@@ -40,7 +40,8 @@
 #define AppIdGuid "838B4E42-F1FC-44A0-B108-53DE8DF4563C"
 
 [Setup]
-AppId={{#AppIdGuid}
+; '{{' is a literal brace for Inno, '{#...}' the preprocessor value: {GUID}.
+AppId={{{#AppIdGuid}}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}

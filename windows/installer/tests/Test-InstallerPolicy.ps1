@@ -32,7 +32,7 @@ $checks++
 
 # One constant AppId shared with the control script.
 $guid = '838B4E42-F1FC-44A0-B108-53DE8DF4563C'
-Assert-True ($iss.Contains('#define AppIdGuid "' + $guid + '"') -and (Get-Setup 'AppId') -eq '{{#AppIdGuid}') 'AppId must be the fixed GUID'
+Assert-True ($iss.Contains('#define AppIdGuid "' + $guid + '"') -and (Get-Setup 'AppId') -eq '{{{#AppIdGuid}}') 'AppId must be the fixed GUID'
 Assert-True ([IO.File]::ReadAllText($controlScript).Contains("`$script:InnoAppId = '{" + $guid + "}'")) 'the control script must use the same AppId'
 Assert-True ((Get-Setup 'UninstallFilesDir') -eq '{app}\uninstall' -and (Get-Setup 'AppPublisher') -eq 'Living Room Display project' -and -not (Get-Setup 'AppPublisherURL')) 'uninstall registration fields'
 $checks++
