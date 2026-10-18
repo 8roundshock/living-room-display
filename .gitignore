@@ -12,3 +12,9 @@ CLAUDE.local.md
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Application build and dependency artifacts
+/node_modules/
+/dist/
+/coverage/
+*.tsbuildinfo
