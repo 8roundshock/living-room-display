@@ -1,10 +1,19 @@
 # Windows installation and use
 
+**Draft integration: not yet an installable, verified release.** Native source
+compiles, but the commands below await independent static review and first
+runtime installation checks. Keep idle off. Read [STATUS.md](../STATUS.md) and
+[Windows verification](windows.md#verification) for current evidence.
+Read AGENTS.md and follow the independent [PR workflow](agent-workflow.md) when
+changing source. Readiness is tracked in [issue #10](https://github.com/8roundshock/living-room-display/issues/10).
+
 Target: Windows 10 x64 with Microsoft Edge, .NET Framework 4.x and Windows
 PowerShell 5.1 (PowerShell 7 also works). Installation is per user and needs no
 administrator rights. This is an initial source installation, not a signed or
 public release. The repository remains private. Use your own authorized GitHub
 access while cloning; the maintainer's GitHub helper is not an app prerequisite.
+The backend can be run with the [development commands](development.md), which
+does not establish installed display or screensaver behavior.
 
 The installer downloads the official Node 24.19.0 x64 ZIP over HTTPS, checks its
 SHA256 against that release's official `SHASUMS256.txt`, and keeps Node/npm inside
