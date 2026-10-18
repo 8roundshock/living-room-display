@@ -20,9 +20,8 @@ busy dashboards. The application must produce no audio.
 | Area | Intended behavior |
 | --- | --- |
 | Time and date | Optional clock with outline numerals by default, solid digital or minimal analog hands, and 12/24-hour format. |
-| Current weather | Conditions with a clear place label, units, and update age. |
+| Weather | Conditions with a clear place label, units, and update age; when rain is near it adds the chance and estimated timing of upcoming rain inside the same widget, with uncertainty visible (#74). |
 | Forecast | Readable seven-day outlook. |
-| Rain | Chance and estimated timing of upcoming rain, with uncertainty visible. |
 | Reminders | Add, edit, complete, or hide one-time/undated reminders through the local editor. |
 | Appearance | User-editable layout, colors, typography, motion, and saved presets. |
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
@@ -45,7 +44,7 @@ Editing should not require changing source code. Keep the editor separate from
 the sparse display experience. Personal reminders and settings need persistence
 and a recovery/export plan once their storage is designed; private user content
 does not belong in Git. A local editor does not imply public or LAN exposure.
-Every information module is independently optional, including clock and rain.
+Every information module is independently optional, including clock and weather.
 Use a shared catalog and supported small/medium/large content families. The live
 canvas offers direct drag, selected/focused resize handles, reversible fitted
 grid density choices and keyboard alternatives. Reflow neighbors when possible;

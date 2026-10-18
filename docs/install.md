@@ -185,7 +185,7 @@ keep the newer data directory and restore the matching pre-upgrade data copy.
 | --- | --- |
 | #73 reminder history | Not shipped yet |
 | #73 custom Reminders sizes | Not shipped yet |
-| #74 Weather and Rain merge | Not shipped yet |
+| #74 Weather and Rain merge | None: no new keys, and `bedca44` reads everything written (`src/server/weather-merge.test.ts`). An enabled Rain merges into Weather in memory; the file changes only at the next ordinary save, which writes `rain: false`, Rain's hidden placement and Weather in the merged cells. After upgrading, boards with the old default Weather and Rain show one large Weather in the same space; Rain-only boards show Weather in Rain's cell (now with conditions); users who had hidden only Rain see rain detail when relevant (no opt-out until #102). Save/Cancel stays hidden because the migrated settings are the saved baseline. After a rollback, `bedca44` shows the calm (old) Weather with Rain hidden; Rain re-added there is merged again after upgrading. The first save writes the already-merged state to `state.backup.json` too, so restoring the separate Rain placement needs a pre-upgrade data copy. |
 | #75 Native colours | Not shipped yet |
 | #76 Animation level | Not shipped yet |
 | #78 Calendar, Countdown and Note | Not shipped yet |

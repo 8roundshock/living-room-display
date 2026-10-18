@@ -50,8 +50,8 @@ visible above it, including narrow screens and compact keyboard-height windows.
   cannot accommodate the board; it never silently removes existing content.
 - **Widgets** selects inline size/position and per-widget controls. **Add widget**
   opens a compact category rail and one actual renderer with synthetic family
-  content, size choices and a reachable Add action. Every module can be removed, including clock,
-  weather and rain separately. Small/medium/large families adapt their content.
+  content, size choices and a reachable Add action. Every module can be removed, including clock
+  and weather separately. Small/medium/large families adapt their content.
 - **Preview movement** explicitly reveals numbered arrangements and **Automatic**
   ambient preview. Editing returns to authored placement. **Open display** opens
   a browser tab; its pointer remains visible, including fullscreen. Unmodified
@@ -93,13 +93,25 @@ and reminder input use the computer timezone. Current conditions show age;
 retained stale data is marked throughout. Missing values stay unavailable.
 Hourly chance covers precipitation including snow; rain estimates use rain plus
 showers and label incomplete/gapped coverage. See [API semantics](api.md#weather-semantics).
+Rain timing lives inside Weather (#74): it stays calm when the next 12 hours are
+complete and dry, adds a hint line when rain is later, precipitation is possible or
+the outlook is unknown, and leads with rain timing (large adds hourly chance bars)
+when rain is current or starts within six hours. Wording says “likely” or
+“possible”, never that it is raining; times use the weather city's timezone and the
+12/24-hour setting, and “Forecast estimate”/“Partial forecast” labels stay visible.
+The footprint never changes, and the separate Rain widget is gone from the picker,
+list and canvas; an enabled Rain from older data is merged into Weather
+([upgrade](install.md#additive-data-and-rollback-compatibility-84)). There is no opt-out of
+rain detail yet (#102). The [weather harness](../tests/ui/weather-browser.mjs) checks
+every family × mode × density at 1280/1920/3840 widths, CSS glyph boxes (#128) and the
+upgrade of a pre-#74 data folder.
 Each weather module keeps its actual place and relevant units visible when used
 alone; weather and forecast show the unit beside the place (“Toronto · °C”), and
-rain keeps its timing beside the chance. Compact forecasts abbreviate Tomorrow as
+elevated Weather keeps the rain amount unit (“0.16 in rain”). Compact forecasts abbreviate Tomorrow as
 “Tom.” while retaining the full relative label and civil date for assistive text
 and hover details. Ambient labels, age, attribution, units and secondary values
 have a readability floor of 1.4% of the display height (1.65% for forecast
-chance/temperatures, rain amount/period and reminder dates), multiplied by
+chance/temperatures, the Weather rain detail and reminder dates), multiplied by
 **Text size**; very short compact widgets cap it by their own height. A larger
 Text size never renders scaled ambient labels or values smaller: an overfull
 widget zooms out as a whole (icons and the unavailable dash may still shrink). See the [widget contract](widgets.md#families-and-editing).

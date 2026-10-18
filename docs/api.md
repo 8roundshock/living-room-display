@@ -167,6 +167,38 @@ used in WeatherState, so forecast dates/times never use the browser's potentiall
 different zone. A missing/invalid resolved timezone makes that forecast
 unavailable. Settings retain `auto` to resolve again for a changed area.
 
+### Adaptive Weather outlook
+
+The Weather widget (#74) classifies the saved hourly intervals in the browser with
+`rainOutlook` in [`weather-outlook.ts`](../src/client/weather-outlook.ts); the API
+and persisted data are unchanged. The window is the 12 hours after now (intervals
+overlapping it; expired intervals are ignored, so a retained stale forecast is still
+classified from what remains). A **spell** is contiguous hours whose `rainAmount`
+(rain plus showers) is at least 0.1 mm (0.004 in); a dry or unknown hour or a
+coverage gap ends it. In precedence order:
+
+| Kind | When | Weather mode | Example |
+| --- | --- | --- | --- |
+| `unknown` | No future intervals | hint | “Rain outlook unavailable” |
+| `now` | A spell includes now | elevated | “Rain likely until 6 PM”; open end “Rain likely beyond 1 AM” (small: “Rain likely now”) |
+| `soon` | A spell starts within 6 hours (inclusive) | elevated | “Rain likely 3–6 PM”; open end or several spells “from 3 PM” (medium/large: “on and off from 3 PM”) |
+| `later` | A spell starts in 6–12 hours | hint | “Rain likely from 9 PM” (medium/large add the day when it differs: “from Tomorrow 7 AM”) |
+| `unknown` | No spell, but some rain amounts are missing | hint | “Rain timing unavailable” |
+| `possible` | Some hour has at least 30% chance, or precipitation without rain (for example snow) | hint | “Precipitation possible · 40%” |
+| `unknown` | Partial, gapped or null coverage | hint | “Rain outlook partial” |
+| `calm` | Otherwise: the 12-hour forecast is complete and dry | calm | nothing about rain |
+
+“Likely” means the spell's peak hourly chance is at least 60%; otherwise, or when the
+chance is unknown, “possible”. Probability covers all precipitation, so the wording
+never says it is or will be raining. The elevated detail covers every spell in the
+window: “Peak 60% · 4 mm rain” (imperial “0.16 in rain”), “Known rain 4 mm” when some
+rain amounts are missing, and “Chance unavailable” without a chance. The confidence
+label is “Forecast estimate”, “Partial forecast” (coverage under 12 hours) or
+“Partial data” (missing values), plus “ · coverage gaps”. Times use the weather
+city's timezone and the 12/24-hour setting; compact 12-hour times drop “:00” and
+share AM/PM (“3–6 PM”, “11 AM–2 PM”, “15:00–18:00”), keeping non-zero minutes in
+half-hour zones. Hours are real instants, so a DST change shows wall-clock times.
+
 ### Forecast normalization and caching
 
 The server requests Open-Meteo epoch timestamps and the configured timezone.
