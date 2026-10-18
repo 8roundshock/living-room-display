@@ -100,7 +100,8 @@ Source provenance checks use synthetic local Git repositories to verify clean,
 dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
 verify metadata refresh on successful install and retention after failed update
 or uninstall. No paths, remotes, changes or credentials are saved in provenance.
-The last verified installed baseline on 2026-10-18 is clean `7e654fd`, the normal
+The current installed baseline is recorded in [STATUS.md](../STATUS.md) (clean
+`bedca44`, PR #70, on 2026-10-18). The preceding rollout installed clean `7e654fd`, the normal
 merge of PR #57. Its 79 application tests, full production build, independent
 final-head reviews and Windows/Linux CI passed before rollout. The
 [dated rollout evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)

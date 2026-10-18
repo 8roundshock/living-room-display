@@ -152,8 +152,8 @@ CI, but remains draft, unmerged and uninstalled. Frozen old-source
 `3a492b0` staging passed a bound stationary round with 26 qualified NULL cursor
 samples, exit 0, owned cleanup and unchanged data/screensaver settings. That
 old-source result does not establish visual/input or combined-source acceptance.
-The merged UI is included in the candidate and was served by the canonical
-backend at the verified rollout. The revision-3 visual observer has
+The PR #57 UI (`7e654fd`) is included in the candidate and was served by the
+canonical backend at that rollout; the backend now serves `bedca44` (see below). The revision-3 visual observer has
 [independent preparation-only source/pure approval](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6253359163);
 its final JavaScript binding review and actual combined visual/input runtime
 acceptance remain incomplete. This observer review does not establish actual
