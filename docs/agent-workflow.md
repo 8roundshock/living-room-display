@@ -5,6 +5,10 @@ reviews results; specialized workers perform project interaction and building.
 Use the available subagent mechanism, not extra user-owned chats unless requested.
 These instructions do not install a background orchestration system.
 
+For explicitly requested Claude Code collaboration, use the bounded
+[CLI delegation and handoff workflow](claude-collaboration.md). Existing account
+access and a session ID do not establish that a task ran or was independently reviewed.
+
 ## Roles and ownership
 
 | Role | Responsibility |
