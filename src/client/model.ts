@@ -11,8 +11,9 @@ export function getVisual(settings: Settings): VisualSettings {
   return structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview });
 }
 
-export function weatherAttributionWidget(settings: Settings): 'forecast' | 'weather' | 'rain' | null {
-  return settings.widgets.forecast ? 'forecast' : settings.widgets.weather ? 'weather' : settings.widgets.rain ? 'rain' : null;
+/** Rain is retired into Weather (#74), so it never carries the credit. */
+export function weatherAttributionWidget(settings: Settings): 'forecast' | 'weather' | null {
+  return settings.widgets.forecast ? 'forecast' : settings.widgets.weather ? 'weather' : null;
 }
 
 export function reminderPresentation(

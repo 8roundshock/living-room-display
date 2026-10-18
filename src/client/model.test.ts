@@ -14,7 +14,8 @@ import {
 test('weather attribution follows the first enabled weather module and can all be removed', () => {
   const settings = defaultSettings(); assert.equal(weatherAttributionWidget(settings), 'forecast');
   settings.widgets.forecast = false; assert.equal(weatherAttributionWidget(settings), 'weather');
-  settings.widgets.weather = false; assert.equal(weatherAttributionWidget(settings), 'rain');
+  // Rain is retired into Weather (#74): even an injected enabled Rain never carries the credit.
+  settings.widgets.weather = false; settings.widgets.rain = true; assert.equal(weatherAttributionWidget(settings), null);
   settings.widgets.rain = false; assert.equal(weatherAttributionWidget(settings), null);
 });
 import {

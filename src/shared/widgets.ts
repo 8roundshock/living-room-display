@@ -1,4 +1,4 @@
-import type { WidgetGrid, WidgetPlacement, WidgetId } from './contracts.ts';
+import type { VisualSettings, WidgetGrid, WidgetPlacement, WidgetId } from './contracts.ts';
 import type { PaletteRole } from './palette.ts';
 
 export type WidgetSize = 'small' | 'medium' | 'large';
@@ -33,8 +33,8 @@ const standard = { small: { columns: 2, rows: 2 }, medium: { columns: 4, rows: 2
 /** The authority for picker labels, supported families, validation and rendering. */
 export const WIDGET_CATALOG = {
   clock: { name: 'Clock', description: 'Time and date', icon: 'clock', category: 'time', tone: 'time', sizes: { ...standard, large: { columns: 8, rows: 4 } }, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 0, row: 0 } },
-  weather: { name: 'Weather', description: 'Current conditions', icon: 'cloud', category: 'weather', tone: 'sky', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 0 } },
-  rain: { name: 'Rain', description: 'Rain timing and probability', icon: 'rain', category: 'weather', tone: 'water', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 2 }, legacyPlacement: { column: 0, row: 3 }, legacyEnabledFrom: 'weather' },
+  weather: { name: 'Weather', description: 'Conditions now, with rain timing when rain is near', icon: 'cloud', category: 'weather', tone: 'sky', sizes: standard, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 8, row: 0 } },
+  rain: { name: 'Rain', description: 'Now part of Weather', icon: 'rain', category: 'weather', tone: 'water', status: 'retired', mergedInto: 'weather', sizes: standard, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 8, row: 2 }, legacyPlacement: { column: 0, row: 3 }, legacyEnabledFrom: 'weather' },
   forecast: { name: 'Forecast', description: 'The days ahead', icon: 'calendar', category: 'weather', tone: 'sky', sizes: { ...standard, large: { columns: 8, rows: 2 } }, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 0, row: 6 }, legacyPlacement: { column: 2, row: 6 } },
   reminders: { name: 'Reminders', description: 'What is coming up', icon: 'check', category: 'personal', tone: 'personal', sizes: standard, defaultSize: 'small', defaultEnabled: true, defaultPlacement: { column: 0, row: 4 }, legacyPlacement: { column: 5, row: 3 } },
   preview: { name: 'Last screen', description: 'A dim snapshot on activation', icon: 'monitor', category: 'pictures', tone: 'stone', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 4 }, legacyPlacement: { column: 8, row: 3 } },
@@ -70,6 +70,60 @@ export function defaultWidgetGrid(revision: 1 | 2 = 2): WidgetGrid {
   })) as Record<WidgetId, WidgetPlacement> };
 }
 export function defaultWidgetVisibility(): Record<WidgetId, boolean> { return Object.fromEntries(WIDGET_IDS.map(id => [id, WIDGET_CATALOG[id].defaultEnabled])) as Record<WidgetId, boolean>; }
+function retiredTarget(id: WidgetId): WidgetId | null {
+  const definition: WidgetDefinition = WIDGET_CATALOG[id];
+  return definition.status === 'retired' && definition.mergedInto && Object.hasOwn(WIDGET_CATALOG, definition.mergedInto) ? definition.mergedInto as WidgetId : null;
+}
+/** The target family whose span is exactly the edge-sharing union of two rectangles, if any. */
+function unionPlacement(grid: WidgetGrid, target: WidgetId, a: WidgetPlacement, aSpan: WidgetSpan, b: WidgetPlacement, bSpan: WidgetSpan): WidgetPlacement | null {
+  const stacked = a.column === b.column && aSpan.columns === bSpan.columns && (a.row + aSpan.rows === b.row || b.row + bSpan.rows === a.row);
+  const beside = a.row === b.row && aSpan.rows === bSpan.rows && (a.column + aSpan.columns === b.column || b.column + bSpan.columns === a.column);
+  if (!stacked && !beside) return null;
+  const span = stacked ? { columns: aSpan.columns, rows: aSpan.rows + bSpan.rows } : { columns: aSpan.columns + bSpan.columns, rows: aSpan.rows };
+  const size = widgetSizes(target).find(family => { const candidate = widgetSpan(target, family, grid.revision); return candidate.columns === span.columns && candidate.rows === span.rows; });
+  return size ? { column: Math.min(a.column, b.column), row: Math.min(a.row, b.row), size } : null;
+}
+/**
+ * Merges every enabled retired widget into its `mergedInto` target (#74), keeping placement intent:
+ * a hidden target takes the retired cells and family; when both are visible and their edge-sharing
+ * union is a supported target family, the target takes the union; otherwise it takes the larger
+ * rectangle, keeping its own on a tie. The retired id is then hidden and its hidden placement kept.
+ * Pure and idempotent; never returns an invalid board (it falls back to the target's own rectangle).
+ */
+export function absorbRetiredWidgets<T extends Pick<VisualSettings, 'widgets' | 'widgetGrid'>>(value: T): T {
+  let result = value;
+  for (const id of WIDGET_IDS) {
+    const target = retiredTarget(id);
+    if (!target || !result.widgets[id]) continue;
+    const grid = result.widgetGrid, retired = grid.placements[id], own = grid.placements[target];
+    const retiredSpan = widgetSpan(id, retired.size, grid.revision), ownSpan = widgetSpan(target, own.size, grid.revision);
+    const supportsRetired = widgetSizes(target).includes(retired.size);
+    let placement = own;
+    if (!result.widgets[target]) { if (supportsRetired) placement = retired; }
+    else placement = unionPlacement(grid, target, own, ownSpan, retired, retiredSpan)
+      ?? (supportsRetired && retiredSpan.columns * retiredSpan.rows > ownSpan.columns * ownSpan.rows ? retired : own);
+    const widgets = { ...result.widgets, [target]: true, [id]: false };
+    const candidates = [placement, own].map(choice => ({ ...grid, placements: { ...grid.placements, [target]: { ...choice } } }));
+    const widgetGrid = candidates.find(candidate => !gridProblem(candidate, widgets));
+    if (!widgetGrid) continue;
+    result = { ...result, widgets, widgetGrid };
+  }
+  return result;
+}
+/**
+ * gridProblem for input that absorbRetiredWidgets will merge: an enabled retired widget may overlap
+ * its own visible target (for example a pre-grid board, or a stale editor still sending Rain), but
+ * nothing else. Every other bound and overlap rule stays strict.
+ */
+export function absorbableGridProblem(grid: WidgetGrid, enabled: Partial<Record<WidgetId, boolean>>): string | null {
+  const problem = gridProblem(grid, enabled);
+  if (!problem) return null;
+  const merging = WIDGET_IDS.filter(id => { const target = retiredTarget(id); return enabled[id] && target && enabled[target]; });
+  if (!merging.length) return problem;
+  const rest = { ...enabled }; for (const id of merging) rest[id] = false;
+  if (gridProblem(grid, rest)) return problem;
+  return merging.every(id => placementFits(grid, id, grid.placements[id], { ...rest, [retiredTarget(id)!]: false })) ? null : problem;
+}
 export function widgetSizes(id: WidgetId): WidgetSize[] { return WIDGET_SIZES.filter(size => Boolean((WIDGET_CATALOG[id].sizes as Partial<Record<WidgetSize, WidgetSpan>>)[size])); }
 export function widgetSpan(id: WidgetId, size: WidgetSize, revision: 1 | 2 = 2): WidgetSpan {
   if (revision === 1 && id === 'clock' && size === 'large') return { columns: 6, rows: 2 };
