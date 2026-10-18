@@ -134,24 +134,31 @@ needed. See the [PR workflow](agent-workflow.md).
 
 ## PowerShell host for project scripts
 
-Agent shells may start PowerShell from their own bundled runtime or with an
-inherited execution-policy override. On the owner's PC on 2026-10-18, one agent's
-PowerShell tool ran another agent's cached `pwsh` with `-ExecutionPolicy Bypass`.
-That same `pwsh` was also first on `PATH` in Git Bash. A project script started that way
-depends on a runtime the project does not own and on a policy override that
-nobody chose for that command. Before running a project `.ps1` from an agent
-shell, confirm the host:
+An agent shell may start PowerShell from a runtime bundled with an agent, possibly
+a different agent, or pass an inherited execution-policy override. On the owner's
+PC on 2026-10-18, one agent's PowerShell tool ran another agent's cached `pwsh` with
+`-ExecutionPolicy Bypass`, and that `pwsh` was also first on `PATH` in Git Bash.
+A project script started that way depends on a runtime the project does not own
+and on a policy override nobody chose for that command. Before running a project
+`.ps1` from an agent shell, confirm the host inside the same PowerShell that will run
+it. This check works in Windows PowerShell 5.1 and PowerShell 7:
 
 ```powershell
-$PSHOME; $PSVersionTable.PSVersion
+(Get-Process -Id $PID).Path; $PSVersionTable.PSVersion
 Get-ExecutionPolicy -List
-(Get-AuthenticodeSignature (Join-Path $PSHOME 'pwsh.exe')).SignerCertificate.Subject
+(Get-AuthenticodeSignature (Get-Process -Id $PID).Path).SignerCertificate.Subject
 ```
 
-If the host is not an installed PowerShell you intend to use, or the Process scope
-shows an override you did not request, call an installed PowerShell explicitly.
-Clear the inherited module path and policy variables. Use the actual install
-path; the Microsoft Store location is shown here:
+From Git Bash, a bare `pwsh` or `powershell.exe` resolves through `PATH`. Run the
+check with `-Command` on the exact executable you intend to use. If the host is
+not an installed PowerShell you intend to use, or the Process scope shows an
+override you did not request, call an installed PowerShell explicitly. Clear the
+inherited `PSExecutionPolicyPreference`, which carries a parent's `-ExecutionPolicy`
+to child processes, and the inherited `PSModulePath`. A module path from another
+PowerShell or a bundled runtime can stop Windows PowerShell 5.1 from loading its own
+core modules; on that PC, `Get-ExecutionPolicy` then failed with
+`CouldNotAutoloadMatchingModule`. Use the actual install path. This owner example
+uses the Microsoft Store `pwsh`; substitute your own script and arguments:
 
 ```bash
 env -u PSModulePath -u PSExecutionPolicyPreference \
@@ -159,10 +166,13 @@ env -u PSModulePath -u PSExecutionPolicyPreference \
   -File scripts/gh-personal.ps1 repo view --json 'nameWithOwner,isPrivate'
 ```
 
-The `-ExecutionPolicy Bypass` regression command above is a deliberate,
-process-scoped choice for those checks. It is not an inherited default. Do not
-change global execution policy, agent configuration or `PATH` to work around an
-unexpected host; report it. See [#81](https://github.com/8roundshock/living-room-display/issues/81).
+The same variable clearing applies when `powershell.exe` is the intended host. The
+explicit `-ExecutionPolicy Bypass` in the `windows\Test-Windows.ps1` command above
+and in the `LivingRoomDisplay.ps1` commands in [installation](install.md) is a
+deliberate, process-scoped choice for those commands. It is not an inherited
+default. Do not change global execution policy, agent configuration or `PATH` to
+work around an unexpected host; report it. See
+[#81](https://github.com/8roundshock/living-room-display/issues/81).
 
 ## Verification now
 
