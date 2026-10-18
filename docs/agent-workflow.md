@@ -122,3 +122,20 @@ Report concrete blockers rather than inventing an approval step.
 Return outcome, branch/PR/commit, checks and results, material limits, and the next
 decision if needed. Update project docs with durable findings. Do not claim a
 feature is built, running, visually verified, reviewed, or deployed without evidence.
+
+## Active workstreams and visibility
+
+Create or link an issue for each active workstream before implementation. Keep
+one primary integration ticket, and link scoped feature/bug issues to it with
+clear ownership, observed behavior, acceptance criteria and remaining checks.
+Older closed issues may provide context; do not treat them as current tracking
+for a new regression without recording that new evidence.
+
+Publish meaningful committed branch checkpoints while work is underway and open
+or update a draft integration PR without waiting for all QA to finish. Record the
+current branch/commit links, actual validation, incomplete work and next owner in
+the primary/scoped issues and draft PR. An integrated change normally uses one
+PR, preserving component authorship through normal merges instead of creating
+per-agent PRs. Draft publication is visibility, not final acceptance or permission
+to merge: independent review of the final pushed SHA and applicable checks still
+apply.
