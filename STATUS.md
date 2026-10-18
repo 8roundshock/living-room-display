@@ -20,8 +20,11 @@ the owner's explicit authority to choose practical defaults and build the app.
   settings/location/style Save and Cancel, debounced keyboard city dropdown,
   concurrent-draft refresh and an atomic automatic-location guard.
 - Shared catalog/renderer registry, adaptive size families and optional modules;
-  grid drag/resize with touch/keyboard alternatives, collision rejection and
-  density controls. Save/Cancel is hidden unless an effective draft exists.
+  source refinement in [draft PR #57](https://github.com/8roundshock/living-room-display/pull/57)
+  adds stable direct drag/neighbor reflow, selected resize handles, reversible
+  fitted density drafts and a bounded compact studio/picker. Local arrangement
+  rebasing is atomic; valid legacy settings/presets retain revision-one backfill
+  before migration. Save/Cancel is hidden unless an effective draft exists.
 - Outline/digital/analog clock styles and optional private local photo drafts,
   normalized PNG validation and atomic settings/image saves. Exports omit image
   bytes; recovery backups may retain an older selected image. Desktop captures
@@ -39,9 +42,11 @@ the owner's explicit authority to choose practical defaults and build the app.
   preview content/readability was
   accepted under [#46](https://github.com/8roundshock/living-room-display/issues/46),
   with raw capture/inspection in RAM and no screenshot files.
-- Standalone display cursor CSS covers loading/error pages and descendants;
-  editor/embedded preview cursor behavior is preserved. The production Edge
-  route regression passes; actual native cursor proof remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).
+- The candidate browser display keeps its pointer visible through loading/error
+  and fullscreen, with an unmodified F fullscreen toggle. Only explicit
+  `native=1` presentation hides the document cursor. The minimal host URL flag
+  does not include held native cursor-surface/lifecycle changes in PR #51;
+  combined native acceptance remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).
 - Editor-only device location with permission-aware one-shot lookup, rounded
   coordinates, Toronto fallback and manual-city protection. Existing choices
   migrate as manual; no location prompt or lookup occurs in the screensaver.
@@ -52,7 +57,7 @@ the owner's explicit authority to choose practical defaults and build the app.
   source regression checks cover startup cancellation, restore selection,
   owned-process recognition and filesystem transaction/cleanup behavior.
 
-Local verification: the full build and all 71 application tests pass using the
+Local verification: the full build and all 79 application tests pass using the
 app-owned Node 24 runtime. Eleven Windows check groups pass on PowerShell 5.1
 and 7 with the optional real child-process test (ten without). Provenance tests
 cover clean/dirty Git, archives, enclosing repositories and composed sources;
@@ -67,8 +72,9 @@ groups, including async Save/Cancel/city/location races, reminder CRUD and exact
 due-date preservation through title edits, all four
 1080p/4K bounds, reduced motion, 390px/320px reflow and focused-field clearance
 above the measured Save bar at full/compact heights. Source desktop/mobile
-visuals were inspected in RAM, and the merged UI changes received independent
-functional and actual visual review. No screenshots or real device positions
+visuals were inspected in RAM. Earlier merged UI changes received independent
+functional and actual visual review; current PR #57 final-head review is recorded
+separately in that PR before merge. No screenshots or real device positions
 are retained. See [UI evidence](docs/ui.md).
 The long-city wrapping correction
 [#52](https://github.com/8roundshock/living-room-display/issues/52) has isolated
@@ -85,14 +91,29 @@ race [#44](https://github.com/8roundshock/living-room-display/issues/44) was res
 
 ## Last verified installation and remaining acceptance
 
+The source-only refinement in PR #57 passes the 16-group Studio, 15-group Grid,
+seven-group compact Workspace, six-group Widget and five-group Preview optical
+browser suites. Workspace checks include 1280×720/600, 1024×600, 760×600,
+390×700/480 and a 640×300 CSS viewport equivalent to 200% zoom on 1280×600.
+Widget checks cover 21 families across three densities at 1080p and 4K, with
+actual descendant bounds and long/unknown/partial/image failure states. Final
+compact picker images and component atlases were inspected in RAM without files.
+Independent data review verified 128 legacy omitted-key subsets plus startup,
+HTTP import, presets, selected-image/reminder preservation and backup recovery.
+Exact final-head independent review and CI are recorded in PR #57; these source
+results do not establish installed behavior, native acceptance or TV comfort.
+See the [revision-2 backup/rollback requirement](docs/install.md#widget-geometry-revision-2-update-and-rollback)
+before any coordinated rollout.
+
 The last verified installed baseline on 2026-10-18 was clean
-`d81c1e0f5683a37f4f81b4c5d006203877168ac6`,
-including the reviewed Studio/grid, preview-readability and reminder corrections.
+`2e010f04aded296f896df5065e391b62d36e2bb1`,
+including the reviewed Studio/grid, preview, reminder and city-wrap corrections.
 Recheck current provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](docs/install.md).
-The installation marker and HTTP health were rechecked on that date. Source and
-served-asset provenance, update preservation of settings/reminders/private photos,
-and actual 3840x2160 native preview acceptance were verified during rollout.
+The installation marker and HTTP health were rechecked on that date. Current UI
+refinements in PR #57 remain source-only until coordinated rollout. Earlier
+rollout verified source/served-asset provenance, preservation of settings/reminders/
+private photos and actual 3840x2160 native preview acceptance.
 Device location was not requested during rollout. Simulated composition/browser
 checks and actual 4K preview inspection do not establish across-room comfort.
 
@@ -106,17 +127,18 @@ That verified native baseline has the cursor and early-input issues
 [#36](https://github.com/8roundshock/living-room-display/issues/36) and
 [#50](https://github.com/8roundshock/living-room-display/issues/50), both open.
 The proposed replacement in [draft PR51](https://github.com/8roundshock/living-room-display/pull/51)
-is candidate-only: head `3a492b0` received independent code approval and both CI
-jobs passed, but it is unmerged and uninstalled. Positive isolated prototype
-evidence does not establish integrated production acceptance. Its actual native
-normal/visual/input dismissal and cursor restoration gates remain pending.
+is candidate-only: head `43beadc` received independent code approval and both CI
+jobs passed, but it is draft, unmerged and uninstalled. Frozen old-source
+`3a492b0` staging passed a bound stationary round with 26 qualified NULL cursor
+samples, exit 0, owned cleanup and unchanged data/screensaver settings. That
+old-source result does not establish visual/input or combined-source acceptance.
+The reviewed UI must first be merged normally into the candidate and served by
+the canonical backend before combined `native=1` acceptance and registration.
 
-The last hardware preflight on 2026-10-18 stopped before launch because cursor
-observation returned access denied and the current desktop was not receiving
-input. Resume only after the user returns to the normal interactive desktop and
-cursor observation is available, with a new coordinated preflight/GO. Do not
-switch desktops, dismiss security UI or weaken the guard. See the
-[sanitized diagnosis](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6249615459).
+The user confirmed the normal interactive desktop on 2026-10-18. An earlier
+access-denied preflight is historical, not the current desktop state. Native
+visual/input dismissal, cursor restoration and combined-source tests remain
+coordinated gates; do not switch desktops or weaken capture/input guards.
 Native `/c` cold startup was blocked by automatic approval review before action
 and remains unverified. Fresh-account installation, movie/game inhibition,
 secure lock/resume and across-room readability are unverified. Automatic idle

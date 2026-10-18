@@ -44,7 +44,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       const before = await frame();
       for (const name of ['Style', 'Widgets', 'Weather', 'Reminders']) {
         await tab(name);
-        assert.deepEqual(await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]), [viewport.width, viewport.height], `desktop ${name} must use contained scrolling`);
+        assert.equal(await page.evaluate(() => `${document.documentElement.scrollWidth},${document.documentElement.scrollHeight}`), `${viewport.width},${viewport.height}`, `desktop ${name} must use contained scrolling`);
         await inView(button('Edit layout'), 'Edit layout');
         await inView(button('Add widget to display'), 'Canvas plus');
       }
@@ -75,7 +75,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       const field = await input.boundingBox(), savebar = await page.locator('.studio-savebar').boundingBox();
       assert.ok(field.y >= 0 && field.y + field.height < savebar.y, 'focused desktop field must clear Save');
       await button('Cancel').click();
-      checks.push(`${viewport.width}x${viewport.height}: bounded tabs/canvas/actions, stable dirty geometry, all21family catalog actions, keyboard close/focus return and Save clearance`);
+      checks.push(`${viewport.width}x${viewport.height}: bounded tabs/canvas/actions, stable dirty geometry, all 21 family catalog actions, keyboard close/focus return and Save clearance`);
     }
     for (const viewport of [{ width: 390, height: 700 }, { width: 390, height: 480 }, { width: 640, height: 300 }]) {
       await open(viewport);
@@ -93,7 +93,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     assert.deepEqual(errors, []); return { checks, images };
   } finally { await context?.close(); await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (typeof process !== 'undefined' && process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({ options: { playwright: { type: 'string' }, edge: { type: 'string' } } });
   const result = await runWorkspaceQa(values); console.log(JSON.stringify({ checks: result.checks }, null, 2));
 }

@@ -71,7 +71,10 @@ selection borders, labels and picker chrome belong to the editor only.
 
 Every widget is optional. The picker describes available widgets and sizes;
 adding/removing/resizing/repositioning changes the settings draft. Provide direct
-size and position controls usable by keyboard/touch as an alternative to dragging.
+family controls usable by keyboard/touch as an alternative to handle resizing.
+The focused canvas widget supports arrow-key movement and its selected/focused
+resize handle supports arrow-key family changes; do not expose technical
+coordinates/four-arrow Position controls in the primary inspector.
 Cancel restores the saved configuration, including grid, styles and selected
 images. Show Save/Cancel only while there are actual unsaved changes, preserving
 the existing async race and concurrent-draft behavior. Reminder records retain
@@ -79,6 +82,13 @@ their documented independent immediate-save behavior.
 The authored editor canvas stays still. Ambient relocation runs only in the
 display or an explicitly requested movement preview, so layout editing never
 competes with the ambient scheduler.
+
+Legacy backfill uses revision-one catalog origins before strict validation and
+central migration. An absent additive module is different from an explicitly
+invalid overlapping placement; the latter still rejects. Current saves use
+geometry revision 2. Follow the [pre-upgrade data backup and rollback](install.md#widget-geometry-revision-2-update-and-rollback)
+procedure; the previous app does not understand revision 2 even though the outer
+settings version remains 1.
 
 ## Ambient appearance and recurring exposure
 

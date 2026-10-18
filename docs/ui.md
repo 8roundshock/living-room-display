@@ -1,6 +1,11 @@
 # Display studio
 
-Reviewed 2026-10-18 for [#43](https://github.com/8roundshock/living-room-display/issues/43).
+Reviewed 2026-10-18 for [#56](https://github.com/8roundshock/living-room-display/issues/56)
+and scoped [#58](https://github.com/8roundshock/living-room-display/issues/58),
+[#59](https://github.com/8roundshock/living-room-display/issues/59),
+[#60](https://github.com/8roundshock/living-room-display/issues/60),
+[#61](https://github.com/8roundshock/living-room-display/issues/61) and
+[#62](https://github.com/8roundshock/living-room-display/issues/62).
 Browser checks establish source behavior; installation and native pointer/idle
 acceptance are recorded separately in [STATUS](../STATUS.md).
 
@@ -8,8 +13,10 @@ acceptance are recorded separately in [STATUS](../STATUS.md).
 
 `/editor` (also `/`) opens a large live appearance preview and a focused inspector.
 Style, Widgets, Weather and Reminders share one settings draft. Desktop keeps the
-preview beside the inspector; small windows stack it above a normally scrolling
-inspector. The mobile preview is not sticky, leaving room for the keyboard.
+preview beside a height-bounded inspector with fixed tabs and contained scrolling
+above 700 CSS pixels. Canvas actions remain visible at compact desktop heights;
+the 16:9 preview fits the height. Narrow windows stack a normally scrolling
+inspector below a nonsticky preview, leaving room for the keyboard.
 Focus scrolling reserves the measured Save bar height so fields and labels remain
 visible above it, including narrow screens and compact keyboard-height windows.
 
@@ -23,21 +30,36 @@ visible above it, including narrow screens and compact keyboard-height windows.
 - **Phone**, **Room** and **Night** reset visuals/transforms while preserving
   location, units, reminders and named styles. Room brightness is 55%; Night is
   28%. Up to twelve saved styles include visual/widget/empty-reminder settings.
-- **Edit layout** reveals a faint editor-only grid, draggable widgets and visible
-  resize handles. Arrow keys move the focused widget; size buttons/position
-  arrows are an alternative. Escape or pointer cancellation abandons a drag.
-  Invalid drops/resizes retain the prior layout. Density changes repack all active
-  widgets without shrinking or dropping them, or report insufficient room.
+- The authored canvas stays still by default. **Edit layout** reveals a faint
+  editor-only grid and whole-widget drag targets. Clicking/focusing selects a
+  widget and exposes its resize handle. Arrow keys move the focused widget;
+  Tab reaches its handle, where arrows change family. Family buttons are another
+  alternative. No technical Position coordinates or four-arrow inspector exists.
+  Pointer feedback is continuous while neighbors reflow into legal cells. Escape
+  or pointer cancellation abandons the entire drag; impossible drops/resizes keep
+  the prior board. Density changes immediately fit every enabled module, reducing
+  families only when necessary; a round trip restores exact explored positions
+  and families until another widget edit. Cancel restores the saved arrangement.
+- Density/family/position and visibility form one atomic local layout during a
+  concurrent poll, preserving its validity while unrelated saved settings refresh.
+  Adding a widget can seek nearby legal origins when its previous hidden origin
+  cannot accommodate the board; it never silently removes existing content.
 - **Widgets** selects inline size/position and per-widget controls. **Add widget**
-  shows synthetic family previews. Every module can be removed, including clock,
+  opens a compact category rail and one actual renderer with synthetic family
+  content, size choices and a reachable Add action. Every module can be removed, including clock,
   weather and rain separately. Small/medium/large families adapt their content.
-- Numbered preview buttons select arrangements; **Automatic** resumes movement.
-  **Open display** opens a separate tab. Manual display controls appear on pointer
-  movement or Tab; Esc or E returns to the editor.
+- **Preview movement** explicitly reveals numbered arrangements and **Automatic**
+  ambient preview. Editing returns to authored placement. **Open display** opens
+  a browser tab; its pointer remains visible, including fullscreen. Unmodified
+  **F** toggles fullscreen without stealing typing, modifier shortcuts or repeats.
+  Manual display controls appear on pointer movement or Tab; Esc or E returns
+  to the editor.
 
-Standalone cursor CSS covers loading, failure and controls. Editor/embedded
-previews keep normal pointers. This does not change Windows cursor settings or
-establish native cursor acceptance. Appearance saves do not enable Windows idle.
+Only explicit `native=1` presentation hides the document cursor and omits browser
+controls. Browser loading/failure/display and editor/embedded previews retain
+normal pointers. The host URL flag selects that presentation; held native cursor
+surface/lifecycle changes remain in draft PR #51 and require combined-source
+acceptance. Appearance saves do not enable Windows idle.
 
 ## Weather and location
 
@@ -117,15 +139,30 @@ bounds, true black, silence, reduced motion and 390px/320px reflow. Regressions 
 cover failed explicit-location fallback races and focused-field clearance at
 390px/320px with 844px/480px heights. The [grid harness](../tests/ui/grid-browser.mjs)
 adds actual pointer/touch/keyboard moves/resizes, effective dirty-bar reverts,
-density rejection, optional modules/styles, local canvas PNG/Cancel/atomic save
+density fitting/round-trip restoration, optional modules/styles, local canvas PNG/Cancel/atomic save
 and pairwise rendered bounds. Images stay in RAM. Current verified counts and
 review/installation limits are recorded in [STATUS](../STATUS.md).
+
+The [workspace harness](../tests/ui/workspace-browser.mjs) checks bounded desktop
+tabs/canvas/actions, unchanged canvas bounds when Save appears, selected/focused
+resize handles, all 21 family picker actions, Escape/focus return, private-data
+separation, successful large Photo Add, explicit icon dimensions and focus clear
+of Save. Verified logical viewports are 1280×720, 1280×600, 1024×600, 760×600,
+390×700, 390×480 and 640×300 (the CSS viewport equivalent of 1280×600 at 200% zoom).
+The actual browser-chrome zoom setting was not changed. Final-source compact
+picker screenshots were inspected in RAM at 1280×600, 760×600 and 390×480.
+The [widget harness](../tests/ui/widgets-browser.mjs) checks all 21 families at
+three densities and 1080p/4K, meaningful descendant bounds, readable fitting,
+unknown/partial/stale/image failures, browser F/cursor behavior and native-only
+document styling. Physical TV brightness/comfort remains a separate gate.
 
 After `npm ci` and `npm run build`, use an existing Playwright/browser installation:
 
 ```powershell
 node tests/ui/studio-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
 node tests/ui/grid-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
+node tests/ui/workspace-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
+node tests/ui/widgets-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
 node tests/ui/preview-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>' --sharp '<Sharp module path>'
 node windows/tests/Test-CursorBrowser.mjs --base-url 'http://127.0.0.1:<isolated QA port>' --playwright '<Playwright module path>' --edge '<browser executable>'
 ```

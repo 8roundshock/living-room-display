@@ -41,8 +41,10 @@ and a recovery/export plan once their storage is designed; private user content
 does not belong in Git. A local editor does not imply public or LAN exposure.
 Every information module is independently optional, including clock and rain.
 Use a shared catalog and supported small/medium/large content families. The live
-canvas offers drag, visible resize handles, grid density choices and keyboard
-alternatives; reject overlaps and out-of-bounds placements. A picker previews
+canvas offers direct drag, selected/focused resize handles, reversible fitted
+grid density choices and keyboard alternatives. Reflow neighbors when possible;
+reject impossible overlapping or out-of-bounds placements. Keep the authored
+editor stable, with ambient movement available as an explicit preview. A picker previews
 synthetic examples without exposing private data. Global Save/Cancel appears only
 while effective settings or a photo differ from the saved baseline; reverting all
 edits hides it again. Reminder actions remain independently saved.
