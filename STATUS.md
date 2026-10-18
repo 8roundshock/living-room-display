@@ -28,6 +28,9 @@ the owner's explicit authority to choose practical defaults and build the app.
   remain a separate RAM-only feature.
 - Varied collision-free composition search with black rests. Reduced motion and
   Soft motion off remove travel/effects while discrete relocation continues.
+- Reminder title edits preserve an unchanged due instant instead of reparsing a
+  repeated local daylight-saving hour or discarding imported seconds/offsets.
+  Explicit date changes, clearing and creation retain their local-time behavior.
 - Standalone display cursor CSS covers loading/error pages and descendants;
   editor/embedded preview cursor behavior is preserved. The production Edge
   route regression passes; actual native cursor proof remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).

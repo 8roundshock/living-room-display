@@ -45,6 +45,7 @@ import {
 import { GridEditor } from './GridEditor';
 import { WidgetInspector } from './WidgetInspector';
 import { preparePhoto, type PhotoDraft } from './photo';
+import { reminderDuePatch } from './reminder';
 const sections = ['Style', 'Widgets', 'Weather', 'Reminders'] as const;
 type Section = (typeof sections)[number];
 const colors = [
@@ -161,6 +162,7 @@ export function Editor({
     [editingId, setEditingId] = useState<string | null>(null);
   const [reminderText, setReminderText] = useState(''),
     [reminderDue, setReminderDue] = useState('');
+  const [initialReminderDue, setInitialReminderDue] = useState<string | undefined>();
   const [reminderSaving, setReminderSaving] = useState(false),
     [reminderMessage, setReminderMessage] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -547,9 +549,11 @@ export function Editor({
     setPresetId(id);
   }
   function startReminder(reminder?: Reminder) {
+    const dueInput = localInputDate(reminder?.dueAt);
     setEditingId(reminder?.id ?? null);
     setReminderText(reminder?.text ?? '');
-    setReminderDue(localInputDate(reminder?.dueAt));
+    setReminderDue(dueInput);
+    setInitialReminderDue(reminder ? dueInput : undefined);
     setReminderForm(true);
     setError(null);
     setReminderMessage('');
@@ -566,7 +570,7 @@ export function Editor({
           method: editingId ? 'PATCH' : 'POST',
           body: JSON.stringify({
             text: reminderText.trim(),
-            dueAt: reminderDue ? new Date(reminderDue).toISOString() : null,
+            ...reminderDuePatch(reminderDue, initialReminderDue),
           }),
         },
       );
