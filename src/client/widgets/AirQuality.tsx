@@ -55,7 +55,9 @@ function AirQuality({ state, settings, size, now, disconnected }: WidgetContentP
   const current = air.status === 'fresh' || air.status === 'stale' ? air.current : null;
   const category = current ? aqiCategory(current.aqi, air.scale, size === 'small') : null;
   const caution = disconnected || air.status === 'stale' || air.status === 'unavailable';
-  const age = `${disconnected ? 'Offline · ' : ''}${air.status === 'stale' ? 'Saved reading' : 'Model estimate'} · ${ageLabel(air.updatedAt, now.getTime())}`;
+  // "Model estimate" labels an actual reading; with none (off or unavailable) only the age shows.
+  const kind = air.status === 'stale' ? 'Saved reading · ' : current ? 'Model estimate · ' : '';
+  const age = `${disconnected ? 'Offline · ' : ''}${kind}${ageLabel(air.updatedAt, now.getTime())}`;
   // Bars are relative to the top of the "Moderate" band, or to the highest hour when worse.
   const top = Math.max(air.scale === 'us' ? 100 : 60, ...air.hourly.map(reading => reading.aqi ?? 0));
   return <div className="widget-body air-body">

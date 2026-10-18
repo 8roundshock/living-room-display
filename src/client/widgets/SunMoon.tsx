@@ -28,13 +28,13 @@ const polarLabel = (polar: 'day' | 'night') => polar === 'day' ? 'Sun up all day
 function skyModel(minute: number, latitude: number, longitude: number, timeZone: string): SkyModel {
   const at = new Date(minute * 60_000);
   const today = civilDateKey(at, timeZone);
-  const sun = sunDay(today, latitude, longitude), yesterday = sunDay(addDays(today, -1), latitude, longitude);
+  const sun = sunDay(today, latitude, longitude, timeZone), yesterday = sunDay(addDays(today, -1), latitude, longitude, timeZone);
   let next: SkyModel['next'];
   if (sun.polar) next = { label: polarLabel(sun.polar), at: null };
   else if (at < sun.sunrise!) next = { label: 'Sunrise', at: sun.sunrise! };
   else if (at < sun.sunset!) next = { label: 'Sunset', at: sun.sunset! };
   else {
-    const tomorrow = sunDay(addDays(today, 1), latitude, longitude);
+    const tomorrow = sunDay(addDays(today, 1), latitude, longitude, timeZone);
     next = tomorrow.sunrise ? { label: 'Sunrise', at: tomorrow.sunrise } : { label: polarLabel(tomorrow.polar ?? 'night'), at: null };
   }
   const up = sunIsUp(at, latitude, longitude);

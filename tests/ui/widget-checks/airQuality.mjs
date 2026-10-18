@@ -21,7 +21,9 @@ async function reload(page) { await page.reload(); await page.locator('.display-
 export async function family({ page, widget, size, density, viewport, state }) {
   const text = await widget.innerText();
   assert.match(text, /Air quality/); assert.match(text, /US AQI/); assert.match(text, /\b42\b/); assert.match(text, /Good/);
-  assert.match(text, /Model estimate · Updated 1\d min ago/); // the page clock advances across the suite assert.match(text, /Air quality: CAMS via Open-Meteo/);
+  // The page clock advances a few minutes across the suite.
+  assert.match(text, /Model estimate · Updated 1\d min ago/);
+  assert.match(text, /Air quality: CAMS via Open-Meteo/);
   if (size === 'small') assert.doesNotMatch(text, /Mostly/);
   else { assert.match(text, /Mostly PM2\.5 · 12 µg\/m³/); assert.match(text, /UV 3 · Moderate/); }
   if (size === 'large') {

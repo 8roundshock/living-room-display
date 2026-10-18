@@ -134,16 +134,24 @@ const sunDays = new Map<string, SunDay>();
 /**
  * Sun events for a civil date (YYYY-MM-DD) at a place. Times are instants; a sunset late in the
  * local evening can fall on the next UTC date. The civil date's events are those around its solar
- * noon, which is right for any zone whose offset roughly follows its longitude.
+ * noon. With `timeZone`, that solar noon is moved by whole days to within 12 hours of the zone's
+ * civil noon, so zones whose offset crosses the date line against their longitude (Pacific/Apia,
+ * Pacific/Kiritimati) get their own day; without it the zone is assumed to follow the longitude.
  */
-export function sunDay(dateKey: string, latitude: number, longitude: number): SunDay {
-  const key = `${dateKey}|${latitude}|${longitude}`;
+export function sunDay(dateKey: string, latitude: number, longitude: number, timeZone?: string): SunDay {
+  const key = `${dateKey}|${latitude}|${longitude}|${timeZone ?? ''}`;
   const cached = sunDays.get(key);
   if (cached) return cached;
   const midnight = Date.parse(`${dateKey}T00:00:00Z`);
   const at = (minutes: number) => midnight + minutes * MINUTE_MS;
-  let noon = 720 - 4 * longitude;
-  for (let step = 0; step < 2; step++) noon = 720 - 4 * longitude - solarPosition(at(noon)).equationOfTime;
+  let base = 720 - 4 * longitude;
+  if (timeZone) {
+    // Civil noon in minutes after this date's UTC midnight.
+    const civilNoon = 720 - zoneOffsetMinutes(new Date(midnight + 720 * MINUTE_MS), timeZone);
+    base += Math.round((civilNoon - base) / 1440) * 1440;
+  }
+  let noon = base;
+  for (let step = 0; step < 2; step++) noon = base - solarPosition(at(noon)).equationOfTime;
   const noonPosition = solarPosition(at(noon));
   const cosine = riseHourAngleCosine(latitude, noonPosition.declination);
   let result: SunDay;
@@ -157,7 +165,7 @@ export function sunDay(dateKey: string, latitude: number, longitude: number): Su
       for (let step = 0; step < 3; step++) {
         const position = solarPosition(at(minutes));
         const angle = Math.acos(Math.min(1, Math.max(-1, riseHourAngleCosine(latitude, position.declination)))) / RAD;
-        minutes = 720 - 4 * longitude - position.equationOfTime + direction * 4 * angle;
+        minutes = base - position.equationOfTime + direction * 4 * angle;
       }
       return minutes;
     };

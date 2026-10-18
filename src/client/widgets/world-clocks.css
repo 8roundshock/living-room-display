@@ -9,7 +9,10 @@
 .grid-ambient .ambient-worldClocks .wc-more { font-size: calc(max(var(--min-text), min(5cqw, 7cqh)) * var(--font-scale)); line-height: 1.2; margin-top: 3cqh; opacity: 0.55; }
 
 /* Medium: two cities side by side. */
-.grid-ambient .ambient-worldClocks .wc-cities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6cqw; align-items: start; }
+/* Shared rows (subgrid) keep both times on one line when one label wraps. */
+.grid-ambient .ambient-worldClocks .wc-cities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto auto; column-gap: 6cqw; align-items: end; }
+.grid-ambient .ambient-worldClocks .wc-cities .wc-city { display: grid; grid-row: span 3; grid-template-rows: subgrid; align-content: end; }
+.grid-ambient .ambient-worldClocks .wc-cities .wc-relation { align-self: start; }
 .grid-ambient .ambient-worldClocks.widget-size-medium .wc-time { font-size: calc(min(14cqw, 34cqh) * var(--font-scale)); }
 .grid-ambient .ambient-worldClocks.widget-size-medium .ambient-label { font-size: calc(max(var(--min-text), min(4.4cqw, 9cqh)) * var(--font-scale)); }
 .grid-ambient .ambient-worldClocks.widget-size-medium .wc-relation { font-size: calc(max(var(--min-text), min(3.4cqw, 7.5cqh)) * var(--font-scale)); }

@@ -168,9 +168,10 @@ and a dim dotted day arc with the sun's position, illumination and the next full
 (or new) moon (large); polar days read "Sun up all day" / "Sun stays down today".
 Air quality shows the AQI and its category word (no category colours), adds the
 main pollutant and UV (medium), and 24 hourly bars with unknown hours dotted and the
-UV peak (large). Its footer always reads "Model estimate · Updated …" (stale: "Saved
-reading · Updated …" in the caution tone) and "Air quality: CAMS via Open-Meteo";
-a failure reads "Air quality unavailable", never clean air. Calculations are cached
+UV peak (large). Its footer always shows the age and "Air quality: CAMS via
+Open-Meteo": "Model estimate · Updated …" with a reading, "Saved reading · Updated …"
+in the caution tone when stale. A failure reads "Air quality unavailable" (age only,
+caution tone), never clean air. Calculations are cached
 per minute; values change on the shared one-second tick without their own animation.
 Browser suite: `tests/ui/catalog-sky-browser.mjs`.
 

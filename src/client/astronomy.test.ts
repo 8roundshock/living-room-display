@@ -31,6 +31,24 @@ test('southern hemisphere: Sydney in spring', () => {
   assert.ok(day.daylightMinutes > sunDay(addDays('2026-10-18', -1), -33.8688, 151.2093).daylightMinutes);
 });
 
+test('zones across the date line from their longitude get their own civil day', () => {
+  // USNO: Apia (UTC+13) 06:00/18:25 and Kiritimati (UTC+14) 06:13/18:17 on 2026-10-18.
+  for (const [timeZone, latitude, longitude, rise, set] of [
+    ['Pacific/Apia', -13.83, -171.76, '2026-10-17T17:00:00Z', '2026-10-18T05:25:00Z'],
+    ['Pacific/Kiritimati', 1.87, -157.36, '2026-10-17T16:13:00Z', '2026-10-18T04:17:00Z'],
+  ] as const) {
+    const day = sunDay('2026-10-18', latitude, longitude, timeZone);
+    assert.ok(minutesApart(day.sunrise, rise) <= 2, `${timeZone} sunrise ${day.sunrise?.toISOString()}`);
+    assert.ok(minutesApart(day.sunset, set) <= 2, `${timeZone} sunset ${day.sunset?.toISOString()}`);
+    assert.equal(civilDateKey(day.sunrise!, timeZone), '2026-10-18');
+    assert.equal(civilDateKey(day.sunset!, timeZone), '2026-10-18');
+  }
+  // Without a zone the longitude decides, which is the previous local day there.
+  assert.equal(civilDateKey(sunDay('2026-10-18', -13.83, -171.76).sunrise!, 'Pacific/Apia'), '2026-10-19');
+  // Ordinary zones are unaffected by passing the zone.
+  assert.equal(sunDay('2026-06-21', TORONTO.latitude, TORONTO.longitude, 'America/Toronto').sunrise!.getTime(), sunDay('2026-06-21', TORONTO.latitude, TORONTO.longitude).sunrise!.getTime());
+});
+
 test('Tromsø has a polar day in June and a polar night in December with no invented times', () => {
   const june = sunDay('2026-06-21', 69.6492, 18.9553);
   assert.equal(june.polar, 'day'); assert.equal(june.sunrise, null); assert.equal(june.sunset, null); assert.equal(june.daylightMinutes, 1440);
