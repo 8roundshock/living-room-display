@@ -48,6 +48,13 @@ current. Link meaningful feature work to an issue, update scope/checklists as
 decisions change, and connect implementation PRs. Mark actual progress rather
 than closing tickets merely because code was drafted. Close only when the issue's
 acceptance criteria are verified; leave remaining work explicit.
+In owner-authorized work, every agent records any follow-up work, idea, bug,
+risk or deferred item it identifies: search open and closed issues, update the
+matching issue or file a new one, and link it from the PR or primary ticket.
+Workers and reviewers whose task is read-only or excludes issue writes list
+candidate tickets in their handoff, and the coordinator files them before
+finishing; chat and code comments are not the backlog. Outside users and
+contributors follow the reporting authorization rules below.
 Use plain issue references for unfinished acceptance; GitHub can parse closing
 keywords even inside negated or future-tense phrases.
 

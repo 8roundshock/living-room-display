@@ -85,6 +85,14 @@ background sync or automation.
   step; do not change visibility as part of the current foundation.
 - Use topic branches and reviewed pull requests; never push directly to `main`,
   force-push, discard others' work, or bypass branch protection.
+- In owner-authorized project work, track all intended work in GitHub issues:
+  find or create the ticket before starting and record meaningful progress there.
+  Whenever you notice follow-up work, an idea, a bug, a risk or a deferred item,
+  search open and closed issues, then update the matching issue or file a new one
+  with its reason and scope, and link it from the PR or ticket. A read-only or
+  issue-restricted worker lists candidate tickets in its handoff; the coordinator
+  files them before finishing. Never leave such thoughts only in chat or code
+  comments. Pass this rule to every delegated agent.
 - Keep feature and bug issues current, link PRs, and write meaningful scoped
   commits. Every PR needs a primary ticket and a reason. Use exactly
   `#<ticket-number> - <Ticket Name>` as the title; put related tickets, the change,
