@@ -71,7 +71,9 @@ The host captures before ambient activation and posts PNG bytes to
 and `Content-Type: image/png`. Maximum: 4 MiB, 4096 pixels per side, 4 megapixels.
 The host clears it with `DELETE /api/preview` and the same token on exit.
 Disabling the preview, importing data, server shutdown, or a 12-hour expiry also
-removes availability. No snapshot, token, capture log, or image cache is written
+removes availability. Every clear invalidates earlier unfinished uploads, which
+return 409 instead of restoring pixels; re-enabling preview does not revive them.
+No snapshot, token, capture log, or image cache is written
 by the server. Actual Windows capture is owned and tested by the Windows host.
 
 ## Persistence and recovery
