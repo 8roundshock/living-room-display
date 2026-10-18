@@ -34,11 +34,12 @@ the owner's explicit authority to choose practical defaults and build the app.
 - Snapshot presentation uses family sizing, black-preserving midtone correction
   and a 24% new default; existing opacity choices stay unchanged. The isolated
   optical harness confirms raw bytes remain in RAM unchanged, black stays zero,
-  highlights remain bounded and controls/clear behavior work. Actual native
-  content/readability remains under [#46](https://github.com/8roundshock/living-room-display/issues/46).
+  highlights remain bounded and controls/clear behavior work. The reviewed correction is installed; actual native content was inspected in RAM
+  under [#46](https://github.com/8roundshock/living-room-display/issues/46).
 - Standalone display cursor CSS covers loading/error pages and descendants;
   editor/embedded preview cursor behavior is preserved. The production Edge
-  route regression passes; actual native cursor proof remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).
+  route regression passes. A native input-surface replacement has positive isolated
+  prototype evidence; integrated acceptance remains open under [#36](https://github.com/8roundshock/living-room-display/issues/36).
 - Editor-only device location with permission-aware one-shot lookup, rounded
   coordinates, Toronto fallback and manual-city protection. Existing choices
   migrate as manual; no location prompt or lookup occurs in the screensaver.
@@ -49,52 +50,47 @@ the owner's explicit authority to choose practical defaults and build the app.
   source regression checks cover startup cancellation, restore selection,
   owned-process recognition and filesystem transaction/cleanup behavior.
 
-Local verification: the full build and all 71 application tests pass using the
-app-owned Node 24 runtime. Eleven Windows check groups pass on PowerShell 5.1
-and 7 with the optional real child-process test (ten without). Provenance tests
-cover clean/dirty Git, archives, enclosing repositories and composed sources;
-successful install refreshes metadata while failed updates and uninstall retain it.
-Synthetic
-online export/import and validated offline recovery after both saved JSON files
-were corrupted pass, retaining original corrupt evidence. Native static/unit
-checks use fake transport/session/native boundaries and scoped filesystem fixtures;
-they do not establish actual installed capture, kiosk, idle or lock behavior.
-The isolated production Edge studio harness passes fifteen interaction/layout
-groups, including async Save/Cancel/city/location races, reminder CRUD and exact
-due-date preservation through title edits, all four
-1080p/4K bounds, reduced motion, 390px/320px reflow and focused-field clearance
-above the measured Save bar at full/compact heights. Source desktop/mobile
-visuals are inspected in RAM; final independent visual review is required and
-tracked on the PR. No screenshots or real device positions are retained. See [UI evidence](docs/ui.md).
+## Current verification and installation
 
-Feature [#43](https://github.com/8roundshock/living-room-display/issues/43) adds
-the isolated grid/photo browser harness. Independent functional/actual visual/
-skill-forward review of the pushed feature head is required; the PR records
-exact results and remaining checks. A held-drag polling race is tracked by
-[#44](https://github.com/8roundshock/living-room-display/issues/44).
+The reviewed Studio/grid, snapshot optics and reminder corrections are merged;
+clean revision `d81c1e0` is installed on the current Windows 10/4K PC. Source and
+served-asset provenance, health and preservation of settings/reminders/private
+photo data were checked. Device location was never requested during rollout.
+The owner's preview opacity is intentionally 24%; automatic idle stays off with
+the original blank saver, timeout 1200 and security 0. This is a private local
+installation, not a public/signed release.
 
-## In progress / not yet verified
+All 71 application tests and the full production build pass. Reviewed production
+Edge harnesses cover Studio/city/location/reminder races, grid/photo behavior,
+desktop/mobile bounds and cursor CSS. Windows source checks now cover thirteen
+groups with the optional owned-process test (twelve without), on PowerShell 5.1
+and 7. They include native compilation/flags, session and early-input cancellation,
+surface policy, restore selection, install/reinstall/rollback data retention,
+provenance and safe cleanup. Pure/fake tests do not establish actual native UI.
 
-Current-PC source `eba70fc` passed official-runtime per-user install, real
-Stop/Start/update/rollback/uninstall-retain/reinstall and reminder persistence.
-Actual 3840x2160 native view and 640x360 RAM PNG were inspected; normal exit cleared
-the image to 404 and removed only owned display processes. No capture files were
-found. See [runtime evidence](docs/windows.md#actual-current-pc-runtime-evidence).
+The native cursor replacement is source-only, awaiting final-head independent
+review and CI before any installed update. Its independently reviewed isolated
+prototype completed normally with 28 consecutive qualified NULL cursor readings
+through the loaded 4K Edge session, helper hit-root, stable input, matched desktop
+cursor/context afterward, preview 404, zero owned display processes and unchanged
+data/native preferences. This is sampled prototype evidence; integrated runtime,
+real input/Escape, external focus, renderer failure and startup/error visuals
+remain separate gates. The first-second input-loss bug is tracked by
+[#50](https://github.com/8roundshock/living-room-display/issues/50) with actual
+caller-baseline and fake delayed-startup regressions.
 
-The reviewed Windows/cursor baseline `7f6313a` was subsequently installed and its
-47 tests/build/control checks passed. This display-studio change has not yet been
-installed; its refresh follows final independent review/CI. The native host is
-unchanged by the redesign.
-The user reported a bright white pointer during the previous native test;
-WGC image inspection did not establish cursor absence. A reviewed bounded native
-test must verify cursor hiding and restoration before calling that bug resolved.
-Native `/c` cold startup was blocked by automatic approval review before action
-and remains unverified. Fresh-account installation, movie/game inhibition,
-secure lock/resume and across-room readability are unverified. Automatic idle
-stays off with the original blank saver, 1200-second timeout and security 0 preserved until explicitly
-enabled after final QA. This is a working current-PC source installation, not a
-public/signed release. TV control, live app preview and multi-monitor selection
-remain future work; the host targets one primary display.
+Earlier current-PC installation tests passed real CLI Start/Stop, update/rollback,
+uninstall-retain/reinstall and synthetic reminder persistence. A native RAM PNG
+and actual 4K ambient window were inspected, without screenshot files. See
+[Windows evidence](docs/windows.md#actual-current-pc-runtime-evidence).
+
+Native `/c` cold startup remains unverified after automatic approval blocked that
+optional test; do not equate it with CLI startup or retry an equivalent route.
+Movie/game screensaver inhibition, real lock/resume, fresh-account installation,
+across-room comfort and multi-monitor support remain unverified. Current input
+polling exists only inside an already requested ambient session; activation uses
+conventional Windows screensaver registration, with no new idle service/loop.
+Keep automatic idle off until actual acceptance and explicit coordinator approval.
 
 ## Decisions and boundaries
 

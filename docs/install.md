@@ -214,6 +214,9 @@ and [contribution workflow](../CONTRIBUTING.md) for a consent-based bug/fix hand
 - Choose a location; check weather age/error labels and seven forecast days.
 - Add/edit/complete a test reminder; `Stop`/`Start` and verify persistence.
 - Run `Display`; check dim moving widgets, labeled last state and input dismissal.
+- Native cursor replacement is still in review. Keep idle off until the reviewed
+  installed helper passes native cursor/dismissal/restoration acceptance; CSS or
+  a cursor-free screenshot alone does not establish it.
 - Disable preview; verify it clears and re-enabling does not reuse an old image.
 - Confirm `Stop` leaves normal Edge tabs open and reports no owned processes.
 - Test update, data retention and uninstall before relying on unattended use.

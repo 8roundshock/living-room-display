@@ -15,7 +15,8 @@ uses the [recorded HIG-inspired design choices](docs/design.md). The display stu
 puts one focused Style, Widgets, Weather or Reminders inspector beside its live
 preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
-This redesigned source still needs an installed refresh and native acceptance.
+The reviewed Studio/grid, preview and reminder changes are installed on the current PC.
+The native cursor lifecycle replacement is in review; automatic idle remains off.
 Wider release
 compatibility checks remain; see [STATUS.md](STATUS.md).
 

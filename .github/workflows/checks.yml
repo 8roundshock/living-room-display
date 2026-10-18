@@ -24,3 +24,11 @@ jobs:
       - name: Build the integrated frontend when present
         if: ${{ hashFiles('index.html') != '' }}
         run: npm run build
+      - name: Verify Windows native host and scoped lifecycle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $node = (Get-Command node).Source
+          ./windows/Test-Windows.ps1 -NodeExe $node
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./windows/Test-Windows.ps1 -NodeExe $node
+          if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 checks failed.' }

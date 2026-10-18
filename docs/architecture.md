@@ -49,14 +49,18 @@ dependency. Node 24 is an active LTS line; existing system runtimes are not repl
 
 | Mode | Intended benefit | Open work |
 | --- | --- | --- |
-| Last-state snapshot, selected for version one | Shows the screen immediately before ambient activation. | Verify native capture timing/source, RAM-only lifetime, timestamp label, and permissions. |
+| Last-state snapshot, selected for version one | Shows the screen immediately before ambient activation. | Current-PC native source/content, RAM-only lifetime, label and clear were verified; other-account, real-lock and room-comfort checks remain. |
 | Live selected-app thumbnail, future work | Shows changing state from an explicitly chosen application. | Capture support, minimized/occluded app behavior, permissions, performance, and avoiding dashboard recursion. |
 
 The native Windows host captures before activating the display and transfers a
 small PNG to the backend's RAM-only endpoint. A normal web page has no silent
 desktop capture permission. Keep the thumbnail dim, adjustable, movable, and
-toggleable. Do not save screenshots. The backend handoff exists; actual native
-capture still requires the Windows workstream's verification. See [API](api.md).
+toggleable. Do not save screenshots. Actual native content and the readable
+time-labeled snapshot were inspected in RAM on the current 3840x2160 Windows 10
+setup on 2026-10-18; normal exit cleared the image to 404 without capture files.
+This establishes that setup's last-state source/lifecycle, not live capture,
+locked/protected desktop access, another account or across-room comfort. See
+[API](api.md) and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 
 ## Current decisions
 

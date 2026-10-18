@@ -64,6 +64,15 @@ try {
     & $lifecycleTest
     if ($LASTEXITCODE -ne 0) { throw 'Lifecycle regression failed.' }
     $passed++
+    foreach($testName in @('ActiveInputTests','SurfacePolicyTests')) {
+        $target=Join-Path $compiled ($testName+'.exe')
+        $sources=if($testName -eq 'ActiveInputTests'){@((Join-Path $PSScriptRoot 'SessionStartup.cs'))}else{@((Join-Path $PSScriptRoot 'SurfacePolicy.cs'))}
+        & $compiler /nologo /target:exe /platform:anycpu "/out:$target" $sources (Join-Path $PSScriptRoot ('tests\'+$testName+'.cs'))
+        if($LASTEXITCODE -ne 0){throw ($testName+' compilation failed')}
+        & $target
+        if($LASTEXITCODE -ne 0){throw ($testName+' failed')}
+        $passed++
+    }
     & (Join-Path $PSScriptRoot 'tests\Test-IdleRestore.ps1')
     $passed++
     & (Join-Path $PSScriptRoot 'tests\Test-InstallLifecycle.ps1')

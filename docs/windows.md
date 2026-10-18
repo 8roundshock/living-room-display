@@ -16,8 +16,8 @@ package, administrator installation or always-running idle watcher is required.
   bounded integration verification. Capture still follows the preview setting.
 
 The helper observes input to dismiss an active display, not to decide when to
-activate. A 1.2-second launch grace prevents the activation key from dismissing
-it. A per-user mutex prevents simultaneous ambient sessions. Session lock,
+activate. One fixed input baseline is captured before startup; genuine input
+cancels startup or dismisses the display, including its first second. A per-user mutex prevents simultaneous ambient sessions. Session lock,
 logoff and disconnect close the display. A named event scoped to the installed
 helper path lets `Stop` ask it to exit normally.
 Session observation starts before cold server startup and handshake. A cancelled
@@ -25,17 +25,38 @@ startup aborts pending HTTP, clears the image, skips later capture/kiosk steps,
 and releases its event subscription. Cancellation also closes an already-created
 owned browser job; failed startup and ordinary exit share cleanup.
 
-Edge starts suspended, is assigned to an owned Windows job, then resumes. The
+Edge is atomically assigned to an owned Windows job at suspended creation, then
+resumes after a cancellation check. The
 job uses `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, so dismissal and helper crashes
 terminate only that browser process tree. No global Edge/node kill, window input
 injection, audio change or media key is used. The backend lives independently.
 Scripts validate PID, executable path, command line and process start time before
 stopping it. Source runs and other apps are not adopted.
 
-The standalone `/display` document uses scoped `cursor: none`, including loading,
-error and descendant controls. The class is removed on unmount; the editor and
-its embedded preview keep ordinary cursor behavior. No global Windows cursor
-counter, cursor image, registry setting or input hook is changed.
+The standalone web route retains scoped CSS cursor hiding for browser use,
+loading/errors and descendants. Native kiosk startup needs its own input surface:
+the stationary Edge cursor was empirically still visible despite that CSS.
+
+The fullscreen host creates one independent, borderless primary-display window,
+initially opaque black. It establishes NULL cursor only over its own foreground
+client, through its initial handler and WM_SETCURSOR. A 50ms native-only poll
+requires actual hit-root, physical full-primary bounds, readable NULL cursor and
+helper/job-owned foreground before launching Edge. Exact loaded Edge readiness
+and a fresh ownership check permit alpha1 reveal; alpha0, color-key transparency
+and WS_EX_TRANSPARENT are not used. Loading that never becomes ready closes after
+15 seconds. Renderer loss, foreign/NULL foreground, visible cursor, input, stop
+or cancellation hide the surface and end its exact browser job. No timer repairs
+cursor state or forces focus. HTTP cleanup follows hiding/disposal of the surface.
+
+Cross-queue WM_ACTIVATE is asynchronous: its next-window hint can be NULL/stale.
+One fresh actual foreground sample controls immediate closure; the mandatory poll
+also catches a later Edge-to-foreign transition. The fullscreen surface has no
+external owner/parent and never attaches input queues. The unchanged /p placeholder
+uses the conventional Windows control-panel parent; it is separate from fullscreen.
+There is no ShowCursor counter change, system cursor replacement, borrowed cursor
+retention/destruction, pointer movement, input injection or global hook. Natural
+desktop cursor restoration needs actual measurement. The editor keeps its normal
+pointer. Unexpected UI-thread errors close instead of displaying a modal dialog.
 
 ## Preview and privacy
 
@@ -77,92 +98,76 @@ establish them.
 
 ## Verification
 
-Observed 2026-10-18: Windows 10 Pro 10.0.19045 x64, existing Edge, Framework
-v4.0.30319 compiler, PowerShell 7 and Windows PowerShell 5.1. Helper compilation,
-`--check` and invalid-parent preview exit were exercised. The control script
-parses under both PowerShell engines. Run `windows/Test-Windows.ps1` for native
-compile/argument checks, cleanup containment including nested junction refusal,
-malformed/unrelated PID refusal, and optional real process/start-time ownership
-checks (`-NodeExe '<node.exe>'`). Eleven check groups with Node (ten without) pass
-on PowerShell 7 and 5.1, including successful final cleanup; use process-scoped
-`-ExecutionPolicy Bypass` where script policy requires it. These include seven native lifecycle scenarios using the production
-startup coordinator with delayed fake transport/synthesized session ends, plus
-four real restore-function scenarios with mocked registry/file/SPI boundaries
-(missing, empty, other and owned selections).
-Retained-data uninstall/reinstall and failed-update regressions exercise real
-filesystem transactions with external build/runtime/process/native boundaries
-mocked. Cleanup deletes only the verified test junction without recursion and
-checks that its target survives. These tests use scoped synthetic fixtures and
-a sleeping child; no real app installation, capture, kiosk or settings change.
-An actual child PowerShell `-File` invocation verifies default parameter binding
-reaches the missing-install guard; dot-sourced tests alone do not cover that path.
-Source provenance checks use synthetic local Git repositories to verify clean,
-dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
-verify metadata refresh on successful install and retention after failed update
-or uninstall. No paths, remotes, changes or credentials are saved in provenance.
-The integrated source includes approved main `5ef3fdc`; its full production build
-and all 47 application tests pass using the installed app-owned Node 24.19.0.
-This source check does not itself establish a successful installed refresh.
-The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
-passes actual computed-style checks for loading/error, viewport edges, widget
-controls, display-to-editor navigation, the embedded preview and a new display
-tab. Synthetic state is intercepted in an isolated headless browser; it neither
-changes app data nor establishes the visible native cursor state.
+Verified on 2026-10-18: Windows 10 Pro 19045 x64, existing Edge, Framework 4.x compiler,
+PowerShell 5.1 and 7, physical primary 3840x2160. Current installed clean revision is
+`d81c1e0`, including the reviewed Studio/grid, readable snapshot and reminder fixes.
+Its owned Node 24.19.0 is isolated from the preexisting system Node 16. The original
+blank saver/1200-second timeout/security 0 is preserved; automatic idle is off.
 
-Independent static review approved source `eba70fc` before current-PC runtime QA.
-The final integrated source still needs its own exact-head review and CI before
-merge; the repository stays private.
+The new Windows surface integration is source-only pending exact-head independent
+review, CI and separate runtime acceptance. Run `windows/Test-Windows.ps1`: thirteen
+groups with optional `-NodeExe '<node.exe>'` (twelve without) cover compilation,
+entry flags, eight fake transport/session/browser scenarios, fixed caller input
+baseline and delayed-startup cancellation, surface policy, restore selections,
+install transactions, provenance and scoped cleanup. Both PowerShell versions pass.
+These tests create no UI/capture or actual screensaver selection. CI runs them on
+Windows; the application has 71 tests and a full production build.
+
+The production Edge browser regression separately checks real computed styles for
+loading/error, viewport, descendants, editor/embedded preview and navigation.
+It does not establish native cursor behavior. No prototype phase logging or
+screenshot logging is included in normal product operation.
 
 ## Actual current-PC runtime evidence
 
-Tested 2026-10-18, source `eba70fc`, Windows 10 Pro 19045 x64, actual display 3840x2160:
+- Earlier reviewed source `eba70fc` passed nonadmin official-runtime installation,
+  CLI Start/Stop, real update/rollback, uninstall-retain/reinstall and synthetic
+  reminder persistence. A RAM 640x360 PNG and actual 4K kiosk were inspected; exit
+  cleared preview 404 and left only the independent server. Capture files were not
+  created. That visual check did not establish cursor absence.
+- Reviewed `d81c1e0` is installed clean. Source provenance, served assets, health
+  and settings/reminder/photo preservation were checked during updates. The
+  owner deliberately uses 24% preview opacity; other settings were preserved.
+- Native `/c` end-to-end cold startup was not executed: automatic approval review
+  rejected that optional test before action with only `blocked by policy`.
+  It remains unverified. Separate CLI cold Start/Stop and warm-native startup do
+  not prove it. Do not retry an equivalent route around that rejection.
+- Cursor defect [#36](https://github.com/8roundshock/living-room-display/issues/36)
+  was confirmed natively: stable loaded owned Edge still showed a nonNULL arrow;
+  a one-time owned WM_SETCURSOR reapply completed but did not hide it.
+- An independently reviewed isolated surface prototype (binary SHA256 prefix
+  `2861444F`, not the installed helper) completed one normal eight-second bounded
+  test. Initial sampled NULL ownership began at 59ms over the full3840x2160 client;
+  actual job-owned Edge activated at 406ms while its message hint was NULL. Reveal
+  occurred at 1018ms. Twenty-eight consecutive independent readings confirmed
+  NULL cursor, helper hit-root, physical bounds, live loaded pinned Edge and stable
+  input. The surface stayed alpha1 until bounded closure at 8015ms; helper exit 0
+  needed no watchdog kill. Baseline/post cursor65541/SHOWING1, input and underlying
+  foreground matched. RAM 640x360 preview cleared to 404, owned display processes
+  were zero, server healthy, and settings/data/native preference hashes unchanged.
+  An earlier prototype observation timed out and remains failed; its harness had
+  a proven wait-before-drain pipe dependency, corrected and independently reviewed
+  before the successful observation. Neither run saved pixels to disk.
 
-- Per-user nonadmin install downloaded/checksummed official Node 24.19.0 and built
-  the web/native app. The system Node 16.14.2 installation was unchanged. Installed
-  editor/display routes returned 200; owned server on 4318 was healthy.
-- Synthetic reminder add/edit/complete survived restart. Stop removed the owned
-  listener; repeated Start retained the PID. Real update, previous-app rollback
-  and restore were healthy. Uninstall removed app/runtime and retained data plus
-  ownership marker; same-path reinstall preserved the data hash. Reinstall
-  reused a cached copy of the already verified official runtime. Only the
-  synthetic reminder was deleted afterward; user preferences were not reset.
-- An actual 640x360 RAM PNG was emitted/inspected, followed by a WGC view of a
-  returned window matched to the owned Edge PID/HWND. Black/dim clock, weather,
-  forecasts and faint time-labeled last state were visible without recursion.
-  Helper exit 0/stderr empty after 6222ms, within the eight-second test bound.
-  The precise expiry cause was not isolated from input/browser dismissal.
-- After exit, preview metadata was absent and image GET returned 404; helper and
-  app-profile Edge process counts were 0 and the server remained healthy. No
-  capture file was found. New PNG files were only Edge 128x128/448x448 static icons,
-  plus the preexisting npm QR example. Preview flags were unchanged.
-- The original Windows blank saver, 1200-second timeout and security 0 stayed
-  unchanged; this app's automatic idle activation remains off.
+Prototype evidence supports the sampled stationary lifecycle. It does not prove
+the final integrated binary, every-frame flash absence, real input/Escape,
+external focus/failed activation, renderer failure or session-cancel paths.
+Those remain acceptance gates before resolving36 or enabling idle. Real lock,
+movie/game inhibition, fresh-account installation, across-room comfort and
+multi-monitor operation are also unverified. No public/signed release exists.
 
-Native `/c` end-to-end cold startup was **not executed**: automatic approval review
-rejected that optional test before action, stating only `blocked by policy`.
-Do not infer this path passed from separate CLI cold Start/Stop and native warm
-EnsureServer checks. This is an unverified path, not an established application
-bug; do not route around the rejected test.
+## Primary API basis
 
-Pending: final integrated installed update and exact-head review/CI, fresh-account install,
-actual movies/games/screensaver inhibition, real lock/resume, across-room
-readability, and multi-monitor behavior. The native test proves neither exact
-eight-second timer expiry nor these compatibility cases. Automatic idle stays
-off until explicitly authorized after final reconciliation.
-
-Cursor bug [#36](https://github.com/8roundshock/living-room-display/issues/36):
-the user reported a bright white pointer during the prior native test. WGC may
-omit the cursor, so the earlier image did not prove it was hidden. Native proof
-of the scoped CSS fix is pending a reviewed bounded test. Read-only
-[`GetCursorInfo`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getcursorinfo)
-and [`CURSORINFO`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-cursorinfo)
-provide visibility flags and screen position: `0` is hidden, `1` is showing, and
-`2` is touch/pen suppression. Verify the point lies inside the owned kiosk's
-actual rectangle and check restoration after exit; do not infer absence from a
-cursor-free screenshot. These Microsoft definitions were checked for this
-2026-10-18 verification plan; native results must be recorded when executed.
-
-References: [Screensaver library](https://learn.microsoft.com/en-us/windows/win32/lwef/screen-saver-library),
-[Edge kiosk](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-configure-kiosk-mode),
-[Windows jobs](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects),
-[Node release files](https://nodejs.org/download/release/v24.19.0/).
+Checked 2026-10-18 for this Windows 10 implementation; recheck when Windows/Edge or
+the host design changes. Microsoft documents [SetCursor(NULL)](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setcursor)
+as removing the glyph, scoped to the calling window's actual client ownership.
+[WM_ACTIVATE](https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-activate)
+is asynchronous across queues and permits NULL hints. [Layered window hit testing](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features)
+and [JOB_LIST at creation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)
+provide the implementation basis; style alone is never ownership proof.
+[Thread DPI context](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setthreaddpiawarenesscontext)
+keeps native client/point checks physical without changing display settings.
+[CURSORINFO](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-cursorinfo)
+flags are recorded alongside hCursor: NULL glyph is decisive; flags alone and
+cursor-free screenshots cannot prove absence. These API facts do not replace
+empirical startup/restoration and compatibility checks.
