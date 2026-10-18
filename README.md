@@ -4,9 +4,9 @@ A silent, customizable ambient display for a Windows 10 leisure PC connected to
 a Samsung S90F OLED TV: large time and date, weather, a seven-day outlook, rain
 estimates, optional reminders, and an optional dim screen preview.
 
-**Current state: local backend implemented; display/Windows integration in progress.**
+**Current state: local display/editor implemented; Windows install/runtime QA pending.**
 The selected approach is a custom local web dashboard plus a Windows helper.
-The API, persistence, weather service, and RAM-only snapshot handoff are available.
+The React UI, local API, persistence, weather and RAM-only snapshot handoff are implemented.
 A complete installable display release is not ready yet. See [STATUS.md](STATUS.md).
 
 This is the independent private
@@ -19,11 +19,13 @@ chosen to keep it private until a usable release; there is no public release yet
 
 - [AGENTS.md](AGENTS.md): primary instructions for any coding agent.
 - [Product requirements](docs/product.md): desired experience and boundaries.
-- [Architecture choices](docs/architecture.md): alternatives and pending decisions.
+- [Architecture](docs/architecture.md): selected design and boundaries.
 - [Development](docs/development.md): verified tools, authentication, and checks.
 - [Local API](docs/api.md): shared contracts, weather semantics, and data recovery.
 - [Agent workflow](docs/agent-workflow.md): ownership, handoffs, review, and PRs.
 - [Installation readiness](docs/install.md): current limits and future user setup.
+- [Contributing](CONTRIBUTING.md) and [agent runbook](docs/agent-runbook.md):
+  install/diagnose, prepare a useful issue, or fork/fix using your own setup.
 
 From this checkout, start an installed Codex CLI with:
 
@@ -48,5 +50,6 @@ feature acceptance and remaining integrated checks.
 > does not, explain what is missing without inventing setup commands. Keep my
 > data local and do not post feedback or star the repository without my permission.
 
-Today that check will find a backend milestone, not an installable display release.
+Today the web UI is built and verified; native installation, capture and kiosk
+checks are still a release gate. See [Windows verification](docs/windows.md#verification).
 Future releases should work without the owner's accounts, paths, or private memory.

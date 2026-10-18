@@ -1,8 +1,9 @@
 # Development
 
 Use Node 24 LTS and npm. Application dependencies are pinned in `package.json`
-and `package-lock.json`. The backend, shared types, and tests are implemented;
-the frontend and Windows host are integrated in separate changes. Do not replace
+and `package-lock.json`. The React display/editor, local backend and native host
+sources are implemented; installed Windows runtime verification is still pending.
+Do not replace
 an existing system Node or application runtime to work on this project.
 
 ## Application commands
@@ -11,23 +12,38 @@ From the checkout with Node 24/npm available:
 
 ```powershell
 npm ci
-npm run typecheck
+npm run build
 npm test
-npm run build:server
 npm start
 ```
 
-The backend listens at `http://127.0.0.1:4318`; `/api/health` verifies readiness.
+The production app serves the editor at `http://127.0.0.1:4318/editor` and ambient
+view at `http://127.0.0.1:4318/display`; `/api/health` verifies server readiness.
 It stores data in the per-user directory documented in [API](api.md), not Git or
 browser storage. Set `LRD_DATA_DIR` to an isolated test folder before integration
 experiments. `LRD_PORT` can choose another unprivileged local port. Ctrl+C stops it.
 
-Once the frontend entry point is present, `npm run build` typechecks and builds
-both server and browser assets; `npm start` then serves the display and editor.
+Build before `npm start` on a fresh clone: `npm run build` typechecks and builds
+both server and browser assets. `build:server` alone does not produce the UI.
 For development use `npm run dev:server` and `npm run dev` in separate terminals.
 Vite listens on loopback port 5173 and proxies `/api` to 4318. The development
 server explicitly accepts that origin; production does not expose CORS access.
-Do not claim a full application build passed on a backend-only branch.
+Source runs may use `LRD_PORT`; the installed Windows helper/control script uses
+fixed loopback port 4318 and overrides an inherited `LRD_PORT` for its owned server.
+Do not run two instances there. The Windows installer uses a separate app-owned
+Node24 runtime and never changes system Node. See [installation](install.md) for
+runtime updates, rollback, reparse restrictions and data recovery.
+
+For nonintrusive Windows regression checks (process-scoped policy only):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Test-Windows.ps1
+```
+
+Pass `-NodeExe '<Node24 node.exe>'` to also test exact owned-process/start-time
+recognition. Native capture/fullscreen/lock acceptance remains separate. Follow
+[CONTRIBUTING.md](../CONTRIBUTING.md) and the [agent runbook](agent-runbook.md) for
+self-service issue/fork/fix handoff; neither enables automatic reporting.
 
 ## Local checkout and agent startup
 

@@ -17,7 +17,7 @@ function Expect-Failure([scriptblock]$Action, [string]$Message) {
     Assert-True $failed $Message
 }
 try {
-    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1')) {
+    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1','tests\Test-InstallLifecycle.ps1')) {
         $parseErrors = $null
         $null = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $file),[ref]$null,[ref]$parseErrors)
         Assert-True ($parseErrors.Count -eq 0) "PowerShell syntax failed: $file"
@@ -49,6 +49,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Lifecycle regression failed.' }
     $passed++
     & (Join-Path $PSScriptRoot 'tests\Test-IdleRestore.ps1')
+    $passed++
+    & (Join-Path $PSScriptRoot 'tests\Test-InstallLifecycle.ps1')
     $passed++
     . (Join-Path $PSScriptRoot 'LivingRoomDisplay.ps1') -InstallRoot $fixture -FunctionsOnly
     Write-Json $marker @{product='living-room-display'}
@@ -91,13 +93,22 @@ try {
         Assert-True ($null -eq (Get-OwnedServer)) 'Reused PID/start-time mismatch was adopted.'
         $passed++
     }
-    Write-Output "$passed Windows checks passed. No capture, kiosk, install, port listener, or screensaver setting was used."
 } finally {
     if ($ownedTestProcess -and -not $ownedTestProcess.HasExited) { $ownedTestProcess | Stop-Process -Force }
-    # Remove only this test's known junction itself, then validate its absolute scratch root.
-    if (Test-Path -LiteralPath $junction) { Remove-Item -LiteralPath $junction -Force }
     $scratchFull = [IO.Path]::GetFullPath($scratch)
     $allowed = [IO.Path]::GetFullPath((Join-Path $repo '.local')).TrimEnd('\') + '\'
     if (-not $scratchFull.StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase)) { throw 'Test cleanup path escaped .local.' }
+    # PS5.1 Remove-Item can throw on a junction. Validate the exact known link,
+    # then delete only that directory entry with recursion explicitly disabled.
+    if (Test-Path -LiteralPath $junction) {
+        $junctionFull = [IO.Path]::GetFullPath($junction)
+        $expectedLink = Join-Path $scratchFull 'install\with-junction\link'
+        if ($junctionFull -ne $expectedLink -or -not $junctionFull.StartsWith($scratchFull + '\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Test junction path escaped its expected location.' }
+        if (-not ((Get-Item -LiteralPath $junctionFull -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Expected test junction is no longer a reparse point; cleanup stopped.' }
+        [IO.Directory]::Delete($junctionFull, $false)
+        Assert-True (-not (Test-Path -LiteralPath $junctionFull)) 'Known test junction was not removed.'
+        Assert-True (Test-Path -LiteralPath (Join-Path $scratchFull 'outside\keep.txt')) 'Junction target was changed by link cleanup.'
+    }
     Remove-Item -LiteralPath $scratchFull -Recurse -Force
 }
+Write-Output "$passed Windows checks passed, including cleanup. No capture, kiosk, install, port listener, or screensaver setting was used."

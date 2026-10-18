@@ -88,6 +88,7 @@ function Test-Server {
 }
 function Start-App {
     Assert-Installed
+    if (-not (Test-Path -LiteralPath (Join-Path $app 'dist\server\index.js'))) { throw 'App files are absent. Run Install from the source clone to reinstall; retained data stays in place.' }
     $owned = Get-OwnedServer
     if ($owned) {
         if (-not (Test-Server)) { throw 'Owned server is running but not responding. Run Stop, then Start.' }
@@ -157,6 +158,27 @@ function Install-Runtime {
         Move-Item -LiteralPath (Join-Path $download "node-v$NodeVersion-win-x64") -Destination $runtime
     } finally { [Net.ServicePointManager]::SecurityProtocol = $oldProtocol; Remove-OwnedDirectory $download }
 }
+function Build-InstallCandidate([string]$Source, [string]$Next) {
+    Push-Location $Source
+    try {
+        & (Join-Path $runtime 'npm.cmd') ci
+        if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
+        & (Join-Path $runtime 'npm.cmd') run build
+        if ($LASTEXITCODE -ne 0) { throw 'Application build failed.' }
+    } finally { Pop-Location }
+    $null = New-Item -ItemType Directory -Path $Next
+    Copy-Item -LiteralPath (Join-Path $Source 'dist') -Destination $Next -Recurse
+    Copy-Item -LiteralPath (Join-Path $Source 'package.json'),(Join-Path $Source 'package-lock.json') -Destination $Next
+    $nextWindows = Join-Path $Next 'windows'
+    $null = New-Item -ItemType Directory -Path $nextWindows
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LivingRoomDisplay.ps1') -Destination $nextWindows
+    & (Join-Path $PSScriptRoot 'Build-Host.ps1') -OutputDirectory $nextWindows
+    Push-Location $Next
+    try {
+        & (Join-Path $runtime 'npm.cmd') ci --omit=dev --ignore-scripts
+        if ($LASTEXITCODE -ne 0) { throw 'Production dependency install failed.' }
+    } finally { Pop-Location }
+}
 function Install-App {
     $source = [IO.Path]::GetFullPath($SourceRoot)
     if (-not (Test-Path -LiteralPath (Join-Path $source 'package-lock.json')) -or -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Build-Host.ps1')) -or -not (Test-Path -LiteralPath (Join-Path $source 'src'))) { throw 'Run Install or Update from a complete source clone, not from installed app files.' }
@@ -175,32 +197,14 @@ function Install-App {
     $oldPath = $env:PATH
     try {
         $env:PATH = $runtime + ';' + $oldPath
-        Push-Location $source
-        try {
-            & (Join-Path $runtime 'npm.cmd') ci
-            if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
-            & (Join-Path $runtime 'npm.cmd') run build
-            if ($LASTEXITCODE -ne 0) { throw 'Application build failed.' }
-        } finally { Pop-Location }
-        $null = New-Item -ItemType Directory -Path $next
-        Copy-Item -LiteralPath (Join-Path $source 'dist') -Destination $next -Recurse
-        Copy-Item -LiteralPath (Join-Path $source 'package.json'),(Join-Path $source 'package-lock.json') -Destination $next
-        $nextWindows = Join-Path $next 'windows'
-        $null = New-Item -ItemType Directory -Path $nextWindows
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LivingRoomDisplay.ps1') -Destination $nextWindows
-        & (Join-Path $PSScriptRoot 'Build-Host.ps1') -OutputDirectory $nextWindows
-        Push-Location $next
-        try {
-            & (Join-Path $runtime 'npm.cmd') ci --omit=dev --ignore-scripts
-            if ($LASTEXITCODE -ne 0) { throw 'Production dependency install failed.' }
-        } finally { Pop-Location }
+        Build-InstallCandidate $source $next
         if (-not (Test-Path -LiteralPath (Join-Path $next 'dist\server\index.js')) -or -not (Test-Path -LiteralPath (Join-Path $next 'dist\client\index.html'))) { throw 'Build output is incomplete.' }
         if (Test-Path -LiteralPath $marker) { Stop-App }
         Remove-OwnedDirectory $previous
         if (Test-Path -LiteralPath $app) { Move-Item -LiteralPath $app -Destination $previous }
         try { Move-Item -LiteralPath $next -Destination $app }
         catch { if (Test-Path -LiteralPath $previous) { Move-Item -LiteralPath $previous -Destination $app }; throw }
-        Write-Json $marker @{product='living-room-display';installedAt=[DateTime]::UtcNow.ToString('o');version=(Get-Content (Join-Path $app 'package.json') -Raw | ConvertFrom-Json).version}
+        Write-Json $marker @{product='living-room-display';state='installed';installedAt=[DateTime]::UtcNow.ToString('o');version=(Get-Content (Join-Path $app 'package.json') -Raw | ConvertFrom-Json).version}
     } finally {
         $env:PATH = $oldPath
         Remove-OwnedDirectory $next
@@ -290,6 +294,18 @@ function Set-Idle([bool]$Enable) {
     }
 }
 
+function Uninstall-App {
+    Assert-Installed
+    Set-Idle $false
+    Stop-App
+    foreach ($directory in @('app','app.previous','runtime','run','edge-profile')) { Remove-OwnedDirectory (Join-Path $InstallRoot $directory) }
+    if ($RemoveData) { Remove-OwnedDirectory $data }
+    # Keep a non-secret ownership marker so retained data/backups can be safely
+    # reinstalled at this same path. Unrelated nonempty directories remain refused.
+    Write-Json $marker @{product='living-room-display';state='uninstalled';uninstalledAt=[DateTime]::UtcNow.ToString('o')}
+    Write-Output "App removed. Settings/reminders $(if ($RemoveData) {'removed'} else {'retained at ' + $data}). Ownership marker retained for reinstall."
+}
+
 if ($FunctionsOnly) { return }
 $hasher = [Security.Cryptography.SHA256]::Create()
 try { $lockSuffix = [BitConverter]::ToString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($InstallRoot.ToUpperInvariant()))).Replace('-','').Substring(0,12) } finally { $hasher.Dispose() }
@@ -323,15 +339,6 @@ try {
     }
     'EnableIdle' { Set-Idle $true; break }
     'DisableIdle' { Set-Idle $false; break }
-    'Uninstall' {
-        Assert-Installed
-        Set-Idle $false
-        Stop-App
-        foreach ($directory in @('app','app.previous','runtime','run','edge-profile')) { Remove-OwnedDirectory (Join-Path $InstallRoot $directory) }
-        if ($RemoveData) { Remove-OwnedDirectory $data }
-        Remove-Item -LiteralPath $marker -Force
-        Write-Output "App removed. Settings/reminders $(if ($RemoveData) {'removed'} else {'retained at ' + $data})."
-        break
-    }
+    'Uninstall' { Uninstall-App; break }
     }
 } finally { if ($lockHeld) { $operationLock.ReleaseMutex() }; $operationLock.Dispose() }

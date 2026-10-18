@@ -12,6 +12,9 @@ PowerShell 5.1 (PowerShell 7 also works). Installation is per user and needs no
 administrator rights. This is an initial source installation, not a signed or
 public release. The repository remains private. Use your own authorized GitHub
 access while cloning; the maintainer's GitHub helper is not an app prerequisite.
+The host targets one primary display; monitor selection and multi-monitor layout
+are not implemented. Install directories/subdirectories must be ordinary local
+paths without junctions/symlinks; cleanup refuses reparse traversal.
 The backend can be run with the [development commands](development.md), which
 does not establish installed display or screensaver behavior.
 
@@ -105,6 +108,7 @@ selection, and retains the backup for inspection.
 | `run/server.json` | Server PID/start time for scoped process management. |
 | `edge-profile` | Dedicated Edge profile; ambient uses InPrivate/no-store preview responses. |
 | `screensaver-before.json` | Prior native screensaver settings, only after opt-in. |
+| `installation.json` | Non-secret ownership/state marker, retained for same-path reinstall. |
 
 Use the editor's export, or stop the app and copy `data` to a private backup.
 Snapshot pixels and native tokens are RAM only and excluded from persisted
@@ -117,11 +121,74 @@ untouched. A replacement failure restores the prior app directory. To roll back,
 run `Stop`, rename `app` to `app.failed`, rename `app.previous` to `app`, then run
 the installed script `Start`. Check data compatibility before rolling back a
 future schema version. Do not remove data to repair an update.
+`Update` reuses an existing Node24 runtime; `-NodeVersion` selects a version only
+when the runtime is absent. For a deliberate runtime update, stop the app, rename
+`runtime` to `runtime.previous`, then run source `Update -NodeVersion <explicit
+24.x.y release>`. The new official ZIP is checksum-verified. Keep the previous
+runtime until verified; rollback by stopping, renaming the new runtime aside and
+renaming `runtime.previous` back. No system runtime or PATH is changed.
 
 `Uninstall` retains `data` by default. Add `-RemoveData` to explicitly delete it.
 Run uninstall from the clone so removal does not remove its executing script.
 A backup is retained if a different screensaver is now selected. The parent
-directory may remain with retained data/backup.
+directory retains its ownership marker, even with `-RemoveData`. Run `Install`
+again at the same path to reuse retained data and screensaver backup. An unrelated
+nonempty unmarked directory is still refused. Deliberately preserved recovery or
+runtime backup folders are not removed by uninstall.
+
+## JSON export/import and offline recovery
+
+The JSON API and offline validation/file replacement steps were checked with
+synthetic data under PowerShell 7 and 5.1. Installed process control still awaits
+runtime QA. The installed server is fixed at 4318; use the actual `LRD_PORT` URL for source runs.
+Choose a private backup path; exports contain your reminders/location/settings.
+With the app running:
+
+```powershell
+$backupFile = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'living-room-display-backup.json'
+Invoke-WebRequest 'http://127.0.0.1:4318/api/export' -OutFile $backupFile -UseBasicParsing
+# Restore a previously saved app export (replaces settings/reminders):
+Invoke-RestMethod 'http://127.0.0.1:4318/api/import' -Method Post -ContentType 'application/json' -InFile $backupFile -UseBasicParsing
+```
+
+If both `data\state.json` and `state.backup.json` are unreadable, startup refuses
+to overwrite them and the online import endpoint is unavailable. Keep installed
+app/runtime files, stop the app with its control script, and use a valid export.
+The following validates against this installed version's schema before preserving
+the data folder and replacing anything. Set `$installRoot`/`$backupFile` to your
+actual paths. Do not use an export from an incompatible future schema version.
+
+```powershell
+$installRoot = Join-Path $env:LOCALAPPDATA 'LivingRoomDisplay'
+$control = Join-Path $installRoot 'app\windows\LivingRoomDisplay.ps1'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $control Stop
+$dataDirectory = Join-Path $installRoot 'data'
+$node = Join-Path $installRoot 'runtime\node.exe'
+$validator = Join-Path $installRoot 'app\dist\server\validation.js'
+$candidate = Join-Path $installRoot ('restore-' + [Guid]::NewGuid().ToString('N') + '.json')
+$validationCode = @'
+const fs=require('node:fs');
+const {pathToFileURL}=require('node:url');
+(async()=>{
+  const exported=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
+  const {dataSchema}=await import(pathToFileURL(process.argv[2]).href);
+  const restored=dataSchema.parse({version:exported.version,settings:exported.settings,reminders:exported.reminders});
+  fs.writeFileSync(process.argv[3],JSON.stringify(restored,null,2),{encoding:'utf8',flag:'wx'});
+})().catch(()=>{console.error('Backup validation failed; preserved data was not modified.');process.exitCode=1;});
+'@
+& $node -e $validationCode $backupFile $validator $candidate
+if ($LASTEXITCODE -ne 0) { throw 'Backup validation failed; stop without replacing data.' }
+$preserved = Join-Path $installRoot ('data-before-restore-' + [Guid]::NewGuid().ToString('N'))
+Copy-Item -LiteralPath $dataDirectory -Destination $preserved -Recurse -ErrorAction Stop
+Move-Item -LiteralPath $candidate -Destination (Join-Path $dataDirectory 'state.json') -Force -ErrorAction Stop
+Copy-Item -LiteralPath (Join-Path $dataDirectory 'state.json') -Destination (Join-Path $dataDirectory 'state.backup.json') -Force -ErrorAction Stop
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $control Start
+```
+
+The preserved folder contains the original files for inspection. Keep it private.
+If no valid export exists, retain the data folder and request diagnosis; do not
+delete corrupt files merely to get a clean startup. See [agent runbook](agent-runbook.md)
+and [contribution workflow](../CONTRIBUTING.md) for a consent-based bug/fix handoff.
 
 ## Verification and troubleshooting
 
