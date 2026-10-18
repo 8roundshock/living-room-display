@@ -183,7 +183,7 @@ keep the newer data directory and restore the matching pre-upgrade data copy.
 
 | Feature | Data the previous release cannot read |
 | --- | --- |
-| #73 reminder history | Not shipped yet |
+| #73 reminder history | None: history is the completed subset of `reminders[]` and completion time is `updatedAt`, so the previous app reads it. It lists history under Show completed and can edit completed items there, which moves their derived completion time. |
 | #73 custom Reminders sizes | Not shipped yet |
 | #74 Weather and Rain merge | Not shipped yet |
 | #75 Native colours | Not shipped yet |
