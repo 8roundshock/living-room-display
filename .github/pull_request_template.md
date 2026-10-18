@@ -1,3 +1,9 @@
+<!-- Title: #<ticket-number> - <Ticket Name>, using the primary ticket's exact title. -->
+## Primary ticket and reason
+
+Link the primary ticket and explain why this change is needed. Link related
+tickets here; use closing keywords only for verified completion.
+
 ## Change
 
 Describe the problem and resulting behavior or documentation change. Link the
