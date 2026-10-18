@@ -132,6 +132,38 @@ Expected Git identity: `Vladimir Dolgopolov <vladimir@dolgopolov.ca>`; GitHub lo
 and credential username: `8roundshock`. Configure identity only in this repo if
 needed. See the [PR workflow](agent-workflow.md).
 
+## PowerShell host for project scripts
+
+Agent shells may start PowerShell from their own bundled runtime or with an
+inherited execution-policy override. On the owner's PC on 2026-10-18, one agent's
+PowerShell tool ran another agent's cached `pwsh` with `-ExecutionPolicy Bypass`.
+That same `pwsh` was also first on `PATH` in Git Bash. A project script started that way
+depends on a runtime the project does not own and on a policy override that
+nobody chose for that command. Before running a project `.ps1` from an agent
+shell, confirm the host:
+
+```powershell
+$PSHOME; $PSVersionTable.PSVersion
+Get-ExecutionPolicy -List
+(Get-AuthenticodeSignature (Join-Path $PSHOME 'pwsh.exe')).SignerCertificate.Subject
+```
+
+If the host is not an installed PowerShell you intend to use, or the Process scope
+shows an override you did not request, call an installed PowerShell explicitly.
+Clear the inherited module path and policy variables. Use the actual install
+path; the Microsoft Store location is shown here:
+
+```bash
+env -u PSModulePath -u PSExecutionPolicyPreference \
+  "$LOCALAPPDATA/Microsoft/WindowsApps/pwsh.exe" -NoProfile -NonInteractive \
+  -File scripts/gh-personal.ps1 repo view --json 'nameWithOwner,isPrivate'
+```
+
+The `-ExecutionPolicy Bypass` regression command above is a deliberate,
+process-scoped choice for those checks. It is not an inherited default. Do not
+change global execution policy, agent configuration or `PATH` to work around an
+unexpected host; report it. See [#81](https://github.com/8roundshock/living-room-display/issues/81).
+
 ## Verification now
 
 Run `git diff --check` for working changes and `git diff --cached --check` for
