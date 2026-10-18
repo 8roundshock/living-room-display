@@ -104,7 +104,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'reminders']));
       current.settings.widgetGrid.placements.reminders = { column: 0, row: 0, size };
       current.reminders[0].text = 'A deliberately long synthetic reminder that wraps across the available line length';
-      await open(); assert.ok(await page.locator('.ambient-reminders .widget-content').evaluate(el => new DOMMatrix(getComputedStyle(el).transform).a) >= 0.65);
+      await open(); const longReminderScale = await page.locator('.ambient-reminders .widget-content').evaluate(el => new DOMMatrix(getComputedStyle(el).transform).a); assert.ok(longReminderScale >= 0.65, `${size} long reminders retain their scale: ${longReminderScale}`);
     }
     current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'rain'])); current.settings.widgetGrid.placements.rain = { column: 0, row: 0, size: 'large' };
     current.weather.hourly[10].precipitationProbability = null; current.weather.hourly[11].rainAmount = null;

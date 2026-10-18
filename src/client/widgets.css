@@ -54,6 +54,13 @@
 .grid-ambient .weather-metrics { display: flex; justify-content: space-between; gap: 5cqw; margin-top: 7cqh; font-size: calc(min(7cqw, 10cqh) * var(--font-scale)); }
 .grid-ambient .weather-metrics > div { display: flex; flex-direction: column; gap: 2cqh; }
 .grid-ambient .metric-label { display: block; color: var(--ambient-accent); font-size: 0.65em; line-height: 1.3; margin-bottom: 1cqh; }
+.grid-ambient .ambient-weather.widget-size-large .ambient-label { font-size: calc(min(6cqw, 6cqh) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .current-temperature { font-size: calc(min(28cqw, 34cqh) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .weather-condition { font-size: calc(min(7cqw, 9cqh) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .weather-details { font-size: calc(min(5.5cqw, 7cqh) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .weather-metrics { margin-top: 5cqh; font-size: calc(min(6.5cqw, 8cqh) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .weather-age, .grid-ambient .ambient-weather.widget-size-large .weather-credit { font-size: calc(min(5cqw, 5cqh) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .weather-age { margin-top: 3cqh; }
 
 /* Rain has a clear chance, an estimated window, then a chart only with space. */
 .grid-ambient .rain-summary { display: flex; flex-direction: column; gap: 3cqh; }
@@ -100,8 +107,9 @@
 .grid-ambient .ambient-reminder-dot { width: 2cqw; height: 2cqw; margin-top: 3cqh; }
 .grid-ambient .ambient-reminder-title { font-size: calc(min(9cqw, 16cqh) * var(--font-scale)); line-height: 1.2; font-weight: 500; }
 .grid-ambient .ambient-reminder-date { font-size: calc(min(5.8cqw, 8cqh) * var(--font-scale)); margin-top: 2cqh; }
-.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-title { font-size: calc(min(7cqw, 10cqh) * var(--font-scale)); }
-.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-date { font-size: calc(min(5cqw, 6.5cqh) * var(--font-scale)); }
+.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-list { gap: 3cqh; }
+.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-title { font-size: calc(min(6cqw, 8cqh) * var(--font-scale)); }
+.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-date, .grid-ambient .ambient-reminders.widget-size-large .ambient-description { font-size: calc(min(4.5cqw, 5.5cqh) * var(--font-scale)); }
 
 /* Screens remain complete and faint; deliberate photos have purposeful crops. */
 .snapshot-processing { position: absolute; width: 0; height: 0; pointer-events: none; }
