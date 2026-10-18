@@ -180,9 +180,10 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.clock.runFor(300);
     await page.getByRole('option').first().waitFor();
     await input.press('ArrowDown');
+    // Option ids are unique per combobox instance (useId); the first option is active.
     assert.equal(
       await input.getAttribute('aria-activedescendant'),
-      'city-option-0',
+      await page.getByRole('option').first().getAttribute('id'),
     );
     assert.equal(
       await input.evaluate((e) => document.activeElement === e),

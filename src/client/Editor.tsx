@@ -33,6 +33,7 @@ import {
   settingsChanges,
 } from './draft';
 import { CitySearch } from './CitySearch';
+import { useAirQualityPreview } from './airPreview';
 import {
   GRID_DENSITIES,
   WIDGET_CATALOG,
@@ -178,6 +179,7 @@ export function Editor({
     photoDraft !== undefined &&
     (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
   const dirty = !sameEffectiveSettings(saved, draft) || photoChanged;
+  const airPreview = useAirQualityPreview(draft, state.airQuality);
   // A widget module can block Save with a reason shown in the save bar.
   const draftProblem =
     WIDGET_IDS.map((id) => WIDGET_MODULES[id].draftProblem?.(draft) ?? null).find(
@@ -718,7 +720,7 @@ export function Editor({
           <div className="preview-frame">
             <div className="preview-screen">
               <AmbientDisplay
-                state={state}
+                state={{ ...state, airQuality: airPreview ?? state.airQuality }}
                 settings={
                   gridPreview ? { ...draft, widgetGrid: gridPreview } : draft
                 }
