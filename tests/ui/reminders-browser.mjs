@@ -154,6 +154,9 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await page.keyboard.press('Enter');
     await page.clock.runFor(50);
     assert.equal(await focused(page), 'Complete: Call a friend');
+    // The settle timer starts when the save returns (the server saves in order), so wait for
+    // it in real time before running the fake clock past the settle.
+    await status(page).getByText('Completed “Water the plants”', { exact: true }).waitFor();
     await page.clock.runFor(1300);
     assert.deepEqual(await rowTitles(page), ['Call a friend', 'Plan the weekend']);
     checks.push('keyboard Enter completes and focus walks to the next circle');
