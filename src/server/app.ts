@@ -5,6 +5,7 @@ import { extname, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import type { AppState, PreviewState, Reminder } from '../shared/contracts.ts';
 import { DataStore } from './store.ts';
+import { persistableSettings } from './persistence.ts';
 import { WeatherService, type FetchLike } from './weather.ts';
 import { windowsStatus } from './windows.ts';
 import { automaticLocationSchema, importSchema, mergeSettings, reminderInputSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
@@ -146,7 +147,8 @@ export async function createApplication(options: ApplicationOptions) {
     if (method === 'GET' && path === '/api/export') {
       response.setHeader('Content-Disposition', 'attachment; filename="living-room-display-backup.json"');
       const { version, settings, reminders } = store.snapshot();
-      json(response, 200, { version, settings, reminders, exportedAt: new Date(now()).toISOString() }); return;
+      // Exports omit additive defaults so the previous release can import them (#84).
+      json(response, 200, { version, settings: persistableSettings(settings), reminders, exportedAt: new Date(now()).toISOString() }); return;
     }
     if (method === 'POST' && path === '/api/import') {
       const imported = importSchema.parse(await jsonBody(request));
