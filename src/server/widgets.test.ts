@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, composeWidgetGrid, firstPlacement, gridProblem, motionOffset, placeWidget, repackGrid, widgetContentLimits, widgetSizes } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, composeWidgetGrid, firstPlacement, fitGridDensity, gridProblem, motionOffset, placeWidget, reflowWidget, repackGrid, switchGridDensity, widgetContentLimits, widgetSizes } from '../shared/widgets.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
 
 test('all optional widgets and their family metadata have a valid independent default', () => {
@@ -46,11 +46,81 @@ test('density changes preserve families and every enabled module or reject witho
   const fine = repackGrid(settings.widgetGrid, 'fine', settings.widgets); assert.ok(fine);
   assert.equal(gridProblem(fine, settings.widgets), null);
   for (const id of WIDGET_IDS) assert.equal(fine.placements[id].size, settings.widgetGrid.placements[id].size);
-  assert.equal(repackGrid(settings.widgetGrid, 'spacious', settings.widgets), null, '56 occupied cells cannot be squeezed into 48 without an explicit resize');
+  assert.equal(repackGrid(settings.widgetGrid, 'spacious', settings.widgets), null, '76 occupied cells cannot fit into 48 while preserving all families');
   const allSmall = structuredClone(settings.widgetGrid);
   for (const id of WIDGET_IDS) allSmall.placements[id].size = 'small';
   const compact = repackGrid(allSmall, 'spacious', settings.widgets); assert.ok(compact);
   assert.equal(gridProblem(compact, settings.widgets), null);
+});
+
+test('density fitting keeps every widget and exactly restores an explored authored layout and families', () => {
+  const settings = defaultSettings(); settings.widgets.photo = true;
+  const original = structuredClone(settings.widgetGrid);
+  const compact = switchGridDensity(original, 'spacious', settings.widgets); assert.ok(compact);
+  assert.equal(gridProblem(compact.grid, settings.widgets), null);
+  assert.ok(compact.resized.length > 0);
+  assert.equal(compact.grid.placements.clock.size, 'medium');
+  const fine = switchGridDensity(compact.grid, 'fine', settings.widgets, compact.history); assert.ok(fine);
+  const restored = switchGridDensity(fine.grid, 'balanced', settings.widgets, fine.history); assert.ok(restored);
+  assert.deepEqual(restored.grid, original, 'returning restores positions and larger families, including hidden/default geometry');
+  assert.deepEqual(settings.widgetGrid, original, 'all exploration is a pure draft');
+  for (const density of Object.keys(GRID_DENSITIES) as (keyof typeof GRID_DENSITIES)[]) {
+    const fit = fitGridDensity(original, density, settings.widgets); assert.ok(fit);
+    assert.equal(gridProblem(fit.grid, settings.widgets), null);
+    assert.deepEqual(Object.keys(fit.grid.placements), WIDGET_IDS);
+  }
+});
+
+test('density history cannot overwrite a meaningful widget edit with a stale snapshot', () => {
+  const settings = defaultSettings(); for (const id of WIDGET_IDS) settings.widgets[id] = id === 'clock';
+  settings.widgetGrid.placements.clock = { column: 6, row: 6, size: 'small' };
+  const original = structuredClone(settings.widgetGrid);
+  const compact = switchGridDensity(original, 'spacious', settings.widgets); assert.ok(compact);
+  const back = switchGridDensity(compact.grid, 'balanced', settings.widgets, compact.history); assert.ok(back);
+  assert.deepEqual(back.grid, original, 'the original bottom-right placement survives coarse rounding');
+  const edited = structuredClone(compact.grid); edited.placements.clock = { column: 0, row: 0, size: 'medium' };
+  const afterEdit = switchGridDensity(edited, 'balanced', settings.widgets, compact.history); assert.ok(afterEdit);
+  assert.deepEqual(afterEdit.grid.placements.clock, { column: 0, row: 0, size: 'medium' });
+});
+
+test('direct manipulation pins the requested widget, displaces neighbors, and leaves unrelated cells intact', () => {
+  const settings = defaultSettings();
+  const original = structuredClone(settings.widgetGrid);
+  const next = reflowWidget(original, 'weather', { column: 6, row: 0, size: 'medium' }, settings.widgets); assert.ok(next);
+  assert.deepEqual(next.placements.weather, { column: 6, row: 0, size: 'medium' });
+  assert.equal(gridProblem(next, settings.widgets), null);
+  assert.notDeepEqual(next.placements.clock, original.placements.clock, 'the large neighbor makes room');
+  assert.deepEqual(next.placements.forecast, original.placements.forecast, 'unrelated neighbors stay put when possible');
+  assert.equal(reflowWidget(original, 'clock', { column: -1, row: 0, size: 'large' }, settings.widgets), null);
+  assert.deepEqual(original, settings.widgetGrid, 'a valid preview or rejected request never mutates its source');
+});
+
+test('legacy family geometry is validated before migration while current invalid layouts remain errors', () => {
+  const legacy = JSON.parse(JSON.stringify(defaultSettings())); delete legacy.widgetGrid.revision;
+  const positions = { clock: [0, 0], weather: [8, 0], rain: [0, 3], forecast: [2, 6], reminders: [5, 3], preview: [8, 3], photo: [4, 3] };
+  for (const id of WIDGET_IDS) { const [column, row] = positions[id]; legacy.widgetGrid.placements[id] = { ...legacy.widgetGrid.placements[id], column, row }; }
+  const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = legacy;
+  legacy.savedPresets = [{ id: 'legacy', name: 'Legacy layout', visual: { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } }];
+  const migrated = settingsSchema.parse(legacy);
+  assert.equal(migrated.widgetGrid.revision, 2);
+  assert.equal(gridProblem(migrated.widgetGrid, migrated.widgets), null);
+  assert.deepEqual(migrated.widgets, legacy.widgets);
+  assert.equal(migrated.savedPresets[0]!.visual.widgetGrid.revision, 2);
+  assert.equal(gridProblem(migrated.savedPresets[0]!.visual.widgetGrid, migrated.widgets), null);
+  const malformed = structuredClone(legacy); malformed.widgetGrid.placements.rain.row = 0;
+  assert.throws(() => settingsSchema.parse(malformed), /overlaps/, 'migration does not repair previously invalid input');
+  assert.throws(() => settingsSchema.parse({ ...legacy, widgetGrid: { ...legacy.widgetGrid, revision: 2 } }), /overlaps/, 'current geometry invalidity stays strict');
+  assert.equal(legacy.widgetGrid.revision, undefined, 'reading a legacy input does not modify its original data');
+  const dense = structuredClone(legacy); dense.savedPresets = []; dense.widgets.photo = true; dense.widgetGrid.density = 'spacious';
+  dense.widgetGrid.placements = {
+    clock: { column: 0, row: 0, size: 'large' }, weather: { column: 6, row: 0, size: 'small' },
+    rain: { column: 0, row: 2, size: 'medium' }, preview: { column: 4, row: 2, size: 'medium' },
+    forecast: { column: 0, row: 4, size: 'medium' }, reminders: { column: 4, row: 4, size: 'small' }, photo: { column: 6, row: 4, size: 'small' },
+  };
+  const migratedDense = settingsSchema.parse(dense);
+  assert.equal(gridProblem(migratedDense.widgetGrid, migratedDense.widgets), null);
+  assert.deepEqual(migratedDense.widgets, dense.widgets, 'a full legacy board never loses a widget to the larger clock');
+  assert.equal(migratedDense.widgetGrid.placements.clock.size, 'medium');
 });
 
 test('additive legacy migration preserves visibility, cities, presets and obsolete transforms', () => {
