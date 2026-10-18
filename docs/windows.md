@@ -20,6 +20,10 @@ activate. A 1.2-second launch grace prevents the activation key from dismissing
 it. A per-user mutex prevents simultaneous ambient sessions. Session lock,
 logoff and disconnect close the display. A named event scoped to the installed
 helper path lets `Stop` ask it to exit normally.
+Session observation starts before cold server startup and handshake. A cancelled
+startup aborts pending HTTP, clears the image, skips later capture/kiosk steps,
+and releases its event subscription. Cancellation also closes an already-created
+owned browser job; failed startup and ordinary exit share cleanup.
 
 Edge starts suspended, is assigned to an owned Windows job, then resumes. The
 job uses `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, so dismissal and helper crashes
@@ -58,6 +62,8 @@ saves the previous per-user screensaver/timeout and selects this app;
 `DisableIdle`/uninstall restore it when this app remains selected. Lock-on-resume
 is never edited. Managed policy is not overridden. This is a visual screensaver,
 not a lock-screen replacement.
+If the user chooses None, clears the selection or selects another saver, restore
+does not overwrite that choice or remove the saved backup.
 
 Not every player/game necessarily inhibits screensavers. Test the actual apps,
 including fullscreen video, controller-only games, presentations and lock/resume.
@@ -72,11 +78,16 @@ v4.0.30319 compiler, PowerShell 7 and Windows PowerShell 5.1. Helper compilation
 parses under both PowerShell engines. Run `windows/Test-Windows.ps1` for native
 compile/argument checks, cleanup containment including nested junction refusal,
 malformed/unrelated PID refusal, and optional real process/start-time ownership
-checks (`-NodeExe '<node.exe>'`). All six checks passed on PowerShell 7 and 5.1.
+checks (`-NodeExe '<node.exe>'`). All eight check groups passed on PowerShell 7
+and 5.1. These include seven native lifecycle scenarios using the production
+startup coordinator with delayed fake transport/synthesized session ends, plus
+four real restore-function scenarios with mocked registry/file/SPI boundaries
+(missing, empty, other and owned selections).
 These tests create only scoped scratch files and a sleeping child process; they
 do not capture, open kiosk, install, listen on a port or change screensavers.
-An isolated source candidate combining UI `c5971e1` and backend `960c95a` passed
-the full production build and all 26 tests (including five preview-clear races).
+An isolated source candidate from UI `7a7d15e` (including reviewed backend main
+`7a44f03`) passed the production build and all 33 tests (including five
+preview-clear races).
 That build used development Node 24 and existing npm; installed official-runtime
 verification remains pending and is not established by the development build.
 

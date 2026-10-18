@@ -228,6 +228,9 @@ function Update-IdlePreference([bool]$Enabled) {
         $null = Invoke-RestMethod -Uri "$script:baseUrl/api/settings" -Method Patch -ContentType 'application/json' -Body (@{idle=$idle} | ConvertTo-Json -Compress) -TimeoutSec 3 -UseBasicParsing
     } catch { Write-Warning 'Windows settings changed, but the desired idle preference could not be saved. The editor still reads actual Windows status.' }
 }
+function Set-WindowsScreenSaverParameter([uint32]$Action, [uint32]$Value) {
+    return [LrdWindowsSettings]::SystemParametersInfo($Action, $Value, [IntPtr]::Zero, 3)
+}
 function Set-Idle([bool]$Enable) {
     Assert-Installed
     Initialize-WindowsApi
@@ -255,7 +258,7 @@ function Set-Idle([bool]$Enable) {
         }
         try {
             Set-ItemProperty $key 'SCRNSAVE.EXE' $hostExe
-            if (-not [LrdWindowsSettings]::SystemParametersInfo(15, ($IdleMinutes * 60), [IntPtr]::Zero, 3) -or -not [LrdWindowsSettings]::SystemParametersInfo(17, 1, [IntPtr]::Zero, 3)) { throw 'Windows could not enable the screensaver.' }
+            if (-not (Set-WindowsScreenSaverParameter 15 ($IdleMinutes * 60)) -or -not (Set-WindowsScreenSaverParameter 17 1)) { throw 'Windows could not enable the screensaver.' }
         } catch {
             $failure = $_
             try { Set-Idle $false } catch { Write-Warning 'Automatic restoration failed. The saved screensaver backup remains for recovery.' }
@@ -266,7 +269,7 @@ function Set-Idle([bool]$Enable) {
     } else {
         if (-not (Test-Path -LiteralPath $backup)) { Write-Output 'No saved screensaver configuration to restore.'; return }
         $property = $current.PSObject.Properties['SCRNSAVE.EXE']
-        if ($property -and $property.Value -ne $hostExe) { Write-Output 'A different screensaver is selected. Its configuration was preserved; saved backup retained.'; return }
+        if (-not $property -or $property.Value -ne $hostExe) { Write-Output 'This app is no longer the selected screensaver. Current configuration and saved backup were preserved.'; return }
         $saved = Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
         foreach ($name in $names) {
             $record = $saved.PSObject.Properties[$name].Value
@@ -274,7 +277,7 @@ function Set-Idle([bool]$Enable) {
         }
         $timeout = if ($saved.ScreenSaveTimeOut.exists) { [uint32]$saved.ScreenSaveTimeOut.value } else { 600 }
         $active = if ($saved.ScreenSaveActive.exists -and $saved.ScreenSaveActive.value -eq '1') { 1 } else { 0 }
-        if (-not [LrdWindowsSettings]::SystemParametersInfo(15,$timeout,[IntPtr]::Zero,3) -or -not [LrdWindowsSettings]::SystemParametersInfo(17,$active,[IntPtr]::Zero,3)) { throw 'Windows could not refresh restored screensaver settings; backup retained.' }
+        if (-not (Set-WindowsScreenSaverParameter 15 $timeout) -or -not (Set-WindowsScreenSaverParameter 17 $active)) { throw 'Windows could not refresh restored screensaver settings; backup retained.' }
         # SPI can recreate missing values, so restore original existence last.
         foreach ($name in $names) {
             $record = $saved.PSObject.Properties[$name].Value

@@ -91,7 +91,8 @@ Activation uses native Windows screensaver behavior, rather than starting over
 a film based only on missing mouse input. Media applications must still be
 tested for inhibition; see [Windows behavior and limits](windows.md). Managed
 policy is not overridden. If you select a different screensaver yourself,
-`DisableIdle` preserves your new choice and retains the backup for inspection.
+`DisableIdle` preserves your new choice, including None or an empty/missing
+selection, and retains the backup for inspection.
 
 ## Data, updates, recovery and removal
 

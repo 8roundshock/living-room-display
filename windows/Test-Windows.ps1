@@ -17,7 +17,7 @@ function Expect-Failure([scriptblock]$Action, [string]$Message) {
     Assert-True $failed $Message
 }
 try {
-    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1')) {
+    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1')) {
         $parseErrors = $null
         $null = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $file),[ref]$null,[ref]$parseErrors)
         Assert-True ($parseErrors.Count -eq 0) "PowerShell syntax failed: $file"
@@ -39,6 +39,16 @@ try {
             Assert-True ($process.ExitCode -eq $expected) ("Native argument failed: " + $argument + ': ' + $process.StandardError.ReadToEnd())
         } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
     }
+    $passed++
+    $framework = if ([Environment]::Is64BitOperatingSystem) { 'Framework64' } else { 'Framework' }
+    $compiler = Join-Path $env:WINDIR "Microsoft.NET\$framework\v4.0.30319\csc.exe"
+    $lifecycleTest = Join-Path $compiled 'HostLifecycleTests.exe'
+    & $compiler /nologo /target:exe /platform:anycpu "/out:$lifecycleTest" (Join-Path $PSScriptRoot 'SessionStartup.cs') (Join-Path $PSScriptRoot 'tests\HostLifecycleTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Lifecycle regression compilation failed.' }
+    & $lifecycleTest
+    if ($LASTEXITCODE -ne 0) { throw 'Lifecycle regression failed.' }
+    $passed++
+    & (Join-Path $PSScriptRoot 'tests\Test-IdleRestore.ps1')
     $passed++
     . (Join-Path $PSScriptRoot 'LivingRoomDisplay.ps1') -InstallRoot $fixture -FunctionsOnly
     Write-Json $marker @{product='living-room-display'}

@@ -43,10 +43,9 @@ internal static class Program
                 if (!owned) return 0;
                 try
                 {
-                    EnsureServer();
                     Application.EnableVisualStyles();
                     using (AmbientSession session = new AmbientSession(mode == "--test-display"))
-                        Application.Run(session);
+                        if (session.Ready) Application.Run(session);
                 }
                 finally { single.ReleaseMutex(); }
             }
@@ -71,8 +70,9 @@ internal static class Program
         throw new FileNotFoundException("Microsoft Edge is required. Install Edge from Microsoft, then retry.");
     }
 
-    internal static void EnsureServer()
+    internal static void EnsureServer(CancellationToken cancellation = default(CancellationToken))
     {
+        cancellation.ThrowIfCancellationRequested();
         string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LivingRoomDisplay.ps1");
         if (!File.Exists(script)) throw new FileNotFoundException("Install the app before running its screensaver.");
         string shell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
@@ -84,6 +84,7 @@ internal static class Program
             if (!starter.WaitForExit(20000)) { starter.Kill(); throw new TimeoutException("Local server startup timed out."); }
             if (starter.ExitCode != 0) throw new InvalidOperationException("Local server could not start; run the Status command.");
         }
+        cancellation.ThrowIfCancellationRequested();
         if (!NativeApi.IsReady()) throw new InvalidOperationException("Local server did not become ready.");
     }
 
@@ -118,50 +119,43 @@ internal static class Program
 
 internal sealed class AmbientSession : ApplicationContext
 {
-    private readonly NativeApi api;
-    private readonly OwnedBrowser browser;
+    private readonly SessionStartup startup;
     private readonly System.Windows.Forms.Timer timer;
     private readonly Stopwatch age = Stopwatch.StartNew();
     private uint baseline;
     private bool closed;
     private readonly bool test;
     private readonly EventWaitHandle stop = new EventWaitHandle(false, EventResetMode.ManualReset, Native.StopEventName());
-    private volatile bool sessionEnded;
+    internal bool Ready { get; private set; }
 
     internal AmbientSession(bool testDisplay)
     {
         test = testDisplay;
         stop.Reset();
-        api = new NativeApi();
         try
         {
-            // Capture occurs once, before any ambient browser is created. Failure omits preview.
-            if (api.PreviewEnabled) api.UploadDesktop();
-            browser = new OwnedBrowser(Program.FindEdge(), Program.BaseUrl + "/display");
+            startup = new SessionStartup(new WindowsSessionSignals(),
+                token => Program.EnsureServer(token), token => new NativeApi(token),
+                token => new OwnedBrowser(Program.FindEdge(), Program.BaseUrl + "/display", token));
+            Ready = startup.Start();
+            if (!Ready) return;
+            age.Restart();
             baseline = Native.LastInputTick();
             timer = new System.Windows.Forms.Timer { Interval = 100 };
             timer.Tick += OnTick;
-            SystemEvents.SessionSwitch += OnSessionSwitch;
             timer.Start();
         }
-        catch { api.Clear(); if (browser != null) browser.Dispose(); throw; }
+        catch { Cleanup(); throw; }
     }
 
     private void OnTick(object sender, EventArgs e)
     {
         uint input = Native.LastInputTick();
         if (age.ElapsedMilliseconds < 1200) baseline = input;
-        if (sessionEnded || stop.WaitOne(0) || age.ElapsedMilliseconds >= 1200 && input != baseline ||
-            age.ElapsedMilliseconds > 3000 && browser.IsEmpty ||
+        if (startup.IsCancelled || stop.WaitOne(0) || age.ElapsedMilliseconds >= 1200 && input != baseline ||
+            age.ElapsedMilliseconds > 3000 && startup.BrowserIsEmpty ||
             test && age.ElapsedMilliseconds > 8000)
             ExitThread();
-    }
-
-    private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
-    {
-        if (e.Reason == SessionSwitchReason.SessionLock || e.Reason == SessionSwitchReason.SessionLogoff ||
-            e.Reason == SessionSwitchReason.RemoteDisconnect || e.Reason == SessionSwitchReason.ConsoleDisconnect)
-            sessionEnded = true;
     }
 
     protected override void ExitThreadCore()
@@ -178,31 +172,26 @@ internal sealed class AmbientSession : ApplicationContext
     {
         if (closed) return;
         closed = true;
-        SystemEvents.SessionSwitch -= OnSessionSwitch;
         if (timer != null) timer.Dispose();
-        if (browser != null) browser.Dispose();
-        api.Clear();
+        if (startup != null) startup.Dispose();
         stop.Dispose();
     }
 }
 
-internal sealed class NativeApi
+internal sealed class NativeApi : IPreviewSession
 {
     private string token;
-    internal bool PreviewEnabled;
-    internal NativeApi()
+    public bool PreviewEnabled { get; private set; }
+    internal NativeApi(CancellationToken cancellation)
     {
-        using (WebClient client = new BoundedWebClient())
-        {
-            client.Headers["X-LRD-Native"] = "1";
-            string json = client.DownloadString(Program.BaseUrl + "/api/host/session");
+            cancellation.ThrowIfCancellationRequested();
+            string json = Request("GET", "/api/host/session", null, cancellation, 5000);
             var data = new JavaScriptSerializer().DeserializeObject(json) as System.Collections.Generic.Dictionary<string, object>;
             token = (string)data["token"];
             var settings = data["settings"] as System.Collections.Generic.Dictionary<string, object>;
             var preview = settings["preview"] as System.Collections.Generic.Dictionary<string, object>;
             var widgets = settings["widgets"] as System.Collections.Generic.Dictionary<string, object>;
             PreviewEnabled = (bool)preview["enabled"] && (bool)widgets["preview"];
-        }
     }
     internal static bool IsReady()
     {
@@ -215,10 +204,11 @@ internal sealed class NativeApi
         }
         catch (WebException) { return false; }
     }
-    internal void UploadDesktop()
+    public void UploadDesktop(CancellationToken cancellation)
     {
         try
         {
+            cancellation.ThrowIfCancellationRequested();
             Rectangle bounds = Screen.PrimaryScreen.Bounds;
             double scale = Math.Min(1, Math.Min(640.0 / bounds.Width, 360.0 / bounds.Height));
             using (Bitmap screen = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb))
@@ -227,17 +217,13 @@ internal sealed class NativeApi
             using (Graphics resize = Graphics.FromImage(small))
             using (MemoryStream png = new MemoryStream())
             {
+                cancellation.ThrowIfCancellationRequested();
                 capture.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
                 resize.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 resize.DrawImage(screen, new Rectangle(0, 0, small.Width, small.Height));
                 small.Save(png, ImageFormat.Png);
-                using (WebClient client = new BoundedWebClient())
-                {
-                    client.Headers["X-LRD-Token"] = token;
-                    client.Headers["X-Captured-At"] = DateTime.UtcNow.ToString("o");
-                    client.Headers[HttpRequestHeader.ContentType] = "image/png";
-                    client.UploadData(Program.BaseUrl + "/api/preview", "POST", png.ToArray());
-                }
+                cancellation.ThrowIfCancellationRequested();
+                Request("POST", "/api/preview", png.ToArray(), cancellation, 5000);
             }
         }
         catch (Exception ex)
@@ -246,43 +232,62 @@ internal sealed class NativeApi
             Clear(); // A protected or unavailable desktop is simply absent.
         }
     }
-    internal void Clear()
+    public void Clear()
     {
         if (token == null) return;
         try
         {
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(Program.BaseUrl + "/api/preview");
-            request.Method = "DELETE";
-            request.Headers["X-LRD-Token"] = token;
-            request.Timeout = 2000;
-            request.Proxy = null;
-            using (WebResponse response = request.GetResponse()) { }
+            Request("DELETE", "/api/preview", null, CancellationToken.None, 2000);
         }
         catch (WebException) { }
     }
-}
-
-internal sealed class BoundedWebClient : WebClient
-{
-    protected override WebRequest GetWebRequest(Uri address)
+    private string Request(string method, string path, byte[] pixels, CancellationToken cancellation, int timeout)
     {
-        WebRequest request = base.GetWebRequest(address);
-        request.Timeout = 5000;
+        cancellation.ThrowIfCancellationRequested();
+        HttpWebRequest request = (HttpWebRequest)WebRequest.Create(Program.BaseUrl + path);
+        request.Method = method;
+        request.Timeout = timeout;
+        request.ReadWriteTimeout = timeout;
         request.Proxy = null;
-        ((HttpWebRequest)request).AllowAutoRedirect = false;
-        return request;
+        request.AllowAutoRedirect = false;
+        if (path == "/api/host/session") request.Headers["X-LRD-Native"] = "1";
+        else request.Headers["X-LRD-Token"] = token;
+        if (pixels != null)
+        {
+            request.Headers["X-Captured-At"] = DateTime.UtcNow.ToString("o");
+            request.ContentType = "image/png";
+            request.ContentLength = pixels.Length;
+        }
+        using (cancellation.Register(delegate { request.Abort(); }))
+        {
+            try
+            {
+                cancellation.ThrowIfCancellationRequested();
+                if (pixels != null) using (Stream body = request.GetRequestStream()) body.Write(pixels, 0, pixels.Length);
+                using (WebResponse response = request.GetResponse())
+                {
+                    if (((HttpWebResponse)response).StatusCode == HttpStatusCode.NoContent) return "";
+                    using (StreamReader reader = new StreamReader(response.GetResponseStream())) return reader.ReadToEnd();
+                }
+            }
+            catch (WebException) { cancellation.ThrowIfCancellationRequested(); throw; }
+        }
     }
 }
 
-internal sealed class OwnedBrowser : IDisposable
+internal sealed class OwnedBrowser : IAmbientBrowser
 {
     private IntPtr job;
-    internal OwnedBrowser(string executable, string url)
+    private CancellationTokenRegistration cancellationRegistration;
+    internal OwnedBrowser(string executable, string url, CancellationToken cancellation)
     {
+        cancellation.ThrowIfCancellationRequested();
         job = Native.CreateJobObject(IntPtr.Zero, null);
         if (job == IntPtr.Zero) throw new System.ComponentModel.Win32Exception();
         try
         {
+            cancellationRegistration = cancellation.Register(CloseJob);
+            cancellation.ThrowIfCancellationRequested();
             Native.JobLimits limits = new Native.JobLimits();
             limits.BasicLimitInformation.LimitFlags = 0x2000; // KILL_ON_JOB_CLOSE
             if (!Native.SetInformationJobObject(job, 9, ref limits, (uint)Marshal.SizeOf(limits)))
@@ -302,14 +307,15 @@ internal sealed class OwnedBrowser : IDisposable
                     Native.TerminateProcess(process.hProcess, 1);
                     throw new System.ComponentModel.Win32Exception();
                 }
+                cancellation.ThrowIfCancellationRequested();
                 if (Native.ResumeThread(process.hThread) == uint.MaxValue)
                     throw new System.ComponentModel.Win32Exception();
             }
             finally { Native.CloseHandle(process.hThread); Native.CloseHandle(process.hProcess); }
         }
-        catch { Dispose(); throw; }
+        catch { Dispose(); cancellation.ThrowIfCancellationRequested(); throw; }
     }
-    internal bool IsEmpty
+    public bool IsEmpty
     {
         get
         {
@@ -317,7 +323,12 @@ internal sealed class OwnedBrowser : IDisposable
             return Native.QueryInformationJobObject(job, 1, out account, (uint)Marshal.SizeOf(typeof(Native.JobAccounting)), IntPtr.Zero) && account.ActiveProcesses == 0;
         }
     }
-    public void Dispose() { if (job != IntPtr.Zero) { Native.CloseHandle(job); job = IntPtr.Zero; } }
+    private void CloseJob()
+    {
+        IntPtr ownedJob = Interlocked.Exchange(ref job, IntPtr.Zero);
+        if (ownedJob != IntPtr.Zero) Native.CloseHandle(ownedJob);
+    }
+    public void Dispose() { cancellationRegistration.Dispose(); CloseJob(); }
 }
 
 internal static class Native

@@ -6,6 +6,6 @@ $compiler = Join-Path $env:WINDIR "Microsoft.NET\$framework\v4.0.30319\csc.exe"
 if (-not (Test-Path -LiteralPath $compiler)) { throw '.NET Framework 4.x C# compiler is required on Windows.' }
 $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
 $output = Join-Path ([IO.Path]::GetFullPath($OutputDirectory)) 'LivingRoomDisplay.scr'
-& $compiler /nologo /target:winexe /platform:anycpu /optimize+ "/out:$output" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll (Join-Path $PSScriptRoot 'LivingRoomDisplay.cs')
+& $compiler /nologo /target:winexe /platform:anycpu /optimize+ "/out:$output" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll (Join-Path $PSScriptRoot 'LivingRoomDisplay.cs') (Join-Path $PSScriptRoot 'SessionStartup.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Windows helper compilation failed.' }
 Write-Output $output
