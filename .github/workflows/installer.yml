@@ -69,6 +69,8 @@ jobs:
             $iscc = Join-Path $target 'ISCC.exe'
           }
           "ISCC_PATH=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # The version probe leaves ISCC's nonzero exit code (it has no [Setup]).
+          exit 0
       - name: Build the installer
         shell: pwsh
         run: ./windows/installer/Build-Installer.ps1 -OutputDirectory "$env:RUNNER_TEMP/installer" -IsccPath $env:ISCC_PATH
