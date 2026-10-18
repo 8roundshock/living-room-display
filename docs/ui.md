@@ -52,8 +52,9 @@ visible above it, including narrow screens and compact keyboard-height windows.
   ambient preview. Editing returns to authored placement. **Open display** opens
   a browser tab; its pointer remains visible, including fullscreen. Unmodified
   **F** toggles fullscreen without stealing typing, modifier shortcuts or repeats.
-  Manual display controls appear on pointer movement or Tab; Esc or E returns
-  to the editor.
+  Manual display controls appear on pointer movement or Tab and hide after
+  3.5 seconds without another supported interaction. Focused controls stay visible.
+  Esc or E returns to the editor.
 
 Only explicit `native=1` presentation hides the document cursor and omits browser
 controls. Browser loading/failure/display and editor/embedded previews retain
@@ -163,6 +164,7 @@ node tests/ui/studio-browser.mjs --playwright '<Playwright module path>' --edge 
 node tests/ui/grid-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
 node tests/ui/workspace-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
 node tests/ui/widgets-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
+node tests/ui/display-controls-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
 node tests/ui/preview-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>' --sharp '<Sharp module path>'
 node windows/tests/Test-CursorBrowser.mjs --base-url 'http://127.0.0.1:<isolated QA port>' --playwright '<Playwright module path>' --edge '<browser executable>'
 ```
