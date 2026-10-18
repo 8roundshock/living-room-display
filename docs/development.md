@@ -1,8 +1,33 @@
 # Development
 
-This repository has no application runtime, package manager, build, server, or
-test suite yet. Do not run guessed `npm` commands or install a stack before the
-architecture decision. The only script is a repository authentication helper.
+Use Node 24 LTS and npm. Application dependencies are pinned in `package.json`
+and `package-lock.json`. The backend, shared types, and tests are implemented;
+the frontend and Windows host are integrated in separate changes. Do not replace
+an existing system Node or application runtime to work on this project.
+
+## Application commands
+
+From the checkout with Node 24/npm available:
+
+```powershell
+npm ci
+npm run typecheck
+npm test
+npm run build:server
+npm start
+```
+
+The backend listens at `http://127.0.0.1:4318`; `/api/health` verifies readiness.
+It stores data in the per-user directory documented in [API](api.md), not Git or
+browser storage. Set `LRD_DATA_DIR` to an isolated test folder before integration
+experiments. `LRD_PORT` can choose another unprivileged local port. Ctrl+C stops it.
+
+Once the frontend entry point is present, `npm run build` typechecks and builds
+both server and browser assets; `npm start` then serves the display and editor.
+For development use `npm run dev:server` and `npm run dev` in separate terminals.
+Vite listens on loopback port 5173 and proxies `/api` to 4318. The development
+server explicitly accepts that origin; production does not expose CORS access.
+Do not claim a full application build passed on a backend-only branch.
 
 ## Local checkout and agent startup
 
@@ -83,10 +108,10 @@ For helper changes, exercise a real read-only identity/repository query and veri
 that process environment variables are restored. Review output for accidental
 credential disclosure. Do not add tests that simply repeat script statements.
 
-No application CI workflow currently exists. Absence of checks is not a passed
-build. Each PR uses an independent review agent; no external review integration
-is being configured. Add appropriate automated checks
-when code exists, then document commands that actually run. Future UI checks
+CI installs the lockfile, typechecks, runs tests, and builds the server on Windows
+and Linux with Node 24. Once `index.html` exists it also requires the full app
+build. Every PR still needs an independent review agent; CI is not that review.
+UI checks
 require actual visual inspection, not only compilation or a successful tool call.
 
 Keep temporary PR bodies and scratch files under ignored `.local/`. Do not commit

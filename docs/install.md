@@ -1,9 +1,9 @@
 # Installation readiness
 
-**There is no installable or runnable application yet.** This repository contains
-requirements, planning, and repository tooling. There is no installer, release
-package, application start command, or dependency setup to run. Do not substitute
-guessed commands or the repository's GitHub maintenance helper for an installer.
+**A complete installable display release is not ready yet.** The local backend
+can be built and run using [development commands](development.md). The display,
+Windows host, and installer are being integrated and require separate verification.
+Do not substitute the repository's GitHub maintenance helper for an installer.
 Implementation readiness is tracked in
 [issue #10](https://github.com/8roundshock/living-room-display/issues/10).
 
@@ -15,9 +15,9 @@ being shared. Public visibility has not been enabled or scheduled.
 ## Agent handoff today
 
 Open this checkout and read [AGENTS.md](../AGENTS.md), [STATUS.md](../STATUS.md),
-and this file. Explain the current readiness accurately. The next product step
-is the owner's [architecture choice](architecture.md); installation cannot be
-completed from this foundation alone. An agent cannot invent a usable release.
+and this file. Explain the current readiness accurately. The [architecture](architecture.md)
+is selected; remaining work is integration and verification. A backend milestone
+alone is not a complete display release. An agent cannot invent a usable release.
 Agents changing source or project docs must follow the [PR workflow](agent-workflow.md),
 including a separate independent review agent/session for each PR. Installing an
 existing release alone does not require creating a PR.
