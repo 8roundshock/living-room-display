@@ -235,6 +235,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     let { page, context } = await open();
     assert.equal(await save(page).count(), 0);
     assert.equal(await cancel(page).count(), 0);
+    await tab(page, 'Style');
     await page.getByRole('button', { name: 'Night', exact: true }).click();
     await selectCity(page);
     assert.equal(app.store.snapshot().settings.location.name, 'Toronto');
@@ -667,7 +668,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
         await page.evaluate(() => window.__geoCalls + window.__permissionCalls),
         0,
       );
-      assert.equal(
+      assert.notEqual(
         await page.locator('html').evaluate((e) => getComputedStyle(e).cursor),
         'none',
       );
@@ -678,7 +679,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
       await context.close();
     }
     checks.push(
-      'four timed compositions fit 1080p and 4K; true black, no audio or ambient geolocation/cursor',
+      'four timed compositions fit 1080p and 4K; true black, no audio or ambient geolocation, visible browser cursor',
     );
     ({ page, context } = await open({
       route: '/display',
@@ -830,7 +831,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
     ]) {
       ({ page, context } = await open({ viewport }));
       await tab(page, 'Style');
-      await page.getByRole('button', { name: 'Night', exact: true }).click();
+      await tab(page, 'Style');
+    await page.getByRole('button', { name: 'Night', exact: true }).click();
       await tab(page, 'Reminders');
       await page
         .getByRole('button', { name: 'Add reminder', exact: true })

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, composeWidgetGrid, firstPlacement, fitGridDensity, gridProblem, motionOffset, placeWidget, reflowWidget, repackGrid, switchGridDensity, widgetContentLimits, widgetSizes } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, composeWidgetGrid, firstPlacement, fitGridDensity, fitWidgetFamily, gridProblem, motionOffset, placeWidget, reflowWidget, repackGrid, switchGridDensity, widgetContentLimits, widgetSizes } from '../shared/widgets.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
 
 test('all optional widgets and their family metadata have a valid independent default', () => {
@@ -51,6 +51,20 @@ test('density changes preserve families and every enabled module or reject witho
   for (const id of WIDGET_IDS) allSmall.placements[id].size = 'small';
   const compact = repackGrid(allSmall, 'spacious', settings.widgets); assert.ok(compact);
   assert.equal(gridProblem(compact, settings.widgets), null);
+});
+
+test('adding a large photo searches nearby origins when its old origin blocks the wide forecast', () => {
+  const settings = defaultSettings(), original = structuredClone(settings.widgetGrid);
+  const preferred = { ...original.placements.photo, size: 'large' as const };
+  assert.equal(firstPlacement(original, 'photo', 'large', settings.widgets), null);
+  assert.equal(reflowWidget(original, 'photo', preferred, settings.widgets), null, 'the old hidden origin partitions the free space');
+  const next = fitWidgetFamily(original, 'photo', 'large', settings.widgets); assert.ok(next);
+  assert.equal(gridProblem(next, { ...settings.widgets, photo: true }), null);
+  assert.equal(next.placements.photo.size, 'large');
+  for (const id of WIDGET_IDS.filter(id => id !== 'photo')) assert.equal(next.placements[id].size, original.placements[id].size, 'adding preserves every existing family');
+  assert.deepEqual(fitWidgetFamily(original, 'photo', 'large', settings.widgets), next, 'nearest-origin search is deterministic');
+  assert.deepEqual(settings.widgetGrid, original, 'the saved baseline is untouched');
+  assert.doesNotThrow(() => mergeSettings(settings, { widgets: { photo: true }, widgetGrid: next }));
 });
 
 test('density fitting keeps every widget and exactly restores an explored authored layout and families', () => {

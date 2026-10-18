@@ -126,12 +126,24 @@ export function reflowWidget(grid: WidgetGrid, id: WidgetId, placement: WidgetPl
   const unaffected = WIDGET_IDS.filter(other => enabled[other] && other !== id && !intersects(placement, widgetSpan(id, placement.size), grid.placements[other], widgetSpan(other, grid.placements[other].size)));
   return packGrid(result, { ...enabled, [id]: true }, [id, ...unaffected]) ?? packGrid(result, { ...enabled, [id]: true }, [id]);
 }
-/** Adding and family buttons share the same bounded origin and neighbor reflow as dragging. */
+/** Family changes keep their requested origin; additions can seek nearby legal space. */
 export function fitWidgetFamily(grid: WidgetGrid, id: WidgetId, size: WidgetSize, enabled: Visibility): WidgetGrid | null {
   if (!widgetSizes(id).includes(size)) return null;
   const span = widgetSpan(id, size), limits = GRID_DENSITIES[grid.density], origin = grid.placements[id];
   if (span.columns > limits.columns || span.rows > limits.rows) return null;
-  return reflowWidget(grid, id, { size, column: Math.min(origin.column, limits.columns - span.columns), row: Math.min(origin.row, limits.rows - span.rows) }, enabled);
+  const preferred = { size, column: Math.min(origin.column, limits.columns - span.columns), row: Math.min(origin.row, limits.rows - span.rows) };
+  const result = reflowWidget(grid, id, preferred, enabled);
+  if (result || enabled[id]) return result;
+  // A hidden widget's old origin can partition an otherwise usable board.
+  // Search the same deterministic nearby candidates used by shared packing;
+  // never change families, drop content or relax collision validation to add it.
+  const requested = { ...grid, placements: { ...grid.placements, [id]: preferred } };
+  for (const candidate of nearbyPlacements(requested, id)) {
+    if (candidate.column === preferred.column && candidate.row === preferred.row) continue;
+    const next = reflowWidget(grid, id, candidate, enabled);
+    if (next) return next;
+  }
+  return null;
 }
 /** Preserve families and relative origins; never return a partially packed board. */
 export function repackGrid(grid: WidgetGrid, density: GridDensity, enabled: Visibility): WidgetGrid | null {
