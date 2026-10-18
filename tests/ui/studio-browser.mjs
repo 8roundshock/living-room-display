@@ -452,6 +452,63 @@ export async function runStudioQa({ playwright, edge } = {}) {
     checks.push(
       'independent reminder add/edit/complete/delete; confirmed-empty widget hides',
     );
+    const dated = [];
+    for (const [index, dueAt] of [
+      '2026-11-01T05:30:00.000Z',
+      '2026-11-01T06:30:00.000Z',
+      '2026-10-19T18:45:39.876+05:45',
+      null,
+    ].entries()) {
+      const response = await fetch(`${base}/api/reminders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `Date preservation ${index}`, dueAt }),
+      });
+      assert.equal(response.status, 201);
+      dated.push(await response.json());
+    }
+    await context.close();
+    ({ page, context } = await open());
+    await page.locator('#tab-Reminders').click();
+    await page.clock.runFor(300);
+    for (const reminder of dated) {
+      await page.getByRole('button', { name: `Edit: ${reminder.text}`, exact: true }).click();
+      await page.getByLabel('Reminder', { exact: true }).fill(`${reminder.text} renamed`);
+      const request = page.waitForRequest(request => request.method() === 'PATCH' && request.url().endsWith(`/api/reminders/${reminder.id}`));
+      await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
+      assert.equal(Object.hasOwn((await request).postDataJSON(), 'dueAt'), false);
+      await page.getByText('Reminder saved', { exact: true }).waitFor();
+      assert.equal(app.store.snapshot().reminders.find(item => item.id === reminder.id).dueAt, reminder.dueAt);
+    }
+    const concurrent = dated[3];
+    await page.getByRole('button', { name: `Edit: ${concurrent.text} renamed`, exact: true }).click();
+    await fetch(`${base}/api/reminders/${concurrent.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dueAt: '2026-11-03T19:00:00.000Z' }),
+    });
+    await page.getByLabel('Reminder', { exact: true }).fill('Concurrent date preserved');
+    await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
+    await page.getByText('Reminder saved', { exact: true }).waitFor();
+    assert.equal(app.store.snapshot().reminders.find(item => item.id === concurrent.id).dueAt, '2026-11-03T19:00:00.000Z');
+    const first = dated[0];
+    await page.getByRole('button', { name: `Edit: ${first.text} renamed`, exact: true }).click();
+    await page.locator('.reminder-form input[type="datetime-local"]').fill('2026-11-02T13:45');
+    await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
+    await page.getByText('Reminder saved', { exact: true }).waitFor();
+    assert.equal(app.store.snapshot().reminders.find(item => item.id === first.id).dueAt, '2026-11-02T18:45:00.000Z');
+    await page.getByRole('button', { name: `Edit: ${first.text} renamed`, exact: true }).click();
+    await page.locator('.reminder-form input[type="datetime-local"]').fill('');
+    await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
+    await page.getByText('Reminder saved', { exact: true }).waitFor();
+    assert.equal(app.store.snapshot().reminders.find(item => item.id === first.id).dueAt, null);
+    await page.getByRole('button', { name: 'Add reminder', exact: true }).click();
+    await page.getByLabel('Reminder', { exact: true }).fill('New dated reminder');
+    await page.locator('.reminder-form input[type="datetime-local"]').fill('2026-11-02T13:45');
+    await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
+    await page.getByText('Reminder saved', { exact: true }).waitFor();
+    assert.equal(app.store.snapshot().reminders.find(item => item.text === 'New dated reminder').dueAt, '2026-11-02T18:45:00.000Z');
+    checks.push('title-only reminder edits preserve both DST-hour instants, imported seconds/offsets and undated state; date changes, clearing and creation work');
     images.push({
       label: 'Studio desktop',
       bytes: await page.screenshot({ type: 'png', animations: 'disabled' }),

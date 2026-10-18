@@ -73,6 +73,10 @@ or undated and one-time; families show one, two or four pending items, dated fir
 **Widgets → Reminders → Hide when empty** defaults on. Confirmed empty/all-completed
 lists hide the widget; failure cannot masquerade as an empty list. Disabling the
 widget always hides it. Completed items remain editable until deleted.
+An unchanged due-date input is omitted from an edit, preserving its exact saved
+instant (including repeated daylight-saving hours and imported seconds/offsets)
+and any concurrent date update. Explicitly changing or clearing the date still
+saves that selection in the computer's local timezone.
 
 Last screen is a dim optional pre-activation snapshot with capture time, size and
 opacity controls. The UI does not capture. Native/server RAM lifecycle clears it
