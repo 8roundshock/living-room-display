@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../dist/server/app.js';
 import { defaultSettings } from '../../dist/shared/defaults.js';
-import { WIDGET_IDS, widgetSizes } from '../../dist/shared/widgets.js';
+import { ACTIVE_WIDGET_IDS, widgetSizes } from '../../dist/shared/widgets.js';
 
 export async function runWorkspaceQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -62,7 +62,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       await button('Add widget').click();
       const panel = await page.locator('.inspector-panel').evaluate(element => [element.clientHeight, element.scrollHeight]);
       assert.ok(panel[1] <= panel[0] + 1, 'catalog and Add must fit the contained panel');
-      for (const id of WIDGET_IDS) {
+      for (const id of ACTIVE_WIDGET_IDS) {
         const name = { clock: 'Clock', weather: 'Weather', rain: 'Rain', forecast: 'Forecast', reminders: 'Reminders', preview: 'Last screen', photo: 'Photo' }[id];
         await button(`Preview ${name}`).focus(); await page.keyboard.press('Enter');
         await inView(button(`Add ${name}`), `${name} Add`);

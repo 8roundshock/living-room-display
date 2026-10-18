@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
-import { WIDGET_IDS, GRID_DENSITIES, widgetSizes } from '../../src/shared/widgets.ts';
+import { ACTIVE_WIDGET_IDS, WIDGET_IDS, GRID_DENSITIES, widgetSizes } from '../../src/shared/widgets.ts';
 
 export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -64,7 +64,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     const clockFonts = {};
     for (const viewport of [{ width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       await page.setViewportSize(viewport);
-      for (const density of Object.keys(GRID_DENSITIES)) for (const id of WIDGET_IDS) for (const size of widgetSizes(id)) {
+      for (const density of Object.keys(GRID_DENSITIES)) for (const id of ACTIVE_WIDGET_IDS) for (const size of widgetSizes(id)) {
         current = structuredClone(source); current.settings.appearance.motionEnabled = false;
         current.settings.widgetGrid.density = density; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id]));
         current.settings.widgetGrid.placements[id] = { column: 0, row: 0, size };

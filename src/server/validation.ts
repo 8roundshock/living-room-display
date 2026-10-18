@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Settings, SettingsPatch, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, defaultWidgetGrid, firstPlacement, fitGridDensity, gridProblem, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, defaultWidgetGrid, firstPlacement, fitGridDensity, gridProblem, isPlannedWidget, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
 import { ACCENT_MODES } from '../shared/palette.ts';
 import { ANIMATION_LEVELS } from '../shared/motion.ts';
 import { inspectPhoto, photoAssetSchema } from './photo.ts';
@@ -11,10 +11,13 @@ const widgetShape = <T>(factory: (id: WidgetId) => T) => Object.fromEntries(WIDG
 function legacyWidgets(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const source = value as Record<string, unknown>;
-  return { ...Object.fromEntries(WIDGET_IDS.map(id => {
+  const merged: Record<string, unknown> = { ...Object.fromEntries(WIDGET_IDS.map(id => {
     const definition: WidgetDefinition = WIDGET_CATALOG[id];
     return [id, definition.legacyEnabledFrom && Object.hasOwn(source, definition.legacyEnabledFrom) ? source[definition.legacyEnabledFrom] : definition.defaultEnabled];
   })), ...source };
+  // Planned ids have no renderer yet: they always read as disabled (retired ids are untouched).
+  for (const id of WIDGET_IDS) if (isPlannedWidget(id)) merged[id] = false;
+  return merged;
 }
 
 const timezone = z.string().max(100).refine(value => {
@@ -105,7 +108,12 @@ export const settingsPatchSchema = z.object({
   automaticLocation: z.boolean().optional(),
   location: location.partial().optional(), units: z.enum(['metric', 'imperial']).optional(), clockFormat: z.enum(['12h', '24h']).optional(),
   locationSource: z.enum(['device', 'manual', 'fallback']).optional(),
-  appearance: appearancePatch.optional(), widgets: widgetsObject.partial().optional(),
+  appearance: appearancePatch.optional(),
+  widgets: widgetsObject.partial().superRefine((value, context) => {
+    for (const id of WIDGET_IDS) {
+      if (value[id] === true && isPlannedWidget(id)) context.addIssue({ code: 'custom', path: [id], message: `${WIDGET_CATALOG[id].name} is not available yet` });
+    }
+  }).optional(),
   widgetOverrides: z.object(widgetShape(() => transform.partial().optional())).strict().optional(),
   widgetGrid: z.object({ revision: z.literal(2).optional(), density: z.enum(['spacious', 'balanced', 'fine']).optional(), placements: z.object(widgetShape(() => placement.partial().optional())).strict().partial().optional() }).strict().optional(),
   photoChange: z.object({ pngBase64: z.string().max(2_796_204).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/) }).strict().superRefine((value, context) => {

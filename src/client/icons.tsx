@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, SVGProps } from 'react';
 
 export type IconName =
   | 'clock'
@@ -23,7 +23,14 @@ export type IconName =
   | 'trash'
   | 'edit'
   | 'sparkles'
-  | 'download';
+  | 'download'
+  | 'globe'
+  | 'hourglass'
+  | 'note'
+  | 'air'
+  | 'sunrise'
+  | 'forecast'
+  | 'undo';
 const paths: Record<IconName, React.ReactNode> = {
   clock: (
     <>
@@ -133,23 +140,67 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" />
     </>
   ),
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.4 2.5 3.5 5.3 3.5 8.5s-1.1 6-3.5 8.5c-2.4-2.5-3.5-5.3-3.5-8.5s1.1-6 3.5-8.5Z" />
+    </>
+  ),
+  hourglass: (
+    <>
+      <path d="M6 3h12M6 21h12M7.5 3c0 4.5 4.5 6 4.5 9s-4.5 4.5-4.5 9m9-18c0 4.5-4.5 6-4.5 9s4.5 4.5 4.5 9" />
+      <path d="M10 18.5h4" />
+    </>
+  ),
+  note: (
+    <>
+      <path d="M5 4h14v10.5L13.5 20H5Z" />
+      <path d="M13.5 20v-5.5H19M8.5 8.5h7M8.5 12h4" />
+    </>
+  ),
+  air: (
+    <path d="M3 8c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 12.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 17c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0" />
+  ),
+  sunrise: (
+    <>
+      <path d="M2.5 19h19M7 19a5 5 0 0 1 10 0" />
+      <path d="M12 3.5v5M9.8 5.7 12 3.5l2.2 2.2M5.6 12.6 7 14m11.4-1.4L17 14" />
+    </>
+  ),
+  forecast: (
+    <>
+      <rect x="3" y="5" width="18" height="16" rx="3" />
+      <path d="M7 3v4m10-4v4M3 10h18" />
+      <circle cx="12" cy="15.5" r="2" />
+      <path d="M12 11.6v.9m0 6v.9m-3.9-3.9h.9m6 0h.9" />
+    </>
+  ),
+  undo: (
+    <>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+    </>
+  ),
 };
 
+/** `size={null}` omits width, height and inline size so CSS controls it; other SVG attributes (for example data-glyph) pass through. */
 export function Icon({
   name,
   size = 20,
   className,
   style,
+  ...attributes
 }: {
   name: IconName;
-  size?: number | string;
+  size?: number | string | null;
   className?: string;
   style?: CSSProperties;
-}) {
+} & Omit<SVGProps<SVGSVGElement>, 'name' | 'width' | 'height' | 'className' | 'style' | 'ref' | 'children'>) {
   return (
     <svg
-      width={size}
-      height={size}
+      {...attributes}
+      width={size ?? undefined}
+      height={size ?? undefined}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -157,7 +208,7 @@ export function Icon({
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
-      style={{ width: size, height: size, flexShrink: 0, ...style }}
+      style={size === null ? { flexShrink: 0, ...style } : { width: size, height: size, flexShrink: 0, ...style }}
       aria-hidden="true"
       focusable="false"
     >

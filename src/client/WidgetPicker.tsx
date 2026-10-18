@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Settings, WidgetId } from '../shared/contracts';
-import { WIDGET_CATALOG, WIDGET_IDS, widgetSizes, type WidgetSize } from '../shared/widgets';
+import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, widgetSizes, type WidgetSize } from '../shared/widgets';
 import { Icon } from './icons';
 import { WidgetSample } from './WidgetSample';
 
@@ -10,7 +10,7 @@ export function WidgetPicker({ settings, onAdd, onClose, message }: {
   onClose: () => void;
   message: string;
 }) {
-  const [selected, setSelected] = useState<WidgetId>(() => WIDGET_IDS.find(id => !settings.widgets[id]) ?? WIDGET_IDS[0]!);
+  const [selected, setSelected] = useState<WidgetId>(() => ACTIVE_WIDGET_IDS.find(id => !settings.widgets[id]) ?? ACTIVE_WIDGET_IDS[0]!);
   const [sizes, setSizes] = useState<Partial<Record<WidgetId, WidgetSize>>>({});
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => { close.current?.focus(); }, []);
@@ -24,7 +24,7 @@ export function WidgetPicker({ settings, onAdd, onClose, message }: {
       <button className="icon-button" aria-label="Close widget picker" ref={close} onClick={onClose}><Icon name="close" size={18} /></button>
     </div>
     <div className="picker-body"><div className="widget-catalog" aria-label="Widget catalog">
-      {WIDGET_IDS.map(id => <button key={id} className="catalog-item" aria-label={`Preview ${WIDGET_CATALOG[id].name}`} aria-pressed={selected === id} onClick={() => setSelected(id)}>
+      {ACTIVE_WIDGET_IDS.map(id => <button key={id} className="catalog-item" aria-label={`Preview ${WIDGET_CATALOG[id].name}`} aria-pressed={selected === id} onClick={() => setSelected(id)}>
         <Icon name={WIDGET_CATALOG[id].icon} size={19} />
         <span>{WIDGET_CATALOG[id].name}</span>
         {settings.widgets[id] && <Icon name="check" size={12} className="catalog-added" />}

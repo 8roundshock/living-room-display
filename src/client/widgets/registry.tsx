@@ -1,6 +1,6 @@
 import { useEffect, useState, type ComponentType, type CSSProperties } from 'react';
 import type { AppState, Settings, WidgetId } from '../../shared/contracts.ts';
-import { WIDGET_CATALOG, widgetContentLimits, type WidgetSize } from '../../shared/widgets.ts';
+import { WIDGET_CATALOG, isActiveWidget, widgetContentLimits, type WidgetSize } from '../../shared/widgets.ts';
 import { ageLabel, forecastDay, forecastPeriod, precipitation, reminderDate, temperature, weatherTime } from '../format.ts';
 import { Icon, weatherIcon } from '../icons.tsx';
 import { SnapshotImage } from './SnapshotImage.tsx';
@@ -59,9 +59,10 @@ function Photo({ state, photoPreview, embedded }: WidgetContentProps) {
 }
 
 /** Adding an id requires a renderer here; the catalog supplies the platform metadata. */
-export const WIDGET_RENDERERS: Record<WidgetId, ComponentType<WidgetContentProps>> = { clock: Clock, weather: Weather, rain: Rain, forecast: Forecast, reminders: Reminders, preview: Preview, photo: Photo };
+const Planned = () => null;
+export const WIDGET_RENDERERS: Record<WidgetId, ComponentType<WidgetContentProps>> = { clock: Clock, weather: Weather, rain: Rain, forecast: Forecast, reminders: Reminders, preview: Preview, photo: Photo, worldClocks: Planned, calendar: Planned, countdown: Planned, note: Planned, airQuality: Planned, sunMoon: Planned };
 export function widgetVisible(id: WidgetId, props: WidgetContentProps): boolean {
-  if (!props.settings.widgets[id]) return false;
+  if (!isActiveWidget(id) || !props.settings.widgets[id]) return false;
   if (id === 'reminders') return reminderPresentation(props.settings, props.state.reminders, props.disconnected) !== 'hidden';
   if (id === 'preview') return props.settings.preview.enabled && (props.embedded || props.state.preview.available);
   if (id === 'photo') return props.embedded || Boolean(props.photoPreview === undefined ? props.state.photo?.available : props.photoPreview);
