@@ -427,9 +427,16 @@ html.studio-editor {
 .preset-miniature i {
   height: 3px;
   width: 65%;
-  background: currentColor;
-  opacity: 0.25;
+  background: var(--bar, currentColor);
+  opacity: 0.5;
   border-radius: 5px;
+}
+/* Built-in styles use native colours: Lilac, Mist and Rose bars at each style's own dimness. */
+.miniature-phone i {
+  opacity: 0.7;
+}
+.miniature-night i {
+  opacity: 0.3;
 }
 .miniature-phone {
   color: #a397b9;
@@ -547,6 +554,33 @@ html.studio-editor {
 .studio .swatch.active > span {
   outline: 2px solid #d2c9e8;
   outline-offset: 4px;
+}
+/* Native: a thin ring of the palette tones around the panel colour, so it reads as "several". */
+.studio .swatch-native > span {
+  position: relative;
+  color: #ece8f4;
+}
+.studio .swatch-native > span::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #1e1e22;
+}
+.studio .swatch-native > span > svg {
+  position: relative;
+}
+/* The current accent rides on the heading line, so naming it adds no height. */
+.studio .accent-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.studio .accent-current {
+  color: #aba5b6;
+  font-size: 12px;
+  font-weight: 450;
 }
 .studio .custom-color {
   position: relative;
