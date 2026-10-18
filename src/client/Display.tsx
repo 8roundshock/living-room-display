@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { AppState, Settings, WidgetId } from '../shared/contracts.ts';
-import { WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset } from '../shared/widgets.ts';
 import { Icon } from './icons.tsx';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
 
@@ -34,7 +34,19 @@ function Widget({ id, settings, children, index, style }: { id: WidgetId; settin
     return () => observer.disconnect();
   }, [settings.appearance.fontScale, settings.appearance.fontFamily, children]);
   const size = settings.widgetGrid.placements[id].size;
-  return <section ref={region} className={`ambient-widget ambient-${id} widget-size-${size}`} style={{ ...style, '--widget-index': index } as CSSProperties} aria-label={widgetLabel(id)} data-widget-id={id} data-widget-size={size}>
+  return <section
+    ref={region}
+    className={[
+      'ambient-widget',
+      `ambient-${id}`,
+      `widget-size-${size}`,
+      `tone-${WIDGET_CATALOG[id].tone}`,
+    ].join(' ')}
+    style={{ ...style, '--widget-index': index } as CSSProperties}
+    aria-label={widgetLabel(id)}
+    data-widget-id={id}
+    data-widget-size={size}
+  >
     <div ref={content} className="widget-content" style={{ width: `${100 / fit}%`, maxWidth: 'none', transform: `scale(${fit})`, transformOrigin: 'left center' }}>{children}</div>
   </section>;
 }
@@ -90,7 +102,20 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     '--fade-duration': reducedMotion || !settings.appearance.motionEnabled ? '0s' : `${settings.appearance.fadeSeconds}s`, '--motion-x': `${offset.x}%`, '--motion-y': `${offset.y}%` } as CSSProperties;
   const Surface = embedded ? 'div' : 'main';
   return <Surface className={embedded ? 'preview-surface' : `display-page ${interacting ? 'interacting' : ''}`} onPointerMove={showControls}>
-    <div className={`ambient grid-ambient composition-${effectiveCycle % 4} font-${settings.appearance.fontFamily} ${!settings.appearance.motionEnabled || reducedMotion || layoutEditing ? 'static' : ''} ${layoutEditing ? 'layout-editing' : ''} ${reducedMotion ? 'reduce-motion' : ''}`} style={ambientStyle} data-composition={effectiveCycle}>
+    <div
+      className={[
+        'ambient',
+        'grid-ambient',
+        `composition-${effectiveCycle % 4}`,
+        `font-${settings.appearance.fontFamily}`,
+        !settings.appearance.motionEnabled || reducedMotion || layoutEditing ? 'static' : '',
+        layoutEditing ? 'layout-editing' : '',
+        reducedMotion ? 'reduce-motion' : '',
+      ].filter(Boolean).join(' ')}
+      style={ambientStyle}
+      data-composition={effectiveCycle}
+      data-accent-mode={settings.appearance.accentMode}
+    >
       <div className={`ambient-content widget-grid-plane ${fading ? 'fading' : ''}`}>
         {WIDGET_IDS.map((id, index) => {
           const props: WidgetContentProps = { state, settings, size: settings.widgetGrid.placements[id].size, now, embedded, disconnected, photoPreview };

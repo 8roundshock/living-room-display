@@ -26,7 +26,7 @@
 .grid-ambient .weather-context, .grid-ambient .weather-age, .grid-ambient .weather-credit { font-size: calc(max(var(--min-text), min(5cqw, 6cqh)) * var(--font-scale)); line-height: 1.3; color: var(--ambient-accent); overflow-wrap: anywhere; }
 .grid-ambient .weather-context { margin: 0 0 3cqh; }
 .grid-ambient .weather-age { margin: 4cqh 0 0; opacity: 0.72; }
-.grid-ambient .weather-age.stale { color: #b0926b; opacity: 1; }
+.grid-ambient .weather-age.stale { color: var(--ambient-caution); opacity: 1; }
 .grid-ambient .weather-credit { margin-top: 1cqh; opacity: 0.65; }
 
 /* Small is compact, medium places the calendar beside time, large is monumental. */

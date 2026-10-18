@@ -1,8 +1,8 @@
 import type { CSSProperties } from 'react';
 import type { AppState, WidgetId } from '../shared/contracts';
 import { defaultSettings } from '../shared/defaults';
-import { widgetSpan, type WidgetSize } from '../shared/widgets';
-import { WIDGET_RENDERERS } from './widgets/registry';
+import { WIDGET_CATALOG, widgetSpan, type WidgetSize } from '../shared/widgets';
+import { WIDGET_MODULES, WIDGET_RENDERERS } from './widgets/registry';
 
 // The catalog never previews private reminders, photo, city or desktop snapshot.
 const now = new Date(2026, 9, 18, 9, 41);
@@ -29,10 +29,18 @@ const landscape = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http:/
 export function WidgetSample({ id, size }: { id: WidgetId; size: WidgetSize }) {
   const Renderer = WIDGET_RENDERERS[id];
   const span = widgetSpan(id, size);
+  // A widget may adjust the synthetic sample (new objects only, never private content).
+  const base = { state: sample, settings };
+  const prepared = WIDGET_MODULES[id].sample?.(base) ?? base;
   return <div className="sample-stage" aria-hidden="true">
-    <div className="picker-sample ambient grid-ambient static layout-editing font-sans" style={{ '--sample-columns': span.columns, '--sample-ratio': span.columns / span.rows, '--ambient-accent': '#b1b9d0', '--ambient-text': '#d0d3df', '--ambient-brightness': 1, '--font-scale': 1 } as CSSProperties}>
-      <div className={`ambient-widget ambient-${id} widget-size-${size}`}>
-        <div className="widget-content"><Renderer state={sample} settings={settings} size={size} now={now} embedded disconnected={false} photoPreview={landscape} /></div>
+    <div
+      className="picker-sample ambient grid-ambient static layout-editing font-sans"
+      style={{ '--sample-columns': span.columns, '--sample-ratio': span.columns / span.rows, '--ambient-accent': '#b1b9d0', '--ambient-text': '#d0d3df', '--ambient-brightness': 1, '--font-scale': 1 } as CSSProperties}
+      data-accent-mode="color"
+      data-animation="off"
+    >
+      <div className={`ambient-widget ambient-${id} widget-size-${size} tone-${WIDGET_CATALOG[id].tone}`}>
+        <div className="widget-content"><Renderer state={prepared.state} settings={prepared.settings} size={size} now={now} embedded disconnected={false} photoPreview={landscape} /></div>
       </div>
     </div>
   </div>;
