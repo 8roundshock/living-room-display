@@ -108,7 +108,7 @@
 .grid-ambient .forecast-strip { grid-template-columns: repeat(var(--forecast-days, 7), minmax(0, 1fr)); gap: 2cqw; }
 .grid-ambient .forecast-day { gap: 3cqh; }
 .grid-ambient .forecast-day-label { font-size: calc(max(var(--min-text), min(7cqw, 9cqh)) * var(--font-scale)); line-height: 1.2; white-space: nowrap; }
-.grid-ambient .forecast-day > svg, .grid-ambient .forecast-unknown { width: min(10cqw, 16cqh); height: min(10cqw, 16cqh); font-size: min(10cqw, 16cqh); }
+.grid-ambient .forecast-day > .weather-glyph, .grid-ambient .forecast-unknown { width: min(10cqw, 16cqh); height: min(10cqw, 16cqh); font-size: min(10cqw, 16cqh); }
 .grid-ambient .forecast-temperatures { font-size: calc(max(var(--min-data), min(8cqw, 12cqh)) * var(--font-scale)); line-height: 1.15; gap: 1.4cqw; }
 .grid-ambient .forecast-rain { font-size: calc(max(var(--min-data), min(5cqw, 7cqh)) * var(--font-scale)); gap: 1cqw; }
 .grid-ambient .forecast-rain svg { width: 0.8em; height: 0.8em; }
@@ -142,5 +142,5 @@
 .grid-ambient .image-placeholder { align-items: center; text-align: center; gap: 3cqh; opacity: 0.7; }
 .grid-ambient .image-placeholder > svg { width: min(23cqw, 28cqh); height: min(23cqw, 28cqh); color: var(--ambient-accent); }
 .grid-ambient .image-placeholder .ambient-label, .grid-ambient .image-placeholder .ambient-description { margin: 0; }
-.grid-ambient.layout-editing .ambient-widget, .grid-ambient.layout-editing .widget-content { animation: none; }
+.grid-ambient[data-motion-surface='canvas-editing'] .ambient-widget, .grid-ambient[data-motion-surface='canvas-editing'] .widget-content { animation: none; }
 .grid-ambient.reduce-motion .ambient-content, .grid-ambient.static .ambient-content { transition: none; }

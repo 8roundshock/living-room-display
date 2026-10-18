@@ -533,7 +533,7 @@ button {
   color: var(--ambient-accent);
   font-weight: 500;
 }
-.forecast-day svg {
+.forecast-day > .weather-glyph {
   width: 2.6cqw;
   height: 2.6cqw;
   color: var(--ambient-accent);

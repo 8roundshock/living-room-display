@@ -6,6 +6,9 @@ import './widgets.css';
 import './studio.css';
 import './grid-editor.css';
 import './widget-controls.css';
+import './motion.css';
+import './motion-widgets.css';
+import './motion-editor.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

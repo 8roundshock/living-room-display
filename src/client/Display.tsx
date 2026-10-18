@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { AppState, Settings, WidgetId } from '../shared/contracts.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset, widgetRevealOrder } from '../shared/widgets.ts';
+import { DEFAULT_ANIMATION_LEVEL, MAX_REVEAL_STEPS, motionPlan, revealTiming, type EntranceLevel, type MotionSurface } from '../shared/motion.ts';
 import { Icon } from './icons.tsx';
+import { MotionContext, usePrefersReducedMotion, type MotionState } from './useMotion.ts';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
 
 export interface WidgetGesture { id: WidgetId; x: number; y: number; width?: number; height?: number }
@@ -10,8 +12,12 @@ function toggleFullscreen() {
   void request?.catch(() => undefined);
 }
 
-function Widget({ id, settings, children, index, style }: { id: WidgetId; settings: Settings; children: ReactNode; index: number; style: CSSProperties }) {
+function Widget({ id, settings, children, index, revealOrder, style }: { id: WidgetId; settings: Settings; children: ReactNode; index: number; revealOrder: number; style: CSSProperties }) {
   const region = useRef<HTMLElement>(null); const content = useRef<HTMLDivElement>(null); const [fit, setFit] = useState(1); const current = useRef(1);
+  // Content first shown with the widget never animates; later insertions (a changed value, a new
+  // reminder) may transition in through @starting-style once the widget has settled (#76).
+  const [settled, setSettled] = useState(false);
+  useEffect(() => setSettled(true), []);
   useLayoutEffect(() => {
     const update = () => {
       const area = region.current, body = content.current; if (!area || !body) return;
@@ -42,17 +48,24 @@ function Widget({ id, settings, children, index, style }: { id: WidgetId; settin
       `widget-size-${size}`,
       `tone-${WIDGET_CATALOG[id].tone}`,
     ].join(' ')}
-    style={{ ...style, '--widget-index': index } as CSSProperties}
+    style={{ ...style, '--widget-index': index, '--reveal-order': Math.min(revealOrder, MAX_REVEAL_STEPS) } as CSSProperties}
     aria-label={widgetLabel(id)}
     data-widget-id={id}
     data-widget-size={size}
+    data-settled={settled ? 'true' : undefined}
   >
     <div ref={content} className="widget-content" style={{ width: `${100 / fit}%`, maxWidth: 'none', transform: `scale(${fit})`, transformOrigin: 'left center' }}>{children}</div>
   </section>;
 }
 
-export function AmbientDisplay({ state, settings = state.settings, embedded = false, native = false, disconnected = false, compositionOverride, layoutEditing = false, photoPreview, gesture }: {
+interface Reveal { epoch: number; active: boolean }
+
+export function AmbientDisplay({ state, settings = state.settings, embedded = false, native = false, disconnected = false, compositionOverride, layoutEditing = false, photoPreview, gesture, motionSurface = 'editing', revealNonce }: {
   state: AppState; settings?: Settings; embedded?: boolean; native?: boolean; disconnected?: boolean; compositionOverride?: number; layoutEditing?: boolean; photoPreview?: string | null; gesture?: WidgetGesture | null;
+  /** Embedded canvases only: `editing` (the default) keeps widgets still; `preview` shows the draft Animation level. */
+  motionSurface?: 'preview' | 'editing';
+  /** Each new value replays the entrance once on an embedded canvas (for example after choosing a level). */
+  revealNonce?: number;
 }) {
   const [now, setNow] = useState(() => new Date()); const [cycle, setCycle] = useState(0); const [fading, setFading] = useState(false); const [interacting, setInteracting] = useState(false);
   const interactionTimer = useRef<number | undefined>(undefined);
@@ -64,9 +77,8 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     interactionTimer.current = window.setTimeout(() => { interactionTimer.current = undefined; setInteracting(false); }, 3500);
   }, [embedded, native]);
   useEffect(() => () => window.clearTimeout(interactionTimer.current), []);
-  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const reducedMotion = usePrefersReducedMotion();
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { const media = window.matchMedia('(prefers-reduced-motion: reduce)'); const change = () => setReducedMotion(media.matches); media.addEventListener('change', change); return () => media.removeEventListener('change', change); }, []);
   useEffect(() => {
     if (layoutEditing || compositionOverride !== undefined) { setFading(false); return; }
     let hide: number | undefined; let reveal: number | undefined;
@@ -98,8 +110,70 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   const grid = useMemo(() => composeWidgetGrid(settings.widgetGrid, enabled, effectiveCycle, previous.current), [gridKey, enabled, effectiveCycle]);
   useEffect(() => { previous.current = grid; }, [grid]);
   const offset = motionOffset(effectiveCycle);
+
+  // Motion levels (#76). The ambient page and the editor's Preview movement behave as the display;
+  // the authored canvas shows the draft level; Edit layout keeps widgets still.
+  const surface: MotionSurface = !embedded ? 'display' : motionSurface === 'editing' ? 'canvas-editing' : layoutEditing ? 'canvas' : 'display';
+  const motionInput = { level: settings.appearance.animation ?? DEFAULT_ANIMATION_LEVEL, reducedMotion, softMotion: settings.appearance.motionEnabled, fadeSeconds: settings.appearance.fadeSeconds, surface };
+  const plan = useMemo(() => motionPlan(motionInput), [motionInput.level, reducedMotion, motionInput.softMotion, motionInput.fadeSeconds, surface]);
+  const replayPlan = useMemo(() => motionPlan({ ...motionInput, replay: true }), [motionInput.level, reducedMotion, motionInput.softMotion, motionInput.fadeSeconds, surface]);
+  const visible = WIDGET_IDS.filter(id => widgetVisible(id, { state, settings, size: settings.widgetGrid.placements[id].size, now, embedded, disconnected, photoPreview }));
+  const revealOrder = widgetRevealOrder(grid, visible);
+  const [reveal, setReveal] = useState<Reveal>({ epoch: 0, active: false });
+  const [planeSettled, setPlaneSettled] = useState(false);
+  const latest = useRef({ plan, replayPlan, visibleCount: visible.length, fadeSeconds: settings.appearance.fadeSeconds, fadeIn: !reducedMotion && settings.appearance.motionEnabled });
+  latest.current = { plan, replayPlan, visibleCount: visible.length, fadeSeconds: settings.appearance.fadeSeconds, fadeIn: !reducedMotion && settings.appearance.motionEnabled };
+  const revealTimer = useRef<number | undefined>(undefined), revealFrame = useRef<number | undefined>(undefined), revealActive = useRef(false);
+  const stopReveal = useCallback(() => {
+    window.clearTimeout(revealTimer.current); window.cancelAnimationFrame(revealFrame.current ?? 0);
+    if (revealActive.current) { revealActive.current = false; setReveal(value => ({ ...value, active: false })); }
+  }, []);
+  const startReveal = useCallback((entrance: EntranceLevel, fadeSeconds: number) => {
+    const restart = revealActive.current;
+    stopReveal();
+    if (entrance === 'none') return;
+    const { totalMs } = revealTiming({ entrance }, fadeSeconds, latest.current.visibleCount);
+    const begin = () => {
+      revealActive.current = true;
+      setReveal(value => ({ epoch: value.epoch + 1, active: true }));
+      revealTimer.current = window.setTimeout(() => { revealActive.current = false; setReveal(value => ({ ...value, active: false })); }, totalMs);
+    };
+    // A reveal already in progress restarts from its first frame once its class is gone.
+    if (restart) revealFrame.current = window.requestAnimationFrame(() => { revealFrame.current = window.requestAnimationFrame(begin); });
+    else begin();
+  }, [stopReveal]);
+  useEffect(() => () => { window.clearTimeout(revealTimer.current); window.cancelAnimationFrame(revealFrame.current ?? 0); }, []);
+  // Reveals start in layout effects, before paint, so widgets never flash at full opacity first.
+  // The first display load counts as a reveal.
+  useLayoutEffect(() => { setPlaneSettled(true); startReveal(latest.current.plan.entrance, 0); }, [startReveal]);
+  const wasFading = useRef(false);
+  useLayoutEffect(() => {
+    // The new arrangement fades in from black: its widgets settle in during that fade.
+    if (wasFading.current && !fading) startReveal(latest.current.plan.entrance, latest.current.fadeIn ? latest.current.fadeSeconds : 0);
+    // Fading out never overlaps an entrance.
+    if (fading) stopReveal();
+    wasFading.current = fading;
+  }, [fading, startReveal, stopReveal]);
+  const shownCycle = useRef(effectiveCycle);
+  useLayoutEffect(() => {
+    // Preview movement's numbered arrangements switch without a black rest; each still reveals.
+    if (shownCycle.current !== effectiveCycle && embedded && surface === 'display' && compositionOverride !== undefined) startReveal(latest.current.plan.entrance, 0);
+    shownCycle.current = effectiveCycle;
+  }, [effectiveCycle, embedded, surface, compositionOverride, startReveal]);
+  const shownNonce = useRef(revealNonce);
+  useLayoutEffect(() => {
+    if (shownNonce.current !== revealNonce && embedded) startReveal(latest.current.replayPlan.entrance, 0);
+    shownNonce.current = revealNonce;
+  }, [revealNonce, embedded, startReveal]);
+  // Leaving a surface that may animate (Edit layout, reduced motion) ends any entrance at once.
+  useLayoutEffect(() => { if (plan.entrance === 'none' && replayPlan.entrance === 'none') stopReveal(); }, [plan.entrance, replayPlan.entrance, stopReveal]);
+  const motion = useMemo<MotionState>(() => ({ plan, revealEpoch: reveal.epoch, revealing: reveal.active, resting: fading }), [plan, reveal.epoch, reveal.active, fading]);
+  const animation = plan.valueTransitions ? plan.level : 'off';
+
   const ambientStyle = { '--ambient-accent': settings.appearance.accentColor, '--ambient-text': settings.appearance.textColor, '--ambient-brightness': settings.appearance.brightness, '--font-scale': settings.appearance.fontScale,
     '--fade-duration': reducedMotion || !settings.appearance.motionEnabled ? '0s' : `${settings.appearance.fadeSeconds}s`, '--motion-x': `${offset.x}%`, '--motion-y': `${offset.y}%` } as CSSProperties;
+  // Editor polish: a released or invalid drag settles into its cell; a newly added widget drops in.
+  const editingTransition = `left 180ms ease, top 180ms ease, width 180ms ease, height 180ms ease${plan.editorPolish ? ', transform 160ms var(--motion-ease), translate 240ms var(--motion-ease), opacity 240ms var(--motion-ease)' : ''}`;
   const Surface = embedded ? 'div' : 'main';
   return <Surface className={embedded ? 'preview-surface' : `display-page ${interacting ? 'interacting' : ''}`} onPointerMove={showControls}>
     <div
@@ -115,16 +189,24 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       style={ambientStyle}
       data-composition={effectiveCycle}
       data-accent-mode={settings.appearance.accentMode}
+      data-animation={animation}
+      data-motion-surface={surface}
     >
-      <div className={`ambient-content widget-grid-plane ${fading ? 'fading' : ''}`}>
-        {WIDGET_IDS.map((id, index) => {
-          const props: WidgetContentProps = { state, settings, size: settings.widgetGrid.placements[id].size, now, embedded, disconnected, photoPreview };
-          if (!widgetVisible(id, props)) return null;
-          const rect = getWidgetRect(grid, id); const Renderer = WIDGET_RENDERERS[id];
-          const activeGesture = gesture?.id === id ? gesture : null;
-          return <Widget key={id} id={id} settings={settings} index={index} style={{ left: `${rect.left}%`, top: `${rect.top}%`, width: activeGesture?.width === undefined ? `${rect.width}%` : `${activeGesture.width}px`, height: activeGesture?.height === undefined ? `${rect.height}%` : `${activeGesture.height}px`, transform: activeGesture ? `translate3d(${activeGesture.x}px, ${activeGesture.y}px, 0)` : undefined, transition: layoutEditing && !activeGesture && !reducedMotion ? 'left 180ms ease, top 180ms ease, width 180ms ease, height 180ms ease' : 'none' }}><Renderer {...props} /></Widget>;
-        })}
-      </div>
+      <MotionContext.Provider value={motion}>
+        <div
+          className={['ambient-content', 'widget-grid-plane', fading ? 'fading' : '', reveal.active ? 'revealing' : ''].filter(Boolean).join(' ')}
+          data-reveal={reveal.active ? reveal.epoch : undefined}
+          data-settled={planeSettled ? 'true' : undefined}
+        >
+          {WIDGET_IDS.map((id, index) => {
+            const props: WidgetContentProps = { state, settings, size: settings.widgetGrid.placements[id].size, now, embedded, disconnected, photoPreview };
+            if (!visible.includes(id)) return null;
+            const rect = getWidgetRect(grid, id); const Renderer = WIDGET_RENDERERS[id];
+            const activeGesture = gesture?.id === id ? gesture : null;
+            return <Widget key={id} id={id} settings={settings} index={index} revealOrder={revealOrder.indexOf(id)} style={{ left: `${rect.left}%`, top: `${rect.top}%`, width: activeGesture?.width === undefined ? `${rect.width}%` : `${activeGesture.width}px`, height: activeGesture?.height === undefined ? `${rect.height}%` : `${activeGesture.height}px`, transform: activeGesture ? `translate3d(${activeGesture.x}px, ${activeGesture.y}px, 0)` : undefined, transition: layoutEditing && !activeGesture && !reducedMotion ? editingTransition : 'none' }}><Renderer {...props} /></Widget>;
+          })}
+        </div>
+      </MotionContext.Provider>
     </div>
     {!embedded && !native && <nav className="display-help" aria-label="Display controls"><button className="button" onClick={toggleFullscreen}><Icon name="monitor" size={15} />Fullscreen · F</button><a className="button" href="/editor"><Icon name="settings" size={15} />Editor · Esc</a></nav>}
   </Surface>;

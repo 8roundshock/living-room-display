@@ -1,0 +1,284 @@
+/* Widget motion for the Animation levels (#76); tokens and reveal rules live in motion.css.
+   "Settled" widgets (data-settled) have been shown at least once: content inserted later (a
+   changed value, a new reminder, a new photo) may transition in from @starting-style, while
+   content first shown with its widget stays still. */
+
+/* ---- Geometry shared by every level (no motion) ---------------------------------------- */
+/* WeatherGlyph stacks one SVG per part in the same 24-unit box, so resting pixels match a
+   single SVG; a part moves with compositable transforms around the box centre. */
+.weather-glyph {
+  position: relative;
+  display: inline-block;
+  flex: none;
+}
+.weather-glyph > .glyph-part {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.weather-glyph > .glyph-part > .glyph-motion,
+.weather-glyph > .glyph-part > .glyph-motion > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Hands rotate around the dial centre through CSS, identically at every level. */
+.analog-clock line {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+.clock-char {
+  display: inline-block;
+}
+
+/* ---- Subtle and Lively: changes only ---------------------------------------------------- */
+/* Values crossfade (opacity only) after a TransitionText remount; numbers are never tweened. */
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .value-transition {
+  transition: opacity var(--motion-value) var(--motion-ease);
+}
+@starting-style {
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .value-transition {
+    opacity: 0;
+  }
+}
+
+/* Clock: the digits settle in once when the clock appears, then only changed characters move. */
+@keyframes lrd-clock-reveal {
+  from {
+    opacity: 0.55;
+    translate: 0 -0.25cqh;
+  }
+}
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .clock-digits {
+  animation: lrd-clock-reveal 550ms var(--motion-ease) backwards;
+}
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .clock-char {
+  transition:
+    opacity var(--motion-digit) var(--motion-ease),
+    translate var(--motion-digit) var(--motion-ease);
+  transition-delay: calc(var(--char-from-end, 0) * var(--motion-digit-stagger));
+}
+@starting-style {
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .clock-char {
+    opacity: var(--motion-digit-from);
+    translate: 0 calc(-1 * var(--motion-digit-rise));
+  }
+}
+/* Hands ease clockwise; jumps carry data-hand-snap and move at once. No seconds hand. */
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .analog-clock line:not([data-hand-snap]) {
+  transition: rotate var(--motion-hand) var(--motion-ease);
+}
+
+/* Weather: the stale/offline label changes colour gently; age and attribution never move. */
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .weather-age {
+  transition: color 400ms var(--motion-ease);
+}
+
+/* The hero glyph settles once on a reveal or condition change (parts remount for both).
+   Stale, offline or unavailable weather (data-glyph-still) keeps it still. */
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part {
+  transition:
+    opacity var(--motion-glyph-settle) var(--motion-ease),
+    translate var(--motion-glyph-settle) var(--motion-ease),
+    rotate var(--motion-glyph-settle) var(--motion-ease),
+    scale var(--motion-glyph-settle) var(--motion-ease);
+  transition-delay: var(--reveal-delay);
+}
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > :is(.glyph-part-drop-1, .glyph-part-drop-2, .glyph-part-drop-3) {
+  transition-duration: calc(var(--motion-glyph-settle) - 240ms);
+}
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part-drop-2 {
+  transition-delay: calc(var(--reveal-delay) + 120ms);
+}
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part-drop-3 {
+  transition-delay: calc(var(--reveal-delay) + 240ms);
+}
+/* Becoming still (stale or offline) cancels a settle in progress: an explicit `none` is needed,
+   because the default `all 0s` would let a running transition finish. */
+.weather-glyph[data-glyph-still] > .glyph-part {
+  transition: none;
+}
+@starting-style {
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part-rays {
+    rotate: -20deg;
+  }
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part-core {
+    scale: 0.7;
+  }
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part-moon {
+    rotate: -6deg;
+  }
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part-cloud {
+    opacity: 0;
+    translate: -2.5% 0;
+  }
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > :is(.glyph-part-drop-1, .glyph-part-drop-2, .glyph-part-drop-3) {
+    opacity: 0;
+    translate: 0 -10%;
+  }
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part-flake {
+    rotate: -45deg;
+  }
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part-bolt {
+    opacity: 0;
+  }
+}
+
+/* Rain bars ease to new heights (the existing behaviour, now only above Off). */
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .rain-bar {
+  transition: height 700ms var(--motion-ease);
+}
+
+/* Reminders: newly pending items, "+N more" and "All clear" fade and settle; removal is instant. */
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.ambient-reminder-list > li, .reminders-more, .reminders-clear) {
+  transition:
+    opacity var(--motion-value) var(--motion-ease),
+    translate var(--motion-value) var(--motion-ease);
+}
+@starting-style {
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.ambient-reminder-list > li, .reminders-more, .reminders-clear) {
+    opacity: 0;
+    translate: 0 -0.3em;
+  }
+}
+
+/* A newly loaded snapshot or photo fades in; no pan, zoom or loop (#109). Placeholders stay still. */
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.photo-image-shell, .preview-image-shell) {
+  transition: opacity 600ms var(--motion-ease);
+}
+@starting-style {
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.photo-image-shell, .preview-image-shell) {
+    opacity: 0;
+  }
+}
+
+/* ---- Lively: reveal choreography --------------------------------------------------------- */
+/* In-widget items finish within their widget's entrance window (≤ 1 s after its own delay).
+   Staggers use sibling-index() where supported; elsewhere items move together. */
+.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing :is(.forecast-strip > .forecast-day) {
+  animation: lrd-enter-left 600ms var(--motion-ease) backwards;
+  animation-delay: var(--reveal-delay);
+}
+.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .rain-bars > .rain-bar {
+  transform-origin: 50% 100%;
+  animation: lrd-bar-grow 600ms var(--motion-ease) backwards;
+  animation-delay: var(--reveal-delay);
+}
+.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .rain-bars > .rain-bar-unknown {
+  animation-name: lrd-fade-in;
+}
+.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing :is(.ambient-reminder-list > li) {
+  animation: lrd-enter var(--motion-value) var(--motion-ease) backwards;
+  animation-delay: var(--reveal-delay);
+}
+.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .ambient-weather .weather-metrics > div {
+  animation: lrd-enter 600ms var(--motion-ease) backwards;
+  animation-delay: var(--reveal-delay);
+}
+@supports (order: sibling-index()) {
+  .grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing :is(.forecast-strip > .forecast-day) {
+    animation-delay: calc(var(--reveal-delay) + (min(sibling-index(), 7) - 1) * 50ms);
+  }
+  .grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .rain-bars > .rain-bar {
+    animation-delay: calc(var(--reveal-delay) + (min(sibling-index(), 13) - 1) * 25ms);
+  }
+  .grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing :is(.ambient-reminder-list > li) {
+    animation-delay: calc(var(--reveal-delay) + (min(sibling-index(), 7) - 1) * 60ms);
+  }
+  .grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .ambient-weather .weather-metrics > div {
+    animation-delay: calc(var(--reveal-delay) + (min(sibling-index(), 3) - 1) * 80ms);
+  }
+}
+@keyframes lrd-bar-grow {
+  from {
+    scale: 1 0;
+  }
+}
+
+/* ---- Lively: the only loops, on the current-weather hero glyph ------------------------------ */
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='sun'] > .glyph-part-rays > .glyph-motion {
+  animation: lrd-glyph-turn 90s linear infinite;
+}
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='sun'] > .glyph-part-core > .glyph-motion {
+  animation: lrd-glyph-glow 8s ease-in-out infinite;
+}
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='moon'] > .glyph-part-moon > .glyph-motion {
+  animation: lrd-glyph-rock 18s ease-in-out infinite;
+}
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still]):is([data-glyph='cloud'], [data-glyph='storm']) > .glyph-part-cloud > .glyph-motion {
+  animation: lrd-glyph-drift 11s ease-in-out infinite;
+}
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='rain'] > :is(.glyph-part-drop-1, .glyph-part-drop-2, .glyph-part-drop-3) > .glyph-motion {
+  animation: lrd-glyph-rain 1.8s ease-in infinite;
+}
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='rain'] > .glyph-part-drop-2 > .glyph-motion {
+  animation-delay: -0.6s;
+}
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='rain'] > .glyph-part-drop-3 > .glyph-motion {
+  animation-delay: -1.2s;
+}
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='snow'] > .glyph-part-flake > .glyph-motion {
+  animation: lrd-glyph-turn 40s linear infinite;
+}
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='storm'] > .glyph-part-bolt > .glyph-motion {
+  animation: lrd-glyph-bolt 9s ease-in-out infinite;
+}
+@keyframes lrd-glyph-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+/* The sun glows by dimming, never brightening. */
+@keyframes lrd-glyph-glow {
+  50% {
+    opacity: 0.82;
+  }
+}
+@keyframes lrd-glyph-rock {
+  25% {
+    rotate: 4deg;
+  }
+  75% {
+    rotate: -4deg;
+  }
+}
+/* ±2.5% stays inside the glyph box: the cloud outline keeps a stroke-width margin. */
+@keyframes lrd-glyph-drift {
+  25% {
+    translate: 2.5% 0;
+  }
+  75% {
+    translate: -2.5% 0;
+  }
+}
+@keyframes lrd-glyph-rain {
+  0% {
+    translate: 0 0;
+    opacity: 1;
+  }
+  60% {
+    translate: 0 10%;
+    opacity: 0;
+  }
+  61% {
+    translate: 0 0;
+    opacity: 0;
+  }
+  100% {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+/* One dim pulse of 1.2 s every 9 s; no flash. */
+@keyframes lrd-glyph-bolt {
+  0%,
+  86.67% {
+    opacity: 1;
+  }
+  93.33% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 1;
+  }
+}

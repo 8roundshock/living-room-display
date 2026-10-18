@@ -1,4 +1,4 @@
-import type { CSSProperties, SVGProps } from 'react';
+import { Fragment, type CSSProperties, type ReactNode, type SVGProps } from 'react';
 
 export type IconName =
   | 'clock'
@@ -31,6 +31,34 @@ export type IconName =
   | 'sunrise'
   | 'forecast'
   | 'undo';
+export type WeatherIconName = 'sun' | 'moon' | 'cloud' | 'rain' | 'snow' | 'storm';
+export interface GlyphPart { id: string; node: ReactNode }
+/**
+ * Weather symbols as separately movable parts (#76). WeatherGlyph stacks one small SVG per part
+ * with the same 24-unit geometry and stroke, so resting pixels match the single-SVG Icon.
+ */
+export const GLYPH_PARTS: Record<WeatherIconName, readonly GlyphPart[]> = {
+  sun: [
+    { id: 'core', node: <circle cx="12" cy="12" r="4" /> },
+    { id: 'rays', node: <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /> },
+  ],
+  moon: [{ id: 'moon', node: <path d="M20.2 15.4A8.8 8.8 0 0 1 8.6 3.8a8.8 8.8 0 1 0 11.6 11.6Z" /> }],
+  cloud: [{ id: 'cloud', node: <path d="M6 18h12a4 4 0 0 0 .4-8 6.5 6.5 0 0 0-12.6-1A4.5 4.5 0 0 0 6 18Z" /> }],
+  rain: [
+    { id: 'cloud', node: <path d="M6 15a4.5 4.5 0 0 1-.2-9 6.5 6.5 0 0 1 12.6 1 4 4 0 0 1 .6 7.9" /> },
+    { id: 'drop-1', node: <path d="M8 17l-1 3" /> },
+    { id: 'drop-2', node: <path d="M13 17l-1 3" /> },
+    { id: 'drop-3', node: <path d="M18 17l-1 3" /> },
+  ],
+  snow: [{ id: 'flake', node: <path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9 4.5l3 3 3-3M9 19.5l3-3 3 3M4.5 11l4-1-1-4M19.5 13l-4 1 1 4M4.5 13l4 1-1 4M19.5 11l-4-1 1-4" /> }],
+  storm: [
+    { id: 'cloud', node: <path d="M6 15a4.5 4.5 0 0 1-.2-9 6.5 6.5 0 0 1 12.6 1 4 4 0 0 1 .6 7.9" /> },
+    { id: 'bolt', node: <path d="m13 12-4 6h5l-2 5" /> },
+  ],
+};
+function glyph(name: WeatherIconName): ReactNode {
+  return <>{GLYPH_PARTS[name].map(part => <Fragment key={part.id}>{part.node}</Fragment>)}</>;
+}
 const paths: Record<IconName, React.ReactNode> = {
   clock: (
     <>
@@ -51,33 +79,12 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="m4 17 5-5 4 4 3-3 5 5" />
     </>
   ),
-  sun: (
-    <>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
-    </>
-  ),
-  moon: <path d="M20.2 15.4A8.8 8.8 0 0 1 8.6 3.8a8.8 8.8 0 1 0 11.6 11.6Z" />,
-  cloud: (
-    <path d="M6 18h12a4 4 0 0 0 .4-8 6.5 6.5 0 0 0-12.6-1A4.5 4.5 0 0 0 6 18Z" />
-  ),
-  rain: (
-    <>
-      <path d="M6 15a4.5 4.5 0 0 1-.2-9 6.5 6.5 0 0 1 12.6 1 4 4 0 0 1 .6 7.9" />
-      <path d="m8 17-1 3m6-3-1 3m6-3-1 3" />
-    </>
-  ),
-  snow: (
-    <>
-      <path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9 4.5l3 3 3-3M9 19.5l3-3 3 3M4.5 11l4-1-1-4M19.5 13l-4 1 1 4M4.5 13l4 1-1 4M19.5 11l-4-1 1-4" />
-    </>
-  ),
-  storm: (
-    <>
-      <path d="M6 15a4.5 4.5 0 0 1-.2-9 6.5 6.5 0 0 1 12.6 1 4 4 0 0 1 .6 7.9" />
-      <path d="m13 12-4 6h5l-2 5" />
-    </>
-  ),
+  sun: glyph('sun'),
+  moon: glyph('moon'),
+  cloud: glyph('cloud'),
+  rain: glyph('rain'),
+  snow: glyph('snow'),
+  storm: glyph('storm'),
   wind: (
     <>
       <path d="M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h6a3 3 0 1 1-3 3" />
@@ -217,7 +224,7 @@ export function Icon({
   );
 }
 
-export function weatherIcon(code: number, isDay = true): IconName {
+export function weatherIcon(code: number, isDay = true): WeatherIconName {
   if (code === 0) return isDay ? 'sun' : 'moon';
   if (code <= 3 || code === 45 || code === 48) return 'cloud';
   if (code >= 95) return 'storm';
