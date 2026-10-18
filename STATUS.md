@@ -28,6 +28,11 @@ the owner's explicit authority to choose practical defaults and build the app.
   remain a separate RAM-only feature.
 - Varied collision-free composition search with black rests. Reduced motion and
   Soft motion off remove travel/effects while discrete relocation continues.
+- Snapshot presentation uses family sizing, black-preserving midtone correction
+  and a 24% new default; existing opacity choices stay unchanged. The isolated
+  optical harness confirms raw bytes remain in RAM unchanged, black stays zero,
+  highlights remain bounded and controls/clear behavior work. Actual native
+  content/readability remains under [#46](https://github.com/8roundshock/living-room-display/issues/46).
 - Standalone display cursor CSS covers loading/error pages and descendants;
   editor/embedded preview cursor behavior is preserved. The production Edge
   route regression passes; actual native cursor proof remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).
@@ -41,7 +46,7 @@ the owner's explicit authority to choose practical defaults and build the app.
   source regression checks cover startup cancellation, restore selection,
   owned-process recognition and filesystem transaction/cleanup behavior.
 
-Local verification: the full build and all 67 application tests pass using the
+Local verification: the full build and all 68 application tests pass using the
 app-owned Node 24 runtime. Eleven Windows check groups pass on PowerShell 5.1
 and 7 with the optional real child-process test (ten without). Provenance tests
 cover clean/dirty Git, archives, enclosing repositories and composed sources;

@@ -97,6 +97,7 @@ test('effective equality ignores object order, preset labels and disabled widget
     draft = structuredClone(base);
   draft.appearance.preset = 'custom';
   draft.appearance.layout = 'minimal';
+  draft.preview.widthPercent = 35;
   draft.widgetGrid.placements.photo = { column: 9, row: 4, size: 'small' };
   assert.equal(sameEffectiveSettings(base, draft), true);
   assert.deepEqual(settingsChanges(base, draft), {});

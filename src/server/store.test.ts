@@ -6,6 +6,24 @@ import { join } from 'node:path';
 import { DataStore } from './store.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 
+test('new snapshot default preserves existing low/custom opacity and saved visual choices', async () => {
+  assert.equal(defaultSettings().preview.opacity, 0.24);
+  for (const opacity of [0.08, 0.17]) {
+    const directory = await mkdtemp(join(tmpdir(), 'lrd-preview-settings-'));
+    try {
+      const settings = defaultSettings(); settings.preview.opacity = opacity;
+      const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = structuredClone(settings);
+      settings.savedPresets = [{ id: 'existing', name: 'Existing', visual: { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview: { ...preview, opacity: 0.06 } } }];
+      await writeFile(join(directory, 'state.json'), JSON.stringify({ version: 1, settings, reminders: [] }));
+      const store = await DataStore.open(directory);
+      await store.patchSettings({ clockFormat: '24h' });
+      const reloaded = (await DataStore.open(directory)).snapshot().settings;
+      assert.equal(reloaded.preview.opacity, opacity);
+      assert.equal(reloaded.savedPresets[0]!.visual.preview.opacity, 0.06);
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  }
+});
+
 test('queued concurrent writes preserve changes and survive restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-store-'));
   try {
