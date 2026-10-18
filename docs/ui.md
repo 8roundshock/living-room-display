@@ -18,7 +18,8 @@ above 700 CSS pixels. Canvas actions remain visible at compact desktop heights;
 the 16:9 preview fits the height. Narrow windows stack a normally scrolling
 inspector below a nonsticky preview, leaving room for the keyboard.
 Above 1050 CSS pixels the Save bar centers under the canvas, so the inspector uses
-the full height; at 1280×720 every tab fits without scrolling. Whenever settings
+the full height unless an alert row is shown; at 1280×720 each tab's default,
+collapsed contents fit without scrolling. Whenever settings
 remain below, the inspector's bottom edge fades (scroll-linked, kept with reduced
 motion). Focus scrolling reserves the measured Save bar height so fields and labels remain
 visible above it, including narrow screens and compact keyboard-height windows.
@@ -98,7 +99,9 @@ rain keeps its timing beside the chance. Compact forecasts abbreviate Tomorrow a
 and hover details. Ambient labels, age, attribution, units and secondary values
 have a readability floor of 1.4% of the display height (1.65% for forecast
 chance/temperatures, rain amount/period and reminder dates), multiplied by
-**Text size**; see the [widget contract](widgets.md#families-and-editing).
+**Text size**; very short compact widgets cap it by their own height. A larger
+Text size never renders ambient text smaller: an overfull widget zooms out as a
+whole. See the [widget contract](widgets.md#families-and-editing).
 
 ## Reminders and last screen
 

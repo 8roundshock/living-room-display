@@ -1510,7 +1510,8 @@ html.studio-editor {
 }
 /* Wide layouts: the Save bar sits under the canvas, so settings use the full height. */
 @media (min-width: 1051px) {
-  .studio .inspector { height: calc(100% + 64px); }
+  /* An alert adds a grid row below; the inspector then keeps its own track. */
+  .studio-workspace:not(:has(> .studio-error)) > .inspector { height: calc(100% + 64px); }
   .studio-savebar { left: calc(50% - 187px); }
 }
 @media (min-width: 701px) and (max-width: 1050px) {

@@ -6,11 +6,11 @@
 @property --ambient-min-text { syntax: '<length>'; inherits: true; initial-value: 0px; }
 @property --ambient-min-data { syntax: '<length>'; inherits: true; initial-value: 0px; }
 .grid-ambient > .ambient-content { --ambient-min-text: min(1.4cqh, 0.7875cqw); --ambient-min-data: min(1.65cqh, 0.928cqw); }
-/* Widgets inherit the display floors. Small rain/forecast cannot hold them in the fine grid,
-   so they cap both at 7.25% of their own height (~1.07% of the display there; the text floor
-   is unchanged on coarser grids) rather than letting the fit scale shrink everything. */
+/* Widgets inherit the display floors. Small rain/forecast cap them by their own content height
+   (text 7.25%, data 8.5%), which binds only when that height is under ~19.4% of the display
+   (fine grid: ~1.07%/1.26%), rather than letting the fit scale shrink everything. */
 .grid-ambient .ambient-widget { --min-text: var(--ambient-min-text, 0px); --min-data: var(--ambient-min-data, 0px); }
-.grid-ambient :is(.ambient-rain, .ambient-forecast).widget-size-small { --min-text: min(var(--ambient-min-text, 0px), 7.25cqh); --min-data: min(var(--ambient-min-data, 0px), 7.25cqh); }
+.grid-ambient :is(.ambient-rain, .ambient-forecast).widget-size-small { --min-text: min(var(--ambient-min-text, 0px), 7.25cqh); --min-data: min(var(--ambient-min-data, 0px), 8.5cqh); }
 .grid-ambient .ambient-content { display: block; width: auto; height: auto; padding: 0; gap: 0; transform: translate(var(--motion-x, 0), var(--motion-y, 0)); }
 .grid-ambient.layout-editing .ambient-content { transform: none; }
 .grid-ambient .ambient-widget { position: absolute; grid-area: auto; padding: min(1.2cqw, 1.8cqh); container-type: size; animation: none; transform: none; }
@@ -30,7 +30,7 @@
 .grid-ambient .weather-credit { margin-top: 1cqh; opacity: 0.65; }
 
 /* Small is compact, medium places the calendar beside time, large is monumental. */
-.grid-ambient .clock-face { height: 100cqh; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 5cqh; }
+.grid-ambient .clock-face { min-height: 100cqh; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 5cqh; }
 .grid-ambient .clock-calendar { order: 2; }
 .grid-ambient .clock-calendar .ambient-label { margin: 0; font-size: calc(max(var(--min-text), min(7cqw, 10cqh)) * var(--font-scale)); }
 .grid-ambient .clock-date { font-size: calc(max(var(--min-text), min(7cqw, 10cqh)) * var(--font-scale)); margin: 1cqh 0 0; line-height: 1.2; }

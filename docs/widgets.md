@@ -46,8 +46,11 @@ Small labels, age, attribution, units and secondary values use the shared floors
 inherited from `--ambient-min-text` (1.4% of the display or editor canvas height)
 and `--ambient-min-data` (1.65%), times Text size. Wrap related values onto shared
 rows before letting the fit scale shrink a family. Only a family that truly cannot
-fit caps the floor by its own height (currently small rain/forecast in the fine
-grid, about 1.07%); the picker sample has no floor.
+fit caps the floors by its own content height: small rain/forecast use 7.25% (text)
+and 8.5% (data), which binds only when that height is under about 19.4% of the
+display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold).
+Overfull content is laid out proportionally wider before the fit scale shrinks it,
+so a larger Text size never renders text smaller. The picker sample has no floor.
 
 The renderer families have deliberate visual roles:
 
