@@ -100,13 +100,16 @@ Source provenance checks use synthetic local Git repositories to verify clean,
 dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
 verify metadata refresh on successful install and retention after failed update
 or uninstall. No paths, remotes, changes or credentials are saved in provenance.
-The last verified installed baseline on 2026-10-18 was clean `d81c1e0`; its 71
-application tests and the full production build passed using the app-owned Node
-24.19.0. The reviewed Studio/grid, snapshot-readability and reminder corrections
-were installed in that baseline. The
-installation marker and HTTP health were rechecked on 2026-10-18; the rollout
-separately verified served assets and data preservation. This documentation-only
-recheck performed no GUI, capture or native/current-desktop probe. Recheck current
+The last verified installed baseline on 2026-10-18 is clean `7e654fd`, the normal
+merge of PR #57. Its 79 application tests, full production build, independent
+final-head reviews and Windows/Linux CI passed before rollout. The
+[dated rollout evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)
+verifies installed provenance, owned backend/listener, health, served asset hashes
+and unchanged private data after the owner confirmed a clean editor and authorized
+the update. A complete private pre-revision-2 data recovery copy was verified;
+retain it for the [matching app/data rollback](install.md#widget-geometry-revision-2-update-and-rollback).
+No native launch, capture, editor reload or screensaver registration accompanied
+that rollout. This documentation correction adds no live probes. Recheck current
 provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](install.md).
 The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
@@ -119,14 +122,15 @@ Independent static review approved source `eba70fc` before the earlier runtime Q
 later merged application changes also passed their final-head reviews and CI.
 The native cursor replacement is a separate, uninstalled candidate in
 [draft PR51](https://github.com/8roundshock/living-room-display/pull/51), reviewed
-at `3a492b0` with both CI jobs successful. Its integrated runtime gates still
-apply; the repository stays private and this PR is not deployment evidence.
+at combined head `f4a57b5` with both CI jobs successful. Its integrated runtime
+gates still apply; the repository stays private and this PR is not deployment evidence.
 
 ## Actual current-PC runtime evidence
 
-The last verified installed baseline on 2026-10-18 was clean `d81c1e0`, including
-the reviewed Studio/grid, readable snapshot and reminder fixes. Actual native preview source/content and
-readability on the 3840x2160 primary were accepted under
+The clean `7e654fd` installed web baseline is verified as described above; no
+combined-host native acceptance was performed during that update. Earlier actual
+native preview source/content and readability on the 3840x2160 primary were
+accepted under
 [#46](https://github.com/8roundshock/living-room-display/issues/46): raw PNG and
 rendered preview were inspected in RAM, normal exit cleared preview to 404 and
 left zero owned display processes, and no screenshot files were saved. This
@@ -167,6 +171,9 @@ fresh-account install, movie/game/screensaver inhibition, real lock/resume,
 across-room comfort and multi-monitor behavior. The earlier native smoke test
 does not prove these cases. Automatic idle remains off with the original blank
 saver, 1200-second timeout and security 0 until explicitly authorized after QA.
+The user is away as of the latest 2026-10-18 handoff. Wait for fresh readiness
+before physical tests; do not launch native tests, capture or input, change the
+installed app/data, or alter idle/TV settings during unattended source work.
 
 Cursor bug [#36](https://github.com/8roundshock/living-room-display/issues/36):
 the user reported a bright white pointer, and native readings confirmed a visible
