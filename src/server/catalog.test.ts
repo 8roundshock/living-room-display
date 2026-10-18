@@ -17,7 +17,10 @@ import {
 } from '../shared/widgets.ts';
 import type { WidgetId } from '../shared/contracts.ts';
 
-const PLANNED = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
+/** The six #78 ids, appended after the previous release's ones in this order. */
+const NEW_IDS = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
+/** Ids still reserved; computed so that activating an entry (deleting its status) needs no edit here. */
+const PLANNED: string[] = WIDGET_IDS.filter(isPlannedWidget);
 const definition = (id: WidgetId): WidgetDefinition => WIDGET_CATALOG[id];
 
 test('every catalog entry declares a valid category, tone, status and supported default size', () => {
@@ -36,11 +39,11 @@ test('every catalog entry declares a valid category, tone, status and supported 
 });
 
 test('planned entries reserve the #78 ids after the shipped ones and are never active', () => {
-  assert.deepEqual(WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds, ...PLANNED]);
-  assert.deepEqual(ACTIVE_WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds]);
+  assert.deepEqual(WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds, ...NEW_IDS]);
+  assert.deepEqual(ACTIVE_WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds, ...NEW_IDS.filter(id => !PLANNED.includes(id))]);
+  for (const id of NEW_IDS as WidgetId[]) { assert.equal(definition(id).defaultEnabled, false, `${id} is off by default`); assert.equal(definition(id).legacyPlacement, undefined); }
   for (const id of PLANNED as WidgetId[]) {
     assert.equal(isPlannedWidget(id), true); assert.equal(isActiveWidget(id), false, `${id}: widgetVisible starts with isActiveWidget`);
-    assert.equal(definition(id).defaultEnabled, false); assert.equal(definition(id).legacyPlacement, undefined);
   }
   for (const id of ACTIVE_WIDGET_IDS) { assert.equal(isActiveWidget(id), true); assert.equal(isPlannedWidget(id), false); }
 });
@@ -90,10 +93,12 @@ test('settings, saved styles and imports that enable a planned id read it as dis
   }
 });
 
-test('a PATCH enabling a planned id is rejected with a clear message', async () => {
-  assert.throws(() => settingsPatchSchema.parse({ widgets: { note: true } }), /Note is not available yet/);
-  assert.deepEqual(settingsPatchSchema.parse({ widgets: { note: false } }), { widgets: { note: false } });
-  assert.throws(() => mergeSettings(defaultSettings(), settingsPatchSchema.parse({ widgets: { sunMoon: true } })), /Sun & moon is not available yet/);
+test('a PATCH enabling a planned id is rejected with a clear message', async t => {
+  const [first, last] = [PLANNED[0], PLANNED.at(-1)] as [WidgetId | undefined, WidgetId | undefined];
+  if (!first || !last) { t.skip('every #78 id has shipped'); return; }
+  assert.throws(() => settingsPatchSchema.parse({ widgets: { [first]: true } }), new RegExp(`${definition(first).name} is not available yet`));
+  assert.deepEqual(settingsPatchSchema.parse({ widgets: { [first]: false } }), { widgets: { [first]: false } });
+  assert.throws(() => mergeSettings(defaultSettings(), settingsPatchSchema.parse({ widgets: { [last]: true } })), new RegExp(`${definition(last).name} is not available yet`));
   const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-'));
   const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
