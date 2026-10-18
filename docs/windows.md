@@ -69,7 +69,20 @@ establish them.
 Observed 2026-10-18: Windows 10 Pro 10.0.19045 x64, existing Edge, Framework
 v4.0.30319 compiler, PowerShell 7 and Windows PowerShell 5.1. Helper compilation,
 `--check` and invalid-parent preview exit were exercised. The control script
-parses under both PowerShell engines.
+parses under both PowerShell engines. Run `windows/Test-Windows.ps1` for native
+compile/argument checks, cleanup containment including nested junction refusal,
+malformed/unrelated PID refusal, and optional real process/start-time ownership
+checks (`-NodeExe '<node.exe>'`). All six checks passed on PowerShell 7 and 5.1.
+These tests create only scoped scratch files and a sleeping child process; they
+do not capture, open kiosk, install, listen on a port or change screensavers.
+An isolated source candidate combining UI `c5971e1` and backend `960c95a` passed
+the full production build and all 26 tests (including five preview-clear races).
+That build used development Node 24 and existing npm; installed official-runtime
+verification remains pending and is not established by the development build.
+
+Static source review must finish before the initial installation/native smoke.
+The first implementation remains a draft until runtime evidence and a separate
+review of the final pushed commit are recorded on its pull request.
 
 Pending: official-runtime installation, server lifecycle, kiosk/snapshot/clear,
 update/data/uninstall, clean-account install, media/game inhibition, secure

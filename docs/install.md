@@ -26,6 +26,10 @@ The command builds the web app and native helper, installs production files unde
 selected Windows screensaver. Use `-NoBrowser` to avoid opening a tab.
 An optional `-InstallRoot '<dedicated directory>'` selects another user-owned
 directory; pass that same path to later source-clone commands.
+An agent composing reviewed component revisions can pass `-SourceRoot '<source
+candidate directory>'` to build a separate full source snapshot. The native
+helper/control script come from the invoked `windows` directory; web sources
+and the lockfile come from `SourceRoot`. Other workers' files remain untouched.
 
 In the editor, choose your own weather location, units, clock format, dim colors,
 widgets and motion. Location is not inferred from timezone. Snapshots come from
@@ -71,6 +75,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\LivingRoomDisp
 
 This saves the selected screensaver, active state and timeout in
 `screensaver-before.json` before changing them. It preserves lock-on-resume.
+Successful changes update the desired app preference when its owned server is
+running. The editor's Windows status comes from the registry and stays separate
+from that preference. Supported timeout choices are 1–120 minutes.
 Activation uses native Windows screensaver behavior, rather than starting over
 a film based only on missing mouse input. Media applications must still be
 tested for inhibition; see [Windows behavior and limits](windows.md). Managed

@@ -2,10 +2,12 @@
 param(
     [Parameter(Position=0)][ValidateSet('Install','Update','Start','Stop','Status','Editor','Display','EnableIdle','DisableIdle','Uninstall')][string]$Command = 'Status',
     [string]$InstallRoot,
-    [ValidateRange(1,1440)][int]$IdleMinutes = 20,
+    [string]$SourceRoot = (Split-Path $PSScriptRoot -Parent),
+    [ValidateRange(1,120)][int]$IdleMinutes = 20,
     [switch]$NoBrowser,
     [switch]$RemoveData,
-    [string]$NodeVersion = '24.19.0'
+    [string]$NodeVersion = '24.19.0',
+    [switch]$FunctionsOnly
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -26,14 +28,36 @@ $script:node = Join-Path $runtime 'node.exe'
 $hostExe = Join-Path $app 'windows\LivingRoomDisplay.scr'
 
 function Assert-Installed {
+    Assert-NoReparseAncestor $InstallRoot
+    foreach ($ownedPath in @($app,$runtime,$data,$run,$marker,$hostExe)) { Assert-NoReparseAncestor $ownedPath }
     if (-not (Test-Path -LiteralPath $marker)) { throw "Not installed at $InstallRoot. Run Install from the clone." }
     if ((Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).product -ne 'living-room-display') { throw 'Installation marker does not match this application.' }
+}
+function Assert-NoReparseAncestor([string]$Path) {
+    $itemPath = [IO.Path]::GetFullPath($Path)
+    while ($itemPath) {
+        if (Test-Path -LiteralPath $itemPath) {
+            if ((Get-Item -LiteralPath $itemPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "App paths must not pass through a reparse point: $itemPath" }
+        }
+        $nextPath = Split-Path $itemPath -Parent
+        if ($nextPath -eq $itemPath) { break }
+        $itemPath = $nextPath
+    }
 }
 function Remove-OwnedDirectory([string]$Path) {
     $full = [IO.Path]::GetFullPath($Path).TrimEnd('\')
     if (-not $full.StartsWith($InstallRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "Cleanup path is outside application directory: $full" }
     if (Test-Path -LiteralPath $full) {
-        if ((Get-Item -LiteralPath $full -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Refusing cleanup through a reparse point: $full" }
+        Assert-NoReparseAncestor $full
+        # Inspect descendants before recursive removal. Never traverse a nested junction.
+        $pending = New-Object 'Collections.Generic.Stack[string]'
+        $pending.Push($full)
+        while ($pending.Count) {
+            foreach ($child in (Get-ChildItem -LiteralPath $pending.Pop() -Force)) {
+                if ($child.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Refusing cleanup of a tree containing a reparse point: $($child.FullName)" }
+                if ($child.PSIsContainer) { $pending.Push($child.FullName) }
+            }
+        }
         # No shell expansion, wildcard paths, cross-shell commands or root deletion.
         Remove-Item -LiteralPath $full -Recurse -Force
     }
@@ -46,12 +70,14 @@ function Write-Json([string]$Path, $Value) {
 function Get-OwnedServer {
     $file = Join-Path $run 'server.json'
     if (-not (Test-Path -LiteralPath $file)) { return $null }
-    $record = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+    try { $record = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json } catch { return $null }
+    if (-not $record.PSObject.Properties['processId'] -or -not $record.PSObject.Properties['startedAt'] -or [string]$record.processId -notmatch '^\d+$') { return $null }
     $candidate = Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$record.processId)" -ErrorAction SilentlyContinue
     if (-not $candidate -or -not $candidate.ExecutablePath -or -not $candidate.CommandLine) { return $null }
     $entry = Join-Path $app 'dist\server\index.js'
     $process = Get-Process -Id $record.processId -ErrorAction SilentlyContinue
-    if ($candidate.ExecutablePath -ne $script:node -or $candidate.CommandLine.IndexOf($entry,[StringComparison]::OrdinalIgnoreCase) -lt 0 -or -not $process -or $process.StartTime.ToUniversalTime().ToString('o') -ne $record.startedAt) { return $null }
+    try { $startedAt = ([DateTimeOffset]$record.startedAt).UtcDateTime.Ticks } catch { return $null }
+    if ($candidate.ExecutablePath -ne $script:node -or $candidate.CommandLine.IndexOf(('"' + $entry + '"'),[StringComparison]::OrdinalIgnoreCase) -lt 0 -or -not $process -or $process.StartTime.ToUniversalTime().Ticks -ne $startedAt) { return $null }
     return $process
 }
 function Test-Server {
@@ -72,11 +98,13 @@ function Start-App {
     $null = New-Item -ItemType Directory -Path $run -Force
     $entry = Join-Path $app 'dist\server\index.js'
     $oldData = $env:LRD_DATA_DIR
+    $oldPort = $env:LRD_PORT
     try {
         $env:LRD_DATA_DIR = $data
+        $env:LRD_PORT = '4318'
         $process = Start-Process -FilePath $script:node -ArgumentList ('"' + $entry + '"') -WorkingDirectory $app -WindowStyle Hidden -PassThru
         Write-Json (Join-Path $run 'server.json') @{processId=$process.Id;startedAt=$process.StartTime.ToUniversalTime().ToString('o')}
-    } finally { $env:LRD_DATA_DIR = $oldData }
+    } finally { $env:LRD_DATA_DIR = $oldData; $env:LRD_PORT = $oldPort }
     for ($attempt=0; $attempt -lt 40; $attempt++) {
         Start-Sleep -Milliseconds 250
         if ($process.HasExited) { throw 'Server exited during startup. Check prerequisites and port 4318.' }
@@ -111,6 +139,7 @@ function Install-Runtime {
     }
     if ($NodeVersion -notmatch '^24\.\d+\.\d+$') { throw 'NodeVersion must be an explicit Node 24 LTS version.' }
     if (-not [Environment]::Is64BitOperatingSystem) { throw 'This installer currently supports 64-bit Windows only.' }
+    $oldProtocol = [Net.ServicePointManager]::SecurityProtocol
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $download = Join-Path $InstallRoot 'runtime-download'
     if (Test-Path -LiteralPath $download) { throw 'A runtime-download directory exists; inspect it before retrying.' }
@@ -126,11 +155,13 @@ function Install-Runtime {
         if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $match.Groups[1].Value) { throw 'Official Node archive checksum did not match.' }
         Expand-Archive -LiteralPath $archive -DestinationPath $download
         Move-Item -LiteralPath (Join-Path $download "node-v$NodeVersion-win-x64") -Destination $runtime
-    } finally { Remove-OwnedDirectory $download }
+    } finally { [Net.ServicePointManager]::SecurityProtocol = $oldProtocol; Remove-OwnedDirectory $download }
 }
 function Install-App {
-    $source = Split-Path $PSScriptRoot -Parent
+    $source = [IO.Path]::GetFullPath($SourceRoot)
     if (-not (Test-Path -LiteralPath (Join-Path $source 'package-lock.json')) -or -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Build-Host.ps1')) -or -not (Test-Path -LiteralPath (Join-Path $source 'src'))) { throw 'Run Install or Update from a complete source clone, not from installed app files.' }
+    Assert-NoReparseAncestor $InstallRoot
+    if ($source -eq $app -or $source.StartsWith($InstallRoot + '\',[StringComparison]::OrdinalIgnoreCase)) { throw 'SourceRoot must be outside the install directory.' }
     if (Test-Path -LiteralPath $marker) { Assert-Installed }
     elseif (Test-Path -LiteralPath $InstallRoot) {
         if (@(Get-ChildItem -LiteralPath $InstallRoot -Force).Count -gt 0) { throw 'Install directory is nonempty without an app marker. Choose an empty dedicated path.' }
@@ -189,6 +220,14 @@ public static class LrdWindowsSettings {
 '@
     }
 }
+function Update-IdlePreference([bool]$Enabled) {
+    if (-not (Get-OwnedServer)) { return }
+    $idle = @{enabled=$Enabled}
+    if ($Enabled) { $idle.idleMinutes = $IdleMinutes }
+    try {
+        $null = Invoke-RestMethod -Uri "$script:baseUrl/api/settings" -Method Patch -ContentType 'application/json' -Body (@{idle=$idle} | ConvertTo-Json -Compress) -TimeoutSec 3 -UseBasicParsing
+    } catch { Write-Warning 'Windows settings changed, but the desired idle preference could not be saved. The editor still reads actual Windows status.' }
+}
 function Set-Idle([bool]$Enable) {
     Assert-Installed
     Initialize-WindowsApi
@@ -204,6 +243,8 @@ function Set-Idle([bool]$Enable) {
     $current = Get-ItemProperty $key
     if ($Enable) {
         if (-not (Test-Path -LiteralPath $hostExe)) { throw 'Installed helper is missing.' }
+        $selected = $current.PSObject.Properties['SCRNSAVE.EXE']
+        if ((Test-Path -LiteralPath $backup) -and $selected -and $selected.Value -ne $hostExe) { throw 'A prior screensaver backup exists and another screensaver is now selected. Inspect the saved backup before enabling again.' }
         if (-not (Test-Path -LiteralPath $backup)) {
             $saved = @{}
             foreach ($name in $names) {
@@ -212,8 +253,15 @@ function Set-Idle([bool]$Enable) {
             }
             Write-Json $backup $saved
         }
-        Set-ItemProperty $key 'SCRNSAVE.EXE' $hostExe
-        if (-not [LrdWindowsSettings]::SystemParametersInfo(15, ($IdleMinutes * 60), [IntPtr]::Zero, 3) -or -not [LrdWindowsSettings]::SystemParametersInfo(17, 1, [IntPtr]::Zero, 3)) { throw 'Windows could not enable the screensaver. Run DisableIdle to restore previous settings.' }
+        try {
+            Set-ItemProperty $key 'SCRNSAVE.EXE' $hostExe
+            if (-not [LrdWindowsSettings]::SystemParametersInfo(15, ($IdleMinutes * 60), [IntPtr]::Zero, 3) -or -not [LrdWindowsSettings]::SystemParametersInfo(17, 1, [IntPtr]::Zero, 3)) { throw 'Windows could not enable the screensaver.' }
+        } catch {
+            $failure = $_
+            try { Set-Idle $false } catch { Write-Warning 'Automatic restoration failed. The saved screensaver backup remains for recovery.' }
+            throw $failure
+        }
+        Update-IdlePreference $true
         Write-Output "Windows ambient screensaver enabled after $IdleMinutes minutes. Existing lock/security setting was preserved."
     } else {
         if (-not (Test-Path -LiteralPath $backup)) { Write-Output 'No saved screensaver configuration to restore.'; return }
@@ -223,24 +271,40 @@ function Set-Idle([bool]$Enable) {
         foreach ($name in $names) {
             $record = $saved.PSObject.Properties[$name].Value
             if ($record.exists) { Set-ItemProperty $key $name $record.value }
-            else { Remove-ItemProperty $key $name -ErrorAction SilentlyContinue }
         }
         $timeout = if ($saved.ScreenSaveTimeOut.exists) { [uint32]$saved.ScreenSaveTimeOut.value } else { 600 }
         $active = if ($saved.ScreenSaveActive.exists -and $saved.ScreenSaveActive.value -eq '1') { 1 } else { 0 }
         if (-not [LrdWindowsSettings]::SystemParametersInfo(15,$timeout,[IntPtr]::Zero,3) -or -not [LrdWindowsSettings]::SystemParametersInfo(17,$active,[IntPtr]::Zero,3)) { throw 'Windows could not refresh restored screensaver settings; backup retained.' }
+        # SPI can recreate missing values, so restore original existence last.
+        foreach ($name in $names) {
+            $record = $saved.PSObject.Properties[$name].Value
+            if ($record.exists) { Set-ItemProperty $key $name $record.value }
+            else { Remove-ItemProperty $key $name -ErrorAction SilentlyContinue }
+        }
         Remove-Item -LiteralPath $backup
+        Update-IdlePreference $false
         Write-Output 'Previous screensaver and timeout restored. Lock/security setting was not changed.'
     }
 }
 
-switch ($Command) {
+if ($FunctionsOnly) { return }
+$hasher = [Security.Cryptography.SHA256]::Create()
+try { $lockSuffix = [BitConverter]::ToString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($InstallRoot.ToUpperInvariant()))).Replace('-','').Substring(0,12) } finally { $hasher.Dispose() }
+$operationLock = New-Object Threading.Mutex($false, ('Local\LivingRoomDisplay.Control.' + $lockSuffix))
+$lockHeld = $false
+try {
+    try { $lockHeld = $operationLock.WaitOne(10000) } catch [Threading.AbandonedMutexException] { $lockHeld = $true }
+    if (-not $lockHeld) { throw 'Another application operation is in progress. Wait for it to finish.' }
+    switch ($Command) {
     { $_ -in @('Install','Update') } { Install-App; break }
     'Start' { Start-App; if (-not $NoBrowser) { Start-Process "$script:baseUrl/editor" }; break }
     'Stop' { Stop-App; Write-Output 'Owned display and server stopped.'; break }
     'Status' {
         Assert-Installed
         $owned = Get-OwnedServer
-        [pscustomobject]@{InstallRoot=$InstallRoot;ServerRunning=($null -ne $owned);Healthy=$(if ($owned) { Test-Server } else { $false });DisplayRunning=(@(Get-CimInstance Win32_Process -Filter "Name='LivingRoomDisplay.scr'" | Where-Object { $_.ExecutablePath -eq $hostExe }).Count -gt 0);Editor="$script:baseUrl/editor";Data=$data;Screensaver=(Get-ItemProperty 'HKCU:\Control Panel\Desktop').PSObject.Properties['SCRNSAVE.EXE'].Value}
+        $current = Get-ItemProperty 'HKCU:\Control Panel\Desktop'
+        $selected = $current.PSObject.Properties['SCRNSAVE.EXE']
+        [pscustomobject]@{InstallRoot=$InstallRoot;ServerRunning=($null -ne $owned);Healthy=$(if ($owned) { Test-Server } else { $false });DisplayRunning=(@(Get-CimInstance Win32_Process -Filter "Name='LivingRoomDisplay.scr'" | Where-Object { $_.ExecutablePath -eq $hostExe }).Count -gt 0);Editor="$script:baseUrl/editor";Data=$data;Screensaver=$(if ($selected) { $selected.Value } else { $null });IdleActive=$($current.PSObject.Properties['ScreenSaveActive'] -and $current.ScreenSaveActive -eq '1');IdleSeconds=$(if ($current.PSObject.Properties['ScreenSaveTimeOut']) { $current.ScreenSaveTimeOut } else { $null });SecureOnResume=$(if ($current.PSObject.Properties['ScreenSaverIsSecure']) { $current.ScreenSaverIsSecure } else { $null })}
         break
     }
     'Editor' { Start-App; Start-Process "$script:baseUrl/editor"; break }
@@ -266,4 +330,5 @@ switch ($Command) {
         Write-Output "App removed. Settings/reminders $(if ($RemoveData) {'removed'} else {'retained at ' + $data})."
         break
     }
-}
+    }
+} finally { if ($lockHeld) { $operationLock.ReleaseMutex() }; $operationLock.Dispose() }

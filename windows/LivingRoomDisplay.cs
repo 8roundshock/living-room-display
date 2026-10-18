@@ -200,7 +200,8 @@ internal sealed class NativeApi
             token = (string)data["token"];
             var settings = data["settings"] as System.Collections.Generic.Dictionary<string, object>;
             var preview = settings["preview"] as System.Collections.Generic.Dictionary<string, object>;
-            PreviewEnabled = (bool)preview["enabled"];
+            var widgets = settings["widgets"] as System.Collections.Generic.Dictionary<string, object>;
+            PreviewEnabled = (bool)preview["enabled"] && (bool)widgets["preview"];
         }
     }
     internal static bool IsReady()
@@ -268,6 +269,7 @@ internal sealed class BoundedWebClient : WebClient
         WebRequest request = base.GetWebRequest(address);
         request.Timeout = 5000;
         request.Proxy = null;
+        ((HttpWebRequest)request).AllowAutoRedirect = false;
         return request;
     }
 }
@@ -285,7 +287,7 @@ internal sealed class OwnedBrowser : IDisposable
             limits.BasicLimitInformation.LimitFlags = 0x2000; // KILL_ON_JOB_CLOSE
             if (!Native.SetInformationJobObject(job, 9, ref limits, (uint)Marshal.SizeOf(limits)))
                 throw new System.ComponentModel.Win32Exception();
-            string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LivingRoomDisplay", "edge-profile");
+            string profile = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "edge-profile"));
             string arguments = Native.Quote(executable) + " --kiosk " + Native.Quote(url) +
                 " --edge-kiosk-type=fullscreen --no-first-run --no-default-browser-check --disable-background-mode --inprivate --user-data-dir=" + Native.Quote(profile);
             Native.StartupInfo startup = new Native.StartupInfo();
