@@ -52,6 +52,9 @@ repeated permission questions once the user has granted the relevant scope.
    stop that download with a clear access error instead of seeking owner tokens.
 2. Follow the actual installation commands. Record source commit/version and
    supported OS/runtime versions, without recording credentials or private paths.
+   For installed Windows bugs, use Status `SourceRevision`/`SourceState` from
+   [installed provenance](windows.md), not a newer checkout HEAD; report unknown
+   for archives without a verified revision instead of guessing.
    Use the user's configuration; never assume the product's sample city is theirs.
    When device geolocation is available, explain the editor's user-initiated
    browser/OS permission flow. Permission may require a person to click or change

@@ -18,7 +18,11 @@ import {
   weatherTime,
 } from './format';
 import { Icon, weatherIcon } from './icons';
-import { precipitationOutlook, reminderPresentation, sortReminders } from './model';
+import {
+  precipitationOutlook,
+  reminderPresentation,
+  sortReminders,
+} from './model';
 
 const conditions: Record<number, string> = {
   0: 'Clear skies',
@@ -234,7 +238,11 @@ export function AmbientDisplay({
           now,
         )
       : '';
-  const reminderState = reminderPresentation(settings, state.reminders, disconnected);
+  const reminderState = reminderPresentation(
+    settings,
+    state.reminders,
+    disconnected,
+  );
   const reminders = sortReminders(state.reminders ?? [])
     .filter((reminder) => !reminder.completed)
     .slice(0, 2);
@@ -269,14 +277,15 @@ export function AmbientDisplay({
                 {new Intl.DateTimeFormat('en', { weekday: 'long' }).format(now)}
               </div>
               <div className="clock-time">
-                {clock}
+                <span className="clock-digits" key={clock}>
+                  {clock}
+                </span>
                 {period && <span className="clock-period">{period}</span>}
               </div>
               <div className="clock-date">
                 {new Intl.DateTimeFormat('en', {
                   month: 'long',
                   day: 'numeric',
-                  year: 'numeric',
                 }).format(now)}
               </div>
             </Widget>
@@ -444,14 +453,16 @@ export function AmbientDisplay({
                 </>
               ) : (
                 <>
-                  <div className="ambient-title">A little breathing room.</div>
+                  <div className="ambient-title">All clear</div>
                   <div className="ambient-description">
                     No reminders waiting.
                   </div>
                 </>
               )}
               {disconnected && reminders.length > 0 && (
-                <div className="ambient-description">Saved reminders · offline</div>
+                <div className="ambient-description">
+                  Saved reminders · offline
+                </div>
               )}
             </Widget>
           )}
@@ -487,8 +498,8 @@ export function AmbientDisplay({
                   </div>
                   <div className="ambient-description">
                     {previewImageFailed
-                      ? 'Snapshot unavailable. A new capture will appear when the Windows helper opens the display.'
-                      : 'A dim snapshot appears here when the Windows helper opens the display.'}
+                      ? 'Snapshot unavailable'
+                      : 'Captured on activation'}
                   </div>
                 </>
               ) : null}

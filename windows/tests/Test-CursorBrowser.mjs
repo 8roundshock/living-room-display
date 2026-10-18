@@ -53,7 +53,7 @@ try {
   await page.getByRole('link', { name: 'Editor · Esc' }).click();
   await page.locator('.preview-surface').waitFor({ state: 'visible' });
   assert.equal(await page.locator('html').evaluate(element => element.classList.contains('standalone-display')), false, 'Display document state must be removed on editor navigation.');
-  const editorCursors = await cursors(page, ['html', '.preview-surface', '.preview-surface .ambient-widget', '.topbar-actions a']);
+  const editorCursors = await cursors(page, ['html', '.preview-surface', '.preview-surface .ambient-widget', 'a.open-display']);
   assert.ok(editorCursors.slice(0, 3).every(cursor => cursor !== 'none'), 'Editor and embedded preview must retain normal cursors.');
   assert.equal(editorCursors[3], 'pointer', 'Editor action must retain its usable pointer.');
   const popupPromise = page.waitForEvent('popup');
@@ -61,7 +61,7 @@ try {
   const popup = await popupPromise;
   await popup.locator('.display-page').waitFor({ state: 'visible' });
   assert.deepEqual(await cursors(popup, ['html', '.ambient-widget']), ['none', 'none']);
-  assert.equal((await cursors(page, ['.topbar-actions a']))[0], 'pointer', 'Opening the display must not hide its editor parent cursor.');
+  assert.equal((await cursors(page, ['a.open-display']))[0], 'pointer', 'Opening the display must not hide its editor parent cursor.');
   await popup.close();
   assert.deepEqual(exceptions, [], 'No page exceptions are expected.');
   console.log('Production Edge cursor regression PASS: loading/error, viewport, widgets/controls, editor navigation, embedded preview and new display tab. No native cursor claim, capture or saved-state mutation.');

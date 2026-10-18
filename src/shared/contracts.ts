@@ -25,6 +25,8 @@ export interface Settings extends VisualSettings {
   idle: IdleSettings; savedPresets: SavedPreset[];
 }
 export interface SettingsPatch {
+  /** Request intent only; automatic/failure-fallback selection must preserve a saved manual city. */
+  automaticLocation?: boolean;
   location?: Partial<LocationSettings>; locationSource?: Settings['locationSource']; units?: Units; clockFormat?: Settings['clockFormat'];
   appearance?: Partial<AppearanceSettings>; widgets?: Partial<Record<WidgetId, boolean>>;
   widgetOverrides?: Partial<Record<WidgetId, Partial<WidgetTransform>>>;

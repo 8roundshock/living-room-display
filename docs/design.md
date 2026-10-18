@@ -1,30 +1,47 @@
-# Quiet visual hierarchy
+# Display studio design
 
-Reviewed 2026-10-18 for [#34](https://github.com/8roundshock/living-room-display/issues/34).
-Apple's Human Interface Guidelines inform this web interface; this is an original
-implementation for a wide living-room display, not an Apple platform replica.
-No Apple assets, SF font downloads, glass materials, or platform libraries are used.
+Reviewed 2026-10-18 for [#39](https://github.com/8roundshock/living-room-display/issues/39).
+Primary Apple HIG and W3C APG pages, including Apple's live Markdown, were checked
+on this date. Recheck when interactions, geometry, typography or motion change,
+or upstream guidance changes. This is original web UI without Apple assets,
+downloaded SF fonts, native Apple libraries or platform certification.
 
-| Primary guidance | Application here |
+## Chosen direction
+
+Synthetic browser mockups compared a long settings dashboard, a broad theme
+gallery, and a focused preview studio. The studio keeps the result and relevant
+controls together without pushing controls below a gallery or exposing every
+setting simultaneously. An independent critic refined the concept first.
+
+One black canvas leads; a stable Style/Widgets/Weather/Reminders switcher reveals
+one inspector at a time. Rounded charcoal groups, consistent insets, system type,
+small style miniatures and restrained active tint establish hierarchy. No slogans
+or decorative intro cards compete with controls. One persistent bar handles
+saved/unsaved status and Save/Cancel. Advanced details stay in context disclosures.
+Mobile uses normal scrolling and a nonsticky preview, leaving room for keyboard
+editing. The city query is separate from the selected location. Reminders explain
+their independent immediate-save behavior once.
+
+## Primary guidance and adaptation
+
+| Source | Application |
 | --- | --- |
-| [Widgets](https://developer.apple.com/design/human-interface-guidelines/widgets): glanceable content; StandBy enlarges content and removes its background. | Quiet black widget surfaces, large time/temperature, short reminder titles, and no empty reminder widget by default. |
-| [Layout](https://developer.apple.com/design/human-interface-guidelines/layout): alignment and deliberate hierarchy support scanning. | Shared editor section insets and spacing, subordinate widget behavior controls, stable relationships inside each moving group. |
-| [Typography](https://developer.apple.com/design/human-interface-guidelines/typography): legibility and size/weight communicate importance. | System font stack, sturdier main numerals, sentence-case labels with restrained tracking, clear editor headings. Primary values lead; supporting details remain smaller. |
-| [Motion](https://developer.apple.com/design/human-interface-guidelines/motion): purposeful, optional motion that avoids distraction. | Brief color feedback on controls and a soft reveal when a widget appears. No bouncing, extra interaction delays, or animated decoration. Reduced motion removes these transitions and widget motion. |
-| [Always On](https://developer.apple.com/design/human-interface-guidelines/always-on): keep key content legible and dim secondary information. | Brightness applies only to content over `#000`; forecast age is quieter than current values, and there are no filled ambient cards. |
+| [Apple Layout](https://developer.apple.com/design/human-interface-guidelines/layout) | Deliberate alignment/grouping, focused sections, progressive disclosure, responsive reflow. |
+| [Apple Typography](https://developer.apple.com/design/human-interface-guidelines/typography) | System fonts, few weights, sturdier time/temperature numerals, clear hierarchy and large-text fitting. |
+| [Apple Motion](https://developer.apple.com/design/human-interface-guidelines/motion) | Brief nonblocking feedback with gentle easing; no bounce or forced waiting. |
+| [Apple Widgets](https://developer.apple.com/design/human-interface-guidelines/widgets) | Glanceable time/current conditions, forecast/rain graphics, StandBy-like enlarged information, no filled ambient cards or default empty reminders. |
+| [Apple Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Legible key information, dim secondary content, sparse decoration and restrained updates. |
+| [W3C APG Combobox](https://www.w3.org/WAI/ARIA/apg/patterns/combobox/) | Editable manual-selection listbox, input-held focus, active-descendant semantics, arrows/Enter/Escape, no blur selection. |
 
-The owner's requirement for whole widgets to drift and periodically move between
-distinct areas takes precedence over Apple's recommendation to keep Always On
-layouts stable. Four compositions and calm fades remain; disabling movement or
-using reduced motion gives a static layout. Hiding an empty reminder group leaves
-its region black, without moving neighboring content unexpectedly. This design
-does not claim to prevent OLED image retention or reproduce Apple power behavior.
+Inspector entry fades/translates slightly over 220ms; controls transition around
+180ms. Clock changes reveal briefly at minute boundaries; rain bars ease on data
+updates. Reduced motion removes effects and ambient motion. Information never
+depends on animation or tint alone. No audio or haptics are introduced.
 
-The editor remains more legible than the ambient display. Room/Night brightness
-defaults and the existing brightness range are unchanged. Readability on a TV at
-the user's viewing distance still requires actual setup verification; browser
-viewport checks alone do not establish it.
-
-Recheck these choices when typography, widget content, composition geometry or
-motion changes, or when relevant upstream HIG guidance changes. This is a dated
-design reference, not a scheduled review or a vendor certification.
+The owner's relocation requirement deliberately differs from Apple's stable
+Always On layout advice: four distinct compositions remain with soft fades.
+Unused ambient pixels remain true black; saved brightness caps are unchanged.
+These choices do not reproduce Apple power behavior or guarantee OLED safety.
+The editor is more legible than the distant display; browser images do not prove
+actual TV brightness or viewing comfort. See [UI contracts](ui.md), [API](api.md)
+and the [UX role guide](roles/ux.md) for verification and future work.

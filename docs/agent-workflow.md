@@ -10,7 +10,7 @@ These instructions do not install a background orchestration system.
 | Role | Responsibility |
 | --- | --- |
 | Coordinator | Define outcomes, track decisions, assign ownership/dependencies, resolve findings, report verified state. |
-| Visual/interaction worker | Composition, readability, motion, preview presentation, presets, and editor experience. |
+| Visual/interaction worker | Composition, readability, motion, presets and editor experience; follow the [UX role handoff](roles/ux.md). |
 | Data/application worker | Weather semantics, stale/error states, reminders, settings, and persistence. |
 | Windows worker | Optional activation/fullscreen host, capture source/lifecycle, dismissal, and media/game compatibility. |
 | Reviewer/verifier | Independent review and checks relevant to the change; concrete findings and verification evidence. |
@@ -44,6 +44,8 @@ current. Link meaningful feature work to an issue, update scope/checklists as
 decisions change, and connect implementation PRs. Mark actual progress rather
 than closing tickets merely because code was drafted. Close only when the issue's
 acceptance criteria are verified; leave remaining work explicit.
+Use plain issue references for unfinished acceptance; GitHub can parse closing
+keywords even inside negated or future-tense phrases.
 
 File reproducible bugs with expected/observed behavior, steps, affected version,
 severity/impact, and relevant evidence. Do not invent bugs or include secrets,

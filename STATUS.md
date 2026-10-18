@@ -16,6 +16,9 @@ the owner's explicit authority to choose practical defaults and build the app.
   reminders, forecasts and last-state preview presentation. Empty reminders hide
   by default with a saved override; typography, spacing and reduced motion follow
   the [design notes](docs/design.md). See [UI checks](docs/ui.md).
+- Focused display-studio inspector, visual style miniatures, soft transitions,
+  settings/location/style Save and Cancel, debounced keyboard city dropdown,
+  concurrent-draft refresh and an atomic automatic-location guard.
 - Standalone display cursor CSS covers loading/error pages and descendants;
   editor/embedded preview cursor behavior is preserved. The production Edge
   route regression passes; actual native cursor proof remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).
@@ -24,12 +27,12 @@ the owner's explicit authority to choose practical defaults and build the app.
   migrate as manual; no location prompt or lookup occurs in the screensaver.
 - Framework Windows host and per-user installer/control sources, with screensaver
   backup/restore, isolated Edge job, cancellation and scoped process management.
-- Full production build and 47 application tests. Windows/Linux CI runs the full
+- Full production build and 53 application tests. Windows/Linux CI runs the full
   application checks. Windows
   source regression checks cover startup cancellation, restore selection,
   owned-process recognition and filesystem transaction/cleanup behavior.
 
-Local verification: full build and all 47 application tests pass using the
+Local verification: full build and all 53 application tests pass using the
 app-owned Node 24 runtime. Eleven Windows check groups pass on PowerShell 5.1
 and 7 with the optional real child-process test (ten without). Provenance tests
 cover clean/dirty Git, archives, enclosing repositories and composed sources;
@@ -39,6 +42,12 @@ online export/import and validated offline recovery after both saved JSON files
 were corrupted pass, retaining original corrupt evidence. Native static/unit
 checks use fake transport/session/native boundaries and scoped filesystem fixtures;
 they do not establish actual installed capture, kiosk, idle or lock behavior.
+The isolated production Edge studio harness passes fourteen interaction/layout
+groups, including async Save/Cancel/city/location races, reminder CRUD, all four
+1080p/4K compositions, reduced motion, 390px/320px reflow and focused-field clearance
+above the measured Save bar at full/compact heights. Source desktop/mobile
+visuals are inspected in RAM; final independent visual review is required and
+tracked on the PR. No screenshots or real device positions are retained. See [UI evidence](docs/ui.md).
 
 ## In progress / not yet verified
 
@@ -48,8 +57,10 @@ Actual 3840x2160 native view and 640x360 RAM PNG were inspected; normal exit cle
 the image to 404 and removed only owned display processes. No capture files were
 found. See [runtime evidence](docs/windows.md#actual-current-pc-runtime-evidence).
 
-The newer UI/location source is integrated; its installed refresh follows final
-Windows review/CI. The recorded native host is unchanged by those UI features.
+The reviewed Windows/cursor baseline `7f6313a` was subsequently installed and its
+47 tests/build/control checks passed. This display-studio change has not yet been
+installed; its refresh follows final independent review/CI. The native host is
+unchanged by the redesign.
 The user reported a bright white pointer during the previous native test;
 WGC image inspection did not establish cursor absence. A reviewed bounded native
 test must verify cursor hiding and restoration before calling that bug resolved.
