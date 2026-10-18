@@ -37,8 +37,10 @@ import {
   GRID_DENSITIES,
   WIDGET_CATALOG,
   firstPlacement,
-  placeWidget,
-  repackGrid,
+  fitWidgetFamily,
+  reflowWidget,
+  switchGridDensity,
+  type GridDensityHistory,
   type GridDensity,
   type WidgetSize,
 } from '../shared/widgets';
@@ -134,15 +136,19 @@ export function Editor({
   const [draft, setDraft] = useState(() => structuredClone(state.settings));
   const savedRef = useRef(saved),
     draftRef = useRef(draft);
-  const [section, setSection] = useState<Section>('Style');
+  const [section, setSection] = useState<Section>('Widgets');
   const [saving, setSaving] = useState(false),
     [error, setError] = useState<string | null>(null);
-  const [composition, setComposition] = useState<number | undefined>();
+  const [composition, setComposition] = useState<number | undefined>(0);
+  const [movementPreview, setMovementPreview] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<WidgetId | null>(null);
   const [layoutEditing, setLayoutEditing] = useState(false),
     [pickerOpen, setPickerOpen] = useState(false);
   const [gridPreview, setGridPreview] = useState<WidgetGrid | null>(null),
     [gridMessage, setGridMessage] = useState('');
+  const [gridEpoch, setGridEpoch] = useState(0);
+  const densityHistory = useRef<GridDensityHistory | undefined>(undefined);
+  const [gridGesture, setGridGesture] = useState<{ id: WidgetId; x: number; y: number; width?: number; height?: number } | null>(null);
   const [photoDraft, setPhotoDraft] = useState<PhotoDraft | null | undefined>(),
     [photoBusy, setPhotoBusy] = useState(false);
   const photoDraftRef = useRef(photoDraft),
@@ -249,6 +255,9 @@ export function Editor({
     cancelPhoto();
     updatePhoto(undefined);
     setGridPreview(null);
+    setGridEpoch(value => value + 1);
+    setGridGesture(null);
+    densityHistory.current = undefined;
     setGridMessage('');
     locationEpoch.current++;
     guardLocation.current = false;
@@ -304,17 +313,13 @@ export function Editor({
       size,
       draftRef.current.widgets,
     );
-    if (!placement) {
-      setGridMessage('No room. Try a smaller size or finer grid.');
-      return;
-    }
-    const next = placeWidget(
+    const next = placement ? reflowWidget(
       draftRef.current.widgetGrid,
       id,
       placement,
       draftRef.current.widgets,
-    );
-    if (!next) return;
+    ) : fitWidgetFamily(draftRef.current.widgetGrid, id, size, draftRef.current.widgets);
+    if (!next) { setGridMessage('No room. Try a smaller size or finer grid.'); return; }
     change((previous) => ({
       ...previous,
       widgetGrid: next,
@@ -346,10 +351,10 @@ export function Editor({
     setGridMessage('');
   }
   function resizeWidget(id: WidgetId, size: WidgetSize) {
-    const next = placeWidget(
+    const next = fitWidgetFamily(
       draftRef.current.widgetGrid,
       id,
-      { ...draftRef.current.widgetGrid.placements[id], size },
+      size,
       draftRef.current.widgets,
     );
     if (next) commitGrid(next);
@@ -357,7 +362,7 @@ export function Editor({
   }
   function moveWidget(id: WidgetId, dx: number, dy: number) {
     const original = draftRef.current.widgetGrid.placements[id];
-    const next = placeWidget(
+    const next = reflowWidget(
       draftRef.current.widgetGrid,
       id,
       { ...original, column: original.column + dx, row: original.row + dy },
@@ -367,12 +372,17 @@ export function Editor({
     else setGridMessage('No room there');
   }
   function density(value: GridDensity) {
-    const next = repackGrid(
+    const next = switchGridDensity(
       draftRef.current.widgetGrid,
       value,
       draftRef.current.widgets,
+      densityHistory.current,
     );
-    if (next) commitGrid(next);
+    if (next) {
+      densityHistory.current = next.history;
+      commitGrid(next.grid);
+      if (next.resized.length) setGridMessage(`${next.resized.map(({ id, to }) => `${WIDGET_CATALOG[id].name} ${to}`).join(' · ')} to fit. Switch back to restore.`);
+    }
     else
       setGridMessage('Not enough room. Keep this grid or use smaller widgets.');
   }
@@ -677,12 +687,15 @@ export function Editor({
         <section className="canvas-column" aria-label="Display preview">
           <div className="canvas-heading">
             <h1>Your display</h1>
+            <div className="canvas-heading-actions">
             <button
               className={`button small edit-layout ${layoutEditing ? 'active' : ''}`}
               aria-pressed={layoutEditing}
               onClick={() => {
                 setLayoutEditing((value) => !value);
                 setGridPreview(null);
+                setGridGesture(null);
+                setMovementPreview(false);
                 setGridMessage('');
                 if (!layoutEditing) setSection('Widgets');
               }}
@@ -690,6 +703,10 @@ export function Editor({
               <Icon name={layoutEditing ? 'check' : 'edit'} size={15} />
               {layoutEditing ? 'Done' : 'Edit layout'}
             </button>
+            <button className="icon-button canvas-add" aria-label="Add widget to display" title="Add widget" onClick={() => {
+              setSection('Widgets'); setPickerOpen(true); setLayoutEditing(true); setMovementPreview(false);
+            }}><Icon name="plus" size={20} /></button>
+            </div>
           </div>
           <div className="preview-frame">
             <div className="preview-screen">
@@ -701,7 +718,8 @@ export function Editor({
                 embedded
                 disconnected={connectionError !== null}
                 compositionOverride={composition}
-                layoutEditing={layoutEditing}
+                layoutEditing={layoutEditing || !movementPreview}
+                gesture={gridGesture}
                 photoPreview={
                   photoDraft === undefined
                     ? undefined
@@ -710,6 +728,7 @@ export function Editor({
               />
               {layoutEditing && (
                 <GridEditor
+                  key={gridEpoch}
                   settings={draft}
                   selected={selectedWidget}
                   onSelect={(id) => {
@@ -717,7 +736,7 @@ export function Editor({
                     setSection('Widgets');
                     setPickerOpen(false);
                   }}
-                  onPreview={setGridPreview}
+                  onPreview={(grid, gesture) => { setGridPreview(grid); setGridGesture(gesture ?? null); }}
                   onCommit={commitGrid}
                   onMessage={setGridMessage}
                 />
@@ -725,7 +744,7 @@ export function Editor({
             </div>
           </div>
           <div className="canvas-toolbar">
-            <span>{layoutEditing ? 'Grid' : 'Preview'}</span>
+            <span>{layoutEditing ? 'Drag to move · pull corner to resize' : 'Your saved arrangement'}</span>
             {layoutEditing ? (
               <label className="grid-density-control">
                 <span className="sr-only">Grid density</span>
@@ -746,6 +765,10 @@ export function Editor({
               </label>
             ) : (
               <>
+                <button className={`button small movement-preview ${movementPreview ? 'active' : ''}`} aria-pressed={movementPreview} onClick={() => setMovementPreview(value => !value)}>
+                  <Icon name={movementPreview ? 'check' : 'refresh'} size={15} />{movementPreview ? 'Back to layout' : 'Preview movement'}
+                </button>
+                {movementPreview && <>
                 <div
                   className="composition-picker"
                   aria-label="Preview arrangement"
@@ -781,6 +804,7 @@ export function Editor({
                 >
                   <Icon name="refresh" size={16} />
                 </button>
+                </>}
               </>
             )}
           </div>
