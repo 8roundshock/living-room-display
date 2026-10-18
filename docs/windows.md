@@ -100,12 +100,15 @@ Source provenance checks use synthetic local Git repositories to verify clean,
 dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
 verify metadata refresh on successful install and retention after failed update
 or uninstall. No paths, remotes, changes or credentials are saved in provenance.
-Current installed clean source is `d81c1e0`; its 71 application tests and the full
-production build pass using the app-owned Node 24.19.0. The reviewed
-Studio/grid, snapshot-readability and reminder corrections are installed. The
+The last verified installed baseline on 2026-10-18 was clean `d81c1e0`; its 71
+application tests and the full production build passed using the app-owned Node
+24.19.0. The reviewed Studio/grid, snapshot-readability and reminder corrections
+were installed in that baseline. The
 installation marker and HTTP health were rechecked on 2026-10-18; the rollout
 separately verified served assets and data preservation. This documentation-only
-recheck performed no GUI, capture or native/current-desktop probe.
+recheck performed no GUI, capture or native/current-desktop probe. Recheck current
+provenance using installed CLI `Status` or
+`%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](install.md).
 The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
 passes actual computed-style checks for loading/error, viewport edges, widget
 controls, display-to-editor navigation, the embedded preview and a new display
@@ -121,8 +124,8 @@ apply; the repository stays private and this PR is not deployment evidence.
 
 ## Actual current-PC runtime evidence
 
-Current installed clean source is `d81c1e0`, including the reviewed Studio/grid,
-readable snapshot and reminder fixes. Actual native preview source/content and
+The last verified installed baseline on 2026-10-18 was clean `d81c1e0`, including
+the reviewed Studio/grid, readable snapshot and reminder fixes. Actual native preview source/content and
 readability on the 3840x2160 primary were accepted under
 [#46](https://github.com/8roundshock/living-room-display/issues/46): raw PNG and
 rendered preview were inspected in RAM, normal exit cleared preview to 404 and

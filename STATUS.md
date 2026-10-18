@@ -35,7 +35,8 @@ the owner's explicit authority to choose practical defaults and build the app.
   and a 24% new default; existing opacity choices stay unchanged. The isolated
   optical harness confirms raw bytes remain in RAM unchanged, black stays zero,
   highlights remain bounded and controls/clear behavior work. The reviewed
-  correction is installed and actual 4K native preview content/readability was
+  correction was installed in the last verified baseline below; actual 4K native
+  preview content/readability was
   accepted under [#46](https://github.com/8roundshock/living-room-display/issues/46),
   with raw capture/inspection in RAM and no screenshot files.
 - Standalone display cursor CSS covers loading/error pages and descendants;
@@ -76,11 +77,14 @@ its isolated grid/photo harness were reviewed, merged and installed; the
 functional, actual visual and widget-skill review evidence. The held-drag polling
 race [#44](https://github.com/8roundshock/living-room-display/issues/44) was resolved.
 
-## Current installation and remaining acceptance
+## Last verified installation and remaining acceptance
 
-Current installed source is clean `d81c1e0f5683a37f4f81b4c5d006203877168ac6`,
+The last verified installed baseline on 2026-10-18 was clean
+`d81c1e0f5683a37f4f81b4c5d006203877168ac6`,
 including the reviewed Studio/grid, preview-readability and reminder corrections.
-The installation marker and HTTP health were rechecked on 2026-10-18. Source and
+Recheck current provenance using installed CLI `Status` or
+`%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](docs/install.md).
+The installation marker and HTTP health were rechecked on that date. Source and
 served-asset provenance, update preservation of settings/reminders/private photos,
 and actual 3840x2160 native preview acceptance were verified during rollout.
 Device location was not requested during rollout. Simulated composition/browser
@@ -92,7 +96,7 @@ Actual 3840x2160 native view and 640x360 RAM PNG were inspected; normal exit cle
 the image to 404 and removed only owned display processes. No capture files were
 found. See [runtime evidence](docs/windows.md#actual-current-pc-runtime-evidence).
 
-The installed native host still has the cursor and early-input issues
+That verified native baseline has the cursor and early-input issues
 [#36](https://github.com/8roundshock/living-room-display/issues/36) and
 [#50](https://github.com/8roundshock/living-room-display/issues/50), both open.
 The proposed replacement in [draft PR51](https://github.com/8roundshock/living-room-display/pull/51)

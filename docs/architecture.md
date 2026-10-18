@@ -59,7 +59,9 @@ desktop capture permission. Keep the thumbnail dim, adjustable, movable, and
 toggleable. Do not save screenshots. Actual native capture and rendered preview
 were inspected in RAM on the current 3840x2160 Windows 10 setup on 2026-10-18;
 normal exit cleared the image to 404 without capture files. Reviewed Studio/grid,
-preview and reminder changes are installed in clean source `d81c1e0`. This does
+preview and reminder changes were installed in the last verified baseline on
+2026-10-18, clean source `d81c1e0`. Recheck current provenance through installed CLI
+`Status` or `installation.json`; see [installation](install.md). This does
 not establish live capture, locked/protected desktop access, another account or
 across-room comfort. The cursor replacement in
 [draft PR51](https://github.com/8roundshock/living-room-display/pull/51) remains
@@ -75,7 +77,7 @@ and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 | Language/framework and host | Node 24/TypeScript, React/Vite, native Node HTTP server, Windows helper. |
 | Weather/defaults | Open-Meteo; editable Toronto city default, metric, 12-hour clock. This is a product default, not inferred user location. |
 | Data | Per-user JSON with serialized atomic writes, prior backup, and export/import; no kiosk-storage dependency. |
-| Visual controls | Reviewed Studio/grid, optional modules, outline/digital/analog clocks and presets are installed; actual 4K preview is accepted, while across-room comfort and compatibility gates remain. |
+| Visual controls | Reviewed Studio/grid, optional modules, outline/digital/analog clocks and presets were installed in the last verified 2026-10-18 baseline; actual 4K preview is accepted, while across-room comfort and compatibility gates remain. |
 | Preview | Last-desktop snapshot in RAM only; live app preview deferred. |
 | Local photo | Explicit selected raster is normalized in-browser, validated and atomically saved with settings in private local state; exports/imports exclude its bytes. Prior recovery backup may retain an older image. |
 | Activation | Manual use first; Windows idle activation remains off until verification and explicit enablement. |
