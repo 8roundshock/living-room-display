@@ -6,22 +6,23 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 
 ## Browser API
 
-| Method/path | Request | Response |
-| --- | --- | --- |
-| `GET /api/health` | None | Status, version, storage recovery warning. |
-| `GET /api/state` | None | Settings, reminders, weather, preview metadata, storage warning. |
-| `PATCH /api/settings` | Validated nested partial settings | Full saved settings. |
-| `GET /api/reminders` | None | Reminder array. |
-| `POST /api/reminders` | `text`, optional ISO `dueAt` or null | Created reminder (201). |
-| `PATCH /api/reminders/:id` | Partial `text`, `completed`, `dueAt` | Updated reminder. |
-| `DELETE /api/reminders/:id` | None | Empty 204. |
-| `GET /api/weather` | None | Cached normalized forecast. |
-| `GET /api/locations?q=Toronto` | City query, 2–100 characters | Up to eight city results with coordinates/timezone. |
-| `GET /api/export` | None | Downloadable settings/reminders JSON backup. |
-| `POST /api/import` | A validated export | Atomic replacement of settings/reminders. |
-| `GET /api/preview` | None | Availability, capture timestamp, dimensions. |
-| `GET /api/preview/image` | None | RAM-only PNG, `no-store`, or 404. |
-| `GET /api/windows/status` | None | Actual screensaver registry state; unavailable on other systems. |
+| Method/path                    | Request                                                                | Response                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `GET /api/health`              | None                                                                   | Status, version, storage recovery warning.                                   |
+| `GET /api/state`               | None                                                                   | Settings, reminders, weather, preview metadata, storage warning.             |
+| `PATCH /api/settings`          | Validated nested partial settings                                      | Full saved settings.                                                         |
+| `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |
+| `GET /api/reminders`           | None                                                                   | Reminder array.                                                              |
+| `POST /api/reminders`          | `text`, optional ISO `dueAt` or null                                   | Created reminder (201).                                                      |
+| `PATCH /api/reminders/:id`     | Partial `text`, `completed`, `dueAt`                                   | Updated reminder.                                                            |
+| `DELETE /api/reminders/:id`    | None                                                                   | Empty 204.                                                                   |
+| `GET /api/weather`             | None                                                                   | Cached normalized forecast.                                                  |
+| `GET /api/locations?q=Toronto` | City query, 2–100 characters                                           | Up to eight city results with coordinates/timezone.                          |
+| `GET /api/export`              | None                                                                   | Downloadable settings/reminders JSON backup.                                 |
+| `POST /api/import`             | A validated export                                                     | Atomic replacement of settings/reminders.                                    |
+| `GET /api/preview`             | None                                                                   | Availability, capture timestamp, dimensions.                                 |
+| `GET /api/preview/image`       | None                                                                   | RAM-only PNG, `no-store`, or 404.                                            |
+| `GET /api/windows/status`      | None                                                                   | Actual screensaver registry state; unavailable on other systems.             |
 
 Mutating JSON requests require `Content-Type: application/json`. Errors use
 `{ "error": "message" }` and appropriate 4xx/5xx codes. Unknown settings fields
@@ -38,6 +39,38 @@ installed. Only the Windows host's explicit activation command changes that
 configuration. `/api/windows/status` reads existing settings without changing them.
 
 ## Weather semantics
+
+### Device and manual location
+
+Settings add `locationSource: device | manual | fallback`. New installs use
+`fallback`, with the existing Toronto city coordinates/timezone from shared
+defaults. Old version-one state or exports without the field parse as `manual`
+and keep their city. Explicit location edits through PATCH without a source are
+also treated as manual for existing API callers. No storage directory changes.
+
+`POST /api/location` accepts either `{source:"device", latitude, longitude,
+automatic}` or `{source:"fallback", automatic}`. It returns saved Settings.
+The existing Host/Origin, JSON/size and coordinate validation apply. Device points
+are rounded to 0.1 degrees on both client and server; stored name/timezone are
+`Device area`/`auto`. No position accuracy, raw fix, altitude or timestamp is
+accepted or logged. Fallback always uses shared Toronto defaults. A serialized
+write checks the current source: automatic results and failed-look-up fallbacks
+cannot overwrite a manual city, including a city saved while a lookup was pending.
+An explicit successful device action can replace a manual selection.
+
+The editor performs only one automatic lookup per open, only for nonmanual
+settings and already-granted permission. Otherwise the user must press the device
+button. No permission/position request occurs in `/display`; its response carries
+`Permissions-Policy: geolocation=()`, while editor responses permit only self.
+There is no background watch or IP geolocation service.
+
+For device points, Open-Meteo receives only the rounded coordinates and
+`timezone=auto`. The returned timezone must be a valid IANA identifier and is
+used in WeatherState, so forecast dates/times never use the browser's potentially
+different zone. A missing/invalid resolved timezone makes that forecast
+unavailable. Settings retain `auto` to resolve again for a changed area.
+
+### Forecast normalization and caching
 
 The server requests Open-Meteo epoch timestamps and the configured timezone.
 It normalizes seven daily forecasts and 24 upcoming hourly intervals. Hourly

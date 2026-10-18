@@ -56,6 +56,31 @@ test('rejects browser cross-origin and untrusted Host requests', async () => {
   } finally { await app.close(); }
 });
 
+test('device location is rounded, fallback is Toronto, and late automatic results preserve a manual city', async () => {
+  const app = await fixture();
+  try {
+    assert.equal(app.store.snapshot().settings.locationSource, 'fallback');
+    let response = await fetch(`${app.url}/api/location`, { method: 'POST', ...body({ source: 'device', latitude: 12.34567, longitude: 45.67891, automatic: true }) });
+    let settings = await response.json();
+    assert.equal(settings.locationSource, 'device'); assert.equal(settings.location.name, 'Device area'); assert.equal(settings.location.latitude, 12.3); assert.equal(settings.location.longitude, 45.7); assert.equal(settings.location.timezone, 'auto');
+    const weather = await (await fetch(`${app.url}/api/weather`)).json(); assert.equal(weather.location.timezone, 'America/Toronto');
+    await fetch(`${app.url}/api/location`, { method: 'POST', ...body({ source: 'fallback', automatic: true }) });
+    assert.equal(app.store.snapshot().settings.location.name, 'Toronto');
+    await fetch(`${app.url}/api/settings`, { method: 'PATCH', ...body({ location: { name: 'Manual test city', latitude: 1, longitude: 2, timezone: 'Asia/Tokyo' } }) });
+    for (const selection of [{ source: 'device', latitude: 12.34567, longitude: 45.67891, automatic: true }, { source: 'fallback', automatic: true }, { source: 'fallback', automatic: false }]) {
+      settings = await (await fetch(`${app.url}/api/location`, { method: 'POST', ...body(selection) })).json();
+      assert.equal(settings.locationSource, 'manual'); assert.equal(settings.location.name, 'Manual test city');
+    }
+    response = await fetch(`${app.url}/api/location`, { method: 'POST', ...body({ source: 'device', latitude: 99, longitude: 2, automatic: false }) }); assert.equal(response.status, 400);
+    assert.equal(app.store.snapshot().settings.locationSource, 'manual');
+    response = await fetch(`${app.url}/api/location`, { method: 'POST', ...body({ source: 'device', latitude: 12.34567, longitude: 45.67891, automatic: false }) }); assert.equal((await response.json()).locationSource, 'device');
+    const exported = await (await fetch(`${app.url}/api/export`)).json(); assert.equal(exported.settings.location.latitude, 12.3);
+    assert.equal((await fetch(`${app.url}/api/location`, { method: 'POST', headers: { ...body({}).headers, Origin: 'https://attacker.example' }, body: JSON.stringify({ source: 'fallback', automatic: true }) })).status, 403);
+    assert.equal((await fetch(`${app.url}/display`)).headers.get('permissions-policy'), 'geolocation=()');
+    assert.equal((await fetch(`${app.url}/editor`)).headers.get('permissions-policy'), 'geolocation=(self)');
+  } finally { await app.close(); }
+});
+
 test('native preview stays in RAM and clears when disabled', async () => {
   const app = await fixture();
   try {

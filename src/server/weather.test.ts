@@ -52,3 +52,27 @@ test('provider query uses explicit timezone, epoch instants, and requested units
   assert.equal(requested?.searchParams.get('precipitation_unit'), 'inch');
   assert.equal(result.units.temperature, '°F');
 });
+
+test('device weather resolves the timezone from the provider instead of the browser timezone', async () => {
+  const settings = defaultSettings(); settings.locationSource = 'device';
+  settings.location = { name: 'Device area', latitude: 12.3, longitude: 45.7, timezone: 'auto' };
+  const payload = forecastFixture(Date.parse('2026-10-17T15:00:00Z') / 1000);
+  payload.timezone = 'Asia/Tokyo'; payload.utc_offset_seconds = 9 * 3600;
+  let requested: URL | undefined;
+  const service = new WeatherService(async input => { requested = new URL(input); return Response.json(payload); }, () => Date.parse('2026-10-18T13:00:00Z'));
+  const state = await service.get(settings);
+  assert.equal(requested!.searchParams.get('timezone'), 'auto');
+  assert.equal(requested!.searchParams.get('latitude'), '12.3');
+  assert.equal(state.location.name, 'Device area'); assert.equal(state.location.timezone, 'Asia/Tokyo');
+  assert.equal(state.daily[0].date, '2026-10-18'); assert.equal(state.status, 'fresh');
+});
+
+test('unresolved device timezone cannot produce a misleading fresh forecast', async () => {
+  const settings = defaultSettings(); settings.locationSource = 'device'; settings.location.timezone = 'auto';
+  for (const timezone of [undefined, 'not-a-timezone']) {
+    const payload = { ...forecastFixture(), timezone };
+    const service = new WeatherService(async () => Response.json(payload));
+    const state = await service.get(settings);
+    assert.equal(state.status, 'unavailable'); assert.equal(state.daily.length, 0); assert.equal(state.current, null);
+  }
+});

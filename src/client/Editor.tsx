@@ -22,6 +22,8 @@ import {
 } from './format';
 import { Icon, type IconName } from './icons';
 import { applyBuiltinPreset, getVisual, sortReminders } from './model';
+import { browserLocationPlatform, getDeviceLocation } from './location';
+import type { AutomaticLocationSelection } from '../shared/contracts';
 
 const widgetLabels: Record<WidgetId, string> = {
   clock: 'Time & date',
@@ -154,6 +156,22 @@ export function Editor({
   const [reminderSaving, setReminderSaving] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const draftRevision = useRef(0);
+  const [locationBusy, setLocationBusy] = useState(false);
+  const locationMounted = useRef(true);
+  const autoLocationAttempted = useRef(false);
+  useEffect(() => {
+    locationMounted.current = true;
+    if (
+      !autoLocationAttempted.current &&
+      state.settings.locationSource !== 'manual'
+    ) {
+      autoLocationAttempted.current = true;
+      void useDeviceLocation(true);
+    }
+    return () => {
+      locationMounted.current = false;
+    };
+  }, []);
   useEffect(() => {
     if (!dirty && !saving) setDraft(structuredClone(state.settings));
   }, [state.settings, dirty, saving]);
@@ -164,6 +182,67 @@ export function Editor({
     setDirty(true);
     setSaveMessage('Previewing unsaved changes');
     setError(null);
+  }
+  async function useDeviceLocation(automatic: boolean) {
+    if (saving || locationBusy) return;
+    setLocationBusy(true);
+    setLocationMessage(
+      automatic
+        ? 'Checking device location permission…'
+        : 'Finding an approximate weather area…',
+    );
+    try {
+      const result = await getDeviceLocation(
+        browserLocationPlatform(),
+        !automatic,
+      );
+      if (!locationMounted.current) return;
+      const selection: AutomaticLocationSelection =
+        result.status === 'success'
+          ? {
+              source: 'device',
+              latitude: result.latitude,
+              longitude: result.longitude,
+              automatic,
+            }
+          : { source: 'fallback', automatic };
+      const saved = await api<Settings>('/api/location', {
+        method: 'POST',
+        body: JSON.stringify(selection),
+      });
+      if (!locationMounted.current) return;
+      draftRevision.current++;
+      setState((previous) =>
+        previous ? { ...previous, settings: saved } : previous,
+      );
+      setDraft((previous) => ({
+        ...previous,
+        location: saved.location,
+        locationSource: saved.locationSource,
+      }));
+      setLocationMessage(
+        saved.locationSource === 'device'
+          ? 'Using your approximate device area.'
+          : saved.locationSource === 'manual'
+            ? 'Your manual city is kept.'
+            : result.status === 'denied'
+              ? 'Location permission is blocked. Using Toronto; you can still choose a city.'
+              : result.status === 'permission-needed'
+                ? 'Using Toronto. Choose Use device location to allow a one-time lookup.'
+                : 'Device location is unavailable. Using Toronto; you can still choose a city.',
+      );
+      if (
+        result.status === 'success' ||
+        saved.locationSource !== state.settings.locationSource
+      )
+        void reload();
+    } catch {
+      setLocationMessage(
+        'Could not save the location. Your saved city is kept.',
+      );
+    } finally {
+      if (locationMounted.current) setLocationBusy(false);
+    }
   }
   function appearance(
     key: keyof Settings['appearance'],
@@ -611,10 +690,36 @@ export function Editor({
                     <div>
                       <strong>{draft.location.name}</strong>
                       <span>
-                        {draft.location.timezone.replaceAll('_', ' ')}
+                        {draft.locationSource === 'device'
+                          ? 'Approximate device area · city weather precision'
+                          : draft.locationSource === 'fallback'
+                            ? 'Toronto fallback'
+                            : 'Manual city'}
                       </span>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    className="button small ghost"
+                    style={{ marginBottom: 10 }}
+                    disabled={locationBusy || saving}
+                    onClick={() => {
+                      void useDeviceLocation(false);
+                    }}
+                  >
+                    <Icon name="location" size={14} />
+                    {locationBusy
+                      ? 'Checking location…'
+                      : 'Use device location'}
+                  </button>
+                  <p
+                    className="hint"
+                    style={{ marginTop: 0, marginBottom: 14 }}
+                  >
+                    One lookup through your browser's device location services.
+                    Only an approximate weather area is kept. A manual city
+                    overrides automatic location.
+                  </p>
                   <form
                     className="location-search"
                     onSubmit={(event) => {
@@ -630,13 +735,14 @@ export function Editor({
                       minLength={2}
                       maxLength={100}
                       value={locationQuery}
+                      disabled={locationBusy || saving}
                       placeholder="Search for a city"
                       onChange={(event) => setLocationQuery(event.target.value)}
                     />
                     <button
                       className="button"
                       aria-label="Search cities"
-                      disabled={searching}
+                      disabled={searching || locationBusy || saving}
                     >
                       <Icon name={searching ? 'refresh' : 'arrow'} size={16} />
                     </button>
@@ -647,9 +753,11 @@ export function Editor({
                         <li key={location.id}>
                           <button
                             type="button"
+                            disabled={locationBusy || saving}
                             onClick={() => {
                               change((previous) => ({
                                 ...previous,
+                                locationSource: 'manual',
                                 location: {
                                   name: location.name,
                                   latitude: location.latitude,
@@ -1217,7 +1325,7 @@ export function Editor({
               </span>
               <button
                 className="button primary"
-                disabled={!dirty || saving}
+                disabled={!dirty || saving || locationBusy}
                 onClick={() => {
                   void saveSettings();
                 }}
