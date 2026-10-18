@@ -245,6 +245,49 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
       'opacity remains effective and bounded from2–30%; no hidden minimum overrides a customized value',
     );
 
+    // Native colours (#75) must not light the panel more than one accent colour.
+    const luminanceLevels = {};
+    for (const brightness of [0.55, 0.28]) {
+      for (const accentMode of ['color', 'native']) {
+        const s = defaultSettings();
+        Object.assign(s.appearance, { accentMode, brightness, motionEnabled: false });
+        await app.store.update((d) => {
+          d.settings = s;
+        });
+        await open();
+        const shot = await decode(
+          await page.screenshot({ type: 'png', animations: 'disabled' }),
+        )
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        const linear = (v) =>
+          v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4;
+        let max = 0,
+          sum = 0,
+          count = 0;
+        for (let i = 0; i < shot.data.length; i += shot.info.channels) {
+          const [r, g, b] = shot.data.subarray(i, i + 3);
+          if (!r && !g && !b) continue;
+          const y = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+          max = Math.max(max, y);
+          sum += y;
+          count++;
+        }
+        assert.deepEqual([...shot.data.subarray(0, 3)], [0, 0, 0]);
+        luminanceLevels[`${accentMode}-${brightness}`] = { max, mean: sum / count };
+      }
+      const color = luminanceLevels[`color-${brightness}`],
+        native = luminanceLevels[`native-${brightness}`];
+      assert.ok(
+        Math.abs(native.max - color.max) / color.max <= 0.05 &&
+          Math.abs(native.mean - color.mean) / color.mean <= 0.05,
+        `native luminance parity at ${brightness}: ${JSON.stringify(luminanceLevels)}`,
+      );
+    }
+    checks.push(
+      'native default composition keeps max/mean lit-pixel luminance within 5% of color mode at 55% and 28% brightness; exact black kept',
+    );
+
     await settings();
     await page.goto(base + '/editor');
     await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
