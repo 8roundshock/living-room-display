@@ -43,7 +43,9 @@ permission setting was changed. This discovery does not prove a model request ra
 5. Summarize verified findings in the issue/PR. Keep raw request/results ignored;
    publish only the sanitized change, checks, limitations and next owner.
 
-For a **curated text-only audit**, current help offers this restrictive shape:
+For a future **curated text-only audit**, current help offers the shape below.
+It must not run on this PC while the [current invocation hold](#verified-limit-on-this-pc)
+remains unresolved.
 
 ```powershell
 # Use the already verified existing executable; $request is reviewed project text.
@@ -52,11 +54,14 @@ $request | & $claudeExe -p --safe-mode --tools '' `
   --no-session-persistence
 ```
 
-Safe mode disables auto-loaded custom instructions, hooks and integrations, so
-this request must explicitly include the applicable project instructions. It
-keeps normal authentication/model selection; omit model/effort overrides. Tool
-selection here permits no file reads, shell commands, edits or browser actions.
-It is a proposed command shape, **not a workaround for a rejected invocation**.
+Safe mode disables custom instruction/autoload features, including user/project
+hooks and integrations; include the applicable project instructions explicitly.
+Managed policy still applies, including policy-configured hooks, status line and
+file-suggestion commands. Authentication, model selection and permissions keep
+their normal behavior; omit model/effort overrides. Empty tool selection removes
+the model's built-in tools. Neither flag guarantees zero startup side effects or
+provides an operating-system sandbox. This is a future command shape, **not a
+workaround for a rejected invocation**.
 
 When a later task genuinely needs tools, recheck current help and obtain the
 appropriate authorized, narrowly scoped access. Keep normal permission checks;
@@ -99,6 +104,9 @@ was rejected by automatic approval review before execution, with the stated
 reason **"blocked by policy"**. No Claude response or task process was produced;
 the request was not retried through another tool or permission mode. Existing
 CLI/account discovery succeeded, but end-to-end delegation remains unverified.
+No further Claude model request, session resume, alternate launcher, API or IPC
+route may be used on this PC to accomplish the rejected task until the opaque
+restriction is clarified. Do not change permissions or retry automatically.
 Continue useful authorized project work and report this exact boundary. Do not
 claim that Claude reviewed or authored a change until an actual response exists.
 
