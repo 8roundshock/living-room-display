@@ -102,7 +102,7 @@ The renderer families have deliberate visual roles:
 | Weather | Temperature and conditions | Temperature beside conditions and feels-like | Adds wind and the available daily high/low |
 | Rain | Peak hourly precipitation chance, estimated rain window and coverage | Adds rain amount and the shown interval | Adds the hourly probability plot; missing probabilities remain unknown |
 | Forecast | Three days | Five days | Seven days; compact weekday labels preserve room for temperatures and chance |
-| Reminders | One pending item | Two pending items | Four pending items; all show an honest remaining count |
+| Reminders | As many pending reminders as fit the actual box, soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete, faint captured desktop | Wider complete desktop | Larger complete desktop; no crop hides screen context |
 | World clocks | Planned (#78), not shipped | | |

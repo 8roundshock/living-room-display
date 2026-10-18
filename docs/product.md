@@ -23,7 +23,7 @@ busy dashboards. The application must produce no audio.
 | Current weather | Conditions with a clear place label, units, and update age. |
 | Forecast | Readable seven-day outlook. |
 | Rain | Chance and estimated timing of upcoming rain, with uncertainty visible. |
-| Reminders | Add, edit, complete, or hide one-time/undated reminders through the local editor. |
+| Reminders | Add, edit, delete and one-tap check off one-time/undated reminders in the local editor, with Undo and a local history (restore, delete, clear; the latest 500 kept on this computer). The display shows as many pending reminders as fit, soonest first, with an honest “+N more”. |
 | Appearance | User-editable layout, colors, typography, motion, and saved presets. |
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 | Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |

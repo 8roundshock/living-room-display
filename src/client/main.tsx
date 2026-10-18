@@ -4,6 +4,7 @@ import { App } from './App';
 import './styles.css';
 import './widgets.css';
 import './studio.css';
+import './reminders.css';
 import './grid-editor.css';
 import './freesize.css';
 import './widget-controls.css';

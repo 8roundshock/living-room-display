@@ -152,8 +152,9 @@ export function getWidgetRect(grid: WidgetGrid, id: WidgetId, placement = grid.p
   const limits = GRID_DENSITIES[grid.density]; const span = placementSpan(id, placement, grid.revision);
   return { left: placement.column / limits.columns * 100, top: placement.row / limits.rows * 100, width: span.columns / limits.columns * 100, height: span.rows / limits.rows * 100 };
 }
-export function widgetContentLimits(size: WidgetSize): { forecastDays: number; reminders: number } {
-  return size === 'small' ? { forecastDays: 3, reminders: 1 } : size === 'medium' ? { forecastDays: 5, reminders: 2 } : { forecastDays: 7, reminders: 4 };
+/** Reminders measure how many rows fit their actual box, so only the forecast has a per-family count. */
+export function widgetContentLimits(size: WidgetSize): { forecastDays: number } {
+  return { forecastDays: size === 'small' ? 3 : size === 'medium' ? 5 : 7 };
 }
 export function intersects(a: WidgetPlacement, aSpan: WidgetSpan, b: WidgetPlacement, bSpan: WidgetSpan): boolean {
   return a.column < b.column + bSpan.columns && b.column < a.column + aSpan.columns && a.row < b.row + bSpan.rows && b.row < a.row + aSpan.rows;

@@ -71,12 +71,17 @@ export interface SettingsPatch {
   };
 }
 export type AutomaticLocationSelection = { source: 'device'; latitude: number; longitude: number; automatic: boolean } | { source: 'fallback'; automatic: boolean };
+/**
+ * While `completed` is true, `updatedAt` is the completion time. Completed reminders are immutable
+ * except restore (`completed: false`, optionally with `text`/`dueAt` in the same patch) and delete.
+ */
 export interface Reminder {
   id: string; text: string; completed: boolean; dueAt: string | null;
   createdAt: string; updatedAt: string;
 }
 export interface ReminderInput { text: string; dueAt?: string | null }
 export interface ReminderPatch { text?: string; completed?: boolean; dueAt?: string | null }
+export interface ClearCompletedResult { deleted: number }
 export interface WeatherCurrent {
   time: string; temperature: number | null; feelsLike: number | null;
   weatherCode: number | null; isDay: boolean; windSpeed: number | null;

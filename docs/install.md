@@ -183,7 +183,7 @@ keep the newer data directory and restore the matching pre-upgrade data copy.
 
 | Feature | Data the previous release cannot read |
 | --- | --- |
-| #73 reminder history | Not shipped yet |
+| #73 reminder history | None: history is the completed subset of `reminders[]` and completion time is `updatedAt`, so the previous app reads it. It lists history under Show completed and can edit completed items there, which moves their derived completion time. |
 | #73 custom Reminders sizes | Readable until a custom size (anything other than Small, Medium or Large) is saved in settings or a saved style; from then on `state.json`, later `state.backup.json`, and exports carry `span` keys that `bedca44` rejects. Use the pre-upgrade data copy, or [remove the custom sizes](#removing-custom-reminders-sizes-before-a-downgrade). |
 | #74 Weather and Rain merge | Not shipped yet |
 | #75 Native colours | Not shipped yet |
