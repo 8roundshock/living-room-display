@@ -99,6 +99,7 @@ export async function runGridQa({ playwright, edge } = {}) {
     );
     if (finish === 'escape') await page.keyboard.press('Escape');
     await page.mouse.up();
+    await page.clock.runFor(220);
   }
   function onlyClock() {
     const s = defaultSettings();
@@ -177,6 +178,7 @@ export async function runGridQa({ playwright, edge } = {}) {
     await tab('Weather');
     await page.getByRole('combobox', { name: 'Search for a city' }).fill('Tor');
     await clean();
+    await open(onlyClock());
     await layout();
     await clean();
     const move = () =>
@@ -188,6 +190,8 @@ export async function runGridQa({ playwright, edge } = {}) {
     await drag(move(), -1, 0);
     await clean();
     await drag(move(), 8, 0);
+    await dirty();
+    await cancel().click();
     await clean();
     await move().focus();
     await page.keyboard.press('ArrowRight');
@@ -196,9 +200,9 @@ export async function runGridQa({ playwright, edge } = {}) {
     await clean();
     const resize = () =>
       page.getByRole('button', { name: 'Resize Clock', exact: true });
-    await drag(resize(), -2, 0);
+    await drag(resize(), -4, -2);
     await dirty();
-    await drag(resize(), 2, 0);
+    await drag(resize(), 4, 2);
     await clean();
     await resize().focus();
     await page.keyboard.press('ArrowLeft');
@@ -209,19 +213,30 @@ export async function runGridQa({ playwright, edge } = {}) {
       'effective dirty only: tabs/picker/query/selection/drag cancellation, pointer+keyboard move/resize and full reverts',
     );
 
+    await open();
+    await layout();
     await page
       .getByRole('combobox', { name: 'Grid density' })
       .selectOption('spacious');
     await page
       .getByRole('status')
-      .filter({ hasText: /room|fit/i })
+      .filter({ hasText: /fit/i })
       .waitFor();
     assert.equal(
       await page.getByRole('combobox', { name: 'Grid density' }).inputValue(),
-      'balanced',
+      'spacious',
     );
+    await dirty();
+    assert.equal(await page.locator('.grid-widget-frame').count(), 6);
+    assert.equal(await page.locator('.ambient-clock').getAttribute('data-widget-size'), 'medium');
+    const fittedFrames = await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style')));
+    await resize().focus(); await page.keyboard.press('ArrowRight');
+    assert.equal(await page.locator('.ambient-clock').getAttribute('data-widget-size'), 'medium');
+    assert.deepEqual(await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style'))), fittedFrames, 'impossible family changes leave every current placement intact');
+    await page.getByRole('combobox', { name: 'Grid density' }).selectOption('balanced');
     await clean();
-    await open(onlyClock());
+    const cornerClock = onlyClock(); cornerClock.widgetGrid.placements.clock = { column: 6, row: 6, size: 'small' };
+    await open(cornerClock);
     await layout();
     for (const density of ['spacious', 'fine', 'balanced'])
       await page
@@ -234,10 +249,43 @@ export async function runGridQa({ playwright, edge } = {}) {
     await cancel().click();
     await clean();
     checks.push(
-      'density changes retain enabled widgets/families or reject without dirtying; Cancel restores full grid',
+      'density fits every enabled widget as a visible draft; returning restores exact authored corner placement and families; Cancel restores full grid',
     );
 
-    const concurrent = onlyClock();
+    await open(onlyClock(), { viewport: { width: 390, height: 480 } });
+    await layout();
+    await page.evaluate(() => scrollTo(0, 110));
+    const position = () => page.evaluate(() => {
+      const rect = element => { const r = element.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
+      return { scroll: scrollY, canvas: rect(document.querySelector('.grid-editor')), widget: rect(document.querySelector('.ambient-clock')), handle: rect(document.querySelector('button[aria-label="Move Clock"]').parentElement) };
+    });
+    const anchored = await position(), grip = await gridPoint(move());
+    await page.mouse.move(grip.x, grip.y); await page.mouse.down();
+    await page.mouse.move(grip.x + 9, grip.y + 2, { steps: 3 });
+    const moving = await position();
+    assert.deepEqual(moving.canvas, anchored.canvas); assert.equal(moving.scroll, anchored.scroll);
+    assert.ok(Math.abs(moving.handle.x - anchored.handle.x - 9) < 1);
+    assert.ok(Math.abs(moving.widget.x - anchored.widget.x - 9) < 1);
+    assert.ok(Math.abs(moving.handle.y - anchored.handle.y - 2) < 1);
+    await clean(); await page.keyboard.press('Escape'); await page.mouse.up();
+    await page.clock.runFor(200); await clean();
+    assert.deepEqual(await position(), anchored);
+    await page.clock.runFor(185000);
+    assert.deepEqual((await position()).canvas, anchored.canvas);
+    assert.equal(await page.locator('.ambient').getAttribute('data-composition'), '0');
+    checks.push('fractional pointer movement anchors content and handle pixel-for-pixel while canvas/scroll stay fixed; Escape rolls back and authored editor never drifts');
+
+    await open(); await layout();
+    const beforeNeighbors = await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style')));
+    await drag(move(), 1, 0, 'escape'); await clean();
+    assert.deepEqual(await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style'))), beforeNeighbors);
+    await drag(move(), 1, 0); await dirty();
+    assert.notDeepEqual(await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style'))), beforeNeighbors);
+    await cancel().click(); await clean();
+    assert.deepEqual(await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style'))), beforeNeighbors);
+    checks.push('neighbor displacement previews and commits as one draft; Escape and global Cancel restore every affected placement');
+
+    const concurrent = onlyClock(); concurrent.widgetGrid.placements.clock.size = 'medium';
     concurrent.widgets.weather = true;
     for (const collision of [false, true]) {
       await open(concurrent);
@@ -251,7 +299,7 @@ export async function runGridQa({ playwright, edge } = {}) {
         headers: { Origin: base },
         data: {
           widgetGrid: {
-            placements: { weather: collision ? { column: 6 } : { row: 5 } },
+            placements: { weather: collision ? { column: 4 } : { row: 5 } },
           },
         },
       });
@@ -262,11 +310,13 @@ export async function runGridQa({ playwright, edge } = {}) {
           'button[aria-label="Move Weather"]',
         ).parentElement;
         return collision
-          ? frame.style.left === '50%'
+          ? parseFloat(frame.style.left) > 34 && parseFloat(frame.style.left) < 66
           : frame.style.top === '62.5%';
       }, collision);
       await page.mouse.up();
       if (collision) {
+        await dirty();
+        await cancel().click();
         await clean();
         assert.equal(
           app.store.snapshot().settings.widgetGrid.placements.clock.column,
@@ -287,7 +337,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       }
     }
     checks.push(
-      'held drag preserves unrelated incoming placements and rejects collisions against the latest polled board',
+      'held drag preserves unrelated incoming placements and reflows neighbors against the latest polled board; Cancel discards reflow',
     );
 
     await open(onlyClock(), { hasTouch: true });
@@ -561,7 +611,7 @@ export async function runGridQa({ playwright, edge } = {}) {
           );
         if (id === 'rain')
           assert.match(
-            await widget.locator('.ambient-description').innerText(),
+            await widget.innerText(),
             /\bin\b/,
           );
       }
