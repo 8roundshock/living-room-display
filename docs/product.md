@@ -19,18 +19,20 @@ busy dashboards. The application must produce no audio.
 
 | Area | Intended behavior |
 | --- | --- |
-| Time and date | Large, legible display; time format is a pending preference. |
+| Time and date | Large, legible display; editable 12/24-hour format. |
 | Current weather | Conditions with a clear place label, units, and update age. |
 | Forecast | Readable seven-day outlook. |
 | Rain | Chance and estimated timing of upcoming rain, with uncertainty visible. |
-| Reminders | Optional; add, edit, and complete through a local web editor. |
+| Reminders | Add, edit, complete, or hide one-time/undated reminders through the local editor. |
 | Appearance | User-editable layout, colors, typography, motion, and saved presets. |
-| Screen preview | Small, dim, nearly transparent indication of the last or current screen state; capture mode is pending. |
+| Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 
 Distinguish forecast probability, expected precipitation amount, and estimated
 rain windows. Label times and intervals correctly. Show stale or unavailable
-weather instead of silently retaining an apparently fresh forecast. A weather
-provider and location have not been chosen.
+weather instead of silently retaining an apparently fresh forecast. Version one
+uses Open-Meteo and an editable Toronto city default selected by the coordinator;
+the default is not a claim about the user's location. Probability covers all
+precipitation; rain amount is separate so snow does not become a false rain warning.
 
 Editing should not require changing source code. Keep the editor separate from
 the sparse display experience. Personal reminders and settings need persistence
@@ -44,15 +46,16 @@ ambient display. Provide a small, very dim translucent thumbnail with adjustable
 size/opacity, a hide toggle, and placement that moves with the other widgets.
 It should remain useful to read while fitting the sparse, mostly black display.
 
-Two capture modes remain open: a last-state snapshot immediately before ambient
-activation, or a live preview of an explicitly selected app. The snapshot is the
-recommended first option, not a selected decision. Label a snapshot as last state
-with its capture time so it cannot be mistaken for a live view.
+A last-state snapshot immediately before ambient activation is selected for
+version one. A live preview of an explicitly selected app remains future work.
+Label the snapshot as last state with capture time so it cannot be mistaken for
+a live view.
 
 Keep snapshot pixels in RAM only; do not accumulate screenshot files. A live
 source needs explicit selection and testing to avoid capturing the dashboard
 itself or creating recursive previews. Do not promise whole-desktop live capture
-works. No screenshot capture or screen access has been performed for this scaffold.
+works. The backend implements the RAM-only handoff; actual capture is verified
+separately with the Windows host.
 
 ## Movement and OLED considerations
 
@@ -77,7 +80,7 @@ The dashboard must be useful without them. Do not change TV connections or
 settings while exploring architecture, and do not repeatedly suggest turning
 the TV off instead of meeting the ambient-display requirement.
 
-## First implementation acceptance criteria, once authorized
+## Integrated acceptance criteria
 
 - Demonstrate readability and brightness on the actual viewing setup, with
   verified viewport/resolution rather than an assumed TV mode.

@@ -33,6 +33,8 @@ test('corrupt primary recovers the last valid backup without overwriting evidenc
     assert.equal(recovered.snapshot().settings.clockFormat, '12h');
     assert.match(recovered.warning!, /Recovered/);
     assert.equal(await readFile(join(directory, 'state.corrupt.json'), 'utf8'), 'broken');
+    await rm(join(directory, 'state.json'));
+    assert.equal((await DataStore.open(directory)).snapshot().settings.units, 'imperial', 'a missing primary also recovers the backup');
     await writeFile(join(directory, 'state.json'), 'broken again');
     await writeFile(join(directory, 'state.backup.json'), 'also broken');
     await assert.rejects(DataStore.open(directory), /Preserve the data folder/);

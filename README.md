@@ -4,9 +4,10 @@ A silent, customizable ambient display for a Windows 10 leisure PC connected to
 a Samsung S90F OLED TV: large time and date, weather, a seven-day outlook, rain
 estimates, optional reminders, and an optional dim screen preview.
 
-**Current state: project foundation only.** There is no dashboard, application
-runtime, installer, service, or preview to launch. Architecture and technology
-choices are pending. See [STATUS.md](STATUS.md) before starting work.
+**Current state: local backend implemented; display/Windows integration in progress.**
+The selected approach is a custom local web dashboard plus a Windows helper.
+The API, persistence, weather service, and RAM-only snapshot handoff are available.
+A complete installable display release is not ready yet. See [STATUS.md](STATUS.md).
 
 This is the independent private
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)
@@ -20,6 +21,7 @@ chosen to keep it private until a usable release; there is no public release yet
 - [Product requirements](docs/product.md): desired experience and boundaries.
 - [Architecture choices](docs/architecture.md): alternatives and pending decisions.
 - [Development](docs/development.md): verified tools, authentication, and checks.
+- [Local API](docs/api.md): shared contracts, weather semantics, and data recovery.
 - [Agent workflow](docs/agent-workflow.md): ownership, handoffs, review, and PRs.
 - [Installation readiness](docs/install.md): current limits and future user setup.
 
@@ -34,8 +36,9 @@ read `AGENTS.md` and `STATUS.md`. The project context does not depend on the
 original chat. `CLAUDE.md` and `GEMINI.md` import the same primary instructions;
 their live startup behavior has not been tested on this PC.
 
-The next decision is which [architecture](docs/architecture.md) to pursue.
-Document the user's selection before beginning implementation.
+Implementation follows the recorded [architecture decisions](docs/architecture.md).
+The [backlog](https://github.com/8roundshock/living-room-display/issues) tracks
+feature acceptance and remaining integrated checks.
 
 ## Ask an agent to install or use it
 
@@ -45,5 +48,5 @@ Document the user's selection before beginning implementation.
 > does not, explain what is missing without inventing setup commands. Keep my
 > data local and do not post feedback or star the repository without my permission.
 
-Today that check will find a documentation-only project, not an installable app.
+Today that check will find a backend milestone, not an installable display release.
 Future releases should work without the owner's accounts, paths, or private memory.

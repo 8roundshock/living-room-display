@@ -1,37 +1,41 @@
 # Project status
 
-Reviewed: 2026-10-18. Product requirements come from the owner's project brief.
+Reviewed: 2026-10-18. Implementation choices were made by the coordinator under
+the owner's explicit authority to choose practical defaults and build the app.
 
-## Ready
+## Implemented in this backend milestone
 
-- Independent private GitHub repository and Windows checkout.
-- Portable agent instructions, product brief, architecture comparison, and PR workflow.
-- Project-scoped GitHub authentication helper using an existing personal credential.
-- Feature/decision backlog and issue/PR templates; see the
-  [GitHub issues](https://github.com/8roundshock/living-room-display/issues).
+- Node 24 LTS/TypeScript local API and shared React/Vite contracts.
+- Validated settings, visual presets, reminder CRUD, atomic local JSON saves,
+  previous-state backup/recovery, and export/import.
+- Open-Meteo current weather, seven-day forecast, 24 hourly precipitation/rain
+  intervals, city search, and honest stale/unavailable handling.
+- Loopback Host/Origin protections, native-token RAM-only snapshot handoff, and
+  read-only Windows screensaver status.
+- Backend fixture/API/persistence tests and Windows/Linux CI; full frontend build
+  becomes a CI requirement once the frontend entry point is present.
 
-Visibility decision: stay private until a usable release. Installation is not
-available yet; [install.md](docs/install.md) defines the future portability and
-verification contract. Each PR requires a separate independent review agent,
-an outcome recorded on the PR, and review of the final pushed SHA. No external
-code-review integration is configured or required.
+Local verification: ten backend tests, server compile, shared/client typecheck,
+and real Toronto weather/city-search requests passed. A temporary development API
+was used for integration; this does not establish installed Windows idle behavior.
 
-## Not built
+## In progress / not yet verified
 
-No dashboard, weather integration, reminder store/editor, layout engine, screen
-preview/capture, Windows host, TV integration, installer, active background process,
-or deployment exists. No application dependencies or application tests were added.
+The React ambient display/editor and Windows capture/screensaver/installer are
+separate workstreams. Their integration, actual TV readability/brightness,
+RAM-only Windows capture, idle dismissal/lock behavior, and clean-machine
+installation require their own verification. There is no complete usable release
+yet. TV control and live application preview remain future work.
 
-## Next decision
+## Decisions and boundaries
 
-The owner has not selected an architecture. Compare the three options in
-[architecture.md](docs/architecture.md), record the choice and its scope there,
-then plan a small first implementation through delegated work and a reviewed PR.
+Selected: local web dashboard plus Windows helper; one-time/undated reminders;
+last-desktop snapshot before activation; Open-Meteo; editable Toronto city default,
+metric units and 12-hour time. Windows idle activation stays disabled until tested
+and explicitly enabled. See [architecture](docs/architecture.md) and [API](docs/api.md).
 
-Stack, weather provider/location, units, time format, storage, activation,
-initial visual preset, and snapshot versus live preview remain undecided. Do not
-infer weather location from the computer's timezone or a folder name.
-
-Once implementation is authorized, establish a manual preview and actual checks
-before optional idle activation or TV control. This sequence is a proposal, not
-an implementation already underway.
+Keep the repository private until a usable release and a reviewed publication
+step. Each PR requires a separate independent reviewer and final reviewed SHA;
+no external review integration is required. See the
+[backlog](https://github.com/8roundshock/living-room-display/issues) and
+[installation readiness](docs/install.md) for remaining acceptance work.

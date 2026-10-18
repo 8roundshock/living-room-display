@@ -58,7 +58,7 @@ export interface WeatherState {
 export interface PreviewState {
   available: boolean; capturedAt: string | null; width: number | null; height: number | null;
 }
-export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState }
+export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; storageWarning?: string | null }
 export interface LocationResult extends LocationSettings { id: number; country: string; admin1: string }
 export interface ApiError { error: string }
 export interface HostSession { token: string; settings: Settings; displayUrl: string }

@@ -32,23 +32,32 @@ export class DataStore {
   static async open(directory: string): Promise<DataStore> {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const path = join(directory, 'state.json');
-    let primary: string;
+    let primary: string | null = null;
     try { primary = await readFile(path, 'utf8'); } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      const store = new DataStore(directory, { version: 1, settings: defaultSettings(), reminders: [] });
-      await atomicWrite(path, JSON.stringify(store.#data, null, 2));
-      return store;
     }
-    try { return new DataStore(directory, dataSchema.parse(JSON.parse(primary))); } catch {
+    if (primary !== null) {
+      try { return new DataStore(directory, dataSchema.parse(JSON.parse(primary))); } catch { /* Try the previous valid save below. */ }
+    }
+    let backup: string | null = null;
+    try { backup = await readFile(join(directory, 'state.backup.json'), 'utf8'); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    if (backup !== null) {
       let recovered: PersistedData;
-      try { recovered = dataSchema.parse(JSON.parse(await readFile(join(directory, 'state.backup.json'), 'utf8'))); }
+      try { recovered = dataSchema.parse(JSON.parse(backup)); }
       catch { throw new Error('Settings data and its backup could not be read. Preserve the data folder and restore a valid export before restarting.'); }
-      await writeFile(join(directory, 'state.corrupt.json'), primary, { mode: 0o600 });
+      if (primary !== null) await writeFile(join(directory, 'state.corrupt.json'), primary, { mode: 0o600 });
       await atomicWrite(path, JSON.stringify(recovered, null, 2));
       const store = new DataStore(directory, recovered);
-      store.warning = 'Recovered the previous saved state from backup. The unreadable file is preserved as state.corrupt.json.';
+      store.warning = primary === null ? 'Recovered the previous saved state from backup because state.json was missing.'
+        : 'Recovered the previous saved state from backup. The unreadable file is preserved as state.corrupt.json.';
       return store;
     }
+    if (primary !== null) throw new Error('Settings data could not be read and no backup exists. Preserve the data folder and restore a valid export before restarting.');
+    const store = new DataStore(directory, { version: 1, settings: defaultSettings(), reminders: [] });
+    await atomicWrite(path, JSON.stringify(store.#data, null, 2));
+    return store;
   }
 
   snapshot(): PersistedData { return structuredClone(this.#data); }
