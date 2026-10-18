@@ -63,7 +63,8 @@ function Invoke-Program([string]$File, [string]$Arguments, [int]$TimeoutSeconds 
 }
 function Invoke-Setup([string]$Name, [string]$Extra) {
     $log = Join-Path $work "$Name.log"
-    $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="' + $log + '"'
+    # GitHub runners are always elevated with UAC on; Setup refuses that unless told.
+    $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLOWELEVATED=1 /LOG="' + $log + '"'
     if ($DirectoryMode -eq 'custom') { $arguments += ' /DIR="' + $installRoot + '"' }
     if ($Extra) { $arguments += ' ' + $Extra }
     $code = Invoke-Program $SetupPath $arguments
@@ -109,6 +110,8 @@ function Invoke-Uninstall([string]$Extra) {
     Write-Host "Uninstaller first phase exit code $code"
     # The first phase may exit before the temporary second phase finishes.
     Wait-Until { -not (Test-Path -LiteralPath $appIdKey) } 120 'uninstall registration removal'
+    # The uninstaller deletes its own files after the registration is gone.
+    Wait-Until { -not (Test-Path -LiteralPath $uninstaller) } 60 'uninstaller self-removal'
     Assert-True ($code -eq 0) "uninstaller exit code $code"
 }
 
@@ -193,7 +196,7 @@ try {
     $null = New-Item -ItemType Directory -Path $foreign
     [IO.File]::WriteAllText((Join-Path $foreign 'keep.txt'), 'unrelated')
     $foreignBefore = Get-TreeState $foreign
-    $code = Invoke-Program $SetupPath ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="' + (Join-Path $work 'foreign.log') + '" /DIR="' + $foreign + '"')
+    $code = Invoke-Program $SetupPath ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLOWELEVATED=1 /LOG="' + (Join-Path $work 'foreign.log') + '" /DIR="' + $foreign + '"')
     Assert-True ($code -eq 7 -and (Get-TreeState $foreign) -eq $foreignBefore -and @(Get-ChildItem -LiteralPath $foreign -Force).Count -eq 1 -and -not (Test-Path -LiteralPath $appIdKey)) "foreign folder: exit $code"
 
     Write-Step 'Refusal: port 4318 taken by another program (exit 7, nothing created)'

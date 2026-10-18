@@ -122,6 +122,7 @@ not deleted in that case: run Setup again to repair, then uninstall. The CLI
 | `LivingRoomDisplaySetup-<version>.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="<file>"` | Install or update. Exit 0 = success, 7 = refused by the checks below (nothing registered). The editor is not opened. |
 | add `/DIR="<dedicated folder>"` | Install elsewhere: a new empty folder, or an existing Living Room Display folder. Keep the path under about 130 characters. |
 | add `/ALLOWDOWNGRADE=1` | Allow installing an older version over a newer Setup install. |
+| add `/ALLOWELEVATED=1` | Build agents only (for example GitHub's runners, which are always elevated with UAC on). Setup otherwise refuses an elevated launch, because the server it starts would run elevated. |
 | `"%LOCALAPPDATA%\LivingRoomDisplay\uninstall\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART` | Uninstall and keep data. The first process can exit early; wait until the Apps & Features entry is gone. |
 | add `/REMOVEDATA=1` | Uninstall and delete data and backups. |
 

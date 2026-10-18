@@ -217,7 +217,11 @@ end;
 function InitializeSetup: Boolean;
 begin
   Result := True;
-  if IsAdmin and UacEnabled then
+  // An elevated Setup would start the server elevated. /ALLOWELEVATED=1 exists only
+  // for build agents, such as GitHub's runners, that always run elevated.
+  if IsAdmin and UacEnabled and (ExpandConstant('{param:ALLOWELEVATED|0}') = '1') then
+    Log('Elevated launch allowed by /ALLOWELEVATED=1 (automation only).')
+  else if IsAdmin and UacEnabled then
   begin
     Log('Refusing an elevated launch while User Account Control is on.');
     SuppressibleMsgBox('Please run Setup normally, without ''Run as administrator''.', mbError, MB_OK, IDOK);

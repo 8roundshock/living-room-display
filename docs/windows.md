@@ -114,6 +114,7 @@ Constrained Language Mode can still block it; Setup then shows a plain message
 | `TaskDialogMsgBox` custom labels (**Keep my data** / **Delete my data**). | Documented Inno API; interactive only. **Not verified in CI.** |
 | `WizardStyle` tokens in 6.7.x. | Inno documentation: base `classic` or `modern`, plus `light`, `dark` or `dynamic`. |
 | `ISCC.exe` has no numeric file version. | Observed in CI (version info read as 0.0.0). The build asks the preprocessor (`DecodeVer(Ver)`) instead. |
+| GitHub runners run Setup elevated with UAC on. | Observed in CI: the refusal of an elevated launch fired. The smoke test passes the automation-only `/ALLOWELEVATED=1`. Normal users still get the refusal. |
 
 ### Installer CI
 
