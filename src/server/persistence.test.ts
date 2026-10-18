@@ -40,7 +40,8 @@ test('persisted data reads back to effectively the same settings, and the input 
 });
 
 test('previous-release keys are always written; only additive defaults are omitted', () => {
-  const settings = mergeSettings(defaultSettings(), { widgets: { rain: false } });
+  // New installs default to native (#75); color is the additive default omitted at rest.
+  const settings = mergeSettings(defaultSettings(), { widgets: { rain: false }, appearance: { accentMode: 'color' } });
   settings.savedPresets = [{ id: 'style', name: 'Style', visual: visualOf(settings) }];
   const written = persistableSettings(settings) as any;
   for (const visual of [written, written.savedPresets[0].visual]) {
@@ -67,6 +68,8 @@ test('files and exports omit additive defaults while state and PATCH responses c
   const address = app.server.address(); assert.ok(address && typeof address === 'object');
   const url = `http://127.0.0.1:${address.port}`;
   try {
+    // A fresh store starts native (#75); choose a colour first so both files hold only defaults.
+    assert.equal((await fetch(`${url}/api/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appearance: { accentMode: 'color' } }) })).status, 200);
     const response = await fetch(`${url}/api/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appearance: { brightness: 0.4 } }) });
     assert.equal(response.status, 200);
     const patched = await response.json(), state = await (await fetch(`${url}/api/state`)).json();
