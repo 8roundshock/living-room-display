@@ -187,7 +187,7 @@ keep the newer data directory and restore the matching pre-upgrade data copy.
 | #73 custom Reminders sizes | Not shipped yet |
 | #74 Weather and Rain merge | Not shipped yet |
 | #75 Native colours | Not shipped yet |
-| #76 Animation level | Not shipped yet |
+| #76 Animation level | Animation **Off** or **Lively** saved anywhere (settings or a saved style). Subtle, the default, is omitted at rest and stays readable. A code-only rollback is behaviour-safe; after choosing Off or Lively, restore the pre-upgrade data copy (#130), or set Subtle again (and update or delete saved styles that hold another level) and save twice so the backup is readable too. |
 | #78 Calendar, Countdown and Note | Not shipped yet |
 | #78 World clocks, Sun & moon and Air quality | Not shipped yet |
 

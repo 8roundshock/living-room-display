@@ -32,9 +32,21 @@ visible above it, including narrow screens and compact keyboard-height windows.
   city query/style form, and invalidates pending device/photo callbacks. It does not
   undo saved reminders. Leaving with settings edits uses the browser's prompt.
 - **Phone**, **Room** and **Night** reset visuals/transforms while preserving
-  location, units, reminders and named styles. Room brightness is 55%; Night is
-  28%. Up to twelve saved styles include visual/widget/empty-reminder settings.
-- The authored canvas stays still by default. **Edit layout** reveals a faint
+  location, units, reminders, named styles and the Animation level (Soft motion
+  and clock style still reset until #110). Room brightness is 55%; Night is
+  28%. Up to twelve saved styles include visual/widget/empty-reminder settings,
+  including the Animation level.
+- The Style tab's **Motion** disclosure (its summary shows the level) starts with
+  **Animation**: Off, Subtle or Lively as pressed buttons, then Soft motion, New
+  arrangement and Fade duration. Choosing a level is an ordinary draft change (the
+  Save bar appears only while it differs from the saved level), does not mark the
+  style Custom, and replays the canvas entrance once. When the editor's own screen
+  prefers reduced motion, a hint explains that animation stays off there while the
+  control still edits the saved value. Editor polish (tab indicator, disclosures,
+  picker, drag settle, new-widget drop-in, Save bar entrance) follows the editor's
+  effective level and stays within 240 ms; Off keeps the existing transitions.
+- The authored canvas never relocates; outside Edit layout it shows value and glyph
+  motion for the draft Animation level, and during Edit layout widgets stay still. **Edit layout** reveals a faint
   editor-only grid and whole-widget drag targets. Clicking/focusing selects a
   widget and exposes its resize handle. Arrow keys move the focused widget;
   Tab reaches its handle, where arrows change family. Family buttons are another
@@ -142,6 +154,16 @@ vary legal widget origins and whole-plane offsets, with a fully black rest befor
 revealing each replacement (default three minutes/two-second fade). Black remains
 `#000`; brightness affects content only. Reduced motion/Soft motion off removes
 drift/travel and reveal effects while discrete relocation continues through black.
+The separate **Animation** setting (Off, Subtle by default, Lively) governs motion
+inside widgets: Subtle animates only changes and the reveal after each black rest,
+Lively adds reveal choreography and slow loops on the current-weather glyph only
+(see [motion levels](design.md#motion-levels)). Each screen shows its effective
+level as `data-animation` on the ambient root: Off whenever that screen prefers
+reduced motion, so turning off Windows Settings → Accessibility → Visual effects →
+Animation effects makes the TV show Off. Relocation through black continues either
+way. The [motion harness](../tests/ui/motion-browser.mjs) checks levels, reduced
+motion, the reveal sequence, entrance geometry, loop inventory, editor flows and a
+CDP performance budget; TV smoothness and comfort remain owner acceptance (#111).
 Motion/dimness do not guarantee protection from image retention. No audio, external
 fonts, telemetry, cloud accounts or LAN exposure is added.
 

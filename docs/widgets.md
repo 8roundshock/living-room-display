@@ -176,6 +176,21 @@ periodic spatial relocation through a black interval and an instant reveal (or a
 brief opacity transition when permitted). It must not freeze the ambient display
 at one permanent position. Missing or hidden widgets must not leave a fixed frame.
 
+Motion inside widgets follows the Animation level (#76; Off, Subtle or Lively, see
+[motion levels](design.md#motion-levels)), which `motionPlan()` in
+[`src/shared/motion.ts`](../src/shared/motion.ts) turns into what may move on each
+surface; a screen that prefers reduced motion is always Off, and picker samples and
+Edit layout stay still. Renderers add no animation code of their own: use
+`TransitionText` for a changing value (the new value fades in; numbers are never
+tweened), `WeatherGlyph` with `hero` for a widget's main condition and `still` for
+stale, offline or unavailable data, and stable React keys (by id or source) so a new
+item or image is a new element. The shared CSS (`motion*.css`) then animates only
+transform and opacity, never above resting opacity, with offsets from above or the
+left that stay inside the widget rectangle and never change the fit scale. Content
+first shown with its widget never animates; later insertions may transition in.
+Reveal choreography uses `widgetRevealOrder()` and `--reveal-order`; only the hero
+glyph loops, at Lively, and loops pause on black.
+
 These are design requirements to reduce recurring exposure, not a measured
 safety threshold. Finite screens and recurring content inevitably reuse pixels;
 do not promise zero overlap over time or prevention of OLED burn-in. Browser
