@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Settings, WidgetGrid, WidgetId, WidgetPlacement } from '../shared/contracts';
-import { GRID_DENSITIES, WIDGET_CATALOG, WIDGET_IDS, familyForSpan, fitWidgetFamily, freeSpanLimits, getWidgetRect, isFreeSize, normalizePlacement, placementSpan, reflowWidget, resizeWidgetSpan, widgetSpan, widgetSizes, type WidgetSpan } from '../shared/widgets';
+import { ACTIVE_WIDGET_IDS, GRID_DENSITIES, WIDGET_CATALOG, WIDGET_IDS, familyForSpan, fitWidgetFamily, freeSpanLimits, getWidgetRect, isFreeSize, normalizePlacement, placementSpan, reflowWidget, resizeWidgetSpan, widgetSpan, widgetSizes, type WidgetSpan } from '../shared/widgets';
 import { same } from './draft';
 
 export interface GridGesture { id: WidgetId; x: number; y: number; width?: number; height?: number }
@@ -10,6 +10,11 @@ interface Drag {
   grid: WidgetGrid; candidate: WidgetPlacement; valid: boolean; target: HTMLButtonElement;
 }
 interface Preview { grid: WidgetGrid; candidate: WidgetPlacement; gesture: GridGesture; valid: boolean }
+/** Keyboard help names the free-size widgets from the catalog (#73, #89). */
+const FREE_SIZE_NAMES = ACTIVE_WIDGET_IDS.filter(isFreeSize).map(id => WIDGET_CATALOG[id].name);
+const FREE_SIZE_HELP = FREE_SIZE_NAMES.length
+  ? `; ${new Intl.ListFormat('en', { type: 'conjunction' }).format(FREE_SIZE_NAMES)} ${FREE_SIZE_NAMES.length === 1 ? 'changes' : 'change'} width with left and right and height with up and down`
+  : '';
 /** Free-size widgets announce their cells; family widgets keep the short message. */
 function resizedMessage(id: WidgetId, placement: WidgetPlacement): string {
   const name = WIDGET_CATALOG[id].name;
@@ -141,7 +146,7 @@ export function GridEditor({ settings, selected, onSelect, onPreview, onCommit, 
   const visibleGrid = preview?.grid ?? settings.widgetGrid;
   return <div ref={plane} className={`widget-grid-plane grid-editor ${preview ? 'dragging' : ''}`} aria-label="Editable widget grid"
     style={{ '--grid-columns': dimensions.columns, '--grid-rows': dimensions.rows } as CSSProperties}>
-    <p className="sr-only" id="grid-keyboard-help">Use arrow keys to move a widget. Focus its resize handle and use arrow keys to resize; Reminders changes width with left and right and height with up and down. Escape cancels a drag.</p>
+    <p className="sr-only" id="grid-keyboard-help">Use arrow keys to move a widget. Focus its resize handle and use arrow keys to resize{FREE_SIZE_HELP}. Escape cancels a drag.</p>
     {preview?.valid && <div className="grid-drop-placeholder" aria-hidden="true" style={rect(visibleGrid, preview.gesture.id)} />}
     {WIDGET_IDS.filter(id => settings.widgets[id]).map(id => {
       const active = preview?.gesture.id === id ? preview : null, style = rect(visibleGrid, id);

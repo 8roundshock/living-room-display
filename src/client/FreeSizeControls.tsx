@@ -8,6 +8,7 @@ import {
   type WidgetSize,
   type WidgetSpan,
 } from '../shared/widgets';
+import { WIDGET_MODULES } from './widgets/registry';
 
 /**
  * Size control for a free-size widget (#73): family presets plus Column, then whole-cell Width and
@@ -28,6 +29,7 @@ export function FreeSizeControls({
     limits = freeSpanLimits(id, density);
   if (!limits) return null;
   const name = WIDGET_CATALOG[id].name,
+    hint = WIDGET_MODULES[id].sizeHint,
     placement = settings.widgetGrid.placements[id],
     span = placementSpan(id, placement),
     rows = GRID_DENSITIES[density].rows,
@@ -82,7 +84,7 @@ export function FreeSizeControls({
           </button>
         </div>
       </div>
-      {id === 'reminders' && <p className="hint free-size-hint">Shows as many reminders as fit · soonest first</p>}
+      {hint && <p className="hint free-size-hint">{hint}</p>}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Settings, WidgetId } from '../shared/contracts';
-import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, isFreeSize, widgetSizes, type WidgetSize } from '../shared/widgets';
+import { ACTIVE_WIDGET_IDS, GRID_DENSITIES, WIDGET_CATALOG, freeSpanLimits, widgetSizes, type WidgetSize } from '../shared/widgets';
 import { Icon } from './icons';
 import { WidgetSample } from './WidgetSample';
 
@@ -16,6 +16,9 @@ export function WidgetPicker({ settings, onAdd, onClose, message }: {
   useEffect(() => { close.current?.focus(); }, []);
   const widget = WIDGET_CATALOG[selected];
   const size = sizes[selected] ?? widget.defaultSize;
+  // Free-size widgets (#73) say how far they can grow, from the catalog rule in the current grid.
+  const limits = freeSpanLimits(selected, settings.widgetGrid.density);
+  const reach = limits && (limits.max.rows === GRID_DENSITIES[settings.widgetGrid.density].rows ? 'the full height' : `${limits.max.rows} rows`);
   return <div className="widget-picker" onKeyDown={event => {
     if (event.key === 'Escape') { event.stopPropagation(); onClose(); }
   }}>
@@ -38,7 +41,7 @@ export function WidgetPicker({ settings, onAdd, onClose, message }: {
           {family[0].toUpperCase() + family.slice(1)}
         </button>)}
       </div>
-      {isFreeSize(selected) && <p className="picker-free-size">Resize freely after adding — up to the full height</p>}
+      {reach && <p className="picker-free-size">Resize freely after adding — up to {reach}</p>}
       <button className="button primary picker-add" disabled={settings.widgets[selected]} aria-label={`Add ${widget.name}`} onClick={() => onAdd(selected, size)}>
         <Icon name={settings.widgets[selected] ? 'check' : 'plus'} size={17} />
         {settings.widgets[selected] ? 'Already on your display' : 'Add widget'}
