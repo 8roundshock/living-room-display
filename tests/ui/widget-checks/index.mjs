@@ -1,0 +1,15 @@
+// Loads every per-widget check module in this folder, so a widget unit only adds its own file.
+// A module exports `id` and optionally:
+//   prepare(state, { now })  mutates the synthetic /api/state fixture so the widget has content;
+//   selectors                extra meaningful-descendant selectors for the clipping check;
+//   family({ page, widget, size, density, viewport, state })  per-family assertions.
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const directory = fileURLToPath(new URL('.', import.meta.url));
+const files = readdirSync(directory).filter(file => file.endsWith('.mjs') && file !== 'index.mjs').sort();
+const modules = await Promise.all(files.map(file => import(pathToFileURL(join(directory, file)).href)));
+
+/** @type {Record<string, { id: string, prepare?: Function, selectors?: string[], family?: Function }>} */
+export const WIDGET_CHECKS = Object.fromEntries(modules.map(module => [module.id, module]));
