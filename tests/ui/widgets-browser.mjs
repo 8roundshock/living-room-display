@@ -73,6 +73,11 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
         assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.right <= viewport.width + 1 && bounds.bottom <= viewport.height + 1, `${id}/${size}/${density} stays inside display`);
         assert.ok(bounds.scale >= 0.75, `${id}/${size}/${density} should fit by design, scale=${bounds.scale}`);
         assert.equal(bounds.border, '0px'); assert.equal(bounds.background, 'rgba(0, 0, 0, 0)');
+        const clipped = await widget.evaluate(el => {
+          const outer = el.getBoundingClientRect();
+          return [...el.querySelectorAll('.ambient-label,.weather-context,.weather-age,.weather-credit,.rain-bars,.rain-confidence,.rain-amount,.clock-calendar,.forecast-strip,.preview-caption,li')].filter(child => { const r = child.getBoundingClientRect(); return r.top < outer.top - 1 || r.bottom > outer.bottom + 1 || r.left < outer.left - 1 || r.right > outer.right + 1; }).map(child => child.className);
+        });
+        assert.deepEqual(clipped, [], `${id}/${size}/${density} meaningful descendants stay visible`);
         if (viewport.width === 1920 && density === 'balanced') {
           if (id === 'clock') clockFonts[size] = await widget.locator('.clock-time').evaluate(el => parseFloat(getComputedStyle(el).fontSize));
           if (capture) images.push({ name: `${id}-${size}`, bytes: await widget.screenshot() });
@@ -81,6 +86,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
         if (id === 'reminders') assert.equal(await widget.locator('li').count(), size === 'small' ? 1 : size === 'medium' ? 2 : 4);
         if (id === 'photo') assert.equal(await widget.locator('img').evaluate(el => getComputedStyle(el).objectFit), size === 'large' ? 'contain' : 'cover');
         if (id === 'preview') assert.equal(await widget.locator('img').evaluate(el => getComputedStyle(el).objectFit), 'contain');
+        if (id === 'rain') { assert.match(await widget.innerText(), /mm rain/); if (size === 'large') assert.ok((await widget.locator('.rain-bars').boundingBox()).height >= (await widget.boundingBox()).height * 0.1, 'Rain chart retains real height'); }
       }
     }
     assert.ok(clockFonts.large > clockFonts.medium * 1.4, `Large clock should be visibly larger: ${JSON.stringify(clockFonts)}`);
@@ -109,6 +115,8 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       current = structuredClone(source); current.settings.appearance.clockStyle = style; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock']));
       await open(); if (capture) images.push({ name: `clock-style-${style}`, bytes: await page.locator('[data-widget-id="clock"]').screenshot() });
     }
+    current = structuredClone(source); current.settings.clockFormat = '24h'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'preview'])); await open(); assert.doesNotMatch(await page.locator('.preview-caption').innerText(), /AM|PM/);
+    current = structuredClone(source); current.weather.units.precipitation = 'in'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'rain'])); current.settings.widgetGrid.placements.rain.size = 'small'; current.weather.hourly.forEach(hour => { hour.rainAmount = 0.03; }); await open(); assert.match(await page.locator('.ambient-rain').innerText(), /in rain/);
     current = structuredClone(source); current.settings.appearance.motionEnabled = false; await page.setViewportSize({ width: 1920, height: 1080 }); await open();
     const inset = await page.locator('.widget-grid-plane').evaluate(el => el.getBoundingClientRect().left / innerWidth); assert.ok(Math.abs(inset - 0.04) < 0.002);
     if (capture) images.push({ name: 'default-composition', bytes: await page.screenshot() });
