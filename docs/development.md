@@ -1,9 +1,10 @@
 # Development
 
 Use Node 24 LTS and npm. Application dependencies are pinned in `package.json`
-and `package-lock.json`. The backend, shared types, and tests are implemented;
-the frontend and Windows host are integrated in separate changes. Do not replace
-an existing system Node or application runtime to work on this project.
+and `package-lock.json`. The React display/editor, local backend and native host
+sources are implemented. Current-PC install, data lifecycle and native preview
+checks passed; see [Windows evidence and remaining limits](windows.md#verification).
+Do not replace an existing system Node or application runtime to work on this project.
 
 ## Application commands
 
@@ -11,23 +12,51 @@ From the checkout with Node 24/npm available:
 
 ```powershell
 npm ci
-npm run typecheck
+npm run build
 npm test
-npm run build:server
 npm start
 ```
 
-The backend listens at `http://127.0.0.1:4318`; `/api/health` verifies readiness.
+The production app serves the editor at `http://127.0.0.1:4318/editor` and ambient
+view at `http://127.0.0.1:4318/display`; `/api/health` verifies server readiness.
 It stores data in the per-user directory documented in [API](api.md), not Git or
 browser storage. Set `LRD_DATA_DIR` to an isolated test folder before integration
 experiments. `LRD_PORT` can choose another unprivileged local port. Ctrl+C stops it.
 
-Once the frontend entry point is present, `npm run build` typechecks and builds
-both server and browser assets; `npm start` then serves the display and editor.
+Build before `npm start` on a fresh clone: `npm run build` typechecks and builds
+both server and browser assets. `build:server` alone does not produce the UI.
 For development use `npm run dev:server` and `npm run dev` in separate terminals.
 Vite listens on loopback port 5173 and proxies `/api` to 4318. The development
 server explicitly accepts that origin; production does not expose CORS access.
-Do not claim a full application build passed on a backend-only branch.
+Source runs may use `LRD_PORT`; the installed Windows helper/control script uses
+fixed loopback port 4318 and overrides an inherited `LRD_PORT` for its owned server.
+Do not run two instances there. The Windows installer uses a separate app-owned
+Node 24 runtime and never changes system Node. See [installation](install.md) for
+runtime updates, rollback, reparse restrictions and data recovery.
+
+For nonintrusive Windows regression checks (process-scoped policy only):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Test-Windows.ps1
+```
+
+Pass `-NodeExe '<Node24 node.exe>'` to also test exact owned-process/start-time
+recognition. Native capture/fullscreen/lock acceptance remains separate. Follow
+[CONTRIBUTING.md](../CONTRIBUTING.md) and the [agent runbook](agent-runbook.md) for
+self-service issue/fork/fix handoff; neither enables automatic reporting.
+
+Optional production cursor regression, using an already available Playwright
+module and Edge plus an isolated source server:
+
+```powershell
+node windows/tests/Test-CursorBrowser.mjs --base-url http://127.0.0.1:4324 --playwright '<Playwright module path>' --edge '<msedge.exe path>'
+```
+
+It intercepts state with synthetic data and checks actual computed cursor styles
+through loading/error, widgets, editor navigation/embedded preview and a new
+display tab. It saves no images or app data. This requires Node 24; Playwright
+is a verification tool, not an app runtime dependency. Native cursor visibility
+and restoration remain separate Windows acceptance checks.
 
 ## Local checkout and agent startup
 
@@ -40,8 +69,10 @@ git remote -v
 codex -C 'C:\Users\8roun\source\repos\living-room-display'
 ```
 
-The installed Codex CLI's `--help` confirms that `-C` sets the working directory.
-The final command launches an agent, not the display. On another computer, use
+Checked 2026-10-18: `Get-Command codex` resolves a CLI and `codex --version`
+reports `codex-cli 0.163.0`; its `--help` confirms that `-C` sets the working directory.
+The final command launches an agent, not the display; no interactive launch was
+performed as part of these checks. On another computer, use
 the actual checkout path and installed agent. An agent that does not discover
 instruction files must be told to read `AGENTS.md` explicitly.
 
@@ -108,9 +139,9 @@ For helper changes, exercise a real read-only identity/repository query and veri
 that process environment variables are restored. Review output for accidental
 credential disclosure. Do not add tests that simply repeat script statements.
 
-CI installs the lockfile, typechecks, runs tests, and builds the server on Windows
-and Linux with Node 24. Once `index.html` exists it also requires the full app
-build. Every PR still needs an independent review agent; CI is not that review.
+CI installs the lockfile, typechecks, runs tests, and builds the full application
+on Windows and Linux with Node 24. Every PR still needs an independent review
+agent; CI is not that review.
 UI checks
 require actual visual inspection, not only compilation or a successful tool call.
 

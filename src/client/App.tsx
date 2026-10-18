@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type Dispatch,
@@ -24,6 +25,14 @@ export function App() {
     [],
   );
   const display = window.location.pathname.startsWith('/display');
+  const standaloneDisplay = display && window.self === window.top;
+  useLayoutEffect(() => {
+    if (!standaloneDisplay) return;
+    // Cover loading/error states and descendant controls before paint. The
+    // editor's embedded component never changes the document cursor.
+    document.documentElement.classList.add('standalone-display');
+    return () => document.documentElement.classList.remove('standalone-display');
+  }, [standaloneDisplay]);
   const reload = useCallback(async () => {
     const startedAt = revision.current;
     const requestId = ++request.current;
