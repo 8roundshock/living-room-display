@@ -51,6 +51,8 @@ test('forecast day labels use the actual city calendar date even in a stale list
   assert.equal(forecastDay('2026-10-17', 'America/Toronto', now), 'Sat');
   assert.equal(forecastDay('2026-10-18', 'America/Toronto', now), 'Today');
   assert.equal(forecastDay('2026-10-19', 'America/Toronto', now), 'Tomorrow');
+  assert.equal(forecastDay('2026-10-19', 'America/Toronto', now, true), 'Tom.');
+  assert.equal(forecastDay('2026-10-20', 'America/Toronto', now, true), 'Tue');
   assert.equal(forecastDay('2026-10-20', 'America/Toronto', now), 'Tue');
 });
 

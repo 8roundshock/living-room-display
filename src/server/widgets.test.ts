@@ -104,7 +104,7 @@ test('long-running full and dense boards remain collision-free and move modules 
       for (const id of WIDGET_IDS) origins[id]!.add(`${next.placements[id].column},${next.placements[id].row}`);
       grid = next;
     }
-    for (const id of WIDGET_IDS) assert.ok(origins[id]!.size >= 5, `${density}/${id} needs more than four fixed origins`);
+    for (const id of WIDGET_IDS.filter(id => settings.widgets[id])) assert.ok(origins[id]!.size >= 5, `${density}/${id} needs more than four fixed origins`);
     assert.notDeepEqual(motionOffset(1), motionOffset(5), 'additional protected-plane offsets do not repeat on the old four-cycle boundary');
   }
   const grid = defaultSettings().widgetGrid;

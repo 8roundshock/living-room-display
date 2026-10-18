@@ -61,6 +61,9 @@ and reminder input use the computer timezone. Current conditions show age;
 retained stale data is marked throughout. Missing values stay unavailable.
 Hourly chance covers precipitation including snow; rain estimates use rain plus
 showers and label incomplete/gapped coverage. See [API semantics](api.md#weather-semantics).
+Each weather module keeps its actual place and relevant units visible when used
+alone. Compact forecasts abbreviate Tomorrow as “Tom.” while retaining the full
+relative label and civil date for assistive text and hover details.
 
 ## Reminders and last screen
 

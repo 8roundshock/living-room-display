@@ -39,13 +39,15 @@ export function forecastDay(
   date: string,
   timeZone: string,
   now: Date | number,
+  compact = false,
 ): string {
   const today = civilDate(new Date(now), timeZone);
   if (date === today) return 'Today';
   // Advance the civil calendar, rather than adding 24 hours across a DST change.
   const tomorrow = new Date(`${today}T12:00:00Z`);
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-  if (date === tomorrow.toISOString().slice(0, 10)) return 'Tomorrow';
+  if (date === tomorrow.toISOString().slice(0, 10))
+    return compact ? 'Tom.' : 'Tomorrow';
   // Provider date-only values are calendar days; UTC here preserves that weekday.
   return new Intl.DateTimeFormat('en', {
     weekday: 'short',

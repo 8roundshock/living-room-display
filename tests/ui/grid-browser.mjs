@@ -10,6 +10,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
+import { repackGrid } from '../../src/shared/widgets.ts';
 
 export async function runGridQa({ playwright, edge } = {}) {
   const { chromium } = createRequire(import.meta.url)(
@@ -532,6 +533,94 @@ export async function runGridQa({ playwright, edge } = {}) {
     }
     checks.push(
       'provider credit remains inside the relocating current-weather or rain widget without Forecast',
+    );
+
+    for (const id of ['weather', 'rain', 'forecast'])
+      for (const size of ['small', 'medium', 'large']) {
+        const settings = onlyClock();
+        settings.widgets.clock = false;
+        settings.widgets[id] = true;
+        settings.units = 'imperial';
+        settings.location.name = 'Review City';
+        settings.locationSource = 'manual';
+        settings.widgetGrid.placements[id] = { column: 0, row: 0, size };
+        await open(settings);
+        await page.goto(base + '/display');
+        const widget = page.locator(`.ambient-${id}`);
+        await widget.waitFor();
+        assert.match(await widget.innerText(), /Review City/);
+        if (id === 'weather')
+          assert.match(
+            await widget.locator('.ambient-label').innerText(),
+            /°F/,
+          );
+        if (id === 'forecast')
+          assert.match(
+            await widget.locator('.weather-context').innerText(),
+            /°F/,
+          );
+        if (id === 'rain')
+          assert.match(
+            await widget.locator('.ambient-description').innerText(),
+            /\bin\b/,
+          );
+      }
+    checks.push(
+      'each independently enabled weather module retains actual place and visible relevant units in every family',
+    );
+
+    for (const density of ['spacious', 'balanced', 'fine'])
+      for (const size of ['small', 'medium']) {
+        const settings = onlyClock();
+        settings.widgets.clock = false;
+        settings.widgets.forecast = true;
+        settings.widgetGrid = repackGrid(
+          settings.widgetGrid,
+          density,
+          settings.widgets,
+        );
+        settings.widgetGrid.placements.forecast = { column: 0, row: 0, size };
+        await open(settings, { viewport: { width: 1920, height: 1080 } });
+        await page.goto(base + '/display');
+        await page.locator('.forecast-day-label').first().waitFor();
+        await page.clock.runFor(500);
+        const labels = await page
+          .locator('.forecast-day-label')
+          .evaluateAll((es) =>
+            es.map((e) => {
+              const range = document.createRange();
+              range.selectNodeContents(e);
+              const text = range.getBoundingClientRect(),
+                cell = e.closest('.forecast-day').getBoundingClientRect();
+              return {
+                text: e.textContent,
+                full: e.getAttribute('aria-label'),
+                lines: range.getClientRects().length,
+                width: text.width,
+                available: cell.width,
+              };
+            }),
+          );
+        assert.ok(
+          labels.some(
+            (label) =>
+              label.text === 'Tom.' && label.full.startsWith('Tomorrow, '),
+          ),
+        );
+        for (const label of labels) {
+          assert.equal(label.lines, 1);
+          assert.ok(
+            label.width <= label.available + 1,
+            JSON.stringify({ density, size, ...label }),
+          );
+        }
+        images.push({
+          label: `Compact forecast ${density}/${size}`,
+          bytes: await page.screenshot({ type: 'png', animations: 'disabled' }),
+        });
+      }
+    checks.push(
+      'small/medium forecast labels remain one line at every grid density with full accessible civil dates',
     );
 
     for (const viewport of [
