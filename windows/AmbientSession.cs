@@ -72,7 +72,7 @@ internal sealed class AmbientSession : ApplicationContext
                 LaunchFailed = browser.Failed, Elapsed = age.ElapsedMilliseconds
             });
             if (action == SurfaceAction.Close) { RequestStop(); return; }
-            if (action == SurfaceAction.StartBrowser) browser.Launch(edgePath, Program.BaseUrl + "/display", startup.Token);
+            if (action == SurfaceAction.StartBrowser) browser.Launch(edgePath, Program.BaseUrl + "/display?native=1", startup.Token);
             if (action == SurfaceAction.Reveal)
             {
                 // Alpha is never proof of ownership. Recheck before revealing.

@@ -1,11 +1,9 @@
 import type { Settings, WidgetId } from '../shared/contracts';
 import { useEffect, useRef } from 'react';
 import {
-  GRID_DENSITIES,
   WIDGET_CATALOG,
   WIDGET_IDS,
   widgetSizes,
-  widgetSpan,
   type WidgetSize,
 } from '../shared/widgets';
 import { Icon } from './icons';
@@ -20,7 +18,6 @@ export function WidgetInspector({
   onAdd,
   onRemove,
   onResize,
-  onMove,
   onChange,
   photoAvailable,
   photoBusy,
@@ -69,11 +66,12 @@ export function WidgetInspector({
         <h2>Widgets</h2>
         <button
           ref={addButton}
-          className="button small"
+          className="icon-button add-widget"
+          aria-label="Add widget"
+          title="Add widget"
           onClick={() => onPicker(true)}
         >
-          <Icon name="plus" size={15} />
-          Add widget
+          <Icon name="plus" size={20} />
         </button>
       </div>
       {!WIDGET_IDS.some((id) => settings.widgets[id]) && (
@@ -95,9 +93,7 @@ export function WidgetInspector({
         )}
         {WIDGET_IDS.filter((id) => settings.widgets[id]).map((id) => {
           const widget = WIDGET_CATALOG[id],
-            placement = settings.widgetGrid.placements[id],
-            limits = GRID_DENSITIES[settings.widgetGrid.density],
-            span = widgetSpan(id, placement.size);
+            placement = settings.widgetGrid.placements[id];
           return (
             <div
               key={id}
@@ -106,13 +102,14 @@ export function WidgetInspector({
               <div className="widget-row">
                 <button
                   className="widget-select"
+                  aria-label={widget.name}
                   aria-expanded={selected === id}
                   onClick={() => onSelect(selected === id ? null : id)}
                 >
                   <span className="widget-icon">
                     <Icon name={widget.icon} size={18} />
                   </span>
-                  {widget.name}
+                  <span className="widget-row-copy"><span>{widget.name}</span><small>{placement.size[0].toUpperCase() + placement.size.slice(1)}</small></span>
                   <span aria-hidden="true" className="row-chevron">
                     ›
                   </span>
@@ -140,46 +137,6 @@ export function WidgetInspector({
                         {size[0].toUpperCase() + size.slice(1)}
                       </button>
                     ))}
-                  </div>
-                  <div className="widget-position-control">
-                    <span>
-                      Position{' '}
-                      <output>
-                        {placement.column + 1}, {placement.row + 1}
-                      </output>
-                    </span>
-                    <div>
-                      {(
-                        [
-                          [-1, 0, 'left'],
-                          [0, -1, 'up'],
-                          [0, 1, 'down'],
-                          [1, 0, 'right'],
-                        ] as const
-                      ).map(([dx, dy, label]) => (
-                        <button
-                          key={label}
-                          className="icon-button"
-                          aria-label={`Move ${widget.name} ${label}`}
-                          disabled={
-                            placement.column + dx < 0 ||
-                            placement.row + dy < 0 ||
-                            placement.column + dx + span.columns >
-                              limits.columns ||
-                            placement.row + dy + span.rows > limits.rows
-                          }
-                          onClick={() => onMove(id, dx, dy)}
-                        >
-                          <Icon
-                            name="arrow"
-                            size={15}
-                            style={{
-                              transform: `rotate(${label === 'left' ? 180 : label === 'up' ? -90 : label === 'down' ? 90 : 0}deg)`,
-                            }}
-                          />
-                        </button>
-                      ))}
-                    </div>
                   </div>
                   {id === 'clock' && (
                     <>
@@ -311,7 +268,7 @@ export function WidgetInspector({
                           type="file"
                           accept="image/jpeg,image/png,image/webp"
                           aria-label="Choose local photo"
-                          disabled={saving}
+                          disabled={saving || photoBusy}
                           onChange={(event) => {
                             const file = event.target.files?.[0];
                             event.target.value = '';

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Settings, SettingsPatch, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, defaultWidgetGrid, firstPlacement, gridProblem, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, defaultWidgetGrid, firstPlacement, fitGridDensity, gridProblem, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
 import { inspectPhoto, photoAssetSchema } from './photo.ts';
 
 const widgetShape = <T>(factory: (id: WidgetId) => T) => Object.fromEntries(WIDGET_IDS.map(id => [id, factory(id)])) as Record<WidgetId, T>;
@@ -39,16 +39,16 @@ z.object(widgetShape(() => transform)).strict());
 const placement = z.object({ column: z.number().int().min(0).max(15), row: z.number().int().min(0).max(9), size: z.enum(['small', 'medium', 'large']) }).strict();
 const widgetGrid = z.preprocess(value => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-  const source = value as { density?: string; placements?: Record<string, unknown> };
+  const source = value as { revision?: number; density?: string; placements?: Record<string, unknown> };
   if (!source.placements || typeof source.placements !== 'object' || Array.isArray(source.placements)) return value;
-  const defaults = defaultWidgetGrid();
+  const defaults = defaultWidgetGrid(source.revision === 2 ? 2 : 1);
   if (source.density && source.density in GRID_DENSITIES) defaults.density = source.density as typeof defaults.density;
   for (const id of WIDGET_IDS) {
     const candidate = placementFits(defaults, id, defaults.placements[id], {}) ? defaults.placements[id] : firstPlacement(defaults, id, WIDGET_CATALOG[id].defaultSize, {});
     if (candidate) defaults.placements[id] = candidate;
   }
-  return { ...source, placements: { ...defaults.placements, ...source.placements } };
-}, z.object({ density: z.enum(['spacious', 'balanced', 'fine']), placements: z.object(widgetShape(() => placement)).strict() }).strict()).default(defaultWidgetGrid);
+  return { revision: 1, ...source, placements: { ...defaults.placements, ...source.placements } };
+}, z.object({ revision: z.union([z.literal(1), z.literal(2)]), density: z.enum(['spacious', 'balanced', 'fine']), placements: z.object(widgetShape(() => placement)).strict() }).strict()).default(() => ({ ...defaultWidgetGrid(), revision: 2 as const }));
 const reminderBehavior = z.object({ hideWhenEmpty: z.boolean().default(true) }).strict();
 // Additive version-one migration applies to settings and every saved visual preset.
 const widgetBehavior = z.object({ reminders: reminderBehavior.default({ hideWhenEmpty: true }) }).strict()
@@ -60,14 +60,20 @@ function checkGrid(value: Pick<Settings, 'widgetGrid' | 'widgets'>, context: z.R
   const problem = gridProblem(value.widgetGrid, value.widgets);
   if (problem) context.addIssue({ code: 'custom', path: ['widgetGrid'], message: problem });
 }
-const visual = z.object(visualShape).strict().superRefine(checkGrid);
+function migrateGrid<T extends Pick<Settings, 'widgetGrid' | 'widgets'>>(value: T): T {
+  if (value.widgetGrid.revision === 2) return value;
+  const fit = fitGridDensity({ ...value.widgetGrid, revision: 2 }, value.widgetGrid.density, value.widgets);
+  if (!fit) throw new Error('This legacy widget layout cannot fit. Preserve the original settings and choose fewer widgets.');
+  return { ...value, widgetGrid: fit.grid };
+}
+const visual = z.object(visualShape).strict().superRefine(checkGrid).transform(migrateGrid);
 const savedPresets = z.array(z.object({ id: z.string().min(1).max(80), name: z.string().trim().min(1).max(60), visual }).strict()).max(12)
   .refine(items => new Set(items.map(item => item.id)).size === items.length, 'Preset IDs must be unique');
 export const settingsSchema = z.object({ ...visualShape, version: z.literal(1), location,
   // Missing source means legacy/manual, so upgrades cannot replace an existing city.
   locationSource: z.enum(['device', 'manual', 'fallback']).default('manual'),
   units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets,
-}).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(value => {
+}).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(value => {
   if (value.locationSource === 'fallback') return { ...value, location: defaultSettings().location };
   if (value.locationSource === 'device') return { ...value, location: {
     name: 'Device area', latitude: Math.round(value.location.latitude * 10) / 10,
@@ -85,7 +91,7 @@ export const settingsPatchSchema = z.object({
   locationSource: z.enum(['device', 'manual', 'fallback']).optional(),
   appearance: appearance.partial().optional(), widgets: widgetsObject.partial().optional(),
   widgetOverrides: z.object(widgetShape(() => transform.partial().optional())).strict().optional(),
-  widgetGrid: z.object({ density: z.enum(['spacious', 'balanced', 'fine']).optional(), placements: z.object(widgetShape(() => placement.partial().optional())).strict().partial().optional() }).strict().optional(),
+  widgetGrid: z.object({ revision: z.literal(2).optional(), density: z.enum(['spacious', 'balanced', 'fine']).optional(), placements: z.object(widgetShape(() => placement.partial().optional())).strict().partial().optional() }).strict().optional(),
   photoChange: z.object({ pngBase64: z.string().max(2_796_204).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/) }).strict().superRefine((value, context) => {
     try { inspectPhoto(Buffer.from(value.pngBase64, 'base64')); }
     catch (error) { context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : 'Invalid photo' }); }

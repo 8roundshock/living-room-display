@@ -90,6 +90,18 @@ export function rebaseSettings(
 ): Settings {
   const result = rebaseDraft(base, draft, incoming);
   if (
+    !same(base.widgetGrid, draft.widgetGrid) ||
+    !same(base.widgets, draft.widgets) ||
+    base.preview.enabled !== draft.preview.enabled
+  ) {
+    // Density, families, origins and visibility describe one valid arrangement.
+    // Mixing untouched coordinates from another density can put a locally
+    // edited widget outside the board or enable it on top of another widget.
+    result.widgetGrid = structuredClone(draft.widgetGrid);
+    result.widgets = structuredClone(draft.widgets);
+    result.preview.enabled = draft.preview.enabled;
+  }
+  if (
     !same(base.location, draft.location) ||
     base.locationSource !== draft.locationSource
   ) {

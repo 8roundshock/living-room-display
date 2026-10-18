@@ -94,7 +94,7 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
         ),
         height = (width * e.naturalHeight) / e.naturalWidth;
       return {
-        x: r.x,
+        x: r.x + (r.width - width) / 2,
         y: r.y + (r.height - height) / 2,
         width,
         height,

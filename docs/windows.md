@@ -1,6 +1,7 @@
 # Windows host
 
-A small .NET Framework `.scr` host launches Microsoft Edge to render `/display`.
+A small .NET Framework `.scr` host launches Microsoft Edge to render
+`/display?native=1`.
 `windows/Build-Host.ps1` uses the Windows Framework compiler; no SDK, native
 package, administrator installation or always-running idle watcher is required.
 
@@ -38,9 +39,11 @@ injection, audio change or media key is used. The backend lives independently.
 Scripts validate PID, executable path, command line and process start time before
 stopping it. Source runs and other apps are not adopted.
 
-The standalone web route retains scoped CSS cursor hiding for browser use,
-loading/errors and descendants. Native kiosk startup needs its own input surface:
-the stationary Edge cursor was empirically still visible despite that CSS.
+Ordinary browser `/display`, including fullscreen, keeps its visible pointer and
+F fullscreen toggle. Explicit `native=1` presentation hides the document cursor
+through loading/errors and descendants and omits browser navigation/shortcuts.
+Native kiosk startup also needs its own input surface: the stationary Edge cursor
+was empirically still visible despite the earlier document CSS alone.
 
 The fullscreen host creates one independent, borderless primary-display window,
 initially opaque black. It establishes NULL cursor only over its own foreground
@@ -140,19 +143,30 @@ recheck performed no GUI, capture or native/current-desktop probe. Recheck curre
 provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](install.md).
 The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
-passes actual computed-style checks for loading/error, viewport edges, widget
-controls, display-to-editor navigation, the embedded preview and a new display
-tab. Synthetic state is intercepted in an isolated headless browser; it neither
-changes app data nor establishes the visible native cursor state.
+checks that browser loading/error, viewport edges, widgets, editor/embedded preview
+and new display tabs retain their pointer, while explicit native presentation
+hides the document cursor. The reviewed UI source passed this isolated browser
+check before its merge in PR57. Synthetic state is intercepted; this neither
+changes app data nor establishes the visible Windows cursor state.
 
 Independent static review approved source `eba70fc` before the earlier runtime QA;
 later merged application changes also passed their final-head reviews and CI.
 The native cursor replacement is a separate, uninstalled candidate in
-[draft PR51](https://github.com/8roundshock/living-room-display/pull/51), reviewed
-at native-code head `c06a9a9` with both CI jobs successful. Its integrated runtime
-gates still apply; any later head requires a final-head independent recheck. The
+[draft PR51](https://github.com/8roundshock/living-room-display/pull/51). Its old
+head `43beadc` received independent approval and both CI jobs passed. Reviewed UI
+main `7e654fd` is now normally merged into the native branch; the moved launch in
+`AmbientSession.cs` preserves the surface/input implementation and carries the
+UI's `native=1` URL flag. This new combined head requires independent review and
+current-head CI. Its combined runtime gates still apply. The
 repository stays private and this PR is not deployment evidence. Normal product
 operation contains no prototype phase logging or screenshot logging.
+
+Combined-merge local preparation passed all 79 application tests/full production
+build, native compilation, three pure C# lifecycle/input/policy suites and three
+mocked/synthetic PowerShell restore/install/provenance suites. No helper argument,
+desktop probe, browser, capture, input, installed server or Windows setting was
+executed/changed by these checks. Complete hosted Windows checks and independent
+review of the final combined head are separate pending gates.
 
 ## Actual current-PC runtime evidence
 
@@ -199,7 +213,7 @@ Do not infer this path passed from separate CLI cold Start/Stop and native warm
 EnsureServer checks. This is an unverified path, not an established application
 bug; do not route around the rejected test.
 
-Pending: actual integrated acceptance and a subsequent reviewed update for PR51,
+Pending: actual combined-source acceptance and a subsequent reviewed update for PR51,
 fresh-account install, movie/game/screensaver inhibition, real lock/resume,
 across-room comfort and multi-monitor behavior. The earlier native smoke test
 does not prove these cases. Automatic idle remains off with the original blank
@@ -207,9 +221,8 @@ saver, 1200-second timeout and security 0 until explicitly authorized after QA.
 
 Cursor bug [#36](https://github.com/8roundshock/living-room-display/issues/36):
 the user reported a bright white pointer, and native readings confirmed a visible
-glyph despite correct standalone CSS. WGC may omit the cursor. The independent
-surface prototype has positive sampled evidence, but PR51 is candidate-only;
-integrated normal, visual, real-input, focus/failure and restoration checks remain.
+glyph despite correct document CSS. WGC may omit the cursor. PR51 is candidate-only;
+actual visual, real-input, focus/failure and combined-source checks remain.
 The independently reviewed isolated prototype (binary SHA256 prefix `2861444F`)
 completed a bounded run normally: initial sampled NULL ownership at 59ms over
 the physical 3840x2160 client, job-owned Edge activation at 406ms, reveal at 1018ms,
@@ -222,6 +235,25 @@ wait-before-drain pipe dependency; it remains failed. Neither run saved pixels.
 These are sampled prototype results, not proof of this integrated binary,
 every-frame startup flash absence or the remaining negative paths.
 
+The first integrated frozen-candidate stationary round subsequently passed on
+2026-10-18. Candidate source `3a492b0b206fa9fcd64904832db0530b4022ca4e` and old PR
+head `43beadce917bf268ee56116b5d10b54f9fd2f597` share Windows tree
+`084c79cb9d7c8c2bfe869a791312c36aeef9d115`. Its unchanged binary SHA256 is
+`0425FE225139AC19A6AC5B3844D9FA5B64962C0857A7BDAD26D0D7ED47318317`.
+A separately reviewed non-installation staging layout bound the unchanged
+control to the canonical healthy owned `2e010f0` backend and a separate candidate
+Edge profile. No second backend, installation marker, private state or token was
+copied. One coordinated direct-runtime round produced 26 consecutive qualified
+NULL-cursor samples, quiet input baseline true, helper exit 0, no forced stop and
+complete empty stdout/stderr. Observation took 10,573ms including startup/cleanup
+around the eight-second helper bound. Foreground restoration/context compatibility
+passed; RAM preview cleared to 404 and owned candidate host/browser counts were
+zero. Separate post-reads confirmed both saved data files, full settings, blank
+saver/active1/1200 seconds/security0 and backup absence unchanged. No screenshots
+or genuine input were used. This old-source result does not relabel the frozen
+binary as the newly merged combined candidate or establish its visual/input
+acceptance; reviewed UI assets must first be served by the canonical backend.
+
 The early-input baseline defect [#50](https://github.com/8roundshock/living-room-display/issues/50)
 also remains open, with its proposed fix only in PR51. Read-only
 [`GetCursorInfo`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getcursorinfo)
@@ -229,22 +261,17 @@ and [`CURSORINFO`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/n
 provide cursor handle, visibility flags and screen position. Require a successful
 read, NULL glyph and actual owned client/hit-root with live renderer and stable
 input; a failed read or cursor-free screenshot proves no absence. Record context
-and restoration separately. On 2026-10-18 the user explicitly confirmed the
-normal interactive PC desktop. A fresh `exec_command` PowerShell preflight still
-aborted before launch: error 5 (access denied) and current `Default` desktop
-`UOI_IO=false`, with visible `WinSta0`. Command, desktop apps and backend shared
-active console session 1 and normal unrestricted medium tokens; no isolation
-cause is confirmed. Minimal/observer x64 structs matched under PS5.1/7.
-The official Computer Use API separately listed four windows across three apps,
-with no Edge/display window; no capture, activation or input occurred. Inventory
-success does not qualify the command observer or candidate. Native/current-desktop
-probing stopped. The prepared next fallback is a single user-initiated run of the
-exact reviewed stationary candidate observer from normal nonadmin PowerShell,
-using a fresh 30-second authorization and its unchanged fail-closed preflight,
-eight-second helper and absolute watchdog bounds. It has not run and grants no
-install/idle approval. Recheck current artifacts, backend and preservation state
-before a new coordinated GO. Do not repeat unlock instructions, open/switch
-desktops, dismiss security UI or weaken guards. See
+and restoration separately. Earlier command preflights returned error 5 (access
+denied) and current `Default` desktop `UOI_IO=false`, despite the user's normal
+interactive desktop confirmation. Struct checks and a separate official window
+inventory did not isolate a cause. An old partial candidate layout also failed
+because the unchanged control treated it as an incomplete installation. These
+failures remain historical evidence; the later successful integrated stationary
+round supersedes them as the latest result. No desktop switch or guard bypass
+was used. Recheck current artifacts, served backend and preservation state before
+each newly coordinated bounded test; do not repeat the unchanged stationary test
+solely to repeat its proof. Never open/switch desktops, dismiss security UI or
+weaken guards. See
 [diagnosis](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6249615459).
 
 References: [Screensaver library](https://learn.microsoft.com/en-us/windows/win32/lwef/screen-saver-library),
