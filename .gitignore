@@ -1,0 +1,14 @@
+# Local scratch, credentials, user data, and isolated worktrees
+/.local/
+/.worktrees/
+/work/
+.env
+.env.*
+!.env.example
+CLAUDE.local.md
+*.log
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
