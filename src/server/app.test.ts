@@ -17,6 +17,31 @@ async function fixture(now?: () => number) {
 }
 function body(value: unknown) { return { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }; }
 
+test('hide-empty behavior persists through partial patch, preset export/import and legacy import', async () => {
+  const app = await fixture();
+  try {
+    const patch = (value: unknown) => fetch(`${app.url}/api/settings`, { method: 'PATCH', ...body(value) });
+    assert.equal((await (await fetch(`${app.url}/api/state`)).json()).settings.widgetBehavior.reminders.hideWhenEmpty, true);
+    assert.equal((await patch({ widgetBehavior: { reminders: { hideWhenEmpty: false } } })).status, 200);
+    const settings = app.store.snapshot().settings;
+    const { appearance, widgets, widgetOverrides, widgetBehavior, preview } = settings;
+    await patch({ savedPresets: [{ id: 'override', name: 'Keep empty', visual: { appearance, widgets, widgetOverrides, widgetBehavior, preview } }] });
+    const exported = await (await fetch(`${app.url}/api/export`)).json();
+    await patch({ widgetBehavior: { reminders: { hideWhenEmpty: true } } });
+    assert.equal((await fetch(`${app.url}/api/import`, { method: 'POST', ...body(exported) })).status, 200);
+    assert.equal(app.store.snapshot().settings.widgetBehavior.reminders.hideWhenEmpty, false);
+    assert.equal(app.store.snapshot().settings.savedPresets[0].visual.widgetBehavior.reminders.hideWhenEmpty, false);
+    assert.equal((await patch({ widgetBehavior: { reminders: { hideWhenEmpty: 'false' } } })).status, 400);
+    assert.equal((await patch({ widgetBehavior: { forecast: { hideWhenEmpty: true } } })).status, 400);
+    assert.equal(app.store.snapshot().settings.widgetBehavior.reminders.hideWhenEmpty, false, 'invalid edits cannot change saved behavior');
+    delete exported.settings.widgetBehavior;
+    delete exported.settings.savedPresets[0].visual.widgetBehavior;
+    assert.equal((await fetch(`${app.url}/api/import`, { method: 'POST', ...body(exported) })).status, 200);
+    assert.equal(app.store.snapshot().settings.widgetBehavior.reminders.hideWhenEmpty, true);
+    assert.equal(app.store.snapshot().settings.savedPresets[0].visual.widgetBehavior.reminders.hideWhenEmpty, true);
+  } finally { await app.close(); }
+});
+
 test('reminder CRUD, nested settings patch, export/import and validation', async () => {
   const app = await fixture();
   try {

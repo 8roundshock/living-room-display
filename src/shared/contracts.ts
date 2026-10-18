@@ -9,12 +9,14 @@ export interface AppearanceSettings {
   motionEnabled: boolean; motionIntervalSeconds: number; fadeSeconds: number;
 }
 export interface WidgetTransform { offsetX: number; offsetY: number; scale: number }
+export interface WidgetBehavior { reminders: { hideWhenEmpty: boolean } }
 export interface PreviewSettings { enabled: boolean; opacity: number; widthPercent: number }
 export interface IdleSettings { enabled: boolean; idleMinutes: number }
 export interface VisualSettings {
   appearance: AppearanceSettings;
   widgets: Record<WidgetId, boolean>;
   widgetOverrides: Record<WidgetId, WidgetTransform>;
+  widgetBehavior: WidgetBehavior;
   preview: PreviewSettings;
 }
 export interface SavedPreset { id: string; name: string; visual: VisualSettings }
@@ -26,6 +28,7 @@ export interface SettingsPatch {
   location?: Partial<LocationSettings>; locationSource?: Settings['locationSource']; units?: Units; clockFormat?: Settings['clockFormat'];
   appearance?: Partial<AppearanceSettings>; widgets?: Partial<Record<WidgetId, boolean>>;
   widgetOverrides?: Partial<Record<WidgetId, Partial<WidgetTransform>>>;
+  widgetBehavior?: { reminders?: Partial<WidgetBehavior['reminders']> };
   preview?: Partial<PreviewSettings>; idle?: Partial<IdleSettings>; savedPresets?: SavedPreset[];
 }
 export type AutomaticLocationSelection = { source: 'device'; latitude: number; longitude: number; automatic: boolean } | { source: 'fallback'; automatic: boolean };

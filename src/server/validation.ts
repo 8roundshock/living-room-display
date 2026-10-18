@@ -20,9 +20,13 @@ const appearance = z.object({
 const widgets = z.object({ clock: z.boolean(), weather: z.boolean(), forecast: z.boolean(), reminders: z.boolean(), preview: z.boolean() }).strict();
 const transform = z.object({ offsetX: z.number().min(-25).max(25), offsetY: z.number().min(-25).max(25), scale: z.number().min(0.5).max(2) }).strict();
 const widgetOverrides = z.object({ clock: transform, weather: transform, forecast: transform, reminders: transform, preview: transform }).strict();
+const reminderBehavior = z.object({ hideWhenEmpty: z.boolean().default(true) }).strict();
+// Additive version-one migration applies to settings and every saved visual preset.
+const widgetBehavior = z.object({ reminders: reminderBehavior.default({ hideWhenEmpty: true }) }).strict()
+  .default({ reminders: { hideWhenEmpty: true } });
 const preview = z.object({ enabled: z.boolean(), opacity: z.number().min(0.02).max(0.3), widthPercent: z.number().min(12).max(35) }).strict();
 const idle = z.object({ enabled: z.boolean(), idleMinutes: z.number().int().min(1).max(120) }).strict();
-const visual = z.object({ appearance, widgets, widgetOverrides, preview }).strict();
+const visual = z.object({ appearance, widgets, widgetOverrides, widgetBehavior, preview }).strict();
 const savedPresets = z.array(z.object({ id: z.string().min(1).max(80), name: z.string().trim().min(1).max(60), visual }).strict()).max(12)
   .refine(items => new Set(items.map(item => item.id)).size === items.length, 'Preset IDs must be unique');
 export const settingsSchema = visual.extend({ version: z.literal(1), location,
@@ -46,6 +50,7 @@ export const settingsPatchSchema = z.object({
   locationSource: z.enum(['device', 'manual', 'fallback']).optional(),
   appearance: appearance.partial().optional(), widgets: widgets.partial().optional(),
   widgetOverrides: z.object({ clock: transform.partial().optional(), weather: transform.partial().optional(), forecast: transform.partial().optional(), reminders: transform.partial().optional(), preview: transform.partial().optional() }).strict().optional(),
+  widgetBehavior: z.object({ reminders: z.object({ hideWhenEmpty: z.boolean().optional() }).strict().optional() }).strict().optional(),
   preview: preview.partial().optional(), idle: idle.partial().optional(), savedPresets: savedPresets.optional(),
 }).strict();
 const dueAt = z.iso.datetime({ offset: true }).nullable();
@@ -60,6 +65,7 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
   const next = { ...current, ...patch, location: { ...current.location, ...patch.location }, appearance: { ...current.appearance, ...patch.appearance },
     widgets: { ...current.widgets, ...patch.widgets }, preview: { ...current.preview, ...patch.preview }, idle: { ...current.idle, ...patch.idle },
     widgetOverrides: { ...current.widgetOverrides },
+    widgetBehavior: { reminders: { ...current.widgetBehavior.reminders, ...patch.widgetBehavior?.reminders } },
   };
   // Existing API callers that explicitly edit a city are manual overrides too.
   if (patch.location && patch.locationSource === undefined) next.locationSource = 'manual';

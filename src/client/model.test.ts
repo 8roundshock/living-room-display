@@ -5,6 +5,7 @@ import {
   applyBuiltinPreset,
   getVisual,
   precipitationOutlook,
+  reminderPresentation,
   sortReminders,
   upcomingRain,
 } from './model.ts';
@@ -313,12 +314,52 @@ test('appearance presets reset visuals while preserving personal data and named 
     { id: 'example', name: 'Example', visual: getVisual(source) },
   ];
   source.widgetOverrides.clock.offsetX = 25;
+  source.widgetBehavior.reminders.hideWhenEmpty = false;
   const night = applyBuiltinPreset(source, 'night');
   assert.equal(night.location.name, 'Example city');
   assert.equal(night.units, 'imperial');
   assert.equal(night.savedPresets.length, 1);
   assert.equal(night.widgetOverrides.clock.offsetX, 0);
   assert.equal(night.appearance.brightness, 0.28);
+  assert.equal(night.widgetBehavior.reminders.hideWhenEmpty, true);
+  assert.equal(source.savedPresets[0].visual.widgetBehavior.reminders.hideWhenEmpty, true);
+  const visual = getVisual(source);
+  assert.equal(visual.widgetBehavior.reminders.hideWhenEmpty, false);
+  visual.widgetBehavior.reminders.hideWhenEmpty = true;
+  assert.equal(source.widgetBehavior.reminders.hideWhenEmpty, false, 'visual snapshot is independent');
   night.widgets.clock = false;
   assert.equal(source.widgets.clock, true);
+});
+
+const pendingReminder = { id: 'qa', text: 'Synthetic reminder', completed: false,
+  dueAt: null, createdAt: '2026-10-18T10:00:00Z', updatedAt: '2026-10-18T10:00:00Z' };
+
+test('reminders hide only when confirmed empty or all completed, and active items remain visible', () => {
+  const settings = defaultSettings();
+  assert.equal(reminderPresentation(settings, []), 'hidden');
+  assert.equal(reminderPresentation(settings, [{ ...pendingReminder, completed: true }]), 'hidden');
+  assert.equal(reminderPresentation(settings, [pendingReminder]), 'pending');
+  assert.equal(reminderPresentation(settings, [{ ...pendingReminder, completed: true }, pendingReminder]), 'pending');
+});
+
+test('empty override preserves a message while an explicitly disabled reminder widget stays hidden', () => {
+  const settings = defaultSettings();
+  settings.widgetBehavior.reminders.hideWhenEmpty = false;
+  assert.equal(reminderPresentation(settings, []), 'empty');
+  assert.equal(reminderPresentation(settings, [{ ...pendingReminder, completed: true }]), 'empty');
+  settings.widgets.reminders = false;
+  for (const value of [[], [pendingReminder], null])
+    assert.equal(reminderPresentation(settings, value, true), 'hidden');
+});
+
+test('unknown and disconnected empty reminders cannot become a confirmed empty widget', () => {
+  const settings = defaultSettings();
+  for (const hide of [true, false]) {
+    settings.widgetBehavior.reminders.hideWhenEmpty = hide;
+    assert.equal(reminderPresentation(settings, null), 'unavailable');
+    assert.equal(reminderPresentation(settings, undefined), 'unavailable');
+    assert.equal(reminderPresentation(settings, [], true), 'unavailable');
+    assert.equal(reminderPresentation(settings, [{ ...pendingReminder, completed: true }], true), 'unavailable');
+    assert.equal(reminderPresentation(settings, [pendingReminder], true), 'pending', 'cached pending items stay useful while marked offline');
+  }
 });
