@@ -12,9 +12,9 @@ This is an independent private project, not a personal-memory workspace.
 4. Read [development](docs/development.md) and [agent workflow](docs/agent-workflow.md)
    before edits, authentication, or delegation. Read further files only as needed.
 
-The repository currently contains documentation and repository tooling only.
-Architecture selection is pending; do not treat a recommendation as approval to
-choose a stack or implement the app. Keep status and commands truthful as it grows.
+The selected architecture is a custom local web dashboard with a Windows
+idle/screensaver helper. Implementation is authorized and in progress;
+`STATUS.md` records what has actually been built and verified.
 
 ## Ownership and context
 
@@ -43,12 +43,13 @@ choose a stack or implement the app. Keep status and commands truthful as it gro
   are optional future work, never prerequisites or recurring power-off advice.
 - Present rain timing as a forecast estimate. Show weather age and stale/error
   states; never invent current weather or present a model estimate as certainty.
-- A dim preview is requested; snapshot versus live selected-app capture remains
-  undecided. Keep snapshots in memory, not screenshot files. No capture is needed
-  for this foundation. See [preview requirements](docs/product.md#screen-preview).
-- No dependency installation, active service, schedule, deployment, connection
-  change, or TV control is authorized by this documentation-only foundation.
-  Reassess scope against the user's next concrete instruction.
+- Use a last-desktop snapshot captured before ambient activation, kept in RAM
+  only. Live app preview is future work; preserve capture access and physical-stop
+  safeguards. See [preview requirements](docs/product.md#screen-preview).
+- Local implementation, dependency setup, and scoped testing are authorized.
+  Keep loopback-only defaults; enable Windows idle activation only after actual
+  verification and coordinator approval. TV control, LAN exposure, and public
+  publication remain separate scope.
 
 ## Change and verify
 
@@ -60,8 +61,11 @@ choose a stack or implement the app. Keep status and commands truthful as it gro
 - Use topic branches and reviewed pull requests; never push directly to `main`,
   force-push, discard others' work, or bypass branch protection.
 - Keep feature and bug issues current, link PRs, and write meaningful scoped
-  commits. Every PR needs a separate independent review agent before merge;
-  the author fixes findings and the reviewer checks the final pushed commit.
+  commits. Every PR needs a primary ticket and a reason. Use exactly
+  `#<ticket-number> - <Ticket Name>` as the title; put related tickets, the change,
+  and validation in the body. Every PR needs a separate independent review agent
+  before merge. The author fixes findings and the reviewer checks the final
+  pushed commit.
   Record the review outcome and SHA in the PR. If native subagents are unavailable,
   use a separate fresh reviewer session/process; if neither is possible, leave
   the PR open and report the blocker. Self-review is not independent review.
