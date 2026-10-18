@@ -55,3 +55,25 @@ test('corrupt primary recovers the last valid backup without overwriting evidenc
     assert.equal(await readFile(join(directory, 'state.json'), 'utf8'), 'broken again');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('legacy settings and saved presets acquire hide-empty defaults without enabling disabled widgets', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'lrd-widget-migration-'));
+  try {
+    const settings = JSON.parse(JSON.stringify(defaultSettings()));
+    delete settings.widgetBehavior;
+    settings.widgets.reminders = false;
+    const { appearance, widgets, widgetOverrides, preview } = settings;
+    settings.savedPresets = [{ id: 'legacy', name: 'Legacy', visual: { appearance, widgets, widgetOverrides, preview } }];
+    await writeFile(join(directory, 'state.json'), JSON.stringify({ version: 1, settings, reminders: [] }));
+    const store = await DataStore.open(directory);
+    assert.equal(store.snapshot().settings.widgetBehavior.reminders.hideWhenEmpty, true);
+    assert.equal(store.snapshot().settings.savedPresets[0].visual.widgetBehavior.reminders.hideWhenEmpty, true);
+    assert.equal(store.snapshot().settings.widgets.reminders, false);
+    await store.patchSettings({ widgetBehavior: { reminders: { hideWhenEmpty: false } } });
+    await store.patchSettings({ widgetBehavior: { reminders: {} }, appearance: { brightness: 0.4 } });
+    const reopened = (await DataStore.open(directory)).snapshot().settings;
+    assert.equal(reopened.widgetBehavior.reminders.hideWhenEmpty, false, 'empty nested patch preserves override through restart');
+    assert.equal(reopened.savedPresets[0].visual.widgetBehavior.reminders.hideWhenEmpty, true);
+    assert.equal(reopened.widgets.reminders, false);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

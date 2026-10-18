@@ -487,6 +487,7 @@ export function Editor({
                   state={state}
                   settings={draft}
                   embedded
+                  disconnected={connectionError !== null}
                   compositionOverride={composition}
                 />
               </div>
@@ -1014,26 +1015,43 @@ export function Editor({
               <div className="settings-group">
                 <h3 className="settings-heading">On your display</h3>
                 {widgetIds.map((id) => (
-                  <Toggle
-                    key={id}
-                    icon={widgetIcons[id]}
-                    checked={
-                      draft.widgets[id] &&
-                      (id !== 'preview' || draft.preview.enabled)
-                    }
-                    onChange={(checked) =>
-                      change((previous) => ({
-                        ...previous,
-                        widgets: { ...previous.widgets, [id]: checked },
-                        preview:
-                          id === 'preview'
-                            ? { ...previous.preview, enabled: checked }
-                            : previous.preview,
-                      }))
-                    }
-                  >
-                    {widgetLabels[id]}
-                  </Toggle>
+                  <div className="widget-option" key={id}>
+                    <Toggle
+                      icon={widgetIcons[id]}
+                      checked={
+                        draft.widgets[id] &&
+                        (id !== 'preview' || draft.preview.enabled)
+                      }
+                      onChange={(checked) =>
+                        change((previous) => ({
+                          ...previous,
+                          widgets: { ...previous.widgets, [id]: checked },
+                          preview:
+                            id === 'preview'
+                              ? { ...previous.preview, enabled: checked }
+                              : previous.preview,
+                        }))
+                      }
+                    >
+                      {widgetLabels[id]}
+                    </Toggle>
+                    {id === 'reminders' && (
+                      <div className="widget-behavior">
+                        <Toggle
+                          checked={draft.widgetBehavior.reminders.hideWhenEmpty}
+                          description="Reminders disappear when every item is completed or the list is empty."
+                          onChange={(hideWhenEmpty) =>
+                            change((previous) => ({
+                              ...previous,
+                              widgetBehavior: { reminders: { hideWhenEmpty } },
+                            }))
+                          }
+                        >
+                          Hide reminders when empty
+                        </Toggle>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
               <div className="settings-group">

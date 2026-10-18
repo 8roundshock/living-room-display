@@ -80,6 +80,24 @@ items are ordered by due time, then undated items; at most two appear in the
 ambient view. Completed entries remain available in the editor until deleted.
 Recurring and time-only repeating reminders are outside this first slice.
 
+Under **On your display → Reminders**, **Hide reminders when empty** defaults to
+on. With no pending items (including when every item is completed), the whole
+reminder widget disappears and leaves black space. Turn the setting off to retain
+the empty reminder message. Turning the Reminders widget off always hides it.
+The behavior saves with appearance changes and built-in/named presets; built-in
+starting points use the default, while named presets retain the chosen value.
+Old settings, saved presets and imports missing this field default to on without
+re-enabling a disabled widget.
+
+Initial loading/failure does not create an empty reminder list. If a later refresh
+fails, an empty cached list shows **Reminders unavailable** instead of disappearing
+or claiming there are no reminders. Cached pending items stay visible and are
+marked offline. These rules apply to both the display and editor preview.
+
+The focused typography, spacing and transition choices follow the adaptations in
+[design.md](design.md), with primary Apple HIG sources. True black, dim defaults,
+whole-widget movement and the four compositions remain part of this design.
+
 ## Last screen
 
 The UI reads capture metadata and an image from the local server. It does not
@@ -95,7 +113,8 @@ screensaver or change Windows idle settings.
 
 ## Verification evidence
 
-The client has twenty-two Node tests covering device permission/position behavior,
+The client has twenty-five Node tests covering reminder visibility/unknown state,
+device permission/position behavior,
 provider-unit formatting, missing values,
 forecast timezone/DST and calendar-day handling, reminder datetime round trips
 and ordering, precipitation versus rain semantics, composition cycling, and
@@ -185,3 +204,15 @@ manual search/reload and denial preservation, late-result protection, provider
 timezone/civil dates, no geolocation calls from `/display`, and phone layout.
 The weather card was inspected in RAM, with no console errors or screenshot files.
 No real location permission was granted and no real device position was obtained.
+
+For #34, all 47 integrated tests and the production build passed. Isolated
+production Edge checks with synthetic data covered empty/all-completed/active
+lists, the empty override, disabled widgets, failed-refresh unavailability and
+retained offline reminders, checkbox save/reload and named preset restoration.
+All four timed compositions passed region/content bounds at 1920×1080 and
+3840×2160; reduced motion disabled drift/recomposition and reveal/control motion.
+The 390px editor had no horizontal overflow and kept reminder management available.
+Final fade states at both display sizes and the phone controls were visually
+inspected in RAM. There were no page exceptions or unexpected console errors;
+two deliberate 503 responses exercised offline behavior. No screenshot files,
+real geolocation requests, or changes to the installed server were involved.
