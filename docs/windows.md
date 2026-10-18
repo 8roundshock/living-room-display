@@ -113,6 +113,9 @@ No native launch, capture, editor reload or screensaver registration accompanied
 that rollout. This documentation correction adds no live probes. Recheck current
 provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](install.md).
+A later marker-only read reports clean `bedca44e` after PR #70, installed at
+19:08:23 UTC. The coordinator has not rechecked current backend/served assets,
+private data/backup equality or registration; see [current status](../STATUS.md).
 The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
 passes actual computed-style checks for loading/error, viewport edges, widget
 controls, display-to-editor navigation, the embedded preview and a new display
@@ -128,8 +131,9 @@ gates still apply; the repository stays private and this PR is not deployment ev
 
 ## Actual current-PC runtime evidence
 
-The clean `7e654fd` installed web baseline is verified as described above; no
-combined-host native acceptance was performed during that update. Earlier actual
+The clean `7e654fd` historical web rollout is verified as described above; no
+combined-host native acceptance was performed during that update or established
+by the newer marker-only `bedca44e` read. Earlier actual
 native preview source/content and readability on the 3840x2160 primary were
 accepted under
 [#46](https://github.com/8roundshock/living-room-display/issues/46): raw PNG and
@@ -170,8 +174,9 @@ bug; do not route around the rejected test.
 Pending: actual integrated acceptance and a subsequent reviewed update for PR51,
 fresh-account install, movie/game/screensaver inhibition, real lock/resume,
 across-room comfort and multi-monitor behavior. The earlier native smoke test
-does not prove these cases. Automatic idle remains off with the original blank
-saver, 1200-second timeout and security 0 until explicitly authorized after QA.
+does not prove these cases. The coordinator's last direct verification kept app
+idle off with the original blank saver, 1200-second timeout and security 0; the newer marker
+read does not establish current registration or authorize activation.
 The user is away as of the latest 2026-10-18 handoff. Wait for fresh readiness
 before physical tests; do not launch native tests, capture or input, change the
 installed app/data, or alter idle/TV settings during unattended source work.
