@@ -107,18 +107,36 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await page.getByRole('button', { name: 'History (60)', exact: true }).waitFor();
     checks.push('one tap fills the check and dims the title at once, saves, moves focus to the next circle, settles and leaves Up next; the canvas widget drops it');
 
-    // Undo restores it to its sorted position.
-    await status(page).getByRole('button', { name: 'Undo', exact: true }).click();
+    // Undo (here from the keyboard) restores it to its sorted position and focuses its circle.
+    await status(page).getByRole('button', { name: 'Undo', exact: true }).focus();
+    await page.keyboard.press('Enter');
     await status(page).getByText('Restored “Pay the bill”', { exact: true }).waitFor();
+    await page.clock.runFor(50);
+    assert.equal(await focused(page), 'Complete: Pay the bill', 'focus moves to the restored reminder, not <body>');
     assert.equal(stored('Pay the bill').completed, false);
     assert.equal((await rowTitles(page))[0], 'Pay the bill');
     assert.equal(await status(page).getByRole('button', { name: 'Undo' }).count(), 0);
-    // A second tap during the settle restores; Undo expires after about eight seconds.
+    // A second tap during the settle restores. The row stays (unchecked) while the restore
+    // saves, even when that takes longer than the settle and collapse.
+    let releaseRestore;
+    const restoreHeld = new Promise(resolve => { releaseRestore = resolve; });
+    await page.route('**/api/reminders/*', async route => {
+      if (route.request().method() === 'PATCH' && JSON.parse(route.request().postData() ?? '{}').completed === false) await restoreHeld;
+      await route.fallback();
+    });
     await circle(page, 'Water the plants').click();
     await status(page).getByText('Completed “Water the plants”', { exact: true }).waitFor();
     await page.clock.runFor(300);
     await circle(page, 'Water the plants').click();
+    for (let step = 0; step < 3; step++) {
+      await page.clock.runFor(500);
+      assert.ok((await rowTitles(page)).includes('Water the plants'), 'the row stays while its restore saves');
+      assert.equal(await page.locator('.editor-reminder-row.leaving').count(), 0, 'no collapse while restoring');
+    }
+    assert.equal(await circle(page, 'Water the plants').evaluate(element => element.classList.contains('done')), false, 'shown unchecked while restoring');
+    releaseRestore();
     await status(page).getByText('Restored “Water the plants”', { exact: true }).waitFor();
+    await page.unroute('**/api/reminders/*');
     assert.equal(stored('Water the plants').completed, false);
     await page.clock.runFor(1500);
     assert.ok((await rowTitles(page)).includes('Water the plants'));
@@ -126,7 +144,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await status(page).getByRole('button', { name: 'Undo', exact: true }).waitFor();
     await page.clock.runFor(8100);
     assert.equal(await status(page).getByRole('button', { name: 'Undo' }).count(), 0, 'Undo lasts about eight seconds');
-    checks.push('Undo and a second tap during the settle restore to the sorted position; Undo expires after ~8 s');
+    checks.push('keyboard Undo and a second tap during the settle restore to the sorted position (Undo focuses the restored circle; a slow restore keeps the row); Undo expires after ~8 s');
 
     // Keyboard users tick off several in a row.
     await circle(page, 'Pay the bill').focus();
@@ -272,6 +290,25 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     assert.equal((await rowTitles(page)).includes('Pay the bill'), false);
     await context.close();
     checks.push('reduced motion keeps the settle delay without the collapse');
+
+    // Deleting a row while it settles is a delete from Up next; one completed reminder is singular.
+    await reset();
+    await app.store.update(data => { data.reminders = data.reminders.filter(item => !item.completed || item.text === 'Read a chapter'); });
+    ({ page, context } = await open());
+    await circle(page, 'Pay the bill').click();
+    await status(page).getByText('Completed “Pay the bill”', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Delete: Pay the bill', exact: true }).click();
+    await status(page).getByText('Reminder deleted', { exact: true }).waitFor();
+    assert.equal(stored('Pay the bill'), undefined);
+    await page.clock.runFor(1300);
+    assert.equal((await rowTitles(page)).includes('Pay the bill'), false);
+    await page.getByRole('button', { name: 'History (1)', exact: true }).click();
+    await page.getByRole('button', { name: 'Clear history…', exact: true }).click();
+    assert.equal(await page.locator('.clear-history-confirm p').textContent(), 'Delete 1 completed reminder? This can’t be undone.');
+    await page.getByRole('button', { name: 'Delete all', exact: true }).click();
+    await status(page).getByText('History cleared (1)', { exact: true }).waitFor();
+    await context.close();
+    checks.push('a delete while settling reads “Reminder deleted”; one completed reminder reads “Delete 1 completed reminder?”');
 
     assert.deepEqual(errors, []);
     return { checks, images };
