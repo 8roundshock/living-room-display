@@ -59,8 +59,10 @@ desktop capture permission. Keep the thumbnail dim, adjustable, movable, and
 toggleable. Do not save screenshots. Actual native capture and rendered preview
 were inspected in RAM on the current 3840x2160 Windows 10 setup on 2026-10-18;
 normal exit cleared the image to 404 without capture files. Reviewed Studio/grid,
-preview and reminder changes were installed in the last verified baseline on
-2026-10-18, clean source `d81c1e0`. Recheck current provenance through installed CLI
+preview, reminder and city-wrapping changes were installed in the last verified
+baseline on 2026-10-18, clean source `2e010f0`; the latest CLI-only update performed
+no native probe/display launch. See [rollout evidence](https://github.com/8roundshock/living-room-display/pull/54#issuecomment-6249798540).
+Recheck current provenance through installed CLI
 `Status` or `installation.json`; see [installation](install.md). This does
 not establish live capture, locked/protected desktop access, another account or
 across-room comfort. The cursor replacement in

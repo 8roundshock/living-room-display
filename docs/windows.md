@@ -130,9 +130,9 @@ Source provenance checks use synthetic local Git repositories to verify clean,
 dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
 verify metadata refresh on successful install and retention after failed update
 or uninstall. No paths, remotes, changes or credentials are saved in provenance.
-The last verified installed baseline on 2026-10-18 was clean `d81c1e0`; its 71
+The last verified installed baseline on 2026-10-18 was clean `2e010f0`; its 71
 application tests and the full production build passed using the app-owned Node
-24.19.0. The reviewed Studio/grid, snapshot-readability and reminder corrections
+24.19.0. The reviewed Studio/grid, snapshot-readability, reminder and city-wrapping corrections
 were installed in that baseline. The
 installation marker and HTTP health were rechecked on 2026-10-18; the rollout
 separately verified served assets and data preservation. That documentation-only
@@ -156,8 +156,13 @@ operation contains no prototype phase logging or screenshot logging.
 
 ## Actual current-PC runtime evidence
 
-The last verified installed baseline on 2026-10-18 was clean `d81c1e0`, including
-the reviewed Studio/grid, readable snapshot and reminder fixes. Actual native preview source/content and
+The last verified installed baseline on 2026-10-18 was clean `2e010f0`, including
+the reviewed Studio/grid, readable snapshot, reminder and city-wrapping fixes.
+The latest CLI-only update verified 21 built and 11 served files, preserved saved
+data/backup, settings, reminders and photo state, and left a healthy owned server.
+It performed no native/current-desktop probe or display launch; see
+[rollout evidence](https://github.com/8roundshock/living-room-display/pull/54#issuecomment-6249798540).
+Actual native preview source/content and
 readability on the 3840x2160 primary were accepted under
 [#46](https://github.com/8roundshock/living-room-display/issues/46): raw PNG and
 rendered preview were inspected in RAM, normal exit cleared preview to 404 and

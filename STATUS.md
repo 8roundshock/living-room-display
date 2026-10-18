@@ -88,11 +88,15 @@ race [#44](https://github.com/8roundshock/living-room-display/issues/44) was res
 ## Last verified installation and remaining acceptance
 
 The last verified installed baseline on 2026-10-18 was clean
-`d81c1e0f5683a37f4f81b4c5d006203877168ac6`,
-including the reviewed Studio/grid, preview-readability and reminder corrections.
+`2e010f04aded296f896df5065e391b62d36e2bb1`, including the reviewed Studio/grid,
+preview-readability, reminder and long-city wrapping corrections. The latest
+CLI-only rollout verified all 21 built and 11 served files, preserved data/backup,
+settings, reminders and private photo state, and left a healthy owned server;
+see [rollout evidence](https://github.com/8roundshock/living-room-display/pull/54#issuecomment-6249798540).
 Recheck current provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](docs/install.md).
-The installation marker and HTTP health were rechecked on that date. Source and
+The installation marker and HTTP health were rechecked on that date without a
+native/current-desktop probe or display launch. Source and
 served-asset provenance, update preservation of settings/reminders/private photos,
 and actual 3840x2160 native preview acceptance were verified during rollout.
 Device location was not requested during rollout. Simulated composition/browser
