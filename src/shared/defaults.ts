@@ -12,6 +12,8 @@ export const DEFAULT_SETTINGS: Settings = {
     fontScale: 1, fontFamily: 'sans', layout: 'balanced',
     motionEnabled: true, motionIntervalSeconds: 180, fadeSeconds: 2,
     clockStyle: 'outline',
+    // #75 later switches new installs to native.
+    accentMode: 'color', animation: 'subtle',
   },
   widgets: defaultWidgetVisibility(),
   widgetGrid: defaultWidgetGrid(),

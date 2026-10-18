@@ -1,4 +1,6 @@
 import type { GridDensity, WidgetKind, WidgetSize } from './widgets.ts';
+import type { AccentMode } from './palette.ts';
+import type { AnimationLevel } from './motion.ts';
 export type WidgetId = WidgetKind;
 export interface WidgetPlacement { column: number; row: number; size: WidgetSize }
 export interface WidgetGrid { revision?: 1 | 2; density: GridDensity; placements: Record<WidgetId, WidgetPlacement> }
@@ -11,6 +13,10 @@ export interface AppearanceSettings {
   layout: 'balanced' | 'minimal' | 'weather-first';
   motionEnabled: boolean; motionIntervalSeconds: number; fadeSeconds: number;
   clockStyle: 'outline' | 'digital' | 'analog';
+  /** `color` tints every widget's accent group with accentColor; `native` uses each widget's palette tone. Rendering arrives with #75. */
+  accentMode: AccentMode;
+  /** Motion inside widgets and the editor; relocation through black is unaffected. Arrives with #76. */
+  animation: AnimationLevel;
 }
 export interface WidgetTransform { offsetX: number; offsetY: number; scale: number }
 export interface WidgetBehavior { reminders: { hideWhenEmpty: boolean } }

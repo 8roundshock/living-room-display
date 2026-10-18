@@ -2,7 +2,10 @@ import { z } from 'zod';
 import type { Settings, SettingsPatch, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, defaultWidgetGrid, firstPlacement, fitGridDensity, gridProblem, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
+import { ACCENT_MODES } from '../shared/palette.ts';
+import { ANIMATION_LEVELS } from '../shared/motion.ts';
 import { inspectPhoto, photoAssetSchema } from './photo.ts';
+import { AT_REST } from './persistence.ts';
 
 const widgetShape = <T>(factory: (id: WidgetId) => T) => Object.fromEntries(WIDGET_IDS.map(id => [id, factory(id)])) as Record<WidgetId, T>;
 function legacyWidgets(value: unknown) {
@@ -22,14 +25,27 @@ const location = z.object({
   longitude: z.number().min(-180).max(180), timezone: z.union([timezone, z.literal('auto')]),
 }).strict();
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex color');
-const appearance = z.object({
+// Field schemas carry no defaults: zod applies .default() inside .partial(), which made a
+// brightness-only PATCH reset a saved clock style (#83). Only the persisted reader fills defaults.
+const appearanceFields = {
   preset: z.enum(['phone', 'room', 'night', 'custom']), accentColor: color, textColor: color,
   brightness: z.number().min(0.1).max(1), fontScale: z.number().min(0.7).max(1.5),
   fontFamily: z.enum(['sans', 'serif', 'mono']), layout: z.enum(['balanced', 'minimal', 'weather-first']),
   motionEnabled: z.boolean(), motionIntervalSeconds: z.number().int().min(30).max(1800),
   fadeSeconds: z.number().min(0).max(10),
-  clockStyle: z.enum(['outline', 'digital', 'analog']).default('outline'),
+  clockStyle: z.enum(['outline', 'digital', 'analog']),
+  accentMode: z.enum(ACCENT_MODES),
+  animation: z.enum(ANIMATION_LEVELS),
+};
+/** Persisted settings, saved styles and imports: additive fields read as their defaults. */
+const appearance = z.object({
+  ...appearanceFields,
+  clockStyle: appearanceFields.clockStyle.default('outline'),
+  accentMode: appearanceFields.accentMode.default(AT_REST.appearance.accentMode),
+  animation: appearanceFields.animation.default(AT_REST.appearance.animation),
 }).strict();
+/** PATCH: exactly the supplied keys, never a default. */
+const appearancePatch = z.object(appearanceFields).strict().partial();
 const widgetsObject = z.object(widgetShape(() => z.boolean())).strict();
 const widgets = z.preprocess(legacyWidgets, widgetsObject);
 const transform = z.object({ offsetX: z.number().min(-25).max(25), offsetY: z.number().min(-25).max(25), scale: z.number().min(0.5).max(2) }).strict();
@@ -89,7 +105,7 @@ export const settingsPatchSchema = z.object({
   automaticLocation: z.boolean().optional(),
   location: location.partial().optional(), units: z.enum(['metric', 'imperial']).optional(), clockFormat: z.enum(['12h', '24h']).optional(),
   locationSource: z.enum(['device', 'manual', 'fallback']).optional(),
-  appearance: appearance.partial().optional(), widgets: widgetsObject.partial().optional(),
+  appearance: appearancePatch.optional(), widgets: widgetsObject.partial().optional(),
   widgetOverrides: z.object(widgetShape(() => transform.partial().optional())).strict().optional(),
   widgetGrid: z.object({ revision: z.literal(2).optional(), density: z.enum(['spacious', 'balanced', 'fine']).optional(), placements: z.object(widgetShape(() => placement.partial().optional())).strict().partial().optional() }).strict().optional(),
   photoChange: z.object({ pngBase64: z.string().max(2_796_204).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/) }).strict().superRefine((value, context) => {

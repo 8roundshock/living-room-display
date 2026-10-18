@@ -872,6 +872,37 @@ export async function runStudioQa({ playwright, edge } = {}) {
     checks.push(
       'keyboard-focused reminder field and label stay above fixed Save bar at 390/320px and compact keyboard heights',
     );
+
+    // #83: a later Style save must not reset the saved clock style.
+    await reset();
+    ({ page, context } = await open());
+    await tab(page, 'Widgets');
+    await page.getByRole('button', { name: 'Clock', exact: true }).click();
+    await page.getByRole('button', { name: 'Analog', exact: true }).click();
+    await save(page).click();
+    await saved(page);
+    assert.equal(app.store.snapshot().settings.appearance.clockStyle, 'analog');
+    await tab(page, 'Style');
+    await range(page, 'Brightness');
+    await save(page).click();
+    await saved(page);
+    assert.equal(app.store.snapshot().settings.appearance.clockStyle, 'analog');
+    assert.notEqual(app.store.snapshot().settings.appearance.brightness, 0.55);
+    await page.reload();
+    await page.locator('.analog-clock').first().waitFor();
+    await page.clock.runFor(500);
+    await tab(page, 'Widgets');
+    await page.getByRole('button', { name: 'Clock', exact: true }).click();
+    assert.equal(
+      await page
+        .getByRole('button', { name: 'Analog', exact: true })
+        .getAttribute('aria-pressed'),
+      'true',
+    );
+    await context.close();
+    checks.push(
+      '#83 clock style Analog survives a later Brightness save and reload',
+    );
     assert.deepEqual(errors, []);
     return { checks, images };
   } finally {
