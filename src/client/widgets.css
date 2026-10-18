@@ -130,6 +130,8 @@
 .grid-ambient .reminders-body { --reminder-title-size: calc(max(var(--min-data, 0px), min(9cqw, 14cqh, var(--ambient-reminder-title))) * var(--font-scale)); height: 100cqh; min-height: 0; overflow: hidden; justify-content: flex-start; }
 /* Even one row overflows: release the height so the shared whole-widget zoom-out applies. */
 .grid-ambient .reminders-body.reminders-overfull { height: auto; min-height: 100cqh; overflow: visible; }
+/* Measuring always uses the fixed box: a remeasure while overfull must not count rows against the grown body. */
+.grid-ambient .reminders-body.reminders-overfull[data-measuring] { height: 100cqh; min-height: 0; overflow: hidden; }
 .grid-ambient .reminders-body .ambient-label { font-size: calc(max(var(--min-text), min(6.4cqw, 8cqh, var(--ambient-reminder-title) * 0.72)) * var(--font-scale)); margin-bottom: calc(var(--reminder-title-size) * 0.35); }
 .grid-ambient .reminders-body .ambient-title { font-size: var(--reminder-title-size); }
 /* Row gaps and the dot follow the title size; the dot centers on the title's first line. */

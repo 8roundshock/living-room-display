@@ -8,10 +8,10 @@ export const selectors = ['.ambient-reminder-list > li:not(.reminder-overflow)',
 const TITLES = ['Read a chapter', 'Water the plants', 'Plan the weekend', 'Call a friend', 'A later reminder'];
 const LONG = 'A deliberately long synthetic reminder title that keeps going well past two lines of the available width without a single natural stopping point so it has to clamp';
 
-function reminders(count, now, { long = false, overdue = false } = {}) {
+function reminders(count, now, { long = false, allLong = false, overdue = false } = {}) {
   return Array.from({ length: count }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
-    text: long && index === 0 ? LONG : `${TITLES[index % TITLES.length]}${index >= TITLES.length ? ` ${index + 1}` : ''}`,
+    text: (long && index === 0) || allLong ? LONG : `${TITLES[index % TITLES.length]}${index >= TITLES.length ? ` ${index + 1}` : ''}`,
     completed: false,
     // A mix of dated and undated rows exercises both row heights.
     dueAt: overdue && index === 0 ? new Date(now - 26 * 3_600_000).toISOString() : long && index === 0 ? new Date(now + 1_800_000).toISOString() : index % 3 === 1 ? new Date(now + (index + 2) * 3_600_000).toISOString() : null,
@@ -32,13 +32,24 @@ async function reopen(page) {
   await page.clock.runFor(100);
 }
 
+// ResizeObserver callbacks run on a real rendering frame, not on the page's fake clock.
+async function resize(page, viewport) {
+  await page.setViewportSize(viewport);
+  await page.waitForTimeout(80);
+  await page.clock.runFor(50);
+  await page.waitForTimeout(20);
+}
+
 async function inspect(widget) {
   return widget.evaluate(element => {
     const body = element.querySelector('.reminders-body');
-    const box = body.getBoundingClientRect();
+    // The body grows while overfull (it is then zoomed out as a whole), so rows must also stay
+    // inside the widget's own section box, which never grows.
+    const box = body.getBoundingClientRect(), section = element.getBoundingClientRect();
     const rows = [...element.querySelectorAll('.ambient-reminder-list > li')];
     const visible = rows.filter(row => !row.classList.contains('reminder-overflow'));
-    const inside = node => { const rect = node.getBoundingClientRect(); return rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1 && rect.left >= box.left - 1 && rect.right <= box.right + 1; };
+    const within = (rect, outer) => rect.top >= outer.top - 1 && rect.bottom <= outer.bottom + 1 && rect.left >= outer.left - 1 && rect.right <= outer.right + 1;
+    const inside = node => { const rect = node.getBoundingClientRect(); return within(rect, box) && within(rect, section); };
     const more = element.querySelector('.reminder-more');
     const offline = element.querySelector('.reminder-offline');
     const content = element.querySelector('.widget-content');
@@ -79,7 +90,7 @@ function assertMeasured(result, expectedTotal, label) {
 
 export async function family({ page, widget, size, density, viewport, state }) {
   const now = await page.evaluate(() => Date.now());
-  const original = { reminders: state.reminders, fontScale: state.settings.appearance.fontScale };
+  const original = { reminders: state.reminders, fontScale: state.settings.appearance.fontScale, fontFamily: state.settings.appearance.fontFamily };
   const fourK = viewport.width > 2000;
   const counts = { };
   try {
@@ -108,17 +119,55 @@ export async function family({ page, widget, size, density, viewport, state }) {
     assert.equal(result.titles[0].text, LONG, 'the soonest reminder leads');
     assert.equal(result.titles[0].lines, 2, `${size}/${density}: the long title clamps to two lines`);
     assert.equal(result.scale, 1, `${size}/${density}: a long title keeps the full scale`);
-    state.reminders = reminders(1, now, { long: true });
-    await reopen(page);
-    result = await inspect(widget);
-    assertMeasured(result, 1, `${size}/${density} single long title`);
-    assert.equal(result.titles[0].clamp, '4');
-    assert.ok(result.titles[0].lines > 2 && result.titles[0].lines <= 4, `${size}/${density}: the only reminder uses up to four lines (${result.titles[0].lines})`);
-    assert.ok(result.scale >= 0.65, `${size}/${density}: single long title scale ${result.scale}`);
+    // Every font family: Mono is the widest, so it wraps (and may zoom out) first.
+    for (const fontFamily of ['sans', 'serif', 'mono']) {
+      state.settings.appearance.fontFamily = fontFamily;
+      state.reminders = reminders(1, now, { long: true });
+      await reopen(page);
+      result = await inspect(widget);
+      const label = `${size}/${density} ${fontFamily} single long title`;
+      assertMeasured(result, 1, label);
+      assert.equal(result.titles[0].clamp, '4');
+      assert.ok(result.titles[0].lines > 2 && result.titles[0].lines <= 4, `${label}: the only reminder uses up to four lines (${result.titles[0].lines})`);
+      assert.ok(result.scale >= 0.65, `${label}: scale ${result.scale}`);
+    }
+    state.settings.appearance.fontFamily = original.fontFamily;
 
+    if (!fourK) await remeasures({ page, widget, size, density, viewport, state, now });
     if (!fourK && density === 'balanced' && size === 'medium') await states({ page, widget, state, now });
   } finally {
-    state.reminders = original.reminders; state.settings.appearance.fontScale = original.fontScale;
+    state.reminders = original.reminders; state.settings.appearance.fontScale = original.fontScale; state.settings.appearance.fontFamily = original.fontFamily;
+  }
+}
+
+/**
+ * Any resize remeasures the list. Larger text and long titles push some families into the overfull
+ * state (one row, whole-widget zoom-out); a remeasure there must not count rows against the grown
+ * body. After a 1px resize and back, every visible row stays inside the widget, "+N more" stays
+ * exact and the state at the original size is unchanged.
+ */
+async function remeasures({ page, widget, size, density, viewport, state, now }) {
+  let overfull = 0;
+  try {
+    for (const fontFamily of ['sans', 'serif', 'mono']) for (const fontScale of [1.25, 1.5]) for (const count of [1, 3]) {
+      state.settings.appearance.fontFamily = fontFamily; state.settings.appearance.fontScale = fontScale;
+      state.reminders = reminders(count, now, { allLong: true });
+      await reopen(page);
+      const label = `${size}/${density} ${fontFamily} text ${fontScale} × ${count} long`;
+      const first = await inspect(widget);
+      assertMeasured(first, count, label);
+      if (first.overfull) overfull++;
+      await resize(page, { width: viewport.width + 1, height: viewport.height });
+      assertMeasured(await inspect(widget), count, `${label} after a 1px resize`);
+      await resize(page, viewport);
+      const back = await inspect(widget);
+      assertMeasured(back, count, `${label} after resizing back`);
+      assert.deepEqual({ overfull: back.overfull, visible: back.visible, more: back.more }, { overfull: first.overfull, visible: first.visible, more: first.more }, `${label}: a remeasure at the same size keeps the state`);
+    }
+    // Keeps the overfull path covered; if a density decision (#144) removes it here, choose another overfull case.
+    if (size === 'small' && density === 'fine') assert.ok(overfull > 0, `${size}/${density}: the remeasure cases include an overfull widget`);
+  } finally {
+    await page.setViewportSize(viewport);
   }
 }
 

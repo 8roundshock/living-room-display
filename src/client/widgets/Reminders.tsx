@@ -15,6 +15,8 @@ const MAX_ROWS = 60;
  * changes this box), measurement runs only when the rows or the widget's own box change, and
  * state changes only when the visible count does. Overflow rows take no layout outside measuring.
  * Returns 0 when even one row overflows; the widget then shows one row and zooms out as a whole.
+ * While measuring, the body is back at its fixed 100cqh box even in that overfull state (see
+ * widgets.css), so a later remeasure never counts rows against the grown body.
  */
 function measureRows(body: HTMLElement, total: number): number | null {
   const items = [...body.querySelectorAll<HTMLElement>('.ambient-reminder-list > li')];
