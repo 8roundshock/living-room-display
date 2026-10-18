@@ -79,6 +79,7 @@ and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 | Initial feature slice | Time, weather/rain, reminders, visual editor/presets, last-state preview. |
 | Language/framework and host | Node 24/TypeScript, React/Vite, native Node HTTP server, Windows helper. |
 | Weather/defaults | Open-Meteo; editable Toronto city default, metric, 12-hour clock. This is a product default, not inferred user location. |
+| Air quality data | Keyless Open-Meteo air-quality API (Copernicus CAMS model, US or European AQI), requested by the local server only while the widget is saved enabled or previewed (#78). Open-Meteo's free tier is for non-commercial use; revisit the provider and terms before any commercial use. Sun & moon is calculated locally and works offline. |
 | Data | Per-user JSON with serialized atomic writes, prior backup, and export/import; no kiosk-storage dependency. |
 | Visual controls | Reviewed Studio/grid, optional modules, outline/digital/analog clocks and presets were installed in the last verified 2026-10-18 baseline; actual 4K preview is accepted, while across-room comfort and compatibility gates remain. |
 | Preview | Last-desktop snapshot in RAM only; live app preview deferred. |

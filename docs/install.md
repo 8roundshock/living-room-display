@@ -189,7 +189,7 @@ keep the newer data directory and restore the matching pre-upgrade data copy.
 | #75 Native colours | Not shipped yet |
 | #76 Animation level | Not shipped yet |
 | #78 Calendar, Countdown and Note | Not shipped yet |
-| #78 World clocks, Sun & moon and Air quality | Not shipped yet |
+| #78 World clocks, Sun & moon and Air quality | Enabling any of the three widgets, adding a world clock city, or choosing the European AQI scale (`widgets.worldClocks/sunMoon/airQuality: true` or non-default `widgetData.worldClocks`/`airQuality`). While all three stay off with no cities and the US scale, files and exports remain readable. |
 
 `Update` reuses an existing Node24 runtime; `-NodeVersion` selects a version only
 when the runtime is absent. For a deliberate runtime update, stop the app, rename

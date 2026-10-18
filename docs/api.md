@@ -9,7 +9,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | Method/path                    | Request                                                                | Response                                                                     |
 | ------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `GET /api/health`              | None                                                                   | Status, version, storage recovery warning.                                   |
-| `GET /api/state`               | None                                                                   | Settings, reminders, weather, preview metadata, storage warning.             |
+| `GET /api/state`               | None                                                                   | Settings, reminders, weather, air quality (`off` unless enabled), preview metadata, storage warning. |
 | `PATCH /api/settings`          | Validated nested partial settings                                      | Full saved settings.                                                         |
 | `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |
 | `GET /api/reminders`           | None                                                                   | Reminder array.                                                              |
@@ -17,6 +17,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `PATCH /api/reminders/:id`     | Partial `text`, `completed`, `dueAt`                                   | Updated reminder.                                                            |
 | `DELETE /api/reminders/:id`    | None                                                                   | Empty 204.                                                                   |
 | `GET /api/weather`             | None                                                                   | Cached normalized forecast.                                                  |
+| `GET /api/air-quality`         | Optional `scale=us\|european` (defaults to the saved scale)            | Editor preview of [air quality](#air-quality) for the saved location, `no-store`. |
 | `GET /api/locations?q=Toronto` | City query, 2–100 characters                                           | Up to eight city results with coordinates/timezone.                          |
 | `GET /api/export`              | None                                                                   | Downloadable settings/reminders JSON backup.                                 |
 | `POST /api/import`             | A validated export                                                     | Atomic replacement of settings/reminders.                                    |
@@ -92,8 +93,8 @@ Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
 `accentMode` or `animation` keeps its saved value (#83). Only the persisted reader
 fills defaults.
 
-Planned catalog ids (`worldClocks`, `calendar`, `countdown`, `note`, `airQuality`,
-`sunMoon`) appear in `widgets`, `widgetOverrides` and `widgetGrid.placements` but
+Planned catalog ids (entries with `status: 'planned'` in `src/shared/widgets.ts`;
+#78 units activate theirs as they ship) appear in `widgets`, `widgetOverrides` and `widgetGrid.placements` but
 always read as disabled. A PATCH that enables one returns 400 (`<Name> is not
 available yet`).
 
@@ -187,6 +188,39 @@ state is unavailable. Failed requests retry no more often than once per minute.
 Switching location/units never reuses a mismatched forecast. City search uses the
 [Open-Meteo geocoding API](https://open-meteo.com/en/docs/geocoding-api), with an
 hour-long in-memory query cache. No IP/address auto-location is used.
+
+## Air quality
+
+`AppState.airQuality` (`AirQualityState` in `src/shared/contracts.ts`) comes from
+the keyless [Open-Meteo air-quality API](https://open-meteo.com/en/docs/air-quality-api),
+which serves the Copernicus Atmosphere Monitoring Service (CAMS) model. The server
+requests it only while the Air quality widget is saved enabled (`GET /api/state`,
+in parallel with the forecast) or while the editor previews an unsaved enable or
+scale change (`GET /api/air-quality`). Otherwise the state is `off` and no request
+is made. The browser never contacts the provider (`connect-src 'self'`).
+
+The request uses the saved weather location's `latitude`, `longitude` and
+`timezone` (or `auto`, whose resolved zone is kept), `timeformat=unixtime`,
+`forecast_hours=24`, `current=<scale>_aqi`, its sub-indices (`_pm2_5`, `_pm10`,
+`_ozone`, `_nitrogen_dioxide`, `_sulphur_dioxide`, plus `_carbon_monoxide` for US),
+`pm2_5`, `pm10`, `uv_index`, and `hourly=<scale>_aqi,uv_index`. No key, an 8-second
+timeout and `redirect: 'error'`.
+
+Normalization keeps the current AQI, the dominant pollutant (the highest known
+sub-index, or null), PM2.5/PM10 in µg/m³ and the UV index. Hourly values are
+instantaneous readings stored as instants (`time`): the current hour and up to 23
+following ones. A missing, non-numeric or misaligned value stays `null` or makes
+the reading `unavailable`; nothing is filled in.
+
+Readings are cached in memory for 30 minutes, keyed by location and scale (at most
+8 entries). A failed refresh keeps the last good reading as `stale`; without one the
+state is `unavailable`. Failures retry no more often than every 2 minutes.
+
+The widget labels every value as a model estimate with its age, and credits
+"Air quality: CAMS via Open-Meteo". It is not a local sensor reading or an official
+index such as Canada's AQHI. Official alerts are a separate decision (#106).
+Open-Meteo's free API is for non-commercial use; see
+[architecture](architecture.md#current-decisions).
 
 ## Native snapshot handoff
 
