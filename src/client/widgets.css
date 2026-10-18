@@ -1,5 +1,16 @@
 /* One shared plane keeps the authored editor and ambient view in agreement. */
 .widget-grid-plane { position: absolute; inset: 4%; }
+/* Small text floors are a share of the whole 16:9 display (or scaled editor canvas), not
+   of each widget. Registered lengths resolve on the plane, so widgets inherit fixed sizes;
+   text size still scales them. Without the plane (picker samples) they are 0. */
+@property --ambient-min-text { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --ambient-min-data { syntax: '<length>'; inherits: true; initial-value: 0px; }
+.grid-ambient > .ambient-content { --ambient-min-text: min(1.4cqh, 0.7875cqw); --ambient-min-data: min(1.65cqh, 0.928cqw); }
+/* Widgets inherit the display floors. Small rain/forecast cap them by their own content height
+   (text 7.25%, data 8.5%), which binds only when that height is under ~19.4% of the display
+   (fine grid: ~1.07%/1.26%), rather than letting the fit scale shrink everything. */
+.grid-ambient .ambient-widget { --min-text: var(--ambient-min-text, 0px); --min-data: var(--ambient-min-data, 0px); }
+.grid-ambient :is(.ambient-rain, .ambient-forecast).widget-size-small { --min-text: min(var(--ambient-min-text, 0px), 7.25cqh); --min-data: min(var(--ambient-min-data, 0px), 8.5cqh); }
 .grid-ambient .ambient-content { display: block; width: auto; height: auto; padding: 0; gap: 0; transform: translate(var(--motion-x, 0), var(--motion-y, 0)); }
 .grid-ambient.layout-editing .ambient-content { transform: none; }
 .grid-ambient .ambient-widget { position: absolute; grid-area: auto; padding: min(1.2cqw, 1.8cqh); container-type: size; animation: none; transform: none; }
@@ -8,115 +19,123 @@
 @keyframes grid-plane-drift { from { transform: translate(calc(var(--motion-x, 0%) - 0.5%), calc(var(--motion-y, 0%) - 0.5%)); } to { transform: translate(calc(var(--motion-x, 0%) + 0.5%), calc(var(--motion-y, 0%) + 0.5%)); } }
 .grid-ambient .widget-body { width: 100%; min-height: 100cqh; height: auto; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .grid-ambient .widget-body > * { flex-shrink: 0; }
-.grid-ambient .ambient-label { display: flex; align-items: center; gap: 2cqw; font-size: calc(min(6.4cqw, 8cqh) * var(--font-scale)); line-height: 1.2; margin: 0 0 3cqh; font-weight: 500; color: var(--ambient-accent); overflow-wrap: anywhere; }
+.grid-ambient .ambient-label { display: flex; align-items: center; gap: 2cqw; font-size: calc(max(var(--min-text), min(6.4cqw, 8cqh)) * var(--font-scale)); line-height: 1.2; margin: 0 0 3cqh; font-weight: 500; color: var(--ambient-accent); overflow-wrap: anywhere; }
 .grid-ambient .ambient-label svg { flex: none; width: min(7cqw, 9cqh); height: min(7cqw, 9cqh); }
 .grid-ambient .ambient-title { font-size: calc(min(10cqw, 15cqh) * var(--font-scale)); line-height: 1.2; }
-.grid-ambient .ambient-description { font-size: calc(min(6.2cqw, 8cqh) * var(--font-scale)); line-height: 1.35; margin: 3cqh 0 0; }
-.grid-ambient .weather-context, .grid-ambient .weather-age, .grid-ambient .weather-credit { font-size: calc(min(5cqw, 6cqh) * var(--font-scale)); line-height: 1.3; color: var(--ambient-accent); overflow-wrap: anywhere; }
+.grid-ambient .ambient-description { font-size: calc(max(var(--min-text), min(6.2cqw, 8cqh)) * var(--font-scale)); line-height: 1.35; margin: 3cqh 0 0; }
+.grid-ambient .weather-context, .grid-ambient .weather-age, .grid-ambient .weather-credit { font-size: calc(max(var(--min-text), min(5cqw, 6cqh)) * var(--font-scale)); line-height: 1.3; color: var(--ambient-accent); overflow-wrap: anywhere; }
 .grid-ambient .weather-context { margin: 0 0 3cqh; }
 .grid-ambient .weather-age { margin: 4cqh 0 0; opacity: 0.72; }
 .grid-ambient .weather-age.stale { color: #b0926b; opacity: 1; }
 .grid-ambient .weather-credit { margin-top: 1cqh; opacity: 0.65; }
 
 /* Small is compact, medium places the calendar beside time, large is monumental. */
-.grid-ambient .clock-face { height: 100cqh; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 5cqh; }
+.grid-ambient .clock-face { min-height: 100cqh; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 5cqh; }
 .grid-ambient .clock-calendar { order: 2; }
-.grid-ambient .clock-calendar .ambient-label { margin: 0; font-size: calc(min(7cqw, 10cqh) * var(--font-scale)); }
-.grid-ambient .clock-date { font-size: calc(min(7cqw, 10cqh) * var(--font-scale)); margin: 1cqh 0 0; line-height: 1.2; }
+.grid-ambient .clock-calendar .ambient-label { margin: 0; font-size: calc(max(var(--min-text), min(7cqw, 10cqh)) * var(--font-scale)); }
+.grid-ambient .clock-date { font-size: calc(max(var(--min-text), min(7cqw, 10cqh)) * var(--font-scale)); margin: 1cqh 0 0; line-height: 1.2; }
 .grid-ambient .clock-time { display: flex; align-items: baseline; font-size: calc(min(31cqw, 48cqh) * var(--font-scale)); font-weight: 400; line-height: 1; letter-spacing: -0.065em; }
-.grid-ambient .clock-period { font-size: 0.2em; margin-left: 0.45em; letter-spacing: 0.01em; }
+.grid-ambient .clock-period { font-size: max(var(--min-text) * var(--font-scale), 0.2em); margin-left: 0.45em; letter-spacing: 0.01em; }
 .grid-ambient .clock-outline .clock-digits { -webkit-text-fill-color: transparent; -webkit-text-stroke: max(0.8px, 0.35cqw) currentColor; }
 .grid-ambient .clock-family-medium { flex-direction: row; align-items: center; justify-content: space-between; gap: 5cqw; }
 .grid-ambient .clock-family-medium .clock-time { font-size: calc(min(23cqw, 57cqh) * var(--font-scale)); }
 .grid-ambient .clock-family-medium .clock-calendar { max-width: 31%; }
-.grid-ambient .clock-family-medium .clock-calendar .ambient-label, .grid-ambient .clock-family-medium .clock-date { font-size: calc(min(5.1cqw, 12cqh) * var(--font-scale)); }
+.grid-ambient .clock-family-medium .clock-calendar .ambient-label, .grid-ambient .clock-family-medium .clock-date { font-size: calc(max(var(--min-text), min(5.1cqw, 12cqh)) * var(--font-scale)); }
 .grid-ambient .clock-family-large { align-items: center; text-align: center; gap: 6cqh; }
 .grid-ambient .clock-family-large .clock-time { font-size: calc(min(31cqw, 66cqh) * var(--font-scale)); }
 .grid-ambient .clock-family-large .clock-calendar { display: flex; align-items: baseline; gap: 2cqw; }
-.grid-ambient .clock-family-large .clock-calendar .ambient-label, .grid-ambient .clock-family-large .clock-date { font-size: calc(min(4cqw, 9cqh) * var(--font-scale)); margin: 0; }
+.grid-ambient .clock-family-large .clock-calendar .ambient-label, .grid-ambient .clock-family-large .clock-date { font-size: calc(max(var(--min-text), min(4cqw, 9cqh)) * var(--font-scale)); margin: 0; }
 .grid-ambient .analog-clock { display: block; flex: none; width: min(75cqw, 65cqh); height: min(75cqw, 65cqh); fill: none; stroke: var(--ambient-text); stroke-width: 1.4; stroke-linecap: round; }
 .grid-ambient .analog-minute { stroke: var(--ambient-accent); stroke-width: 1; }
 .grid-ambient .clock-family-medium .analog-clock { width: min(55cqw, 92cqh); height: min(55cqw, 92cqh); }
 .grid-ambient .clock-family-large .analog-clock { width: min(80cqw, 76cqh); height: min(80cqw, 76cqh); }
 
 /* Temperature leads; wider families add context, taller ones add useful metrics. */
-.grid-ambient .weather-place { justify-content: space-between; gap: 3cqw; }
-.grid-ambient .weather-unit { flex: none; font-size: 0.8em; opacity: 0.65; }
+/* Age and credit share a wrapping row, so wider families spend one line on them. */
+.grid-ambient .weather-footer { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1cqh 3cqw; margin-top: 4cqh; }
+.grid-ambient .weather-footer .weather-age, .grid-ambient .weather-footer .weather-credit { margin: 0; }
+.grid-ambient .weather-place { display: block; }
+.grid-ambient .weather-unit { font-size: max(var(--min-text) * var(--font-scale), 0.8em); opacity: 0.65; white-space: nowrap; }
 .grid-ambient .current-weather-main { display: flex; align-items: center; gap: 5cqw; }
 .grid-ambient .current-temperature { font-size: calc(min(33cqw, 40cqh) * var(--font-scale)); font-weight: 400; line-height: 1; }
 .grid-ambient .current-weather-main > .weather-symbol { width: min(19cqw, 25cqh); height: min(19cqw, 25cqh); }
-.grid-ambient .weather-condition { font-size: calc(min(8cqw, 11cqh) * var(--font-scale)); line-height: 1.25; margin-top: 3cqh; }
-.grid-ambient .weather-details { font-size: calc(min(5.5cqw, 8cqh) * var(--font-scale)); line-height: 1.3; margin-top: 2cqh; }
+.grid-ambient .weather-condition { font-size: calc(max(var(--min-text), min(8cqw, 11cqh)) * var(--font-scale)); line-height: 1.25; margin-top: 3cqh; }
+.grid-ambient .weather-details { font-size: calc(max(var(--min-text), min(5.5cqw, 8cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 2cqh; }
 .grid-ambient .ambient-weather.widget-size-medium .weather-overview { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 5cqw; }
 .grid-ambient .ambient-weather.widget-size-medium .current-temperature { font-size: calc(min(23cqw, 48cqh) * var(--font-scale)); }
 .grid-ambient .ambient-weather.widget-size-medium .current-weather-main > .weather-symbol { width: min(10cqw, 22cqh); height: min(10cqw, 22cqh); }
-.grid-ambient .ambient-weather.widget-size-medium .weather-condition { margin: 0; font-size: calc(min(6.2cqw, 14cqh) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-medium .weather-condition { margin: 0; font-size: calc(max(var(--min-text), min(6.2cqw, 14cqh)) * var(--font-scale)); }
 .grid-ambient .weather-metrics { display: flex; justify-content: space-between; gap: 5cqw; margin-top: 7cqh; font-size: calc(min(7cqw, 10cqh) * var(--font-scale)); }
 .grid-ambient .weather-metrics > div { display: flex; flex-direction: column; gap: 2cqh; }
-.grid-ambient .metric-label { display: block; color: var(--ambient-accent); font-size: 0.65em; line-height: 1.3; margin-bottom: 1cqh; }
-.grid-ambient .ambient-weather.widget-size-large .ambient-label { font-size: calc(min(6cqw, 6cqh) * var(--font-scale)); }
+.grid-ambient .metric-label { display: block; color: var(--ambient-accent); font-size: max(var(--min-text) * var(--font-scale), 0.65em); line-height: 1.3; margin-bottom: 1cqh; }
+.grid-ambient .ambient-weather.widget-size-large .ambient-label { font-size: calc(max(var(--min-text), min(6cqw, 6cqh)) * var(--font-scale)); }
 .grid-ambient .ambient-weather.widget-size-large .current-temperature { font-size: calc(min(28cqw, 34cqh) * var(--font-scale)); }
-.grid-ambient .ambient-weather.widget-size-large .weather-condition { font-size: calc(min(7cqw, 9cqh) * var(--font-scale)); }
-.grid-ambient .ambient-weather.widget-size-large .weather-details { font-size: calc(min(5.5cqw, 7cqh) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .weather-condition { font-size: calc(max(var(--min-text), min(7cqw, 9cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .weather-details { font-size: calc(max(var(--min-text), min(5.5cqw, 7cqh)) * var(--font-scale)); }
 .grid-ambient .ambient-weather.widget-size-large .weather-metrics { margin-top: 5cqh; font-size: calc(min(6.5cqw, 8cqh) * var(--font-scale)); }
-.grid-ambient .ambient-weather.widget-size-large .weather-age, .grid-ambient .ambient-weather.widget-size-large .weather-credit { font-size: calc(min(5cqw, 5cqh) * var(--font-scale)); }
-.grid-ambient .ambient-weather.widget-size-large .weather-age { margin-top: 3cqh; }
+.grid-ambient .ambient-weather.widget-size-large .weather-age, .grid-ambient .ambient-weather.widget-size-large .weather-credit { font-size: calc(max(var(--min-text), min(5cqw, 5cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .weather-footer { margin-top: 3cqh; }
 
-/* Rain has a clear chance, an estimated window, then a chart only with space. */
+/* Rain has a clear chance, an estimated window, then a chart only with space. Compact
+   families keep related values on shared, wrapping rows so small text keeps its floor. */
+.grid-ambient .rain-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 4cqw; }
 .grid-ambient .rain-summary { display: flex; flex-direction: column; gap: 3cqh; }
-.grid-ambient .rain-chance { font-size: calc(min(24cqw, 27cqh) * var(--font-scale)); line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.05em; }
-.grid-ambient .rain-chance > span { display: block; color: var(--ambient-accent); font-size: 0.24em; letter-spacing: 0; margin-top: 2cqh; }
-.grid-ambient .rain-timing { font-size: calc(min(8cqw, 12cqh) * var(--font-scale)); line-height: 1.2; }
-.grid-ambient .rain-amount { font-size: calc(min(5.5cqw, 8cqh) * var(--font-scale)); line-height: 1.3; margin-top: 3cqh; }
-.grid-ambient .rain-amount > span { display: block; margin-top: 1cqh; color: var(--ambient-accent); font-size: 0.85em; }
-.grid-ambient .rain-confidence { font-size: calc(min(4.8cqw, 6cqh) * var(--font-scale)); color: var(--ambient-accent); line-height: 1.3; margin-top: 3cqh; }
+.grid-ambient .rain-chance { display: flex; align-items: last baseline; gap: 4cqw; font-size: calc(min(24cqw, 27cqh) * var(--font-scale)); line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.05em; }
+.grid-ambient .rain-chance > span { display: block; min-width: 0; color: var(--ambient-accent); font-size: max(var(--min-text) * var(--font-scale), 0.24em); line-height: 1.15; letter-spacing: 0; }
+.grid-ambient .rain-timing { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 3cqw; font-size: calc(max(var(--min-text), min(8cqw, 12cqh)) * var(--font-scale)); line-height: 1.2; }
+.grid-ambient .rain-amount { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1cqh 3cqw; font-size: calc(max(var(--min-data), min(5.5cqw, 8cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 3cqh; }
+.grid-ambient .rain-amount > span { color: var(--ambient-accent); font-size: max(var(--min-data) * var(--font-scale), 0.85em); }
+.grid-ambient .rain-confidence { font-size: calc(max(var(--min-text), min(4.8cqw, 6cqh)) * var(--font-scale)); color: var(--ambient-accent); line-height: 1.3; margin-top: 3cqh; }
 .grid-ambient .rain-footer { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1cqh 3cqw; margin-top: 3cqh; }
-.grid-ambient .rain-footer .rain-confidence, .grid-ambient .rain-footer .weather-age, .grid-ambient .rain-footer .weather-credit { margin: 0; font-size: calc(min(4.5cqw, 5cqh) * var(--font-scale)); }
-.grid-ambient .ambient-rain.widget-size-medium .rain-summary { flex-direction: row; align-items: center; justify-content: space-between; gap: 6cqw; }
+.grid-ambient .rain-footer .rain-confidence, .grid-ambient .rain-footer .weather-age, .grid-ambient .rain-footer .weather-credit { margin: 0; font-size: calc(max(var(--min-text), min(4.5cqw, 5cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-rain:is(.widget-size-medium, .widget-size-large) .rain-chance, .grid-ambient .ambient-rain:is(.widget-size-medium, .widget-size-large) .rain-timing { display: block; }
+.grid-ambient .ambient-rain:is(.widget-size-medium, .widget-size-large) .rain-chance > span { margin-top: 2cqh; line-height: 1; }
+.grid-ambient .ambient-rain.widget-size-medium .rain-heading { justify-content: flex-start; }
+.grid-ambient .ambient-rain.widget-size-medium .rain-summary { flex-direction: row; align-items: center; justify-content: flex-start; gap: 6cqw; }
 .grid-ambient .ambient-rain.widget-size-medium .rain-chance { font-size: calc(min(18cqw, 30cqh) * var(--font-scale)); }
-.grid-ambient .ambient-rain.widget-size-medium .rain-timing { max-width: 46%; font-size: calc(min(6.3cqw, 13cqh) * var(--font-scale)); }
+.grid-ambient .ambient-rain.widget-size-medium .rain-timing { max-width: 46%; font-size: calc(max(var(--min-text), min(6.3cqw, 13cqh)) * var(--font-scale)); }
 .grid-ambient .rain-bars { display: flex; align-items: end; height: 16cqh; gap: 2cqw; margin: 3cqh 0 0; }
 .grid-ambient .rain-bar { flex: 1; width: auto; min-height: 1px; opacity: 0.65; background: var(--ambient-accent); border-radius: 1px 1px 0 0; }
 .grid-ambient .rain-bar-unknown { background: none; border-bottom: 1px dotted var(--ambient-accent); }
-.grid-ambient .rain-hours { font-size: min(4.5cqw, 6cqh); max-width: none; margin-top: 2cqh; }
-.grid-ambient .ambient-rain.widget-size-large .rain-summary { flex-direction: row; align-items: center; justify-content: space-between; gap: 5cqw; }
+.grid-ambient .rain-hours { font-size: calc(max(var(--min-text), min(4.5cqw, 6cqh)) * var(--font-scale)); max-width: none; margin-top: 2cqh; }
+.grid-ambient .ambient-rain.widget-size-large .rain-summary { flex-direction: row; align-items: center; justify-content: flex-start; gap: 5cqw; }
 .grid-ambient .ambient-rain.widget-size-large .rain-chance { font-size: calc(min(24cqw, 22cqh) * var(--font-scale)); }
-.grid-ambient .ambient-rain.widget-size-large .rain-timing { max-width: 48%; font-size: calc(min(7cqw, 9cqh) * var(--font-scale)); }
-.grid-ambient .ambient-rain.widget-size-large .rain-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 4cqw; }
-.grid-ambient .ambient-rain.widget-size-large .rain-amount > span { display: inline; margin-left: 3cqw; }
+.grid-ambient .ambient-rain.widget-size-large .rain-timing { max-width: 48%; font-size: calc(max(var(--min-text), min(7cqw, 9cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-rain.widget-size-large .rain-heading { flex-wrap: nowrap; }
 
 .grid-ambient .forecast-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 4cqw; margin-bottom: 4cqh; }
 .grid-ambient .forecast-heading .ambient-label, .grid-ambient .forecast-heading .weather-context { margin: 0; }
 .grid-ambient .forecast-strip { grid-template-columns: repeat(var(--forecast-days, 7), minmax(0, 1fr)); gap: 2cqw; }
 .grid-ambient .forecast-day { gap: 3cqh; }
-.grid-ambient .forecast-day-label { font-size: calc(min(7cqw, 9cqh) * var(--font-scale)); line-height: 1.2; white-space: nowrap; }
+.grid-ambient .forecast-day-label { font-size: calc(max(var(--min-text), min(7cqw, 9cqh)) * var(--font-scale)); line-height: 1.2; white-space: nowrap; }
 .grid-ambient .forecast-day > svg, .grid-ambient .forecast-unknown { width: min(10cqw, 16cqh); height: min(10cqw, 16cqh); font-size: min(10cqw, 16cqh); }
-.grid-ambient .forecast-temperatures { font-size: calc(min(8cqw, 12cqh) * var(--font-scale)); line-height: 1.15; gap: 1.4cqw; }
-.grid-ambient .forecast-rain { font-size: calc(min(5cqw, 7cqh) * var(--font-scale)); gap: 1cqw; }
+.grid-ambient .forecast-temperatures { font-size: calc(max(var(--min-data), min(8cqw, 12cqh)) * var(--font-scale)); line-height: 1.15; gap: 1.4cqw; }
+.grid-ambient .forecast-rain { font-size: calc(max(var(--min-data), min(5cqw, 7cqh)) * var(--font-scale)); gap: 1cqw; }
 .grid-ambient .forecast-rain svg { width: 0.8em; height: 0.8em; }
-.grid-ambient .forecast-attribution { font-size: calc(min(4cqw, 5.5cqh) * var(--font-scale)); line-height: 1.3; margin-top: 4cqh; text-align: left; }
+.grid-ambient .forecast-attribution { font-size: calc(max(var(--min-text), min(4cqw, 5.5cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 4cqh; text-align: left; }
 .grid-ambient .ambient-forecast.widget-size-small .forecast-heading { display: block; }
 .grid-ambient .ambient-forecast.widget-size-small .weather-context { margin-top: 2cqh; }
 .grid-ambient .ambient-forecast.widget-size-small .forecast-temperatures { flex-direction: column; gap: 1cqh; }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-day-label { font-size: calc(min(4cqw, 9cqh) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-temperatures { font-size: calc(min(5cqw, 13cqh) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-rain { font-size: calc(min(3cqw, 7cqh) * var(--font-scale)); }
+.grid-ambient .ambient-forecast.widget-size-large .forecast-day-label { font-size: calc(max(var(--min-text), min(4cqw, 9cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-forecast.widget-size-large .forecast-temperatures { font-size: calc(max(var(--min-data), min(5cqw, 13cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-forecast.widget-size-large .forecast-rain { font-size: calc(max(var(--min-data), min(3cqw, 7cqh)) * var(--font-scale)); }
 
-.grid-ambient .ambient-reminder-list { gap: 5cqh; }
+/* The dot centers on the title's first line, so both share the title size. */
+.grid-ambient .ambient-reminder-list { --reminder-title-size: calc(min(9cqw, 16cqh) * var(--font-scale)); gap: 5cqh; }
 .grid-ambient .ambient-reminder-list li { gap: 3cqw; }
-.grid-ambient .ambient-reminder-dot { width: 2cqw; height: 2cqw; margin-top: 3cqh; }
-.grid-ambient .ambient-reminder-title { font-size: calc(min(9cqw, 16cqh) * var(--font-scale)); line-height: 1.2; font-weight: 500; }
-.grid-ambient .ambient-reminder-date { font-size: calc(min(5.8cqw, 8cqh) * var(--font-scale)); margin-top: 2cqh; }
-.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-list { gap: 3cqh; }
-.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-title { font-size: calc(min(6cqw, 8cqh) * var(--font-scale)); }
-.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-date, .grid-ambient .ambient-reminders.widget-size-large .ambient-description { font-size: calc(min(4.5cqw, 5.5cqh) * var(--font-scale)); }
+.grid-ambient .ambient-reminder-dot { width: 2cqw; height: 2cqw; margin-top: calc((var(--reminder-title-size) * 1.2 - 2cqw) / 2); }
+.grid-ambient .ambient-reminder-title { font-size: var(--reminder-title-size); line-height: 1.2; font-weight: 500; }
+.grid-ambient .ambient-reminder-date { font-size: calc(max(var(--min-data), min(5.8cqw, 8cqh)) * var(--font-scale)); margin-top: 2cqh; }
+.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-list { --reminder-title-size: calc(min(6cqw, 8cqh) * var(--font-scale)); gap: 3cqh; }
+.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-date { font-size: calc(max(var(--min-data), min(4.5cqw, 5.5cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-reminders.widget-size-large .ambient-description { font-size: calc(max(var(--min-text), min(4.5cqw, 5.5cqh)) * var(--font-scale)); }
 
 /* Screens remain complete and faint; deliberate photos have purposeful crops. */
 .snapshot-processing { position: absolute; width: 0; height: 0; pointer-events: none; }
 .grid-ambient .snapshot-body { align-items: center; height: 100cqh; min-height: 0; }
 .grid-ambient .preview-image-shell { width: 100%; min-height: 0; flex: 1; display: flex; align-items: center; justify-content: center; }
 .grid-ambient .preview-image { display: block; width: 100%; height: 100%; max-height: 100%; object-fit: contain; object-position: center; border-radius: 0; }
-.grid-ambient .preview-caption { flex: none; font-size: min(5cqw, 7cqh); line-height: 1.2; margin: 3cqh 0 0; align-self: flex-start; }
+.grid-ambient .preview-caption { flex: none; font-size: calc(max(var(--min-text), min(5cqw, 7cqh)) * var(--font-scale)); line-height: 1.2; margin: 3cqh 0 0; align-self: flex-start; }
 .grid-ambient .photo-image-shell { width: 100%; height: 100cqh; display: flex; align-items: center; justify-content: center; }
 .grid-ambient .ambient-photo-image { display: block; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.3) brightness(0.45); opacity: 0.45; border: 0; border-radius: 0; }
 .grid-ambient .ambient-photo.widget-size-large .ambient-photo-image { object-fit: contain; }

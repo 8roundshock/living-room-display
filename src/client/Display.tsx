@@ -11,22 +11,31 @@ function toggleFullscreen() {
 }
 
 function Widget({ id, settings, children, index, style }: { id: WidgetId; settings: Settings; children: ReactNode; index: number; style: CSSProperties }) {
-  const region = useRef<HTMLElement>(null); const content = useRef<HTMLDivElement>(null); const [fit, setFit] = useState(1);
+  const region = useRef<HTMLElement>(null); const content = useRef<HTMLDivElement>(null); const [fit, setFit] = useState(1); const current = useRef(1);
   useLayoutEffect(() => {
     const update = () => {
-      if (!region.current || !content.current) return;
-      const computed = getComputedStyle(region.current);
-      const width = region.current.clientWidth - parseFloat(computed.paddingLeft) - parseFloat(computed.paddingRight);
-      const height = region.current.clientHeight - parseFloat(computed.paddingTop) - parseFloat(computed.paddingBottom);
-      const next = Math.min(1, height / Math.max(1, content.current.scrollHeight), width / Math.max(1, content.current.scrollWidth));
-      setFit(prior => Math.abs(prior - next) < 0.002 ? prior : next);
+      const area = region.current, body = content.current; if (!area || !body) return;
+      const computed = getComputedStyle(area);
+      const width = area.clientWidth - parseFloat(computed.paddingLeft) - parseFloat(computed.paddingRight);
+      const height = area.clientHeight - parseFloat(computed.paddingTop) - parseFloat(computed.paddingBottom);
+      // Overfull content is laid out proportionally wider before scaling, like zooming out, so a
+      // larger Text size never wraps into extra lines that would render the text smaller.
+      const fits = (scale: number) => { body.style.width = `${100 / scale}%`; return body.scrollHeight * scale <= height + 1 && body.scrollWidth * scale <= width + 1; };
+      let next = 1;
+      if (!fits(1)) {
+        const prior = current.current;
+        if (prior < 1 && fits(prior) && !fits(Math.min(1, prior + 0.002))) next = prior;
+        else { let low = 0.05, high = 1; for (let step = 0; step < 12; step++) { const middle = (low + high) / 2; if (fits(middle)) low = middle; else high = middle; } next = low; }
+      }
+      if (Math.abs(current.current - next) < 0.002) next = current.current;
+      body.style.width = `${100 / next}%`; current.current = next; setFit(next);
     };
     const observer = new ResizeObserver(update); if (region.current) observer.observe(region.current); if (content.current) observer.observe(content.current); update();
     return () => observer.disconnect();
   }, [settings.appearance.fontScale, settings.appearance.fontFamily, children]);
   const size = settings.widgetGrid.placements[id].size;
   return <section ref={region} className={`ambient-widget ambient-${id} widget-size-${size}`} style={{ ...style, '--widget-index': index } as CSSProperties} aria-label={widgetLabel(id)} data-widget-id={id} data-widget-size={size}>
-    <div ref={content} className="widget-content" style={{ transform: `scale(${fit})`, transformOrigin: 'left center' }}>{children}</div>
+    <div ref={content} className="widget-content" style={{ width: `${100 / fit}%`, maxWidth: 'none', transform: `scale(${fit})`, transformOrigin: 'left center' }}>{children}</div>
   </section>;
 }
 

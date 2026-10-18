@@ -17,7 +17,11 @@ preview beside a height-bounded inspector with fixed tabs and contained scrollin
 above 700 CSS pixels. Canvas actions remain visible at compact desktop heights;
 the 16:9 preview fits the height. Narrow windows stack a normally scrolling
 inspector below a nonsticky preview, leaving room for the keyboard.
-Focus scrolling reserves the measured Save bar height so fields and labels remain
+Above 1050 CSS pixels the Save bar centers under the canvas, so the inspector uses
+the full height unless an alert row is shown; at 1280×720 each tab's default,
+collapsed contents fit without scrolling. Whenever settings
+remain below, the inspector's bottom edge fades (scroll-linked, kept with reduced
+motion). Focus scrolling reserves the measured Save bar height so fields and labels remain
 visible above it, including narrow screens and compact keyboard-height windows.
 
 - **Save changes** atomically persists settings, appearance, location, widget
@@ -73,9 +77,10 @@ Long city names and region/country text wrap within each result. The focused
 checks actual text bounds, normal short results, keyboard selection and Cancel
 at 320px, 390px and desktop widths; synthetic visuals were inspected in RAM.
 
-New installs use Toronto until an area/city is saved. An editor with already-granted
-browser permission attempts one automatic lookup; otherwise **Use device location**
-is the explicit permission action. All results remain drafts until Save. Cancel
+New installs use Toronto, labeled **Default location**, until an area/city is
+saved. An editor with already-granted browser permission attempts one automatic
+lookup; otherwise **Use device location** is the explicit permission action. All
+results remain drafts until Save. Cancel
 invalidates late callbacks. Only 0.1-degree coordinates leave the adapter; no raw
 fix, accuracy, altitude or timestamp is stored. Failed lookup preserves a manual
 city; automatic drafts cannot overwrite a manual city saved in another editor.
@@ -89,14 +94,23 @@ retained stale data is marked throughout. Missing values stay unavailable.
 Hourly chance covers precipitation including snow; rain estimates use rain plus
 showers and label incomplete/gapped coverage. See [API semantics](api.md#weather-semantics).
 Each weather module keeps its actual place and relevant units visible when used
-alone. Compact forecasts abbreviate Tomorrow as “Tom.” while retaining the full
-relative label and civil date for assistive text and hover details.
+alone; weather and forecast show the unit beside the place (“Toronto · °C”), and
+rain keeps its timing beside the chance. Compact forecasts abbreviate Tomorrow as
+“Tom.” while retaining the full relative label and civil date for assistive text
+and hover details. Ambient labels, age, attribution, units and secondary values
+have a readability floor of 1.4% of the display height (1.65% for forecast
+chance/temperatures, rain amount/period and reminder dates), multiplied by
+**Text size**; very short compact widgets cap it by their own height. A larger
+Text size never renders scaled ambient labels or values smaller: an overfull
+widget zooms out as a whole (icons and the unavailable dash may still shrink). See the [widget contract](widgets.md#families-and-editing).
 
 ## Reminders and last screen
 
 Reminder Add/Edit/Complete/Delete actions save immediately with separate short
 feedback. Reminder form Cancel abandons that form only. Items are silent, dated
 or undated and one-time; families show one, two or four pending items, dated first.
+Ambient items show a date line only when dated; the editor list labels undated
+items Anytime.
 **Widgets → Reminders → Hide when empty** defaults on. Confirmed empty/all-completed
 lists hide the widget; failure cannot masquerade as an empty list. Disabling the
 widget always hides it. Completed items remain editable until deleted.
