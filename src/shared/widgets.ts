@@ -261,8 +261,9 @@ export function repackGrid(grid: WidgetGrid, density: GridDensity, enabled: Visi
     const original = grid.placements[id], before = placementSpan(id, original), limits = original.span ? freeSpanLimits(id, density) : null;
     let placement: WidgetPlacement = { ...original };
     if (original.span && limits) {
-      // Scale a custom span before its origin (full height stays full height), clamped to the new limits.
-      const scale = (value: number, ratio: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(value * ratio)));
+      // Scale a custom span before its origin, clamped to the new limits. Full height stays full height
+      // and an axis at its minimum stays at the minimum, so a Column stays a Column (#152).
+      const scale = (value: number, ratio: number, min: number, max: number) => value <= min ? min : Math.max(min, Math.min(max, Math.round(value * ratio)));
       const span = { columns: scale(original.span.columns, to.columns / from.columns, limits.min.columns, limits.max.columns), rows: scale(original.span.rows, to.rows / from.rows, limits.min.rows, limits.max.rows) };
       placement = normalizePlacement(id, { ...original, size: familyForSpan(id, span), span });
     }
@@ -273,7 +274,8 @@ export function repackGrid(grid: WidgetGrid, density: GridDensity, enabled: Visi
   }
   return packGrid(result, enabled);
 }
-export interface DensityFit { grid: WidgetGrid; resized: { id: WidgetId; from: WidgetSize; to: WidgetSize }[] }
+/** `span` names a custom size that had to be dropped to fit, so the editor can say what changed. */
+export interface DensityFit { grid: WidgetGrid; resized: { id: WidgetId; from: WidgetSize; to: WidgetSize; span?: WidgetSpan }[] }
 /** Fit all enabled widgets, preferring the fewest family steps and the least lost area. */
 export function fitGridDensity(grid: WidgetGrid, density: GridDensity, enabled: Visibility): DensityFit | null {
   const direct = repackGrid(grid, density, enabled); if (direct) return { grid: direct, resized: [] };
@@ -294,7 +296,11 @@ export function fitGridDensity(grid: WidgetGrid, density: GridDensity, enabled: 
   variants.sort((a, b) => a.cost - b.cost || a.loss - b.loss);
   for (const candidate of variants) {
     const packed = repackGrid(candidate.grid, density, enabled); if (!packed) continue;
-    return { grid: packed, resized: ids.filter(id => packed.placements[id].size !== grid.placements[id].size || (!!grid.placements[id].span && !packed.placements[id].span)).map(id => ({ id, from: grid.placements[id].size, to: packed.placements[id].size })) };
+    const dropped = (id: WidgetId) => grid.placements[id].span && !packed.placements[id].span ? grid.placements[id].span : undefined;
+    return { grid: packed, resized: ids.filter(id => packed.placements[id].size !== grid.placements[id].size || dropped(id)).map(id => {
+      const span = dropped(id);
+      return { id, from: grid.placements[id].size, to: packed.placements[id].size, ...(span ? { span: { columns: span.columns, rows: span.rows } } : {}) };
+    }) };
   }
   return null;
 }

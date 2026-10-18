@@ -389,7 +389,8 @@ export function Editor({
     if (next) {
       densityHistory.current = next.history;
       commitGrid(next.grid);
-      if (next.resized.length) setGridMessage(`${next.resized.map(({ id, to }) => `${WIDGET_CATALOG[id].name} ${to}`).join(' · ')} to fit. Switch back to restore.`);
+      // A dropped custom size is named, e.g. "Reminders 2 × 8 → small" (#152).
+      if (next.resized.length) setGridMessage(`${next.resized.map(({ id, to, span }) => `${WIDGET_CATALOG[id].name} ${span ? `${span.columns} × ${span.rows} → ` : ''}${to}`).join(' · ')} to fit. Switch back to restore.`);
     }
     else
       setGridMessage('Not enough room. Keep this grid or use smaller widgets.');

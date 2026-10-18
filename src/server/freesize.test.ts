@@ -134,7 +134,7 @@ test('density changes scale spans, keep full height, clamp width and fall back t
   assert.equal(Object.hasOwn(fit.grid.placements.reminders, 'span'), false, 'the column falls back to its family');
   assert.equal(fit.grid.placements.reminders.size, 'small');
   assert.equal(fit.grid.placements.clock.size, 'large', 'the smaller area loss is preferred');
-  assert.deepEqual(fit.resized.map(item => item.id), ['reminders']);
+  assert.deepEqual(fit.resized, [{ id: 'reminders', from: 'small', to: 'small', span: { columns: 2, rows: 8 } }], 'the dropped custom size is named (#152)');
   assert.equal(gridProblem(fit.grid, enabled), null);
 
   const there = switchGridDensity(column, 'spacious', enabled); assert.ok(there);
@@ -148,6 +148,27 @@ test('density changes scale spans, keep full height, clamp width and fall back t
   const rescaled = switchGridDensity(edited, 'balanced', enabled, fineTrip.history); assert.ok(rescaled);
   assert.equal(rescaled.grid.placements.reminders.span?.rows, 8);
   assert.equal(gridProblem(rescaled.grid, enabled), null);
+});
+
+test('a minimum-width Column stays a Column in every density where it fits (#152)', () => {
+  const enabled = only('reminders', 'clock');
+  for (const from of Object.keys(GRID_DENSITIES) as GridDensity[]) {
+    const grid = structuredClone(fitGridDensity(defaultSettings().widgetGrid, from, enabled)!.grid);
+    grid.placements = { ...grid.placements, clock: { column: 4, row: 0, size: 'small' }, reminders: { column: 0, row: 0, size: 'small', span: { columns: 2, rows: GRID_DENSITIES[from].rows } } };
+    assert.equal(gridProblem(grid, enabled), null, from);
+    for (const to of Object.keys(GRID_DENSITIES) as GridDensity[]) {
+      if (to === from) continue;
+      const fit = fitGridDensity(grid, to, enabled); assert.ok(fit, `${from} → ${to}`);
+      assert.deepEqual(fit.grid.placements.reminders.span, { columns: 2, rows: GRID_DENSITIES[to].rows }, `${from} → ${to} keeps the minimum width at full height`);
+      assert.equal(placementLabel('reminders', fit.grid.placements.reminders, to), 'Column');
+      assert.deepEqual(fit.resized, []);
+    }
+  }
+  // A minimum-height span keeps its two rows too, while other axes still scale physically.
+  const wide = defaultSettings().widgetGrid;
+  wide.placements = { ...wide.placements, clock: { column: 0, row: 4, size: 'small' }, reminders: { column: 0, row: 0, size: 'medium', span: { columns: 6, rows: 2 } } };
+  const fine = repackGrid(wide, 'fine', enabled); assert.ok(fine);
+  assert.deepEqual(fine.placements.reminders.span, { columns: 8, rows: 2 }, '6 × 16/12 = 8 columns, rows stay at the minimum');
 });
 
 test('ambient composition keeps spans, stays disjoint and moves a full-height column sideways', () => {
