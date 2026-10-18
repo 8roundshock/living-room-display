@@ -4,10 +4,11 @@ A silent, customizable ambient display for a Windows 10 leisure PC connected to
 a Samsung S90F OLED TV: large time and date, weather, a seven-day outlook, rain
 estimates, optional reminders, and an optional dim screen preview.
 
-**Current state: local display/editor implemented; Windows install/runtime QA pending.**
+**Current state: local display/editor and current-PC source install verified.**
 The selected approach is a custom local web dashboard plus a Windows helper.
 The React UI, local API, persistence, weather and RAM-only snapshot handoff are implemented.
-A complete installable display release is not ready yet. See [STATUS.md](STATUS.md).
+Final feature integration/review is in progress, and wider release compatibility
+checks remain. See [STATUS.md](STATUS.md).
 
 This is the independent private
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)
@@ -50,6 +51,7 @@ feature acceptance and remaining integrated checks.
 > does not, explain what is missing without inventing setup commands. Keep my
 > data local and do not post feedback or star the repository without my permission.
 
-Today the web UI is built and verified; native installation, capture and kiosk
-checks are still a release gate. See [Windows verification](docs/windows.md#verification).
+The per-user Windows install, data lifecycle and bounded native RAM-preview/kiosk
+check passed on the current4K PC. Keep automatic idle off until final integration
+and review. See [Windows verification](docs/windows.md#verification) for limits.
 Future releases should work without the owner's accounts, paths, or private memory.

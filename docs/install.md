@@ -1,8 +1,9 @@
 # Windows installation and use
 
-**Draft integration: not yet an installable, verified release.** Native source
-compiles, but the commands below await independent static review and first
-runtime installation checks. Keep idle off. Read [STATUS.md](../STATUS.md) and
+**Current-PC source installation is verified; broader release checks remain.**
+The per-user install, server/data lifecycle and bounded native visual check passed
+on Windows10. Final feature integration/review is in progress; keep idle off.
+This is a private prerelease, not a signed/public package. Read [STATUS.md](../STATUS.md) and
 [Windows verification](windows.md#verification) for current evidence.
 Read AGENTS.md and follow the independent [PR workflow](agent-workflow.md) when
 changing source. Readiness is tracked in [issue #10](https://github.com/8roundshock/living-room-display/issues/10).
@@ -200,7 +201,9 @@ and [contribution workflow](../CONTRIBUTING.md) for a consent-based bug/fix hand
 - Confirm `Stop` leaves normal Edge tabs open and reports no owned processes.
 - Test update, data retention and uninstall before relying on unattended use.
 - Test movie/game/fullscreen and lock behavior before `EnableIdle`; compilation
-  and a manual smoke test do not establish those cases.
+  and a manual smoke test do not establish those cases. Native `/c` cold startup
+  remains unverified after automatic review blocked that optional test before
+  execution; CLI cold Start/Stop and the warm native test are separate evidence.
 
 Port 4318 occupied by another instance is not adopted or killed. Stop that
 instance using its own controls. A stale PID file is insufficient ownership:

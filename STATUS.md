@@ -28,15 +28,20 @@ they do not establish actual installed capture, kiosk, idle or lock behavior.
 
 ## In progress / not yet verified
 
-Independent static Windows re-review and current-PC installation/official-runtime
-verification remain gates before native capture/fullscreen testing. Actual TV
-readability/brightness, capture/no-file/privacy lifecycle, update/rollback and
-uninstall behavior need real runtime evidence. Fresh-account installation,
-movie/game inhibition and secure lock/resume are unverified. Automatic idle stays
-off, preserving the current Windows choice/timeout/security until explicitly
-enabled after QA. No complete usable release is claimed yet. TV control, live
-app preview and multi-monitor selection remain future work; the host targets
-one primary display.
+Current-PC source `eba70fc` passed official-runtime per-user install, real
+Stop/Start/update/rollback/uninstall-retain/reinstall and reminder persistence.
+Actual3840x2160 native view and640x360 RAM PNG were inspected; normal exit cleared
+the image to404 and removed only owned display processes. No capture files were
+found. See [runtime evidence](docs/windows.md#actual-current-pc-runtime-evidence).
+
+Final UI/location integration, installed update and exact-head review/CI remain.
+Native `/c` cold startup was blocked by automatic approval review before action
+and remains unverified. Fresh-account installation, movie/game inhibition,
+secure lock/resume and across-room readability are unverified. Automatic idle
+stays off with the original blank saver1200sec/security0 preserved until explicitly
+enabled after final QA. This is a working current-PC source installation, not a
+public/signed release. TV control, live app preview and multi-monitor selection
+remain future work; the host targets one primary display.
 
 ## Decisions and boundaries
 
