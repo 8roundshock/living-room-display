@@ -2,7 +2,7 @@
 
 **Current-PC source installation is verified; broader release checks remain.**
 The per-user install, server/data lifecycle and bounded native visual check passed
-on Windows10. Final feature integration/review is in progress; keep idle off.
+on Windows 10. Keep idle off until review and explicit activation approval.
 This is a private prerelease, not a signed/public package. Read [STATUS.md](../STATUS.md) and
 [Windows verification](windows.md#verification) for current evidence.
 Read AGENTS.md and follow the independent [PR workflow](agent-workflow.md) when
@@ -44,8 +44,14 @@ candidate directory>'` to build a separate full source snapshot. The native
 helper/control script come from the invoked `windows` directory; web sources
 and the lockfile come from `SourceRoot`. Other workers' files remain untouched.
 
-In the editor, choose your own weather location, units, clock format, dim colors,
-widgets and motion. Location is not inferred from timezone. Snapshots come from
+In the editor, choose your own units, clock format, dim colors, widgets and motion.
+Weather uses a rounded device area when browser permission is already granted,
+or after you choose **Use device location**; otherwise Toronto is the fallback.
+Manual city selection is preserved. Existing saved cities migrate as manual,
+including Toronto, so an upgrade does not guess whether a choice was intentional.
+No device lookup or permission prompt runs in ambient mode. Empty reminders hide
+by default; the editor can keep the empty widget visible. See [UI behavior](ui.md).
+Snapshots come from
 the primary display immediately before native ambient launch; disable preview
 in the editor if you do not want desktop capture. No camera, microphone, audio
 routing, TV control or cloud account is involved.
@@ -59,7 +65,7 @@ Replace the final word of the installation command with:
 | `Start` | Start the local server and open the editor. |
 | `Editor` | Open the editor, starting the server if needed. |
 | `Display` | Capture the last desktop if enabled, then open the ambient Edge kiosk. |
-| `Status` | Show owned server/display state, paths and selected screensaver. |
+| `Status` | Show installed source revision/state, owned processes and selected screensaver. |
 | `Stop` | Close this install's display and local server. |
 | `Update` | Build the current source clone and replace the installed app. |
 | `DisableIdle` | Restore the saved Windows screensaver and timeout. |
@@ -74,7 +80,8 @@ grace period. `Stop` also dismisses it. The host owns an isolated Edge profile/j
 it does not close normal browser windows. Closing ambient clears the snapshot
 and leaves the local server available for later use. `Stop` stops both. The
 loopback server is not a Windows service, scheduled task or startup item.
-Windows screensaver invocation can cold-start it.
+Windows screensaver invocation has a cold-start implementation; its actual `/c`
+end-to-end cold test remains unverified as described below.
 
 ## Optional native screensaver
 
@@ -109,7 +116,7 @@ selection, and retains the backup for inspection.
 | `run/server.json` | Server PID/start time for scoped process management. |
 | `edge-profile` | Dedicated Edge profile; ambient uses InPrivate/no-store preview responses. |
 | `screensaver-before.json` | Prior native screensaver settings, only after opt-in. |
-| `installation.json` | Non-secret ownership/state marker, retained for same-path reinstall. |
+| `installation.json` | Non-secret ownership/state and source provenance, retained for reinstall. |
 
 Use the editor's export, or stop the app and copy `data` to a private backup.
 Snapshot pixels and native tokens are RAM only and excluded from persisted
@@ -129,6 +136,15 @@ when the runtime is absent. For a deliberate runtime update, stop the app, renam
 runtime until verified; rollback by stopping, renaming the new runtime aside and
 renaming `runtime.previous` back. No system runtime or PATH is changed.
 
+`Status` reports `SourceRevision` and `SourceState` from the installed marker,
+so advancing your checkout does not relabel the installed app. A complete Git
+checkout records its verified commit and `clean` or `dirty` state. Archives,
+missing Git, sources inside an unrelated parent repository, and separate web/helper
+source candidates report `unknown` with no invented revision. Only successful
+app replacement refreshes provenance; failed updates and retained-data uninstall
+preserve it. A dirty revision identifies its base commit, not the uncommitted edits.
+For bug reports prefer an installation from a clean reviewed revision.
+
 `Uninstall` retains `data` by default. Add `-RemoveData` to explicitly delete it.
 Run uninstall from the clone so removal does not remove its executing script.
 A backup is retained if a different screensaver is now selected. The parent
@@ -140,8 +156,9 @@ runtime backup folders are not removed by uninstall.
 ## JSON export/import and offline recovery
 
 The JSON API and offline validation/file replacement steps were checked with
-synthetic data under PowerShell 7 and 5.1. Installed process control still awaits
-runtime QA. The installed server is fixed at 4318; use the actual `LRD_PORT` URL for source runs.
+synthetic data under PowerShell 7 and 5.1; installed Start/Stop and data lifecycle
+were also exercised separately. The installed server is fixed at 4318; use the
+actual `LRD_PORT` URL for source runs.
 Choose a private backup path; exports contain your reminders/location/settings.
 With the app running:
 

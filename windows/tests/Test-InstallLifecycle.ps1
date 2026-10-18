@@ -16,6 +16,8 @@ try {
     function Stop-App { }
     function Start-App { $script:starts++ }
     function Install-Runtime { $null = New-Item -ItemType Directory -Path $runtime -Force }
+    $script:fixtureRevision = 'b' * 40
+    function Get-SourceProvenance { param($Source) [pscustomobject]@{sourceRevision=$script:fixtureRevision;sourceState='clean'} }
     function Build-InstallCandidate {
         param($Source,$Next)
         $null = New-Item -ItemType Directory -Path (Join-Path $Next 'dist\server'),(Join-Path $Next 'dist\client') -Force
@@ -31,18 +33,22 @@ try {
     $saveFile = Join-Path $InstallRoot 'screensaver-before.json'
     [IO.File]::WriteAllText($stateFile,'{"syntheticSettings":"preserve","reminders":["synthetic reminder"]}')
     [IO.File]::WriteAllText($saveFile,'{"syntheticPreviousSaver":"preserve"}')
-    Write-Json $marker @{product='living-room-display';state='installed'}
+    Write-Json $marker @{product='living-room-display';state='installed';sourceRevision=('a' * 40);sourceState='clean'}
     $stateHash = (Get-FileHash -LiteralPath $stateFile).Hash
     $saveHash = (Get-FileHash -LiteralPath $saveFile).Hash
     Uninstall-App | Out-Null
     if ((Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).state -ne 'uninstalled' -or (Test-Path -LiteralPath $app)) { throw 'Uninstall did not retain its reinstall ownership marker or remove app files.' }
+    if ((Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).sourceRevision -ne ('a' * 40)) { throw 'Uninstall lost the retained provenance.' }
     Install-App | Out-Null
     if ((Get-FileHash -LiteralPath $stateFile).Hash -ne $stateHash -or (Get-FileHash -LiteralPath $saveFile).Hash -ne $saveHash) { throw 'Uninstall/reinstall changed retained settings/reminders/screensaver backup.' }
     if ((Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).state -ne 'installed' -or $script:starts -ne 1 -or -not (Test-Path -LiteralPath (Join-Path $app 'dist\server\index.js'))) { throw 'Reinstall did not publish its staged app and installed marker.' }
+    if ((Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).sourceRevision -ne $script:fixtureRevision) { throw 'Successful install did not refresh provenance.' }
+    $markerHash = (Get-FileHash -LiteralPath $marker).Hash
+    $script:fixtureRevision = 'c' * 40
     $script:failBuild = $true
     $failed = $false
     try { Install-App | Out-Null } catch { $failed = $true }
-    if (-not $failed -or (Test-Path -LiteralPath (Join-Path $InstallRoot 'app.next')) -or -not (Test-Path -LiteralPath (Join-Path $app 'dist\server\index.js')) -or (Get-FileHash -LiteralPath $stateFile).Hash -ne $stateHash) { throw 'Failed update replaced app/data or leaked its candidate.' }
+    if (-not $failed -or (Test-Path -LiteralPath (Join-Path $InstallRoot 'app.next')) -or -not (Test-Path -LiteralPath (Join-Path $app 'dist\server\index.js')) -or (Get-FileHash -LiteralPath $stateFile).Hash -ne $stateHash -or (Get-FileHash -LiteralPath $marker).Hash -ne $markerHash) { throw 'Failed update replaced app/data/provenance or leaked its candidate.' }
 } finally {
     $full = [IO.Path]::GetFullPath($scratchRoot)
     $allowed = [IO.Path]::GetFullPath((Join-Path $repository '.local')).TrimEnd('\') + '\'

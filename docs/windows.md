@@ -78,8 +78,8 @@ v4.0.30319 compiler, PowerShell 7 and Windows PowerShell 5.1. Helper compilation
 parses under both PowerShell engines. Run `windows/Test-Windows.ps1` for native
 compile/argument checks, cleanup containment including nested junction refusal,
 malformed/unrelated PID refusal, and optional real process/start-time ownership
-checks (`-NodeExe '<node.exe>'`). Ten check groups with Node (nine without) pass
-on PowerShell7 and5.1, including successful final cleanup; use process-scoped
+checks (`-NodeExe '<node.exe>'`). Eleven check groups with Node (ten without) pass
+on PowerShell 7 and 5.1, including successful final cleanup; use process-scoped
 `-ExecutionPolicy Bypass` where script policy requires it. These include seven native lifecycle scenarios using the production
 startup coordinator with delayed fake transport/synthesized session ends, plus
 four real restore-function scenarios with mocked registry/file/SPI boundaries
@@ -91,11 +91,13 @@ checks that its target survives. These tests use scoped synthetic fixtures and
 a sleeping child; no real app installation, capture, kiosk or settings change.
 An actual child PowerShell `-File` invocation verifies default parameter binding
 reaches the missing-install guard; dot-sourced tests alone do not cover that path.
-An isolated source candidate from UI `7a7d15e` (including reviewed backend main
-`7a44f03`) passed the production build and all 33 tests (including five
-preview-clear races).
-That build used development Node 24 and existing npm; installed official-runtime
-verification remains pending and is not established by the development build.
+Source provenance checks use synthetic local Git repositories to verify clean,
+dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
+verify metadata refresh on successful install and retention after failed update
+or uninstall. No paths, remotes, changes or credentials are saved in provenance.
+The integrated source includes approved main `5ef3fdc`; its full production build
+and all 47 application tests pass using the installed app-owned Node 24.19.0.
+This source check does not itself establish a successful installed refresh.
 
 Independent static review approved source `eba70fc` before current-PC runtime QA.
 The final integrated source still needs its own exact-head review and CI before
@@ -103,27 +105,27 @@ merge; the repository stays private.
 
 ## Actual current-PC runtime evidence
 
-Tested source `eba70fc`, Windows10 Pro19045 x64, actual display3840x2160:
+Tested 2026-10-18, source `eba70fc`, Windows 10 Pro 19045 x64, actual display 3840x2160:
 
-- Per-user nonadmin install downloaded/checksummed official Node24.19.0 and built
-  the web/native app. The system Node16.14.2 installation was unchanged. Installed
-  editor/display routes returned200; owned server on4318 was healthy.
+- Per-user nonadmin install downloaded/checksummed official Node 24.19.0 and built
+  the web/native app. The system Node 16.14.2 installation was unchanged. Installed
+  editor/display routes returned 200; owned server on 4318 was healthy.
 - Synthetic reminder add/edit/complete survived restart. Stop removed the owned
   listener; repeated Start retained the PID. Real update, previous-app rollback
   and restore were healthy. Uninstall removed app/runtime and retained data plus
   ownership marker; same-path reinstall preserved the data hash. Reinstall
   reused a cached copy of the already verified official runtime. Only the
   synthetic reminder was deleted afterward; user preferences were not reset.
-- An actual640x360 RAM PNG was emitted/inspected, followed by a WGC view of a
+- An actual 640x360 RAM PNG was emitted/inspected, followed by a WGC view of a
   returned window matched to the owned Edge PID/HWND. Black/dim clock, weather,
   forecasts and faint time-labeled last state were visible without recursion.
-  Helper exit0/stderr empty after6222ms, within the eight-second test bound.
+  Helper exit 0/stderr empty after 6222ms, within the eight-second test bound.
   The precise expiry cause was not isolated from input/browser dismissal.
-- After exit, preview metadata was absent and image GET returned404; helper and
-  app-profile Edge process counts were0 and the server remained healthy. No
-  capture file was found. New PNG files were only Edge128x128/448x448 static icons,
+- After exit, preview metadata was absent and image GET returned 404; helper and
+  app-profile Edge process counts were 0 and the server remained healthy. No
+  capture file was found. New PNG files were only Edge 128x128/448x448 static icons,
   plus the preexisting npm QR example. Preview flags were unchanged.
-- The original Windows blank saver,1200-second timeout and security0 stayed
+- The original Windows blank saver, 1200-second timeout and security 0 stayed
   unchanged; this app's automatic idle activation remains off.
 
 Native `/c` end-to-end cold startup was **not executed**: automatic approval review
@@ -132,7 +134,7 @@ Do not infer this path passed from separate CLI cold Start/Stop and native warm
 EnsureServer checks. This is an unverified path, not an established application
 bug; do not route around the rejected test.
 
-Pending: final UI/location update and exact-head review/CI, fresh-account install,
+Pending: final integrated installed update and exact-head review/CI, fresh-account install,
 actual movies/games/screensaver inhibition, real lock/resume, across-room
 readability, and multi-monitor behavior. The native test proves neither exact
 eight-second timer expiry nor these compatibility cases. Automatic idle stays

@@ -17,7 +17,7 @@ function Expect-Failure([scriptblock]$Action, [string]$Message) {
     Assert-True $failed $Message
 }
 try {
-    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1','tests\Test-InstallLifecycle.ps1')) {
+    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1','tests\Test-InstallLifecycle.ps1','tests\Test-SourceProvenance.ps1')) {
         $parseErrors = $null
         $null = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $file),[ref]$null,[ref]$parseErrors)
         Assert-True ($parseErrors.Count -eq 0) "PowerShell syntax failed: $file"
@@ -67,6 +67,8 @@ try {
     & (Join-Path $PSScriptRoot 'tests\Test-IdleRestore.ps1')
     $passed++
     & (Join-Path $PSScriptRoot 'tests\Test-InstallLifecycle.ps1')
+    $passed++
+    & (Join-Path $PSScriptRoot 'tests\Test-SourceProvenance.ps1')
     $passed++
     . (Join-Path $PSScriptRoot 'LivingRoomDisplay.ps1') -InstallRoot $fixture -FunctionsOnly
     Write-Json $marker @{product='living-room-display'}

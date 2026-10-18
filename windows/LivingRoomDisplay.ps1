@@ -180,6 +180,24 @@ function Build-InstallCandidate([string]$Source, [string]$Next) {
         if ($LASTEXITCODE -ne 0) { throw 'Production dependency install failed.' }
     } finally { Pop-Location }
 }
+function Get-SourceProvenance([string]$Source, [string]$HostDirectory = $PSScriptRoot) {
+    $unknown = [pscustomobject]@{sourceRevision=$null;sourceState='unknown'}
+    try {
+        $fullSource = [IO.Path]::GetFullPath($Source).TrimEnd('\')
+        # A separate web SourceRoot and helper checkout are a composed candidate,
+        # not one revision. An archive must not inherit a surrounding repository.
+        if ([IO.Path]::GetFullPath($HostDirectory).TrimEnd('\') -ne (Join-Path $fullSource 'windows') -or -not (Test-Path -LiteralPath (Join-Path $fullSource '.git'))) { return $unknown }
+        $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $git) { return $unknown }
+        $top = & $git.Source -C $fullSource rev-parse --show-toplevel 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $top -or [IO.Path]::GetFullPath([string]$top).TrimEnd('\') -ne $fullSource) { return $unknown }
+        $revision = & $git.Source -C $fullSource rev-parse --verify HEAD 2>$null
+        if ($LASTEXITCODE -ne 0 -or [string]$revision -notmatch '^[a-fA-F0-9]{40}([a-fA-F0-9]{24})?$') { return $unknown }
+        $changes = @(& $git.Source -C $fullSource status --porcelain --untracked-files=normal 2>$null)
+        if ($LASTEXITCODE -ne 0) { return $unknown }
+        return [pscustomobject]@{sourceRevision=[string]$revision;sourceState=$(if ($changes.Count) { 'dirty' } else { 'clean' })}
+    } catch { return $unknown }
+}
 function Install-App {
     $source = [IO.Path]::GetFullPath($SourceRoot)
     if (-not (Test-Path -LiteralPath (Join-Path $source 'package-lock.json')) -or -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Build-Host.ps1')) -or -not (Test-Path -LiteralPath (Join-Path $source 'src'))) { throw 'Run Install or Update from a complete source clone, not from installed app files.' }
@@ -198,14 +216,17 @@ function Install-App {
     $oldPath = $env:PATH
     try {
         $env:PATH = $runtime + ';' + $oldPath
+        $sourceBefore = Get-SourceProvenance $source
         Build-InstallCandidate $source $next
         if (-not (Test-Path -LiteralPath (Join-Path $next 'dist\server\index.js')) -or -not (Test-Path -LiteralPath (Join-Path $next 'dist\client\index.html'))) { throw 'Build output is incomplete.' }
+        $provenance = Get-SourceProvenance $source
+        if ($sourceBefore.sourceRevision -ne $provenance.sourceRevision -or $sourceBefore.sourceState -ne $provenance.sourceState) { $provenance = [pscustomobject]@{sourceRevision=$null;sourceState='unknown'} }
         if (Test-Path -LiteralPath $marker) { Stop-App }
         Remove-OwnedDirectory $previous
         if (Test-Path -LiteralPath $app) { Move-Item -LiteralPath $app -Destination $previous }
         try { Move-Item -LiteralPath $next -Destination $app }
         catch { if (Test-Path -LiteralPath $previous) { Move-Item -LiteralPath $previous -Destination $app }; throw }
-        Write-Json $marker @{product='living-room-display';state='installed';installedAt=[DateTime]::UtcNow.ToString('o');version=(Get-Content (Join-Path $app 'package.json') -Raw | ConvertFrom-Json).version}
+        Write-Json $marker @{product='living-room-display';state='installed';installedAt=[DateTime]::UtcNow.ToString('o');version=(Get-Content (Join-Path $app 'package.json') -Raw | ConvertFrom-Json).version;sourceRevision=$provenance.sourceRevision;sourceState=$provenance.sourceState}
     } finally {
         $env:PATH = $oldPath
         Remove-OwnedDirectory $next
@@ -303,7 +324,10 @@ function Uninstall-App {
     if ($RemoveData) { Remove-OwnedDirectory $data }
     # Keep a non-secret ownership marker so retained data/backups can be safely
     # reinstalled at this same path. Unrelated nonempty directories remain refused.
-    Write-Json $marker @{product='living-room-display';state='uninstalled';uninstalledAt=[DateTime]::UtcNow.ToString('o')}
+    $retained = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+    $retained | Add-Member -NotePropertyName state -NotePropertyValue 'uninstalled' -Force
+    $retained | Add-Member -NotePropertyName uninstalledAt -NotePropertyValue ([DateTime]::UtcNow.ToString('o')) -Force
+    Write-Json $marker $retained
     Write-Output "App removed. Settings/reminders $(if ($RemoveData) {'removed'} else {'retained at ' + $data}). Ownership marker retained for reinstall."
 }
 
@@ -322,9 +346,10 @@ try {
     'Status' {
         Assert-Installed
         $owned = Get-OwnedServer
+        $installed = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
         $current = Get-ItemProperty 'HKCU:\Control Panel\Desktop'
         $selected = $current.PSObject.Properties['SCRNSAVE.EXE']
-        [pscustomobject]@{InstallRoot=$InstallRoot;ServerRunning=($null -ne $owned);Healthy=$(if ($owned) { Test-Server } else { $false });DisplayRunning=(@(Get-CimInstance Win32_Process -Filter "Name='LivingRoomDisplay.scr'" | Where-Object { $_.ExecutablePath -eq $hostExe }).Count -gt 0);Editor="$script:baseUrl/editor";Data=$data;Screensaver=$(if ($selected) { $selected.Value } else { $null });IdleActive=$($current.PSObject.Properties['ScreenSaveActive'] -and $current.ScreenSaveActive -eq '1');IdleSeconds=$(if ($current.PSObject.Properties['ScreenSaveTimeOut']) { $current.ScreenSaveTimeOut } else { $null });SecureOnResume=$(if ($current.PSObject.Properties['ScreenSaverIsSecure']) { $current.ScreenSaverIsSecure } else { $null })}
+        [pscustomobject]@{InstallRoot=$InstallRoot;SourceRevision=$(if ($installed.PSObject.Properties['sourceRevision']) { $installed.sourceRevision } else { $null });SourceState=$(if ($installed.PSObject.Properties['sourceState']) { $installed.sourceState } else { 'unknown' });ServerRunning=($null -ne $owned);Healthy=$(if ($owned) { Test-Server } else { $false });DisplayRunning=(@(Get-CimInstance Win32_Process -Filter "Name='LivingRoomDisplay.scr'" | Where-Object { $_.ExecutablePath -eq $hostExe }).Count -gt 0);Editor="$script:baseUrl/editor";Data=$data;Screensaver=$(if ($selected) { $selected.Value } else { $null });IdleActive=$($current.PSObject.Properties['ScreenSaveActive'] -and $current.ScreenSaveActive -eq '1');IdleSeconds=$(if ($current.PSObject.Properties['ScreenSaveTimeOut']) { $current.ScreenSaveTimeOut } else { $null });SecureOnResume=$(if ($current.PSObject.Properties['ScreenSaverIsSecure']) { $current.ScreenSaverIsSecure } else { $null })}
         break
     }
     'Editor' { Start-App; Start-Process "$script:baseUrl/editor"; break }
