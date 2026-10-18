@@ -35,9 +35,10 @@ export async function family({ widget, size }) {
   const opacity = async state => Number(await grid.locator(`.calendar-${state}`).first().evaluate(day => getComputedStyle(day).opacity));
   assert.ok(Math.abs(await opacity('past') - 0.45) < 0.01, 'past days are dim');
   if (size !== 'small') assert.ok(Math.abs(await opacity('future') - 0.7) < 0.01, 'days ahead are brighter than past days');
-  if (size !== 'small') {
-    const numerals = parseFloat(await grid.locator('td .calendar-day').first().evaluate(day => getComputedStyle(day).fontSize));
-    const floor = await widget.evaluate(el => parseFloat(getComputedStyle(el).getPropertyValue('--min-data')));
-    assert.ok(numerals >= floor - 0.1, `${size} day numbers keep the data floor: ${numerals} >= ${floor}`);
-  }
+  // The rendered size (font size x the shared fit scale) keeps the data floor in every family.
+  const rendered = await widget.evaluate(el => {
+    const day = el.querySelector('td .calendar-day'), scale = new DOMMatrix(getComputedStyle(el.querySelector('.widget-content')).transform).a;
+    return { size: parseFloat(getComputedStyle(day).fontSize) * scale, floor: parseFloat(getComputedStyle(el).getPropertyValue('--min-data')) };
+  });
+  assert.ok(rendered.size >= rendered.floor * 0.99, `${size} day numbers keep the data floor: ${JSON.stringify(rendered)}`);
 }

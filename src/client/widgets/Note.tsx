@@ -44,7 +44,7 @@ function NoteSettings({ settings, onChange }: WidgetSettingsProps) {
       />
     </label>
     <div className="note-settings-row">
-      <span id="note-count" className="note-count" aria-live="polite">{text.length}/{NOTE_MAX_LENGTH}</span>
+      <span id="note-count" className="note-count">{text.length}/{NOTE_MAX_LENGTH}</span>
       <button type="button" className="text-button" disabled={!text} onClick={() => set('')}>Clear</button>
     </div>
     <p id="note-hint" className="hint">Up to {NOTE_MAX_LINES} lines. Stored on this device and included in exports.</p>

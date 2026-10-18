@@ -147,8 +147,8 @@ export function countdownPassed(event: Pick<CountdownEvent, 'date' | 'repeatsYea
 export function countdownLabel(days: number): { value: string; unit: string | null; text: string } {
   if (days === 0) return { value: 'Today', unit: null, text: 'Today' };
   if (days === 1) return { value: 'Tomorrow', unit: null, text: 'Tomorrow' };
-  const value = new Intl.NumberFormat('en').format(days), unit = days === 1 ? 'day' : 'days';
-  return { value, unit, text: `${value} ${unit}` };
+  const value = new Intl.NumberFormat('en').format(days);
+  return { value, unit: 'days', text: `${value} days` };
 }
 
 /** “Sat, Oct 31”, with the year only when it is not the current one. */

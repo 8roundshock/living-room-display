@@ -114,13 +114,30 @@ test('rollback: default data stays readable; enabling a widget or entering conte
       assertPreviousReaderAccepts('data', await stateFile(directory, 'state.backup.json'), `${label}: the backup of the previous save`);
     } finally { await rm(directory, { recursive: true, force: true }); }
   }
-  // Turning the widgets off and clearing their content makes the files readable again.
+  // A saved style captured while a widget was on keeps it, so it stays unreadable until re-saved.
+  const styled = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-style-'));
+  try {
+    const store = await DataStore.open(styled);
+    const on = await store.patchSettings({ widgets: { calendar: true } });
+    const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = on;
+    await store.patchSettings({ savedPresets: [{ id: 'synthetic-style', name: 'Synthetic style', visual: { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } }] });
+    await store.patchSettings({ widgets: { calendar: false } });
+    await store.patchSettings({ units: 'imperial' });
+    assertPreviousReaderRejects('data', await stateFile(styled), 'a saved style that includes Calendar');
+    await store.patchSettings({ savedPresets: [] });
+    await store.patchSettings({ units: 'metric' });
+    assertPreviousReaderAccepts('data', await stateFile(styled), 'after deleting that saved style');
+  } finally { await rm(styled, { recursive: true, force: true }); }
+  // Turning the widgets off and clearing their content makes the files readable again; one more
+  // save refreshes the backup, which still holds the previous (exceptional) save until then.
   const reverted = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-reverted-'));
   try {
     const store = await DataStore.open(reverted);
     await store.patchSettings({ widgets: { calendar: true, countdown: true, note: true }, widgetData: { calendar: { weekStart: 'sunday' }, countdowns: [event('Synthetic', '2026-12-24')], note: { text: 'Synthetic' } } });
     assertPreviousReaderRejects('data', await stateFile(reverted), 'all three in use');
     await store.patchSettings({ widgets: { calendar: false, countdown: false, note: false }, widgetData: { calendar: { weekStart: 'locale' }, countdowns: [], note: { text: '' } } });
+    assertPreviousReaderAccepts('data', await stateFile(reverted), 'state.json right after turning the widgets off and clearing their content');
+    assertPreviousReaderRejects('data', await stateFile(reverted, 'state.backup.json'), 'the backup still holds the previous save');
     await store.patchSettings({ units: 'imperial' });
     assertPreviousReaderAccepts('data', await stateFile(reverted), 'after turning the widgets off and clearing their content');
     assertPreviousReaderAccepts('data', await stateFile(reverted, 'state.backup.json'), 'its backup');

@@ -83,6 +83,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await page.keyboard.press('End'); assert.equal(await focused(), order.at(-1));
     await page.keyboard.press('ArrowDown'); assert.equal(await focused(), order.at(-1), 'Down stops at the last widget');
     await page.keyboard.press('Home'); assert.equal(await focused(), order[0]);
+    await page.keyboard.press('ArrowRight'); assert.equal(await focused(), order[1], 'Right follows the narrow three-column reading order');
+    await page.keyboard.press('ArrowLeft'); assert.equal(await focused(), order[0]);
     const groupBoundary = groups[0].items.length;
     await button(order[groupBoundary - 1]).focus(); await page.keyboard.press('ArrowDown'); assert.equal(await focused(), order[groupBoundary], 'Down crosses into the next group');
     await page.keyboard.press('Tab'); assert.equal(await focused(), order[groupBoundary + 1], 'Tab keeps its normal order: every widget stays a tab stop');
@@ -144,6 +146,11 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await row.getByRole('checkbox', { name: 'Countdown 2 every year' }).check();
     assert.match(await row.locator('.countdown-editor-status').nth(1).innerText(), /In 348 days · Fri, Oct 1, 2027/, 'Every year rolls to the next occurrence');
     await row.getByRole('checkbox', { name: 'Countdown 2 every year' }).uncheck();
+    await row.getByLabel('Countdown 2 date', { exact: true }).fill('2201-01-01');
+    assert.equal(await saveStatus().innerText(), 'Use a date between 1900 and 2200');
+    assert.equal(await row.getByLabel('Countdown 2 date', { exact: true }).getAttribute('aria-invalid'), 'true');
+    await row.getByText('Use a date between 1900 and 2200', { exact: true }).waitFor();
+    await row.getByLabel('Countdown 2 date', { exact: true }).fill('2026-10-01');
     await save();
     assert.deepEqual(snapshot().widgetData.countdowns.map(({ title, date, repeatsYearly }) => [title, date, repeatsYearly]), [['Weekend trip', '2026-10-30', false], ['Old trip', '2026-10-01', false]]);
     await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('');
@@ -156,6 +163,22 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('Weekend trip  ');
     await row.getByRole('textbox', { name: 'Countdown 1 title' }).blur();
     await savebar().waitFor({ state: 'detached' });
+    // An incomplete row never strands Save: closing the panel or removing the widget drops it.
+    await row.getByRole('button', { name: 'Add date', exact: true }).click(); await savebar().waitFor();
+    assert.equal(await button('Save changes').isDisabled(), true);
+    await button('Countdown').click();
+    await savebar().waitFor({ state: 'detached' });
+    assert.equal(snapshot().widgetData.countdowns.length, 1);
+    row = await inspector('Countdown');
+    assert.equal(await row.getByRole('textbox', { name: 'Countdown 2 title' }).count(), 0, 'collapsing the panel drops the untitled row');
+    await row.getByRole('button', { name: 'Add date', exact: true }).click();
+    await button('Remove Countdown').click();
+    await tab('Style'); await button('Night').click();
+    assert.equal(await saveStatus().innerText(), 'Unsaved changes');
+    assert.equal(await button('Save changes').isDisabled(), false, 'removing the widget never leaves Save blocked by a hidden field');
+    await cancel();
+    row = await inspector('Countdown');
+    assert.deepEqual(await row.locator('input[data-countdown-title]').evaluateAll(inputs => inputs.map(input => input.value)), ['Weekend trip'], 'Cancel restores the saved widget and its one date');
     checks.push('Countdown: editor placeholder, Add date (one week ahead, title focused), inline empty-title error blocks Save via draftProblem, live preview, Passed label, Every year, Remove, Cancel restores, trailing spaces trimmed on blur leave no Save bar');
 
     // 4. Note: counter, Clear, 4-line limit, dirty-only Save bar, reload.
@@ -226,8 +249,9 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
       await row.getByRole('button', { name: 'Remove countdown 2' }).click();
       const noteRow = await inspector('Note');
       await noteRow.getByRole('textbox', { name: 'Note' }).fill('Synthetic narrow note'); await page.clock.runFor(100);
+      await noteRow.getByRole('textbox', { name: 'Note' }).blur(); await noteRow.getByRole('textbox', { name: 'Note' }).focus(); await page.clock.runFor(100);
       const box = await noteRow.getByRole('textbox', { name: 'Note' }).boundingBox(), noteBar = await savebar().boundingBox();
-      assert.ok(box.y + box.height <= noteBar.y + 1 || box.y < noteBar.y, `${viewport.width}px focused note starts above the Save bar`);
+      assert.ok(box.y >= 0 && box.y + box.height <= noteBar.y - 4, `${viewport.width}x${viewport.height} focused note clears the Save bar: ${JSON.stringify({ box, noteBar })}`);
       if (capture) images.push({ name: `panels-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
       await cancel();
     }

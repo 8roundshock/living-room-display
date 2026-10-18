@@ -69,15 +69,20 @@ function dateProblem(value: string): boolean {
   return !date || date.year < FIRST_YEAR || date.year > LAST_YEAR;
 }
 
+function dateMessage(value: string): string | null {
+  if (!parseCivil(value)) return 'Countdown needs a date';
+  return dateProblem(value) ? `Use a date between ${FIRST_YEAR} and ${LAST_YEAR}` : null;
+}
+const complete = (event: CountdownEvent) => Boolean(event.title.trim()) && !dateProblem(event.date);
+
 function draftProblem(settings: Settings): string | null {
   const events = settings.widgetData.countdowns;
   if (events.some(event => !event.title.trim())) return 'Countdown needs a title';
-  if (events.some(event => dateProblem(event.date))) return 'Countdown needs a date';
+  for (const event of events) { const message = dateMessage(event.date); if (message) return message; }
   return null;
 }
 
 function status(event: CountdownEvent, today: CivilDate): string {
-  if (dateProblem(event.date)) return 'Choose a date';
   if (countdownPassed(event, today)) return 'Passed';
   const date = nextOccurrence(event, today)!, label = countdownLabel(daysBetween(today, date));
   return `${label.unit ? `In ${label.text}` : label.text} · ${countdownDate(date, today)}`;
@@ -87,6 +92,18 @@ function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) 
   const events = settings.widgetData.countdowns, today = civilFromDate(new Date());
   const [focusId, setFocusId] = useState<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
+  const latest = useRef({ settings, onChange });
+  latest.current = { settings, onChange };
+  // Incomplete rows can only be fixed in this panel. When it closes (the widget is removed or
+  // collapsed, or the tab changes), drop them so Save is never blocked by a field nobody can see.
+  useEffect(() => () => {
+    const { settings: last, onChange: change } = latest.current;
+    if (last.widgetData.countdowns.every(complete)) return;
+    change((previous: Settings) => {
+      const kept = previous.widgetData.countdowns.filter(complete);
+      return kept.length === previous.widgetData.countdowns.length ? previous : { ...previous, widgetData: { ...previous.widgetData, countdowns: kept } };
+    });
+  }, []);
   useEffect(() => {
     if (!focusId) return;
     list.current?.querySelector<HTMLInputElement>(`[data-countdown-title="${focusId}"]`)?.focus();
@@ -99,7 +116,7 @@ function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) 
     {events.length === 0 && <p className="countdown-settings-empty">No dates yet.</p>}
     {events.map((event, index) => {
       const number = index + 1, titleMissing = !event.title.trim(), passed = !dateProblem(event.date) && countdownPassed(event, today);
-      const errorId = `countdown-${event.id}-error`;
+      const errorId = `countdown-${event.id}-error`, dateError = dateMessage(event.date), dateErrorId = `countdown-${event.id}-date-error`;
       return <fieldset key={event.id} className={`countdown-editor-row ${passed ? 'passed' : ''}`}>
         <legend className="sr-only">Countdown {number}</legend>
         <input
@@ -123,7 +140,8 @@ function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) 
             min={`${FIRST_YEAR}-01-01`}
             max={`${LAST_YEAR}-12-31`}
             value={event.date}
-            aria-invalid={dateProblem(event.date)}
+            aria-invalid={dateError !== null}
+            aria-describedby={dateError ? dateErrorId : undefined}
             onChange={change => edit(event.id, { date: change.target.value })}
           />
           <label className="toggle-row countdown-yearly">
@@ -134,7 +152,7 @@ function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) 
             <Icon name="trash" size={16} />
           </button>
         </div>
-        <p className={`countdown-editor-status ${passed ? 'passed' : ''}`}>{status(event, today)}</p>
+        {dateError ? <p className="countdown-error" id={dateErrorId}>{dateError}</p> : <p className={`countdown-editor-status ${passed ? 'passed' : ''}`}>{status(event, today)}</p>}
       </fieldset>;
     })}
     <button

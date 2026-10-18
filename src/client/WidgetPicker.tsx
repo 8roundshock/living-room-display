@@ -25,13 +25,14 @@ export function WidgetPicker({ settings, onAdd, onClose, message }: {
       <button className="icon-button" aria-label="Close widget picker" ref={close} onClick={onClose}><Icon name="close" size={18} /></button>
     </div>
     <div className="picker-body"><div className="widget-catalog" aria-label="Widget catalog" onKeyDown={event => {
-      // Up/Down/Home/End move through the whole list (across groups) and preview the focused widget.
-      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+      // Up/Down (and Left/Right, for the narrow three-column layout) move through the whole list
+      // across groups and preview the focused widget; Home/End jump to the ends.
+      if (!['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
       const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('.catalog-item')];
       const index = items.findIndex(item => item === document.activeElement);
       if (index < 0) return;
       event.preventDefault();
-      const next = items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : Math.min(items.length - 1, Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)))]!;
+      const next = items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : Math.min(items.length - 1, Math.max(0, index + (event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1)))]!;
       next.focus(); next.click();
     }}>
       {(Object.keys(WIDGET_CATEGORIES) as WidgetCategory[]).map(category => ({ category, ids: ACTIVE_WIDGET_IDS.filter(id => WIDGET_CATALOG[id].category === category) })).filter(group => group.ids.length > 0).map(({ category, ids }) => <div key={category} className="catalog-group" role="group" aria-labelledby={`catalog-group-${category}`}>

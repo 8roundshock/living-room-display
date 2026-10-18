@@ -72,8 +72,9 @@ acceptance. Appearance saves do not enable Windows idle.
 sky**, **Personal** and **Pictures**; groups without an available widget are not shown.
 Desktop shows a narrow scrolling rail with each group label above its buttons;
 narrow screens show three buttons per row under each label. Up/Down move through the
-whole list (across groups) and preview the focused widget; Home/End jump to the first
-or last; Tab keeps its normal order. Samples are the actual renderers with synthetic
+whole list (across groups) and preview the focused widget (Left/Right do the same, matching
+the narrow three-column layout); Home/End jump to the first or last; Tab keeps its normal
+order. Samples are the actual renderers with synthetic
 content (the sample clock, “Weekend trip”, “Birthday” and “Holiday”, “Dinner at seven”).
 
 - **Calendar** (Time, default medium) follows the computer's local date like the Clock
@@ -85,7 +86,9 @@ content (the sample clock, “Weekend trip”, “Birthday” and “Holiday”,
   characters), a date, an **Every year** toggle and Remove. **Add date** adds a row
   dated one week ahead and focuses its title. An empty title shows an inline error and
   the Save bar reads “Countdown needs a title” until it is fixed; the server remains the
-  authority. Each row shows its count (“In 12 days · Fri, Oct 30”) or **Passed** for a
+  authority; a year outside 1900–2200 shows “Use a date between 1900 and 2200”. Closing
+the panel (removing or collapsing the widget, or changing tab) drops untitled or undated
+rows, so Save is never blocked by a field that is not on screen. Each row shows its count (“In 12 days · Fri, Oct 30”) or **Passed** for a
   past one-time date, which the display ignores until it is removed. Counts are whole
   days on this computer's calendar. The display shows the widget only while a date is
   upcoming; the editor canvas shows “Add a date to count down to” otherwise.

@@ -13,8 +13,8 @@
 /* Small: the month, then weekday initials over this week's dates. */
 .grid-ambient .ambient-calendar .calendar-family-small .calendar-month { margin: 0 0 9cqh; font-size: calc(max(var(--min-text), min(13cqw, 18cqh)) * var(--font-scale)); }
 .grid-ambient .ambient-calendar .calendar-strip th { font-size: calc(max(var(--min-text), min(6.5cqw, 9cqh)) * var(--font-scale)); padding-bottom: 0.9em; }
-.grid-ambient .ambient-calendar .calendar-strip td { font-size: calc(max(var(--min-data), min(8.8cqw, 16cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-calendar .calendar-strip .calendar-day { min-width: 1.6em; padding-inline: 0.06em; padding-block: 0.3em; }
+.grid-ambient .ambient-calendar .calendar-strip td { font-size: calc(max(var(--min-data), min(8.4cqw, 16cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-calendar .calendar-strip .calendar-day { min-width: 1.4em; padding-inline: 0.04em; padding-block: 0.15em; }
 
 /* Medium: weekday, a large date and the month on the left; a compact month grid on the right. */
 .grid-ambient .ambient-calendar .calendar-family-medium { flex-direction: row; align-items: center; justify-content: space-between; gap: 5cqw; }
