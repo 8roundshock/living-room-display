@@ -66,6 +66,41 @@ normal pointers. The host URL flag selects that presentation; held native cursor
 surface/lifecycle changes remain in draft PR #51 and require combined-source
 acceptance. Appearance saves do not enable Windows idle.
 
+## Calendar, Countdown and Note
+
+**Add widget** groups the catalog by category in this order: **Time**, **Weather &
+sky**, **Personal** and **Pictures**; groups without an available widget are not shown.
+Desktop shows a narrow scrolling rail with each group label above its buttons;
+narrow screens show three buttons per row under each label. Up/Down move through the
+whole list (across groups) and preview the focused widget; Home/End jump to the first
+or last; Tab keeps its normal order. Samples are the actual renderers with synthetic
+content (the sample clock, “Weekend trip”, “Birthday” and “Holiday”, “Dinner at seven”).
+
+- **Calendar** (Time, default medium) follows the computer's local date like the Clock
+  and rolls over at midnight. **Week starts on** offers Automatic (labelled with the
+  resolved day, for example “Automatic · Sunday”, from the browser locale with a Monday
+  fallback), Sunday or Monday. It has no data dependency, so it is always shown when
+  enabled.
+- **Countdown** (Personal, default small) holds up to 12 rows: a title (1–60
+  characters), a date, an **Every year** toggle and Remove. **Add date** adds a row
+  dated one week ahead and focuses its title. An empty title shows an inline error and
+  the Save bar reads “Countdown needs a title” until it is fixed; the server remains the
+  authority. Each row shows its count (“In 12 days · Fri, Oct 30”) or **Passed** for a
+  past one-time date, which the display ignores until it is removed. Counts are whole
+  days on this computer's calendar. The display shows the widget only while a date is
+  upcoming; the editor canvas shows “Add a date to count down to” otherwise.
+- **Note** (Personal, default small) is a textarea limited to 200 characters and 4
+  lines with a live “37/200” counter and **Clear**. Line breaks are kept. The display
+  hides an empty note; the editor canvas shows “Write a note”.
+
+All three panels join the shared settings draft: Save/Cancel appear only for effective
+changes (trailing spaces trimmed on blur do not count), Cancel restores the saved values,
+and built-in or saved styles never change the week start, countdowns or note (styles
+do reset which widgets are shown). Countdowns and the note are private content stored
+on this device and included in exports. `tests/ui/catalog-time-browser.mjs` checks the
+picker groups and keyboard, each panel, Save/Cancel, reload, styles, display hiding,
+320/390 px reflow, Save-bar clearance and the compact picker viewports.
+
 ## Weather and location
 
 Typing two characters starts debounced city search. Up/Down explores, Enter
