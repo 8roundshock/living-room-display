@@ -79,6 +79,39 @@ and `appearance.layout` remain parseable data but no longer affect rendering;
 old manual visual positions are not converted to cells. The same applies to
 legacy presets/imports. `appearance.clockStyle` is `outline` (default), `digital` or `analog`.
 
+`appearance.accentMode` is `color` or `native`; settings, saved styles and imports
+without it read as `color`. `color` tints every widget's accent group with
+`accentColor`; `native` will use each widget's palette tone. The editor has no
+control yet and rendering arrives with #75.
+
+`appearance.animation` is `off`, `subtle` or `lively`; data without it reads as
+`subtle`. It will govern motion inside widgets and the editor (#76); relocation
+through black is unaffected. The editor has no control yet.
+
+Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
+`accentMode` or `animation` keeps its saved value (#83). Only the persisted reader
+fills defaults.
+
+Planned catalog ids (`worldClocks`, `calendar`, `countdown`, `note`, `airQuality`,
+`sunMoon`) appear in `widgets`, `widgetOverrides` and `widgetGrid.placements` but
+always read as disabled. A PATCH that enables one returns 400 (`<Name> is not
+available yet`).
+
+## Widget data
+
+`settings.widgetData` holds content for the #78 widgets: `worldClocks` (≤4 cities:
+uuid `id`, `label` 1–40 characters, IANA `timezone` other than `auto`, `latitude`,
+`longitude`), `calendar.weekStart` (`locale` default, `sunday`, `monday`),
+`countdowns` (≤12: uuid `id`, `title` 1–60 characters, civil `date` `YYYY-MM-DD`
+in 1900–2200, `repeatsYearly`), `note.text` (≤200 characters and ≤4 lines, trimmed,
+CRLF stored as LF) and `airQuality.scale` (`us` default or `european`). IDs within a
+list are unique and unknown keys are rejected. Missing sections read as defaults.
+PATCH merges `calendar`, `note` and `airQuality` and replaces either list whole.
+`widgetData` is not part of saved styles, so applying a style or built-in preset
+leaves it unchanged. It is included in exports and imports like reminders. Note
+text, countdown titles and world-clock labels are private user content: never put
+them in Git, diagnostics or picker samples.
+
 ## Local photo
 
 `PATCH /api/settings` accepts request-only `photoChange`: absent preserves the
@@ -193,3 +226,10 @@ warning. An unreadable primary is preserved as `state.corrupt.json`. If neither
 copy is valid, startup fails without resetting user data. Preserve the folder and
 restore a known-good export. Export/import includes settings and reminders only;
 weather, snapshot pixels, and native tokens are excluded. Store backups privately.
+
+At rest, `state.json`, `state.backup.json` and exports omit additive values that
+the previous installed release cannot parse while they equal the current read
+default: `appearance.accentMode` `color`, `appearance.animation` `subtle`, disabled
+planned or retired widget ids, and default `widgetData` sections. API responses
+(`/api/state`, the `PATCH /api/settings` response and the native session) always
+include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).

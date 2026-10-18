@@ -58,6 +58,22 @@ display tab. It saves no images or app data. This requires Node 24; Playwright
 is a verification tool, not an app runtime dependency. Native cursor visibility
 and restoration remain separate Windows acceptance checks.
 
+## Rollback compatibility check
+
+`npm test` includes `src/server/rollback.test.ts`. It writes synthetic data in
+temporary folders and parses the results with the frozen previous-release reader in
+`src/server/compat/` (excluded from the build). To prove a change keeps default
+data readable by the previous release, add a scenario that saves through the store
+or API and call `assertPreviousReaderAccepts('data' | 'import', value, label)` from
+`src/server/compat/previous-reader.ts` on `state.json`, `state.backup.json` or the
+export. Use `assertPreviousReaderRejects` for a documented exception, and record
+it in the [install rollback table](install.md#additive-data-and-rollback-compatibility-84).
+Never edit the vendored copy; the coordinator replaces it after each install (#130).
+
+Browser widget checks live in `tests/ui/widget-checks/`, one module per widget
+(`id`, optional `prepare`, `selectors` and `family`). The widget harness loads every
+module in that folder and requires one for each active catalog id.
+
 ## Local checkout and agent startup
 
 On the owner's Windows PC:

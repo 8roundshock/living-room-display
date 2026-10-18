@@ -38,6 +38,24 @@ code and tests for actual symbols and commands; the documentation is not a schem
 - For image widgets, read the contract's photo boundary. User-selected photo
   storage and the RAM-only last-desktop capture are different features.
 
+## Rules for new widgets
+
+- Declare a `category` and an existing palette `tone` on the catalog entry, one
+  line per entry, appended after existing ones. Activate a reserved `planned` entry
+  by deleting its `status`; do not add a second id for it.
+- Implement a `WidgetModule` in its own file under `src/client/widgets/`, with its
+  own CSS file imported from that module. Register it on its line in
+  `WIDGET_MODULES`. Use `Settings`, `draftProblem` and `sample` hooks instead of
+  editing the inspector, editor or picker.
+- Use `WeatherGlyph` for weather symbols and `TransitionText` for changing values.
+  Add no per-widget animation loop.
+- A free-size widget uses the optional `freeSize` catalog rule (#73) rather than
+  its own geometry.
+- Never delete a catalog id the previous release knows: mark it `retired` with
+  `mergedInto` so its keys stay readable for rollback.
+- Add a `tests/ui/widget-checks/<id>.mjs` module, and prove new persisted data
+  with rollback scenarios using the helpers in `src/server/compat/previous-reader.ts`.
+
 Configuration edits join the existing settings draft: Save/Cancel, dirty-only
 save bar, async cancellation and concurrent-draft preservation. Do not add an
 independent autosave path for a new widget's settings.

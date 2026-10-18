@@ -9,11 +9,17 @@ every ambient widget, including clocks, photos and last-desktop previews.
 
 | Authority | Responsibility |
 | --- | --- |
-| [`src/shared/widgets.ts`](../src/shared/widgets.ts) | The catalog, supported families, grid definitions, placement and layout helpers. |
-| [`src/shared/contracts.ts`](../src/shared/contracts.ts) and [`defaults.ts`](../src/shared/defaults.ts) | Persisted types and catalog-derived initial settings. |
+| [`src/shared/widgets.ts`](../src/shared/widgets.ts) | The catalog (category, tone, status), supported families, grid definitions, placement and layout helpers. |
+| [`src/shared/palette.ts`](../src/shared/palette.ts) | Accent modes and the palette roles a catalog entry declares as its `tone`. |
+| [`src/shared/motion.ts`](../src/shared/motion.ts) | Animation levels and their labels. |
+| [`src/shared/contracts.ts`](../src/shared/contracts.ts) and [`defaults.ts`](../src/shared/defaults.ts) | Persisted types, `widgetData` and catalog-derived initial settings. |
 | [`src/server/validation.ts`](../src/server/validation.ts) and [`store.ts`](../src/server/store.ts) | Boundary validation, compatible legacy migration and atomic storage. |
+| [`src/server/persistence.ts`](../src/server/persistence.ts) | The previous release and the additive defaults omitted at rest so it can still read files and exports. |
+| [`src/server/compat/previous-reader.ts`](../src/server/compat/previous-reader.ts) | Test-only frozen reader of the previous release and its assertion helpers ([rollback compatibility](development.md#rollback-compatibility-check)). |
 | [`src/server/photo.ts`](../src/server/photo.ts) | Strict normalized PNG ingestion and private selected-image validation. |
-| [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | Widget rendering by catalog type and family. |
+| [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
+| [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
+| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per widget (`Clock`, `Weather`, `Rain`, `Forecast`, `Reminders`, `Preview`, `Photo`; stubs for planned ids), shared weather pieces in `common.tsx`, and the `WeatherGlyph` and `TransitionText` primitives. |
 | [`src/client/Display.tsx`](../src/client/Display.tsx) | Ambient state and the shared movement/composition boundary. |
 | [`src/client/Editor.tsx`](../src/client/Editor.tsx) | Picker, grid interactions and settings draft integration. |
 
@@ -22,6 +28,40 @@ module. A catalog entry must reach the picker and renderer through this shared
 contract. The repo-local
 [`living-room-widget` skill](../.agents/skills/living-room-widget/SKILL.md) is the
 entrypoint for agents adding or changing a widget; it requires no global install.
+
+## Catalog contract
+
+Each `WIDGET_CATALOG` entry sits on one line, so parallel changes touch different
+lines. Besides its families and defaults, an entry declares:
+
+- `category`: `time`, `weather`, `personal` or `pictures` (labels in
+  `WIDGET_CATEGORIES`).
+- `tone`: one existing palette role from `palette.ts` (`time`, `sky`, `water`,
+  `sun`, `personal`, `stone`). Native accent colours (#75) use it; sections carry
+  `tone-<role>` and the ambient root `data-accent-mode`.
+- `status`: omitted means active. `planned` reserves an id whose renderer has not
+  shipped; `retired` keeps an id only so the previous release can read data, with
+  `mergedInto` naming the active id that absorbs an enabled retired placement (the
+  retiring change owns that migration). Planned and retired entries are hidden from
+  the picker and inspector and never rendered. Planned ids always read as disabled
+  and a PATCH enabling one returns 400.
+
+`WIDGET_IDS` keeps every id, because schemas and geometry need them all.
+`ACTIVE_WIDGET_IDS` is the load-time list of shipped ids for UI lists and test
+iteration; `isActiveWidget(id)` reads the catalog live for validation and rendering.
+New entries are appended, which keeps the packing and composition of existing ids
+identical. To ship a planned widget, delete its `status`, replace its stub module and
+add its check module; nothing else in the shared code needs to change.
+
+Each widget implements a `WidgetModule` in its own file under `src/client/widgets/`:
+`Renderer`, optional `visible(props)` (after the catalog status and enabled flag),
+optional `Settings` panel rendered in the inspector under the shared Size control,
+optional `draftProblem(settings)` that disables Save and shows its reason, and
+optional `sample({ state, settings })` that adjusts the picker's synthetic sample
+with new objects. Use `WeatherGlyph` for weather symbols and `TransitionText` for
+values that change. Browser QA loads one check module per widget from
+[`tests/ui/widget-checks/`](../tests/ui/widget-checks/): `id`, optional
+`prepare(state, { now })`, extra clipping `selectors` and `family(...)` assertions.
 
 Start with `WIDGET_CATALOG`, `GRID_DENSITIES` and `widgetSpan`; use
 `reflowWidget`/`fitGridDensity` rather than implementing a second collision or
@@ -65,6 +105,12 @@ The renderer families have deliberate visual roles:
 | Reminders | One pending item | Two pending items | Four pending items; all show an honest remaining count |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete, faint captured desktop | Wider complete desktop | Larger complete desktop; no crop hides screen context |
+| World clocks | Planned (#78), not shipped | | |
+| Calendar | Planned (#78), not shipped | | |
+| Countdown | Planned (#78), not shipped | | |
+| Note | Planned (#78), not shipped | | |
+| Air quality | Planned (#78), not shipped | | |
+| Sun & moon | Planned (#78), not shipped | | |
 
 The large clock requires actual vertical room in the central catalog; do not
 recreate a giant option by scaling within the previous short large family.
