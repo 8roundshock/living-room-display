@@ -130,7 +130,8 @@ Delete. Completed reminders cannot be edited; an edit saved for a reminder compl
 in another tab reports “This reminder was completed elsewhere. Restore it to edit.”
 **Clear history…** asks inline before deleting every completed reminder. The
 computer keeps the latest 500 completed reminders. Every reminder time follows the
-12/24-hour setting.
+12/24-hour setting; like the canvas preview, the editor list follows an unsaved
+change to it, while the display keeps the saved setting until Save.
 The ambient widget shows as many pending reminders as fit its box, soonest first,
 never a partially visible row, then an exact “+N more”. Titles use up to two lines
 (four when only one reminder is pending) and scale with the widget width, capped
