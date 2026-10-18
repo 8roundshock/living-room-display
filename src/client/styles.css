@@ -1572,3 +1572,10 @@ button {
     padding: 12px 16px;
   }
 }
+/* Applied only by the standalone display route; never alter Windows cursors. */
+html.standalone-display,
+html.standalone-display *,
+html.standalone-display *::before,
+html.standalone-display *::after {
+  cursor: none !important;
+}

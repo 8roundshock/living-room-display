@@ -32,6 +32,11 @@ injection, audio change or media key is used. The backend lives independently.
 Scripts validate PID, executable path, command line and process start time before
 stopping it. Source runs and other apps are not adopted.
 
+The standalone `/display` document uses scoped `cursor: none`, including loading,
+error and descendant controls. The class is removed on unmount; the editor and
+its embedded preview keep ordinary cursor behavior. No global Windows cursor
+counter, cursor image, registry setting or input hook is changed.
+
 ## Preview and privacy
 
 The helper captures the primary display once with `CopyFromScreen`, before any
@@ -98,6 +103,11 @@ or uninstall. No paths, remotes, changes or credentials are saved in provenance.
 The integrated source includes approved main `5ef3fdc`; its full production build
 and all 47 application tests pass using the installed app-owned Node 24.19.0.
 This source check does not itself establish a successful installed refresh.
+The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
+passes actual computed-style checks for loading/error, viewport edges, widget
+controls, display-to-editor navigation, the embedded preview and a new display
+tab. Synthetic state is intercepted in an isolated headless browser; it neither
+changes app data nor establishes the visible native cursor state.
 
 Independent static review approved source `eba70fc` before current-PC runtime QA.
 The final integrated source still needs its own exact-head review and CI before
@@ -139,6 +149,18 @@ actual movies/games/screensaver inhibition, real lock/resume, across-room
 readability, and multi-monitor behavior. The native test proves neither exact
 eight-second timer expiry nor these compatibility cases. Automatic idle stays
 off until explicitly authorized after final reconciliation.
+
+Cursor bug [#36](https://github.com/8roundshock/living-room-display/issues/36):
+the user reported a bright white pointer during the prior native test. WGC may
+omit the cursor, so the earlier image did not prove it was hidden. Native proof
+of the scoped CSS fix is pending a reviewed bounded test. Read-only
+[`GetCursorInfo`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getcursorinfo)
+and [`CURSORINFO`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-cursorinfo)
+provide visibility flags and screen position: `0` is hidden, `1` is showing, and
+`2` is touch/pen suppression. Verify the point lies inside the owned kiosk's
+actual rectangle and check restoration after exit; do not infer absence from a
+cursor-free screenshot. These Microsoft definitions were checked for this
+2026-10-18 verification plan; native results must be recorded when executed.
 
 References: [Screensaver library](https://learn.microsoft.com/en-us/windows/win32/lwef/screen-saver-library),
 [Edge kiosk](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-configure-kiosk-mode),

@@ -45,6 +45,19 @@ recognition. Native capture/fullscreen/lock acceptance remains separate. Follow
 [CONTRIBUTING.md](../CONTRIBUTING.md) and the [agent runbook](agent-runbook.md) for
 self-service issue/fork/fix handoff; neither enables automatic reporting.
 
+Optional production cursor regression, using an already available Playwright
+module and Edge plus an isolated source server:
+
+```powershell
+node windows/tests/Test-CursorBrowser.mjs --base-url http://127.0.0.1:4324 --playwright '<Playwright module path>' --edge '<msedge.exe path>'
+```
+
+It intercepts state with synthetic data and checks actual computed cursor styles
+through loading/error, widgets, editor navigation/embedded preview and a new
+display tab. It saves no images or app data. This requires Node 24; Playwright
+is a verification tool, not an app runtime dependency. Native cursor visibility
+and restoration remain separate Windows acceptance checks.
+
 ## Local checkout and agent startup
 
 On the owner's Windows PC:

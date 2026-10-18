@@ -16,6 +16,9 @@ the owner's explicit authority to choose practical defaults and build the app.
   reminders, forecasts and last-state preview presentation. Empty reminders hide
   by default with a saved override; typography, spacing and reduced motion follow
   the [design notes](docs/design.md). See [UI checks](docs/ui.md).
+- Standalone display cursor CSS covers loading/error pages and descendants;
+  editor/embedded preview cursor behavior is preserved. The production Edge
+  route regression passes; actual native cursor proof remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).
 - Editor-only device location with permission-aware one-shot lookup, rounded
   coordinates, Toronto fallback and manual-city protection. Existing choices
   migrate as manual; no location prompt or lookup occurs in the screensaver.
@@ -47,6 +50,9 @@ found. See [runtime evidence](docs/windows.md#actual-current-pc-runtime-evidence
 
 The newer UI/location source is integrated; its installed refresh follows final
 Windows review/CI. The recorded native host is unchanged by those UI features.
+The user reported a bright white pointer during the previous native test;
+WGC image inspection did not establish cursor absence. A reviewed bounded native
+test must verify cursor hiding and restoration before calling that bug resolved.
 Native `/c` cold startup was blocked by automatic approval review before action
 and remains unverified. Fresh-account installation, movie/game inhibition,
 secure lock/resume and across-room readability are unverified. Automatic idle
