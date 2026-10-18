@@ -11,6 +11,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
+import { resizeWidgetSpan } from '../../src/shared/widgets.ts';
 
 /** Clock, Weather, Forecast and a small Reminders with free cells to its right and below. */
 function roomy() {
@@ -142,8 +143,27 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     assert.equal(await frameSpan('reminders'), '2x8', 'switching back restores the exact span');
     checks.push('pointer resize snaps to whole cells and reflows neighbours live; Escape abandons; Save persists the span; reload, Cancel and a density round trip restore it');
 
+    // #152: a Column stays a Column in a finer grid, and a custom size dropped to fit is named.
+    const columnBoard = defaultSettings(); columnBoard.widgets.preview = false; columnBoard.preview.enabled = false;
+    columnBoard.widgetGrid = resizeWidgetSpan(columnBoard.widgetGrid, 'reminders', { columns: 2, rows: 8 }, columnBoard.widgets);
+    await open(columnBoard); await layout(); await clean();
+    const densityControl = () => page.getByRole('combobox', { name: 'Grid density' });
+    await densityControl().selectOption('spacious'); await dirty();
+    assert.equal(await status().textContent(), 'Clock medium · Reminders 2 × 8 → small to fit. Switch back to restore.');
+    assert.equal(await frameSpan('reminders'), '2x2');
+    await densityControl().selectOption('balanced'); await clean();
+    assert.equal(await frameSpan('reminders'), '2x8');
+    await densityControl().selectOption('fine'); await dirty();
+    assert.equal(await frameSpan('reminders'), '2x10', 'the minimum width survives the finer grid');
+    await selectReminders();
+    assert.equal(await page.locator('.widget-option.selected .widget-row-copy small').textContent(), 'Column');
+    assert.equal(await page.getByRole('button', { name: 'Reminders size column', exact: true }).getAttribute('aria-pressed'), 'true');
+    await cancel().click(); await clean();
+    checks.push('a Column stays a 2-wide full-height Column in Fine, and a density fit that drops it names “Reminders 2 × 8 → small”');
+
     // Keyboard width/height with no displacement; resizing back to the saved shape hides the Save bar.
     await open(roomy()); await layout(); await clean();
+    assert.match(await page.locator('#grid-keyboard-help').textContent(), /resize; Reminders changes width with left and right and height with up and down\./, 'keyboard help names the catalog free-size widgets');
     await mover().focus(); await handle().focus();
     await page.keyboard.press('ArrowDown'); await dirty();
     assert.equal(await frameSpan('reminders'), '2x3');
