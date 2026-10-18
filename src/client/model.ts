@@ -1,13 +1,27 @@
 import type {
   RainInterval,
+  Reminder,
   Settings,
   VisualSettings,
 } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 
 export function getVisual(settings: Settings): VisualSettings {
-  const { appearance, widgets, widgetOverrides, preview } = settings;
-  return structuredClone({ appearance, widgets, widgetOverrides, preview });
+  const { appearance, widgets, widgetOverrides, widgetBehavior, preview } = settings;
+  return structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, preview });
+}
+
+export function reminderPresentation(
+  settings: Settings,
+  reminders: Reminder[] | null | undefined,
+  disconnected = false,
+): 'hidden' | 'pending' | 'empty' | 'unavailable' {
+  if (!settings.widgets.reminders) return 'hidden';
+  if (!Array.isArray(reminders)) return 'unavailable';
+  if (reminders.some((reminder) => !reminder.completed)) return 'pending';
+  // A failed refresh cannot confirm that a retained empty list is still empty.
+  if (disconnected) return 'unavailable';
+  return settings.widgetBehavior.reminders.hideWhenEmpty ? 'hidden' : 'empty';
 }
 
 export function applyBuiltinPreset(

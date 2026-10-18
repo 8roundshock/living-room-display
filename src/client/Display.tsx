@@ -18,7 +18,7 @@ import {
   weatherTime,
 } from './format';
 import { Icon, weatherIcon } from './icons';
-import { precipitationOutlook, sortReminders } from './model';
+import { precipitationOutlook, reminderPresentation, sortReminders } from './model';
 
 const conditions: Record<number, string> = {
   0: 'Clear skies',
@@ -234,7 +234,8 @@ export function AmbientDisplay({
           now,
         )
       : '';
-  const reminders = sortReminders(state.reminders)
+  const reminderState = reminderPresentation(settings, state.reminders, disconnected);
+  const reminders = sortReminders(state.reminders ?? [])
     .filter((reminder) => !reminder.completed)
     .slice(0, 2);
   const ambientStyle = {
@@ -415,7 +416,7 @@ export function AmbientDisplay({
               )}
             </Widget>
           )}
-          {settings.widgets.reminders && (
+          {reminderState !== 'hidden' && (
             <Widget id="reminders" settings={settings} index={3}>
               <div className="ambient-label">Up next</div>
               {reminders.length ? (
@@ -434,6 +435,13 @@ export function AmbientDisplay({
                     </li>
                   ))}
                 </ul>
+              ) : reminderState === 'unavailable' ? (
+                <>
+                  <div className="ambient-title">Reminders unavailable</div>
+                  <div className="ambient-description">
+                    Waiting for the local server.
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="ambient-title">A little breathing room.</div>
@@ -441,6 +449,9 @@ export function AmbientDisplay({
                     No reminders waiting.
                   </div>
                 </>
+              )}
+              {disconnected && reminders.length > 0 && (
+                <div className="ambient-description">Saved reminders · offline</div>
               )}
             </Widget>
           )}

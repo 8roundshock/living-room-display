@@ -29,6 +29,17 @@ Mutating JSON requests require `Content-Type: application/json`. Errors use
 are rejected. Text/reminder limits, visual ranges, and preset limits are validated
 on the server. Saved presets contain only nonrecursive visual snapshots.
 
+Visual settings include `widgetBehavior.reminders.hideWhenEmpty` (boolean,
+default `true`). It controls hiding a confirmed list with no pending reminders;
+`widgets.reminders: false` always disables the widget. PATCH accepts a nested
+partial such as `{ "widgetBehavior": { "reminders": { "hideWhenEmpty": false } } }`.
+Empty nested patches preserve the current value. Saved presets include this
+behavior, and version-one settings/presets/imports missing it acquire the default
+without changing widget visibility or reminder contents. No data version bump
+or storage-directory migration is needed. Unknown widget behavior keys and
+nonboolean values are rejected. Connection failures are a client availability
+state, not a replacement reminder list.
+
 All dates representing instants are ISO timestamps with an offset or `Z`.
 Reminder `dueAt` is one-time, nullable, and displayed in the editor's explicit
 local time context. Recurrence is not implemented. Daily forecast dates are civil
