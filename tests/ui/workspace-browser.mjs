@@ -51,6 +51,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       await tab('Widgets'); await button('Clock').click(); await button('Digital').click(); await button('Save changes').waitFor();
       assert.deepEqual(await frame(), before, 'dirty bar must not change canvas geometry');
       await inView(button('Cancel'), 'Cancel'); await inView(button('Save changes'), 'Save');
+      if (viewport.width > 1050) { const bar = await page.locator('.studio-savebar').boundingBox(), aside = await page.locator('.inspector').boundingBox(); assert.ok(bar.x + bar.width <= aside.x, 'wide Save bar must stay clear of the full-height inspector'); }
       assert.equal(await page.locator('.widget-position-control').count(), 0);
       await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
       await button('Edit layout').click(); await inView(page.getByRole('combobox', { name: 'Grid density' }), 'Density');
@@ -75,7 +76,14 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       const field = await input.boundingBox(), savebar = await page.locator('.studio-savebar').boundingBox();
       assert.ok(field.y >= 0 && field.y + field.height < savebar.y, 'focused desktop field must clear Save');
       await button('Cancel').click();
-      checks.push(`${viewport.width}x${viewport.height}: bounded tabs/canvas/actions, stable dirty geometry, all 21 family catalog actions, keyboard close/focus return and Save clearance`);
+      if (viewport.width > 1050) {
+        await page.route('**/api/state', async route => { const response = await route.fetch(); await route.fulfill({ response, json: { ...(await response.json()), storageWarning: 'Synthetic storage warning' } }); });
+        await page.reload(); await page.locator('.studio-error').waitFor();
+        const alertBox = await page.locator('.studio-error').boundingBox(), aside = await page.locator('.inspector').boundingBox();
+        assert.ok(aside.y + aside.height <= alertBox.y + 1, `inspector must end above an alert row: ${JSON.stringify({ aside, alertBox })}`);
+        await page.unroute('**/api/state');
+      }
+      checks.push(`${viewport.width}x${viewport.height}: bounded tabs/canvas/actions, stable dirty geometry, all 21 family catalog actions, keyboard close/focus return and Save clearance${viewport.width > 1050 ? ', wide Save bar beside the inspector and alert row clear of it' : ''}`);
     }
     for (const viewport of [{ width: 390, height: 700 }, { width: 390, height: 480 }, { width: 640, height: 300 }]) {
       await open(viewport);

@@ -75,5 +75,8 @@ WidgetKit/Always On sources and concrete adaptation rules.
 Unused ambient pixels remain true black; saved brightness caps are unchanged.
 These choices do not reproduce Apple power behavior or guarantee OLED safety.
 The editor is more legible than the distant display; browser images do not prove
-actual TV brightness or viewing comfort. See [UI contracts](ui.md), [API](api.md)
+actual TV brightness or viewing comfort. Ambient metadata keeps a display-relative
+floor (1.4% of display height; 1.65% for secondary values), about 10/12 CSS px on
+a 720-CSS-pixel-tall display such as a 4K TV at 300% scaling, instead of shrinking
+with each widget. See [UI contracts](ui.md), [API](api.md)
 and the [UX role guide](roles/ux.md) for verification and future work.

@@ -133,15 +133,22 @@ Source provenance checks use synthetic local Git repositories to verify clean,
 dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
 verify metadata refresh on successful install and retention after failed update
 or uninstall. No paths, remotes, changes or credentials are saved in provenance.
-The last verified installed baseline on 2026-10-18 was clean `2e010f0`; its 71
-application tests and the full production build passed using the app-owned Node
-24.19.0. The reviewed Studio/grid, snapshot-readability, reminder and city-wrapping corrections
-were installed in that baseline. The
-installation marker and HTTP health were rechecked on 2026-10-18; the rollout
-separately verified served assets and data preservation. That documentation-only
-recheck performed no GUI, capture or native/current-desktop probe. Recheck current
+The current installed baseline is recorded in [STATUS.md](../STATUS.md) (clean
+`bedca44`, PR #70, on 2026-10-18). The preceding rollout installed clean `7e654fd`, the normal
+merge of PR #57. Its 79 application tests, full production build, independent
+final-head reviews and Windows/Linux CI passed before rollout. The
+[dated rollout evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)
+verifies installed provenance, owned backend/listener, health, served asset hashes
+and unchanged private data after the owner confirmed a clean editor and authorized
+the update. A complete private pre-revision-2 data recovery copy was verified;
+retain it for the [matching app/data rollback](install.md#widget-geometry-revision-2-update-and-rollback).
+No native launch, capture, editor reload or screensaver registration accompanied
+that rollout. This documentation correction adds no live probes. Recheck current
 provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](install.md).
+A later marker-only read reports clean `bedca44e` after PR #70, installed at
+19:08:23 UTC. The coordinator has not rechecked current backend/served assets,
+private data/backup equality or registration; see [current status](../STATUS.md).
 The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
 checks that browser loading/error, viewport edges, widgets, editor/embedded preview
 and new display tabs retain their pointer, while explicit native presentation
@@ -152,31 +159,40 @@ changes app data nor establishes the visible Windows cursor state.
 Independent static review approved source `eba70fc` before the earlier runtime QA;
 later merged application changes also passed their final-head reviews and CI.
 The native cursor replacement is a separate, uninstalled candidate in
-[draft PR51](https://github.com/8roundshock/living-room-display/pull/51). Its old
-head `43beadc` received independent approval and both CI jobs passed. Reviewed UI
-main `7e654fd` is now normally merged into the native branch; the moved launch in
-`AmbientSession.cs` preserves the surface/input implementation and carries the
-UI's `native=1` URL flag. This new combined head requires independent review and
-current-head CI. Its combined runtime gates still apply. The
-repository stays private and this PR is not deployment evidence. Normal product
-operation contains no prototype phase logging or screenshot logging.
+[draft PR51](https://github.com/8roundshock/living-room-display/pull/51). Historical
+combined head `f4a57b5` received independent source approval and both CI jobs passed.
+The source-only refresh normally merges main `141af7c` (PR #70 readability and
+PR #67 browser controls) while preserving Windows tree
+`4b269ffc22624168955d651a15d91a7abffc51ee` unchanged. The new head needs its own
+independent review and current-head CI; earlier approvals do not transfer.
+The repository stays private, PR #51 stays draft/unmerged/uninstalled, and source
+approval is not deployment or native acceptance. No new phase or screenshot
+logging is introduced.
 
-Combined-merge local preparation passed all 79 application tests/full production
-build, native compilation, three pure C# lifecycle/input/policy suites and three
-mocked/synthetic PowerShell restore/install/provenance suites. No helper argument,
-desktop probe, browser, capture, input, installed server or Windows setting was
-executed/changed by these checks. Complete hosted Windows checks and independent
-review of the final combined head are separate pending gates.
+Historical `f4a57b5` preparation passed 79 application tests/full build, native
+compilation, three pure C# lifecycle/input/policy suites and three mocked/synthetic
+PowerShell restore/install/provenance suites. Those tests were not replayed as part
+of this refresh. Current local validation is limited to source/tree comparisons,
+diff/link checks and compilation into a new ignored source-check directory; the
+compiled host is not loaded or executed. Hosted CI remains a separate check.
+
+All frozen candidates and direct/r3 visual bundles keep their original bytes and
+old `f4a57b5` / `7e654fd` pins. They cannot establish eligibility against the newer
+installation. Future native acceptance requires a new identified candidate/build,
+independent artifact/JavaScript-binding review, verified current backend/served
+asset pins and fresh user readiness with a coordinated heads-up/GO. No operational
+launcher or live binding is created by this source-only refresh.
 
 ## Actual current-PC runtime evidence
 
-The last verified installed baseline on 2026-10-18 was clean `2e010f0`, including
-the reviewed Studio/grid, readable snapshot, reminder and city-wrapping fixes.
-The latest CLI-only update verified 21 built and 11 served files, preserved saved
-data/backup, settings, reminders and photo state, and left a healthy owned server.
-It performed no native/current-desktop probe or display launch; see
-[rollout evidence](https://github.com/8roundshock/living-room-display/pull/54#issuecomment-6249798540).
-Actual native preview source/content and
+The clean `7e654fd` historical web rollout is verified as described above; no
+combined-host native acceptance was performed during that update or established
+by the newer marker-only `bedca44e` read. The separate PR #70 session's
+[rollout receipt](https://github.com/8roundshock/living-room-display/pull/70#issuecomment-6253957062)
+reports backup/data preservation, healthy API, matching served assets and unchanged
+screensaver values. Those checks belong to that session, separate from the
+coordinator's marker-only read; this source refresh adds no installed-service
+requests or runtime probes. Earlier actual native preview source/content and
 readability on the 3840x2160 primary were accepted under
 [#46](https://github.com/8roundshock/living-room-display/issues/46): raw PNG and
 rendered preview were inspected in RAM, normal exit cleared preview to 404 and
@@ -216,8 +232,12 @@ bug; do not route around the rejected test.
 Pending: actual combined-source acceptance and a subsequent reviewed update for PR51,
 fresh-account install, movie/game/screensaver inhibition, real lock/resume,
 across-room comfort and multi-monitor behavior. The earlier native smoke test
-does not prove these cases. Automatic idle remains off with the original blank
-saver, 1200-second timeout and security 0 until explicitly authorized after QA.
+does not prove these cases. The coordinator's last direct verification kept app
+idle off with the original blank saver, 1200-second timeout and security 0; the newer marker
+read does not establish current registration or authorize activation.
+The user is away as of the latest 2026-10-18 handoff. Wait for fresh readiness
+before physical tests; do not launch native tests, capture or input, change the
+installed app/data, or alter idle/TV settings during unattended source work.
 
 Cursor bug [#36](https://github.com/8roundshock/living-room-display/issues/36):
 the user reported a bright white pointer, and native readings confirmed a visible

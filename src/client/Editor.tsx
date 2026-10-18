@@ -1195,7 +1195,7 @@ export function Editor({
                       {draft.locationSource === 'device'
                         ? 'Approximate device area'
                         : draft.locationSource === 'fallback'
-                          ? 'Toronto fallback'
+                          ? 'Default location'
                           : 'Manual city'}
                     </span>
                   </div>

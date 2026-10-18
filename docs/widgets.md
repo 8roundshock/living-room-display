@@ -41,6 +41,18 @@ smallest useful family and additional relevant detail in larger families. A
 larger family changes composition and information density; it is not merely a
 scaled small widget. A widget need not support every family. Keep text real,
 scalable and readable, with meaningful labels instead of relying on color.
+Small labels, age, attribution, units and secondary values use the shared floors in
+[`widgets.css`](../src/client/widgets.css): `var(--min-text)`/`var(--min-data)`,
+inherited from `--ambient-min-text` (1.4% of the display or editor canvas height)
+and `--ambient-min-data` (1.65%), times Text size. Wrap related values onto shared
+rows before letting the fit scale shrink a family. Only a family that truly cannot
+fit caps the floors by its own content height: small rain/forecast use 7.25% (text)
+and 8.5% (data), which binds only when that height is under about 19.4% of the
+display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold).
+Overfull content is laid out proportionally wider before the fit scale shrinks it,
+so a larger Text size never renders text-size-scaled labels or values smaller.
+Icons and the fixed unavailable dash do not follow Text size and can still shrink
+with the fit. The picker sample has no floor.
 
 The renderer families have deliberate visual roles:
 

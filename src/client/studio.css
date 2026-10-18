@@ -1461,11 +1461,58 @@ html.studio-editor {
   }
   .inspector-panel h2 { font-size: 20px; margin-bottom: 18px; }
   .inspector-panel .panel-heading h2 { margin: 0; }
-  .studio .preset-list { margin-bottom: 20px; }
-  .studio .preset-miniature { height: 64px; }
-  .studio .control-block { margin-bottom: 20px; }
+  .studio .preset-list { margin-bottom: 14px; }
+  .studio .preset-miniature { height: 52px; padding: 7px 8px; }
+  .studio .preset-miniature > span { font-size: 24px; }
+  .studio .miniature-night > span { font-size: 22px; }
+  .studio .control-block { margin: 14px 0; }
+  .studio .range-input { height: 30px; }
+  .studio summary { min-height: 44px; }
+  .inspector-panel { padding-block: 14px 10px; }
+  /* The Style tab already names this panel; keep its heading for assistive tech only. */
+  .inspector-panel > h2:has(+ .preset-list) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .studio-savebar { bottom: 16px; }
   .studio-error { max-height: 70px; overflow: auto; }
+}
+/* Fade the inspector's bottom edge while more settings remain below. */
+@property --inspector-fade {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes inspector-more-below {
+  from { --inspector-fade: 44px; }
+  94% { --inspector-fade: 44px; }
+  to { --inspector-fade: 0px; }
+}
+@supports (animation-timeline: scroll()) {
+  @media (min-width: 701px) {
+    .inspector-panel {
+      mask-image: linear-gradient(to bottom, #000 calc(100% - var(--inspector-fade)), #0000);
+      animation: inspector-more-below linear both;
+      animation-timeline: scroll(self);
+    }
+  }
+  /* Scroll-linked, not motion: keep the cue when motion is reduced. */
+  @media (min-width: 701px) and (prefers-reduced-motion: reduce) {
+    .studio .inspector-panel {
+      animation: inspector-more-below linear both !important;
+      animation-timeline: scroll(self) !important;
+    }
+  }
+}
+/* Wide layouts: the Save bar sits under the canvas, so settings use the full height. */
+@media (min-width: 1051px) {
+  /* An alert adds a grid row below; the inspector then keeps its own track. */
+  .studio-workspace:not(:has(> .studio-error)) > .inspector { height: calc(100% + 64px); }
+  .studio-savebar { left: calc(50% - 187px); }
 }
 @media (min-width: 701px) and (max-width: 1050px) {
   .studio-header { padding-inline: 18px; }
