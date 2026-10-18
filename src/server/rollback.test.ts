@@ -2,6 +2,7 @@
 // frozen reader of the previous installed release. Synthetic data in temporary folders only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,7 +11,7 @@ import { createApplication } from './app.ts';
 import { forecastFixture, photoFixture } from './fixtures.ts';
 import { DataStore } from './store.ts';
 import { PREVIOUS_RELEASE } from './persistence.ts';
-import { PREVIOUS_READER, assertPreviousReaderAccepts, assertPreviousReaderRejects } from './compat/previous-reader.ts';
+import { PREVIOUS_READER, VENDORED_BLOBS, assertPreviousReaderAccepts, assertPreviousReaderRejects } from './compat/previous-reader.ts';
 import { defaultSettings as previousDefaults } from './compat/bedca44/shared/defaults.ts';
 import { WIDGET_CATALOG as PREVIOUS_CATALOG, defaultWidgetGrid as previousGrid } from './compat/bedca44/shared/widgets.ts';
 import { fitGridDensity } from '../shared/widgets.ts';
@@ -35,7 +36,12 @@ async function assertFilesAccepted(directory: string, label: string, backup = tr
 }
 async function temporary(prefix: string) { return mkdtemp(join(tmpdir(), prefix)); }
 
-test('the frozen reader is the previous release and its catalog matches PREVIOUS_RELEASE', () => {
+test('the frozen reader is an unedited copy of the previous release and its catalog matches PREVIOUS_RELEASE', async () => {
+  for (const [path, blob] of Object.entries(VENDORED_BLOBS)) {
+    const bytes = await readFile(new URL(`./compat/${path}`, import.meta.url));
+    const id = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+    assert.equal(id, blob, `${path} must stay byte-for-byte identical to ${PREVIOUS_READER.revision.slice(0, 7)}`);
+  }
   assert.equal(PREVIOUS_READER.revision, PREVIOUS_RELEASE.revision);
   assert.deepEqual(Object.keys(PREVIOUS_CATALOG), [...PREVIOUS_RELEASE.widgetIds]);
   assert.deepEqual(PREVIOUS_READER.widgetIds, [...PREVIOUS_RELEASE.widgetIds]);
