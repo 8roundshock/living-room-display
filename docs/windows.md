@@ -100,22 +100,40 @@ Source provenance checks use synthetic local Git repositories to verify clean,
 dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
 verify metadata refresh on successful install and retention after failed update
 or uninstall. No paths, remotes, changes or credentials are saved in provenance.
-The integrated source includes approved main `5ef3fdc`; its full production build
-and all 47 application tests pass using the installed app-owned Node 24.19.0.
-This source check does not itself establish a successful installed refresh.
+The last verified installed baseline on 2026-10-18 was clean `d81c1e0`; its 71
+application tests and the full production build passed using the app-owned Node
+24.19.0. The reviewed Studio/grid, snapshot-readability and reminder corrections
+were installed in that baseline. The
+installation marker and HTTP health were rechecked on 2026-10-18; the rollout
+separately verified served assets and data preservation. This documentation-only
+recheck performed no GUI, capture or native/current-desktop probe. Recheck current
+provenance using installed CLI `Status` or
+`%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](install.md).
 The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
 passes actual computed-style checks for loading/error, viewport edges, widget
 controls, display-to-editor navigation, the embedded preview and a new display
 tab. Synthetic state is intercepted in an isolated headless browser; it neither
 changes app data nor establishes the visible native cursor state.
 
-Independent static review approved source `eba70fc` before current-PC runtime QA.
-The final integrated source still needs its own exact-head review and CI before
-merge; the repository stays private.
+Independent static review approved source `eba70fc` before the earlier runtime QA;
+later merged application changes also passed their final-head reviews and CI.
+The native cursor replacement is a separate, uninstalled candidate in
+[draft PR51](https://github.com/8roundshock/living-room-display/pull/51), reviewed
+at `3a492b0` with both CI jobs successful. Its integrated runtime gates still
+apply; the repository stays private and this PR is not deployment evidence.
 
 ## Actual current-PC runtime evidence
 
-Tested 2026-10-18, source `eba70fc`, Windows 10 Pro 19045 x64, actual display 3840x2160:
+The last verified installed baseline on 2026-10-18 was clean `d81c1e0`, including
+the reviewed Studio/grid, readable snapshot and reminder fixes. Actual native preview source/content and
+readability on the 3840x2160 primary were accepted under
+[#46](https://github.com/8roundshock/living-room-display/issues/46): raw PNG and
+rendered preview were inspected in RAM, normal exit cleared preview to 404 and
+left zero owned display processes, and no screenshot files were saved. This
+does not establish room comfort, cursor hiding or the proposed replacement host.
+
+Earlier lifecycle tests on 2026-10-18 used source `eba70fc`, Windows 10 Pro 19045
+x64 and the same actual 3840x2160 display:
 
 - Per-user nonadmin install downloaded/checksummed official Node 24.19.0 and built
   the web/native app. The system Node 16.14.2 installation was unchanged. Installed
@@ -144,23 +162,32 @@ Do not infer this path passed from separate CLI cold Start/Stop and native warm
 EnsureServer checks. This is an unverified path, not an established application
 bug; do not route around the rejected test.
 
-Pending: final integrated installed update and exact-head review/CI, fresh-account install,
-actual movies/games/screensaver inhibition, real lock/resume, across-room
-readability, and multi-monitor behavior. The native test proves neither exact
-eight-second timer expiry nor these compatibility cases. Automatic idle stays
-off until explicitly authorized after final reconciliation.
+Pending: actual integrated acceptance and a subsequent reviewed update for PR51,
+fresh-account install, movie/game/screensaver inhibition, real lock/resume,
+across-room comfort and multi-monitor behavior. The earlier native smoke test
+does not prove these cases. Automatic idle remains off with the original blank
+saver, 1200-second timeout and security 0 until explicitly authorized after QA.
 
 Cursor bug [#36](https://github.com/8roundshock/living-room-display/issues/36):
-the user reported a bright white pointer during the prior native test. WGC may
-omit the cursor, so the earlier image did not prove it was hidden. Native proof
-of the scoped CSS fix is pending a reviewed bounded test. Read-only
+the user reported a bright white pointer, and native readings confirmed a visible
+glyph despite correct standalone CSS. WGC may omit the cursor. The independent
+surface prototype has positive sampled evidence, but PR51 is candidate-only;
+integrated normal, visual, real-input, focus/failure and restoration checks remain.
+The early-input baseline defect [#50](https://github.com/8roundshock/living-room-display/issues/50)
+also remains open, with its proposed fix only in PR51. Read-only
 [`GetCursorInfo`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getcursorinfo)
 and [`CURSORINFO`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-cursorinfo)
-provide visibility flags and screen position: `0` is hidden, `1` is showing, and
-`2` is touch/pen suppression. Verify the point lies inside the owned kiosk's
-actual rectangle and check restoration after exit; do not infer absence from a
-cursor-free screenshot. These Microsoft definitions were checked for this
-2026-10-18 verification plan; native results must be recorded when executed.
+provide cursor handle, visibility flags and screen position. Require a successful
+read, NULL glyph and actual owned client/hit-root with live renderer and stable
+input; a failed read or cursor-free screenshot proves no absence. Record context
+and restoration separately. The last hardware preflight on 2026-10-18 aborted
+before launch with immediate error 5 (access denied); the borrowed current Default
+desktop was not receiving input. Minimal/observer x64 structs matched under
+PS5.1/7. Exact lock/secure/switch cause is unproven. All native/current-desktop
+probing stopped. Recheck only after the user returns to the normal interactive
+desktop and cursor observation is available, with a new coordinated preflight/GO;
+do not open/switch desktops, dismiss security UI or weaken guards. See
+[diagnosis](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6249615459).
 
 References: [Screensaver library](https://learn.microsoft.com/en-us/windows/win32/lwef/screen-saver-library),
 [Edge kiosk](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-configure-kiosk-mode),

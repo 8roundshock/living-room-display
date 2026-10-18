@@ -34,8 +34,11 @@ the owner's explicit authority to choose practical defaults and build the app.
 - Snapshot presentation uses family sizing, black-preserving midtone correction
   and a 24% new default; existing opacity choices stay unchanged. The isolated
   optical harness confirms raw bytes remain in RAM unchanged, black stays zero,
-  highlights remain bounded and controls/clear behavior work. Actual native
-  content/readability remains under [#46](https://github.com/8roundshock/living-room-display/issues/46).
+  highlights remain bounded and controls/clear behavior work. The reviewed
+  correction was installed in the last verified baseline below; actual 4K native
+  preview content/readability was
+  accepted under [#46](https://github.com/8roundshock/living-room-display/issues/46),
+  with raw capture/inspection in RAM and no screenshot files.
 - Standalone display cursor CSS covers loading/error pages and descendants;
   editor/embedded preview cursor behavior is preserved. The production Edge
   route regression passes; actual native cursor proof remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).
@@ -64,30 +67,50 @@ groups, including async Save/Cancel/city/location races, reminder CRUD and exact
 due-date preservation through title edits, all four
 1080p/4K bounds, reduced motion, 390px/320px reflow and focused-field clearance
 above the measured Save bar at full/compact heights. Source desktop/mobile
-visuals are inspected in RAM; final independent visual review is required and
-tracked on the PR. No screenshots or real device positions are retained. See [UI evidence](docs/ui.md).
+visuals were inspected in RAM, and the merged UI changes received independent
+functional and actual visual review. No screenshots or real device positions
+are retained. See [UI evidence](docs/ui.md).
 
-Feature [#43](https://github.com/8roundshock/living-room-display/issues/43) adds
-the isolated grid/photo browser harness. Independent functional/actual visual/
-skill-forward review of the pushed feature head is required; the PR records
-exact results and remaining checks. A held-drag polling race is tracked by
-[#44](https://github.com/8roundshock/living-room-display/issues/44).
+Feature [#43](https://github.com/8roundshock/living-room-display/issues/43) and
+its isolated grid/photo harness were reviewed, merged and installed; the
+[feature PR](https://github.com/8roundshock/living-room-display/pull/45) records
+functional, actual visual and widget-skill review evidence. The held-drag polling
+race [#44](https://github.com/8roundshock/living-room-display/issues/44) was resolved.
 
-## In progress / not yet verified
+## Last verified installation and remaining acceptance
 
-Current-PC source `eba70fc` passed official-runtime per-user install, real
+The last verified installed baseline on 2026-10-18 was clean
+`d81c1e0f5683a37f4f81b4c5d006203877168ac6`,
+including the reviewed Studio/grid, preview-readability and reminder corrections.
+Recheck current provenance using installed CLI `Status` or
+`%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](docs/install.md).
+The installation marker and HTTP health were rechecked on that date. Source and
+served-asset provenance, update preservation of settings/reminders/private photos,
+and actual 3840x2160 native preview acceptance were verified during rollout.
+Device location was not requested during rollout. Simulated composition/browser
+checks and actual 4K preview inspection do not establish across-room comfort.
+
+Earlier current-PC source `eba70fc` passed official-runtime per-user install, real
 Stop/Start/update/rollback/uninstall-retain/reinstall and reminder persistence.
 Actual 3840x2160 native view and 640x360 RAM PNG were inspected; normal exit cleared
 the image to 404 and removed only owned display processes. No capture files were
 found. See [runtime evidence](docs/windows.md#actual-current-pc-runtime-evidence).
 
-The reviewed Windows/cursor baseline `7f6313a` was subsequently installed and its
-47 tests/build/control checks passed. This display-studio change has not yet been
-installed; its refresh follows final independent review/CI. The native host is
-unchanged by the redesign.
-The user reported a bright white pointer during the previous native test;
-WGC image inspection did not establish cursor absence. A reviewed bounded native
-test must verify cursor hiding and restoration before calling that bug resolved.
+That verified native baseline has the cursor and early-input issues
+[#36](https://github.com/8roundshock/living-room-display/issues/36) and
+[#50](https://github.com/8roundshock/living-room-display/issues/50), both open.
+The proposed replacement in [draft PR51](https://github.com/8roundshock/living-room-display/pull/51)
+is candidate-only: head `3a492b0` received independent code approval and both CI
+jobs passed, but it is unmerged and uninstalled. Positive isolated prototype
+evidence does not establish integrated production acceptance. Its actual native
+normal/visual/input dismissal and cursor restoration gates remain pending.
+
+The last hardware preflight on 2026-10-18 stopped before launch because cursor
+observation returned access denied and the current desktop was not receiving
+input. Resume only after the user returns to the normal interactive desktop and
+cursor observation is available, with a new coordinated preflight/GO. Do not
+switch desktops, dismiss security UI or weaken the guard. See the
+[sanitized diagnosis](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6249615459).
 Native `/c` cold startup was blocked by automatic approval review before action
 and remains unverified. Fresh-account installation, movie/game inhibition,
 secure lock/resume and across-room readability are unverified. Automatic idle
