@@ -3,6 +3,7 @@ import type { AppState, Settings, WidgetId } from '../../shared/contracts.ts';
 import { WIDGET_CATALOG, widgetContentLimits, type WidgetSize } from '../../shared/widgets.ts';
 import { ageLabel, forecastDay, forecastPeriod, precipitation, reminderDate, temperature, weatherTime } from '../format.ts';
 import { Icon, weatherIcon } from '../icons.tsx';
+import { SnapshotImage } from './SnapshotImage.tsx';
 import { precipitationOutlook, reminderPresentation, sortReminders, weatherAttributionWidget } from '../model.ts';
 
 export interface WidgetContentProps { state: AppState; settings: Settings; size: WidgetSize; now: Date; embedded: boolean; disconnected: boolean; photoPreview?: string | null }
@@ -44,7 +45,7 @@ function Reminders({ state, settings, now, disconnected, size }: WidgetContentPr
 }
 function Preview({ state: { preview }, settings, embedded }: WidgetContentProps) {
   const [failed, setFailed] = useState(false); useEffect(() => setFailed(false), [preview.capturedAt]);
-  return preview.available && preview.capturedAt && !failed ? <><img className="preview-image" src={`/api/preview/image?t=${encodeURIComponent(preview.capturedAt)}`} alt="Desktop captured before the display opened" onError={() => setFailed(true)} style={{ opacity: settings.preview.opacity, width: `${Math.min(100, settings.preview.widthPercent / 33 * 100)}%` }} /><div className="preview-caption">Last screen · {new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit' }).format(new Date(preview.capturedAt))}</div></> : embedded ? <><div className="ambient-label"><Icon name="monitor" />Last screen</div><div className="ambient-description">{failed ? 'Snapshot unavailable' : 'Captured on activation'}</div></> : null;
+  return preview.available && preview.capturedAt && !failed ? <><SnapshotImage src={`/api/preview/image?t=${encodeURIComponent(preview.capturedAt)}`} opacity={settings.preview.opacity} onError={() => setFailed(true)} /><div className="preview-caption">Last screen · {new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit' }).format(new Date(preview.capturedAt))}</div></> : embedded ? <><div className="ambient-label"><Icon name="monitor" />Last screen</div><div className="ambient-description">{failed ? 'Snapshot unavailable' : 'Captured on activation'}</div></> : null;
 }
 function Photo({ state, photoPreview, embedded }: WidgetContentProps) {
   const source = photoPreview === undefined ? state.photo?.available && state.photo.id ? `/api/photo/image?id=${state.photo.id}` : null : photoPreview;

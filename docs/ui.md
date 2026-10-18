@@ -78,6 +78,11 @@ Last screen is a dim optional pre-activation snapshot with capture time, size an
 opacity controls. The UI does not capture. Native/server RAM lifecycle clears it
 on dismissal; live preview/image history is not implemented. Export includes saved
 settings/reminders only, excluding drafts, images and tokens.
+New defaults use 24% snapshot opacity, multiplied by the ambient brightness cap.
+Saved custom values, including the former 8% default, are preserved. A presentation
+filter lifts midtones while preserving exact black/white endpoints; it changes
+neither the RAM PNG nor its alpha. Grid families determine the usable image size;
+the retained legacy `preview.widthPercent` field no longer shrinks that region.
 
 Clock styles are Outline (default), Digital and Analog. Analog has hands without
 a fixed face/tick ring. Photo starts disabled; choose a JPEG/PNG/WebP on this
@@ -113,10 +118,16 @@ After `npm ci` and `npm run build`, use an existing Playwright/browser installat
 ```powershell
 node tests/ui/studio-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
 node tests/ui/grid-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
+node tests/ui/preview-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>' --sharp '<Sharp module path>'
 node windows/tests/Test-CursorBrowser.mjs --base-url 'http://127.0.0.1:<isolated QA port>' --playwright '<Playwright module path>' --edge '<browser executable>'
 ```
 
-Both UI harnesses own their test servers and never use the installed app. Cursor checks
+The UI harnesses own their test servers and never use the installed app. The
+preview harness uses an existing Sharp module to measure RAM screenshot pixels;
+it checks exact black, capped highlights, lifted midtones, all families/densities,
+saved-opacity preservation and byte-for-byte raw snapshot/privacy behavior.
+These checks do not establish recognizable content in an actual native capture.
+Cursor checks
 require a separate isolated production server and mock state without saved-data
 changes. These are development tools, not runtime dependencies. Final source
 visuals also require independent RAM inspection. Native cursor proof, fresh-account
