@@ -58,9 +58,12 @@ small PNG to the backend's RAM-only endpoint. A normal web page has no silent
 desktop capture permission. Keep the thumbnail dim, adjustable, movable, and
 toggleable. Do not save screenshots. Actual native capture and rendered preview
 were inspected in RAM on the current 3840x2160 Windows 10 setup on 2026-10-18;
-normal exit cleared the image to 404 without capture files. Reviewed Studio/grid,
-preview and reminder changes were installed in the last verified baseline on
-2026-10-18, clean source `d81c1e0`. Recheck current provenance through installed CLI
+normal exit cleared the image to 404 without capture files. That native preview
+evidence predates the current web rollout: the last verified installed baseline
+on 2026-10-18 is clean `7e654fd`, including the merged PR #57 studio refinement.
+Its [rollout evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)
+verifies served assets and unchanged private data without a new native launch.
+Recheck current provenance through installed CLI
 `Status` or `installation.json`; see [installation](install.md). This does
 not establish live capture, locked/protected desktop access, another account or
 across-room comfort. The cursor replacement in

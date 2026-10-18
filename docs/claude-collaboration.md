@@ -44,8 +44,8 @@ permission setting was changed. This discovery does not prove a model request ra
    publish only the sanitized change, checks, limitations and next owner.
 
 For a future **curated text-only audit**, current help offers the shape below.
-It must not run on this PC while the [current invocation hold](#verified-limit-on-this-pc)
-remains unresolved.
+This coordinator must not run it while the
+[current invocation hold](#verified-limit-on-this-pc) remains unresolved.
 
 ```powershell
 # Use the already verified existing executable; $request is reviewed project text.
@@ -99,16 +99,22 @@ desktop input, capture or Windows/TV settings change follows from a code task.
 
 ## Verified limit on this PC
 
-The first proposed text-only audit under [#64](https://github.com/8roundshock/living-room-display/issues/64)
+This Codex coordinator's first proposed text-only audit under
+[#64](https://github.com/8roundshock/living-room-display/issues/64)
 was rejected by automatic approval review before execution, with the stated
 reason **"blocked by policy"**. No Claude response or task process was produced;
 the request was not retried through another tool or permission mode. Existing
 CLI/account discovery succeeded, but end-to-end delegation remains unverified.
-No further Claude model request, session resume, alternate launcher, API or IPC
-route may be used on this PC to accomplish the rejected task until the opaque
-restriction is clarified. Do not change permissions or retry automatically.
+This coordinator must not use another Claude model request, session resume,
+alternate launcher, API or IPC route to accomplish the rejected task until the
+opaque restriction is clarified. Do not change permissions or retry automatically.
 Continue useful authorized project work and report this exact boundary. Do not
 claim that Claude reviewed or authored a change until an actual response exists.
+This hold does not establish a system-wide Claude failure or the status of an
+existing independent session. Separate session reports, including the
+[#63 ownership report](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6253160209),
+do not authorize this coordinator to resume, delegate to or change that session's
+work, or to perform an installation based on its reported approval.
 
 Primary references checked 2026-10-18: [headless operation](https://code.claude.com/docs/en/headless),
 [CLI reference](https://code.claude.com/docs/en/cli-reference), and
