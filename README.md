@@ -15,12 +15,13 @@ uses the [recorded HIG-inspired design choices](docs/design.md). The display stu
 puts one focused Style, Widgets, Weather or Reminders inspector beside its live
 preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
-The current PC still runs the older reviewed `2e010f0` installation. The newer
-studio UI merged at `7e654fd` remains source-only until its controlled rollout.
-The combined native cursor lifecycle replacement remains draft and uninstalled;
-actual visual/input acceptance is pending and automatic idle remains off.
-Wider release
-compatibility checks remain; see [STATUS.md](STATUS.md).
+The latest recorded marker-only read identifies clean `bedca44e`, after the
+reviewed studio and readability web rollouts. The separate rollout session reports
+its runtime and data checks; see [STATUS.md](STATUS.md) for attributed installation
+evidence and current gates. The combined native cursor lifecycle replacement
+remains draft and uninstalled. Actual visual/input acceptance and wider release
+compatibility checks remain; the user-away hold and last verified idle-off state
+are recorded in the status document.
 
 This is the independent private
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)
