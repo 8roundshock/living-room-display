@@ -106,9 +106,18 @@ web rollout was verified separately below.
 See the [revision-2 backup/rollback requirement](docs/install.md#widget-geometry-revision-2-update-and-rollback)
 before any coordinated rollout.
 
-The last coordinator-verified complete rollout on 2026-10-18 was clean
-`7e654fdf392fbef71e00a77703f1ed1379a95c85`, the normal merge of PR #57.
-The owner confirmed the editor was saved/clean and authorized this update.
+The latest reported installed baseline on 2026-10-18 is clean
+`bedca44e18bcdc23f33a4ac887e3f2a57d5d41c8`, the normal merge of
+[PR #70](https://github.com/8roundshock/living-room-display/pull/70) (#63 ambient
+readability, full-height inspector) on top of PR #67 and the #57 studio UI.
+The separate implementation session reports owner-directed merge and install
+after independent final-head review. Its
+[install evidence](https://github.com/8roundshock/living-room-display/pull/70#issuecomment-6253957062)
+reports a stopped-app private data copy with manifest, installed provenance, health,
+served JavaScript/CSS matching the reviewed build, unchanged private data hashes and
+unchanged Windows screensaver values; `app.previous` holds the `7e654fd` app.
+For the preceding `7e654fd` (PR #57) rollout, the owner confirmed the editor
+was saved/clean and authorized that update.
 The [dated rollout evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)
 records installed provenance, owned backend/listener and health verification,
 and served HTML/JavaScript/CSS hashes matching the installed files. All private
@@ -128,16 +137,10 @@ normally before further editing. Earlier native preview acceptance remains
 historical evidence, not a new combined-host result. Simulated composition/browser
 checks and earlier actual 4K preview inspection do not establish across-room comfort.
 
-Later file-only provenance on 2026-10-18 reads clean
-`bedca44e18bcdc23f33a4ac887e3f2a57d5d41c8`, installed at 19:08:23 UTC,
-the normal merge of the separate Claude-owned [PR #70](https://github.com/8roundshock/living-room-display/pull/70).
-This coordinator has not rechecked the current API, backend identity/health,
-served hashes, private data/backup equality or screensaver registration. The
-marker does not transfer the earlier rollout's proofs to this installation.
-The separate session's [rollout receipt](https://github.com/8roundshock/living-room-display/pull/70#issuecomment-6253957062)
-reports a verified complete private backup, unchanged data, healthy API,
-matching served assets and unchanged blank-saver settings. Those are that
-session's reported checks, distinct from this coordinator's file-only read.
+This coordinator's file-only marker read confirms clean `bedca44e`, installed
+at 19:08:23 UTC on 2026-10-18. This coordinator has not rechecked the current API, backend identity/health,
+served hashes, private data/backup equality or screensaver registration; those
+reported rollout checks above belong to the separate session.
 See the [current native handoff](https://github.com/8roundshock/living-room-display/issues/7#issuecomment-6253977862).
 
 Earlier current-PC source `eba70fc` passed official-runtime per-user install, real
@@ -156,8 +159,9 @@ CI, but remains draft, unmerged and uninstalled. Frozen old-source
 `3a492b0` staging passed a bound stationary round with 26 qualified NULL cursor
 samples, exit 0, owned cleanup and unchanged data/screensaver settings. That
 old-source result does not establish visual/input or combined-source acceptance.
-The merged UI is included in the candidate and was served by the canonical
-backend at the verified rollout. The revision-3 visual observer has
+The PR #57 UI (`7e654fd`) is included in the candidate and was served by the
+canonical backend at that rollout; the newer receipt reports served `bedca44`.
+The revision-3 visual observer has
 [independent preparation-only source/pure approval](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6253359163);
 its final JavaScript binding review and actual combined visual/input runtime
 acceptance remain incomplete. This observer review does not establish actual
@@ -165,8 +169,9 @@ stdin/physical-stop delivery, input or cleanup timing.
 Its `f4a57b5` candidate and `7e654fd` served-UI pins are outdated for the newer
 `bedca44e` installation. Preserve the sealed artifacts and prior evidence;
 do not relabel, re-pin or run them under this documentation change. Any future
-combined test needs separately reviewed current source/artifacts, verified
-current served assets and fresh physical readiness.
+combined test needs a newly identified candidate containing current `main`, a
+new build, independent source/artifact review, verified current served assets
+and fresh physical readiness.
 
 The user earlier confirmed the normal interactive desktop on 2026-10-18, but
 subsequently left the PC. Physical acceptance is on hold until fresh readiness
@@ -178,8 +183,8 @@ visual/input dismissal, cursor restoration and combined-source tests remain
 coordinated gates; do not switch desktops or weaken capture/input guards.
 Native `/c` cold startup was blocked by automatic approval review before action
 and remains unverified. Fresh-account installation, movie/game inhibition,
-secure lock/resume and across-room readability are unverified. The last directly
-verified activation state kept app idle off and the original blank saver,
+secure lock/resume and across-room readability are unverified. This coordinator's
+last directly verified activation state kept app idle off and the original blank saver,
 1200-second timeout and security 0. The newer marker read does not recheck that
 state or authorize activation. This is a current-PC source installation, not a
 public/signed release. TV control, live app preview and multi-monitor selection
@@ -187,29 +192,26 @@ remain future work; the host targets one primary display.
 
 ## Continuing source work
 
-Source work after the fully verified `7e654fd` rollout is tracked separately:
+Installed in `bedca44`: [#63](https://github.com/8roundshock/living-room-display/issues/63)
+via [PR #70](https://github.com/8roundshock/living-room-display/pull/70) (separate Claude
+Code session, independent Codex review), [PR #67 / #66](https://github.com/8roundshock/living-room-display/pull/67)
+browser controls, and the docs-only PRs #65 and #69.
 
-- [PR #70 / #63](https://github.com/8roundshock/living-room-display/pull/70)
-  merged ambient readability and alignment changes from the separate Claude Code
-  session. That session [reports its earlier review rounds](https://github.com/8roundshock/living-room-display/pull/70#issuecomment-6253932466).
+- The separate session [reports its earlier review rounds](https://github.com/8roundshock/living-room-display/pull/70#issuecomment-6253932466).
   The coordinator's [supplemental independent source review](https://github.com/8roundshock/living-room-display/pull/70#issuecomment-6253946306)
   found no blocking issues across 45 synthetic family/density cases at 100%/125%,
   compact workspace checks and RAM renders, but completed after the external
   merge. It is not this coordinator's pre-merge gate or physical/runtime proof.
   The separate worktree remains owned by that session; its reports do not grant
   this coordinator installation or session-interaction authority.
-- [PR #67 / #66](https://github.com/8roundshock/living-room-display/pull/67)
-  addresses browser controls hiding during continuing pointer interaction.
-- [PR #65 / #64](https://github.com/8roundshock/living-room-display/pull/65)
-  documents bounded Claude Code collaboration. CLI installation/authentication
-  were verified, but automatic approval review rejected the coordinator's first
-  headless request before execution with only `blocked by policy`. No Claude task
-  ran from that request; coordinator inference remains on hold rather than being
-  retried through another launcher or API.
+- Draft [PR #51](https://github.com/8roundshock/living-room-display/pull/51) remains
+  uninstalled with the outdated pins and future acceptance gates described above.
+- [PR #65 / #64](https://github.com/8roundshock/living-room-display/pull/65) documents
+  bounded Claude Code collaboration; the coordinator's own headless request remains on
+  hold after `blocked by policy`.
 
-Consult each PR for current source/rollout evidence. Inclusion in the new marker
-revision is not a fresh coordinator verification of served assets or native
-acceptance; unattended source checks do not replace physical acceptance above.
+Consult each PR for its current review/merge state. Unattended source checks do not
+replace the physical native acceptance above.
 
 ## Decisions and boundaries
 

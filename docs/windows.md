@@ -100,8 +100,9 @@ Source provenance checks use synthetic local Git repositories to verify clean,
 dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
 verify metadata refresh on successful install and retention after failed update
 or uninstall. No paths, remotes, changes or credentials are saved in provenance.
-The last fully coordinator-verified rollout on 2026-10-18 was clean `7e654fd`,
-the normal merge of PR #57. Its 79 application tests, full production build, independent
+The current installed baseline is recorded in [STATUS.md](../STATUS.md) (clean
+`bedca44`, PR #70, on 2026-10-18). The preceding rollout installed clean `7e654fd`, the normal
+merge of PR #57. Its 79 application tests, full production build, independent
 final-head reviews and Windows/Linux CI passed before rollout. The
 [dated rollout evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)
 verifies installed provenance, owned backend/listener, health, served asset hashes
@@ -173,8 +174,8 @@ bug; do not route around the rejected test.
 Pending: actual integrated acceptance and a subsequent reviewed update for PR51,
 fresh-account install, movie/game/screensaver inhibition, real lock/resume,
 across-room comfort and multi-monitor behavior. The earlier native smoke test
-does not prove these cases. The last direct verification kept app idle off with
-the original blank saver, 1200-second timeout and security 0; the newer marker
+does not prove these cases. The coordinator's last direct verification kept app
+idle off with the original blank saver, 1200-second timeout and security 0; the newer marker
 read does not establish current registration or authorize activation.
 The user is away as of the latest 2026-10-18 handoff. Wait for fresh readiness
 before physical tests; do not launch native tests, capture or input, change the
