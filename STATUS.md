@@ -142,9 +142,11 @@ CI, but remains draft, unmerged and uninstalled. Frozen old-source
 samples, exit 0, owned cleanup and unchanged data/screensaver settings. That
 old-source result does not establish visual/input or combined-source acceptance.
 The merged UI is now included in the candidate and served by the canonical
-backend. The revision-3 visual observer passed independent source/pure checks;
-its final JavaScript binding and actual combined visual/input runtime acceptance
-remain incomplete. Source review and pure checks do not establish those results.
+backend. The revision-3 visual observer has
+[independent preparation-only source/pure approval](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6253359163);
+its final JavaScript binding review and actual combined visual/input runtime
+acceptance remain incomplete. This observer review does not establish actual
+stdin/physical-stop delivery, input or cleanup timing.
 
 The user earlier confirmed the normal interactive desktop on 2026-10-18, but
 subsequently left the PC. Physical acceptance is on hold until fresh readiness
@@ -169,9 +171,10 @@ Work beyond the installed `7e654fd` baseline is tracked separately:
   addresses browser controls hiding during continuing pointer interaction.
 - [PR #65 / #64](https://github.com/8roundshock/living-room-display/pull/65)
   documents bounded Claude Code collaboration. CLI installation/authentication
-  were verified, but automatic approval review rejected the first headless request
-  before execution with only `blocked by policy`. No Claude task ran; inference
-  remains on hold rather than being retried through another launcher or API.
+  were verified, but automatic approval review rejected the coordinator's first
+  headless request before execution with only `blocked by policy`. No Claude task
+  ran from that request; coordinator inference remains on hold rather than being
+  retried through another launcher or API.
 
 Consult each PR for its current review/merge state. These workstreams are not
 part of the verified installed baseline, and unattended source checks do not
