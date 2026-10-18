@@ -10,6 +10,7 @@ import type { AppState, Settings, WidgetId } from '../shared/contracts';
 import {
   ageLabel,
   forecastDay,
+  forecastPeriod,
   nextComposition,
   precipitation,
   reminderDate,
@@ -17,7 +18,7 @@ import {
   weatherTime,
 } from './format';
 import { Icon, weatherIcon } from './icons';
-import { precipitationOutlook, sortReminders, upcomingRain } from './model';
+import { precipitationOutlook, sortReminders } from './model';
 
 const conditions: Record<number, string> = {
   0: 'Clear skies',
@@ -206,9 +207,33 @@ export function AmbientDisplay({
     .join('')
     .trim();
   const period = parts.find((part) => part.type === 'dayPeriod')?.value;
-  const rain = upcomingRain(weather.hourly, now.getTime());
-  const { wet, rainy, chance, rainExpected, rainIncomplete, incomplete } =
-    precipitationOutlook(rain, weather.units.precipitation);
+  const {
+    intervals: rain,
+    wet,
+    rainy,
+    chance,
+    rainExpected,
+    rainDataIncomplete,
+    incomplete,
+    coverageComplete,
+    hasGaps,
+    coverageStart,
+    coverageEnd,
+  } = precipitationOutlook(
+    weather.hourly,
+    weather.units.precipitation,
+    now.getTime(),
+  );
+  const rainPeriod =
+    coverageStart && coverageEnd
+      ? forecastPeriod(
+          coverageStart,
+          coverageEnd,
+          weather.location.timezone,
+          settings.clockFormat,
+          now,
+        )
+      : '';
   const reminders = sortReminders(state.reminders)
     .filter((reminder) => !reminder.completed)
     .slice(0, 2);
@@ -333,16 +358,20 @@ export function AmbientDisplay({
                   <div className="ambient-description">
                     {rainy.length
                       ? `Rain estimate ${new Date(rainy[0].intervalStart).getTime() <= now.getTime() ? 'now' : weatherTime(rainy[0].intervalStart, weather.location.timezone, settings.clockFormat)}–${weatherTime(rainy[rainy.length - 1].intervalEnd, weather.location.timezone, settings.clockFormat)}`
-                      : rainIncomplete
+                      : rainDataIncomplete
                         ? 'Rain timing unavailable'
-                        : 'No rain forecast in the next 12 hours'}
+                        : 'No rain forecast in shown intervals'}
                     <br />
                     {rainExpected === null
                       ? 'Rain amount unavailable'
-                      : `${precipitation(rainExpected, weather.units.precipitation)} rain / 12h`}
-                    {incomplete || rainIncomplete
-                      ? ' · partial data'
-                      : ' · estimate'}
+                      : `${rainDataIncomplete ? 'Known rain ' : ''}${precipitation(rainExpected, weather.units.precipitation)}${rainDataIncomplete ? '' : ' rain'} · ${rainPeriod}`}
+                    <br />
+                    {!coverageComplete
+                      ? 'Partial forecast'
+                      : incomplete || rainDataIncomplete
+                        ? 'Partial data'
+                        : 'Forecast estimate'}
+                    {hasGaps ? ' · gaps in coverage' : ''}
                   </div>
                   <div
                     className="rain-bars"
@@ -459,10 +488,14 @@ export function AmbientDisplay({
               {weather.daily.length ? (
                 <>
                   <div className="forecast-strip">
-                    {weather.daily.slice(0, 7).map((day, index) => (
+                    {weather.daily.slice(0, 7).map((day) => (
                       <div className="forecast-day" key={day.date}>
                         <span className="forecast-day-label">
-                          {forecastDay(day.date, index)}
+                          {forecastDay(
+                            day.date,
+                            weather.location.timezone,
+                            now,
+                          )}
                         </span>
                         <Icon name={weatherIcon(day.weatherCode ?? 3)} />
                         <div className="forecast-temperatures">

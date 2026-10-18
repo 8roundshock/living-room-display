@@ -51,17 +51,24 @@ behavior. Dimness and movement do not guarantee protection from image retention.
 The clock and reminders use the computer/browser's local timezone. Forecast
 intervals use the selected weather city's timezone, with the city shown beside
 current conditions. Metric/imperial values come from the API without a second
-conversion in the client. Date-only forecast days are interpreted as local
-calendar dates rather than UTC midnight.
+conversion in the client. Date-only forecast days are interpreted as calendar
+dates. Today and Tomorrow compare the actual current civil date in the weather
+city's timezone, so a retained stale list cannot relabel yesterday as today.
 
-Rain presentation covers up to twelve upcoming hourly intervals. The peak hourly
-chance is the maximum **precipitation** probability among those intervals, not
+Rain presentation selects valid hourly intervals intersecting the upcoming
+twelve hours. This can include thirteen full hour buckets when the first is
+already in progress. The peak hourly chance is the maximum **precipitation**
+probability among those available intervals, not
 the probability of rain at any moment across the entire twelve-hour period.
 Bars show the individual hourly probabilities. Estimated rain windows and rain
 amounts use forecast rain plus showers, excluding snow; the amount is the total
-over the displayed intervals. A window spans the first through last interval with
-forecast rain and can contain breaks. These remain model estimates, not
-minute-perfect nowcasting. Partial/missing amounts and probabilities stay unknown.
+over the displayed full intervals, with their actual start/end period printed
+beside it. Amounts are not prorated within an hour. A rain window spans the first
+through last interval with forecast rain and can contain breaks. Missing hours,
+gaps, or incomplete upcoming coverage are labeled partial, and dry wording is
+limited to the shown intervals. Expired intervals cannot supply a current amount.
+These remain model estimates, not minute-perfect nowcasting. Missing amounts and
+probabilities stay unknown; a partial known amount is labeled as such.
 
 Current conditions show update age; retained stale forecasts are labeled on
 current weather, the weekly strip, and the rain outlook. Missing weather does
@@ -88,7 +95,7 @@ screensaver or change Windows idle settings.
 
 ## Verification evidence
 
-The client has ten Node tests covering provider-unit formatting, missing values,
+The client has seventeen Node tests covering provider-unit formatting, missing values,
 forecast timezone/DST and calendar-day handling, reminder datetime round trips
 and ordering, precipitation versus rain semantics, composition cycling, and
 preset isolation. Run them with the repository's `npm test`; `npm run build`
@@ -115,6 +122,15 @@ browser profile and isolated backend QA data:
   browser console or page errors. The initial missing favicon request is tracked
   in [issue #18](https://github.com/8roundshock/living-room-display/issues/18) and
   fixed with the declared local SVG asset.
+- Reproduced and fixed the two P2 findings from independent review: a stale
+  2026-10-17 daily entry at fixed 2026-10-18 09:00 Toronto now renders Sat, followed
+  by Today and Tomorrow. Two dry 09:00–11:00 intervals render that amount period
+  and Partial forecast, with no twelve-hour dry claim. Browser regressions also
+  checked a city timezone differing from the browser, city midnight, gapped and
+  expired intervals, complete coverage with an in-progress first bucket, 1080p/4K
+  bounds, phone overflow, and zero production CSP/console errors. These fixes are
+  tracked in [#23](https://github.com/8roundshock/living-room-display/issues/23)
+  and [#24](https://github.com/8roundshock/living-room-display/issues/24).
 
 Initial development clipping of default clock/weather content is tracked in
 [issue #13](https://github.com/8roundshock/living-room-display/issues/13); automatic

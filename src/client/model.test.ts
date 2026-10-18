@@ -11,6 +11,7 @@ import {
 import {
   ageLabel,
   forecastDay,
+  forecastPeriod,
   localInputDate,
   nextComposition,
   precipitation,
@@ -34,8 +35,69 @@ test('weather time uses forecast timezone across a daylight-saving transition', 
     weatherTime('2026-11-01T06:30:00Z', 'America/Toronto', '24h'),
     '01:30',
   );
-  assert.equal(forecastDay('2026-10-19', 1), 'Mon');
-  assert.equal(forecastDay('2026-10-18', 0), 'Today');
+});
+
+test('forecast day labels use the actual city calendar date even in a stale list', () => {
+  const now = Date.parse('2026-10-18T13:00:00Z');
+  assert.equal(forecastDay('2026-10-17', 'America/Toronto', now), 'Sat');
+  assert.equal(forecastDay('2026-10-18', 'America/Toronto', now), 'Today');
+  assert.equal(forecastDay('2026-10-19', 'America/Toronto', now), 'Tomorrow');
+  assert.equal(forecastDay('2026-10-20', 'America/Toronto', now), 'Tue');
+});
+
+test('forecast Today and Tomorrow change at city midnight independently of the browser timezone', () => {
+  const now = Date.parse('2026-10-18T23:30:00Z');
+  assert.equal(forecastDay('2026-10-18', 'America/Toronto', now), 'Today');
+  assert.equal(forecastDay('2026-10-18', 'Asia/Tokyo', now), 'Sun');
+  assert.equal(forecastDay('2026-10-19', 'Asia/Tokyo', now), 'Today');
+  assert.equal(forecastDay('2026-10-20', 'Asia/Tokyo', now), 'Tomorrow');
+  assert.equal(
+    forecastDay(
+      '2026-10-18',
+      'America/Toronto',
+      Date.parse('2026-10-18T03:59:59Z'),
+    ),
+    'Tomorrow',
+  );
+  assert.equal(
+    forecastDay(
+      '2026-10-18',
+      'America/Toronto',
+      Date.parse('2026-10-18T04:00:00Z'),
+    ),
+    'Today',
+  );
+});
+
+test('forecast relative calendar dates survive DST and amount periods identify overnight coverage', () => {
+  const now = Date.parse('2026-11-01T04:30:00Z');
+  assert.equal(forecastDay('2026-11-02', 'America/Toronto', now), 'Tomorrow');
+  assert.equal(
+    forecastDay(
+      '2026-11-02',
+      'America/Toronto',
+      Date.parse('2026-11-02T04:30:00Z'),
+    ),
+    'Tomorrow',
+  );
+  assert.equal(
+    forecastDay(
+      '2026-11-02',
+      'America/Toronto',
+      Date.parse('2026-11-02T05:00:00Z'),
+    ),
+    'Today',
+  );
+  assert.equal(
+    forecastPeriod(
+      '2026-10-19T03:00:00Z',
+      '2026-10-19T05:00:00Z',
+      'America/Toronto',
+      '24h',
+      Date.parse('2026-10-18T13:00:00Z'),
+    ),
+    '23:00–Tomorrow 01:00',
+  );
 });
 
 test('date input round trips an existing reminder without changing its instant', () => {
@@ -80,25 +142,37 @@ test('upcoming hourly intervals include an in-progress interval and exclude past
   ]);
 });
 
+const forecastNow = Date.parse('2026-10-18T13:00:00Z');
+function hourly(startHour: number, count = 1, amount = 0) {
+  return Array.from({ length: count }, (_, index) => ({
+    intervalStart: new Date(
+      forecastNow + (startHour + index) * 3_600_000,
+    ).toISOString(),
+    intervalEnd: new Date(
+      forecastNow + (startHour + index + 1) * 3_600_000,
+    ).toISOString(),
+    precipitationProbability: 0,
+    precipitationAmount: amount,
+    rainAmount: amount,
+  }));
+}
+
 test('unknown precipitation never becomes a dry or zero-amount forecast', () => {
   const unknown = [
     {
-      intervalStart: '',
-      intervalEnd: '',
+      ...hourly(0)[0],
       precipitationProbability: null,
       precipitationAmount: null,
       rainAmount: null,
     },
   ];
-  assert.deepEqual(precipitationOutlook(unknown, 'mm'), {
-    chance: null,
-    expected: null,
-    rainExpected: null,
-    rainIncomplete: true,
-    rainy: [],
-    incomplete: true,
-    wet: [],
-  });
+  const outlook = precipitationOutlook(unknown, 'mm', forecastNow);
+  assert.equal(outlook.chance, null);
+  assert.equal(outlook.expected, null);
+  assert.equal(outlook.rainExpected, null);
+  assert.equal(outlook.rainIncomplete, true);
+  assert.equal(outlook.incomplete, true);
+  assert.deepEqual(outlook.wet, []);
   assert.equal(
     precipitationOutlook(
       [
@@ -109,6 +183,7 @@ test('unknown precipitation never becomes a dry or zero-amount forecast', () => 
         },
       ],
       'mm',
+      forecastNow,
     ).expected,
     0.5,
   );
@@ -117,18 +192,88 @@ test('unknown precipitation never becomes a dry or zero-amount forecast', () => 
 test('snow probability does not invent a rain timing window or rain amount', () => {
   const snowy = [
     {
-      intervalStart: '',
-      intervalEnd: '',
+      ...hourly(0)[0],
       precipitationProbability: 90,
       precipitationAmount: 3,
       rainAmount: 0,
     },
   ];
-  const outlook = precipitationOutlook(snowy, 'mm');
+  const outlook = precipitationOutlook(snowy, 'mm', forecastNow);
   assert.equal(outlook.chance, 90);
   assert.equal(outlook.rainExpected, 0);
   assert.equal(outlook.rainy.length, 0);
   assert.equal(outlook.wet.length, 1);
+});
+
+test('two known dry hours are a partial forecast with their actual amount period', () => {
+  const outlook = precipitationOutlook(hourly(0, 2), 'mm', forecastNow);
+  assert.equal(outlook.coverageComplete, false);
+  assert.equal(outlook.incomplete, true);
+  assert.equal(outlook.rainIncomplete, true);
+  assert.equal(outlook.rainDataIncomplete, false);
+  assert.equal(outlook.hasGaps, false);
+  assert.equal(outlook.rainExpected, 0);
+  assert.equal(
+    forecastPeriod(
+      outlook.coverageStart!,
+      outlook.coverageEnd!,
+      'America/Toronto',
+      '24h',
+      forecastNow,
+    ),
+    '09:00–11:00',
+  );
+});
+
+test('gapped hourly data stays partial even when both ends of the horizon exist', () => {
+  const source = hourly(0, 12, 0.5).filter((_, index) => index !== 4);
+  const outlook = precipitationOutlook(source.reverse(), 'mm', forecastNow);
+  assert.equal(outlook.hasGaps, true);
+  assert.equal(outlook.coverageComplete, false);
+  assert.equal(outlook.incomplete, true);
+  assert.equal(outlook.rainExpected, 5.5);
+  assert.equal(
+    outlook.intervals[0].intervalStart,
+    new Date(forecastNow).toISOString(),
+  );
+});
+
+test('expired and invalid hourly intervals produce no current amount or coverage claim', () => {
+  const source = [
+    ...hourly(-3, 3, 2),
+    { ...hourly(0)[0], intervalEnd: 'invalid' },
+    { ...hourly(0)[0], intervalEnd: new Date(forecastNow).toISOString() },
+  ];
+  const outlook = precipitationOutlook(source, 'mm', forecastNow);
+  assert.deepEqual(outlook.intervals, []);
+  assert.equal(outlook.rainExpected, null);
+  assert.equal(outlook.chance, null);
+  assert.equal(outlook.coverageStart, null);
+  assert.equal(outlook.coverageEnd, null);
+  assert.equal(outlook.coverageComplete, false);
+});
+
+test('complete upcoming coverage includes both intersecting hour buckets and totals only those shown', () => {
+  const outlook = precipitationOutlook(
+    hourly(0, 24, 0.5),
+    'mm',
+    forecastNow + 30 * 60_000,
+  );
+  assert.equal(outlook.coverageComplete, true);
+  assert.equal(outlook.incomplete, false);
+  assert.equal(outlook.hasGaps, false);
+  assert.equal(outlook.intervals.length, 13);
+  assert.equal(outlook.rainExpected, 6.5);
+  assert.equal(
+    forecastPeriod(
+      outlook.coverageStart!,
+      outlook.coverageEnd!,
+      'America/Toronto',
+      '24h',
+      forecastNow,
+    ),
+    '09:00–22:00',
+  );
 });
 
 test('dated pending reminders lead undated/completed entries without mutating input', () => {

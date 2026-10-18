@@ -23,12 +23,51 @@ export function ageLabel(
   return `Updated ${Math.floor(minutes / 1440)} days ago`;
 }
 
-export function forecastDay(date: string, index: number): string {
-  if (index === 0) return 'Today';
-  // A date-only provider value describes its local calendar day, not UTC midnight.
-  return new Intl.DateTimeFormat('en', { weekday: 'short' }).format(
-    new Date(`${date.slice(0, 10)}T12:00:00`),
-  );
+function civilDate(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const part = (type: string) =>
+    parts.find((value) => value.type === type)!.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+export function forecastDay(
+  date: string,
+  timeZone: string,
+  now: Date | number,
+): string {
+  const today = civilDate(new Date(now), timeZone);
+  if (date === today) return 'Today';
+  // Advance the civil calendar, rather than adding 24 hours across a DST change.
+  const tomorrow = new Date(`${today}T12:00:00Z`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  if (date === tomorrow.toISOString().slice(0, 10)) return 'Tomorrow';
+  // Provider date-only values are calendar days; UTC here preserves that weekday.
+  return new Intl.DateTimeFormat('en', {
+    weekday: 'short',
+    timeZone: 'UTC',
+  }).format(new Date(`${date.slice(0, 10)}T12:00:00Z`));
+}
+
+export function forecastPeriod(
+  start: string,
+  end: string,
+  timeZone: string,
+  format: '12h' | '24h',
+  now: Date | number,
+): string {
+  const today = civilDate(new Date(now), timeZone);
+  const startDate = civilDate(new Date(start), timeZone);
+  const endDate = civilDate(new Date(end), timeZone);
+  const startDay =
+    startDate === today ? '' : `${forecastDay(startDate, timeZone, now)} `;
+  const endDay =
+    endDate === startDate ? '' : `${forecastDay(endDate, timeZone, now)} `;
+  return `${startDay}${weatherTime(start, timeZone, format)}–${endDay}${weatherTime(end, timeZone, format)}`;
 }
 
 export function weatherTime(
