@@ -114,6 +114,7 @@ Constrained Language Mode can still block it; Setup then shows a plain message
 | `TaskDialogMsgBox` custom labels (**Keep my data** / **Delete my data**). | Documented Inno API; interactive only. **Not verified in CI.** |
 | `WizardStyle` tokens in 6.7.x. | Inno documentation: base `classic` or `modern`, plus `light`, `dark` or `dynamic`. |
 | `ISCC.exe` has no numeric file version. | Observed in CI (version info read as 0.0.0). The build asks the preprocessor (`DecodeVer(Ver)`) instead. |
+| Windows PowerShell 5.1 started (through Setup) from PowerShell 7 can inherit PowerShell 7 module folders. | Observed in CI: `Get-FileHash` was not recognized. The control script now keeps only Windows PowerShell module folders on 5.1 and hashes with .NET ([#123](https://github.com/8roundshock/living-room-display/issues/123)). |
 | GitHub runners run Setup elevated with UAC on. | Observed in CI: the refusal of an elevated launch fired. The smoke test passes the automation-only `/ALLOWELEVATED=1`. Normal users still get the refusal. |
 
 ### Installer CI
@@ -133,6 +134,8 @@ to `main` and manual dispatch.
   (snapshot, `app.previous`, `Status`), a keep-data uninstall, a reinstall and a
   `/REMOVEDATA=1` uninstall. Two refusal cases must exit 7: a foreign folder and
   a taken port.
+
+**Evidence (2026-10-18).** Run 39177635973 (PR #149) passed every job: the build (Setup 0.1.0, 27.1 MB, Inno Setup 6.7.1 preinstalled on windows-2025; the payload and both Windows check runs passed) and all six smoke jobs. That covers windows-2022, windows-2025 and windows-11-arm (x64 emulation) × the default folder and the `Living Room Ünicode` folder. The refusal with port 4318 taken left no install folder, which confirms that Setup doesn't create `{app}` before `PrepareToInstall`. Earlier runs on the same PR found the elevated runners, the ISCC version probe and the inherited module path recorded above.
 
 The smoke script refuses to run outside GitHub Actions, or with an existing
 install, a 4318 listener or the Setup registration. It never starts the kiosk,

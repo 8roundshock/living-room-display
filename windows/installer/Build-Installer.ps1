@@ -249,7 +249,7 @@ try {
     [IO.File]::WriteAllText("$setup.sha256", "$setupSha  $baseName.exe`n", (New-Object Text.UTF8Encoding($false)))
     $megabytes = [Math]::Round((Get-Item -LiteralPath $setup).Length / 1MB, 1)
     Write-Step "Setup ready: $setup ($megabytes MB, sha256 $setupSha; payload $payloadSha)"
-    if ($megabytes -lt 25 -or $megabytes -gt 50) { Write-Warning "Setup size $megabytes MB is outside the expected 33-38 MB range; review the payload." }
+    if ($megabytes -lt 25 -or $megabytes -gt 50) { Write-Warning "Setup size $megabytes MB is outside the expected 25-50 MB range (0.1.0 was 27.1 MB); review the payload." }
 } finally {
     $env:PATH = $oldPath
     if ($KeepWork) { Write-Step "Work folder kept: $work" }

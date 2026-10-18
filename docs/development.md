@@ -195,7 +195,7 @@ The Setup build is reproducible from a clean commit
 - It refuses a dirty tree. `-AllowDirty` builds the tracked changes for a local
   experiment and records `sourceState: dirty`; CI always refuses it. Use
   PowerShell 7 locally: the Node runtime has long paths. Expect about 120 MB
-  of payload and a Setup file of about 33-38 MB.
+  of payload and a Setup file of about 27 MB (0.1.0 in CI: 27.1 MB).
 - Pins: `runtime.json` must name the control script's default `NodeVersion`
   (the policy test enforces it); `inno.json` sets the minimum (6.7.0) and tested
   (6.7.1) Inno Setup with the tested installer's SHA-256. Change a pin in its own
