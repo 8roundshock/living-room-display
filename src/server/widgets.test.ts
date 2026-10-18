@@ -150,6 +150,28 @@ test('additive legacy migration preserves visibility, cities, presets and obsole
   assert.equal(saved.savedPresets[0]!.visual.appearance.clockStyle, 'outline');
 });
 
+test('missing additive modules use accepted revision-one origins before settings and preset migration', () => {
+  const legacy = JSON.parse(JSON.stringify(defaultSettings()));
+  legacy.locationSource = 'manual'; legacy.location.name = 'Preserved legacy city'; legacy.units = 'imperial';
+  legacy.widgetGrid = { density: 'balanced', placements: {
+    clock: { column: 0, row: 0, size: 'large' }, weather: { column: 8, row: 0, size: 'medium' },
+    forecast: { column: 2, row: 6, size: 'large' }, reminders: { column: 5, row: 3, size: 'small' },
+    preview: { column: 8, row: 3, size: 'medium' }, photo: { column: 4, row: 3, size: 'small' },
+  } };
+  delete legacy.widgets.rain; delete legacy.widgetOverrides.rain;
+  const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = legacy;
+  legacy.savedPresets = [{ id: 'old-default', name: 'Existing style', visual: { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } }];
+  const untouched = structuredClone(legacy), migrated = settingsSchema.parse(legacy);
+  assert.equal(migrated.widgets.rain, true);
+  assert.equal(migrated.location.name, 'Preserved legacy city'); assert.equal(migrated.units, 'imperial');
+  assert.equal(migrated.widgetGrid.revision, 2); assert.equal(gridProblem(migrated.widgetGrid, migrated.widgets), null);
+  const preset = migrated.savedPresets[0]!.visual;
+  assert.equal(preset.widgets.rain, true); assert.equal(preset.widgetGrid.revision, 2); assert.equal(gridProblem(preset.widgetGrid, preset.widgets), null);
+  assert.deepEqual(legacy, untouched, 'parsing/import migration does not rewrite the original bytes/object');
+  const malformed = structuredClone(legacy); malformed.widgetGrid.placements.rain = { column: 8, row: 3, size: 'medium' };
+  assert.throws(() => settingsSchema.parse(malformed), /overlaps/, 'an explicitly invalid legacy placement is not silently repaired');
+});
+
 test('catalog defaults generically backfill an absent module throughout saved visuals', () => {
   const legacy = JSON.parse(JSON.stringify(defaultSettings()));
   for (const field of ['widgets', 'widgetOverrides']) delete legacy[field].photo;

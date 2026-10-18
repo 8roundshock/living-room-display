@@ -41,7 +41,7 @@ const widgetGrid = z.preprocess(value => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const source = value as { revision?: number; density?: string; placements?: Record<string, unknown> };
   if (!source.placements || typeof source.placements !== 'object' || Array.isArray(source.placements)) return value;
-  const defaults = defaultWidgetGrid(); defaults.revision = source.revision === 2 ? 2 : 1;
+  const defaults = defaultWidgetGrid(source.revision === 2 ? 2 : 1);
   if (source.density && source.density in GRID_DENSITIES) defaults.density = source.density as typeof defaults.density;
   for (const id of WIDGET_IDS) {
     const candidate = placementFits(defaults, id, defaults.placements[id], {}) ? defaults.placements[id] : firstPlacement(defaults, id, WIDGET_CATALOG[id].defaultSize, {});

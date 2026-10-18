@@ -831,8 +831,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     ]) {
       ({ page, context } = await open({ viewport }));
       await tab(page, 'Style');
-      await tab(page, 'Style');
-    await page.getByRole('button', { name: 'Night', exact: true }).click();
+      await page.getByRole('button', { name: 'Night', exact: true }).click();
       await tab(page, 'Reminders');
       await page
         .getByRole('button', { name: 'Add reminder', exact: true })

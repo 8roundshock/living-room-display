@@ -230,7 +230,9 @@ export async function runGridQa({ playwright, edge } = {}) {
     assert.equal(await page.locator('.grid-widget-frame').count(), 6);
     assert.equal(await page.locator('.ambient-clock').getAttribute('data-widget-size'), 'medium');
     const fittedFrames = await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style')));
-    await resize().focus(); await page.keyboard.press('ArrowRight');
+    await move().focus(); await page.keyboard.press('Tab');
+    assert.equal(await resize().evaluate(element => element === document.activeElement), true, 'focusing a widget reveals its accessible resize handle');
+    await page.keyboard.press('ArrowRight');
     assert.equal(await page.locator('.ambient-clock').getAttribute('data-widget-size'), 'medium');
     assert.deepEqual(await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style'))), fittedFrames, 'impossible family changes leave every current placement intact');
     await page.getByRole('combobox', { name: 'Grid density' }).selectOption('balanced');
@@ -685,14 +687,15 @@ export async function runGridQa({ playwright, edge } = {}) {
         await page.clock.runFor(4000);
         await bounds();
       }
-      assert.equal(await page.locator('html.standalone-display').count(), 1);
+      assert.equal(await page.locator('html.native-display').count(), 0);
+      assert.notEqual(await page.locator('html').evaluate(element => getComputedStyle(element).cursor), 'none');
       images.push({
         label: `Grid ambient ${viewport.width}`,
         bytes: await page.screenshot({ type: 'png', animations: 'disabled' }),
       });
     }
     checks.push(
-      '1080p/4K actual rendered widget bounds and pairwise non-overlap over varied compositions; standalone cursor scope',
+      '1080p/4K actual rendered widget bounds and pairwise non-overlap over varied compositions; visible browser cursor',
     );
     assert.deepEqual(errors, []);
     return { checks, images };

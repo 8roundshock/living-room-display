@@ -7,6 +7,8 @@ export interface WidgetDefinition {
   name: string; description: string; icon: 'clock' | 'cloud' | 'rain' | 'calendar' | 'check' | 'monitor' | 'photo';
   sizes: Partial<Record<WidgetSize, WidgetSpan>>; defaultSize: WidgetSize;
   defaultEnabled: boolean; defaultPlacement: { column: number; row: number };
+  /** Revision-one backfill must use the geometry that originally accepted it. */
+  legacyPlacement?: { column: number; row: number };
   /** Legacy versions coupled this module's visibility to another widget. */
   legacyEnabledFrom?: string;
 }
@@ -16,11 +18,11 @@ const standard = { small: { columns: 2, rows: 2 }, medium: { columns: 4, rows: 2
 export const WIDGET_CATALOG = {
   clock: { name: 'Clock', description: 'Time and date', icon: 'clock', sizes: { ...standard, large: { columns: 8, rows: 4 } }, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 0, row: 0 } },
   weather: { name: 'Weather', description: 'Current conditions', icon: 'cloud', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 0 } },
-  rain: { name: 'Rain', description: 'Rain timing and probability', icon: 'rain', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 2 }, legacyEnabledFrom: 'weather' },
-  forecast: { name: 'Forecast', description: 'The days ahead', icon: 'calendar', sizes: { ...standard, large: { columns: 8, rows: 2 } }, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 0, row: 6 } },
-  reminders: { name: 'Reminders', description: 'What is coming up', icon: 'check', sizes: standard, defaultSize: 'small', defaultEnabled: true, defaultPlacement: { column: 0, row: 4 } },
-  preview: { name: 'Last screen', description: 'A dim snapshot on activation', icon: 'monitor', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 4 } },
-  photo: { name: 'Photo', description: 'One picture from this device', icon: 'photo', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 } },
+  rain: { name: 'Rain', description: 'Rain timing and probability', icon: 'rain', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 2 }, legacyPlacement: { column: 0, row: 3 }, legacyEnabledFrom: 'weather' },
+  forecast: { name: 'Forecast', description: 'The days ahead', icon: 'calendar', sizes: { ...standard, large: { columns: 8, rows: 2 } }, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 0, row: 6 }, legacyPlacement: { column: 2, row: 6 } },
+  reminders: { name: 'Reminders', description: 'What is coming up', icon: 'check', sizes: standard, defaultSize: 'small', defaultEnabled: true, defaultPlacement: { column: 0, row: 4 }, legacyPlacement: { column: 5, row: 3 } },
+  preview: { name: 'Last screen', description: 'A dim snapshot on activation', icon: 'monitor', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 4 }, legacyPlacement: { column: 8, row: 3 } },
+  photo: { name: 'Photo', description: 'One picture from this device', icon: 'photo', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 }, legacyPlacement: { column: 4, row: 3 } },
 } satisfies Record<string, WidgetDefinition>;
 export type WidgetKind = keyof typeof WIDGET_CATALOG;
 export const WIDGET_IDS = Object.keys(WIDGET_CATALOG) as WidgetId[];
@@ -31,8 +33,11 @@ export const GRID_DENSITIES = {
   fine: { name: 'Fine · 16 × 10', columns: 16, rows: 10 },
 } satisfies Record<GridDensity, WidgetSpan & { name: string }>;
 
-export function defaultWidgetGrid(): WidgetGrid {
-  return { revision: 2, density: 'balanced', placements: Object.fromEntries(WIDGET_IDS.map(id => [id, { ...WIDGET_CATALOG[id].defaultPlacement, size: WIDGET_CATALOG[id].defaultSize }])) as Record<WidgetId, WidgetPlacement> };
+export function defaultWidgetGrid(revision: 1 | 2 = 2): WidgetGrid {
+  return { revision, density: 'balanced', placements: Object.fromEntries(WIDGET_IDS.map(id => {
+    const definition: WidgetDefinition = WIDGET_CATALOG[id];
+    return [id, { ...(revision === 1 ? definition.legacyPlacement ?? definition.defaultPlacement : definition.defaultPlacement), size: definition.defaultSize }];
+  })) as Record<WidgetId, WidgetPlacement> };
 }
 export function defaultWidgetVisibility(): Record<WidgetId, boolean> { return Object.fromEntries(WIDGET_IDS.map(id => [id, WIDGET_CATALOG[id].defaultEnabled])) as Record<WidgetId, boolean>; }
 export function widgetSizes(id: WidgetId): WidgetSize[] { return WIDGET_SIZES.filter(size => Boolean((WIDGET_CATALOG[id].sizes as Partial<Record<WidgetSize, WidgetSpan>>)[size])); }
