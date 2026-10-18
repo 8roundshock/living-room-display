@@ -5,6 +5,7 @@ export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Res
 const nullableNumber = z.number().finite().nullable();
 const series = z.array(nullableNumber);
 const forecastSchema = z.object({
+  timezone: z.string().refine(value => { try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; } }).optional(),
   utc_offset_seconds: z.number(),
   current: z.object({ time: z.number(), temperature_2m: nullableNumber, apparent_temperature: nullableNumber, weather_code: nullableNumber, is_day: z.number(), wind_speed_10m: nullableNumber }),
   daily: z.object({ time: z.array(z.number()).min(7), weather_code: series, temperature_2m_max: series, temperature_2m_min: series, precipitation_probability_max: series, precipitation_sum: series }),
@@ -32,6 +33,10 @@ export function normalizeForecast(payload: unknown, settings: Settings, now: num
     if (Object.values(group).some(values => values.length !== group.time.length)) throw new Error('Incomplete forecast series');
   }
   const state = emptyWeather(settings);
+  if (settings.location.timezone === 'auto') {
+    if (!data.timezone) throw new Error('The forecast did not resolve the device timezone');
+    state.location.timezone = data.timezone;
+  }
   const current = data.current;
   state.status = 'fresh'; state.updatedAt = new Date(now).toISOString();
   state.current = { time: new Date(current.time * 1000).toISOString(), temperature: current.temperature_2m,

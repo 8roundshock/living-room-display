@@ -7,7 +7,7 @@ import type { AppState, PreviewState, Reminder } from '../shared/contracts.ts';
 import { DataStore } from './store.ts';
 import { WeatherService, type FetchLike } from './weather.ts';
 import { windowsStatus } from './windows.ts';
-import { importSchema, reminderInputSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
+import { automaticLocationSchema, importSchema, mergeSettings, reminderInputSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
 
 class HttpError extends Error {
   status: number;
@@ -91,6 +91,7 @@ export async function createApplication(options: ApplicationOptions) {
     const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`);
     const method = request.method ?? 'GET';
     const path = url.pathname;
+    response.setHeader('Permissions-Policy', path.startsWith('/display') ? 'geolocation=()' : 'geolocation=(self)');
 
     if (method === 'GET' && path === '/api/health') { json(response, 200, { status: 'ok', version: '0.1.0', storageWarning: store.warning }); return; }
     if (method === 'GET' && path === '/api/windows/status') { json(response, 200, await windowsStatus()); return; }
@@ -103,6 +104,17 @@ export async function createApplication(options: ApplicationOptions) {
       const settings = await store.patchSettings(settingsPatchSchema.parse(await jsonBody(request)));
       if (!settings.preview.enabled || !settings.widgets.preview) clearPreview();
       json(response, 200, settings); return;
+    }
+    if (method === 'POST' && path === '/api/location') {
+      const selection = automaticLocationSchema.parse(await jsonBody(request));
+      const saved = await store.update(data => {
+        // Check inside the serialized write, rather than trusting an earlier browser state.
+        if (data.settings.locationSource === 'manual' && (selection.automatic || selection.source === 'fallback')) return;
+        data.settings = mergeSettings(data.settings, selection.source === 'device'
+          ? { locationSource: 'device', location: { name: 'Device area', latitude: selection.latitude, longitude: selection.longitude, timezone: 'auto' } }
+          : { locationSource: 'fallback' });
+      });
+      json(response, 200, saved.settings); return;
     }
     if (method === 'GET' && path === '/api/weather') { json(response, 200, await weather.get(store.snapshot().settings)); return; }
     if (method === 'GET' && path === '/api/locations') {

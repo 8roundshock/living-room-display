@@ -95,7 +95,8 @@ screensaver or change Windows idle settings.
 
 ## Verification evidence
 
-The client has seventeen Node tests covering provider-unit formatting, missing values,
+The client has twenty-two Node tests covering device permission/position behavior,
+provider-unit formatting, missing values,
 forecast timezone/DST and calendar-day handling, reminder datetime round trips
 and ordering, precipitation versus rain semantics, composition cycling, and
 preset isolation. Run them with the repository's `npm test`; `npm run build`
@@ -138,3 +139,49 @@ fitting resolved the observed clipping and passed the rectangle checks above.
 Screenshots were inspected in memory; no screenshot files were saved. Simulated
 1080p/4K browser viewports are not evidence of the TV's actual active resolution,
 viewing-distance readability, or subjective brightness preference.
+
+## Device weather location
+
+New installs use Toronto as a fallback. In the editor, an already-granted browser
+location permission permits one automatic lookup when that editor opens. Otherwise
+**Use device location** is an explicit user action; the browser may ask permission.
+The ambient `/display` route never queries permission or requests a position and
+its production Permissions-Policy disables geolocation. There is no continuous
+watch or IP-location lookup.
+
+This uses browser device-location services, not a promise of hardware GPS. For
+device lookups, only latitude/longitude rounded to one decimal place leave the location adapter or
+enter local settings, backups, exports, and weather-provider requests. Accuracy,
+altitude, timestamps and raw browser position objects are discarded. The server
+also rounds device coordinates and always labels them **Device area**; no city
+name is inferred. The browser/OS chooses its location service. The app makes no
+additional IP lookup. See the [browser position API](https://developer.mozilla.org/en-US/docs/Web/API/Geolocation/getCurrentPosition).
+
+Source labels distinguish **Approximate device area**, **Manual city**, and
+**Toronto fallback**. Denial, invalid/unavailable positions, or an unanswered
+lookup fall back unobtrusively to Toronto unless a manual city is already selected.
+The manual city search overrides automatic use; an explicit successful device
+button can replace it. Device actions save only the location immediately and keep
+any unrelated appearance draft. The server prevents a late automatic result from
+replacing a manual city selected in another editor.
+
+Existing version-one settings/exports missing `locationSource` migrate to manual,
+including a previously selected Toronto. This preserves existing choices rather
+than guessing whether an old city was intentional. Users can choose the device
+button to switch. New default settings use `fallback`. The setting is local; the
+server has no access to browser permission state.
+
+For device areas, the forecast requests `timezone=auto` and validates the
+provider's returned IANA timezone before displaying data. Today/Tomorrow and
+weather intervals use that resolved weather-area timezone, independently of the
+computer's clock timezone. Unresolved timezone data stays unavailable. See
+[Open-Meteo timezone documentation](https://open-meteo.com/en/docs).
+
+Device-location verification for #31 used synthetic position/permission mocks
+only. All 42 integrated tests and the production build passed. Actual isolated
+Edge production checks covered prompt-without-auto-request, explicit rounded
+success, already-granted one-shot use, denied/unavailable/invalid fallback,
+manual search/reload and denial preservation, late-result protection, provider
+timezone/civil dates, no geolocation calls from `/display`, and phone layout.
+The weather card was inspected in RAM, with no console errors or screenshot files.
+No real location permission was granted and no real device position was obtained.

@@ -4,6 +4,7 @@ export const WIDGET_IDS: WidgetId[] = ['clock', 'weather', 'forecast', 'reminder
 export const DEFAULT_SETTINGS: Settings = {
   version: 1,
   location: { name: 'Toronto', latitude: 43.6532, longitude: -79.3832, timezone: 'America/Toronto' },
+  locationSource: 'fallback',
   units: 'metric', clockFormat: '12h',
   appearance: {
     preset: 'room', accentColor: '#8aa8c2', textColor: '#b8c1ca', brightness: 0.55,
