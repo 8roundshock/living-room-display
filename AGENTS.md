@@ -1,16 +1,24 @@
 # Project instructions
 
-Build a silent ambient display for a Windows 10 leisure PC and Samsung S90F OLED.
+Build a silent ambient display, initially targeted at the owner's Windows 10
+leisure PC and Samsung S90F OLED. Other users supply their own local settings;
+do not infer that their location, display, or preferences match the owner.
 This is an independent private project, not a personal-memory workspace.
 
 ## Start
 
 1. Inspect `git status --short --branch` and `git remote -v`. Preserve pending work.
-2. Fetch origin. Update a clean, nondivergent `main` with `git pull --ff-only`.
+2. Fetch the original project's remote: `origin` for owner maintenance, `upstream`
+   for a contributor fork. Fast-forward a clean, nondivergent local `main` from
+   that verified base; preserve pending work. See the workflow before remapping
+   any remote.
 3. Read [STATUS.md](STATUS.md), [product requirements](docs/product.md), and
    [architecture choices](docs/architecture.md).
 4. Read [development](docs/development.md) and [agent workflow](docs/agent-workflow.md)
    before edits, authentication, or delegation. Read further files only as needed.
+5. For installation, diagnosis, or outside contributions, follow the
+   [agent runbook](docs/agent-runbook.md) and [contribution guide](CONTRIBUTING.md).
+   They include copy/paste user prompts, privacy rules, and a fork workflow.
 
 The selected architecture is a custom local web dashboard with a Windows
 idle/screensaver helper. Implementation is authorized and in progress;
@@ -53,9 +61,11 @@ idle/screensaver helper. Implementation is authorized and in progress;
 
 ## Change and verify
 
-- Use command-line Git and GitHub CLI/API. Keep origin at the private
-  `8roundshock/living-room-display` repository and verify the `8roundshock` identity
-  and privacy before owner-side pushes. Use [the project auth helper](docs/development.md).
+- Use command-line Git and GitHub CLI/API. For owner-side maintenance, keep origin
+  at `8roundshock/living-room-display`, verify the `8roundshock` identity and private
+  visibility, and use [the project auth helper](docs/development.md). Outside
+  contributors use their own authorized account, a fork as `origin`, and the
+  original repository as `upstream`; never use owner credentials or its helper.
   Keep the repository private until a usable release and a reviewed publication
   step; do not change visibility as part of the current foundation.
 - Use topic branches and reviewed pull requests; never push directly to `main`,
@@ -73,6 +83,11 @@ idle/screensaver helper. Implementation is authorized and in progress;
   See [workflow](docs/agent-workflow.md).
 - Keep secrets, personal reminder contents, raw transcripts, and employer content
   out of Git. Use ignored `.local/` for temporary local files.
+- Installing or using the app does not authorize publishing issues, diagnostics,
+  forks, PRs, stars, or other external messages. Obtain the end user's scoped
+  authorization, or keep a sanitized local report/patch. With authorization,
+  search open and closed issues first, update useful existing reports, and follow
+  the [runbook](docs/agent-runbook.md) to avoid duplicate reports and repeated pings.
 - Run checks relevant to the change, review the exact diff, and report real
   failures or blockers. Do not invent build/test commands or claim UI success
   without inspecting the result. See [verification](docs/development.md).

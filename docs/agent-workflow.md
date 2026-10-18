@@ -48,24 +48,40 @@ acceptance criteria are verified; leave remaining work explicit.
 File reproducible bugs with expected/observed behavior, steps, affected version,
 severity/impact, and relevant evidence. Do not invent bugs or include secrets,
 private reminders, or screenshots without authorization. Use the issue templates.
+Outside users follow the [agent runbook](agent-runbook.md): installation alone
+does not authorize external reporting, fork creation, or PR submission. Once
+authorized, search open and closed issues and PRs before creating a ticket. Keep
+one issue per root cause, add new evidence to a matching report, and do not post
+repeated progress comments, agent mentions, or requests for attention. A closed
+report with a verified recurrence needs the affected version and new evidence;
+do not reopen it without maintainer authority. Use an existing feature issue
+before proposing a duplicate. The [contribution guide](../CONTRIBUTING.md)
+describes the own-account fork path and local-only fallback.
 Write focused commits with clear descriptions; do not mix unrelated cleanup or
 other workers' changes into a feature commit.
 
 ## Branches, review, and pull requests
 
-1. Inspect status, fetch origin, and preserve pending work. Start a topic branch
-   from current `origin/main`; use `git worktree add -b` for isolation when needed.
+1. Inspect status/remotes and preserve pending work. For owner maintenance, fetch
+   origin and start from `origin/main`. For an outside contribution, use your own
+   fork as origin and the original repository as upstream, fetch upstream, and
+   start from `upstream/main`. Use `git worktree add -b` for isolation when needed.
 2. Make the scoped change. Update docs/status and the linked issue. Run checks in
    [development.md](development.md), plus checks introduced with the feature.
 3. Inspect the diff against acceptance criteria and recheck affected behavior.
    This author check does not replace the independent PR review below.
 4. Stage only reviewed files. Inspect `git diff --cached`, commit, and inspect
-   `git log --oneline origin/main..HEAD` for unintended commits.
-5. Verify personal identity, exact origin, and private visibility. Push only the
-   topic branch. Use the project helper's `pr create`, explicit `--base main`,
-   `--head`, the exact ticket/title format above, and a reviewed multiline
-   `--body-file` in `.local/`. Identify the primary ticket and reason, link related
-   tickets, and describe scope, verification, and remaining decisions accurately.
+   the log from the chosen base (`origin/main..HEAD` for owner maintenance,
+   `upstream/main..HEAD` for fork contributions) for unintended commits.
+5. Verify identity and remotes before a push. Owner maintenance must verify
+   `8roundshock`, exact original origin, and private visibility with the project
+   helper. Contributors verify their own account and fork; never run the owner's
+   helper or broaden shared-account credentials. Push only the topic branch to
+   the intended repository. Create the PR against the original repository with
+   explicit `--base main` and `--head` (for forks, `<your-login>:<branch>`), the
+   exact ticket/title format above, and a reviewed multiline `--body-file` in
+   `.local/`. Identify the primary ticket and reason, link related tickets, and
+   describe scope, verification, and remaining decisions accurately.
 6. Attach created PRs to the active chat when supported. For every PR, run a
    separate independent review agent with focused project requirements, PR diff,
    acceptance criteria, and test evidence. The reviewer must differ from the
@@ -79,15 +95,19 @@ other workers' changes into a feature commit.
    Do not install or activate an external review integration.
 8. Wait for applicable checks/reviews on the current head. Resolve findings; do
    not bypass required reviews or protection. No checks configured is not a pass.
-9. Within merge authorization, use a merge commit with `pr merge --merge
+9. A contributor submits the PR and leaves merging to authorized maintainers;
+   permission to contribute is not permission to merge upstream. Within maintainer
+   merge authorization, use a merge commit with `pr merge --merge
    --match-head-commit` and the reviewed SHA. Never force-push, push `main`
    directly, use admin bypass, or merge an unreviewed replacement head.
-10. Verify merged state/SHA, update linked issues, fetch, and fast-forward clean
-   local `main`. Remove only your own clean, fully merged worktrees/branches.
+10. Verify merged state/SHA, update linked issues, fetch the original project's
+   remote, and fast-forward clean local `main` from that verified base. Remove
+   only your own clean, fully merged worktrees/branches.
 
-The helper passes through ordinary GitHub CLI arguments; consult subcommand help
+The owner's helper passes through ordinary GitHub CLI arguments; consult subcommand help
 for syntax. Run commits, pushes, and merges sequentially. If `main` advances,
-merge `origin/main` into the topic branch, preserve both sides' useful changes,
+merge the current base (`origin/main` for owner maintenance, `upstream/main` for
+fork contributions) into the topic branch, preserve both sides' useful changes,
 resolve conflicts from evidence, and review/check the new head before merging.
 
 Creating a scaffold does not authorize deployments, persistent services, network
