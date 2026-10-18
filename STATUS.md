@@ -34,63 +34,103 @@ the owner's explicit authority to choose practical defaults and build the app.
 - Snapshot presentation uses family sizing, black-preserving midtone correction
   and a 24% new default; existing opacity choices stay unchanged. The isolated
   optical harness confirms raw bytes remain in RAM unchanged, black stays zero,
-  highlights remain bounded and controls/clear behavior work. The reviewed correction is installed; actual native content was inspected in RAM
-  under [#46](https://github.com/8roundshock/living-room-display/issues/46).
+  highlights remain bounded and controls/clear behavior work. The reviewed
+  correction was installed in the last verified baseline below; actual 4K native
+  preview content/readability was
+  accepted under [#46](https://github.com/8roundshock/living-room-display/issues/46),
+  with raw capture/inspection in RAM and no screenshot files.
 - Standalone display cursor CSS covers loading/error pages and descendants;
   editor/embedded preview cursor behavior is preserved. The production Edge
-  route regression passes. A native input-surface replacement has positive isolated
-  prototype evidence; integrated acceptance remains open under [#36](https://github.com/8roundshock/living-room-display/issues/36).
+  route regression passes; actual native cursor proof remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).
 - Editor-only device location with permission-aware one-shot lookup, rounded
   coordinates, Toronto fallback and manual-city protection. Existing choices
   migrate as manual; no location prompt or lookup occurs in the screensaver.
 - Framework Windows host and per-user installer/control sources, with screensaver
   backup/restore, isolated Edge job, cancellation and scoped process management.
-- Full production build and focused application tests. Windows/Linux CI runs the full
-  application checks. Windows
-  source regression checks cover startup cancellation, restore selection,
-  owned-process recognition and filesystem transaction/cleanup behavior.
+- Full production build and focused application tests. Windows/Linux CI runs the
+  full application checks. Proposed Windows source regressions also cover
+  early-input cancellation and native surface policy; they do not establish
+  installed behavior.
 
-## Current verification and installation
+Local verification: the full build and all 71 application tests pass using the
+app-owned Node 24 runtime. The merged baseline passed eleven Windows check groups
+on PowerShell 5.1 and 7 with the optional real child-process test (ten without).
+The proposed native source adds active-input and surface-policy suites, for
+thirteen groups with Node (twelve without). Provenance tests
+cover clean/dirty Git, archives, enclosing repositories and composed sources;
+successful install refreshes metadata while failed updates and uninstall retain it.
+Synthetic
+online export/import and validated offline recovery after both saved JSON files
+were corrupted pass, retaining original corrupt evidence. Native static/unit
+checks use fake transport/session/native boundaries and scoped filesystem fixtures;
+they do not establish actual installed capture, kiosk, idle or lock behavior.
+The isolated production Edge studio harness passes sixteen interaction/layout
+groups, including async Save/Cancel/city/location races, reminder CRUD and exact
+due-date preservation through title edits, all four
+1080p/4K bounds, reduced motion, 390px/320px reflow and focused-field clearance
+above the measured Save bar at full/compact heights. Source desktop/mobile
+visuals were inspected in RAM, and the merged UI changes received independent
+functional and actual visual review. No screenshots or real device positions
+are retained. See [UI evidence](docs/ui.md).
+The long-city wrapping correction
+[#52](https://github.com/8roundshock/living-room-display/issues/52) has isolated
+browser coverage for complete option text and keyboard/Cancel behavior at 320px,
+390px and desktop widths. See [PR #54](https://github.com/8roundshock/living-room-display/pull/54)
+for final-head review and rollout evidence; use the dated installation baseline
+and live provenance guidance below to check installed state.
 
-The reviewed Studio/grid, snapshot optics and reminder corrections are merged;
-clean revision `d81c1e0` is installed on the current Windows 10/4K PC. Source and
-served-asset provenance, health and preservation of settings/reminders/private
-photo data were checked. Device location was never requested during rollout.
-The owner's preview opacity is intentionally 24%; automatic idle stays off with
-the original blank saver, timeout 1200 and security 0. This is a private local
-installation, not a public/signed release.
+Feature [#43](https://github.com/8roundshock/living-room-display/issues/43) and
+its isolated grid/photo harness were reviewed, merged and installed; the
+[feature PR](https://github.com/8roundshock/living-room-display/pull/45) records
+functional, actual visual and widget-skill review evidence. The held-drag polling
+race [#44](https://github.com/8roundshock/living-room-display/issues/44) was resolved.
 
-All 71 application tests and the full production build pass. Reviewed production
-Edge harnesses cover Studio/city/location/reminder races, grid/photo behavior,
-desktop/mobile bounds and cursor CSS. Windows source checks now cover thirteen
-groups with the optional owned-process test (twelve without), on PowerShell 5.1
-and 7. They include native compilation/flags, session and early-input cancellation,
-surface policy, restore selection, install/reinstall/rollback data retention,
-provenance and safe cleanup. Pure/fake tests do not establish actual native UI.
+## Last verified installation and remaining acceptance
 
-The native cursor replacement is source-only, awaiting final-head independent
-review and CI before any installed update. Its independently reviewed isolated
-prototype completed normally with 28 consecutive qualified NULL cursor readings
-through the loaded 4K Edge session, helper hit-root, stable input, matched desktop
-cursor/context afterward, preview 404, zero owned display processes and unchanged
-data/native preferences. This is sampled prototype evidence; integrated runtime,
-real input/Escape, external focus, renderer failure and startup/error visuals
-remain separate gates. The first-second input-loss bug is tracked by
-[#50](https://github.com/8roundshock/living-room-display/issues/50) with actual
-caller-baseline and fake delayed-startup regressions.
+The last verified installed baseline on 2026-10-18 was clean
+`d81c1e0f5683a37f4f81b4c5d006203877168ac6`,
+including the reviewed Studio/grid, preview-readability and reminder corrections.
+Recheck current provenance using installed CLI `Status` or
+`%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](docs/install.md).
+The installation marker and HTTP health were rechecked on that date. Source and
+served-asset provenance, update preservation of settings/reminders/private photos,
+and actual 3840x2160 native preview acceptance were verified during rollout.
+Device location was not requested during rollout. Simulated composition/browser
+checks and actual 4K preview inspection do not establish across-room comfort.
 
-Earlier current-PC installation tests passed real CLI Start/Stop, update/rollback,
-uninstall-retain/reinstall and synthetic reminder persistence. A native RAM PNG
-and actual 4K ambient window were inspected, without screenshot files. See
-[Windows evidence](docs/windows.md#actual-current-pc-runtime-evidence).
+Earlier current-PC source `eba70fc` passed official-runtime per-user install, real
+Stop/Start/update/rollback/uninstall-retain/reinstall and reminder persistence.
+Actual 3840x2160 native view and 640x360 RAM PNG were inspected; normal exit cleared
+the image to 404 and removed only owned display processes. No capture files were
+found. See [runtime evidence](docs/windows.md#actual-current-pc-runtime-evidence).
 
-Native `/c` cold startup remains unverified after automatic approval blocked that
-optional test; do not equate it with CLI startup or retry an equivalent route.
-Movie/game screensaver inhibition, real lock/resume, fresh-account installation,
-across-room comfort and multi-monitor support remain unverified. Current input
-polling exists only inside an already requested ambient session; activation uses
-conventional Windows screensaver registration, with no new idle service/loop.
-Keep automatic idle off until actual acceptance and explicit coordinator approval.
+That verified native baseline has the cursor and early-input issues
+[#36](https://github.com/8roundshock/living-room-display/issues/36) and
+[#50](https://github.com/8roundshock/living-room-display/issues/50), both open.
+The proposed replacement in [draft PR51](https://github.com/8roundshock/living-room-display/pull/51)
+is candidate-only: head `3a492b0` received independent code approval and both CI
+jobs passed. The subsequent merge of current main requires a final-head recheck;
+the replacement remains unmerged and uninstalled. It adds an independent native
+input surface with exact job ownership, terminal foreground/renderer guards,
+and a fixed input baseline from before startup. Active-session monitoring stops
+on disposal; fake delayed-startup and cleanup-race regressions cover cancellation.
+Positive isolated prototype evidence does not establish integrated production
+acceptance. Actual native normal/visual/input dismissal, focus/renderer failure
+and cursor restoration gates remain pending.
+
+The last hardware preflight on 2026-10-18 stopped before launch because cursor
+observation returned access denied and the current desktop was not receiving
+input. Resume only after the user returns to the normal interactive desktop and
+cursor observation is available, with a new coordinated preflight/GO. Do not
+switch desktops, dismiss security UI or weaken the guard. See the
+[sanitized diagnosis](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6249615459).
+Native `/c` cold startup was blocked by automatic approval review before action
+and remains unverified. Fresh-account installation, movie/game inhibition,
+secure lock/resume and across-room readability are unverified. Automatic idle
+stays off with the original blank saver, 1200-second timeout and security 0 preserved until explicitly
+enabled after final QA. This is a working current-PC source installation, not a
+public/signed release. TV control, live app preview and multi-monitor selection
+remain future work; the host targets one primary display.
 
 ## Decisions and boundaries
 

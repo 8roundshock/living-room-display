@@ -901,6 +901,7 @@ html.studio-editor {
 .city-dropdown li {
   padding: 11px 12px;
   min-height: 60px;
+  overflow-wrap: anywhere;
   border-radius: 9px;
   cursor: pointer;
   color: #ebe4f1;
