@@ -15,7 +15,8 @@ the owner's explicit authority to choose practical defaults and build the app.
 - Backend fixture/API/persistence tests and Windows/Linux CI; full frontend build
   becomes a CI requirement once the frontend entry point is present.
 
-Local verification: ten backend tests, server compile, shared/client typecheck,
+Local verification: sixteen backend checks (including five delayed-upload clear
+regressions), server compile, shared/client typecheck,
 and real Toronto weather/city-search requests passed. A temporary development API
 was used for integration; this does not establish installed Windows idle behavior.
 

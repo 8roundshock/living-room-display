@@ -8,9 +8,9 @@ import { request as httpRequest } from 'node:http';
 import { createApplication } from './app.ts';
 import { forecastFixture } from './fixtures.ts';
 
-async function fixture() {
+async function fixture(now?: () => number) {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-api-'));
-  const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()) });
+  const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()), now });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const address = app.server.address(); assert.ok(address && typeof address === 'object');
   return { ...app, directory, url: `http://127.0.0.1:${address.port}`, async close() { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); } };
@@ -80,4 +80,63 @@ test('native preview stays in RAM and clears when disabled', async () => {
     assert.equal((await fetch(`${app.url}/api/preview/image`)).status, 404);
     assert.equal((await (await fetch(`${app.url}/api/preview`)).json()).available, false);
   } finally { await app.close(); }
+});
+
+test('every preview clear invalidates an upload whose body is still arriving', async t => {
+  for (const operation of ['disable', 'hide widget', 'delete', 'import', 'expire'] as const) {
+    await t.test(operation, async () => {
+      let currentTime = Date.now();
+      const app = await fixture(() => currentTime);
+      const pendingRequests: ReturnType<typeof httpRequest>[] = [];
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jC7sAAAAASUVORK5CYII=', 'base64');
+      function native(path: string, method: string, headers: Record<string, string>, content?: Buffer, delayed = false) {
+        let request!: ReturnType<typeof httpRequest>;
+        const response = new Promise<{ status: number; body: string }>((resolve, reject) => {
+          request = httpRequest(app.url + path, { method, headers }, incoming => {
+            const chunks: Buffer[] = []; incoming.on('data', chunk => chunks.push(chunk));
+            incoming.on('end', () => resolve({ status: incoming.statusCode!, body: Buffer.concat(chunks).toString() }));
+          });
+          request.on('error', reject);
+          if (delayed) request.write(content!.subarray(0, 8)); else request.end(content);
+        });
+        pendingRequests.push(request);
+        return { response, finish() { request.end(content!.subarray(8)); } };
+      }
+      try {
+        const session = await native('/api/host/session', 'GET', { 'X-LRD-Native': '1' }).response;
+        assert.equal(session.status, 200);
+        const token = JSON.parse(session.body).token;
+        const headers = () => ({ 'X-LRD-Token': token, 'Content-Type': 'image/png', 'X-Captured-At': new Date(currentTime).toISOString() });
+        assert.equal((await native('/api/preview', 'POST', headers(), png).response).status, 201);
+
+        // Observe the first body bytes on the server instead of relying on a timer.
+        const bodyStarted = new Promise<void>(resolve => app.server.once('request', incoming => incoming.once('data', () => resolve())));
+        const delayed = native('/api/preview', 'POST', headers(), png, true);
+        await bodyStarted;
+        if (operation === 'disable' || operation === 'hide widget') {
+          const patch = operation === 'disable' ? { preview: { enabled: false } } : { widgets: { preview: false } };
+          assert.equal((await fetch(`${app.url}/api/settings`, { method: 'PATCH', ...body(patch) })).status, 200);
+          // A later re-enable must not revive the upload from before the clear.
+          assert.equal((await fetch(`${app.url}/api/settings`, { method: 'PATCH', ...body({ preview: { enabled: true }, widgets: { preview: true } }) })).status, 200);
+        } else if (operation === 'delete') {
+          assert.equal((await native('/api/preview', 'DELETE', { 'X-LRD-Token': token }).response).status, 204);
+        } else if (operation === 'import') {
+          const exported = await (await fetch(`${app.url}/api/export`)).json();
+          assert.equal((await fetch(`${app.url}/api/import`, { method: 'POST', ...body(exported) })).status, 200);
+        } else {
+          currentTime += 12 * 3600_000 + 1;
+        }
+        assert.equal((await (await fetch(`${app.url}/api/preview`)).json()).available, false);
+        delayed.finish();
+        assert.equal((await delayed.response).status, 409, 'a cleared upload cannot publish');
+        assert.equal((await (await fetch(`${app.url}/api/preview`)).json()).available, false);
+        assert.equal((await fetch(`${app.url}/api/preview/image`)).status, 404);
+        assert.equal((await native('/api/preview', 'POST', headers(), png).response).status, 201, 'a new upload after clearing still works');
+        assert.ok((await readdir(app.directory)).every(name => name === 'state.json' || name === 'state.backup.json'), 'no image files are persisted');
+      } finally {
+        for (const request of pendingRequests) request.destroy();
+        await app.close();
+      }
+    });
+  }
 });

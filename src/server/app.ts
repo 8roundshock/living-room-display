@@ -41,8 +41,13 @@ export async function createApplication(options: ApplicationOptions) {
   const weather = new WeatherService(options.fetcher, now);
   const hostToken = randomBytes(32).toString('hex');
   let image: Buffer | null = null;
+  let previewGeneration = 0;
   let preview: PreviewState = { available: false, capturedAt: null, width: null, height: null };
-  function clearPreview() { image = null; preview = { available: false, capturedAt: null, width: null, height: null }; }
+  function clearPreview() {
+    // Invalidate uploads that began before this clear, even if preview is later enabled again.
+    previewGeneration++;
+    image = null; preview = { available: false, capturedAt: null, width: null, height: null };
+  }
   function previewState(): PreviewState {
     if (preview.capturedAt && now() - Date.parse(preview.capturedAt) > 12 * 3600_000) clearPreview();
     return { ...preview };
@@ -151,10 +156,16 @@ export async function createApplication(options: ApplicationOptions) {
       if (request.headers['content-type'] !== 'image/png') throw new HttpError(415, 'Use image/png');
       const capturedAt = z.iso.datetime({ offset: true }).parse(request.headers['x-captured-at']);
       if (Math.abs(now() - Date.parse(capturedAt)) > 5 * 60_000) throw new HttpError(400, 'Snapshot capture time must be recent');
+      const uploadGeneration = previewGeneration;
       const content = await bytes(request, 4 * 1024 * 1024);
       if (content.length < 33 || !content.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) || content.toString('ascii', 12, 16) !== 'IHDR') throw new HttpError(400, 'Invalid PNG');
       const width = content.readUInt32BE(16); const height = content.readUInt32BE(20);
       if (width < 1 || height < 1 || width > 4096 || height > 4096 || width * height > 4_194_304) throw new HttpError(400, 'Snapshot dimensions are too large');
+      nativeRequest(request, true);
+      const currentSettings = store.snapshot().settings;
+      if (uploadGeneration !== previewGeneration || !currentSettings.preview.enabled || !currentSettings.widgets.preview) {
+        throw new HttpError(409, 'Snapshot upload was cleared or preview is disabled');
+      }
       image = content; preview = { available: true, capturedAt, width, height };
       json(response, 201, previewState()); return;
     }
