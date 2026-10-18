@@ -114,6 +114,7 @@ test('(e) non-default additive choices are the documented exceptions the previou
   for (const [label, patch] of [
     ['accentMode native', { appearance: { accentMode: 'native' } }],
     ['animation lively', { appearance: { animation: 'lively' } }],
+    ['non-default widgetData', { widgetData: { note: { text: 'Synthetic note' } } }],
   ] as const) {
     const directory = await temporary('lrd-rollback-negative-');
     try {

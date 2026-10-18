@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   widgetOverrides: Object.fromEntries(WIDGET_IDS.map(id => [id, { offsetX: 0, offsetY: 0, scale: 1 }])) as Record<WidgetId, WidgetTransform>,
   preview: { enabled: true, opacity: 0.24, widthPercent: 20 },
   idle: { enabled: false, idleMinutes: 10 }, savedPresets: [],
+  widgetData: { worldClocks: [], calendar: { weekStart: 'locale' }, countdowns: [], note: { text: '' }, airQuality: { scale: 'us' } },
 };
 
 export function defaultSettings(): Settings { return structuredClone(DEFAULT_SETTINGS); }

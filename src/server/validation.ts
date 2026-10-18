@@ -75,6 +75,41 @@ const widgetBehavior = z.object({ reminders: reminderBehavior.default({ hideWhen
 const preview = z.object({ enabled: z.boolean(), opacity: z.number().min(0.02).max(0.3), widthPercent: z.number().min(12).max(35) }).strict();
 const idle = z.object({ enabled: z.boolean(), idleMinutes: z.number().int().min(1).max(120) }).strict();
 const visualShape = { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview };
+
+// #78 widget content. Field schemas carry no defaults; only the persisted reader fills them.
+const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a YYYY-MM-DD date').refine(value => {
+  const [year, month, day] = value.split('-').map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return year >= 1900 && year <= 2200 && date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}, 'Use a real calendar date between 1900 and 2200');
+const worldClock = z.object({
+  id: z.uuid(), label: z.string().trim().min(1).max(40), timezone,
+  latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180),
+}).strict();
+const countdown = z.object({ id: z.uuid(), title: z.string().trim().min(1).max(60), date: civilDate, repeatsYearly: z.boolean() }).strict();
+const noteText = z.string().transform(value => value.replace(/\r\n?/g, '\n').trim())
+  .pipe(z.string().max(200, 'Use at most 200 characters').refine(value => value.split('\n').length <= 4, 'Use at most 4 lines'));
+const uniqueIds = (items: { id: string }[]) => new Set(items.map(item => item.id)).size === items.length;
+const worldClocks = z.array(worldClock).max(4).refine(uniqueIds, 'World clock IDs must be unique');
+const countdowns = z.array(countdown).max(12).refine(uniqueIds, 'Countdown IDs must be unique');
+const weekStart = z.enum(['locale', 'sunday', 'monday']);
+const airQualityScale = z.enum(['us', 'european']);
+/** Persisted settings and imports only: never part of visualShape, so saved styles never contain it. */
+const widgetData = z.object({
+  worldClocks: worldClocks.default(() => []),
+  calendar: z.object({ weekStart: weekStart.default('locale') }).strict().default(() => ({ weekStart: 'locale' as const })),
+  countdowns: countdowns.default(() => []),
+  note: z.object({ text: noteText.default('') }).strict().default(() => ({ text: '' })),
+  airQuality: z.object({ scale: airQualityScale.default('us') }).strict().default(() => ({ scale: 'us' as const })),
+}).strict().default(() => defaultSettings().widgetData);
+/** PATCH: exactly the supplied keys, never a default; arrays replace whole. */
+const widgetDataPatch = z.object({
+  worldClocks: worldClocks.optional(),
+  calendar: z.object({ weekStart }).strict().partial().optional(),
+  countdowns: countdowns.optional(),
+  note: z.object({ text: noteText }).strict().partial().optional(),
+  airQuality: z.object({ scale: airQualityScale }).strict().partial().optional(),
+}).strict();
 function checkGrid(value: Pick<Settings, 'widgetGrid' | 'widgets'>, context: z.RefinementCtx) {
   const problem = gridProblem(value.widgetGrid, value.widgets);
   if (problem) context.addIssue({ code: 'custom', path: ['widgetGrid'], message: problem });
@@ -91,7 +126,7 @@ const savedPresets = z.array(z.object({ id: z.string().min(1).max(80), name: z.s
 export const settingsSchema = z.object({ ...visualShape, version: z.literal(1), location,
   // Missing source means legacy/manual, so upgrades cannot replace an existing city.
   locationSource: z.enum(['device', 'manual', 'fallback']).default('manual'),
-  units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets,
+  units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets, widgetData,
 }).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(value => {
   if (value.locationSource === 'fallback') return { ...value, location: defaultSettings().location };
   if (value.locationSource === 'device') return { ...value, location: {
@@ -122,6 +157,7 @@ export const settingsPatchSchema = z.object({
   }).nullable().optional(),
   widgetBehavior: z.object({ reminders: z.object({ hideWhenEmpty: z.boolean().optional() }).strict().optional() }).strict().optional(),
   preview: preview.partial().optional(), idle: idle.partial().optional(), savedPresets: savedPresets.optional(),
+  widgetData: widgetDataPatch.optional(),
 }).strict();
 const dueAt = z.iso.datetime({ offset: true }).nullable();
 export const reminderInputSchema = z.object({ text: z.string().trim().min(1).max(240), dueAt: dueAt.optional() }).strict();
@@ -141,6 +177,11 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
     widgetOverrides: { ...current.widgetOverrides },
     widgetGrid: { ...current.widgetGrid, ...patch.widgetGrid, placements: { ...current.widgetGrid.placements } },
     widgetBehavior: { reminders: { ...current.widgetBehavior.reminders, ...patch.widgetBehavior?.reminders } },
+    // Arrays replace whole (the editor sends whole lists); nested objects merge.
+    widgetData: { ...current.widgetData, ...patch.widgetData,
+      calendar: { ...current.widgetData.calendar, ...patch.widgetData?.calendar },
+      note: { ...current.widgetData.note, ...patch.widgetData?.note },
+      airQuality: { ...current.widgetData.airQuality, ...patch.widgetData?.airQuality } },
   };
   // Existing API callers that explicitly edit a city are manual overrides too.
   if (changes.location && changes.locationSource === undefined) next.locationSource = 'manual';

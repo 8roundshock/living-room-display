@@ -31,9 +31,22 @@ export interface VisualSettings {
   preview: PreviewSettings;
 }
 export interface SavedPreset { id: string; name: string; visual: VisualSettings }
+/** Private user content (labels, titles and note text): included in exports, never in Git, diagnostics or picker samples. */
+export interface WorldClockCity { id: string; label: string; timezone: string; latitude: number; longitude: number }
+/** `date` is a civil YYYY-MM-DD date. */
+export interface CountdownEvent { id: string; title: string; date: string; repeatsYearly: boolean }
+/** Per-widget content for #78; not part of saved styles. */
+export interface WidgetDataSettings {
+  worldClocks: WorldClockCity[];
+  calendar: { weekStart: 'locale' | 'sunday' | 'monday' };
+  countdowns: CountdownEvent[];
+  note: { text: string };
+  airQuality: { scale: 'us' | 'european' };
+}
 export interface Settings extends VisualSettings {
   version: 1; location: LocationSettings; locationSource: 'device' | 'manual' | 'fallback'; units: Units; clockFormat: '12h' | '24h';
   idle: IdleSettings; savedPresets: SavedPreset[];
+  widgetData: WidgetDataSettings;
 }
 export interface SettingsPatch {
   /** Request intent only; automatic/failure-fallback selection must preserve a saved manual city. */
@@ -46,6 +59,11 @@ export interface SettingsPatch {
   /** Request-only local photo mutation; never stored in settings or included in exports. */
   photoChange?: { pngBase64: string } | null;
   preview?: Partial<PreviewSettings>; idle?: Partial<IdleSettings>; savedPresets?: SavedPreset[];
+  /** Arrays replace whole; nested objects merge. */
+  widgetData?: {
+    worldClocks?: WorldClockCity[]; calendar?: Partial<WidgetDataSettings['calendar']>; countdowns?: CountdownEvent[];
+    note?: Partial<WidgetDataSettings['note']>; airQuality?: Partial<WidgetDataSettings['airQuality']>;
+  };
 }
 export type AutomaticLocationSelection = { source: 'device'; latitude: number; longitude: number; automatic: boolean } | { source: 'fallback'; automatic: boolean };
 export interface Reminder {

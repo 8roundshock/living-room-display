@@ -18,7 +18,7 @@ const visualOf = ({ appearance, widgets, widgetOverrides, widgetBehavior, widget
 function data(settings: Settings) { return { version: 1 as const, settings, reminders: [], photoAsset: null }; }
 function variants(): [string, Settings][] {
   const base = defaultSettings();
-  const chosen = mergeSettings(base, { appearance: { accentMode: 'native', animation: 'lively', clockStyle: 'analog' }, widgets: { rain: false, photo: true } });
+  const chosen = mergeSettings(base, { appearance: { accentMode: 'native', animation: 'lively', clockStyle: 'analog' }, widgets: { rain: false, photo: true }, widgetData: { note: { text: 'Synthetic note' }, calendar: { weekStart: 'monday' } } });
   const styled = defaultSettings(); styled.savedPresets = [{ id: 'style', name: 'Style', visual: visualOf(chosen) }, { id: 'plain', name: 'Plain', visual: visualOf(base) }];
   return [['defaults', base], ['non-default choices', chosen], ['saved styles', mergeSettings(styled, {})]];
 }
@@ -72,12 +72,14 @@ test('files and exports omit additive defaults while state and PATCH responses c
     const patched = await response.json(), state = await (await fetch(`${url}/api/state`)).json();
     for (const settings of [patched, state.settings, app.store.snapshot().settings]) {
       assert.equal(settings.appearance.accentMode, 'color'); assert.equal(settings.appearance.animation, 'subtle');
+      assert.deepEqual(settings.widgetData, defaultSettings().widgetData);
       assert.deepEqual(Object.keys(settings.widgets), WIDGET_IDS); assert.deepEqual(Object.keys(settings.widgetOverrides), WIDGET_IDS); assert.deepEqual(Object.keys(settings.widgetGrid.placements), WIDGET_IDS);
     }
     const exported = await (await fetch(`${url}/api/export`)).json();
     const file = JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')), backup = JSON.parse(await readFile(join(directory, 'state.backup.json'), 'utf8'));
     for (const settings of [exported.settings, file.settings, backup.settings]) {
       assert.equal('accentMode' in settings.appearance, false); assert.equal('animation' in settings.appearance, false);
+      assert.equal('widgetData' in settings, false);
       assert.deepEqual(Object.keys(settings.widgets), [...PREVIOUS_RELEASE.widgetIds]);
     }
   } finally { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }
