@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type Dispatch,
@@ -135,7 +136,8 @@ export function Editor({
   const locationEpoch = useRef(0),
     mounted = useRef(true),
     automaticAttempted = useRef(false),
-    automaticLocation = useRef(false);
+    guardLocation = useRef(false);
+  const savebar = useRef<HTMLElement>(null);
   const [reminderForm, setReminderForm] = useState(false),
     [editingId, setEditingId] = useState<string | null>(null);
   const [reminderText, setReminderText] = useState(''),
@@ -151,6 +153,29 @@ export function Editor({
     updateDraft(update(draftRef.current));
     setError(null);
   }
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('studio-editor');
+    const measure = () => {
+      if (!savebar.current) return;
+      const bottom =
+        Number.parseFloat(getComputedStyle(savebar.current).bottom) || 0;
+      root.style.setProperty(
+        '--studio-footer-clearance',
+        `${savebar.current.getBoundingClientRect().height + bottom + 24}px`,
+      );
+    };
+    const observer = new ResizeObserver(measure);
+    if (savebar.current) observer.observe(savebar.current);
+    window.addEventListener('resize', measure);
+    measure();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+      root.classList.remove('studio-editor');
+      root.style.removeProperty('--studio-footer-clearance');
+    };
+  }, []);
   useEffect(() => {
     const incoming = structuredClone(state.settings);
     updateDraft(rebaseSettings(savedRef.current, draftRef.current, incoming));
@@ -193,7 +218,7 @@ export function Editor({
   }, [dirty]);
   function cancelChanges() {
     locationEpoch.current++;
-    automaticLocation.current = false;
+    guardLocation.current = false;
     setLocationBusy(false);
     updateDraft(structuredClone(savedRef.current));
     setLocationQuery('');
@@ -224,7 +249,7 @@ export function Editor({
     setLocationBusy(false);
     if (automatic && draftRef.current.locationSource === 'manual') return;
     if (result.status === 'success') {
-      automaticLocation.current = automatic;
+      guardLocation.current = automatic;
       change((previous) => ({
         ...previous,
         locationSource: 'device',
@@ -241,7 +266,8 @@ export function Editor({
         draftRef.current.locationSource !== 'manual' &&
         result.status !== 'permission-needed'
       ) {
-        automaticLocation.current = automatic;
+        // Every failed-lookup fallback is guarded, even after an explicit action.
+        guardLocation.current = true;
         change((previous) => ({
           ...previous,
           locationSource: 'fallback',
@@ -259,7 +285,7 @@ export function Editor({
   function selectCity(city: LocationResult) {
     locationEpoch.current++;
     setLocationBusy(false);
-    automaticLocation.current = false;
+    guardLocation.current = false;
     change((previous) => ({
       ...previous,
       locationSource: 'manual',
@@ -278,7 +304,7 @@ export function Editor({
       patch = settingsChanges(
         savedRef.current,
         draftRef.current,
-        automaticLocation.current,
+        guardLocation.current,
       );
     setSaving(true);
     setError(null);
@@ -294,7 +320,7 @@ export function Editor({
       setState((previous) =>
         previous ? { ...previous, settings: received } : previous,
       );
-      automaticLocation.current = false;
+      guardLocation.current = false;
       setLocationMessage('');
       void reload();
     } catch (caught) {
@@ -1336,7 +1362,10 @@ export function Editor({
           </div>
         )}
       </main>
-      <footer className={`studio-savebar ${dirty ? 'has-changes' : ''}`}>
+      <footer
+        ref={savebar}
+        className={`studio-savebar ${dirty ? 'has-changes' : ''}`}
+      >
         <span className="save-status" role="status">
           {saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'Saved'}
         </span>

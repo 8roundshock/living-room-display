@@ -36,6 +36,9 @@ consumed, never stored or exported. The studio sends only changed fields, so an
 unrelated appearance save does not resubmit an old location. Explicit successful
 device selection uses validated PATCH without the automatic guard; validation
 rounds device points. Invalid settings reject the entire draft, including location.
+The studio also sets this guard for every failed-lookup fallback, including a
+failed explicit device action; only an explicit successful device selection may
+replace a manual city without this guard.
 `/api/location` remains compatible for existing callers; the studio no longer uses
 its immediate-save behavior.
 

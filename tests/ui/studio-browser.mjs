@@ -109,13 +109,15 @@ export async function runStudioQa({ playwright, edge } = {}) {
               window.__finishGeo = () =>
                 geo === 'denied'
                   ? failure({ code: 1 })
-                  : success({
-                      coords: {
-                        latitude: 12.34567,
-                        longitude: 45.67891,
-                        accuracy: 123,
-                      },
-                    });
+                  : geo === 'unavailable'
+                    ? failure({ code: 2 })
+                    : success({
+                        coords: {
+                          latitude: 12.34567,
+                          longitude: 45.67891,
+                          accuracy: 123,
+                        },
+                      });
               if (geo !== 'deferred') window.__finishGeo();
             },
           },
@@ -508,6 +510,59 @@ export async function runStudioQa({ playwright, edge } = {}) {
     );
     await context.close();
 
+    // Every failed explicit lookup must guard its fallback against another editor.
+    for (const geo of ['denied', 'unavailable']) {
+      await reset();
+      await app.store.patchSettings({
+        locationSource: 'device',
+        location: {
+          name: 'Device area',
+          latitude: 12.3,
+          longitude: 45.7,
+          timezone: 'auto',
+        },
+      });
+      ({ page, context } = await open({ geo }));
+      await tab(page, 'Weather');
+      await page
+        .getByRole('button', { name: 'Use device location', exact: true })
+        .click();
+      await page
+        .locator('.current-location strong')
+        .filter({ hasText: 'Toronto' })
+        .waitFor();
+      await app.store.patchSettings({
+        location: {
+          name: 'Concurrent manual city',
+          latitude: 40,
+          longitude: 50,
+          timezone: 'UTC',
+        },
+      });
+      const requestPromise = page.waitForRequest(
+        (request) =>
+          request.url().endsWith('/api/settings') &&
+          request.method() === 'PATCH',
+      );
+      await save(page).click();
+      const submitted = (await requestPromise).postDataJSON();
+      assert.equal(
+        submitted.automaticLocation,
+        true,
+        'explicit failure fallback must send guarded request intent',
+      );
+      assert.equal(submitted.locationSource, 'fallback');
+      await saved(page);
+      assert.equal(
+        app.store.snapshot().settings.location.name,
+        'Concurrent manual city',
+      );
+      await context.close();
+    }
+    checks.push(
+      'explicit denied/unavailable lookup fallbacks send guarded intent and preserve a concurrent manual city',
+    );
+
     await reset();
     await app.store.patchSettings({
       appearance: { motionIntervalSeconds: 30, fadeSeconds: 0.2 },
@@ -606,6 +661,53 @@ export async function runStudioQa({ playwright, edge } = {}) {
     }
     checks.push(
       'reduced motion, keyboard section navigation, 390px/320px reflow and nonsticky mobile preview',
+    );
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 320, height: 844 },
+      { width: 390, height: 480 },
+      { width: 320, height: 480 },
+    ]) {
+      ({ page, context } = await open({ viewport }));
+      await tab(page, 'Reminders');
+      await page
+        .getByRole('button', { name: 'Add reminder', exact: true })
+        .click();
+      const text = page.getByLabel('Reminder', { exact: true });
+      await text.fill('Synthetic focus clearance');
+      await text.press('Tab');
+      await page.clock.runFor(100);
+      const focus = await page.evaluate(() => {
+        const input = document.querySelector(
+          '.reminder-form input[type="datetime-local"]',
+        );
+        const field = input.getBoundingClientRect(),
+          label = input.closest('label').getBoundingClientRect(),
+          bar = document
+            .querySelector('.studio-savebar')
+            .getBoundingClientRect();
+        return {
+          active: document.activeElement === input,
+          fieldTop: field.top,
+          fieldBottom: field.bottom,
+          labelTop: label.top,
+          barTop: bar.top,
+        };
+      });
+      assert.equal(focus.active, true);
+      assert.ok(
+        focus.fieldBottom <= focus.barTop - 8,
+        JSON.stringify({ viewport, ...focus }),
+      );
+      assert.ok(focus.labelTop >= 0, JSON.stringify({ viewport, ...focus }));
+      images.push({
+        label: `Focused reminder field ${viewport.width}×${viewport.height}`,
+        bytes: await page.screenshot({ type: 'png', animations: 'disabled' }),
+      });
+      await context.close();
+    }
+    checks.push(
+      'keyboard-focused reminder field and label stay above fixed Save bar at 390/320px and compact keyboard heights',
     );
     assert.deepEqual(errors, []);
     return { checks, images };

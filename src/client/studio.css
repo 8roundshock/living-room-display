@@ -1,4 +1,10 @@
 /* A focused editor workspace. The ambient canvas owns its dim, true-black palette. */
+html.studio-editor {
+  scroll-padding-block: 24px var(--studio-footer-clearance, 124px);
+}
+.studio :is(input, select, button, a, summary, [tabindex]) {
+  scroll-margin-block: 24px;
+}
 .ambient.font-sans {
   font-family: system-ui, 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
 }

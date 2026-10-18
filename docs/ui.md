@@ -10,6 +10,8 @@ acceptance are recorded separately in [STATUS](../STATUS.md).
 Style, Widgets, Weather and Reminders share one settings draft. Desktop keeps the
 preview beside the inspector; small windows stack it above a normally scrolling
 inspector. The mobile preview is not sticky, leaving room for the keyboard.
+Focus scrolling reserves the measured Save bar height so fields and labels remain
+visible above it, including narrow screens and compact keyboard-height windows.
 
 - **Save changes** atomically persists settings, appearance, location, widget
   options and saved styles. Edits made while saving remain unsaved afterward.
@@ -76,12 +78,14 @@ content only. Reduced motion stops drift/recomposition and UI/data reveal effect
 Motion/dimness do not guarantee protection from image retention. No audio, external
 fonts, telemetry, cloud accounts or LAN exposure is added.
 
-On 2026-10-18, 52 application tests and the production build pass. The reusable
+On 2026-10-18, 53 application tests and the production build pass. The reusable
 [Edge harness](../tests/ui/studio-browser.mjs) owns an ephemeral loopback server,
 temporary data and synthetic provider/device responses. It checks global Cancel,
 city keyboard/debounce/races, failed/in-flight saves, polling rebase, saved styles,
 reminders, device cancellation/rounding/manual protection, all four timed 1080p/4K
-bounds, true black, silence, reduced motion and 390px/320px reflow. Images stay in RAM.
+bounds, true black, silence, reduced motion and 390px/320px reflow. Regressions also
+cover failed explicit-location fallback races and focused-field clearance at
+390px/320px with 844px/480px heights. Images stay in RAM.
 
 After `npm ci` and `npm run build`, use an existing Playwright/browser installation:
 

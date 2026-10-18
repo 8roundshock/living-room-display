@@ -37,6 +37,25 @@ test('draft Save atomically guards automatic location and does not persist reque
   } finally { await app.close(); }
 });
 
+test('a failed explicit device fallback draft preserves a manual city saved by another editor', async () => {
+  const app = await fixture();
+  try {
+    const patch = (value: unknown) => fetch(`${app.url}/api/settings`, { method: 'PATCH', ...body(value) });
+    await patch({ locationSource: 'device', location: { name: 'Device area', latitude: 12.3, longitude: 45.7, timezone: 'auto' } });
+    // Editor A receives a failed explicit lookup and keeps this unsaved fallback.
+    const failedLookupDraft = { automaticLocation: true, locationSource: 'fallback', appearance: { brightness: 0.3 } };
+    // Editor B then saves its explicit manual selection through the real API.
+    await patch({ location: { name: 'Other editor city', latitude: 40, longitude: 50, timezone: 'UTC' } });
+    const response = await patch(failedLookupDraft);
+    assert.equal(response.status, 200);
+    const saved = await response.json();
+    assert.equal(saved.location.name, 'Other editor city');
+    assert.equal(saved.locationSource, 'manual');
+    assert.equal(saved.appearance.brightness, 0.3, 'unrelated valid draft changes still save atomically');
+    assert.equal('automaticLocation' in saved, false);
+  } finally { await app.close(); }
+});
+
 test('hide-empty behavior persists through partial patch, preset export/import and legacy import', async () => {
   const app = await fixture();
   try {

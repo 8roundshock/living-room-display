@@ -27,12 +27,12 @@ the owner's explicit authority to choose practical defaults and build the app.
   migrate as manual; no location prompt or lookup occurs in the screensaver.
 - Framework Windows host and per-user installer/control sources, with screensaver
   backup/restore, isolated Edge job, cancellation and scoped process management.
-- Full production build and 52 application tests. Windows/Linux CI runs the full
+- Full production build and 53 application tests. Windows/Linux CI runs the full
   application checks. Windows
   source regression checks cover startup cancellation, restore selection,
   owned-process recognition and filesystem transaction/cleanup behavior.
 
-Local verification: full build and all 52 application tests pass using the
+Local verification: full build and all 53 application tests pass using the
 app-owned Node 24 runtime. Eleven Windows check groups pass on PowerShell 5.1
 and 7 with the optional real child-process test (ten without). Provenance tests
 cover clean/dirty Git, archives, enclosing repositories and composed sources;
@@ -42,9 +42,10 @@ online export/import and validated offline recovery after both saved JSON files
 were corrupted pass, retaining original corrupt evidence. Native static/unit
 checks use fake transport/session/native boundaries and scoped filesystem fixtures;
 they do not establish actual installed capture, kiosk, idle or lock behavior.
-The isolated production Edge studio harness passes twelve interaction/layout
+The isolated production Edge studio harness passes fourteen interaction/layout
 groups, including async Save/Cancel/city/location races, reminder CRUD, all four
-1080p/4K compositions, reduced motion and 390px/320px reflow. Source desktop/mobile
+1080p/4K compositions, reduced motion, 390px/320px reflow and focused-field clearance
+above the measured Save bar at full/compact heights. Source desktop/mobile
 visuals are inspected in RAM; final independent visual review is required and
 tracked on the PR. No screenshots or real device positions are retained. See [UI evidence](docs/ui.md).
 
