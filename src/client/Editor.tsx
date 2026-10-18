@@ -40,10 +40,12 @@ import {
   firstPlacement,
   fitWidgetFamily,
   reflowWidget,
+  resizeWidgetSpan as resizeSpanGrid,
   switchGridDensity,
   type GridDensityHistory,
   type GridDensity,
   type WidgetSize,
+  type WidgetSpan,
 } from '../shared/widgets';
 import { GridEditor } from './GridEditor';
 import { WidgetInspector } from './WidgetInspector';
@@ -362,6 +364,16 @@ export function Editor({
       draftRef.current.widgetGrid,
       id,
       size,
+      draftRef.current.widgets,
+    );
+    if (next) commitGrid(next);
+    else setGridMessage('No room for that size');
+  }
+  function resizeWidgetSpan(id: WidgetId, span: WidgetSpan) {
+    const next = resizeSpanGrid(
+      draftRef.current.widgetGrid,
+      id,
+      span,
       draftRef.current.widgets,
     );
     if (next) commitGrid(next);
@@ -1172,6 +1184,7 @@ export function Editor({
                 onAdd={addWidget}
                 onRemove={removeWidget}
                 onResize={resizeWidget}
+                onResizeSpan={resizeWidgetSpan}
                 onMove={moveWidget}
                 onChange={change}
                 saving={saving}

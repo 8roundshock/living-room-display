@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Settings, WidgetId } from '../shared/contracts';
-import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, widgetSizes, type WidgetSize } from '../shared/widgets';
+import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, isFreeSize, widgetSizes, type WidgetSize } from '../shared/widgets';
 import { Icon } from './icons';
 import { WidgetSample } from './WidgetSample';
 
@@ -38,6 +38,7 @@ export function WidgetPicker({ settings, onAdd, onClose, message }: {
           {family[0].toUpperCase() + family.slice(1)}
         </button>)}
       </div>
+      {isFreeSize(selected) && <p className="picker-free-size">Resize freely after adding — up to the full height</p>}
       <button className="button primary picker-add" disabled={settings.widgets[selected]} aria-label={`Add ${widget.name}`} onClick={() => onAdd(selected, size)}>
         <Icon name={settings.widgets[selected] ? 'check' : 'plus'} size={17} />
         {settings.widgets[selected] ? 'Already on your display' : 'Add widget'}
