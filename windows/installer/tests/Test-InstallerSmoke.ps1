@@ -175,7 +175,7 @@ try {
     Assert-True ((Get-TreeState $data) -eq $dataHash) 'default uninstall changed data'
     Assert-True ((Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).state -eq 'uninstalled') 'marker not kept as uninstalled'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $programs 'Living Room Display.lnk')) -and -not (Test-Path -LiteralPath (Join-Path $programs 'Living Room Display - Show display.lnk'))) 'shortcuts remain'
-    Assert-True (-not (Test-Port4318) -and (Get-OwnedProcesses).Count -eq 0) 'port 4318 still in use or an owned process remains'
+    Assert-True (-not (Test-Port4318) -and @(Get-OwnedProcesses).Count -eq 0) 'port 4318 still in use or an owned process remains'
 
     Write-Step 'Reinstall keeps the retained data'
     $result = Invoke-Setup 'reinstall'
@@ -186,7 +186,7 @@ try {
     Write-Step 'Uninstall with /REMOVEDATA=1 removes data, snapshots and the folder'
     Invoke-Uninstall '/REMOVEDATA=1'
     Wait-Until { -not (Test-Path -LiteralPath $installRoot) } 90 'install folder removal after a data-delete uninstall'
-    Assert-True (-not (Test-Port4318) -and (Get-OwnedProcesses).Count -eq 0) 'port 4318 still in use or an owned process remains after removal'
+    Assert-True (-not (Test-Port4318) -and @(Get-OwnedProcesses).Count -eq 0) 'port 4318 still in use or an owned process remains after removal'
     $after = Get-BeforeState
     Assert-True ($after.Saver -eq $before.Saver -and $after.Run -eq $before.Run -and $after.Tasks -eq $before.Tasks -and $after.Firewall -eq $before.Firewall) 'before-state changed after uninstall'
     Assert-True (@(Get-StartMenu | Where-Object { $startBefore -notcontains $_ }).Count -eq 0) 'Start menu entries remain'
