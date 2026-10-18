@@ -46,6 +46,8 @@ export interface WeatherDay {
 export interface RainInterval {
   intervalStart: string; intervalEnd: string;
   precipitationProbability: number | null; precipitationAmount: number | null;
+  /** Rain plus showers; probability above includes snow and other precipitation. */
+  rainAmount: number | null;
 }
 export interface WeatherState {
   status: 'fresh' | 'stale' | 'unavailable'; updatedAt: string | null; error: string | null;
