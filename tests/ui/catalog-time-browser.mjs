@@ -179,6 +179,20 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await cancel();
     row = await inspector('Countdown');
     assert.deepEqual(await row.locator('input[data-countdown-title]').evaluateAll(inputs => inputs.map(input => input.value)), ['Weekend trip'], 'Cancel restores the saved widget and its one date');
+    // Closing the panel never deletes a saved date: a cleared title or date reverts instead.
+    await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('');
+    await button('Countdown').click();
+    await savebar().waitFor({ state: 'detached' });
+    row = await inspector('Countdown');
+    assert.equal(await row.getByRole('textbox', { name: 'Countdown 1 title' }).inputValue(), 'Weekend trip', 'a cleared title reverts when the panel closes');
+    await row.getByLabel('Countdown 1 date', { exact: true }).fill('');
+    await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('Weekend away');
+    await tab('Style'); await button('Night').click(); await save();
+    assert.deepEqual(snapshot().widgetData.countdowns.map(({ title, date, repeatsYearly }) => [title, date, repeatsYearly]), [['Weekend away', '2026-10-30', true]], 'a cleared date reverts while other edits are kept');
+    await app.store.patchSettings({ widgets: { countdown: true, calendar: true } });
+    await page.reload(); await button('Edit layout').waitFor(); await page.clock.runFor(300);
+    row = await inspector('Countdown');
+    await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('Weekend trip'); await save();
     checks.push('Countdown: editor placeholder, Add date (one week ahead, title focused), inline empty-title error blocks Save via draftProblem, live preview, Passed label, Every year, Remove, Cancel restores, trailing spaces trimmed on blur leave no Save bar');
 
     // 4. Note: counter, Clear, 4-line limit, dirty-only Save bar, reload.

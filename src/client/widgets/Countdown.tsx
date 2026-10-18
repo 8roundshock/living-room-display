@@ -95,13 +95,24 @@ function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) 
   const latest = useRef({ settings, onChange });
   latest.current = { settings, onChange };
   // Incomplete rows can only be fixed in this panel. When it closes (the widget is removed or
-  // collapsed, or the tab changes), drop them so Save is never blocked by a field nobody can see.
+  // collapsed, or the tab changes), an edited row gets back the title or date it had when the panel
+  // opened and an incomplete new row is dropped, so Save is never blocked by a field nobody can see
+  // and closing the panel never deletes a date.
+  const opened = useRef(new Map(settings.widgetData.countdowns.map(event => [event.id, event])));
   useEffect(() => () => {
     const { settings: last, onChange: change } = latest.current;
     if (last.widgetData.countdowns.every(complete)) return;
     change((previous: Settings) => {
-      const kept = previous.widgetData.countdowns.filter(complete);
-      return kept.length === previous.widgetData.countdowns.length ? previous : { ...previous, widgetData: { ...previous.widgetData, countdowns: kept } };
+      const events = previous.widgetData.countdowns;
+      if (events.every(complete)) return previous;
+      const repaired = events.flatMap(event => {
+        if (complete(event)) return [event];
+        const before = opened.current.get(event.id);
+        if (!before) return [];
+        const restored = { ...event, title: event.title.trim() ? event.title : before.title, date: dateProblem(event.date) ? before.date : event.date };
+        return complete(restored) ? [restored] : [];
+      });
+      return { ...previous, widgetData: { ...previous.widgetData, countdowns: repaired } };
     });
   }, []);
   useEffect(() => {
