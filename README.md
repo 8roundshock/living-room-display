@@ -3,6 +3,8 @@
 A silent, customizable ambient display for a Windows 10 leisure PC connected to
 a Samsung S90F OLED TV: large time and date, weather, a seven-day outlook, rain
 estimates, optional reminders, and an optional dim screen preview.
+All modules are optional. Drag and resize widgets on a snapping grid, choose
+adaptive sizes and outline/digital/analog clocks, or add a dim local photo.
 
 **Current state: local display/editor and current-PC source install verified.**
 The selected approach is a custom local web dashboard plus a Windows helper.
@@ -11,7 +13,7 @@ Device-area weather with a Toronto fallback, editable presets and reminders,
 and configurable hiding of empty reminders are implemented. The sparse interface
 uses the [recorded HIG-inspired design choices](docs/design.md). The display studio
 puts one focused Style, Widgets, Weather or Reminders inspector beside its live
-preview. Settings/location have Save/Cancel, cities appear as you type, and
+preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
 This redesigned source still needs an installed refresh and native acceptance.
 Wider release
@@ -30,6 +32,7 @@ chosen to keep it private until a usable release; there is no public release yet
 - [Architecture](docs/architecture.md): selected design and boundaries.
 - [Development](docs/development.md): verified tools, authentication, and checks.
 - [Local API](docs/api.md): shared contracts, weather semantics, and data recovery.
+- [Widget contract](docs/widgets.md) and [repo-local creation skill](.agents/skills/living-room-widget/SKILL.md): centralized families, grid, motion and authoring.
 - [Agent workflow](docs/agent-workflow.md): ownership, handoffs, review, and PRs.
 - [Installation and use](docs/install.md): commands, recovery and current limits.
 - [Contributing](CONTRIBUTING.md) and [agent runbook](docs/agent-runbook.md):

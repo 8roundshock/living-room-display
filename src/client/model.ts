@@ -7,8 +7,12 @@ import type {
 import { defaultSettings } from '../shared/defaults.ts';
 
 export function getVisual(settings: Settings): VisualSettings {
-  const { appearance, widgets, widgetOverrides, widgetBehavior, preview } = settings;
-  return structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, preview });
+  const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = settings;
+  return structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview });
+}
+
+export function weatherAttributionWidget(settings: Settings): 'forecast' | 'weather' | 'rain' | null {
+  return settings.widgets.forecast ? 'forecast' : settings.widgets.weather ? 'weather' : settings.widgets.rain ? 'rain' : null;
 }
 
 export function reminderPresentation(

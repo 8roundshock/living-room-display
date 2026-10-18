@@ -1,6 +1,6 @@
 # Display studio
 
-Reviewed 2026-10-18 for [#39](https://github.com/8roundshock/living-room-display/issues/39).
+Reviewed 2026-10-18 for [#43](https://github.com/8roundshock/living-room-display/issues/43).
 Browser checks establish source behavior; installation and native pointer/idle
 acceptance are recorded separately in [STATUS](../STATUS.md).
 
@@ -14,17 +14,23 @@ Focus scrolling reserves the measured Save bar height so fields and labels remai
 visible above it, including narrow screens and compact keyboard-height windows.
 
 - **Save changes** atomically persists settings, appearance, location, widget
-  options and saved styles. Edits made while saving remain unsaved afterward.
+  options, selected local photo and saved styles. The bar exists only while
+  effective saved values differ; reverting all edits hides it. Edits made while saving remain unsaved afterward.
   Failed saves preserve the draft. Untouched fields refresh from server polling.
 - **Cancel** restores the latest saved settings across every section, resets the
-  city query/style form, and invalidates pending device callbacks. It does not
+  city query/style form, and invalidates pending device/photo callbacks. It does not
   undo saved reminders. Leaving with settings edits uses the browser's prompt.
 - **Phone**, **Room** and **Night** reset visuals/transforms while preserving
   location, units, reminders and named styles. Room brightness is 55%; Night is
   28%. Up to twelve saved styles include visual/widget/empty-reminder settings.
-- **Widgets** rows reveal their own controls and size/position disclosure.
-  Large manual offsets/scales can crop content inside its region; inspect every
-  arrangement. Free dragging and arbitrary overlapping placement are not built.
+- **Edit layout** reveals a faint editor-only grid, draggable widgets and visible
+  resize handles. Arrow keys move the focused widget; size buttons/position
+  arrows are an alternative. Escape or pointer cancellation abandons a drag.
+  Invalid drops/resizes retain the prior layout. Density changes repack all active
+  widgets without shrinking or dropping them, or report insufficient room.
+- **Widgets** selects inline size/position and per-widget controls. **Add widget**
+  shows synthetic family previews. Every module can be removed, including clock,
+  weather and rain separately. Small/medium/large families adapt their content.
 - Numbered preview buttons select arrangements; **Automatic** resumes movement.
   **Open display** opens a separate tab. Manual display controls appear on pointer
   movement or Tab; Esc or E returns to the editor.
@@ -60,7 +66,7 @@ showers and label incomplete/gapped coverage. See [API semantics](api.md#weather
 
 Reminder Add/Edit/Complete/Delete actions save immediately with separate short
 feedback. Reminder form Cancel abandons that form only. Items are silent, dated
-or undated and one-time; at most two pending items appear, dated items first.
+or undated and one-time; families show one, two or four pending items, dated first.
 **Widgets → Reminders → Hide when empty** defaults on. Confirmed empty/all-completed
 lists hide the widget; failure cannot masquerade as an empty list. Disabling the
 widget always hides it. Completed items remain editable until deleted.
@@ -70,31 +76,44 @@ opacity controls. The UI does not capture. Native/server RAM lifecycle clears it
 on dismissal; live preview/image history is not implemented. Export includes saved
 settings/reminders only, excluding drafts, images and tokens.
 
+Clock styles are Outline (default), Digital and Analog. Analog has hands without
+a fixed face/tick ring. Photo starts disabled; choose a JPEG/PNG/WebP on this
+device, then Save or Cancel with the rest of the draft. It is dimmed and moves
+as one widget. It never uses the desktop snapshot or a remote feed. The private
+recovery backup may retain an older selected image after replacement or clearing.
+
 ## Movement and verification
 
-Four arrangements relocate whole widget groups, with slow drift and configurable
-fades (default three minutes/two seconds). Black remains `#000`; brightness affects
-content only. Reduced motion stops drift/recomposition and UI/data reveal effects.
+The edited layout is the first composition. Later collision-free compositions
+vary legal widget origins and whole-plane offsets, with a fully black rest before
+revealing each replacement (default three minutes/two-second fade). Black remains
+`#000`; brightness affects content only. Reduced motion/Soft motion off removes
+drift/travel and reveal effects while discrete relocation continues through black.
 Motion/dimness do not guarantee protection from image retention. No audio, external
 fonts, telemetry, cloud accounts or LAN exposure is added.
 
-On 2026-10-18, 53 application tests and the production build pass. The reusable
+The reusable
 [Edge harness](../tests/ui/studio-browser.mjs) owns an ephemeral loopback server,
 temporary data and synthetic provider/device responses. It checks global Cancel,
 city keyboard/debounce/races, failed/in-flight saves, polling rebase, saved styles,
 reminders, device cancellation/rounding/manual protection, all four timed 1080p/4K
 bounds, true black, silence, reduced motion and 390px/320px reflow. Regressions also
 cover failed explicit-location fallback races and focused-field clearance at
-390px/320px with 844px/480px heights. Images stay in RAM.
+390px/320px with 844px/480px heights. The [grid harness](../tests/ui/grid-browser.mjs)
+adds actual pointer/touch/keyboard moves/resizes, effective dirty-bar reverts,
+density rejection, optional modules/styles, local canvas PNG/Cancel/atomic save
+and pairwise rendered bounds. Images stay in RAM. Current verified counts and
+review/installation limits are recorded in [STATUS](../STATUS.md).
 
 After `npm ci` and `npm run build`, use an existing Playwright/browser installation:
 
 ```powershell
 node tests/ui/studio-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
+node tests/ui/grid-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
 node windows/tests/Test-CursorBrowser.mjs --base-url 'http://127.0.0.1:<isolated QA port>' --playwright '<Playwright module path>' --edge '<browser executable>'
 ```
 
-The first owns its test server and never uses the installed app. Cursor checks
+Both UI harnesses own their test servers and never use the installed app. Cursor checks
 require a separate isolated production server and mock state without saved-data
 changes. These are development tools, not runtime dependencies. Final source
 visuals also require independent RAM inspection. Native cursor proof, fresh-account

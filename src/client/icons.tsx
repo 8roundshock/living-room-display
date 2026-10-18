@@ -1,6 +1,9 @@
 import type { CSSProperties } from 'react';
 
 export type IconName =
+  | 'clock'
+  | 'calendar'
+  | 'photo'
   | 'sun'
   | 'moon'
   | 'cloud'
@@ -22,6 +25,25 @@ export type IconName =
   | 'sparkles'
   | 'download';
 const paths: Record<IconName, React.ReactNode> = {
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 6v6l4 2" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="5" width="18" height="16" rx="3" />
+      <path d="M7 3v4m10-4v4M3 10h18m-13 4h2m4 0h2m-8 3h2" />
+    </>
+  ),
+  photo: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <circle cx="8" cy="8" r="1.5" />
+      <path d="m4 17 5-5 4 4 3-3 5 5" />
+    </>
+  ),
   sun: (
     <>
       <circle cx="12" cy="12" r="4" />

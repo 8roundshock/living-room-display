@@ -8,7 +8,15 @@ import {
   reminderPresentation,
   sortReminders,
   upcomingRain,
+  weatherAttributionWidget,
 } from './model.ts';
+
+test('weather attribution follows the first enabled weather module and can all be removed', () => {
+  const settings = defaultSettings(); assert.equal(weatherAttributionWidget(settings), 'forecast');
+  settings.widgets.forecast = false; assert.equal(weatherAttributionWidget(settings), 'weather');
+  settings.widgets.weather = false; assert.equal(weatherAttributionWidget(settings), 'rain');
+  settings.widgets.rain = false; assert.equal(weatherAttributionWidget(settings), null);
+});
 import {
   ageLabel,
   forecastDay,

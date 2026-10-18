@@ -27,7 +27,7 @@ async function bytes(request: IncomingMessage, limit: number): Promise<Buffer> {
 }
 async function jsonBody(request: IncomingMessage): Promise<unknown> {
   if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') throw new HttpError(415, 'Use application/json');
-  try { return JSON.parse((await bytes(request, 1024 * 1024)).toString('utf8')); }
+  try { return JSON.parse((await bytes(request, 4 * 1024 * 1024)).toString('utf8')); }
   catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(400, 'Invalid JSON'); }
 }
 function json(response: ServerResponse, status: number, body?: unknown): void {
@@ -96,12 +96,13 @@ export async function createApplication(options: ApplicationOptions) {
     if (method === 'GET' && path === '/api/health') { json(response, 200, { status: 'ok', version: '0.1.0', storageWarning: store.warning }); return; }
     if (method === 'GET' && path === '/api/windows/status') { json(response, 200, await windowsStatus()); return; }
     if (method === 'GET' && path === '/api/state') {
-      const { settings, reminders } = store.snapshot();
-      const state: AppState = { settings, reminders, weather: await weather.get(settings), preview: previewState() };
+      const { settings, reminders, photoAsset } = store.snapshot();
+      const state: AppState = { settings, reminders, weather: await weather.get(settings), preview: previewState(),
+        photo: photoAsset ? { available: true, id: photoAsset.id, width: photoAsset.width, height: photoAsset.height, updatedAt: photoAsset.updatedAt } : { available: false, id: null, width: null, height: null, updatedAt: null } };
       json(response, 200, { ...state, storageWarning: store.warning }); return;
     }
     if (method === 'PATCH' && path === '/api/settings') {
-      const settings = await store.patchSettings(settingsPatchSchema.parse(await jsonBody(request)));
+      const settings = await store.patchSettings(settingsPatchSchema.parse(await jsonBody(request)), now());
       if (!settings.preview.enabled || !settings.widgets.preview) clearPreview();
       json(response, 200, settings); return;
     }
@@ -144,7 +145,8 @@ export async function createApplication(options: ApplicationOptions) {
     }
     if (method === 'GET' && path === '/api/export') {
       response.setHeader('Content-Disposition', 'attachment; filename="living-room-display-backup.json"');
-      json(response, 200, { ...store.snapshot(), exportedAt: new Date(now()).toISOString() }); return;
+      const { version, settings, reminders } = store.snapshot();
+      json(response, 200, { version, settings, reminders, exportedAt: new Date(now()).toISOString() }); return;
     }
     if (method === 'POST' && path === '/api/import') {
       const imported = importSchema.parse(await jsonBody(request));
@@ -156,6 +158,12 @@ export async function createApplication(options: ApplicationOptions) {
       json(response, 200, { token: hostToken, settings: store.snapshot().settings, displayUrl: `http://127.0.0.1:${port}/` }); return;
     }
     if (method === 'GET' && path === '/api/preview') { json(response, 200, previewState()); return; }
+    if (method === 'GET' && path === '/api/photo/image') {
+      const asset = store.snapshot().photoAsset;
+      if (!asset || (url.searchParams.has('id') && url.searchParams.get('id') !== asset.id)) throw new HttpError(404, 'No selected photo is available');
+      const content = Buffer.from(asset.pngBase64, 'base64');
+      response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'Content-Length': content.length }); response.end(content); return;
+    }
     if (method === 'GET' && path === '/api/preview/image') {
       if (!previewState().available || !image) throw new HttpError(404, 'No snapshot is available');
       response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'Content-Length': image.length }); response.end(image); return;

@@ -19,13 +19,14 @@ busy dashboards. The application must produce no audio.
 
 | Area | Intended behavior |
 | --- | --- |
-| Time and date | Large, legible display; editable 12/24-hour format. |
+| Time and date | Optional clock with outline numerals by default, solid digital or minimal analog hands, and 12/24-hour format. |
 | Current weather | Conditions with a clear place label, units, and update age. |
 | Forecast | Readable seven-day outlook. |
 | Rain | Chance and estimated timing of upcoming rain, with uncertainty visible. |
 | Reminders | Add, edit, complete, or hide one-time/undated reminders through the local editor. |
 | Appearance | User-editable layout, colors, typography, motion, and saved presets. |
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
+| Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |
 
 Distinguish forecast probability, expected precipitation amount, and estimated
 rain windows. Label times and intervals correctly. Show stale or unavailable
@@ -38,6 +39,13 @@ Editing should not require changing source code. Keep the editor separate from
 the sparse display experience. Personal reminders and settings need persistence
 and a recovery/export plan once their storage is designed; private user content
 does not belong in Git. A local editor does not imply public or LAN exposure.
+Every information module is independently optional, including clock and rain.
+Use a shared catalog and supported small/medium/large content families. The live
+canvas offers drag, visible resize handles, grid density choices and keyboard
+alternatives; reject overlaps and out-of-bounds placements. A picker previews
+synthetic examples without exposing private data. Global Save/Cancel appears only
+while effective settings or a photo differ from the saved baseline; reverting all
+edits hides it again. Reminder actions remain independently saved.
 
 ## Screen preview
 
@@ -62,7 +70,10 @@ separately with the Windows host.
 Move whole widget groups through substantially different screen areas. Allow
 periodic recomposition and gentle fades so content does not remain anchored to
 one location. Motion inside an otherwise fixed widget is insufficient. Motion
-style and cadence remain user-editable choices.
+style and cadence remain user-editable choices. Recompose collision-free layouts
+with varied legal origins and offsets, fully black between compositions. Soft
+motion and reduced-motion settings remove travel/effects while protective discrete
+relocation continues. No fixed decorative frame, footer or source credit remains.
 
 Keep transitions calm, avoid flashes, and provide a reduced-motion option in the
 design. Dim colors, black backgrounds, and movement do not guarantee protection

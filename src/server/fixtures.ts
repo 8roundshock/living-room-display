@@ -1,4 +1,17 @@
 /** Synthetic provider response used only by automated tests. */
+import { deflateSync } from 'node:zlib';
+
+export function photoFixture(width = 2, height = 2, pixels?: Buffer): Buffer {
+  const chunk = (type: string, content: Buffer) => {
+    const result = Buffer.alloc(content.length + 12); result.writeUInt32BE(content.length); result.write(type, 4); content.copy(result, 8);
+    let crc = 0xffffffff;
+    for (const byte of result.subarray(4, 8 + content.length)) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0); }
+    result.writeUInt32BE((crc ^ 0xffffffff) >>> 0, 8 + content.length); return result;
+  };
+  const header = Buffer.alloc(13); header.writeUInt32BE(width); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(pixels ?? Buffer.alloc((width * 4 + 1) * height))), chunk('IEND', Buffer.alloc(0))]);
+}
+
 export function forecastFixture(start = Date.parse('2026-10-18T04:00:00Z') / 1000) {
   const daily = Array.from({ length: 7 }, (_, index) => start + index * 86400);
   const hourly = Array.from({ length: 168 }, (_, index) => start + index * 3600);

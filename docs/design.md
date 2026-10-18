@@ -16,8 +16,8 @@ setting simultaneously. An independent critic refined the concept first.
 One black canvas leads; a stable Style/Widgets/Weather/Reminders switcher reveals
 one inspector at a time. Rounded charcoal groups, consistent insets, system type,
 small style miniatures and restrained active tint establish hierarchy. No slogans
-or decorative intro cards compete with controls. One persistent bar handles
-saved/unsaved status and Save/Cancel. Advanced details stay in context disclosures.
+or decorative intro cards compete with controls. Save/Cancel appears only for an
+effective draft; clean views have no status bar. Advanced details stay in context disclosures.
 Mobile uses normal scrolling and a nonsticky preview, leaving room for keyboard
 editing. The city query is separate from the selected location. Reminders explain
 their independent immediate-save behavior once.
@@ -35,11 +35,17 @@ their independent immediate-save behavior once.
 
 Inspector entry fades/translates slightly over 220ms; controls transition around
 180ms. Clock changes reveal briefly at minute boundaries; rain bars ease on data
-updates. Reduced motion removes effects and ambient motion. Information never
+updates. Reduced motion removes effects and ambient travel while discrete
+relocation through black continues. Information never
 depends on animation or tint alone. No audio or haptics are introduced.
 
 The owner's relocation requirement deliberately differs from Apple's stable
-Always On layout advice: four distinct compositions remain with soft fades.
+Always On layout advice: varied collision-free compositions remain with a black
+rest between them. The grid editor exposes one layout-editing mode, a catalog
+picker with synthetic family content, visible handles and keyboard alternatives.
+Outline clock numerals, minimal analog hands and dim local photos reuse the same
+protected grid/motion boundary. See the [widget contract](widgets.md) for Apple
+WidgetKit/Always On sources and concrete adaptation rules.
 Unused ambient pixels remain true black; saved brightness caps are unchanged.
 These choices do not reproduce Apple power behavior or guarantee OLED safety.
 The editor is more legible than the distant display; browser images do not prove

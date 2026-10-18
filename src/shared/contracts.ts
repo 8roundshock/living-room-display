@@ -1,4 +1,7 @@
-export type WidgetId = 'clock' | 'weather' | 'forecast' | 'reminders' | 'preview';
+import type { GridDensity, WidgetKind, WidgetSize } from './widgets.ts';
+export type WidgetId = WidgetKind;
+export interface WidgetPlacement { column: number; row: number; size: WidgetSize }
+export interface WidgetGrid { density: GridDensity; placements: Record<WidgetId, WidgetPlacement> }
 export type Units = 'metric' | 'imperial';
 export interface LocationSettings { name: string; latitude: number; longitude: number; timezone: string }
 export interface AppearanceSettings {
@@ -7,6 +10,7 @@ export interface AppearanceSettings {
   fontFamily: 'sans' | 'serif' | 'mono';
   layout: 'balanced' | 'minimal' | 'weather-first';
   motionEnabled: boolean; motionIntervalSeconds: number; fadeSeconds: number;
+  clockStyle: 'outline' | 'digital' | 'analog';
 }
 export interface WidgetTransform { offsetX: number; offsetY: number; scale: number }
 export interface WidgetBehavior { reminders: { hideWhenEmpty: boolean } }
@@ -17,6 +21,7 @@ export interface VisualSettings {
   widgets: Record<WidgetId, boolean>;
   widgetOverrides: Record<WidgetId, WidgetTransform>;
   widgetBehavior: WidgetBehavior;
+  widgetGrid: WidgetGrid;
   preview: PreviewSettings;
 }
 export interface SavedPreset { id: string; name: string; visual: VisualSettings }
@@ -31,6 +36,9 @@ export interface SettingsPatch {
   appearance?: Partial<AppearanceSettings>; widgets?: Partial<Record<WidgetId, boolean>>;
   widgetOverrides?: Partial<Record<WidgetId, Partial<WidgetTransform>>>;
   widgetBehavior?: { reminders?: Partial<WidgetBehavior['reminders']> };
+  widgetGrid?: { density?: GridDensity; placements?: Partial<Record<WidgetId, Partial<WidgetPlacement>>> };
+  /** Request-only local photo mutation; never stored in settings or included in exports. */
+  photoChange?: { pngBase64: string } | null;
   preview?: Partial<PreviewSettings>; idle?: Partial<IdleSettings>; savedPresets?: SavedPreset[];
 }
 export type AutomaticLocationSelection = { source: 'device'; latitude: number; longitude: number; automatic: boolean } | { source: 'fallback'; automatic: boolean };
@@ -64,7 +72,8 @@ export interface WeatherState {
 export interface PreviewState {
   available: boolean; capturedAt: string | null; width: number | null; height: number | null;
 }
-export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; storageWarning?: string | null }
+export interface PhotoState { available: boolean; id: string | null; width: number | null; height: number | null; updatedAt: string | null }
+export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; photo?: PhotoState; storageWarning?: string | null }
 export interface LocationResult extends LocationSettings { id: number; country: string; admin1: string }
 export interface ApiError { error: string }
 export interface HostSession { token: string; settings: Settings; displayUrl: string }
