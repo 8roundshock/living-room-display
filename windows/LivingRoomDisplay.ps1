@@ -19,6 +19,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 5) { throw 'Windows PowerShell 5.1 or PowerShell 7 is required.' }
+# Started from PowerShell 7 (directly, or through Setup run from it), Windows
+# PowerShell inherits PowerShell 7 module folders and can fail to autoload its own
+# built-in commands (#123). Keep only Windows PowerShell module folders.
+if ($PSVersionTable.PSEdition -ne 'Core' -and $env:PSModulePath) { $env:PSModulePath = (($env:PSModulePath -split ';') | Where-Object { $_ -and $_ -notmatch '\\PowerShell\\(\d[^\\]*\\)?Modules\\?$' }) -join ';' }
 # Keep this file ASCII-only: Windows PowerShell 5.1 reads BOM-less scripts as ANSI.
 $script:installRootExplicit = $PSBoundParameters.ContainsKey('InstallRoot') -and [bool]$InstallRoot
 $script:packageMode = ($Command -eq 'InstallPackage') -and -not $FunctionsOnly
@@ -463,7 +467,15 @@ function ConvertTo-PackageVersion([string]$Text) {
     if ([string]$Text -notmatch '^v?(\d{1,5})\.(\d{1,5})\.(\d{1,5})$') { return $null }
     return New-Object Version ([int]$matches[1]), ([int]$matches[2]), ([int]$matches[3])
 }
-function Get-Sha256([string]$Path) { return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+function Get-Sha256([string]$Path) {
+    # .NET directly: Get-FileHash lives in a script module that Windows PowerShell
+    # may fail to autoload under an inherited PowerShell 7 module path (#123).
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $hasher = [Security.Cryptography.SHA256]::Create()
+        try { return ([BitConverter]::ToString($hasher.ComputeHash($stream)) -replace '-','').ToLowerInvariant() } finally { $hasher.Dispose() }
+    } finally { $stream.Dispose() }
+}
 function Initialize-ZipSupport {
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
