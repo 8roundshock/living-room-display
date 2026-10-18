@@ -236,7 +236,7 @@ try {
 
     Write-Step 'Compiling Setup with Inno Setup'
     $baseName = "LivingRoomDisplaySetup-$version"
-    $uninstallSize = ($ordinal | Measure-Object -Property size -Sum).Sum
+    $uninstallSize = [int64]0; foreach ($file in $ordinal) { $uninstallSize += [int64]$file.size }
     $isccArguments = @('/Qp', "/O$OutputDirectory", "/F$baseName", "/DAppVersion=$version", "/DPayloadZip=$payloadZip", "/DPayloadSha256=$payloadSha",
         "/DControlScript=$(Join-Path $appWindows 'LivingRoomDisplay.ps1')", "/DSetupIconFile=$($art.Icon)",
         "/DWizardSmallImages=$($art.WizardSmall -join ',')", "/DWizardImages=$($art.WizardLarge -join ',')", "/DUninstallSize=$uninstallSize")
