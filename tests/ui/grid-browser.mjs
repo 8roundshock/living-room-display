@@ -254,7 +254,9 @@ export async function runGridQa({ playwright, edge } = {}) {
       'density fits every enabled widget as a visible draft; returning restores exact authored corner placement and families; Cancel restores full grid',
     );
 
-    await open(onlyClock(), { viewport: { width: 390, height: 480 } });
+    // Pure geometry: Animation Off, so the #76 release settle (real-time CSS) cannot be mid-flight.
+    const stillClock = onlyClock(); stillClock.appearance.animation = 'off';
+    await open(stillClock, { viewport: { width: 390, height: 480 } });
     await layout();
     await page.evaluate(() => scrollTo(0, 110));
     const position = () => page.evaluate(() => {
