@@ -84,8 +84,9 @@ try {
         try { return ([BitConverter]::ToString($hasher.ComputeHash($Bytes)) -replace '-','').ToLowerInvariant() } finally { $hasher.Dispose() }
     }
     function New-TestPackage {
-        param([string]$Version = '0.2.0', [string]$NodeVersion = '24.19.0', [string]$Tamper, [string]$Extra, [string]$Drop, [string]$UnsafeName, [string]$ManifestOnlyPath)
+        param([string]$Version = '0.2.0', [string]$NodeVersion = '24.19.0', [string]$Tamper, [string]$Extra, [string]$Drop, [string]$UnsafeName, [string]$ManifestOnlyPath, [string]$LongPath)
         $spec = New-PackageSpec $Version $NodeVersion
+        if ($LongPath) { $spec[$LongPath] = Get-Utf8 'deep file' }
         $files = @(foreach ($name in $spec.Keys) { [ordered]@{path=$name;size=$spec[$name].Length;sha256=(Get-BytesSha256 $spec[$name])} })
         if ($ManifestOnlyPath) { $files += [ordered]@{path=$ManifestOnlyPath;size=1;sha256=('0' * 64)} }
         $manifest = [ordered]@{product='living-room-display';schema=1;version=$Version;sourceRevision=('a' * 40);sourceState='clean';builtAt='2026-10-18T00:00:00Z';node=[ordered]@{version=$NodeVersion;archive="node-v$NodeVersion-win-x64.zip";sha256=('b' * 64)};inno=[ordered]@{version='6.7.1'};files=$files}
@@ -202,6 +203,14 @@ try {
     $code = Invoke-Package (New-TestPackage)
     Assert-True ($code -eq 13 -and (Get-TreeState $InstallRoot) -eq $before) "A mismatched running script returned $code or changed files."
     Complete-Check 'script identity'
+
+    # ---- install folder too long for the deepest package path --------------
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    $before = Get-TreeState $InstallRoot
+    $code = Invoke-Package (New-TestPackage -LongPath ('app/' + ('d' * 60) + '/' + ('e' * 60) + '/' + ('f' * 60) + '/' + ('g' * 40) + '.txt'))
+    Assert-True ($code -eq 1 -and (Get-TreeState $InstallRoot) -eq $before -and (Get-Content -Raw $logFile) -match 'too long') "A too-long install path returned $code or changed files."
+    Complete-Check 'path length preflight'
 
     # ---- explicit InstallRoot and archive placement (real -File runs) -------
     Reset-Root; Reset-Mocks

@@ -700,6 +700,10 @@ function Install-Package {
     if (-not $script:controlScriptPath -or -not (Test-Path -LiteralPath $script:controlScriptPath) -or (Get-Sha256 $script:controlScriptPath) -ne [string]$scriptEntry.sha256) { throw 'LRD-E13: The running control script differs from the copy in the package.' }
     $version = [string]$manifest.version
     Write-PackageLog "Package $version ($packageHash), source $($manifest.sourceRevision) $($manifest.sourceState), Node $($manifest.node.version)."
+    # Windows PowerShell 5.1 file APIs stop at MAX_PATH; refuse before writing
+    # anything rather than failing halfway through staging.
+    $longest = [int](@($manifest.files) | ForEach-Object { ([string]$_.path).Length } | Measure-Object -Maximum).Maximum
+    if ($InstallRoot.Length + '\package.next\'.Length + $longest -gt 259) { throw "The install folder path is too long for this package: keep it under $(259 - '\package.next\'.Length - $longest) characters." }
 
     $isUpgrade = $null -ne $installed
     $installedVersion = $null
