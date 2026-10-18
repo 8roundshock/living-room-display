@@ -82,6 +82,10 @@ and [Gemini import syntax](https://geminicli.com/docs/cli/gemini-md/#modularize-
 Live startup in those clients has not been tested on this PC. These pointers do
 not change global agent settings or start background work.
 
+For explicitly authorized CLI collaboration, use the
+[bounded Claude workflow](claude-collaboration.md), including its current
+verification limit. Discovery/authentication checks alone are not a successful task.
+
 ## GitHub authentication on Windows
 
 This section is for the owner's repository maintenance. End users must not need
