@@ -128,7 +128,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.clock.install({ time: new Date(now) });
     await page.goto(base + route);
     await page.locator('.clock-time').waitFor();
-    await page.clock.runFor(800);
+    await page.clock.runFor(2000);
     return { context, page };
   }
   async function tab(page, name) {
@@ -140,10 +140,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
   const cancel = (page) =>
     page.getByRole('button', { name: 'Cancel', exact: true });
   async function saved(page) {
-    await page
-      .locator('.save-status')
-      .filter({ hasText: /^Saved$/ })
-      .waitFor();
+    await page.locator('.studio-savebar').waitFor({ state: 'detached' });
   }
   async function range(page, name, key = 'ArrowRight') {
     await page.getByRole('slider', { name, exact: true }).focus();
@@ -209,8 +206,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
   try {
     await reset();
     let { page, context } = await open();
-    assert.equal(await save(page).isDisabled(), true);
-    assert.equal(await cancel(page).isDisabled(), true);
+    assert.equal(await save(page).count(), 0);
+    assert.equal(await cancel(page).count(), 0);
     await page.getByRole('button', { name: 'Night', exact: true }).click();
     await selectCity(page);
     assert.equal(app.store.snapshot().settings.location.name, 'Toronto');
@@ -305,7 +302,9 @@ export async function runStudioQa({ playwright, edge } = {}) {
       0,
     );
     await page.unroute('**/api/locations?*');
-    await cancel(page).click();
+    await page
+      .getByRole('button', { name: 'Clear city search', exact: true })
+      .click();
     checks.push('older city responses cannot replace current dropdown');
 
     await tab(page, 'Style');
@@ -428,7 +427,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
       .getByRole('button', { name: 'Save reminder', exact: true })
       .click();
     await page.getByText('Reminder saved', { exact: true }).waitFor();
-    assert.equal(await save(page).isDisabled(), true);
+    assert.equal(await save(page).count(), 0);
     await page
       .getByRole('button', { name: 'Edit: Synthetic reminder', exact: true })
       .click();
@@ -465,7 +464,9 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page
       .getByRole('button', { name: 'Use device location', exact: true })
       .click();
-    await cancel(page).click();
+    await page
+      .getByRole('button', { name: 'Cancel lookup', exact: true })
+      .click();
     await page.evaluate(() => window.__finishGeo());
     await page.clock.runFor(100);
     assert.equal(app.store.snapshot().settings.locationSource, 'fallback');
@@ -612,7 +613,11 @@ export async function runStudioQa({ playwright, edge } = {}) {
       'none',
     );
     await page.clock.runFor(90000);
-    await page.locator('.composition-0').waitFor();
+    assert.ok(
+      Number(await page.locator('.ambient').getAttribute('data-composition')) >
+        0,
+      'Reduced motion retains discrete relocation',
+    );
     await context.close();
     for (const width of [390, 320]) {
       ({ page, context } = await open({
@@ -669,6 +674,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
       { width: 320, height: 480 },
     ]) {
       ({ page, context } = await open({ viewport }));
+      await tab(page, 'Style');
+      await page.getByRole('button', { name: 'Night', exact: true }).click();
       await tab(page, 'Reminders');
       await page
         .getByRole('button', { name: 'Add reminder', exact: true })

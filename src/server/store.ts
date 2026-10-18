@@ -5,8 +5,9 @@ import { randomUUID } from 'node:crypto';
 import { defaultSettings } from '../shared/defaults.ts';
 import type { Reminder, Settings, SettingsPatch } from '../shared/contracts.ts';
 import { dataSchema, mergeSettings } from './validation.ts';
+import { createPhotoAsset, type PhotoAsset } from './photo.ts';
 
-export interface PersistedData { version: 1; settings: Settings; reminders: Reminder[] }
+export interface PersistedData { version: 1; settings: Settings; reminders: Reminder[]; photoAsset: PhotoAsset | null }
 
 export function defaultDataDirectory(): string {
   if (process.env.LRD_DATA_DIR) return resolve(process.env.LRD_DATA_DIR);
@@ -55,7 +56,7 @@ export class DataStore {
       return store;
     }
     if (primary !== null) throw new Error('Settings data could not be read and no backup exists. Preserve the data folder and restore a valid export before restarting.');
-    const store = new DataStore(directory, { version: 1, settings: defaultSettings(), reminders: [] });
+    const store = new DataStore(directory, { version: 1, settings: defaultSettings(), reminders: [], photoAsset: null });
     await atomicWrite(path, JSON.stringify(store.#data, null, 2));
     return store;
   }
@@ -76,7 +77,10 @@ export class DataStore {
     return operation;
   }
 
-  async patchSettings(patch: SettingsPatch): Promise<Settings> {
-    return (await this.update(data => { data.settings = mergeSettings(data.settings, patch); })).settings;
+  async patchSettings(patch: SettingsPatch, now = Date.now()): Promise<Settings> {
+    return (await this.update(data => {
+      data.settings = mergeSettings(data.settings, patch);
+      if (patch.photoChange !== undefined) data.photoAsset = patch.photoChange === null ? null : createPhotoAsset(patch.photoChange.pngBase64, new Date(now).toISOString());
+    })).settings;
   }
 }

@@ -19,6 +19,8 @@ This is an independent private project, not a personal-memory workspace.
 5. For installation, diagnosis, or outside contributions, follow the
    [agent runbook](docs/agent-runbook.md) and [contribution guide](CONTRIBUTING.md).
    They include copy/paste user prompts, privacy rules, and a fork workflow.
+6. For widget work, read [the shared widget contract](docs/widgets.md) and apply
+   the repository-local [widget creation skill](.agents/skills/living-room-widget/SKILL.md).
 
 The selected architecture is a custom local web dashboard with a Windows
 idle/screensaver helper. Implementation is authorized and in progress;
@@ -57,6 +59,9 @@ background sync or automation.
 - Move whole widget groups between distinct areas; allow periodic recomposition
   and fades. Small motion within a fixed layout is insufficient. Do not promise
   prevention of OLED burn-in.
+- Every widget is optional. Share the catalog, family geometry and collision
+  helpers between the editor, validation and ambient renderer. Keep layout/image
+  edits cancellable and show Save/Cancel only for effective unsaved changes.
 - The TV stays powered on by choice. TV power, wake, input, and remote integration
   are optional future work, never prerequisites or recurring power-off advice.
 - Present rain timing as a forecast estimate. Show weather age and stale/error

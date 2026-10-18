@@ -19,6 +19,15 @@ the owner's explicit authority to choose practical defaults and build the app.
 - Focused display-studio inspector, visual style miniatures, soft transitions,
   settings/location/style Save and Cancel, debounced keyboard city dropdown,
   concurrent-draft refresh and an atomic automatic-location guard.
+- Shared catalog/renderer registry, adaptive size families and optional modules;
+  grid drag/resize with touch/keyboard alternatives, collision rejection and
+  density controls. Save/Cancel is hidden unless an effective draft exists.
+- Outline/digital/analog clock styles and optional private local photo drafts,
+  normalized PNG validation and atomic settings/image saves. Exports omit image
+  bytes; recovery backups may retain an older selected image. Desktop captures
+  remain a separate RAM-only feature.
+- Varied collision-free composition search with black rests. Reduced motion and
+  Soft motion off remove travel/effects while discrete relocation continues.
 - Standalone display cursor CSS covers loading/error pages and descendants;
   editor/embedded preview cursor behavior is preserved. The production Edge
   route regression passes; actual native cursor proof remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).
@@ -27,12 +36,12 @@ the owner's explicit authority to choose practical defaults and build the app.
   migrate as manual; no location prompt or lookup occurs in the screensaver.
 - Framework Windows host and per-user installer/control sources, with screensaver
   backup/restore, isolated Edge job, cancellation and scoped process management.
-- Full production build and 53 application tests. Windows/Linux CI runs the full
+- Full production build and focused application tests. Windows/Linux CI runs the full
   application checks. Windows
   source regression checks cover startup cancellation, restore selection,
   owned-process recognition and filesystem transaction/cleanup behavior.
 
-Local verification: full build and all 53 application tests pass using the
+Local verification: the full build and all 67 application tests pass using the
 app-owned Node 24 runtime. Eleven Windows check groups pass on PowerShell 5.1
 and 7 with the optional real child-process test (ten without). Provenance tests
 cover clean/dirty Git, archives, enclosing repositories and composed sources;
@@ -44,10 +53,16 @@ checks use fake transport/session/native boundaries and scoped filesystem fixtur
 they do not establish actual installed capture, kiosk, idle or lock behavior.
 The isolated production Edge studio harness passes fourteen interaction/layout
 groups, including async Save/Cancel/city/location races, reminder CRUD, all four
-1080p/4K compositions, reduced motion, 390px/320px reflow and focused-field clearance
+1080p/4K bounds, reduced motion, 390px/320px reflow and focused-field clearance
 above the measured Save bar at full/compact heights. Source desktop/mobile
 visuals are inspected in RAM; final independent visual review is required and
 tracked on the PR. No screenshots or real device positions are retained. See [UI evidence](docs/ui.md).
+
+Feature [#43](https://github.com/8roundshock/living-room-display/issues/43) adds
+the isolated grid/photo browser harness. Independent functional/actual visual/
+skill-forward review of the pushed feature head is required; the PR records
+exact results and remaining checks. A held-drag polling race is tracked by
+[#44](https://github.com/8roundshock/living-room-display/issues/44).
 
 ## In progress / not yet verified
 

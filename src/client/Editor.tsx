@@ -11,6 +11,7 @@ import type {
   LocationResult,
   Reminder,
   Settings,
+  WidgetGrid,
   WidgetId,
 } from '../shared/contracts';
 import { defaultSettings } from '../shared/defaults';
@@ -22,19 +23,28 @@ import {
   nextComposition,
   reminderDate,
 } from './format';
-import { Icon, type IconName } from './icons';
+import { Icon } from './icons';
 import { applyBuiltinPreset, getVisual, sortReminders } from './model';
 import { browserLocationPlatform, getDeviceLocation } from './location';
-import { rebaseSettings, same, settingsChanges } from './draft';
+import {
+  rebaseSettings,
+  same,
+  sameEffectiveSettings,
+  settingsChanges,
+} from './draft';
 import { CitySearch } from './CitySearch';
-
-const widgets: { id: WidgetId; label: string; icon: IconName }[] = [
-  { id: 'clock', label: 'Time & date', icon: 'moon' },
-  { id: 'weather', label: 'Weather & rain', icon: 'cloud' },
-  { id: 'forecast', label: 'Seven-day forecast', icon: 'sun' },
-  { id: 'reminders', label: 'Reminders', icon: 'check' },
-  { id: 'preview', label: 'Last screen', icon: 'monitor' },
-];
+import {
+  GRID_DENSITIES,
+  WIDGET_CATALOG,
+  firstPlacement,
+  placeWidget,
+  repackGrid,
+  type GridDensity,
+  type WidgetSize,
+} from '../shared/widgets';
+import { GridEditor } from './GridEditor';
+import { WidgetInspector } from './WidgetInspector';
+import { preparePhoto, type PhotoDraft } from './photo';
 const sections = ['Style', 'Widgets', 'Weather', 'Reminders'] as const;
 type Section = (typeof sections)[number];
 const colors = [
@@ -128,6 +138,15 @@ export function Editor({
     [error, setError] = useState<string | null>(null);
   const [composition, setComposition] = useState<number | undefined>();
   const [selectedWidget, setSelectedWidget] = useState<WidgetId | null>(null);
+  const [layoutEditing, setLayoutEditing] = useState(false),
+    [pickerOpen, setPickerOpen] = useState(false);
+  const [gridPreview, setGridPreview] = useState<WidgetGrid | null>(null),
+    [gridMessage, setGridMessage] = useState('');
+  const [photoDraft, setPhotoDraft] = useState<PhotoDraft | null | undefined>(),
+    [photoBusy, setPhotoBusy] = useState(false);
+  const photoDraftRef = useRef(photoDraft),
+    photoEpoch = useRef(0),
+    photoId = useRef(state.photo?.id ?? null);
   const [presetName, setPresetName] = useState(''),
     [presetId, setPresetId] = useState('');
   const [locationQuery, setLocationQuery] = useState(''),
@@ -145,6 +164,10 @@ export function Editor({
   const [reminderSaving, setReminderSaving] = useState(false),
     [reminderMessage, setReminderMessage] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
+  const photoChanged =
+    photoDraft !== undefined &&
+    (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
+  const dirty = !sameEffectiveSettings(saved, draft) || photoChanged;
   function updateDraft(next: Settings) {
     draftRef.current = next;
     setDraft(next);
@@ -157,7 +180,10 @@ export function Editor({
     const root = document.documentElement;
     root.classList.add('studio-editor');
     const measure = () => {
-      if (!savebar.current) return;
+      if (!savebar.current) {
+        root.style.setProperty('--studio-footer-clearance', '24px');
+        return;
+      }
       const bottom =
         Number.parseFloat(getComputedStyle(savebar.current).bottom) || 0;
       root.style.setProperty(
@@ -175,7 +201,16 @@ export function Editor({
       root.classList.remove('studio-editor');
       root.style.removeProperty('--studio-footer-clearance');
     };
-  }, []);
+  }, [dirty]);
+  useEffect(() => {
+    photoId.current = state.photo?.id ?? null;
+  }, [state.photo?.id]);
+  useEffect(
+    () => () => {
+      photoEpoch.current++;
+    },
+    [],
+  );
   useEffect(() => {
     const incoming = structuredClone(state.settings);
     updateDraft(rebaseSettings(savedRef.current, draftRef.current, incoming));
@@ -200,14 +235,6 @@ export function Editor({
       locationEpoch.current++;
     };
   }, []);
-  const dirty = !same(saved, draft),
-    canCancel =
-      dirty ||
-      locationBusy ||
-      !!locationQuery ||
-      presetName !==
-        (saved.savedPresets.find((preset) => preset.id === presetId)?.name ??
-          '');
   useEffect(() => {
     if (!dirty) return;
     const leave = (event: BeforeUnloadEvent) => {
@@ -217,6 +244,10 @@ export function Editor({
     return () => window.removeEventListener('beforeunload', leave);
   }, [dirty]);
   function cancelChanges() {
+    cancelPhoto();
+    updatePhoto(undefined);
+    setGridPreview(null);
+    setGridMessage('');
     locationEpoch.current++;
     guardLocation.current = false;
     setLocationBusy(false);
@@ -226,6 +257,122 @@ export function Editor({
     setPresetId('');
     setPresetName('');
     setError(null);
+  }
+  function updatePhoto(value: PhotoDraft | null | undefined) {
+    photoDraftRef.current = value;
+    setPhotoDraft(value);
+  }
+  function cancelPhoto() {
+    photoEpoch.current++;
+    setPhotoBusy(false);
+  }
+  async function choosePhoto(file: File) {
+    const epoch = ++photoEpoch.current;
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      const photo = await preparePhoto(file);
+      if (!mounted.current || epoch !== photoEpoch.current) {
+        return;
+      }
+      if (photo.id === photoId.current) {
+        updatePhoto(undefined);
+      } else updatePhoto(photo);
+    } catch (caught) {
+      if (mounted.current && epoch === photoEpoch.current)
+        setError(
+          caught instanceof Error ? caught.message : 'Could not read photo',
+        );
+    } finally {
+      if (mounted.current && epoch === photoEpoch.current) setPhotoBusy(false);
+    }
+  }
+  function clearPhoto() {
+    cancelPhoto();
+    updatePhoto(state.photo?.available ? null : undefined);
+  }
+  function commitGrid(grid: WidgetGrid) {
+    setGridMessage('');
+    change((previous) => ({ ...previous, widgetGrid: grid }));
+  }
+  function addWidget(id: WidgetId, size: WidgetSize) {
+    const placement = firstPlacement(
+      draftRef.current.widgetGrid,
+      id,
+      size,
+      draftRef.current.widgets,
+    );
+    if (!placement) {
+      setGridMessage('No room. Try a smaller size or finer grid.');
+      return;
+    }
+    const next = placeWidget(
+      draftRef.current.widgetGrid,
+      id,
+      placement,
+      draftRef.current.widgets,
+    );
+    if (!next) return;
+    change((previous) => ({
+      ...previous,
+      widgetGrid: next,
+      widgets: { ...previous.widgets, [id]: true },
+      preview:
+        id === 'preview'
+          ? { ...previous.preview, enabled: true }
+          : previous.preview,
+    }));
+    setSelectedWidget(id);
+    setPickerOpen(false);
+    setLayoutEditing(true);
+    setGridMessage(`${WIDGET_CATALOG[id].name} added`);
+  }
+  function removeWidget(id: WidgetId) {
+    if (id === 'photo' && !savedRef.current.widgets.photo) {
+      cancelPhoto();
+      updatePhoto(undefined);
+    }
+    change((previous) => ({
+      ...previous,
+      widgets: { ...previous.widgets, [id]: false },
+      preview:
+        id === 'preview'
+          ? { ...previous.preview, enabled: false }
+          : previous.preview,
+    }));
+    setSelectedWidget(null);
+    setGridMessage('');
+  }
+  function resizeWidget(id: WidgetId, size: WidgetSize) {
+    const next = placeWidget(
+      draftRef.current.widgetGrid,
+      id,
+      { ...draftRef.current.widgetGrid.placements[id], size },
+      draftRef.current.widgets,
+    );
+    if (next) commitGrid(next);
+    else setGridMessage('No room for that size');
+  }
+  function moveWidget(id: WidgetId, dx: number, dy: number) {
+    const original = draftRef.current.widgetGrid.placements[id];
+    const next = placeWidget(
+      draftRef.current.widgetGrid,
+      id,
+      { ...original, column: original.column + dx, row: original.row + dy },
+      draftRef.current.widgets,
+    );
+    if (next) commitGrid(next);
+    else setGridMessage('No room there');
+  }
+  function density(value: GridDensity) {
+    const next = repackGrid(
+      draftRef.current.widgetGrid,
+      value,
+      draftRef.current.widgets,
+    );
+    if (next) commitGrid(next);
+    else
+      setGridMessage('Not enough room. Keep this grid or use smaller widgets.');
   }
   function appearance<K extends keyof Settings['appearance']>(
     key: K,
@@ -282,6 +429,11 @@ export function Editor({
         );
     }
   }
+  function cancelLocation() {
+    locationEpoch.current++;
+    setLocationBusy(false);
+    setLocationMessage('');
+  }
   function selectCity(city: LocationResult) {
     locationEpoch.current++;
     setLocationBusy(false);
@@ -306,6 +458,15 @@ export function Editor({
         draftRef.current,
         guardLocation.current,
       );
+    const submittedPhoto = photoDraftRef.current,
+      submittedPhotoEpoch = photoEpoch.current;
+    const includesPhoto =
+      submittedPhoto !== undefined &&
+      (submittedPhoto?.id ?? null) !== photoId.current;
+    if (includesPhoto)
+      patch.photoChange = submittedPhoto
+        ? { pngBase64: submittedPhoto.pngBase64 }
+        : null;
     setSaving(true);
     setError(null);
     try {
@@ -318,8 +479,36 @@ export function Editor({
       savedRef.current = received;
       setSaved(received);
       setState((previous) =>
-        previous ? { ...previous, settings: received } : previous,
+        previous
+          ? {
+              ...previous,
+              settings: received,
+              ...(includesPhoto
+                ? {
+                    photo: submittedPhoto
+                      ? {
+                          available: true,
+                          id: submittedPhoto.id,
+                          width: submittedPhoto.width,
+                          height: submittedPhoto.height,
+                          updatedAt: new Date().toISOString(),
+                        }
+                      : {
+                          available: false,
+                          id: null,
+                          width: null,
+                          height: null,
+                          updatedAt: null,
+                        },
+                  }
+                : {}),
+            }
+          : previous,
       );
+      if (includesPhoto && submittedPhotoEpoch === photoEpoch.current) {
+        photoId.current = submittedPhoto?.id ?? null;
+        updatePhoto(undefined);
+      }
       guardLocation.current = false;
       setLocationMessage('');
       void reload();
@@ -484,58 +673,119 @@ export function Editor({
         <section className="canvas-column" aria-label="Display preview">
           <div className="canvas-heading">
             <h1>Your display</h1>
-            <span className="local-indicator">
-              <span className="status-dot" />
-              Local
-            </span>
+            <button
+              className={`button small edit-layout ${layoutEditing ? 'active' : ''}`}
+              aria-pressed={layoutEditing}
+              onClick={() => {
+                setLayoutEditing((value) => !value);
+                setGridPreview(null);
+                setGridMessage('');
+                if (!layoutEditing) setSection('Widgets');
+              }}
+            >
+              <Icon name={layoutEditing ? 'check' : 'edit'} size={15} />
+              {layoutEditing ? 'Done' : 'Edit layout'}
+            </button>
           </div>
           <div className="preview-frame">
             <div className="preview-screen">
               <AmbientDisplay
                 state={state}
-                settings={draft}
+                settings={
+                  gridPreview ? { ...draft, widgetGrid: gridPreview } : draft
+                }
                 embedded
                 disconnected={connectionError !== null}
                 compositionOverride={composition}
+                layoutEditing={layoutEditing}
+                photoPreview={
+                  photoDraft === undefined
+                    ? undefined
+                    : (photoDraft?.url ?? null)
+                }
               />
+              {layoutEditing && (
+                <GridEditor
+                  settings={draft}
+                  selected={selectedWidget}
+                  onSelect={(id) => {
+                    setSelectedWidget(id);
+                    setSection('Widgets');
+                    setPickerOpen(false);
+                  }}
+                  onPreview={setGridPreview}
+                  onCommit={commitGrid}
+                  onMessage={setGridMessage}
+                />
+              )}
             </div>
           </div>
           <div className="canvas-toolbar">
-            <span>Preview</span>
-            <div
-              className="composition-picker"
-              aria-label="Preview arrangement"
-            >
-              {[0, 1, 2, 3].map((index) => (
-                <button
-                  key={index}
-                  aria-label={`Arrangement ${index + 1}`}
-                  aria-pressed={composition === index}
-                  onClick={() => setComposition(index)}
+            <span>{layoutEditing ? 'Grid' : 'Preview'}</span>
+            {layoutEditing ? (
+              <label className="grid-density-control">
+                <span className="sr-only">Grid density</span>
+                <select
+                  className="select-input"
+                  aria-label="Grid density"
+                  value={draft.widgetGrid.density}
+                  onChange={(event) =>
+                    density(event.target.value as GridDensity)
+                  }
                 >
-                  {index + 1}
+                  {Object.entries(GRID_DENSITIES).map(([id, grid]) => (
+                    <option key={id} value={id}>
+                      {grid.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <>
+                <div
+                  className="composition-picker"
+                  aria-label="Preview arrangement"
+                >
+                  {[0, 1, 2, 3].map((index) => (
+                    <button
+                      key={index}
+                      aria-label={`Arrangement ${index + 1}`}
+                      aria-pressed={composition === index}
+                      onClick={() => setComposition(index)}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                  <button
+                    className={
+                      composition === undefined
+                        ? 'automatic active'
+                        : 'automatic'
+                    }
+                    aria-pressed={composition === undefined}
+                    onClick={() => setComposition(undefined)}
+                  >
+                    Automatic
+                  </button>
+                </div>
+                <button
+                  className="icon-button"
+                  aria-label="Next arrangement"
+                  onClick={() =>
+                    setComposition((previous) => nextComposition(previous ?? 0))
+                  }
+                >
+                  <Icon name="refresh" size={16} />
                 </button>
-              ))}
-              <button
-                className={
-                  composition === undefined ? 'automatic active' : 'automatic'
-                }
-                aria-pressed={composition === undefined}
-                onClick={() => setComposition(undefined)}
-              >
-                Automatic
-              </button>
-            </div>
-            <button
-              className="icon-button"
-              aria-label="Next arrangement"
-              onClick={() =>
-                setComposition((previous) => nextComposition(previous ?? 0))
-              }
-            >
-              <Icon name="refresh" size={16} />
-            </button>
+              </>
+            )}
           </div>
+          <p
+            className="grid-status"
+            role={section === 'Widgets' ? undefined : 'status'}
+          >
+            {gridMessage}
+          </p>
           {weatherPending && (
             <p className="canvas-note" role="status">
               Weather updates after Save · preview still shows{' '}
@@ -686,12 +936,12 @@ export function Editor({
                 </div>
                 <details className="disclosure">
                   <summary>
-                    Movement
+                    Soft motion
                     <span>{draft.appearance.motionEnabled ? 'On' : 'Off'}</span>
                   </summary>
                   <div className="disclosure-body">
                     <Toggle
-                      label="Move & recompose"
+                      label="Soft motion"
                       checked={draft.appearance.motionEnabled}
                       onChange={(value) => appearance('motionEnabled', value)}
                     />
@@ -719,12 +969,13 @@ export function Editor({
                       onChange={(value) => appearance('fadeSeconds', value)}
                     />
                     <p className="hint">
-                      Follows your system’s reduced-motion setting.
+                      Reduced motion removes drift. Widgets still change places
+                      through black.
                     </p>
                   </div>
                 </details>
                 <details className="disclosure">
-                  <summary>Typography & layout</summary>
+                  <summary>Typography</summary>
                   <div className="disclosure-body">
                     <div className="input-row">
                       <label>
@@ -743,24 +994,6 @@ export function Editor({
                           <option value="sans">System</option>
                           <option value="serif">Classic</option>
                           <option value="mono">Monospace</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span className="field-label">Layout</span>
-                        <select
-                          className="select-input"
-                          value={draft.appearance.layout}
-                          onChange={(event) =>
-                            appearance(
-                              'layout',
-                              event.target
-                                .value as Settings['appearance']['layout'],
-                            )
-                          }
-                        >
-                          <option value="balanced">Balanced</option>
-                          <option value="minimal">Airy</option>
-                          <option value="weather-first">Weather first</option>
                         </select>
                       </label>
                     </div>
@@ -894,216 +1127,33 @@ export function Editor({
               </>
             )}
             {section === 'Widgets' && (
-              <>
-                <h2>On your display</h2>
-                <div className="widget-list">
-                  {widgets.map((widget) => (
-                    <div
-                      key={widget.id}
-                      className={`widget-option ${selectedWidget === widget.id ? 'selected' : ''}`}
-                    >
-                      <div className="widget-row">
-                        <button
-                          className="widget-select"
-                          aria-expanded={selectedWidget === widget.id}
-                          aria-controls={`widget-${widget.id}-controls`}
-                          onClick={() =>
-                            setSelectedWidget((previous) =>
-                              previous === widget.id ? null : widget.id,
-                            )
-                          }
-                        >
-                          <span className="widget-icon">
-                            <Icon name={widget.icon} size={18} />
-                          </span>
-                          {widget.label}
-                          <span aria-hidden="true" className="row-chevron">
-                            ›
-                          </span>
-                        </button>
-                        <input
-                          className="toggle"
-                          aria-label={`Show ${widget.label}`}
-                          type="checkbox"
-                          checked={
-                            draft.widgets[widget.id] &&
-                            (widget.id !== 'preview' || draft.preview.enabled)
-                          }
-                          onChange={(event) =>
-                            change((previous) => ({
-                              ...previous,
-                              widgets: {
-                                ...previous.widgets,
-                                [widget.id]: event.target.checked,
-                              },
-                              preview:
-                                widget.id === 'preview'
-                                  ? {
-                                      ...previous.preview,
-                                      enabled: event.target.checked,
-                                    }
-                                  : previous.preview,
-                            }))
-                          }
-                        />
-                      </div>
-                      {selectedWidget === widget.id && (
-                        <div
-                          className="widget-inspector"
-                          id={`widget-${widget.id}-controls`}
-                        >
-                          {widget.id === 'reminders' && (
-                            <Toggle
-                              label="Hide when empty"
-                              checked={
-                                draft.widgetBehavior.reminders.hideWhenEmpty
-                              }
-                              onChange={(hideWhenEmpty) =>
-                                change((previous) => ({
-                                  ...previous,
-                                  widgetBehavior: {
-                                    reminders: { hideWhenEmpty },
-                                  },
-                                }))
-                              }
-                            />
-                          )}
-                          {widget.id === 'clock' && (
-                            <label>
-                              <span className="field-label">Clock</span>
-                              <select
-                                className="select-input"
-                                value={draft.clockFormat}
-                                onChange={(event) =>
-                                  change((previous) => ({
-                                    ...previous,
-                                    clockFormat: event.target
-                                      .value as Settings['clockFormat'],
-                                  }))
-                                }
-                              >
-                                <option value="12h">12-hour</option>
-                                <option value="24h">24-hour</option>
-                              </select>
-                            </label>
-                          )}
-                          {widget.id === 'preview' && (
-                            <>
-                              <Range
-                                label="Snapshot opacity"
-                                min={2}
-                                max={30}
-                                value={Math.round(draft.preview.opacity * 100)}
-                                display={`${Math.round(draft.preview.opacity * 100)}%`}
-                                onChange={(value) =>
-                                  change((previous) => ({
-                                    ...previous,
-                                    preview: {
-                                      ...previous.preview,
-                                      opacity: value / 100,
-                                    },
-                                  }))
-                                }
-                              />
-                              <Range
-                                label="Snapshot width"
-                                min={12}
-                                max={35}
-                                value={draft.preview.widthPercent}
-                                display={`${draft.preview.widthPercent}%`}
-                                onChange={(value) =>
-                                  change((previous) => ({
-                                    ...previous,
-                                    preview: {
-                                      ...previous.preview,
-                                      widthPercent: value,
-                                    },
-                                  }))
-                                }
-                              />
-                              <p className="hint">
-                                {state.preview.available
-                                  ? 'Last capture is available.'
-                                  : 'Captured when the Windows screensaver starts.'}{' '}
-                                Kept in memory only.
-                              </p>
-                            </>
-                          )}
-                          <details className="position-disclosure">
-                            <summary>Size & position</summary>
-                            {(['scale', 'offsetX', 'offsetY'] as const).map(
-                              (key) => (
-                                <Range
-                                  key={key}
-                                  label={
-                                    key === 'scale'
-                                      ? 'Widget size'
-                                      : key === 'offsetX'
-                                        ? 'Horizontal'
-                                        : 'Vertical'
-                                  }
-                                  min={key === 'scale' ? 50 : -25}
-                                  max={key === 'scale' ? 200 : 25}
-                                  value={
-                                    key === 'scale'
-                                      ? Math.round(
-                                          draft.widgetOverrides[widget.id][
-                                            key
-                                          ] * 100,
-                                        )
-                                      : draft.widgetOverrides[widget.id][key]
-                                  }
-                                  display={`${key === 'scale' ? Math.round(draft.widgetOverrides[widget.id][key] * 100) : draft.widgetOverrides[widget.id][key]}%`}
-                                  onChange={(value) =>
-                                    change((previous) => ({
-                                      ...previous,
-                                      widgetOverrides: {
-                                        ...previous.widgetOverrides,
-                                        [widget.id]: {
-                                          ...previous.widgetOverrides[
-                                            widget.id
-                                          ],
-                                          [key]:
-                                            key === 'scale'
-                                              ? value / 100
-                                              : value,
-                                        },
-                                      },
-                                    }))
-                                  }
-                                />
-                              ),
-                            )}
-                            <button
-                              className="text-button"
-                              onClick={() =>
-                                change((previous) => ({
-                                  ...previous,
-                                  widgetOverrides: {
-                                    ...previous.widgetOverrides,
-                                    [widget.id]: {
-                                      scale: 1,
-                                      offsetX: 0,
-                                      offsetY: 0,
-                                    },
-                                  },
-                                }))
-                              }
-                            >
-                              Reset size & position
-                            </button>
-                            <p className="hint">
-                              Large offsets can crop content. Check all four
-                              arrangements.
-                            </p>
-                          </details>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </>
+              <WidgetInspector
+                message={gridMessage}
+                settings={draft}
+                selected={selectedWidget}
+                onSelect={setSelectedWidget}
+                pickerOpen={pickerOpen}
+                onPicker={setPickerOpen}
+                onAdd={addWidget}
+                onRemove={removeWidget}
+                onResize={resizeWidget}
+                onMove={moveWidget}
+                onChange={change}
+                saving={saving}
+                photoAvailable={
+                  photoDraft === undefined
+                    ? !!state.photo?.available
+                    : !!photoDraft
+                }
+                photoBusy={photoBusy}
+                onPhotoFile={(file) => {
+                  void choosePhoto(file);
+                }}
+                onPhotoClear={clearPhoto}
+                onPhotoCancel={cancelPhoto}
+              />
             )}
+
             {section === 'Weather' && (
               <>
                 <h2>Weather location</h2>
@@ -1135,6 +1185,11 @@ export function Editor({
                   <Icon name="location" size={16} />
                   {locationBusy ? 'Finding your area…' : 'Use device location'}
                 </button>
+                {locationBusy && (
+                  <button className="text-button" onClick={cancelLocation}>
+                    Cancel lookup
+                  </button>
+                )}
                 <div className="city-field">
                   <label className="field-label" htmlFor="city-search">
                     City
@@ -1362,33 +1417,35 @@ export function Editor({
           </div>
         )}
       </main>
-      <footer
-        ref={savebar}
-        className={`studio-savebar ${dirty ? 'has-changes' : ''}`}
-      >
-        <span className="save-status" role="status">
-          {saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'Saved'}
-        </span>
-        <div>
-          <button
-            className="button cancel-settings"
-            disabled={!canCancel || saving}
-            onClick={cancelChanges}
-          >
-            Cancel
-          </button>
-          <button
-            className="button primary"
-            disabled={!dirty || saving || locationBusy}
-            onClick={() => {
-              void saveSettings();
-            }}
-          >
-            {saving ? 'Saving…' : 'Save changes'}
-            <Icon name="check" size={15} />
-          </button>
-        </div>
-      </footer>
+      {dirty && (
+        <footer
+          ref={savebar}
+          className={`studio-savebar ${dirty ? 'has-changes' : ''}`}
+        >
+          <span className="save-status" role="status">
+            {saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'Saved'}
+          </span>
+          <div>
+            <button
+              className="button cancel-settings"
+              disabled={saving}
+              onClick={cancelChanges}
+            >
+              Cancel
+            </button>
+            <button
+              className="button primary"
+              disabled={!dirty || saving || locationBusy || photoBusy}
+              onClick={() => {
+                void saveSettings();
+              }}
+            >
+              {saving ? 'Saving…' : 'Save changes'}
+              <Icon name="check" size={15} />
+            </button>
+          </div>
+        </footer>
+      )}
     </div>
   );
 }

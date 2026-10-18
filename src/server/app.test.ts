@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request as httpRequest } from 'node:http';
 import { createApplication } from './app.ts';
-import { forecastFixture } from './fixtures.ts';
+import { forecastFixture, photoFixture } from './fixtures.ts';
 
 async function fixture(now?: () => number) {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-api-'));
@@ -16,6 +16,30 @@ async function fixture(now?: () => number) {
   return { ...app, directory, url: `http://127.0.0.1:${address.port}`, async close() { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); } };
 }
 function body(value: unknown) { return { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }; }
+
+test('saved local photos stay out of state/export/import while settings and image change atomically', async () => {
+  const app = await fixture();
+  try {
+    const png = photoFixture(); const pngBase64 = png.toString('base64');
+    const patch = (value: unknown) => fetch(`${app.url}/api/settings`, { method: 'PATCH', ...body(value) });
+    assert.equal((await patch({ photoChange: { pngBase64 }, appearance: { clockStyle: 'analog' } })).status, 200);
+    const state = await (await fetch(`${app.url}/api/state`)).json();
+    assert.equal(state.photo.available, true); assert.match(state.photo.id, /^[a-f0-9]{64}$/);
+    assert.equal(JSON.stringify(state).includes(pngBase64), false);
+    const image = await fetch(`${app.url}/api/photo/image?id=${state.photo.id}`);
+    assert.equal(image.status, 200); assert.equal(image.headers.get('content-type'), 'image/png'); assert.equal(image.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(Buffer.from(await image.arrayBuffer()), png);
+    assert.equal((await fetch(`${app.url}/api/photo/image?id=${'0'.repeat(64)}`)).status, 404);
+    assert.equal((await patch({ photoChange: { pngBase64: Buffer.from('<svg/>').toString('base64') }, units: 'imperial' })).status, 400);
+    assert.equal(app.store.snapshot().settings.units, 'metric');
+    const exported = await (await fetch(`${app.url}/api/export`)).json();
+    assert.equal('photoAsset' in exported, false); assert.equal(JSON.stringify(exported).includes(pngBase64), false);
+    assert.equal((await fetch(`${app.url}/api/import`, { method: 'POST', ...body(exported) })).status, 200);
+    assert.equal(app.store.snapshot().photoAsset?.id, state.photo.id, 'settings import cannot replace or clear another device local photo');
+    assert.equal((await patch({ photoChange: null, appearance: { clockStyle: 'outline' } })).status, 200);
+    assert.equal((await fetch(`${app.url}/api/photo/image`)).status, 404);
+  } finally { await app.close(); }
+});
 
 test('draft Save atomically guards automatic location and does not persist request intent', async () => {
   const app = await fixture();

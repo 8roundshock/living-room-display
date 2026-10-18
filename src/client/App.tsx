@@ -31,7 +31,8 @@ export function App() {
     // Cover loading/error states and descendant controls before paint. The
     // editor's embedded component never changes the document cursor.
     document.documentElement.classList.add('standalone-display');
-    return () => document.documentElement.classList.remove('standalone-display');
+    return () =>
+      document.documentElement.classList.remove('standalone-display');
   }, [standaloneDisplay]);
   const reload = useCallback(async () => {
     const startedAt = revision.current;
@@ -64,25 +65,27 @@ export function App() {
 
   if (!state)
     return (
-      <main className="loading-page">
-        {error ? (
-          <>
-            <p>{error}</p>
-            <button
-              className="button"
-              onClick={() => {
-                void reload();
-              }}
-            >
-              Try again
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="loading-orbit" />
-            <p>Opening your room…</p>
-          </>
-        )}
+      <main className={`loading-page ${display ? 'display-fallback' : ''}`}>
+        <div className="fallback-content" key={error ? 'error' : 'loading'}>
+          {error ? (
+            <>
+              <p>{display ? 'Display unavailable' : error}</p>
+              <button
+                className="button"
+                onClick={() => {
+                  void reload();
+                }}
+              >
+                Try again
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="loading-orbit" />
+              <p>{display ? 'Opening display…' : 'Opening your room…'}</p>
+            </>
+          )}
+        </div>
       </main>
     );
   if (display)

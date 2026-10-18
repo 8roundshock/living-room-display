@@ -22,6 +22,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `POST /api/import`             | A validated export                                                     | Atomic replacement of settings/reminders.                                    |
 | `GET /api/preview`             | None                                                                   | Availability, capture timestamp, dimensions.                                 |
 | `GET /api/preview/image`       | None                                                                   | RAM-only PNG, `no-store`, or 404.                                            |
+| `GET /api/photo/image?id=hash` | Current photo hash                                                     | Selected local PNG, `no-store`, or 404.                                      |
 | `GET /api/windows/status`      | None                                                                   | Actual screensaver registry state; unavailable on other systems.             |
 
 Mutating JSON requests require `Content-Type: application/json`. Errors use
@@ -61,6 +62,41 @@ local time context. Recurrence is not implemented. Daily forecast dates are civi
 Settings `idle.enabled` is a preference, not proof Windows idle activation is
 installed. Only the Windows host's explicit activation command changes that
 configuration. `/api/windows/status` reads existing settings without changing them.
+
+## Grid and widget contracts
+
+The [catalog](../src/shared/widgets.ts) supplies supported families, default
+visibility/placements and all grid dimensions. `widgetGrid` contains `density`
+(`spacious` 8×6, `balanced` 12×8 default, `fine` 16×10) and a placement for every
+catalog ID: `{column,row,size}` with zero-based cells and a supported family.
+`widgets[id]` is the enabled authority. The native desktop capture gate also
+requires `preview.enabled`; the editor keeps both flags coherent when adding or
+removing Last screen. Enabled placements may not intersect or leave the grid.
+PATCH accepts nested placement updates; import/presets validate the same rules.
+Legacy version-one settings acquire the safe default grid while preserving old
+widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
+and `appearance.layout` remain parseable data but no longer affect rendering;
+old manual visual positions are not converted to cells. The same applies to
+legacy presets/imports. `appearance.clockStyle` is `outline` (default), `digital` or `analog`.
+
+## Local photo
+
+`PATCH /api/settings` accepts request-only `photoChange`: absent preserves the
+local photo, `null` clears it, `{pngBase64}` replaces it atomically with settings.
+The editor accepts ≤10 MiB JPEG/PNG/WebP, checks declared dimensions ≤40 megapixels
+before browser decode, then downsamples to a longest side of 1280 and re-encodes
+PNG without source metadata. The server independently verifies normalized PNG
+signature/chunks/CRC/inflated scanlines, RGB/RGBA8 noninterlaced, ≤2 MiB binary,
+≤2048 per side and ≤4 megapixels. The JSON body limit is 4 MiB for base64/settings.
+Invalid image/settings reject the entire mutation.
+
+`GET /api/state` adds metadata-only `photo` availability/hash/dimensions/update
+time. Image bytes are served only for the current hash through the local image
+endpoint and are absent from settings, exports and diagnostics. Imports leave
+the existing local photo unchanged. The private atomic store contains selected
+photo bytes; its previous-state recovery backup may retain an older photo after
+Replace/Clear. This is not secure deletion. Desktop snapshots remain separate,
+RAM-only and never become a photo or part of that backup.
 
 ## Weather semantics
 

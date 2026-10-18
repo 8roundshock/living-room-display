@@ -1,7 +1,13 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { defaultSettings } from '../shared/defaults.ts';
-import { rebaseDraft, rebaseSettings, settingsChanges } from './draft.ts';
+import {
+  rebaseDraft,
+  rebaseSettings,
+  same,
+  sameEffectiveSettings,
+  settingsChanges,
+} from './draft.ts';
 
 test('draft rebase refreshes untouched nested fields and retains local edits', () => {
   const base = defaultSettings(),
@@ -79,4 +85,33 @@ test('a pending city remains an atomic selection when another editor saves a loc
   const next = rebaseSettings(base, draft, incoming);
   assert.deepEqual(next.location, draft.location);
   assert.equal(next.appearance.fontScale, 1.2);
+});
+
+test('effective equality ignores object order, preset labels and disabled widget positions', () => {
+  assert.equal(
+    same({ a: 1, b: { x: 2, y: 3 } }, { b: { y: 3, x: 2 }, a: 1 }),
+    true,
+  );
+  assert.equal(same([1, 2], [2, 1]), false);
+  const base = defaultSettings(),
+    draft = structuredClone(base);
+  draft.appearance.preset = 'custom';
+  draft.appearance.layout = 'minimal';
+  draft.widgetGrid.placements.photo = { column: 9, row: 4, size: 'small' };
+  assert.equal(sameEffectiveSettings(base, draft), true);
+  assert.deepEqual(settingsChanges(base, draft), {});
+  draft.widgets.photo = true;
+  assert.equal(sameEffectiveSettings(base, draft), false);
+});
+
+test('restoring a value removes dirty state despite a custom preset descriptor', () => {
+  const base = defaultSettings(),
+    draft = structuredClone(base);
+  draft.appearance.preset = 'custom';
+  draft.appearance.brightness = 0.3;
+  assert.equal(sameEffectiveSettings(base, draft), false);
+  draft.appearance.brightness = base.appearance.brightness;
+  assert.equal(sameEffectiveSettings(base, draft), true);
+  draft.units = 'imperial';
+  assert.deepEqual(settingsChanges(base, draft), { units: 'imperial' });
 });

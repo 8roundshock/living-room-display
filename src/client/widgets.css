@@ -1,0 +1,87 @@
+/* The editor overlay and ambient rendering use the same protected grid plane. */
+.widget-grid-plane { position: absolute; inset: 8% 10%; }
+.grid-ambient .ambient-content { display: block; width: auto; height: auto; padding: 0; gap: 0; transform: translate(var(--motion-x, 0), var(--motion-y, 0)); }
+.grid-ambient.layout-editing .ambient-content { transform: none; }
+.grid-ambient .ambient-widget { position: absolute; grid-area: auto; padding: 0.8cqw; container-type: size; animation: none; transform: none; }
+.grid-ambient .ambient-widget .widget-content { animation: none; }
+.grid-ambient:not(.static) .ambient-content { animation: grid-plane-drift 71s ease-in-out infinite alternate; }
+@keyframes grid-plane-drift { from { transform: translate(calc(var(--motion-x, 0%) - 0.5%), calc(var(--motion-y, 0%) - 0.5%)); } to { transform: translate(calc(var(--motion-x, 0%) + 0.5%), calc(var(--motion-y, 0%) + 0.5%)); } }
+.grid-ambient .widget-content { width: 100%; }
+.grid-ambient .ambient-label { font-size: calc(7cqw * var(--font-scale)); gap: 3cqw; margin-bottom: 4cqh; line-height: 1.35; overflow-wrap: anywhere; }
+.grid-ambient .ambient-label svg { width: 8cqw; height: 8cqw; }
+.grid-ambient .clock-time { font-size: calc(32cqw * var(--font-scale)); }
+.grid-ambient .clock-period { font-size: 8cqw; margin-left: 3cqw; }
+.grid-ambient .clock-outline .clock-digits { -webkit-text-fill-color: transparent; -webkit-text-stroke: max(0.7px, 0.55cqw) currentColor; }
+.grid-ambient .clock-date { font-size: calc(7cqw * var(--font-scale)); margin-top: 5cqh; }
+.grid-ambient .analog-clock { display: block; width: 65%; max-height: 64cqh; fill: none; stroke: var(--ambient-text); stroke-width: 1.4; stroke-linecap: round; }
+.grid-ambient .analog-minute { stroke: var(--ambient-accent); stroke-width: 1; }
+.grid-ambient .current-weather-main { gap: 7cqw; }
+.grid-ambient .current-weather-main > .weather-symbol { width: 19cqw; height: 19cqw; }
+.grid-ambient .current-temperature { font-size: calc(28cqw * var(--font-scale)); }
+.grid-ambient .weather-condition { font-size: calc(8cqw * var(--font-scale)); }
+.grid-ambient .weather-details, .grid-ambient .weather-age { font-size: calc(5.4cqw * var(--font-scale)); margin-top: 3cqh; }
+.grid-ambient .ambient-title { font-size: calc(10cqw * var(--font-scale)); }
+.grid-ambient .ambient-description { font-size: calc(6.2cqw * var(--font-scale)); margin-top: 4cqh; }
+.grid-ambient .rain-bars { height: 12cqh; gap: 2cqw; margin-top: 6cqh; }
+.grid-ambient .rain-bar { flex: 1; width: auto; }
+.grid-ambient .rain-hours { font-size: 5cqw; max-width: none; margin-top: 3cqh; }
+.grid-ambient .ambient-reminder-list { gap: 6cqh; }
+.grid-ambient .ambient-reminder-list li { gap: 4cqw; }
+.grid-ambient .ambient-reminder-dot { width: 2cqw; height: 2cqw; margin-top: 3cqh; }
+.grid-ambient .ambient-reminder-title { font-size: calc(9cqw * var(--font-scale)); }
+.grid-ambient .ambient-reminder-date { font-size: calc(6cqw * var(--font-scale)); margin-top: 2cqh; }
+.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-title { font-size: calc(7cqw * var(--font-scale)); }
+.grid-ambient .forecast-strip { grid-template-columns: repeat(var(--forecast-days, 7), minmax(0, 1fr)); gap: 2cqw; }
+.grid-ambient .forecast-day { gap: 5cqh; }
+.grid-ambient .forecast-day-label { font-size: calc(4cqw * var(--font-scale)); }
+.grid-ambient .forecast-day svg { width: 7cqw; height: 7cqw; }
+.grid-ambient .forecast-temperatures { font-size: calc(5.5cqw * var(--font-scale)); gap: 2cqw; }
+.grid-ambient .forecast-rain { font-size: calc(3.5cqw * var(--font-scale)); gap: 1cqw; }
+.grid-ambient .forecast-rain svg { width: 3cqw; height: 3cqw; }
+.grid-ambient .forecast-attribution { font-size: 2.7cqw; margin-top: 5cqh; }
+.grid-ambient .ambient-forecast.widget-size-small .forecast-day-label { font-size: 9cqw; }
+.grid-ambient .ambient-forecast.widget-size-small .forecast-day svg { width: 14cqw; height: 14cqw; }
+.grid-ambient .ambient-forecast.widget-size-small .forecast-temperatures { font-size: 10cqw; flex-direction: column; }
+.grid-ambient .ambient-forecast.widget-size-small .forecast-rain { font-size: 8cqw; }
+.grid-ambient .ambient-forecast.widget-size-small .forecast-attribution { font-size: 6cqw; }
+.grid-ambient .ambient-forecast.widget-size-medium .forecast-day-label { font-size: 7cqw; }
+.grid-ambient .ambient-forecast.widget-size-medium .forecast-day svg { width: 11cqw; height: 11cqw; }
+.grid-ambient .ambient-forecast.widget-size-medium .forecast-temperatures { font-size: 8cqw; }
+.grid-ambient .ambient-forecast.widget-size-medium .forecast-rain { font-size: 6cqw; }
+.grid-ambient .ambient-forecast.widget-size-medium .forecast-attribution { font-size: 4cqw; }
+.grid-ambient .preview-image { display: block; max-height: 77cqh; }
+.grid-ambient .preview-caption { font-size: 5cqw; margin-top: 3cqh; }
+.grid-ambient .ambient-preview .ambient-description { font-size: 6cqw; max-width: none; }
+.grid-ambient .ambient-photo-image { display: block; max-width: 100%; width: 100%; max-height: 80cqh; object-fit: contain; filter: saturate(0.3) brightness(0.45); opacity: 0.45; border: 0; border-radius: 0; }
+.grid-ambient.layout-editing .ambient-widget, .grid-ambient.layout-editing .widget-content { animation: none; }
+.grid-ambient.reduce-motion .ambient-content { transition: none; }
+.grid-ambient.static .ambient-content { transition: none; }
+
+/* Families adapt to both axes; normal content must fit without a global shrink. */
+.grid-ambient .ambient-label { font-size: calc(min(7cqw, 9cqh) * var(--font-scale)); line-height: 1.3; margin-bottom: 2cqh; gap: 2cqw; }
+.grid-ambient .ambient-label svg { width: min(8cqw, 10cqh); height: min(8cqw, 10cqh); }
+.grid-ambient .clock-time { font-size: calc(min(32cqw, 53cqh) * var(--font-scale)); }
+.grid-ambient .clock-period { font-size: min(8cqw, 12cqh); }
+.grid-ambient .clock-date { font-size: calc(min(7cqw, 10cqh) * var(--font-scale)); margin-top: 3cqh; }
+.grid-ambient .current-temperature { font-size: calc(min(28cqw, 34cqh) * var(--font-scale)); }
+.grid-ambient .current-weather-main > .weather-symbol { width: min(19cqw, 27cqh); height: min(19cqw, 27cqh); }
+.grid-ambient .weather-condition { font-size: calc(min(8cqw, 11cqh) * var(--font-scale)); line-height: 1.3; }
+.grid-ambient .weather-details, .grid-ambient .weather-age { font-size: calc(min(5.4cqw, 7cqh) * var(--font-scale)); line-height: 1.3; margin-top: 2cqh; }
+.grid-ambient .ambient-title { font-size: calc(min(10cqw, 16cqh) * var(--font-scale)); line-height: 1.2; }
+.grid-ambient .ambient-description { font-size: calc(min(6.2cqw, 9cqh) * var(--font-scale)); line-height: 1.35; margin-top: 2cqh; }
+.grid-ambient .rain-bars { height: 12cqh; margin-top: 3cqh; }
+.grid-ambient .rain-hours { font-size: min(5cqw, 7cqh); margin-top: 2cqh; }
+.grid-ambient .ambient-reminder-list { gap: 4cqh; }
+.grid-ambient .ambient-reminder-title { font-size: calc(min(9cqw, 16cqh) * var(--font-scale)); }
+.grid-ambient .ambient-reminder-date { font-size: calc(min(6cqw, 9cqh) * var(--font-scale)); }
+.grid-ambient .ambient-reminders.widget-size-large .ambient-reminder-title { font-size: calc(min(7cqw, 10cqh) * var(--font-scale)); }
+.grid-ambient .forecast-day { gap: 1.5cqh; }
+.grid-ambient .forecast-day-label, .grid-ambient .ambient-forecast.widget-size-small .forecast-day-label, .grid-ambient .ambient-forecast.widget-size-medium .forecast-day-label { font-size: calc(min(9cqw, 10cqh) * var(--font-scale)); line-height: 1.3; overflow-wrap: anywhere; }
+.grid-ambient .forecast-day svg, .grid-ambient .ambient-forecast.widget-size-small .forecast-day svg, .grid-ambient .ambient-forecast.widget-size-medium .forecast-day svg { width: min(14cqw, 17cqh); height: min(14cqw, 17cqh); }
+.grid-ambient .forecast-temperatures, .grid-ambient .ambient-forecast.widget-size-small .forecast-temperatures, .grid-ambient .ambient-forecast.widget-size-medium .forecast-temperatures { font-size: calc(min(10cqw, 12cqh) * var(--font-scale)); line-height: 1.2; gap: 1cqw; }
+.grid-ambient .forecast-rain, .grid-ambient .ambient-forecast.widget-size-small .forecast-rain, .grid-ambient .ambient-forecast.widget-size-medium .forecast-rain { font-size: calc(min(8cqw, 9cqh) * var(--font-scale)); line-height: 1.2; }
+.grid-ambient .forecast-attribution, .grid-ambient .ambient-forecast.widget-size-small .forecast-attribution, .grid-ambient .ambient-forecast.widget-size-medium .forecast-attribution { font-size: min(6cqw, 7cqh); line-height: 1.2; margin-top: 2cqh; }
+.grid-ambient .preview-caption { font-size: min(5cqw, 8cqh); margin-top: 2cqh; }
+.grid-ambient .weather-credit { font-size: min(5cqw, 7cqh); line-height: 1.2; margin-top: 1cqh; color: var(--ambient-accent); }
+.grid-ambient .weather-context { font-size: calc(min(6cqw, 8cqh) * var(--font-scale)); line-height: 1.3; margin-bottom: 2cqh; color: var(--ambient-accent); overflow-wrap: anywhere; }
+.grid-ambient .forecast-day-label { white-space: nowrap; overflow-wrap: normal; }

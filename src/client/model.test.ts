@@ -8,7 +8,15 @@ import {
   reminderPresentation,
   sortReminders,
   upcomingRain,
+  weatherAttributionWidget,
 } from './model.ts';
+
+test('weather attribution follows the first enabled weather module and can all be removed', () => {
+  const settings = defaultSettings(); assert.equal(weatherAttributionWidget(settings), 'forecast');
+  settings.widgets.forecast = false; assert.equal(weatherAttributionWidget(settings), 'weather');
+  settings.widgets.weather = false; assert.equal(weatherAttributionWidget(settings), 'rain');
+  settings.widgets.rain = false; assert.equal(weatherAttributionWidget(settings), null);
+});
 import {
   ageLabel,
   forecastDay,
@@ -43,6 +51,8 @@ test('forecast day labels use the actual city calendar date even in a stale list
   assert.equal(forecastDay('2026-10-17', 'America/Toronto', now), 'Sat');
   assert.equal(forecastDay('2026-10-18', 'America/Toronto', now), 'Today');
   assert.equal(forecastDay('2026-10-19', 'America/Toronto', now), 'Tomorrow');
+  assert.equal(forecastDay('2026-10-19', 'America/Toronto', now, true), 'Tom.');
+  assert.equal(forecastDay('2026-10-20', 'America/Toronto', now, true), 'Tue');
   assert.equal(forecastDay('2026-10-20', 'America/Toronto', now), 'Tue');
 });
 

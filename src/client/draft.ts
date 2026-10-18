@@ -1,10 +1,71 @@
-import type { Settings, SettingsPatch } from '../shared/contracts.ts';
+import type {
+  Settings,
+  SettingsPatch,
+  VisualSettings,
+} from '../shared/contracts.ts';
+import { WIDGET_IDS } from '../shared/widgets.ts';
 
 export function same(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (Object.is(a, b)) return true;
+  if (Array.isArray(a) || Array.isArray(b))
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((value, index) => same(value, b[index]))
+    );
+  if (object(a) && object(b)) {
+    const keys = Object.keys(a);
+    return (
+      keys.length === Object.keys(b).length &&
+      keys.every((key) => Object.hasOwn(b, key) && same(a[key], b[key]))
+    );
+  }
+  return false;
 }
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Preset labels and hidden-widget positions do not change the current output. */
+export function sameEffectiveSettings(a: Settings, b: Settings): boolean {
+  function visual(value: VisualSettings) {
+    const {
+      preset: _preset,
+      layout: _legacyLayout,
+      ...appearance
+    } = value.appearance;
+    const { widgetOverrides: _legacy, ...rest } = value;
+    return {
+      ...rest,
+      appearance,
+      preview: {
+        ...value.preview,
+        enabled: !!value.widgets.preview && value.preview.enabled,
+      },
+      widgetGrid: {
+        ...value.widgetGrid,
+        placements: Object.fromEntries(
+          WIDGET_IDS.filter((id) => value.widgets[id]).map((id) => [
+            id,
+            value.widgetGrid.placements[id],
+          ]),
+        ),
+      },
+    };
+  }
+  function comparable(settings: Settings) {
+    const { widgetOverrides: _legacy, ...base } = settings;
+    return {
+      ...base,
+      ...visual(settings),
+      savedPresets: settings.savedPresets.map((preset) => ({
+        ...preset,
+        visual: visual(preset.visual),
+      })),
+    };
+  }
+  return same(comparable(a), comparable(b));
 }
 
 /** Refresh untouched fields without losing a local edit, including during Save. */
@@ -56,10 +117,29 @@ export function settingsChanges(
   draft: Settings,
   automaticLocation = false,
 ): SettingsPatch {
+  if (sameEffectiveSettings(base, draft)) return {};
   const patch = (difference(base, draft) ?? {}) as SettingsPatch & {
     version?: number;
   };
   delete patch.version;
+  if (
+    patch.appearance &&
+    Object.keys(patch.appearance).every(
+      (key) => key === 'preset' || key === 'layout',
+    )
+  )
+    delete patch.appearance;
+  if (patch.widgetGrid?.placements && !patch.widgetGrid.density) {
+    for (const id of Object.keys(
+      patch.widgetGrid.placements,
+    ) as (keyof Settings['widgets'])[]) {
+      if (!base.widgets[id] && !draft.widgets[id])
+        delete patch.widgetGrid.placements[id];
+    }
+    if (!Object.keys(patch.widgetGrid.placements).length)
+      delete patch.widgetGrid.placements;
+    if (!Object.keys(patch.widgetGrid).length) delete patch.widgetGrid;
+  }
   if (patch.location || patch.locationSource) {
     // A location and its source are one selection, not independently rebasable.
     patch.location = structuredClone(draft.location);

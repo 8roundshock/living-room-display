@@ -67,8 +67,9 @@ capture still requires the Windows workstream's verification. See [API](api.md).
 | Language/framework and host | Node 24/TypeScript, React/Vite, native Node HTTP server, Windows helper. |
 | Weather/defaults | Open-Meteo; editable Toronto city default, metric, 12-hour clock. This is a product default, not inferred user location. |
 | Data | Per-user JSON with serialized atomic writes, prior backup, and export/import; no kiosk-storage dependency. |
-| Visual controls | Phone/Room/Night and named saved presets, editable colors/type/motion/widget transforms; actual TV QA remains required. |
+| Visual controls | Shared catalog, discrete adaptive widget families, drag/resize grid, optional modules, outline/digital/analog clocks and named presets; actual TV QA remains required. |
 | Preview | Last-desktop snapshot in RAM only; live app preview deferred. |
+| Local photo | Explicit selected raster is normalized in-browser, validated and atomically saved with settings in private local state; exports/imports exclude its bytes. Prior recovery backup may retain an older image. |
 | Activation | Manual use first; Windows idle activation remains off until verification and explicit enablement. |
 | Editor access | Loopback only, no LAN/public hosting or account system. |
 
