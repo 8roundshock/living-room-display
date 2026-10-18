@@ -45,6 +45,10 @@ Typing two characters starts debounced city search. Up/Down explores, Enter
 selects, and Escape dismisses; focus stays in the input. Typing, blur or the first
 result never selects. Region/country distinguishes namesakes. Older requests
 cannot replace newer options. Selected location is separate from search text.
+Long city names and region/country text wrap within each result. The focused
+[#52](https://github.com/8roundshock/living-room-display/issues/52) regression
+checks actual text bounds, normal short results, keyboard selection and Cancel
+at 320px, 390px and desktop widths; synthetic visuals were inspected in RAM.
 
 New installs use Toronto until an area/city is saved. An editor with already-granted
 browser permission attempts one automatic lookup; otherwise **Use device location**

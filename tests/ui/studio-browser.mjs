@@ -24,6 +24,33 @@ export async function runStudioQa({ playwright, edge } = {}) {
     clientDirectory: join(root, 'dist/client'),
     now: () => now,
     fetcher: async (input) => {
+      const url = new URL(input);
+      if (
+        url.hostname === 'geocoding-api.open-meteo.com' &&
+        url.searchParams.get('name') === 'Long'
+      )
+        return Response.json({
+          results: [
+            {
+              id: 103,
+              name: 'Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch',
+              latitude: 53.22,
+              longitude: -4.2,
+              timezone: 'Europe/London',
+              admin1: 'AdministrativeRegion'.repeat(4),
+              country: 'CountryName'.repeat(8),
+            },
+            {
+              id: 104,
+              name: 'London',
+              latitude: 51.5,
+              longitude: -0.1,
+              timezone: 'Europe/London',
+              admin1: 'England',
+              country: 'United Kingdom',
+            },
+          ],
+        });
       if (new URL(input).hostname === 'geocoding-api.open-meteo.com')
         return Response.json({
           results: [
@@ -723,6 +750,77 @@ export async function runStudioQa({ playwright, edge } = {}) {
     }
     checks.push(
       'reduced motion, keyboard section navigation, 390px/320px reflow and nonsticky mobile preview',
+    );
+    await reset();
+    for (const width of [320, 390, 1440]) {
+      ({ page, context } = await open({
+        viewport: { width, height: 844 },
+      }));
+      await tab(page, 'Weather');
+      const input = page.getByRole('combobox', { name: 'Search for a city' });
+      await input.fill('Long');
+      await page.clock.runFor(300);
+      const options = page.locator('[role="option"]');
+      await options.first().waitFor();
+      assert.equal(await save(page).count(), 0);
+      await input.press('ArrowDown');
+      const content = await options.evaluateAll((elements) =>
+        elements.map((element) => {
+          const option = element.getBoundingClientRect();
+          return {
+            width: element.clientWidth,
+            scrollWidth: element.scrollWidth,
+            height: option.height,
+            text: [...element.querySelectorAll('strong, span')].map((text) => {
+              const range = document.createRange();
+              range.selectNodeContents(text);
+              const lines = [...range.getClientRects()];
+              return {
+                lines: lines.length,
+                contained: lines.every(
+                  (line) =>
+                    line.left >= option.left - 1 &&
+                    line.right <= option.right + 1 &&
+                    line.top >= option.top - 1 &&
+                    line.bottom <= option.bottom + 1,
+                ),
+              };
+            }),
+          };
+        }),
+      );
+      for (const option of content) {
+        assert.ok(option.height >= 60);
+        assert.ok(
+          option.scrollWidth <= option.width + 1,
+          JSON.stringify({ viewportWidth: width, ...option }),
+        );
+        assert.ok(option.text.every((text) => text.contained));
+      }
+      assert.ok(content[1].text.every((text) => text.lines === 1));
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+        width,
+      );
+      assert.equal(await input.evaluate((e) => document.activeElement === e), true);
+      images.push({
+        label: `Long city option ${width}`,
+        bytes: await page.screenshot({ type: 'png', animations: 'disabled' }),
+      });
+      await input.press('Enter');
+      assert.equal(
+        await page.locator('.current-location strong').innerText(),
+        'Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch',
+      );
+      assert.equal(await input.evaluate((e) => document.activeElement === e), true);
+      await cancel(page).click();
+      await saved(page);
+      assert.equal(await page.locator('.current-location strong').innerText(), 'Toronto');
+      assert.equal(await input.inputValue(), '');
+      await context.close();
+    }
+    checks.push(
+      'long city/region/country options fully wrap at 320px/390px/desktop; short results stay tidy, keyboard selection and Cancel work',
     );
     for (const viewport of [
       { width: 390, height: 844 },
