@@ -5,6 +5,32 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DataStore } from './store.ts';
 import { defaultSettings } from '../shared/defaults.ts';
+import { gridProblem } from '../shared/widgets.ts';
+
+test('reading legacy geometry preserves original state bytes and migrates every widget in memory before a normal save', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'lrd-grid-migration-'));
+  try {
+    const settings = defaultSettings(); delete settings.widgetGrid.revision;
+    settings.widgetGrid.placements.clock = { column: 0, row: 0, size: 'large' };
+    settings.widgetGrid.placements.rain = { column: 0, row: 3, size: 'medium' };
+    settings.widgetGrid.placements.reminders = { column: 5, row: 3, size: 'small' };
+    settings.widgetGrid.placements.preview = { column: 8, row: 3, size: 'medium' };
+    settings.widgetGrid.placements.forecast = { column: 2, row: 6, size: 'large' };
+    const original = JSON.stringify({ version: 1, settings, reminders: [] });
+    await writeFile(join(directory, 'state.json'), original);
+    const store = await DataStore.open(directory), migrated = store.snapshot().settings;
+    assert.equal(migrated.widgetGrid.revision, 2);
+    assert.equal(gridProblem(migrated.widgetGrid, migrated.widgets), null);
+    assert.deepEqual(migrated.widgets, settings.widgets);
+    assert.equal(await readFile(join(directory, 'state.json'), 'utf8'), original);
+    await store.patchSettings({ clockFormat: '24h' });
+    const reopened = (await DataStore.open(directory)).snapshot().settings;
+    assert.equal(reopened.widgetGrid.revision, 2);
+    assert.deepEqual(reopened.widgets, settings.widgets);
+    assert.equal(gridProblem(reopened.widgetGrid, reopened.widgets), null);
+    assert.equal(JSON.parse(await readFile(join(directory, 'state.backup.json'), 'utf8')).settings.widgetGrid.revision, 2);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test('new snapshot default preserves existing low/custom opacity and saved visual choices', async () => {
   assert.equal(defaultSettings().preview.opacity, 0.24);

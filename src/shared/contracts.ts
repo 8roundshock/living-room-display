@@ -1,7 +1,7 @@
 import type { GridDensity, WidgetKind, WidgetSize } from './widgets.ts';
 export type WidgetId = WidgetKind;
 export interface WidgetPlacement { column: number; row: number; size: WidgetSize }
-export interface WidgetGrid { density: GridDensity; placements: Record<WidgetId, WidgetPlacement> }
+export interface WidgetGrid { revision?: 1 | 2; density: GridDensity; placements: Record<WidgetId, WidgetPlacement> }
 export type Units = 'metric' | 'imperial';
 export interface LocationSettings { name: string; latitude: number; longitude: number; timezone: string }
 export interface AppearanceSettings {
@@ -36,7 +36,7 @@ export interface SettingsPatch {
   appearance?: Partial<AppearanceSettings>; widgets?: Partial<Record<WidgetId, boolean>>;
   widgetOverrides?: Partial<Record<WidgetId, Partial<WidgetTransform>>>;
   widgetBehavior?: { reminders?: Partial<WidgetBehavior['reminders']> };
-  widgetGrid?: { density?: GridDensity; placements?: Partial<Record<WidgetId, Partial<WidgetPlacement>>> };
+  widgetGrid?: { revision?: 2; density?: GridDensity; placements?: Partial<Record<WidgetId, Partial<WidgetPlacement>>> };
   /** Request-only local photo mutation; never stored in settings or included in exports. */
   photoChange?: { pngBase64: string } | null;
   preview?: Partial<PreviewSettings>; idle?: Partial<IdleSettings>; savedPresets?: SavedPreset[];
