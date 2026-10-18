@@ -57,6 +57,8 @@
   text-overflow: ellipsis;
 }
 .grid-resize-handle {
+  visibility: hidden;
+  pointer-events: none;
   position: absolute;
   bottom: 0;
   right: 0;
@@ -69,6 +71,11 @@
   color: #e1d3f2;
   cursor: nwse-resize;
   touch-action: none;
+}
+.grid-widget-frame.selected > .grid-resize-handle,
+.grid-widget-frame:focus-within > .grid-resize-handle {
+  visibility: visible;
+  pointer-events: auto;
 }
 .grid-resize-handle svg {
   width: 17px;

@@ -120,7 +120,7 @@ export function GridEditor({ settings, selected, onSelect, onPreview, onCommit, 
       const handlers = { onPointerMove: move, onPointerUp: () => finish(true), onPointerCancel: () => finish(false), onLostPointerCapture: () => { if (drag.current) finish(false); } };
       return <div key={id} className={`grid-widget-frame ${selected === id ? 'selected' : ''} ${active ? 'active-drag' : ''} ${active && !active.valid ? 'invalid' : ''}`} style={style}>
         <button className="grid-drag-target" aria-label={`Move ${WIDGET_CATALOG[id].name}`} aria-describedby="grid-keyboard-help"
-          onPointerDown={event => start(event, id, 'move')} {...handlers} onKeyDown={event => keyboard(event, id)} onClick={() => onSelect(id)}>
+          onPointerDown={event => start(event, id, 'move')} {...handlers} onKeyDown={event => keyboard(event, id)} onFocus={() => onSelect(id)} onClick={() => onSelect(id)}>
           <span>{WIDGET_CATALOG[id].name}</span>
         </button>
         <button className="grid-resize-handle" aria-label={`Resize ${WIDGET_CATALOG[id].name}`} aria-describedby="grid-keyboard-help"

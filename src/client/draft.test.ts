@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { defaultSettings } from '../shared/defaults.ts';
+import { gridProblem, switchGridDensity } from '../shared/widgets.ts';
 import {
   rebaseDraft,
   rebaseSettings,
@@ -85,6 +86,28 @@ test('a pending city remains an atomic selection when another editor saves a loc
   const next = rebaseSettings(base, draft, incoming);
   assert.deepEqual(next.location, draft.location);
   assert.equal(next.appearance.fontScale, 1.2);
+});
+
+test('a density draft remains a valid atomic layout through a concurrent placement and visibility poll', () => {
+  const base = defaultSettings(), draft = structuredClone(base), incoming = structuredClone(base);
+  const compact = switchGridDensity(base.widgetGrid, 'spacious', base.widgets); assert.ok(compact);
+  draft.widgetGrid = compact.grid;
+  incoming.widgetGrid.placements.weather.row = 6;
+  incoming.widgets.clock = false;
+  incoming.appearance.brightness = 0.3;
+  incoming.location.name = 'Concurrent city';
+  incoming.preview.opacity = 0.15;
+  assert.equal(gridProblem(incoming.widgetGrid, incoming.widgets), null, 'the incoming saved board is valid in its own density');
+  const next = rebaseSettings(base, draft, incoming);
+  assert.deepEqual(next.widgetGrid, draft.widgetGrid);
+  assert.deepEqual(next.widgets, draft.widgets);
+  assert.equal(gridProblem(next.widgetGrid, next.widgets), null);
+  assert.equal(next.appearance.brightness, 0.3);
+  assert.equal(next.location.name, 'Concurrent city');
+  assert.equal(next.preview.opacity, 0.15, 'independent opacity refreshes normally');
+  const back = switchGridDensity(next.widgetGrid, 'balanced', next.widgets, compact.history); assert.ok(back);
+  assert.deepEqual(back.grid, base.widgetGrid, 'polling does not corrupt density round-trip history');
+  assert.deepEqual(rebaseSettings(base, structuredClone(base), incoming), incoming, 'an untouched layout refreshes as a whole');
 });
 
 test('effective equality ignores object order, preset labels and disabled widget positions', () => {

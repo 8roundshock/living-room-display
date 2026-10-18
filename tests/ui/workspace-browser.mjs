@@ -53,7 +53,11 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       await inView(button('Cancel'), 'Cancel'); await inView(button('Save changes'), 'Save');
       assert.equal(await page.locator('.widget-position-control').count(), 0);
       await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
-      await button('Edit layout').click(); await inView(page.getByRole('combobox', { name: 'Grid density' }), 'Density'); await button('Done').click();
+      await button('Edit layout').click(); await inView(page.getByRole('combobox', { name: 'Grid density' }), 'Density');
+      await button('Move Weather').focus();
+      assert.equal(await page.getByRole('button', { name: /^Resize / }).count(), 1, 'only the selected/focused widget exposes a resize handle');
+      await page.keyboard.press('Tab'); assert.equal(await button('Resize Weather').evaluate(element => element === document.activeElement), true, 'keyboard users can reach the selected resize handle');
+      await button('Done').click();
       await button('Add widget').click();
       const panel = await page.locator('.inspector-panel').evaluate(element => [element.clientHeight, element.scrollHeight]);
       assert.ok(panel[1] <= panel[0] + 1, 'catalog and Add must fit the contained panel');
