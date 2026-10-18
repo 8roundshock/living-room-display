@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { AppState, Settings, WidgetId } from '../shared/contracts.ts';
 import { WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset } from '../shared/widgets.ts';
 import { Icon } from './icons.tsx';
@@ -43,6 +43,15 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   state: AppState; settings?: Settings; embedded?: boolean; native?: boolean; disconnected?: boolean; compositionOverride?: number; layoutEditing?: boolean; photoPreview?: string | null; gesture?: WidgetGesture | null;
 }) {
   const [now, setNow] = useState(() => new Date()); const [cycle, setCycle] = useState(0); const [fading, setFading] = useState(false); const [interacting, setInteracting] = useState(false);
+  const interactionTimer = useRef<number | undefined>(undefined);
+  const showControls = useCallback(() => {
+    if (embedded || native) return;
+    setInteracting(true);
+    window.clearTimeout(interactionTimer.current);
+    // Repeated pointer events need a fresh deadline even while the state is true.
+    interactionTimer.current = window.setTimeout(() => { interactionTimer.current = undefined; setInteracting(false); }, 3500);
+  }, [embedded, native]);
+  useEffect(() => () => window.clearTimeout(interactionTimer.current), []);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(timer); }, []);
   useEffect(() => { const media = window.matchMedia('(prefers-reduced-motion: reduce)'); const change = () => setReducedMotion(media.matches); media.addEventListener('change', change); return () => media.removeEventListener('change', change); }, []);
@@ -56,19 +65,18 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     }, settings.appearance.motionIntervalSeconds * 1000);
     return () => { window.clearInterval(timer); window.clearTimeout(hide); window.clearTimeout(reveal); };
   }, [settings.appearance.motionEnabled, settings.appearance.motionIntervalSeconds, settings.appearance.fadeSeconds, layoutEditing, compositionOverride, reducedMotion]);
-  useEffect(() => { if (!interacting) return; const timer = window.setTimeout(() => setInteracting(false), 3500); return () => window.clearTimeout(timer); }, [interacting]);
   useEffect(() => {
     if (embedded || native) return;
     const key = (event: KeyboardEvent) => {
       if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.defaultPrevented) return;
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
-      if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen(); setInteracting(true); }
+      if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen(); showControls(); }
       if (event.key === 'Escape' || event.key.toLowerCase() === 'e') window.location.assign('/editor');
-      if (event.key === 'Tab') setInteracting(true);
+      if (event.key === 'Tab') showControls();
     };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
-  }, [embedded, native]);
+  }, [embedded, native, showControls]);
   const effectiveCycle = layoutEditing ? 0 : compositionOverride ?? cycle;
   const enabledKey = JSON.stringify([settings.widgets, settings.preview.enabled]);
   const gridKey = JSON.stringify(settings.widgetGrid);
@@ -81,7 +89,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   const ambientStyle = { '--ambient-accent': settings.appearance.accentColor, '--ambient-text': settings.appearance.textColor, '--ambient-brightness': settings.appearance.brightness, '--font-scale': settings.appearance.fontScale,
     '--fade-duration': reducedMotion || !settings.appearance.motionEnabled ? '0s' : `${settings.appearance.fadeSeconds}s`, '--motion-x': `${offset.x}%`, '--motion-y': `${offset.y}%` } as CSSProperties;
   const Surface = embedded ? 'div' : 'main';
-  return <Surface className={embedded ? 'preview-surface' : `display-page ${interacting ? 'interacting' : ''}`} onPointerMove={() => { if (!embedded) setInteracting(true); }}>
+  return <Surface className={embedded ? 'preview-surface' : `display-page ${interacting ? 'interacting' : ''}`} onPointerMove={showControls}>
     <div className={`ambient grid-ambient composition-${effectiveCycle % 4} font-${settings.appearance.fontFamily} ${!settings.appearance.motionEnabled || reducedMotion || layoutEditing ? 'static' : ''} ${layoutEditing ? 'layout-editing' : ''} ${reducedMotion ? 'reduce-motion' : ''}`} style={ambientStyle} data-composition={effectiveCycle}>
       <div className={`ambient-content widget-grid-plane ${fading ? 'fading' : ''}`}>
         {WIDGET_IDS.map((id, index) => {
