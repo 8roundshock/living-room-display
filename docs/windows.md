@@ -149,8 +149,8 @@ Independent static review approved source `eba70fc` before the earlier runtime Q
 later merged application changes also passed their final-head reviews and CI.
 The native cursor replacement is a separate, uninstalled candidate in
 [draft PR51](https://github.com/8roundshock/living-room-display/pull/51), reviewed
-at `3a492b0` with both CI jobs successful. Its integrated runtime gates still
-apply; merging current main requires a final-head independent recheck. The
+at native-code head `c06a9a9` with both CI jobs successful. Its integrated runtime
+gates still apply; any later head requires a final-head independent recheck. The
 repository stays private and this PR is not deployment evidence. Normal product
 operation contains no prototype phase logging or screenshot logging.
 
@@ -229,13 +229,22 @@ and [`CURSORINFO`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/n
 provide cursor handle, visibility flags and screen position. Require a successful
 read, NULL glyph and actual owned client/hit-root with live renderer and stable
 input; a failed read or cursor-free screenshot proves no absence. Record context
-and restoration separately. The last hardware preflight on 2026-10-18 aborted
-before launch with immediate error 5 (access denied); the borrowed current Default
-desktop was not receiving input. Minimal/observer x64 structs matched under
-PS5.1/7. Exact lock/secure/switch cause is unproven. All native/current-desktop
-probing stopped. Recheck only after the user returns to the normal interactive
-desktop and cursor observation is available, with a new coordinated preflight/GO;
-do not open/switch desktops, dismiss security UI or weaken guards. See
+and restoration separately. On 2026-10-18 the user explicitly confirmed the
+normal interactive PC desktop. A fresh `exec_command` PowerShell preflight still
+aborted before launch: error 5 (access denied) and current `Default` desktop
+`UOI_IO=false`, with visible `WinSta0`. Command, desktop apps and backend shared
+active console session 1 and normal unrestricted medium tokens; no isolation
+cause is confirmed. Minimal/observer x64 structs matched under PS5.1/7.
+The official Computer Use API separately listed four windows across three apps,
+with no Edge/display window; no capture, activation or input occurred. Inventory
+success does not qualify the command observer or candidate. Native/current-desktop
+probing stopped. The prepared next fallback is a single user-initiated run of the
+exact reviewed stationary candidate observer from normal nonadmin PowerShell,
+using a fresh 30-second authorization and its unchanged fail-closed preflight,
+eight-second helper and absolute watchdog bounds. It has not run and grants no
+install/idle approval. Recheck current artifacts, backend and preservation state
+before a new coordinated GO. Do not repeat unlock instructions, open/switch
+desktops, dismiss security UI or weaken guards. See
 [diagnosis](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6249615459).
 
 References: [Screensaver library](https://learn.microsoft.com/en-us/windows/win32/lwef/screen-saver-library),

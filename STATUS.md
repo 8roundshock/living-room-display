@@ -113,9 +113,9 @@ That verified native baseline has the cursor and early-input issues
 [#36](https://github.com/8roundshock/living-room-display/issues/36) and
 [#50](https://github.com/8roundshock/living-room-display/issues/50), both open.
 The proposed replacement in [draft PR51](https://github.com/8roundshock/living-room-display/pull/51)
-is candidate-only: head `3a492b0` received independent code approval and both CI
-jobs passed. The subsequent merge of current main requires a final-head recheck;
-the replacement remains unmerged and uninstalled. It adds an independent native
+is candidate-only: native code at `c06a9a9` received independent approval and both
+CI jobs passed. Any later head requires a final-head recheck; the replacement
+remains unmerged and uninstalled. It adds an independent native
 input surface with exact job ownership, terminal foreground/renderer guards,
 and a fixed input baseline from before startup. Active-session monitoring stops
 on disposal; fake delayed-startup and cleanup-race regressions cover cancellation.
@@ -123,11 +123,17 @@ Positive isolated prototype evidence does not establish integrated production
 acceptance. Actual native normal/visual/input dismissal, focus/renderer failure
 and cursor restoration gates remain pending.
 
-The last hardware preflight on 2026-10-18 stopped before launch because cursor
-observation returned access denied and the current desktop was not receiving
-input. Resume only after the user returns to the normal interactive desktop and
-cursor observation is available, with a new coordinated preflight/GO. Do not
-switch desktops, dismiss security UI or weaken the guard. See the
+On 2026-10-18 the user confirmed this PC was on its normal interactive desktop.
+A fresh command-run preflight still stopped before launch: `GetCursorInfo`
+returned error 5 and its current desktop reported `UOI_IO=false`, despite the
+same active console session as the desktop apps. No isolation cause is confirmed.
+One official Computer Use inventory succeeded (four windows, three apps; no
+Edge/display window), without capture or input; it does not qualify the native
+observer. The next prepared fallback is one user-initiated, nonadmin PowerShell
+run of the exact reviewed stationary candidate observer, with a fresh 30-second
+authorization, fail-closed preflight and eight-second test bound. It has not run.
+Require successful preflight and a new coordinated GO; do not repeatedly ask the
+user to unlock, switch desktops, dismiss security UI or weaken the guard. See the
 [sanitized diagnosis](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6249615459).
 Native `/c` cold startup was blocked by automatic approval review before action
 and remains unverified. Fresh-account installation, movie/game inhibition,
