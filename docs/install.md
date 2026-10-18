@@ -184,12 +184,61 @@ keep the newer data directory and restore the matching pre-upgrade data copy.
 | Feature | Data the previous release cannot read |
 | --- | --- |
 | #73 reminder history | Not shipped yet |
-| #73 custom Reminders sizes | Not shipped yet |
+| #73 custom Reminders sizes | Readable until a custom size (anything other than Small, Medium or Large) is saved in settings or a saved style; from then on `state.json`, later `state.backup.json`, and exports carry `span` keys that `bedca44` rejects. Use the pre-upgrade data copy, or [remove the custom sizes](#removing-custom-reminders-sizes-before-a-downgrade). |
 | #74 Weather and Rain merge | Not shipped yet |
 | #75 Native colours | Not shipped yet |
 | #76 Animation level | Not shipped yet |
 | #78 Calendar, Countdown and Note | Not shipped yet |
 | #78 World clocks, Sun & moon and Air quality | Not shipped yet |
+
+#### Removing custom Reminders sizes before a downgrade
+
+A custom size is stored as `span` beside the placement's `size`, and `size` is
+always the largest family inside the span. Deleting every `span` therefore leaves
+each Reminders widget at that family in the same corner, inside its old cells, so
+the layout stays valid and collision-free (`src/server/freesize.test.ts` proves
+this). Prefer the pre-upgrade data copy; use this only when newer reminders or
+settings must be kept. Run it **after** restoring the older app, with that app
+stopped; it validates with the installed (older) app's own reader before
+preserving the data folder and replacing anything:
+
+```powershell
+$installRoot = Join-Path $env:LOCALAPPDATA 'LivingRoomDisplay'
+$control = Join-Path $installRoot 'app\windows\LivingRoomDisplay.ps1'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $control Stop
+$dataDirectory = Join-Path $installRoot 'data'
+$node = Join-Path $installRoot 'runtime\node.exe'
+$validator = Join-Path $installRoot 'app\dist\server\validation.js'
+$source = Join-Path $dataDirectory 'state.json'
+$candidate = Join-Path $installRoot ('strip-spans-' + [Guid]::NewGuid().ToString('N') + '.json')
+$stripCode = @'
+const fs=require('node:fs');
+const {pathToFileURL}=require('node:url');
+(async()=>{
+  const data=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
+  const grids=[data.settings?.widgetGrid,...(data.settings?.savedPresets??[]).map(preset=>preset?.visual?.widgetGrid)];
+  for(const grid of grids) for(const placement of Object.values(grid?.placements??{})) if(placement&&typeof placement==='object') delete placement.span;
+  const {dataSchema}=await import(pathToFileURL(process.argv[2]).href);
+  dataSchema.parse(data);
+  fs.writeFileSync(process.argv[3],JSON.stringify(data,null,2),{encoding:'utf8',flag:'wx'});
+})().catch(()=>{console.error('Validation failed after removing custom sizes; preserved data was not modified.');process.exitCode=1;});
+'@
+& $node -e $stripCode $source $validator $candidate
+if ($LASTEXITCODE -ne 0) { throw 'Validation failed; stop without replacing data.' }
+$preserved = Join-Path $installRoot ('data-before-strip-' + [Guid]::NewGuid().ToString('N'))
+Copy-Item -LiteralPath $dataDirectory -Destination $preserved -Recurse -ErrorAction Stop
+Move-Item -LiteralPath $candidate -Destination (Join-Path $dataDirectory 'state.json') -Force -ErrorAction Stop
+Copy-Item -LiteralPath (Join-Path $dataDirectory 'state.json') -Destination (Join-Path $dataDirectory 'state.backup.json') -Force -ErrorAction Stop
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $control Start
+```
+
+If `state.json` itself is unreadable, point `$source` at `state.backup.json`. Only
+`span` keys are removed; any other newer-only data (the other rows above) still
+needs its own handling, and validation stops with nothing replaced. The preserved
+folder keeps the original files; keep it private. An export that contains spans
+must be stripped the same way (delete `settings.widgetGrid.placements.*.span` and
+`settings.savedPresets[].visual.widgetGrid.placements.*.span`) before importing it
+into the older app.
 
 `Update` reuses an existing Node24 runtime; `-NodeVersion` selects a version only
 when the runtime is absent. For a deliberate runtime update, stop the app, rename

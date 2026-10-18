@@ -44,6 +44,16 @@ visible above it, including narrow screens and compact keyboard-height windows.
   the prior board. Density changes immediately fit every enabled module, reducing
   families only when necessary; a round trip restores exact explored positions
   and families until another widget edit. Cancel restores the saved arrangement.
+- **Free-size Reminders** (#73): its handle snaps to whole cells from 2 × 2 up to
+  the full grid height and two-thirds of the width; neighbours reflow live, and an
+  impossible size keeps the board with “No room for that size”. On the focused
+  handle Right/Left change width and Down/Up change height by one cell, announced
+  as “Reminders resized to 2 × 6”. The inspector offers Small, Medium, Large and
+  Column (2 × full height) presets plus Width and Height steppers that stop at
+  their limits; the list subtitle reads the family, Column or `C × R`. Sizes join
+  the draft (resizing back to the saved shape is clean), density changes scale the
+  span with full height kept, and the picker still adds a family with a caption
+  noting free resizing.
 - Density/family/position and visibility form one atomic local layout during a
   concurrent poll, preserving its validity while unrelated saved settings refresh.
   Adding a widget can seek nearby legal origins when its previous hidden origin

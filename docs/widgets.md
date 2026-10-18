@@ -127,6 +127,16 @@ restoring the exact prior layout when switched back before another widget edit.
 A visible grid, handles,
 selection borders, labels and picker chrome belong to the editor only.
 
+A free-size widget declares the optional catalog `freeSize` rule instead of its own
+geometry (#73; currently Reminders). Besides its families it accepts any whole-cell
+`span` from `min` (2 × 2) up to the full grid height and `maxColumnsFraction` (two
+thirds) of the width, so even a full-height column leaves at least a third of the
+board for relocation. `size` stays the largest family inside the span, which keeps
+family-based renderers working and guarantees that deleting the span leaves a
+collision-free board. Every helper reads cells through `placementSpan`, so the
+editor, validation, density fitting (span scaled first, full height kept, falling
+back to a family) and ambient composition share one collision rule.
+
 Every widget is optional. The picker describes available widgets and sizes;
 adding/removing/resizing/repositioning changes the settings draft. Provide direct
 family controls usable by keyboard/touch as an alternative to handle resizing.
@@ -170,6 +180,14 @@ rectangles disjoint at each visible phase; fade the old composition fully to
 black before revealing a new one, so crossfades cannot overlay bright layouts.
 Include a black rest interval and avoid flashes or synchronized bright accents.
 Use the centralized scheduler/wrapper, not a new per-widget motion loop.
+
+Dense boards keep relocating (#93). The bounded composition search may fail to
+find a board where every widget moves; it then reflects the previous composition
+horizontally, vertically or both (`displayPlacement`, span-aware), choosing the
+reflection that moves the most widgets. A reflection is always in bounds and
+collision-free. Only a board that every reflection maps onto itself falls through
+to the search that allows widgets to stay. A full-height span can only travel
+sideways; any span relocates as one whole group through the black rest.
 
 Reduced motion removes travel, zoom and decorative animation while preserving
 periodic spatial relocation through a black interval and an instant reveal (or a
