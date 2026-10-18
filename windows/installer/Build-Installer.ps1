@@ -36,6 +36,30 @@ function Get-ScriptNodeVersion([string]$ScriptPath) {
     return [string]$parameter.DefaultValue.Value
 }
 
+function Get-InnoVersion([string]$Compiler) {
+    # Inno's binaries carry no numeric file version, so ask the preprocessor:
+    # Ver is the packed compiler version and DecodeVer formats it as x.y.z.
+    $probe = Join-Path ([IO.Path]::GetTempPath()) ('lrd-inno-version-' + [Guid]::NewGuid().ToString('N') + '.iss')
+    try {
+        [IO.File]::WriteAllText($probe, "#pragma message `"LRD-INNO-VERSION=`" + DecodeVer(Ver)`n", (New-Object Text.UTF8Encoding($false)))
+        $launch = New-Object Diagnostics.ProcessStartInfo
+        $launch.FileName = $Compiler
+        $launch.Arguments = '"' + $probe + '"'
+        $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true
+        $launch.RedirectStandardOutput = $true; $launch.RedirectStandardError = $true
+        $process = [Diagnostics.Process]::Start($launch)
+        try {
+            $stderr = $process.StandardError.ReadToEndAsync()
+            $output = $process.StandardOutput.ReadToEnd() + $stderr.Result
+            $process.WaitForExit()
+        } finally { $process.Dispose() }
+        $match = [regex]::Match($output, 'LRD-INNO-VERSION=(\d+)\.(\d+)\.(\d+)')
+        if ($match.Success) { return New-Object Version ([int]$match.Groups[1].Value), ([int]$match.Groups[2].Value), ([int]$match.Groups[3].Value) }
+        Write-Warning "Could not read the Inno Setup version: $output"
+        return $null
+    } finally { Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue }
+}
+
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repository '.local\installer' }
 $OutputDirectory = Resolve-UserPath $OutputDirectory
 $runtimePin = (Get-Content -LiteralPath (Join-Path $installerDirectory 'runtime.json') -Raw | ConvertFrom-Json).node
@@ -65,9 +89,8 @@ if (-not $PayloadOnly) {
     $candidates += @((Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'), (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'), (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'))
     $iscc = $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
     if (-not $iscc) { throw 'ISCC.exe (Inno Setup 6) was not found. Pass -IsccPath, or use -PayloadOnly.' }
-    $info = (Get-Item -LiteralPath $iscc).VersionInfo
-    $isccVersion = New-Object Version $info.FileMajorPart, $info.FileMinorPart, $info.FileBuildPart
-    if ($isccVersion -lt [Version]$innoPin.minimumVersion -or $isccVersion.Major -ne 6) { throw "Inno Setup $isccVersion is not supported; install 6.x >= $($innoPin.minimumVersion) (tested $($innoPin.testedVersion))." }
+    $isccVersion = Get-InnoVersion $iscc
+    if (-not $isccVersion -or $isccVersion -lt [Version]$innoPin.minimumVersion -or $isccVersion.Major -ne 6) { throw "Inno Setup $isccVersion is not supported; install 6.x >= $($innoPin.minimumVersion) (tested $($innoPin.testedVersion))." }
     Write-Step "Using Inno Setup $isccVersion at $iscc"
 }
 

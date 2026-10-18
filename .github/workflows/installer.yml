@@ -38,13 +38,22 @@ jobs:
         shell: pwsh
         run: |
           $pin = Get-Content windows/installer/inno.json -Raw | ConvertFrom-Json
+          function Get-InnoVersion([string]$Compiler) {
+            # Inno binaries carry no numeric file version; ask the preprocessor.
+            $probe = Join-Path $env:RUNNER_TEMP 'inno-version.iss'
+            Set-Content -LiteralPath $probe -Value '#pragma message "LRD-INNO-VERSION=" + DecodeVer(Ver)' -Encoding ascii
+            $output = (& $Compiler $probe 2>&1 | Out-String)
+            $match = [regex]::Match($output, 'LRD-INNO-VERSION=(\d+\.\d+\.\d+)')
+            if ($match.Success) { return [Version]$match.Groups[1].Value }
+            Write-Host $output
+            return $null
+          }
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           $usable = $false
           if (Test-Path -LiteralPath $iscc) {
-            $info = (Get-Item -LiteralPath $iscc).VersionInfo
-            $version = [Version]::new($info.FileMajorPart, $info.FileMinorPart, $info.FileBuildPart)
+            $version = Get-InnoVersion $iscc
             Write-Host "Preinstalled Inno Setup $version"
-            $usable = $version.Major -eq 6 -and $version -ge [Version]$pin.minimumVersion
+            $usable = $version -and $version.Major -eq 6 -and $version -ge [Version]$pin.minimumVersion
           }
           if (-not $usable) {
             Write-Host "Installing the pinned Inno Setup $($pin.testedVersion)"
