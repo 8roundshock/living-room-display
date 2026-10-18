@@ -107,8 +107,16 @@ See the [revision-2 backup/rollback requirement](docs/install.md#widget-geometry
 before any coordinated rollout.
 
 The last verified installed baseline on 2026-10-18 is clean
-`7e654fdf392fbef71e00a77703f1ed1379a95c85`, the normal merge of PR #57.
-The owner confirmed the editor was saved/clean and authorized this update.
+`bedca44e18bcdc23f33a4ac887e3f2a57d5d41c8`, the normal merge of
+[PR #70](https://github.com/8roundshock/living-room-display/pull/70) (#63 ambient
+readability, full-height inspector) on top of PR #67 and the #57 studio UI. The owner
+directed this merge and install after independent final-head review. The
+[install evidence](https://github.com/8roundshock/living-room-display/pull/70#issuecomment-6253957062)
+records a stopped-app private data copy with manifest, installed provenance, health,
+served JavaScript/CSS matching the reviewed build, unchanged private data hashes and
+unchanged Windows screensaver values; `app.previous` holds the `7e654fd` app.
+For the preceding `7e654fd` (PR #57) rollout, the owner confirmed the editor
+was saved/clean and authorized that update.
 The [dated rollout evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)
 records installed provenance, owned backend/listener and health verification,
 and served HTML/JavaScript/CSS hashes matching the installed files. All private
@@ -169,24 +177,20 @@ remain future work; the host targets one primary display.
 
 ## Continuing source work
 
-Work beyond the installed `7e654fd` baseline is tracked separately:
+Installed in `bedca44`: [#63](https://github.com/8roundshock/living-room-display/issues/63)
+via [PR #70](https://github.com/8roundshock/living-room-display/pull/70) (separate Claude
+Code session, independent Codex review), [PR #67 / #66](https://github.com/8roundshock/living-room-display/pull/67)
+browser controls, and the docs-only PRs #65 and #69.
 
-- [#63](https://github.com/8roundshock/living-room-display/issues/63) has a
-  [reported separate Claude Code owner](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6253160209).
-  That session later [reported separate owner-directed rollout instructions](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6253218182).
-  Its worktree remains separately owned; those reports do not authorize this
-  coordinator to delegate, alter its work or perform a new installation.
-- [PR #67 / #66](https://github.com/8roundshock/living-room-display/pull/67)
-  addresses browser controls hiding during continuing pointer interaction.
-- [PR #65 / #64](https://github.com/8roundshock/living-room-display/pull/65)
-  documents bounded Claude Code collaboration. CLI installation/authentication
-  were verified, but automatic approval review rejected the coordinator's first
-  headless request before execution with only `blocked by policy`. No Claude task
-  ran from that request; coordinator inference remains on hold rather than being
-  retried through another launcher or API.
+- Draft [PR #51](https://github.com/8roundshock/living-room-display/pull/51) and its
+  observer were bound to the `7e654fd` served assets. Before combined native acceptance,
+  merge current `main` into the candidate, rebuild, and re-pin/re-review against the
+  served `bedca44` assets; the old asset pins no longer match the installed backend.
+- [PR #65 / #64](https://github.com/8roundshock/living-room-display/pull/65) documents
+  bounded Claude Code collaboration; the coordinator's own headless request remains on
+  hold after `blocked by policy`.
 
-Consult each PR for its current review/merge state. These workstreams are not
-part of the verified installed baseline, and unattended source checks do not
+Consult each PR for its current review/merge state. Unattended source checks do not
 replace the physical native acceptance above.
 
 ## Decisions and boundaries
