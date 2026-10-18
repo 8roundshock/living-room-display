@@ -46,6 +46,7 @@ try {
             $memory = New-Object IO.MemoryStream
             $opened = $zipManifest.Open(); try { $opened.CopyTo($memory) } finally { $opened.Dispose() }
             $zipManifestBytes = $memory.ToArray()
+            $manifestText = (New-Object Text.UTF8Encoding($false)).GetString($zipManifestBytes)
         } finally { $zip.Dispose() }
         if ($ReleaseJson) { Assert-True ((Get-Sha256 $ReleaseJson) -eq (([BitConverter]::ToString(([Security.Cryptography.SHA256]::Create()).ComputeHash($zipManifestBytes)) -replace '-','').ToLowerInvariant())) 'release.json next to the archive differs from the copy inside it' }
         if (-not $PayloadDirectory) {
@@ -55,7 +56,8 @@ try {
         $checks++
     } else {
         Assert-True ([bool]$ReleaseJson) 'pass -ReleaseJson with a payload folder'
-        $manifest = Get-Content -LiteralPath $ReleaseJson -Raw | ConvertFrom-Json
+        $manifestText = [IO.File]::ReadAllText($ReleaseJson)
+        $manifest = $manifestText | ConvertFrom-Json
     }
     $PayloadDirectory = (Resolve-UserPath $PayloadDirectory).TrimEnd('\')
     Assert-True (Test-Path -LiteralPath $PayloadDirectory -PathType Container) "payload folder not found: $PayloadDirectory"
@@ -90,7 +92,8 @@ try {
     Assert-True ($manifest.product -eq 'living-room-display' -and [string]$manifest.schema -eq '1') 'manifest product/schema'
     Assert-True ([string]$manifest.version -eq [string]$package.version -and [string]$manifest.version -match '^\d+\.\d+\.\d+$') 'manifest version must equal app/package.json'
     Assert-True ([string]$manifest.sourceRevision -match '^[0-9a-f]{40}$' -and @('clean','dirty') -contains [string]$manifest.sourceState) 'manifest provenance'
-    Assert-True ([string]$manifest.builtAt -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$') 'manifest builtAt'
+    # PowerShell 7 turns ISO strings into DateTime, so check the raw JSON text.
+    Assert-True ($manifestText -match '"builtAt"\s*:\s*"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"') 'manifest builtAt'
     Assert-True ($manifest.node.version -eq $runtimePin.version -and $manifest.node.archive -eq $runtimePin.archive -and $manifest.node.sha256 -eq $runtimePin.sha256) 'manifest node pin'
     Assert-True ([string]$manifest.inno.version -match '^\d+\.\d+\.\d+$') 'manifest inno version'
     $actual = @{}
