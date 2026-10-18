@@ -18,6 +18,9 @@ export function GridEditor({ settings, selected, onSelect, onPreview, onCommit, 
   const plane = useRef<HTMLDivElement>(null), drag = useRef<Drag | null>(null), latest = useRef(settings), interaction = useRef<Preview | null>(null);
   latest.current = settings;
   const [preview, setPreview] = useState<Preview | null>(null);
+  // Frames inserted after the first render (a newly added widget) may drop in (#76 editor polish).
+  const [settled, setSettled] = useState(false);
+  useEffect(() => setSettled(true), []);
   const dimensions = GRID_DENSITIES[settings.widgetGrid.density];
   function finish(commit: boolean) {
     const active = drag.current; drag.current = null;
@@ -109,7 +112,7 @@ export function GridEditor({ settings, selected, onSelect, onPreview, onCommit, 
     return { left: `${r.left}%`, top: `${r.top}%`, width: `${r.width}%`, height: `${r.height}%` };
   }
   const visibleGrid = preview?.grid ?? settings.widgetGrid;
-  return <div ref={plane} className={`widget-grid-plane grid-editor ${preview ? 'dragging' : ''}`} aria-label="Editable widget grid"
+  return <div ref={plane} className={`widget-grid-plane grid-editor ${preview ? 'dragging' : ''}`} aria-label="Editable widget grid" data-settled={settled ? 'true' : undefined}
     style={{ '--grid-columns': dimensions.columns, '--grid-rows': dimensions.rows } as CSSProperties}>
     <p className="sr-only" id="grid-keyboard-help">Use arrow keys to move a widget. Focus its resize handle and use arrow keys to resize. Escape cancels a drag.</p>
     {preview?.valid && <div className="grid-drop-placeholder" aria-hidden="true" style={rect(visibleGrid, preview.gesture.id)} />}
