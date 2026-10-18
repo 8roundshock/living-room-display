@@ -32,6 +32,13 @@ Never switch a branch under another worker.
 
 ## Issues and commits
 
+Every PR has one primary ticket, created first if none fits, and an explanation
+of why the change is needed. This project's convention is exactly
+`#<ticket-number> - <Ticket Name>` using the ticket's actual title. Retain the
+complete tracker identifier if a different tracker is adopted. Put related
+tickets in the body alongside the primary link, reason, resulting change, and
+validation; do not combine multiple ticket numbers in the title.
+
 Keep the [GitHub backlog](https://github.com/8roundshock/living-room-display/issues)
 current. Link meaningful feature work to an issue, update scope/checklists as
 decisions change, and connect implementation PRs. Mark actual progress rather
@@ -56,8 +63,9 @@ other workers' changes into a feature commit.
    `git log --oneline origin/main..HEAD` for unintended commits.
 5. Verify personal identity, exact origin, and private visibility. Push only the
    topic branch. Use the project helper's `pr create`, explicit `--base main`,
-   `--head`, and a reviewed multiline `--body-file` in `.local/`. Link issues and
-   describe scope, verification, and remaining decisions accurately.
+   `--head`, the exact ticket/title format above, and a reviewed multiline
+   `--body-file` in `.local/`. Identify the primary ticket and reason, link related
+   tickets, and describe scope, verification, and remaining decisions accurately.
 6. Attach created PRs to the active chat when supported. For every PR, run a
    separate independent review agent with focused project requirements, PR diff,
    acceptance criteria, and test evidence. The reviewer must differ from the
