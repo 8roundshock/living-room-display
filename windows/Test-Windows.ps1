@@ -119,6 +119,9 @@ try {
         [IO.File]::WriteAllText($entry, 'setTimeout(() => {}, 60000);')
         $ownedTestProcess = Start-Process -FilePath $NodeExe -ArgumentList ('"' + $entry + '"') -WindowStyle Hidden -PassThru
         Write-Json (Join-Path $run 'server.json') @{processId=$ownedTestProcess.Id;startedAt=$ownedTestProcess.StartTime.ToUniversalTime().ToString('o')}
+        # A just-started process can briefly report no command line through CIM
+        # (seen on a CI runner), so allow it a moment before judging ownership.
+        for ($attempt = 0; $attempt -lt 20 -and $null -eq (Get-OwnedServer); $attempt++) { Start-Sleep -Milliseconds 150 }
         if ($null -eq (Get-OwnedServer)) {
             $seen = Get-CimInstance Win32_Process -Filter "ProcessId=$($ownedTestProcess.Id)"
             $record = Get-Content -LiteralPath (Join-Path $run 'server.json') -Raw
