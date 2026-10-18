@@ -235,6 +235,15 @@ export function motionOffset(cycle: number): { x: number; y: number } {
   if (cycle === 0) return { x: 0, y: 0 };
   return { x: ((cycle * 0.61803398875) % 1 - 0.5) * 4, y: ((cycle * 0.41421356237) % 1 - 0.5) * 4 };
 }
+/** Reveal choreography order (#76): visible widgets in reading order (row, then column); ties keep catalog order. */
+export function widgetRevealOrder(grid: WidgetGrid, ids: readonly WidgetId[]): WidgetId[] {
+  const visible = new Set(ids);
+  // Array#sort is stable, so equal positions keep the catalog order of WIDGET_IDS.
+  return WIDGET_IDS.filter(id => visible.has(id) && grid.placements[id]).sort((a, b) => {
+    const first = grid.placements[a], second = grid.placements[b];
+    return first.row - second.row || first.column - second.column;
+  });
+}
 
 function hash(value: string): number {
   let result = 2166136261;
