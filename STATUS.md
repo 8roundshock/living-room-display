@@ -31,6 +31,11 @@ the owner's explicit authority to choose practical defaults and build the app.
 - Reminder title edits preserve an unchanged due instant instead of reparsing a
   repeated local daylight-saving hour or discarding imported seconds/offsets.
   Explicit date changes, clearing and creation retain their local-time behavior.
+- Snapshot presentation uses family sizing, black-preserving midtone correction
+  and a 24% new default; existing opacity choices stay unchanged. The isolated
+  optical harness confirms raw bytes remain in RAM unchanged, black stays zero,
+  highlights remain bounded and controls/clear behavior work. Actual native
+  content/readability remains under [#46](https://github.com/8roundshock/living-room-display/issues/46).
 - Standalone display cursor CSS covers loading/error pages and descendants;
   editor/embedded preview cursor behavior is preserved. The production Edge
   route regression passes; actual native cursor proof remains pending [#36](https://github.com/8roundshock/living-room-display/issues/36).
@@ -44,7 +49,7 @@ the owner's explicit authority to choose practical defaults and build the app.
   source regression checks cover startup cancellation, restore selection,
   owned-process recognition and filesystem transaction/cleanup behavior.
 
-Local verification: the full build and all 67 application tests pass using the
+Local verification: the full build and all 71 application tests pass using the
 app-owned Node 24 runtime. Eleven Windows check groups pass on PowerShell 5.1
 and 7 with the optional real child-process test (ten without). Provenance tests
 cover clean/dirty Git, archives, enclosing repositories and composed sources;
@@ -54,8 +59,9 @@ online export/import and validated offline recovery after both saved JSON files
 were corrupted pass, retaining original corrupt evidence. Native static/unit
 checks use fake transport/session/native boundaries and scoped filesystem fixtures;
 they do not establish actual installed capture, kiosk, idle or lock behavior.
-The isolated production Edge studio harness passes fourteen interaction/layout
-groups, including async Save/Cancel/city/location races, reminder CRUD, all four
+The isolated production Edge studio harness passes fifteen interaction/layout
+groups, including async Save/Cancel/city/location races, reminder CRUD and exact
+due-date preservation through title edits, all four
 1080p/4K bounds, reduced motion, 390px/320px reflow and focused-field clearance
 above the measured Save bar at full/compact heights. Source desktop/mobile
 visuals are inspected in RAM; final independent visual review is required and

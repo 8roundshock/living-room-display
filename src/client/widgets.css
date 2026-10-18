@@ -49,7 +49,8 @@
 .grid-ambient .ambient-forecast.widget-size-medium .forecast-temperatures { font-size: 8cqw; }
 .grid-ambient .ambient-forecast.widget-size-medium .forecast-rain { font-size: 6cqw; }
 .grid-ambient .ambient-forecast.widget-size-medium .forecast-attribution { font-size: 4cqw; }
-.grid-ambient .preview-image { display: block; max-height: 77cqh; }
+.grid-ambient .preview-image { display: block; width: 100%; max-height: 77cqh; }
+.snapshot-processing { position: absolute; width: 0; height: 0; pointer-events: none; }
 .grid-ambient .preview-caption { font-size: 5cqw; margin-top: 3cqh; }
 .grid-ambient .ambient-preview .ambient-description { font-size: 6cqw; max-width: none; }
 .grid-ambient .ambient-photo-image { display: block; max-width: 100%; width: 100%; max-height: 80cqh; object-fit: contain; filter: saturate(0.3) brightness(0.45); opacity: 0.45; border: 0; border-radius: 0; }

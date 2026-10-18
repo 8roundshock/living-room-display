@@ -36,11 +36,12 @@ export function sameEffectiveSettings(a: Settings, b: Settings): boolean {
       ...appearance
     } = value.appearance;
     const { widgetOverrides: _legacy, ...rest } = value;
+    const { widthPercent: _legacySnapshotWidth, ...preview } = value.preview;
     return {
       ...rest,
       appearance,
       preview: {
-        ...value.preview,
+        ...preview,
         enabled: !!value.widgets.preview && value.preview.enabled,
       },
       widgetGrid: {

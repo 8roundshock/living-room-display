@@ -175,6 +175,13 @@ by the server. Actual Windows capture is owned and tested by the Windows host.
 
 ## Persistence and recovery
 
+Snapshot presentation uses the grid family rather than legacy
+`preview.widthPercent` (retained for compatible parsing/export). New settings use
+`preview.opacity:0.24`; existing saved values/presets/imports are preserved, with
+no automatic migration from 0.08. Browser-only midtone correction keeps black
+pixels black and normalized white bounded before ordinary opacity/ambient
+brightness. It never rewrites or persists the raw RAM snapshot bytes.
+
 Windows data defaults to `%LOCALAPPDATA%\LivingRoomDisplay\data`; `LRD_DATA_DIR`
 can select an isolated test location. Other systems use their per-user application
 data folder. No creator path/account is required. Writes are serialized, validated,
