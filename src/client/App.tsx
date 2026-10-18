@@ -25,15 +25,15 @@ export function App() {
     [],
   );
   const display = window.location.pathname.startsWith('/display');
-  const standaloneDisplay = display && window.self === window.top;
+  const nativeDisplay = display && window.self === window.top && new URLSearchParams(window.location.search).get('native') === '1';
   useLayoutEffect(() => {
-    if (!standaloneDisplay) return;
+    if (!nativeDisplay) return;
     // Cover loading/error states and descendant controls before paint. The
     // editor's embedded component never changes the document cursor.
-    document.documentElement.classList.add('standalone-display');
+    document.documentElement.classList.add('native-display');
     return () =>
-      document.documentElement.classList.remove('standalone-display');
-  }, [standaloneDisplay]);
+      document.documentElement.classList.remove('native-display');
+  }, [nativeDisplay]);
   const reload = useCallback(async () => {
     const startedAt = revision.current;
     const requestId = ++request.current;
@@ -89,7 +89,7 @@ export function App() {
       </main>
     );
   if (display)
-    return <AmbientDisplay state={state} disconnected={error !== null} />;
+    return <AmbientDisplay state={state} disconnected={error !== null} native={nativeDisplay} />;
   return (
     <Editor
       state={state}

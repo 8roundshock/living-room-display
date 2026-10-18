@@ -136,7 +136,7 @@ internal sealed class AmbientSession : ApplicationContext
         {
             startup = new SessionStartup(new WindowsSessionSignals(),
                 token => Program.EnsureServer(token), token => new NativeApi(token),
-                token => new OwnedBrowser(Program.FindEdge(), Program.BaseUrl + "/display", token));
+                token => new OwnedBrowser(Program.FindEdge(), Program.BaseUrl + "/display?native=1", token));
             Ready = startup.Start();
             if (!Ready) return;
             age.Restart();
