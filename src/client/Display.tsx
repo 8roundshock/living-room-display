@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { AppState, Settings, WidgetId } from '../shared/contracts.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset } from '../shared/widgets.ts';
+import { toneVariables } from '../shared/palette.ts';
 import { Icon } from './icons.tsx';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
 
@@ -99,6 +100,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   useEffect(() => { previous.current = grid; }, [grid]);
   const offset = motionOffset(effectiveCycle);
   const ambientStyle = { '--ambient-accent': settings.appearance.accentColor, '--ambient-text': settings.appearance.textColor, '--ambient-brightness': settings.appearance.brightness, '--font-scale': settings.appearance.fontScale,
+    ...toneVariables(settings.appearance),
     '--fade-duration': reducedMotion || !settings.appearance.motionEnabled ? '0s' : `${settings.appearance.fadeSeconds}s`, '--motion-x': `${offset.x}%`, '--motion-y': `${offset.y}%` } as CSSProperties;
   const Surface = embedded ? 'div' : 'main';
   return <Surface className={embedded ? 'preview-surface' : `display-page ${interacting ? 'interacting' : ''}`} onPointerMove={showControls}>

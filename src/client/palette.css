@@ -1,0 +1,34 @@
+/* Native palette (#75). The ambient root sets --tone-<role> from toneVariables(): every tone
+   equals accentColor in color mode, so this file changes nothing there, and each widget's own
+   palette tone in native mode. Only --ambient-accent is redirected: the same elements are tinted
+   in both modes, primary text keeps --ambient-text and status cues keep their own tokens. */
+
+/* Fallback: without tone variables every role is the single accent. */
+.ambient {
+  --tone-time: var(--ambient-accent);
+  --tone-sky: var(--ambient-accent);
+  --tone-water: var(--ambient-accent);
+  --tone-sun: var(--ambient-accent);
+  --tone-personal: var(--ambient-accent);
+  --tone-stone: var(--ambient-accent);
+}
+
+/* Each widget section carries tone-<role> from its catalog entry. */
+.grid-ambient .tone-time { --ambient-accent: var(--tone-time); }
+.grid-ambient .tone-sky { --ambient-accent: var(--tone-sky); }
+.grid-ambient .tone-water { --ambient-accent: var(--tone-water); }
+.grid-ambient .tone-sun { --ambient-accent: var(--tone-sun); }
+.grid-ambient .tone-personal { --ambient-accent: var(--tone-personal); }
+.grid-ambient .tone-stone { --ambient-accent: var(--tone-stone); }
+
+/* Weather glyph sub-tones (WEATHER_GLYPH_TONE), wherever WeatherGlyph or a data-glyph icon appears. */
+.grid-ambient [data-glyph="sun"] { --ambient-accent: var(--tone-sun); }
+.grid-ambient [data-glyph="moon"] { --ambient-accent: var(--tone-time); }
+.grid-ambient [data-glyph="cloud"] { --ambient-accent: var(--tone-stone); }
+.grid-ambient [data-glyph="rain"] { --ambient-accent: var(--tone-water); }
+.grid-ambient [data-glyph="storm"] { --ambient-accent: var(--tone-water); }
+.grid-ambient [data-glyph="snow"] { --ambient-accent: var(--tone-sky); }
+
+/* Precipitation inside sky widgets: Forecast's daily chance and Weather's rain block (#74). */
+.grid-ambient .forecast-rain { --ambient-accent: var(--tone-water); }
+.grid-ambient .ambient-weather { --weather-rain: var(--tone-water); }
