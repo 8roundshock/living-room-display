@@ -50,7 +50,9 @@ fit caps the floors by its own content height: small rain/forecast use 7.25% (te
 and 8.5% (data), which binds only when that height is under about 19.4% of the
 display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold).
 Overfull content is laid out proportionally wider before the fit scale shrinks it,
-so a larger Text size never renders text smaller. The picker sample has no floor.
+so a larger Text size never renders text-size-scaled labels or values smaller.
+Icons and the fixed unavailable dash do not follow Text size and can still shrink
+with the fit. The picker sample has no floor.
 
 The renderer families have deliberate visual roles:
 

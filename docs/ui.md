@@ -101,8 +101,8 @@ and hover details. Ambient labels, age, attribution, units and secondary values
 have a readability floor of 1.4% of the display height (1.65% for forecast
 chance/temperatures, rain amount/period and reminder dates), multiplied by
 **Text size**; very short compact widgets cap it by their own height. A larger
-Text size never renders ambient text smaller: an overfull widget zooms out as a
-whole. See the [widget contract](widgets.md#families-and-editing).
+Text size never renders scaled ambient labels or values smaller: an overfull
+widget zooms out as a whole (icons and the unavailable dash may still shrink). See the [widget contract](widgets.md#families-and-editing).
 
 ## Reminders and last screen
 
