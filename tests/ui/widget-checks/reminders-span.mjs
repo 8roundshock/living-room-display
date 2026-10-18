@@ -1,0 +1,172 @@
+import assert from 'node:assert/strict';
+import { GRID_DENSITIES, WIDGET_IDS, familyForSpan, freeSpanLimits, getWidgetRect, normalizePlacement, resizeWidgetSpan } from '../../../src/shared/widgets.ts';
+
+// Free-size Reminders (#73). Runs through the `sweep` hook, once per viewport after the family sweep:
+// the measured list holds in every custom span shape (complete rows inside the box, overflow rows
+// taking no layout, an exact "+N more"), and a full-height column alternates top and bottom anchoring
+// while relocating sideways. Synthetic reminders only.
+export const id = 'reminders-span';
+
+const TITLES = ['Read a chapter', 'Water the plants', 'Plan the weekend', 'Call a friend', 'A later reminder'];
+
+function reminders(count, now) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+    text: `${TITLES[index % TITLES.length]}${index >= TITLES.length ? ` ${index + 1}` : ''}`,
+    completed: false,
+    // Dated and undated rows mix both row heights.
+    dueAt: index % 3 === 1 ? new Date(now + (index + 2) * 3_600_000).toISOString() : null,
+    createdAt: new Date(now - index * 60_000).toISOString(),
+    updatedAt: new Date(now - index * 60_000).toISOString(),
+  }));
+}
+
+/** 2×2, 4×2, 4×4, Column, 4 × full height, max width × 2 and 3×5 in one density. */
+function shapes(density) {
+  const { rows } = GRID_DENSITIES[density], max = freeSpanLimits('reminders', density).max;
+  return { '2x2': { columns: 2, rows: 2 }, '4x2': { columns: 4, rows: 2 }, '4x4': { columns: 4, rows: 4 }, column: { columns: 2, rows },
+    '4xfull': { columns: 4, rows }, 'max-widthx2': { columns: max.columns, rows: 2 }, '3x5': { columns: 3, rows: 5 } };
+}
+
+async function reopen(page) {
+  await page.reload();
+  await page.locator('.display-page').waitFor();
+  await page.clock.runFor(100);
+}
+
+/** Measured-list facts plus where the visible group sits inside the body. */
+async function inspect(widget) {
+  return widget.evaluate(element => {
+    const body = element.querySelector('.reminders-body');
+    const box = body.getBoundingClientRect();
+    const rows = [...element.querySelectorAll('.ambient-reminder-list > li')];
+    const visible = rows.filter(row => !row.classList.contains('reminder-overflow'));
+    const inside = node => { const rect = node.getBoundingClientRect(); return rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1 && rect.left >= box.left - 1 && rect.right <= box.right + 1; };
+    const shown = [...body.children].filter(child => getComputedStyle(child).display !== 'none' && child.getBoundingClientRect().height > 0);
+    const label = body.querySelector('.ambient-label');
+    const more = element.querySelector('.reminder-more');
+    return {
+      span: element.getAttribute('data-widget-span'),
+      fullHeight: element.hasAttribute('data-full-height'),
+      total: rows.length,
+      visible: visible.length,
+      outside: visible.filter(row => !inside(row)).length,
+      overflowRendered: rows.filter(row => row.classList.contains('reminder-overflow') && (getComputedStyle(row).display !== 'none' || row.getBoundingClientRect().height > 0)).length,
+      more: more ? more.textContent : null,
+      moreInside: more ? inside(more) : true,
+      labelInside: inside(label),
+      horizontal: visible.filter(row => { const title = row.querySelector('.ambient-reminder-title'); return title.scrollWidth > title.clientWidth + 1; }).length,
+      top: shown[0].getBoundingClientRect().top - box.top,
+      bottom: box.bottom - Math.max(...shown.map(child => child.getBoundingClientRect().bottom)),
+      justify: getComputedStyle(body).justifyContent,
+      scale: new DOMMatrix(getComputedStyle(element.querySelector('.widget-content')).transform).a,
+      composition: element.closest('.ambient').getAttribute('data-composition'),
+    };
+  });
+}
+
+function assertMeasured(result, expectedTotal, label) {
+  assert.ok(result.visible >= 1, `${label}: at least one row`);
+  assert.equal(result.outside, 0, `${label}: every visible row is complete inside the box ${JSON.stringify(result)}`);
+  assert.equal(result.overflowRendered, 0, `${label}: overflow rows take no layout`);
+  const hidden = expectedTotal - result.visible;
+  assert.equal(result.more, hidden > 0 ? `+${hidden} more` : null, `${label}: honest remaining count`);
+  assert.ok(result.moreInside && result.labelInside, `${label}: the label and footer stay inside the box`);
+  assert.equal(result.horizontal, 0, `${label}: titles never overflow sideways`);
+}
+
+function assertAnchor(result, bottom, label) {
+  assert.ok(result.top >= -0.5 && result.bottom >= -0.5, `${label}: the group is never clipped ${JSON.stringify(result)}`);
+  if (bottom) assert.ok(result.bottom <= 1.5, `${label}: bottom-anchored ${JSON.stringify(result)}`);
+  else assert.ok(result.top <= 1.5, `${label}: top-anchored ${JSON.stringify(result)}`);
+}
+
+/** Only Reminders, at the top-left origin, in a custom or family shape. */
+function single(state, density, span) {
+  state.settings.appearance.motionEnabled = false;
+  state.settings.widgetGrid.density = density;
+  state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'reminders']));
+  state.settings.widgetGrid.placements.reminders = normalizePlacement('reminders', { column: 0, row: 0, size: familyForSpan('reminders', span), span });
+}
+
+export async function sweep({ page, viewport, state, base, now }) {
+  const widget = page.locator('[data-widget-id="reminders"]');
+  const fourK = viewport.width > 2000, authored = structuredClone(state.settings.widgetGrid);
+  // Every shape × density × 1, 5 and 30 pending at this viewport.
+  for (const density of Object.keys(GRID_DENSITIES)) {
+    const counts = {};
+    for (const [name, span] of Object.entries(shapes(density))) for (const count of [1, 5, 30]) {
+      single(state, density, span); state.reminders = reminders(count, now);
+      await reopen(page);
+      const label = `${name} ${span.columns}x${span.rows}/${density}/${viewport.width}p × ${count}`;
+      const result = await inspect(widget);
+      assert.equal(result.span, `${span.columns}x${span.rows}`, label);
+      assert.equal(result.fullHeight, span.rows === GRID_DENSITIES[density].rows, `${label}: data-full-height`);
+      assertMeasured(result, count, label);
+      assert.equal(result.scale, 1, `${label}: normal text fits without zooming out`);
+      assertAnchor(result, false, `${label} at rest`);
+      counts[`${name}/${count}`] = result.visible;
+    }
+    // The #73 request: a tall box lists more reminders, never one item plus "+29 more".
+    assert.ok(counts['column/30'] > counts['2x2/30'] && counts['column/30'] >= 4, `${density}/${viewport.width}p: a Column shows more rows ${JSON.stringify(counts)}`);
+    assert.ok(counts['4xfull/30'] > counts['4x2/30'], `${density}/${viewport.width}p: 4 × full height shows more rows than 4×2 ${JSON.stringify(counts)}`);
+  }
+
+  // Timed compositions on the display: a lone full-height column moves sideways and alternates its anchor.
+  for (const count of [1, 30]) {
+    single(state, 'balanced', { columns: 2, rows: 8 }); state.reminders = reminders(count, now);
+    state.settings.appearance.motionIntervalSeconds = 30;
+    await reopen(page);
+    const lefts = new Set(), seen = [];
+    for (let composition = 0; composition < 4; composition++) {
+      if (composition) { await page.clock.runFor(30_000); await page.clock.runFor(1_200); }
+      const label = `display column × ${count} composition ${composition}/${viewport.width}p`;
+      const result = await inspect(widget);
+      assert.equal(result.composition, String(composition), label);
+      assertMeasured(result, count, label);
+      assertAnchor(result, composition % 2 === 1, label);
+      assert.equal(result.justify, composition % 2 ? 'safe flex-end' : 'flex-start', label);
+      if (count === 1 && composition % 2) assert.ok(result.top > 100, `${label}: one reminder visibly sits at the bottom (${result.top}px)`);
+      const rect = await widget.evaluate(element => { const r = element.getBoundingClientRect(), plane = element.closest('.widget-grid-plane').getBoundingClientRect(); return { left: r.left - plane.left, top: r.top - plane.top, height: r.height, plane: plane.height }; });
+      assert.ok(Math.abs(rect.top) <= 1 && Math.abs(rect.height - rect.plane) <= 1, `${label}: stays full height`);
+      lefts.add(Math.round(rect.left)); seen.push(result.visible);
+    }
+    assert.ok(lefts.size >= 2, `display column × ${count}: moves horizontally (${[...lefts].join(', ')})`);
+    assert.equal(new Set(seen).size, 1, `display column × ${count}: anchoring never changes the fitted count (${seen.join(', ')})`);
+  }
+
+  // compositionOverride 0–3 through the editor's arrangement preview, beside the default widgets.
+  if (!fourK) {
+    state.settings.appearance.motionEnabled = false; state.reminders = reminders(30, now);
+    state.settings.widgetGrid = structuredClone(authored);
+    state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, ['clock', 'weather', 'rain', 'forecast', 'reminders'].includes(key)]));
+    const enabled = { ...state.settings.widgets, preview: state.settings.widgets.preview && state.settings.preview.enabled };
+    const board = resizeWidgetSpan(state.settings.widgetGrid, 'reminders', { columns: 2, rows: 8 }, enabled);
+    assert.ok(board, 'the default board makes room for a 2 × 8 column');
+    state.settings.widgetGrid = board;
+    await page.goto(`${base}/editor`); await page.locator('.preview-surface').waitFor(); await page.clock.runFor(300);
+    await page.getByRole('button', { name: 'Preview movement', exact: true }).click();
+    const preview = page.locator('.preview-surface');
+    const lefts = new Set();
+    for (let composition = 0; composition < 4; composition++) {
+      await page.getByRole('button', { name: `Arrangement ${composition + 1}`, exact: true }).click();
+      await preview.locator(`.ambient.composition-${composition}`).waitFor(); await page.clock.runFor(100);
+      const label = `editor arrangement ${composition + 1}`;
+      const rects = await preview.locator('[data-widget-id]').evaluateAll(elements => elements.map(element => { const r = element.getBoundingClientRect(); return { id: element.getAttribute('data-widget-id'), left: r.left, top: r.top, right: r.right, bottom: r.bottom }; }));
+      assert.equal(rects.length, 5, `${label}: every enabled widget renders`);
+      for (const a of rects) for (const b of rects) if (a.id < b.id) assert.ok(a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5, `${label}: ${a.id} and ${b.id} are disjoint`);
+      const result = await inspect(preview.locator('[data-widget-id="reminders"]'));
+      assert.equal(result.composition, String(composition), label);
+      assert.equal(result.fullHeight, true, label);
+      assertMeasured(result, 30, label);
+      assert.ok(result.visible >= 4, `${label}: the editor canvas lists several reminders in the column (${result.visible})`);
+      assertAnchor(result, composition % 2 === 1, label);
+      lefts.add(Math.round(rects.find(rect => rect.id === 'reminders').left));
+    }
+    assert.ok(lefts.size >= 2, `editor arrangements move the column horizontally (${[...lefts].join(', ')})`);
+    // The shared rect helper agrees with the authored column.
+    assert.equal(getWidgetRect(board, 'reminders').height, 100);
+    await page.goto(`${base}/display`); await page.locator('.display-page').waitFor();
+  }
+  return 'Free-size Reminders: 2×2, 4×2, 4×4, Column, 4 × full, max width × 2 and 3×5 × 3 densities × 1080p/4K × 1, 5 and 30 pending keep the measured list; a full-height column relocates sideways, alternates top/bottom anchoring without clipping or changing "+N more", and editor arrangements 1–4 stay disjoint';
+}

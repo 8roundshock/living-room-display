@@ -88,6 +88,12 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
         }
         await WIDGET_CHECKS[id].family?.({ page, widget, size, density, viewport, state: current });
       }
+      // Checks beyond the families (tests/ui/widget-checks sweep hooks) run once per viewport.
+      for (const check of Object.values(WIDGET_CHECKS)) if (check.sweep) {
+        current = structuredClone(source);
+        const summary = await check.sweep({ page, viewport, state: current, base, now });
+        if (summary && !checks.includes(summary)) checks.push(summary);
+      }
     }
     assert.ok(clockFonts.large > clockFonts.medium * 1.4, `Large clock should be visibly larger: ${JSON.stringify(clockFonts)}`);
     checks.push(`All ${familyCount} widget families × 3 densities × 1080p/4K: bounds, useful content, no frames/fills, tone classes, photo crops, whole-screen snapshot`);

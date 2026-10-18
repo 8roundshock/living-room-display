@@ -149,6 +149,13 @@
 .grid-ambient .reminders-body[data-measuring] .reminder-more { display: none; }
 .grid-ambient .reminders-body[data-measuring] .reminder-more-probe { display: block; visibility: hidden; }
 
+/* Free size (#73): a full-height Reminders column can only relocate sideways, so odd compositions
+   anchor its list to the bottom of the column and even ones (the authored layout included) to the top.
+   Only fitted rows take layout, so the group never clips; `safe` keeps an overfull body top-aligned.
+   Measurement always runs top-anchored, so the fitted count and "+N more" are unchanged. */
+.grid-ambient:is(.composition-1, .composition-3) .ambient-reminders[data-full-height] .reminders-body { justify-content: safe flex-end; }
+.grid-ambient:is(.composition-1, .composition-3) .ambient-reminders[data-full-height] .reminders-body[data-measuring] { justify-content: flex-start; }
+
 /* Screens remain complete and faint; deliberate photos have purposeful crops. */
 .snapshot-processing { position: absolute; width: 0; height: 0; pointer-events: none; }
 .grid-ambient .snapshot-body { align-items: center; height: 100cqh; min-height: 0; }
