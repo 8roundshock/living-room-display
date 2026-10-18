@@ -48,6 +48,11 @@ current. Link meaningful feature work to an issue, update scope/checklists as
 decisions change, and connect implementation PRs. Mark actual progress rather
 than closing tickets merely because code was drafted. Close only when the issue's
 acceptance criteria are verified; leave remaining work explicit.
+Every agent, including delegated workers and reviewers, files a searched,
+deduplicated issue for any follow-up work, idea, bug, risk or deferred item it
+identifies, and links it from the PR or primary ticket; chat, handoffs and code
+comments are not the backlog. Outside contributors follow the reporting
+authorization rules below.
 Use plain issue references for unfinished acceptance; GitHub can parse closing
 keywords even inside negated or future-tense phrases.
 
