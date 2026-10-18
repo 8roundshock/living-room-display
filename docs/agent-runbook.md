@@ -71,6 +71,37 @@ repeated permission questions once the user has granted the relevant scope.
    Record unresolved limits honestly. Installation success does not mean every
    TV, media app, or clean Windows system was tested.
 
+### Setup or source install
+
+Prefer Setup when the user has a reviewed `LivingRoomDisplaySetup-<version>.exe`
+release artifact. Verify it against its `.sha256` file and `release.json`. Use a
+source install only for development or when no artifact exists. See
+[installation](install.md#install-with-setup-recommended) for the switches,
+messages and rollback.
+
+```powershell
+# Install or update, without opening the editor. Exit 0 = installed, 7 = refused.
+$p = Start-Process .\LivingRoomDisplaySetup-<version>.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG="<private log path>"' -PassThru
+$p.WaitForExit(); $p.ExitCode
+# Installed status (Channel, Version, RuntimeVersion, PackageSha256, health):
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\LivingRoomDisplay\app\windows\LivingRoomDisplay.ps1" Status
+# Uninstall and keep data (add /REMOVEDATA=1 only when the user chose to delete it):
+& "$env:LOCALAPPDATA\LivingRoomDisplay\uninstall\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+```
+
+Wait for the Setup process itself rather than its children: Setup leaves the
+local server running. After uninstalling, wait until the **Living Room Display**
+entry has gone from Apps & Features; the first uninstaller process can exit
+early. Read the Setup log for the helper's own log and its `LRD-E<nn>` reason.
+Keep logs private: they contain local paths.
+
+**Never run Setup, its uninstaller or the CI smoke test on a PC that already has
+a Living Room Display install without that PC owner's explicit go-ahead.** Setup
+stops and replaces the running install. Check the editor for unsaved changes
+first. On the original owner's PC, adoption is the coordinated rollout in
+[#130](https://github.com/8roundshock/living-room-display/issues/130). Never use
+`/ALLOWDOWNGRADE=1` to "recover": follow the manual rollback steps.
+
 ## Diagnose before reporting
 
 Identify whether the failure is repository access, prerequisites, installation,

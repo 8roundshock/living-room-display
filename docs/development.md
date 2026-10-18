@@ -170,3 +170,51 @@ screenshots, private reminders, weather location details, or local credentials.
 Capture screenshots only for authorized verification and keep them in memory;
 persistent copies require an explicit user request. Honor physical stop and
 applicable screenshot safeguards.
+
+## Building the Windows installer
+
+The Setup build is reproducible from a clean commit
+([#77](https://github.com/8roundshock/living-room-display/issues/77)):
+
+```powershell
+# Node 24 first on PATH. Builds and checks payload.zip + release.json only.
+.\windows\installer\Build-Installer.ps1 -PayloadOnly
+.\windows\installer\tests\Test-InstallerPayload.ps1 -ArchivePath .local\installer\payload.zip -ReleaseJson .local\installer\release.json
+```
+
+- `Build-Installer.ps1` exports `HEAD` with `git archive` into
+  `.local\installer-build-<id>`. It then runs `npm ci` and `npm run build`, and
+  assembles `app\` (the built `dist`, production `node_modules`, `package.json`,
+  the lockfile, the control script, the helper with the generated icon and version
+  info, and `THIRD-PARTY-NOTICES.txt`). It adds the official Node ZIP pinned in
+  `windows/installer/runtime.json` (downloaded once into `.local\installer-cache`,
+  SHA-256-checked, `node.exe` OpenJS signature and `--version` checked). Then it
+  writes the exact `release.json` manifest and a stored `payload.zip`, and
+  without `-PayloadOnly` compiles `windows/installer/LivingRoomDisplay.iss`. The
+  work folder is removed afterwards unless you pass `-KeepWork`.
+- It refuses a dirty tree. `-AllowDirty` builds the tracked changes for a local
+  experiment and records `sourceState: dirty`; CI always refuses it. Use
+  PowerShell 7 locally: the Node runtime has long paths. Expect about 120 MB
+  of payload and a Setup file of about 33-38 MB.
+- Pins: `runtime.json` must name the control script's default `NodeVersion`
+  (the policy test enforces it); `inno.json` sets the minimum (6.7.0) and tested
+  (6.7.1) Inno Setup with the tested installer's SHA-256. Change a pin in its own
+  reviewed PR.
+- The release version is `package.json`'s `version` (x.y.z). The coordinator
+  bumps it with `npm version <x.y.z> --no-git-tag-version` in a release PR; the
+  health endpoint, helper file version, Apps & Features entry and setup name follow.
+- Run the ISCC compile and the install/uninstall smoke test only in CI
+  (`.github/workflows/installer.yml`). It runs on installer-related pull
+  requests, pushes to `main` and manual dispatch, and uploads a 14-day artifact.
+  `windows/installer/tests/Test-InstallerSmoke.ps1` refuses to run outside
+  GitHub Actions or on any PC with an install, a 4318 listener or the Setup
+  registration.
+- **Never run `LivingRoomDisplaySetup-*.exe`, its uninstaller or the smoke test
+  on a PC with a live install** (the owner's included): Setup stops and replaces
+  that install. Owner-PC adoption is a coordinated step with the owner's go-ahead
+  and a saved editor ([#130](https://github.com/8roundshock/living-room-display/issues/130)).
+- Local checks: `windows/Test-Windows.ps1` (under Windows PowerShell 5.1 and
+  PowerShell 7) includes `windows/tests/Test-PackageInstall.ps1`, which runs the
+  InstallPackage transaction with synthetic packages and mocked process, port
+  and health boundaries, and `windows/installer/tests/Test-InstallerPolicy.ps1`
+  (static `.iss`, pin and workflow rules).

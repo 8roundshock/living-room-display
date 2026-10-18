@@ -24,6 +24,151 @@ SHA256 against that release's official `SHASUMS256.txt`, and keeps Node/npm insi
 the app directory. It does not replace system Node or alter PATH outside its own
 process. npm retrieves the pinned dependencies in `package-lock.json`.
 
+## Install with Setup (recommended)
+
+`LivingRoomDisplaySetup-<version>.exe` is a per-user setup for people who don't
+use Git or PowerShell ([#77](https://github.com/8roundshock/living-room-display/issues/77)).
+CI builds it from reviewed commits as the `living-room-display-setup` artifact,
+with a `.sha256` file and the `release.json` manifest. It is still a private,
+unsigned prerelease: how it is distributed ([#114](https://github.com/8roundshock/living-room-display/issues/114))
+and code signing ([#115](https://github.com/8roundshock/living-room-display/issues/115))
+are owner decisions, and clean-PC acceptance is tracked in
+[#116](https://github.com/8roundshock/living-room-display/issues/116).
+
+**Supported systems.** Windows 10 22H2 and Windows 11, x64. Setup refuses
+anything older than Windows 10 1809 and anything that isn't x64-compatible.
+Windows 11 on Arm runs it through x64 emulation; that path is checked in CI
+but doesn't gate releases yet ([#122](https://github.com/8roundshock/living-room-display/issues/122)).
+The full-screen display needs Microsoft Edge ([#119](https://github.com/8roundshock/living-room-display/issues/119))
+and the .NET Framework 4.x, which is built into Windows 10 and 11. Setup users
+don't need the C# compiler, Node.js, Git or a terminal.
+
+**Download warnings.** Until the file is signed, Edge may say it "isn't
+commonly downloaded" (choose **Keep**). Running it shows **Windows protected your
+PC**: choose **More info**, then **Run anyway**. On Windows 11 with Smart App
+Control turned on, unsigned setups are blocked with no override; that needs
+signing (#115). To check the download, compare
+`(Get-FileHash .\LivingRoomDisplaySetup-<version>.exe).Hash` with the `.sha256`
+file.
+
+**What Setup does.** One page, **Ready to install Living Room Display**, with
+one unchecked option: **Create a desktop shortcut**. Click **Install**. Setup
+installs for your account only (no administrator rights) into
+`%LOCALAPPDATA%\LivingRoomDisplay`, using the same layout as the
+[table below](#data-updates-recovery-and-removal) plus `backups\` (data snapshots),
+`uninstall\` (the uninstaller and its copy of the control script) and
+`app\release.json`. Setup does the following:
+
+- checks the download, including every file against `release.json` and the
+  bundled Node runtime against its pinned SHA-256;
+- installs the app;
+- starts the local server and confirms it answers before it reports success;
+- finishes with **Open Living Room Display** checked, which opens
+  <http://127.0.0.1:4318/editor>.
+
+It never adds startup entries, services, scheduled tasks or Run keys, and it
+never changes your screen saver. There's no firewall prompt because the server
+listens only on 127.0.0.1. No account and no cloud are involved.
+
+**Start menu.** **Living Room Display** opens the editor (it starts the server if
+needed). **Living Room Display - Show display** shows the ambient display now;
+move the mouse or press a key to close it. There's no Uninstall shortcut:
+right-click the Start entry, or use **Settings > Apps**.
+
+**Updating.** Download and run the newer Setup. The Ready page says
+**Update Living Room Display to version X**. Save any unsaved editor changes
+first: the display closes during the update. Setup then:
+
+1. stops this install's display and server;
+2. copies the whole `data` folder to `backups\data-before-<old version>-<UTC time>`
+   and verifies every file's size and SHA-256 (the newest three copies are kept);
+3. keeps the previous app as `app.previous`;
+4. installs the new app, restarts it and checks its health.
+
+Running the same version again repairs the install. Setup also adopts an
+existing source install at the same folder through its `installation.json`
+marker. Running an older Setup is refused (see E12), so an older version never
+"recovers" over newer data; agents may override this with `/ALLOWDOWNGRADE=1`
+only after following the rollback steps below.
+The runtime is replaced only when the packaged Node 24 is newer and any
+`runtime.previous` was made by Setup; a runtime that isn't Node 24 stops
+the update untouched (E18).
+A later source `Update` on a Setup install works, but Apps & Features keeps
+showing the Setup version and `Status` then reports `Channel` `source`.
+
+**Uninstalling.** From **Settings > Apps** or the Start menu, confirm **Remove
+Living Room Display from this PC?** Then choose **Keep my data** (the default)
+or **Delete my data**. Keeping it lets you pick up where you left off if you
+reinstall. Either way, uninstall does the following:
+
+- restores your previous screen saver, but only if this app is the selected one
+  and a saved backup exists;
+- stops the display and server;
+- removes `app`, `app.previous`, `app.failed`, `runtime` (and a Setup-made
+  `runtime.previous`), `run`, `edge-profile`, leftover staging folders, the
+  shortcuts and the Apps & Features entry.
+
+**Keep my data** leaves `data`, `backups` and `installation.json`. **Delete my
+data** removes `data` and `backups` as well, then removes the folder once only
+the marker is left. If something can't be stopped or removed, uninstall stops
+with "Living Room Display couldn't stop or remove some files: ...". Your data is
+not deleted in that case: run Setup again to repair, then uninstall. The CLI
+`Uninstall` command on a Setup install hands over to the same uninstaller.
+
+**Silent use (agents and administrators).**
+
+| Command | Result |
+| --- | --- |
+| `LivingRoomDisplaySetup-<version>.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="<file>"` | Install or update. Exit 0 = success, 7 = refused by the checks below (nothing registered). The editor is not opened. |
+| add `/DIR="<dedicated folder>"` | Install elsewhere: a new empty folder, or an existing Living Room Display folder. Keep the path under about 130 characters. |
+| add `/ALLOWDOWNGRADE=1` | Allow installing an older version over a newer Setup install. |
+| `"%LOCALAPPDATA%\LivingRoomDisplay\uninstall\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART` | Uninstall and keep data. The first process can exit early; wait until the Apps & Features entry is gone. |
+| add `/REMOVEDATA=1` | Uninstall and delete data and backups. |
+
+Installed `Status` also reports `Channel` (`package` or `source`), `Version`,
+`RuntimeVersion` and `PackageSha256`. The Setup log (`/LOG`, or `Setup Log
+<date> #<n>.txt` in `%TEMP%`) includes the helper's own log.
+
+**When Setup stops.** Every refusal happens before anything is replaced; your
+previous version and data stay as they were.
+
+| Code | Message |
+| --- | --- |
+| E10 | Setup can't use the folder `<path>` because it contains other files. Nothing was changed. |
+| E11 | Another program is already using the connection Living Room Display needs (local port 4318). Close any other copy of Living Room Display, then run Setup again. Nothing was changed. |
+| E12 | A newer version of Living Room Display (`<v>`) is already installed. Nothing was changed. |
+| E13 | The setup files look damaged or incomplete. Download Setup again. Nothing was changed. |
+| E14 | Living Room Display is busy with another update or uninstall. Wait a moment and try again. |
+| E15 | The new version didn't start, so Setup put the previous version back. Your data was not changed. Details are in the setup log. |
+| E16 | As E15, plus: Neither version could start; your data was not changed. |
+| E17 | There isn't enough free disk space (about 500 MB needed). |
+| E18 | An unexpected runtime is in the app folder; Setup left it untouched. |
+| E19 | Setup couldn't make a safe backup of your data, so nothing was changed. |
+| Script blocked | Windows settings on this PC don't allow Setup's helper script to run (common on work or school PCs). Ask the PC's administrator, or install on a personal PC. ([#117](https://github.com/8roundshock/living-room-display/issues/117)) |
+| Run as administrator | Please run Setup normally, without 'Run as administrator'. |
+| Other | Setup couldn't finish. Your previous version and data were not changed. (Plus the log path.) |
+
+Missing Edge or .NET Framework 4 shows a warning but doesn't stop Setup.
+
+**Rollback.** If the new version fails its health check, Setup restores it
+automatically: `app.previous` goes back to `app` (and `runtime.previous` if
+this run swapped the runtime). The candidate is kept as `app.failed` and the
+previous version is restarted; data is never touched. To roll back by hand:
+
+1. Run the installed control script's `Stop`.
+2. Rename `app` to `app.failed` and `app.previous` to `app`.
+3. Swap `runtime` and `runtime.previous` only if `installation.json` says
+   `"runtimePreviousOwner": "package"`.
+4. Restore the matching `backups\data-before-...` copy only if the newer
+   version wrote data the older one can't read (see the
+   [compatibility table](#additive-data-and-rollback-compatibility-84)). Keep
+   the newer `data` folder separately.
+5. Run `Start`.
+
+`app.previous` carries its own `release.json`. Never run Setup on a PC that has
+a live install you care about without its owner's go-ahead and a saved editor
+([#130](https://github.com/8roundshock/living-room-display/issues/130)).
+
 ## Install from a source clone
 
 From the clone directory, in PowerShell:
