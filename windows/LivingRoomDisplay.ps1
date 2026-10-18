@@ -2,7 +2,7 @@
 param(
     [Parameter(Position=0)][ValidateSet('Install','Update','Start','Stop','Status','Editor','Display','EnableIdle','DisableIdle','Uninstall')][string]$Command = 'Status',
     [string]$InstallRoot,
-    [string]$SourceRoot = (Split-Path $PSScriptRoot -Parent),
+    [string]$SourceRoot,
     [ValidateRange(1,120)][int]$IdleMinutes = 20,
     [switch]$NoBrowser,
     [switch]$RemoveData,
@@ -12,6 +12,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 5) { throw 'Windows PowerShell 5.1 or PowerShell 7 is required.' }
+if (-not $SourceRoot) { $SourceRoot = Split-Path $PSScriptRoot -Parent }
 if (-not $InstallRoot) {
     $parent = Split-Path $PSScriptRoot -Parent
     $InstallRoot = if ((Split-Path $parent -Leaf) -eq 'app') { Split-Path $parent -Parent } else { Join-Path $env:LOCALAPPDATA 'LivingRoomDisplay' }

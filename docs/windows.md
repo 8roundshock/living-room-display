@@ -78,7 +78,7 @@ v4.0.30319 compiler, PowerShell 7 and Windows PowerShell 5.1. Helper compilation
 parses under both PowerShell engines. Run `windows/Test-Windows.ps1` for native
 compile/argument checks, cleanup containment including nested junction refusal,
 malformed/unrelated PID refusal, and optional real process/start-time ownership
-checks (`-NodeExe '<node.exe>'`). Nine check groups with Node (eight without) pass
+checks (`-NodeExe '<node.exe>'`). Ten check groups with Node (nine without) pass
 on PowerShell7 and5.1, including successful final cleanup; use process-scoped
 `-ExecutionPolicy Bypass` where script policy requires it. These include seven native lifecycle scenarios using the production
 startup coordinator with delayed fake transport/synthesized session ends, plus
@@ -89,6 +89,8 @@ filesystem transactions with external build/runtime/process/native boundaries
 mocked. Cleanup deletes only the verified test junction without recursion and
 checks that its target survives. These tests use scoped synthetic fixtures and
 a sleeping child; no real app installation, capture, kiosk or settings change.
+An actual child PowerShell `-File` invocation verifies default parameter binding
+reaches the missing-install guard; dot-sourced tests alone do not cover that path.
 An isolated source candidate from UI `7a7d15e` (including reviewed backend main
 `7a44f03`) passed the production build and all 33 tests (including five
 preview-clear races).

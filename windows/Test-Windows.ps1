@@ -40,6 +40,22 @@ try {
         } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
     }
     $passed++
+    # Real -File binding differs from dot-sourcing on Windows PowerShell5.1.
+    # Missing install should reach the ownership guard, not fail a parameter default.
+    $controlInvocation = New-Object Diagnostics.ProcessStartInfo
+    $controlInvocation.FileName = (Get-Process -Id $PID).Path
+    $controlInvocation.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'LivingRoomDisplay.ps1') + '" Status -InstallRoot "' + $fixture + '"'
+    $controlInvocation.UseShellExecute = $false
+    $controlInvocation.CreateNoWindow = $true
+    $controlInvocation.RedirectStandardError = $true
+    $controlInvocation.RedirectStandardOutput = $true
+    $controlProcess = [Diagnostics.Process]::Start($controlInvocation)
+    try {
+        Assert-True ($controlProcess.WaitForExit(10000)) 'Control -File invocation timed out.'
+        $controlError = $controlProcess.StandardError.ReadToEnd()
+        Assert-True ($controlProcess.ExitCode -ne 0 -and $controlError.Contains('Not installed at')) 'Control -File did not reach the intended missing-install guard.'
+    } finally { if (-not $controlProcess.HasExited) { $controlProcess.Kill() }; $controlProcess.Dispose() }
+    $passed++
     $framework = if ([Environment]::Is64BitOperatingSystem) { 'Framework64' } else { 'Framework' }
     $compiler = Join-Path $env:WINDIR "Microsoft.NET\$framework\v4.0.30319\csc.exe"
     $lifecycleTest = Join-Path $compiled 'HostLifecycleTests.exe'
