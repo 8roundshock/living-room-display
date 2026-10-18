@@ -81,7 +81,38 @@ Reproduce the smallest failure in an isolated checkout/test data directory on a
 separate unprivileged loopback port. Use synthetic reminders and broad example
 weather fixtures, never a copy of the user's store or browser profile. The
 backend supports `LRD_DATA_DIR` and `LRD_PORT` as documented in [API](api.md).
-Use a new shell or restore environment overrides afterward. Do not reset,
+For a web/UI reproduction, open a **new dedicated PowerShell process** in the
+isolated checkout with Node 24/npm available, choose an unused port (54319 in
+this example), and serve the production build from that backend:
+
+```powershell
+node -e "if (process.versions.node.split('.')[0] !== '24') process.exit(1)"
+if ($LASTEXITCODE -ne 0) { throw 'Use Node 24 in this dedicated shell before continuing' }
+npm ci
+if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
+npm run build
+if ($LASTEXITCODE -ne 0) { throw 'Production build failed' }
+$env:LRD_DATA_DIR = Join-Path (Get-Location) ('.local/diagnosis-' + [guid]::NewGuid().ToString('N'))
+$env:LRD_PORT = '54319'
+npm start
+```
+
+Wait for this foreground process to announce `http://127.0.0.1:54319`. If it
+reports a bind/start failure, stop and choose another unused port; never use a
+pre-existing listener as the diagnosis server. Open exactly
+`http://127.0.0.1:54319/editor` or `http://127.0.0.1:54319/display` in the browser,
+check that the address still uses the chosen port before edits, and use only
+synthetic data. Stop this foreground server with Ctrl+C and close its dedicated
+shell afterward; process-scoped environment overrides then disappear. Preserve
+the user's normal server, settings, and processes.
+
+**Do not use `npm run dev` for this isolated setup.** Vite's development proxy
+targets `127.0.0.1:4318`; setting `LRD_PORT` does not retarget it and could send
+edits to the user's normal app. `LRD_PORT` also does not retarget the native
+Windows helper, which uses fixed port 4318. Keep the native helper out of this
+custom-port web reproduction. Native tests must follow the Windows guide's
+fixed-port and owned-process isolation procedure; do not point a test at the
+user's active installation or change it merely to reproduce a bug. Do not reset,
 overwrite, export publicly, or delete real data to obtain a reproduction.
 
 Run the relevant existing checks from [development](development.md). A useful
