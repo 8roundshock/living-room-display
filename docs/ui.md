@@ -17,7 +17,10 @@ preview beside a height-bounded inspector with fixed tabs and contained scrollin
 above 700 CSS pixels. Canvas actions remain visible at compact desktop heights;
 the 16:9 preview fits the height. Narrow windows stack a normally scrolling
 inspector below a nonsticky preview, leaving room for the keyboard.
-Focus scrolling reserves the measured Save bar height so fields and labels remain
+Above 1050 CSS pixels the Save bar centers under the canvas, so the inspector uses
+the full height; at 1280×720 every tab fits without scrolling. Whenever settings
+remain below, the inspector's bottom edge fades (scroll-linked, kept with reduced
+motion). Focus scrolling reserves the measured Save bar height so fields and labels remain
 visible above it, including narrow screens and compact keyboard-height windows.
 
 - **Save changes** atomically persists settings, appearance, location, widget
