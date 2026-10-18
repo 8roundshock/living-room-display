@@ -95,11 +95,12 @@ settings, reminders and private photo state, and left a healthy owned server;
 see [rollout evidence](https://github.com/8roundshock/living-room-display/pull/54#issuecomment-6249798540).
 Recheck current provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](docs/install.md).
-The installation marker and HTTP health were rechecked on that date without a
-native/current-desktop probe or display launch. Source and
-served-asset provenance, update preservation of settings/reminders/private photos,
-and actual 3840x2160 native preview acceptance were verified during rollout.
-Device location was not requested during rollout. Simulated composition/browser
+The city update rechecked the installation marker, HTTP health, source/served-asset
+provenance and data preservation without a native/current-desktop probe or display
+launch; it added no native runtime acceptance. Actual 3840x2160 rendered preview
+readability was accepted earlier on installed `2b564c9` under
+[#46](https://github.com/8roundshock/living-room-display/issues/46#issuecomment-6249125861).
+Device location was not requested during either rollout. Simulated composition/browser
 checks and actual 4K preview inspection do not establish across-room comfort.
 
 Earlier current-PC source `eba70fc` passed official-runtime per-user install, real
