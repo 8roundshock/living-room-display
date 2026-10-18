@@ -119,6 +119,9 @@ Retain that copy: rollback requires the matching older app and data, and both
 saved JSON files can become revision 2 after normal saves.
 Recheck current provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](docs/install.md).
+This is a dated baseline, not a guarantee against concurrent changes. Before
+future rollout or native acceptance, verify current provenance and asset pins
+read-only rather than assuming the recorded values still match.
 No native launch/test, registration, device-location request or editor reload
 was performed during that rollout. The existing editor should be refreshed
 normally before further editing. Earlier native preview acceptance remains
@@ -141,8 +144,8 @@ CI, but remains draft, unmerged and uninstalled. Frozen old-source
 `3a492b0` staging passed a bound stationary round with 26 qualified NULL cursor
 samples, exit 0, owned cleanup and unchanged data/screensaver settings. That
 old-source result does not establish visual/input or combined-source acceptance.
-The merged UI is now included in the candidate and served by the canonical
-backend. The revision-3 visual observer has
+The merged UI is included in the candidate and was served by the canonical
+backend at the verified rollout. The revision-3 visual observer has
 [independent preparation-only source/pure approval](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6253359163);
 its final JavaScript binding review and actual combined visual/input runtime
 acceptance remain incomplete. This observer review does not establish actual
@@ -150,8 +153,9 @@ stdin/physical-stop delivery, input or cleanup timing.
 
 The user earlier confirmed the normal interactive desktop on 2026-10-18, but
 subsequently left the PC. Physical acceptance is on hold until fresh readiness
-on return. Do not launch native/screensaver tests, capture, synthesize input or
-change the installed backend/assets/data, Windows idle settings or TV while away.
+on return. This coordinator's unattended work must not launch native/screensaver
+tests, capture, synthesize input or change the installed backend/assets/data,
+Windows idle settings or TV while away.
 An earlier access-denied preflight is historical, not a current blocker. Native
 visual/input dismissal, cursor restoration and combined-source tests remain
 coordinated gates; do not switch desktops or weaken capture/input guards.
@@ -167,6 +171,11 @@ remain future work; the host targets one primary display.
 
 Work beyond the installed `7e654fd` baseline is tracked separately:
 
+- [#63](https://github.com/8roundshock/living-room-display/issues/63) has a
+  [reported separate Claude Code owner](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6253160209).
+  That session later [reported separate owner-directed rollout instructions](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6253218182).
+  Its worktree remains separately owned; those reports do not authorize this
+  coordinator to delegate, alter its work or perform a new installation.
 - [PR #67 / #66](https://github.com/8roundshock/living-room-display/pull/67)
   addresses browser controls hiding during continuing pointer interaction.
 - [PR #65 / #64](https://github.com/8roundshock/living-room-display/pull/65)
