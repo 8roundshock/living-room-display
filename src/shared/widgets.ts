@@ -40,12 +40,12 @@ export const WIDGET_CATALOG = {
   preview: { name: 'Last screen', description: 'A dim snapshot on activation', icon: 'monitor', category: 'pictures', tone: 'stone', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 4 }, legacyPlacement: { column: 8, row: 3 } },
   photo: { name: 'Photo', description: 'One picture from this device', icon: 'photo', category: 'pictures', tone: 'stone', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 }, legacyPlacement: { column: 4, row: 3 } },
   // Planned (#78): reserved ids, always disabled and never rendered until their unit deletes `status`.
-  worldClocks: { name: 'World clocks', description: 'Time in other cities', icon: 'globe', category: 'time', tone: 'time', status: 'planned', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 4, row: 4 } },
+  worldClocks: { name: 'World clocks', description: 'Time in other cities', icon: 'globe', category: 'time', tone: 'time', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 4, row: 4 } },
   calendar: { name: 'Calendar', description: 'This month at a glance', icon: 'calendar', category: 'time', tone: 'time', status: 'planned', sizes: standard, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 8, row: 6 } },
   countdown: { name: 'Countdown', description: 'Days until dates you choose', icon: 'hourglass', category: 'personal', tone: 'personal', status: 'planned', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 6, row: 4 } },
   note: { name: 'Note', description: 'A short message on screen', icon: 'note', category: 'personal', tone: 'personal', status: 'planned', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 } },
-  airQuality: { name: 'Air quality', description: 'Air quality and UV index', icon: 'air', category: 'weather', tone: 'sky', status: 'planned', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 10, row: 6 } },
-  sunMoon: { name: 'Sun & moon', description: 'Daylight and moon phase', icon: 'sunrise', category: 'weather', tone: 'sun', status: 'planned', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 8, row: 6 } },
+  airQuality: { name: 'Air quality', description: 'Air quality and UV index', icon: 'air', category: 'weather', tone: 'sky', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 10, row: 6 } },
+  sunMoon: { name: 'Sun & moon', description: 'Daylight and moon phase', icon: 'sunrise', category: 'weather', tone: 'sun', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 8, row: 6 } },
 } satisfies Record<string, WidgetDefinition>;
 export type WidgetKind = keyof typeof WIDGET_CATALOG;
 /** Every id, including planned and retired ones: schemas and geometry need them all. */

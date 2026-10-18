@@ -97,7 +97,19 @@ export interface PreviewState {
   available: boolean; capturedAt: string | null; width: number | null; height: number | null;
 }
 export interface PhotoState { available: boolean; id: string | null; width: number | null; height: number | null; updatedAt: string | null }
-export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; photo?: PhotoState; storageWarning?: string | null }
+export type AirPollutant = 'pm2_5' | 'pm10' | 'ozone' | 'nitrogen_dioxide' | 'sulphur_dioxide' | 'carbon_monoxide';
+/** One hourly model value at an instant (not an interval). */
+export interface AirQualityReading { time: string; aqi: number | null; uvIndex: number | null }
+/** CAMS model estimate via Open-Meteo for the saved weather location; `off` means no request was made. */
+export interface AirQualityState {
+  status: 'fresh' | 'stale' | 'unavailable' | 'off'; updatedAt: string | null; error: string | null;
+  source: 'CAMS via Open-Meteo'; sourceUrl: string; location: LocationSettings; scale: 'us' | 'european';
+  /** pm2_5/pm10 in µg/m³; `dominant` is the pollutant with the highest sub-index. */
+  current: { time: string; aqi: number | null; dominant: AirPollutant | null; pm2_5: number | null; pm10: number | null; uvIndex: number | null } | null;
+  /** At most 24 upcoming instants, starting with the current hour. */
+  hourly: AirQualityReading[];
+}
+export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; photo?: PhotoState; airQuality?: AirQualityState; storageWarning?: string | null }
 export interface LocationResult extends LocationSettings { id: number; country: string; admin1: string }
 export interface ApiError { error: string }
 export interface HostSession { token: string; settings: Settings; displayUrl: string }

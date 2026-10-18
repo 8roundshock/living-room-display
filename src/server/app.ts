@@ -7,6 +7,7 @@ import type { AppState, PreviewState, Reminder } from '../shared/contracts.ts';
 import { DataStore } from './store.ts';
 import { persistableSettings } from './persistence.ts';
 import { WeatherService, type FetchLike } from './weather.ts';
+import { AirQualityService, offAirQuality } from './air.ts';
 import { windowsStatus } from './windows.ts';
 import { automaticLocationSchema, importSchema, mergeSettings, reminderInputSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
 
@@ -40,6 +41,7 @@ export async function createApplication(options: ApplicationOptions) {
   const store = await DataStore.open(options.dataDirectory);
   const now = options.now ?? Date.now;
   const weather = new WeatherService(options.fetcher, now);
+  const air = new AirQualityService(options.fetcher, now);
   const hostToken = randomBytes(32).toString('hex');
   let image: Buffer | null = null;
   let previewGeneration = 0;
@@ -98,7 +100,9 @@ export async function createApplication(options: ApplicationOptions) {
     if (method === 'GET' && path === '/api/windows/status') { json(response, 200, await windowsStatus()); return; }
     if (method === 'GET' && path === '/api/state') {
       const { settings, reminders, photoAsset } = store.snapshot();
-      const state: AppState = { settings, reminders, weather: await weather.get(settings), preview: previewState(),
+      // Air quality is requested only while the widget is saved enabled.
+      const [weatherState, airQuality] = await Promise.all([weather.get(settings), settings.widgets.airQuality ? air.get(settings) : offAirQuality(settings)]);
+      const state: AppState = { settings, reminders, weather: weatherState, preview: previewState(), airQuality,
         photo: photoAsset ? { available: true, id: photoAsset.id, width: photoAsset.width, height: photoAsset.height, updatedAt: photoAsset.updatedAt } : { available: false, id: null, width: null, height: null, updatedAt: null } };
       json(response, 200, { ...state, storageWarning: store.warning }); return;
     }
@@ -119,6 +123,12 @@ export async function createApplication(options: ApplicationOptions) {
       json(response, 200, saved.settings); return;
     }
     if (method === 'GET' && path === '/api/weather') { json(response, 200, await weather.get(store.snapshot().settings)); return; }
+    if (method === 'GET' && path === '/api/air-quality') {
+      // Editor preview before Save: the saved location, the requested (or saved) scale, the shared cache.
+      const settings = store.snapshot().settings;
+      const scale = z.enum(['us', 'european']).optional().parse(url.searchParams.get('scale') ?? undefined) ?? settings.widgetData.airQuality.scale;
+      json(response, 200, await air.get(settings, scale)); return;
+    }
     if (method === 'GET' && path === '/api/locations') {
       const query = z.string().trim().min(2).max(100).parse(url.searchParams.get('q'));
       try { json(response, 200, await weather.locations(query)); } catch { throw new HttpError(502, 'City search is unavailable. Try again later.'); }

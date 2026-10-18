@@ -17,7 +17,9 @@ import {
 } from '../shared/widgets.ts';
 import type { WidgetId } from '../shared/contracts.ts';
 
-const PLANNED = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
+/** The #78 ids, appended after the previous release; each unit activates its own (deletes `status`). */
+const NEW_IDS = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'] as WidgetId[];
+const PLANNED = WIDGET_IDS.filter(isPlannedWidget);
 const definition = (id: WidgetId): WidgetDefinition => WIDGET_CATALOG[id];
 
 test('every catalog entry declares a valid category, tone, status and supported default size', () => {
@@ -36,12 +38,11 @@ test('every catalog entry declares a valid category, tone, status and supported 
 });
 
 test('planned entries reserve the #78 ids after the shipped ones and are never active', () => {
-  assert.deepEqual(WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds, ...PLANNED]);
-  assert.deepEqual(ACTIVE_WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds]);
-  for (const id of PLANNED as WidgetId[]) {
-    assert.equal(isPlannedWidget(id), true); assert.equal(isActiveWidget(id), false, `${id}: widgetVisible starts with isActiveWidget`);
-    assert.equal(definition(id).defaultEnabled, false); assert.equal(definition(id).legacyPlacement, undefined);
-  }
+  assert.deepEqual(WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds, ...NEW_IDS]);
+  assert.deepEqual(ACTIVE_WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds, ...NEW_IDS.filter(id => !isPlannedWidget(id))]);
+  assert.ok(PLANNED.every(id => NEW_IDS.includes(id)), 'only reserved #78 ids are planned');
+  for (const id of NEW_IDS) { assert.equal(definition(id).defaultEnabled, false, `${id} is optional and off by default`); assert.equal(definition(id).legacyPlacement, undefined); }
+  for (const id of PLANNED) assert.equal(isActiveWidget(id), false, `${id}: widgetVisible starts with isActiveWidget`);
   for (const id of ACTIVE_WIDGET_IDS) { assert.equal(isActiveWidget(id), true); assert.equal(isPlannedWidget(id), false); }
 });
 
@@ -63,7 +64,11 @@ test('retired entries merge into an active id that supports their families', () 
     assert.deepEqual(retiredProblems(), []);
     const settings = defaultSettings();
     assert.equal(settingsSchema.parse(settings).widgets.rain, true, 'reading leaves retired ids untouched');
-    rain.mergedInto = 'worldClocks'; assert.deepEqual(retiredProblems(), ['rain must merge into an active widget']);
+    const worldClocks = definition('worldClocks'), worldClocksStatus = worldClocks.status;
+    try {
+      worldClocks.status = 'planned';
+      rain.mergedInto = 'worldClocks'; assert.deepEqual(retiredProblems(), ['rain must merge into an active widget']);
+    } finally { if (worldClocksStatus === undefined) delete worldClocks.status; else worldClocks.status = worldClocksStatus; }
     rain.mergedInto = undefined; assert.deepEqual(retiredProblems(), ['rain must merge into an active widget']);
     const clockSizes = definition('clock').sizes;
     try {
@@ -85,15 +90,20 @@ test('settings, saved styles and imports that enable a planned id read it as dis
   const read = settingsSchema.parse(settings);
   const imported = importSchema.parse({ version: 1, exportedAt: new Date().toISOString(), settings, reminders: [] }).settings;
   for (const value of [read.widgets, read.savedPresets[0]!.visual.widgets, imported.widgets]) {
-    for (const id of PLANNED as WidgetId[]) assert.equal(value[id], false, id);
+    for (const id of PLANNED) assert.equal(value[id], false, id);
     for (const id of ACTIVE_WIDGET_IDS) assert.equal(value[id], settings.widgets[id], id);
   }
 });
 
 test('a PATCH enabling a planned id is rejected with a clear message', async () => {
-  assert.throws(() => settingsPatchSchema.parse({ widgets: { note: true } }), /Note is not available yet/);
-  assert.deepEqual(settingsPatchSchema.parse({ widgets: { note: false } }), { widgets: { note: false } });
-  assert.throws(() => mergeSettings(defaultSettings(), settingsPatchSchema.parse({ widgets: { sunMoon: true } })), /Sun & moon is not available yet/);
+  // Generic over whichever ids are still planned; temporarily reserve one if every unit has shipped.
+  const probe = PLANNED[0] ?? 'sunMoon', probeStatus = definition(probe).status;
+  definition(probe).status = 'planned';
+  try {
+    assert.throws(() => settingsPatchSchema.parse({ widgets: { [probe]: true } }), new RegExp(`${definition(probe).name} is not available yet`));
+    assert.deepEqual(settingsPatchSchema.parse({ widgets: { [probe]: false } }), { widgets: { [probe]: false } });
+    assert.throws(() => mergeSettings(defaultSettings(), settingsPatchSchema.parse({ widgets: { [probe]: true } })), /is not available yet/);
+  } finally { if (probeStatus === undefined) delete definition(probe).status; else definition(probe).status = probeStatus; }
   const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-'));
   const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
