@@ -119,7 +119,11 @@ try {
         [IO.File]::WriteAllText($entry, 'setTimeout(() => {}, 60000);')
         $ownedTestProcess = Start-Process -FilePath $NodeExe -ArgumentList ('"' + $entry + '"') -WindowStyle Hidden -PassThru
         Write-Json (Join-Path $run 'server.json') @{processId=$ownedTestProcess.Id;startedAt=$ownedTestProcess.StartTime.ToUniversalTime().ToString('o')}
-        Assert-True ($null -ne (Get-OwnedServer)) 'Exact owned test process was not recognized.'
+        if ($null -eq (Get-OwnedServer)) {
+            $seen = Get-CimInstance Win32_Process -Filter "ProcessId=$($ownedTestProcess.Id)"
+            $record = Get-Content -LiteralPath (Join-Path $run 'server.json') -Raw
+            throw ("Exact owned test process was not recognized. PS $($PSVersionTable.PSVersion); node=$script:node; exe=$($seen.ExecutablePath); cmd=$($seen.CommandLine); record=$record; start=" + (Get-Process -Id $ownedTestProcess.Id).StartTime.ToUniversalTime().ToString('o') + '; parsed=' + ([DateTimeOffset](ConvertFrom-Json $record).startedAt).UtcDateTime.ToString('o'))
+        }
         Write-Json (Join-Path $run 'server.json') @{processId=$ownedTestProcess.Id;startedAt='2000-01-01T00:00:00.0000000Z'}
         Assert-True ($null -eq (Get-OwnedServer)) 'Reused PID/start-time mismatch was adopted.'
         $passed++
