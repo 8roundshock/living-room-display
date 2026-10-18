@@ -70,10 +70,12 @@ above the measured Save bar at full/compact heights. Source desktop/mobile
 visuals were inspected in RAM, and the merged UI changes received independent
 functional and actual visual review. No screenshots or real device positions
 are retained. See [UI evidence](docs/ui.md).
-The source-only long-city wrapping correction
-[#52](https://github.com/8roundshock/living-room-display/issues/52) also verifies
-complete option text and keyboard/Cancel behavior at 320px, 390px and desktop
-widths. It awaits independent final-head review and has not been installed.
+The long-city wrapping correction
+[#52](https://github.com/8roundshock/living-room-display/issues/52) has isolated
+browser coverage for complete option text and keyboard/Cancel behavior at 320px,
+390px and desktop widths. See [PR #54](https://github.com/8roundshock/living-room-display/pull/54)
+for final-head review and rollout evidence; use the dated installation baseline
+and live provenance guidance below to check installed state.
 
 Feature [#43](https://github.com/8roundshock/living-room-display/issues/43) and
 its isolated grid/photo harness were reviewed, merged and installed; the
