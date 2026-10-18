@@ -4,6 +4,7 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DataStore } from './store.ts';
+import { defaultSettings } from '../shared/defaults.ts';
 
 test('queued concurrent writes preserve changes and survive restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-store-'));
@@ -18,6 +19,19 @@ test('queued concurrent writes preserve changes and survive restart', async () =
     assert.equal(store.snapshot().settings.appearance.brightness, 0.55);
     await store.patchSettings({ clockFormat: '24h' });
     assert.equal(store.snapshot().settings.clockFormat, '24h', 'queue remains usable after failed mutation');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('legacy state without locationSource migrates to manual without replacing its city', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'lrd-location-migration-'));
+  try {
+    const settings: Partial<ReturnType<typeof defaultSettings>> = defaultSettings();
+    delete settings.locationSource; settings.location = { name: 'Existing city', latitude: 1.25, longitude: 2.75, timezone: 'Asia/Tokyo' };
+    await writeFile(join(directory, 'state.json'), JSON.stringify({ version: 1, settings, reminders: [] }));
+    const store = await DataStore.open(directory);
+    assert.equal(store.snapshot().settings.locationSource, 'manual'); assert.deepEqual(store.snapshot().settings.location, settings.location);
+    await store.patchSettings({ units: 'imperial' });
+    assert.equal((await DataStore.open(directory)).snapshot().settings.locationSource, 'manual');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
