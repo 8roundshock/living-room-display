@@ -24,12 +24,15 @@ contract. The repo-local
 entrypoint for agents adding or changing a widget; it requires no global install.
 
 Start with `WIDGET_CATALOG`, `GRID_DENSITIES` and `widgetSpan`; use
-`placeWidget`/`repackGrid` rather than implementing a second collision or packing
-rule. `composeWidgetGrid` and `motionOffset` own ambient placement variation.
+`reflowWidget`/`fitGridDensity` rather than implementing a second collision or
+packing rule. `composeWidgetGrid` and `motionOffset` own ambient placement variation.
 Schema/default changes belong at these authorities with their tests.
 Legacy settings/presets without a grid receive the safe catalog default grid.
 Their visibility/location choices survive; old offsets/scale and
 `appearance.layout` are retained data, not converted or applied to the grid.
+Grid revision 2 gives the large clock real height. Revision 1 is validated against
+its original geometry before migration; enabled widgets remain present, with
+family reduction only when needed to fit. Current invalid layouts are rejected.
 
 ## Families and editing
 
@@ -39,19 +42,53 @@ larger family changes composition and information density; it is not merely a
 scaled small widget. A widget need not support every family. Keep text real,
 scalable and readable, with meaningful labels instead of relying on color.
 
+The renderer families have deliberate visual roles:
+
+| Widget | Small | Medium | Large |
+| --- | --- | --- | --- |
+| Clock | Compact time and calendar | Time beside a calendar column | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
+| Weather | Temperature and conditions | Temperature beside conditions and feels-like | Adds wind and the available daily high/low |
+| Rain | Peak hourly precipitation chance, estimated rain window and coverage | Adds rain amount and the shown interval | Adds the hourly probability plot; missing probabilities remain unknown |
+| Forecast | Three days | Five days | Seven days; compact weekday labels preserve room for temperatures and chance |
+| Reminders | One pending item | Two pending items | Four pending items; all show an honest remaining count |
+| Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
+| Last screen | Complete, faint captured desktop | Wider complete desktop | Larger complete desktop; no crop hides screen context |
+
+The large clock requires actual vertical room in the central catalog; do not
+recreate a giant option by scaling within the previous short large family.
+All families use the same renderer in ambient view, authored editor canvas and
+synthetic picker preview. Picker fixtures never become user data.
+
 The selected grid controls snapping and capacity. Dragging and resize handles
-snap to allowed cells and supported families through the shared helpers. Reject
-an impossible placement with a clear local response instead of silently covering
-another widget, clipping content or discarding one. A visible grid, handles,
+snap to allowed cells and supported families through the shared helpers. Moving
+or enlarging a widget gently reflows neighbors into valid space; the active
+widget stays under the pointer. Reject an impossible placement with a clear
+local response instead of covering another widget or discarding one. Density
+changes fit every enabled module, reducing families only as necessary and
+restoring the exact prior layout when switched back before another widget edit.
+A visible grid, handles,
 selection borders, labels and picker chrome belong to the editor only.
 
 Every widget is optional. The picker describes available widgets and sizes;
 adding/removing/resizing/repositioning changes the settings draft. Provide direct
-size and position controls usable by keyboard/touch as an alternative to dragging.
+family controls usable by keyboard/touch as an alternative to handle resizing.
+The focused canvas widget supports arrow-key movement and its selected/focused
+resize handle supports arrow-key family changes; do not expose technical
+coordinates/four-arrow Position controls in the primary inspector.
 Cancel restores the saved configuration, including grid, styles and selected
 images. Show Save/Cancel only while there are actual unsaved changes, preserving
 the existing async race and concurrent-draft behavior. Reminder records retain
 their documented independent immediate-save behavior.
+The authored editor canvas stays still. Ambient relocation runs only in the
+display or an explicitly requested movement preview, so layout editing never
+competes with the ambient scheduler.
+
+Legacy backfill uses revision-one catalog origins before strict validation and
+central migration. An absent additive module is different from an explicitly
+invalid overlapping placement; the latter still rejects. Current saves use
+geometry revision 2. Follow the [pre-upgrade data backup and rollback](install.md#widget-geometry-revision-2-update-and-rollback)
+procedure; the previous app does not understand revision 2 even though the outer
+settings version remains 1.
 
 ## Ambient appearance and recurring exposure
 
@@ -120,7 +157,9 @@ to personal photo folders merely to implement a widget.
   grid changes, Save/Cancel, clean/dirty save-bar visibility, persistence,
   presets and legacy import/migration. Retain edits made while Save is pending.
 - Check reduced motion still relocates, whole-group bounds remain valid, and
-  pointer hiding stays limited to the standalone ambient page. Keep captures in
+  pointer hiding stays limited to explicit native presentation. Browser display
+  and browser fullscreen retain their pointer; unmodified F toggles fullscreen
+  outside editable controls. Keep captures in
   RAM and test data outside the user's installed state.
 
 Run the relevant commands in [development](development.md). Independent final
@@ -140,4 +179,6 @@ assets, fonts, frameworks, platform integration or certification.
 | [HIG Widgets](https://developer.apple.com/design/human-interface-guidelines/widgets) | Focused glanceable content, family-specific detail and restrained color. StandBy enlarges widgets for distant use; this app has its own grid and does not copy iOS point sizes. |
 | [WidgetFamily](https://developer.apple.com/documentation/widgetkit/widgetfamily) | Declare supported size/shape families and adapt content flexibly. WidgetKit APIs are inspiration, not app dependencies. |
 | [HIG Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Dim secondary content and reduce visual noise. Apple's preference for stable layouts differs from this app's required periodic relocation on a TV. |
+| [HIG Typography](https://developer.apple.com/design/human-interface-guidelines/typography) | System type, clear size/weight hierarchy and viewing-distance checks. Small supporting text uses regular/medium weight; enlarged outlined time remains a deliberate sparse treatment. |
+| [HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion) | Purposeful, brief editor feedback; fade before relocation when travel conveys no useful information. Reduced motion removes effects while the ambient relocation contract still applies. No audio or haptic feedback is introduced. |
 | [Designing your app for the Always On state](https://developer.apple.com/documentation/watchos-apps/designing-your-app-for-the-always-on-state) | The watchOS example replaces large numeral fills with outlines/dim interiors. It supports the clock treatment, not a claim that this TV inherits Apple luminance or panel controls. |

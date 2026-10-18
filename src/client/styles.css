@@ -646,10 +646,10 @@ button {
   }
 }
 
-/* Applied only by the standalone display route; never alter Windows cursors. */
-html.standalone-display,
-html.standalone-display *,
-html.standalone-display *::before,
-html.standalone-display *::after {
+/* Explicit native presentation only; browser display/fullscreen keeps its pointer. */
+html.native-display,
+html.native-display *,
+html.native-display *::before,
+html.native-display *::after {
   cursor: none !important;
 }

@@ -129,6 +129,38 @@ untouched. A replacement failure restores the prior app directory. To roll back,
 run `Stop`, rename `app` to `app.failed`, rename `app.previous` to `app`, then run
 the installed script `Start`. Check data compatibility before rolling back a
 future schema version. Do not remove data to repair an update.
+
+### Widget geometry revision 2 update and rollback
+
+The studio refinement in [#56](https://github.com/8roundshock/living-room-display/issues/56)
+keeps `settings.version` at 1 but introduces `widgetGrid.revision: 2`. Earlier app
+versions reject that geometry. Reading a valid old file migrates it in memory
+without rewriting its bytes; the first ordinary save writes the new geometry,
+and subsequent saves can leave **both** `state.json` and `state.backup.json` at
+revision 2. Keeping `app.previous` alone is therefore insufficient for rollback.
+
+Before upgrading, inspect the actual open editor draft read-only; the saved
+backend API cannot establish whether that browser has unsaved changes. If dirty,
+obtain the user's Save or Cancel choice and resolve it in the current app before
+stopping or reloading that editor. Do not reload an active unsaved draft as part
+of an unattended update.
+Stop the owned backend, then copy the complete private `data` directory to a
+separate pre-upgrade backup and verify the primary, backup and selected-image
+data are included. An export is useful in addition; it excludes private images
+and does not replace the directory backup. Keep those bytes private and outside
+Git or diagnostics. Do not mutate the live data merely to test migration.
+
+Update to the clean reviewed UI revision, restart and verify installed provenance,
+health and served assets, then reload the editor after its draft is resolved.
+The native candidate reuses that canonical backend: a new native host tested
+against old served UI assets is not combined-source acceptance. Test the reviewed
+`native=1` UI and candidate host together before native registration or idle use.
+
+For rollback, stop the app, preserve the entire newer data directory separately,
+and restore the matching pre-upgrade app **and** private data copy. Validate with
+that older app before starting it. Never overwrite or discard newer reminders,
+settings or photo data with an old backup; retain both for deliberate recovery.
+No automatic geometry downgrade is provided.
 `Update` reuses an existing Node24 runtime; `-NodeVersion` selects a version only
 when the runtime is absent. For a deliberate runtime update, stop the app, rename
 `runtime` to `runtime.previous`, then run source `Update -NodeVersion <explicit

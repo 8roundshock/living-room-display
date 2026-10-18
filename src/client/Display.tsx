@@ -4,6 +4,12 @@ import { WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset } from '../s
 import { Icon } from './icons.tsx';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
 
+export interface WidgetGesture { id: WidgetId; x: number; y: number; width?: number; height?: number }
+function toggleFullscreen() {
+  const request = document.fullscreenElement ? document.exitFullscreen?.() : document.documentElement.requestFullscreen?.();
+  void request?.catch(() => undefined);
+}
+
 function Widget({ id, settings, children, index, style }: { id: WidgetId; settings: Settings; children: ReactNode; index: number; style: CSSProperties }) {
   const region = useRef<HTMLElement>(null); const content = useRef<HTMLDivElement>(null); const [fit, setFit] = useState(1);
   useLayoutEffect(() => {
@@ -24,8 +30,8 @@ function Widget({ id, settings, children, index, style }: { id: WidgetId; settin
   </section>;
 }
 
-export function AmbientDisplay({ state, settings = state.settings, embedded = false, disconnected = false, compositionOverride, layoutEditing = false, photoPreview }: {
-  state: AppState; settings?: Settings; embedded?: boolean; disconnected?: boolean; compositionOverride?: number; layoutEditing?: boolean; photoPreview?: string | null;
+export function AmbientDisplay({ state, settings = state.settings, embedded = false, native = false, disconnected = false, compositionOverride, layoutEditing = false, photoPreview, gesture }: {
+  state: AppState; settings?: Settings; embedded?: boolean; native?: boolean; disconnected?: boolean; compositionOverride?: number; layoutEditing?: boolean; photoPreview?: string | null; gesture?: WidgetGesture | null;
 }) {
   const [now, setNow] = useState(() => new Date()); const [cycle, setCycle] = useState(0); const [fading, setFading] = useState(false); const [interacting, setInteracting] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -43,10 +49,17 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   }, [settings.appearance.motionEnabled, settings.appearance.motionIntervalSeconds, settings.appearance.fadeSeconds, layoutEditing, compositionOverride, reducedMotion]);
   useEffect(() => { if (!interacting) return; const timer = window.setTimeout(() => setInteracting(false), 3500); return () => window.clearTimeout(timer); }, [interacting]);
   useEffect(() => {
-    if (embedded) return;
-    const key = (event: KeyboardEvent) => { if (event.key === 'Escape' || event.key.toLowerCase() === 'e') window.location.assign('/editor'); if (event.key === 'Tab') setInteracting(true); };
+    if (embedded || native) return;
+    const key = (event: KeyboardEvent) => {
+      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.defaultPrevented) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
+      if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen(); setInteracting(true); }
+      if (event.key === 'Escape' || event.key.toLowerCase() === 'e') window.location.assign('/editor');
+      if (event.key === 'Tab') setInteracting(true);
+    };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
-  }, [embedded]);
+  }, [embedded, native]);
   const effectiveCycle = layoutEditing ? 0 : compositionOverride ?? cycle;
   const enabledKey = JSON.stringify([settings.widgets, settings.preview.enabled]);
   const gridKey = JSON.stringify(settings.widgetGrid);
@@ -66,10 +79,11 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
           const props: WidgetContentProps = { state, settings, size: settings.widgetGrid.placements[id].size, now, embedded, disconnected, photoPreview };
           if (!widgetVisible(id, props)) return null;
           const rect = getWidgetRect(grid, id); const Renderer = WIDGET_RENDERERS[id];
-          return <Widget key={id} id={id} settings={settings} index={index} style={{ left: `${rect.left}%`, top: `${rect.top}%`, width: `${rect.width}%`, height: `${rect.height}%` }}><Renderer {...props} /></Widget>;
+          const activeGesture = gesture?.id === id ? gesture : null;
+          return <Widget key={id} id={id} settings={settings} index={index} style={{ left: `${rect.left}%`, top: `${rect.top}%`, width: activeGesture?.width === undefined ? `${rect.width}%` : `${activeGesture.width}px`, height: activeGesture?.height === undefined ? `${rect.height}%` : `${activeGesture.height}px`, transform: activeGesture ? `translate3d(${activeGesture.x}px, ${activeGesture.y}px, 0)` : undefined, transition: layoutEditing && !activeGesture && !reducedMotion ? 'left 180ms ease, top 180ms ease, width 180ms ease, height 180ms ease' : 'none' }}><Renderer {...props} /></Widget>;
         })}
       </div>
     </div>
-    {!embedded && <nav className="display-help" aria-label="Display controls"><button className="button" onClick={() => { void document.documentElement.requestFullscreen?.().catch(() => undefined); }}><Icon name="monitor" size={15} />Fullscreen</button><a className="button" href="/editor"><Icon name="settings" size={15} />Editor · Esc</a></nav>}
+    {!embedded && !native && <nav className="display-help" aria-label="Display controls"><button className="button" onClick={toggleFullscreen}><Icon name="monitor" size={15} />Fullscreen · F</button><a className="button" href="/editor"><Icon name="settings" size={15} />Editor · Esc</a></nav>}
   </Surface>;
 }

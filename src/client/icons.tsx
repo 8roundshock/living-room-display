@@ -157,8 +157,9 @@ export function Icon({
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
-      style={style}
+      style={{ width: size, height: size, flexShrink: 0, ...style }}
       aria-hidden="true"
+      focusable="false"
     >
       {paths[name]}
     </svg>
