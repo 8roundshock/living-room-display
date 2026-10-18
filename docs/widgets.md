@@ -157,6 +157,19 @@ including attribution and stale-state labels, belongs inside its movable group.
 The editor may be brighter and show controls; those styles must not leak into the
 ambient view or its error/loading states.
 
+Colour follows one rule in both accent modes (#75). Primary content always uses
+the text colour: time digits, temperatures, condition text, reminder titles and
+forecast highs. Accent content uses `--ambient-accent`: labels, place and units,
+secondary metrics, weather glyphs, chart bars, dots, captions, age and attribution.
+In `color` mode that is the single accent; in `native` mode `src/client/palette.css`
+redirects it to the section's catalog `tone` and weather glyphs to their own
+sub-tone (`WEATHER_GLYPH_TONE`), so both modes colour exactly the same elements and
+Native never lights more of the panel. Status cues never change: stale amber
+`--ambient-caution`, offline mauve `--ambient-offline` and the Overdue word. Never
+hard-code a hue in widget CSS, fill or frame anything new for colour, or tint
+images; a new widget declares an existing palette role and uses `--ambient-accent`.
+See [native palette](design.md#native-palette).
+
 Large clock numerals should offer a tasteful outline treatment with sparse lit
 area and sufficient stroke weight at real viewing distance. Other clock styles
 remain subject to the same dimness and movement contract. Do not add a fixed

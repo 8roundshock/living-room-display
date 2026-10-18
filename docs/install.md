@@ -172,7 +172,7 @@ from files and exports while they equal the value the current reader restores
 readable by `bedca44`, so `app.previous` remains a working rollback for it.
 
 `src/server/rollback.test.ts` (part of `npm test`) proves this with a byte-for-byte
-copy of the `bedca44` reader: fresh data, previous-release data after unrelated
+copy of the `bedca44` reader: fresh data (apart from its #75 Native default), previous-release data after unrelated
 saves, saved styles, a photo, a revision-one legacy file and the export all parse.
 Its negative controls show the documented exceptions below are rejected. After each
 coordinated install, the baseline moves to the newly installed revision (#130).
@@ -186,7 +186,7 @@ keep the newer data directory and restore the matching pre-upgrade data copy.
 | #73 reminder history | Not shipped yet |
 | #73 custom Reminders sizes | Not shipped yet |
 | #74 Weather and Rain merge | Not shipped yet |
-| #75 Native colours | Not shipped yet |
+| #75 Native colours | `appearance.accentMode: native`, once Native is saved anywhere: settings, a saved style, a built-in Phone/Room/Night style or Reset appearance. A fresh data folder also starts Native. Data that only ever used a colour stays readable. To make data readable again without the pre-upgrade copy, choose a colour, re-save every saved style with a colour, then save once more so `state.backup.json` is clean too; color is omitted at rest. The exception ends when the baseline moves to a release that knows the key (#130). |
 | #76 Animation level | Not shipped yet |
 | #78 Calendar, Countdown and Note | Not shipped yet |
 | #78 World clocks, Sun & moon and Air quality | Not shipped yet |

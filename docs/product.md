@@ -24,7 +24,7 @@ busy dashboards. The application must produce no audio.
 | Forecast | Readable seven-day outlook. |
 | Rain | Chance and estimated timing of upcoming rain, with uncertainty visible. |
 | Reminders | Add, edit, complete, or hide one-time/undated reminders through the local editor. |
-| Appearance | User-editable layout, colors, typography, motion, and saved presets. |
+| Appearance | User-editable layout, colors, typography, motion, and saved presets. The accent is one colour or Native, where each widget uses its own tone from one harmonious dim palette (default for new installs and built-in styles). |
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 | Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |
 | World clocks (planned, #78) | Time in up to four other cities. |

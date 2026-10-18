@@ -79,10 +79,14 @@ and `appearance.layout` remain parseable data but no longer affect rendering;
 old manual visual positions are not converted to cells. The same applies to
 legacy presets/imports. `appearance.clockStyle` is `outline` (default), `digital` or `analog`.
 
-`appearance.accentMode` is `color` or `native`; settings, saved styles and imports
-without it read as `color`. `color` tints every widget's accent group with
-`accentColor`; `native` will use each widget's palette tone. The editor has no
-control yet and rendering arrives with #75.
+`appearance.accentMode` is `color` or `native`. New installs, the built-in Phone,
+Room and Night styles and Reset appearance use `native` (#75); legacy settings,
+saved styles and imports without the key read as `color`, so existing data looks
+unchanged until Native is chosen. `color` tints every widget's accent elements with
+`accentColor`; `native` uses each widget's catalog palette tone (see
+[native palette](design.md#native-palette)). `accentColor` is kept in both modes.
+At rest `color` is omitted; `native` is written and is a
+[rollback exception](install.md#additive-data-and-rollback-compatibility-84).
 
 `appearance.animation` is `off`, `subtle` or `lively`; data without it reads as
 `subtle`. It will govern motion inside widgets and the editor (#76); relocation
