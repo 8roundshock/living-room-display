@@ -11,7 +11,8 @@ choices are pending. See [STATUS.md](STATUS.md) before starting work.
 This is the independent private
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)
 repository. Its code, branches, pull requests, documentation, and future local
-data belong here, separate from personal-memory repositories.
+data belong here, separate from personal-memory repositories. The owner has
+chosen to keep it private until a usable release; there is no public release yet.
 
 ## Start here
 
@@ -20,11 +21,12 @@ data belong here, separate from personal-memory repositories.
 - [Architecture choices](docs/architecture.md): alternatives and pending decisions.
 - [Development](docs/development.md): verified tools, authentication, and checks.
 - [Agent workflow](docs/agent-workflow.md): ownership, handoffs, review, and PRs.
+- [Installation readiness](docs/install.md): current limits and future user setup.
 
-On the owner's Windows PC, start an installed Codex CLI in this checkout:
+From this checkout, start an installed Codex CLI with:
 
 ```powershell
-codex -C "C:\Users\8roun\source\repos\living-room-display"
+codex -C .
 ```
 
 For another agent, open this repository as the working directory and ask it to
@@ -34,3 +36,14 @@ their live startup behavior has not been tested on this PC.
 
 The next decision is which [architecture](docs/architecture.md) to pursue.
 Document the user's selection before beginning implementation.
+
+## Ask an agent to install or use it
+
+> Read AGENTS.md, STATUS.md, and docs/install.md in this repository. Check whether
+> a usable release exists for my computer. If it does, follow its documented
+> local installation and verification steps with my own configuration. If it
+> does not, explain what is missing without inventing setup commands. Keep my
+> data local and do not post feedback or star the repository without my permission.
+
+Today that check will find a documentation-only project, not an installable app.
+Future releases should work without the owner's accounts, paths, or private memory.

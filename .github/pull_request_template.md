@@ -5,8 +5,12 @@ issue; use a closing keyword only when its acceptance criteria are satisfied.
 
 ## Verification and review
 
-List checks actually run and results. Identify the reviewed head and independent
-or automatic review evidence. State when no runtime, UI check, or CI applies.
+List checks actually run and results. State when no runtime, UI check, or CI applies.
+
+Every PR requires a separate independent review agent/session before merge.
+Record the reviewer, outcome, and exact final reviewed commit SHA here or in a
+linked PR comment. The author fixes findings; the reviewer rechecks new commits.
+Author self-review and CI results do not replace this independent review.
 
 ## Remaining limits
 

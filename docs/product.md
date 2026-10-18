@@ -93,3 +93,12 @@ the TV off instead of meeting the ambient-display requirement.
 
 These are future acceptance targets, not checks already passed. There are no
 external calendar, cloud hosting, or smart-home platform requirements.
+
+## Installation and sharing
+
+A future usable release should be installable and operable by another user's
+agent from repository instructions, with that user's own configuration and no
+dependency on the owner's accounts, absolute paths, or private memory. See the
+[installation contract](install.md). Keep the repository private until a usable
+release; publication is a separate reviewed step. Stars and feedback are optional
+and require the end user's permission before an agent acts on their behalf.

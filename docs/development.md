@@ -28,6 +28,11 @@ not change global agent settings or start background work.
 
 ## GitHub authentication on Windows
 
+This section is for the owner's repository maintenance. End users must not need
+this helper, this identity, or any owner credential to install or run a release.
+Other contributors use their own authorized GitHub access and normal Git/PR
+workflow. See [installation readiness](install.md).
+
 Use [scripts/gh-personal.ps1](../scripts/gh-personal.ps1) for GitHub CLI operations
 on this PC. It uses the existing `8roundshock` Git credential in memory, verifies
 the login, exact origin, repository name, and private visibility, scopes GitHub
@@ -79,7 +84,8 @@ that process environment variables are restored. Review output for accidental
 credential disclosure. Do not add tests that simply repeat script statements.
 
 No application CI workflow currently exists. Absence of checks is not a passed
-build, and CI is not an independent AI review. Add appropriate automated checks
+build. Each PR uses an independent review agent; no external review integration
+is being configured. Add appropriate automated checks
 when code exists, then document commands that actually run. Future UI checks
 require actual visual inspection, not only compilation or a successful tool call.
 

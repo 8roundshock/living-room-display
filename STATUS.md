@@ -7,6 +7,14 @@ Reviewed: 2026-10-18. Product requirements come from the owner's project brief.
 - Independent private GitHub repository and Windows checkout.
 - Portable agent instructions, product brief, architecture comparison, and PR workflow.
 - Project-scoped GitHub authentication helper using an existing personal credential.
+- Feature/decision backlog and issue/PR templates; see the
+  [GitHub issues](https://github.com/8roundshock/living-room-display/issues).
+
+Visibility decision: stay private until a usable release. Installation is not
+available yet; [install.md](docs/install.md) defines the future portability and
+verification contract. Each PR requires a separate independent review agent,
+an outcome recorded on the PR, and review of the final pushed SHA. No external
+code-review integration is configured or required.
 
 ## Not built
 

@@ -50,25 +50,31 @@ other workers' changes into a feature commit.
    from current `origin/main`; use `git worktree add -b` for isolation when needed.
 2. Make the scoped change. Update docs/status and the linked issue. Run checks in
    [development.md](development.md), plus checks introduced with the feature.
-3. Have an independent worker review the diff against acceptance criteria when
-   delegation is available. Resolve findings and recheck affected behavior.
+3. Inspect the diff against acceptance criteria and recheck affected behavior.
+   This author check does not replace the independent PR review below.
 4. Stage only reviewed files. Inspect `git diff --cached`, commit, and inspect
    `git log --oneline origin/main..HEAD` for unintended commits.
 5. Verify personal identity, exact origin, and private visibility. Push only the
    topic branch. Use the project helper's `pr create`, explicit `--base main`,
    `--head`, and a reviewed multiline `--body-file` in `.local/`. Link issues and
    describe scope, verification, and remaining decisions accurately.
-6. Attach created PRs to the active chat when supported. Request/verify automatic
-   review after opening a PR and after relevant new commits. Check the exact
-   pushed head; CI checks and AI review are different evidence. Do not claim
-   automatic review is enabled or completed without an observed configuration
-   and review result. Use an independent review while automation is unavailable.
-7. Wait for applicable checks/reviews on the current head. Resolve findings; do
+6. Attach created PRs to the active chat when supported. For every PR, run a
+   separate independent review agent with focused project requirements, PR diff,
+   acceptance criteria, and test evidence. The reviewer must differ from the
+   author. If native subagents are unavailable, use a separate fresh reviewer
+   session/process with that context. No particular model or paid service is
+   required. If independent review cannot run, leave the PR open and report why;
+   never label author self-review as independent.
+7. The author fixes findings, pushes the changes, and requests a reviewer recheck
+   of the final commit. Record reviewer identity/role, outcome, and exact reviewed
+   SHA in the PR body or comment. Keep this evidence distinct from CI results.
+   Do not install or activate an external review integration.
+8. Wait for applicable checks/reviews on the current head. Resolve findings; do
    not bypass required reviews or protection. No checks configured is not a pass.
-8. Within merge authorization, use a merge commit with `pr merge --merge
+9. Within merge authorization, use a merge commit with `pr merge --merge
    --match-head-commit` and the reviewed SHA. Never force-push, push `main`
    directly, use admin bypass, or merge an unreviewed replacement head.
-9. Verify merged state/SHA, update linked issues, fetch, and fast-forward clean
+10. Verify merged state/SHA, update linked issues, fetch, and fast-forward clean
    local `main`. Remove only your own clean, fully merged worktrees/branches.
 
 The helper passes through ordinary GitHub CLI arguments; consult subcommand help

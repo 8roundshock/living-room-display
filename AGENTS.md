@@ -29,6 +29,9 @@ choose a stack or implement the app. Keep status and commands truthful as it gro
 - Do not load or copy unrelated personal context just because the checkout is
   under the user's home directory. Do not put app code, app PRs, or project tooling
   in `vladimir-personal`. No runtime or documentation dependency on that repository.
+- Keep future installation/use portable for other users. The owner's developer
+  paths and GitHub helper are not application prerequisites; follow the
+  [installation contract](docs/install.md).
 
 ## Product guardrails
 
@@ -51,12 +54,19 @@ choose a stack or implement the app. Keep status and commands truthful as it gro
 
 - Use command-line Git and GitHub CLI/API. Keep origin at the private
   `8roundshock/living-room-display` repository and verify the `8roundshock` identity
-  and privacy before pushing. Use [the project auth helper](docs/development.md).
+  and privacy before owner-side pushes. Use [the project auth helper](docs/development.md).
+  Keep the repository private until a usable release and a reviewed publication
+  step; do not change visibility as part of the current foundation.
 - Use topic branches and reviewed pull requests; never push directly to `main`,
   force-push, discard others' work, or bypass branch protection.
 - Keep feature and bug issues current, link PRs, and write meaningful scoped
-  commits. Verify automatic review and checks on the exact pushed head before
-  merging; CI alone is not AI review. See [workflow](docs/agent-workflow.md).
+  commits. Every PR needs a separate independent review agent before merge;
+  the author fixes findings and the reviewer checks the final pushed commit.
+  Record the review outcome and SHA in the PR. If native subagents are unavailable,
+  use a separate fresh reviewer session/process; if neither is possible, leave
+  the PR open and report the blocker. Self-review is not independent review.
+  No external review integration or particular paid service/model is required.
+  See [workflow](docs/agent-workflow.md).
 - Keep secrets, personal reminder contents, raw transcripts, and employer content
   out of Git. Use ignored `.local/` for temporary local files.
 - Run checks relevant to the change, review the exact diff, and report real
