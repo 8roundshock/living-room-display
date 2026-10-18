@@ -23,7 +23,7 @@ export function WidgetPicker({ settings, onAdd, onClose, message }: {
       <h2>Add a widget</h2>
       <button className="icon-button" aria-label="Close widget picker" ref={close} onClick={onClose}><Icon name="close" size={18} /></button>
     </div>
-    <div className="widget-catalog" aria-label="Widget catalog">
+    <div className="picker-body"><div className="widget-catalog" aria-label="Widget catalog">
       {WIDGET_IDS.map(id => <button key={id} className="catalog-item" aria-label={`Preview ${WIDGET_CATALOG[id].name}`} aria-pressed={selected === id} onClick={() => setSelected(id)}>
         <Icon name={WIDGET_CATALOG[id].icon} size={19} />
         <span>{WIDGET_CATALOG[id].name}</span>
@@ -42,7 +42,7 @@ export function WidgetPicker({ settings, onAdd, onClose, message }: {
         <Icon name={settings.widgets[selected] ? 'check' : 'plus'} size={17} />
         {settings.widgets[selected] ? 'Already on your display' : 'Add widget'}
       </button>
-    </section>
+    </section></div>
     {message && <p className="inline-message" role="status">{message}</p>}
     <p className="picker-footnote">Sample content · changes stay in your draft</p>
   </div>;

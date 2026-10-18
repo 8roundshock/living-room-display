@@ -189,3 +189,38 @@
 @media (max-width: 380px) {
   .catalog-item { font-size: 11px; padding-inline: 8px; gap: 6px; }
 }
+
+/* A category rail keeps the preview, family and Add action within the panel. */
+@media (min-width: 701px) {
+  .inspector-panel:has(> .widget-picker) { overflow: hidden; padding: 14px; }
+  .widget-picker { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+  .widget-picker > .panel-heading { flex: none; margin-bottom: 10px; }
+  .picker-body { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; flex: 1; min-height: 0; }
+  .widget-catalog { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; margin: 0; gap: 5px; padding: 1px 3px 1px 1px; scrollbar-width: thin; }
+  .catalog-item { flex: none; min-height: 54px; flex-direction: column; justify-content: center; gap: 4px; padding: 7px 3px; position: relative; font-size: 10px; }
+  .catalog-item span { flex: none; text-align: center; }
+  .catalog-added { position: absolute; top: 5px; right: 4px; width: 9px !important; height: 9px !important; }
+  .picker-detail { min-height: 0; display: flex; flex-direction: column; padding: 10px; border-radius: 12px; }
+  .picker-detail-heading { flex: none; }
+  .picker-detail-heading h3 { font-size: 15px; }
+  .picker-detail-heading p { font-size: 11px; line-height: 1.35; }
+  .sample-stage { flex: 1; min-height: 40px; height: auto; margin: 8px -3px; container-type: size; }
+  .picker-sample.ambient { width: min(100%, calc(100cqh * var(--sample-ratio)), calc(var(--sample-columns) * 50px)); }
+  .widget-picker .family-previews { flex: none; }
+  .widget-picker .family-previews > button { min-height: 34px; font-size: 11px; }
+  .studio .picker-add { flex: none; margin-top: 8px; font-size: 12px; padding-inline: 7px; }
+  .picker-footnote { flex: none; font-size: 10px; margin-top: 8px; }
+  .widget-picker > .inline-message { flex: none; margin: 6px 0 0; font-size: 11px; }
+  .studio .widget-list { margin-inline: -6px; }
+  .studio .widget-row { min-height: 49px; }
+  .studio .widget-select { min-height: 49px; padding-block: 4px; }
+  .studio .widget-row .widget-icon { width: 29px; height: 29px; border-radius: 9px; }
+}
+@media (max-width: 700px) {
+  .picker-body { display: block; }
+  .widget-catalog { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .catalog-item { flex-direction: column; gap: 4px; padding: 8px 4px; position: relative; font-size: 11px; }
+  .catalog-item span { flex: none; }
+  .catalog-added { position: absolute; right: 5px; top: 5px; }
+  .sample-stage { height: 140px; }
+}

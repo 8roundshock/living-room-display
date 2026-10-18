@@ -8,7 +8,6 @@ import {
 } from '../shared/widgets';
 import { Icon } from './icons';
 import { WidgetPicker } from './WidgetPicker';
-import './widget-controls.css';
 
 export function WidgetInspector({
   settings,
