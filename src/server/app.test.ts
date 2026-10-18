@@ -17,6 +17,26 @@ async function fixture(now?: () => number) {
 }
 function body(value: unknown) { return { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }; }
 
+test('draft Save atomically guards automatic location and does not persist request intent', async () => {
+  const app = await fixture();
+  try {
+    const patch = (value: unknown) => fetch(`${app.url}/api/settings`, { method: 'PATCH', ...body(value) });
+    await patch({ location: { name: 'Chosen city', latitude: 43, longitude: -79, timezone: 'America/Toronto' } });
+    const automatic = { automaticLocation: true, locationSource: 'device', location: { name: 'Device area', latitude: 12.345, longitude: 45.678, timezone: 'auto' }, appearance: { brightness: 0.3 } };
+    assert.equal((await patch(automatic)).status, 200);
+    assert.equal(app.store.snapshot().settings.location.name, 'Chosen city');
+    assert.equal(app.store.snapshot().settings.appearance.brightness, 0.3);
+    assert.equal('automaticLocation' in app.store.snapshot().settings, false);
+    assert.equal((await patch({ ...automatic, automaticLocation: false, appearance: { brightness: 9 } })).status, 400);
+    assert.equal(app.store.snapshot().settings.location.name, 'Chosen city', 'invalid visual draft cannot partly save device location');
+    assert.equal((await patch({ ...automatic, automaticLocation: false })).status, 200);
+    assert.equal(app.store.snapshot().settings.location.latitude, 12.3);
+    const exported = await (await fetch(`${app.url}/api/export`)).json();
+    assert.equal('automaticLocation' in exported.settings, false);
+    assert.equal((await patch({ automaticLocation: 'yes' })).status, 400);
+  } finally { await app.close(); }
+});
+
 test('hide-empty behavior persists through partial patch, preset export/import and legacy import', async () => {
   const app = await fixture();
   try {

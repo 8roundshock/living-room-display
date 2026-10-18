@@ -29,6 +29,16 @@ Mutating JSON requests require `Content-Type: application/json`. Errors use
 are rejected. Text/reminder limits, visual ranges, and preset limits are validated
 on the server. Saved presets contain only nonrecursive visual snapshots.
 
+`PATCH /api/settings` also accepts request-only `automaticLocation: boolean`.
+When true, the serialized write preserves a saved manual city rather than applying
+the request's location/source; other valid changes save atomically. The flag is
+consumed, never stored or exported. The studio sends only changed fields, so an
+unrelated appearance save does not resubmit an old location. Explicit successful
+device selection uses validated PATCH without the automatic guard; validation
+rounds device points. Invalid settings reject the entire draft, including location.
+`/api/location` remains compatible for existing callers; the studio no longer uses
+its immediate-save behavior.
+
 Visual settings include `widgetBehavior.reminders.hideWhenEmpty` (boolean,
 default `true`). It controls hiding a confirmed list with no pending reminders;
 `widgets.reminders: false` always disables the widget. PATCH accepts a nested
@@ -74,6 +84,10 @@ settings and already-granted permission. Otherwise the user must press the devic
 button. No permission/position request occurs in `/display`; its response carries
 `Permissions-Policy: geolocation=()`, while editor responses permit only self.
 There is no background watch or IP geolocation service.
+Device/fallback results remain local drafts until Save. Cancel invalidates pending
+callbacks; choosing a city invalidates earlier device work. The request-only
+automatic guard protects a manual city saved by another editor while a draft is
+pending. Neither path submits a raw browser position.
 
 For device points, Open-Meteo receives only the rounded coordinates and
 `timezone=auto`. The returned timezone must be a valid IANA identifier and is

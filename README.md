@@ -9,7 +9,12 @@ The selected approach is a custom local web dashboard plus a Windows helper.
 The React UI, local API, persistence, weather and RAM-only snapshot handoff are implemented.
 Device-area weather with a Toronto fallback, editable presets and reminders,
 and configurable hiding of empty reminders are implemented. The sparse interface
-uses the [recorded HIG-inspired design choices](docs/design.md). Wider release
+uses the [recorded HIG-inspired design choices](docs/design.md). The display studio
+puts one focused Style, Widgets, Weather or Reminders inspector beside its live
+preview. Settings/location have Save/Cancel, cities appear as you type, and
+advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
+This redesigned source still needs an installed refresh and native acceptance.
+Wider release
 compatibility checks remain; see [STATUS.md](STATUS.md).
 
 This is the independent private

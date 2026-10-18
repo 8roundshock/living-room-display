@@ -46,6 +46,7 @@ export const automaticLocationSchema = z.discriminatedUnion('source', [
   z.object({ source: z.literal('fallback'), automatic: z.boolean() }).strict(),
 ]);
 export const settingsPatchSchema = z.object({
+  automaticLocation: z.boolean().optional(),
   location: location.partial().optional(), units: z.enum(['metric', 'imperial']).optional(), clockFormat: z.enum(['12h', '24h']).optional(),
   locationSource: z.enum(['device', 'manual', 'fallback']).optional(),
   appearance: appearance.partial().optional(), widgets: widgets.partial().optional(),
@@ -62,13 +63,17 @@ export const dataSchema = z.object({ version: z.literal(1), settings: settingsSc
 export const importSchema = z.object({ version: z.literal(1), exportedAt: z.iso.datetime(), settings: settingsSchema, reminders: z.array(reminderSchema).max(1000) }).strict();
 
 export function mergeSettings(current: Settings, patch: SettingsPatch): Settings {
-  const next = { ...current, ...patch, location: { ...current.location, ...patch.location }, appearance: { ...current.appearance, ...patch.appearance },
+  const { automaticLocation, ...changes } = patch;
+  if (automaticLocation && current.locationSource === 'manual') {
+    delete changes.location; delete changes.locationSource;
+  }
+  const next = { ...current, ...changes, location: { ...current.location, ...changes.location }, appearance: { ...current.appearance, ...changes.appearance },
     widgets: { ...current.widgets, ...patch.widgets }, preview: { ...current.preview, ...patch.preview }, idle: { ...current.idle, ...patch.idle },
     widgetOverrides: { ...current.widgetOverrides },
     widgetBehavior: { reminders: { ...current.widgetBehavior.reminders, ...patch.widgetBehavior?.reminders } },
   };
   // Existing API callers that explicitly edit a city are manual overrides too.
-  if (patch.location && patch.locationSource === undefined) next.locationSource = 'manual';
+  if (changes.location && changes.locationSource === undefined) next.locationSource = 'manual';
   for (const id of Object.keys(patch.widgetOverrides ?? {}) as (keyof Settings['widgetOverrides'])[]) {
     next.widgetOverrides[id] = { ...current.widgetOverrides[id], ...patch.widgetOverrides?.[id] };
   }
