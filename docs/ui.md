@@ -116,10 +116,12 @@ the title, a due line (`Overdue · Yesterday · 3:00 PM`, `Today · 6:00 PM` or
 `Anytime`) and Edit/Delete. One tap fills the circle and dims the title at once while
 the completion saves; after about 0.9 s the row collapses out of Up next (reduced
 motion keeps the delay without the collapse). The status line offers **Undo** for
-about 8 s; Undo, or tapping the circle again during the settle, restores the item.
-Focus moves to the next circle (else the previous one, else Add), so keyboard users
-can tick off several in a row. A failed save reverts the row: “Could not complete
-reminder. It is still in Up next.”
+about 8 s; Undo, or tapping the circle again during the settle, restores the item
+(it shows unchecked at once and stays in Up next while the restore saves). Focus
+moves to the next circle (else the previous one, else Add), so keyboard users can
+tick off several in a row; after Undo, focus moves to the restored reminder's circle.
+A failed save reverts the row: “Could not complete reminder. It is still in Up
+next.” Deleting from Up next reads “Reminder deleted”, also while a row settles.
 History groups completed reminders under TODAY, YESTERDAY, `Mon, Oct 12` or
 `Oct 12, 2025` by completion time in the computer timezone, newest first, 50 at a
 time. A row shows `Completed 3:42 PM` (plus ` · was due …` when it was dated), and
@@ -132,7 +134,9 @@ computer keeps the latest 500 completed reminders. Every reminder time follows t
 The ambient widget shows as many pending reminders as fit its box, soonest first,
 never a partially visible row, then an exact “+N more”. Titles use up to two lines
 (four when only one reminder is pending) and scale with the widget width, capped
-near 3.2% of the display height. Dated rows add `Today · 6:00 PM`, `Tomorrow ·
+near 3.2% of the display height. If even one row overflows, that row stays and the
+widget zooms out as a whole; any resize remeasures against the widget's fixed box, so
+the count and that state never flip on a remeasure. Dated rows add `Today · 6:00 PM`, `Tomorrow ·
 9:00 AM`, `Oct 24 · 3:00 PM` or `Overdue · Yesterday · 3:00 PM` (the word Overdue in
 the dim caution tone). Completed reminders never appear; the display reflects a
 check-off within its 30 s refresh.
