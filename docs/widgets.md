@@ -293,7 +293,8 @@ exact. Reminders marks only reminders that were not pending at the previous upda
 with `data-new`, and fades them by opacity alone. A re-sorted row, which React moves
 with `insertBefore` and Chromium would otherwise restart from `@starting-style`
 (#172), and a row that stops overflowing stay still. Lively reminder rows also fade
-without moving. Its measuring pass hides the visible “+N more” with `visibility`
+without moving, because the measurement reads transformed rectangles (#216 tracks
+measuring layout boxes instead). Its measuring pass hides the visible “+N more” with `visibility`
 and `position: absolute`, never `display: none`, because a box that disappears and
 returns replays its entrance and crossfade.
 
