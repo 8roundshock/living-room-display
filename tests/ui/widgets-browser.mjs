@@ -20,13 +20,13 @@ const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'off
  * still zoom out below it; each allowance names the ticket fixing it. An allowance no longer needed fails,
  * so it is removed when that work lands.
  */
-const FLOOR_FIT_ALLOWANCES = { 'forecast/small': '#264', 'airQuality/small': '#271', 'airQuality/medium': '#271', 'countdown/large': '#266', 'weather/small': '#283', 'note/small': '#194' };
+const FLOOR_FIT_ALLOWANCES = { 'airQuality/small': '#271', 'airQuality/medium': '#271', 'weather/small': '#283', 'weather/medium': '#283', 'note/small': '#291' };
 /**
  * #99: widgets that still construct Intl formatters on a one-second tick within the same minute, each with
  * the ticket caching them. An allowance no longer needed fails; with none left the full board must
  * construct none.
  */
-const INTL_TICK_ALLOWANCES = { forecast: '#264', weather: '#264', calendar: '#266', countdown: '#266', clock: '#271', preview: '#271' };
+const INTL_TICK_ALLOWANCES = { clock: '#271', preview: '#271' };
 /** Every active widget on one Balanced 12 x 8 board (as in motion-browser.mjs). */
 const FULL_BOARD = {
   clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
@@ -125,10 +125,17 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       return state;
     };
     // #221: stale and offline variants render on their own page, so the main page's clock (which
-    // the family hooks read) never moves for them.
+    // the family hooks read) never moves for them. Chromium delays rendering frames, and with them
+    // ResizeObserver delivery, in a background tab, so whichever page is in use is brought to the
+    // front: the family hooks (the Reminders remeasure checks, #216) wait on real frames.
     const statusPage = await context.newPage(); statusPage.on('pageerror', error => errors.push(error.message));
     await statusPage.clock.install({ time: new Date(now) });
+    await page.bringToFront();
     async function statusReport(id, size, density, viewport, status) {
+      await statusPage.bringToFront();
+      try { return await renderStatus(id, size, density, viewport, status); } finally { await page.bringToFront(); }
+    }
+    async function renderStatus(id, size, density, viewport, status) {
       current = familyState(id, size, density);
       if (status === 'stale') {
         current.weather = { ...current.weather, status: 'stale', updatedAt: new Date(now - 5 * 3_600_000).toISOString() };

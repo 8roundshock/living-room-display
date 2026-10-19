@@ -196,6 +196,6 @@ sequence, rectangles and fit at 50% of an entrance for the whole merged catalog,
 the loop inventory, glyph pixel parity, adaptive Weather, the measured Reminders
 list, value changes in every widget unit, the discrete drift steps, a 15 s CDP budget
 at 1280×720 ×3 for the default board and a full board of every widget, and a frame
-budget (at most a few drawn frames per second at Off with Soft motion on, at 1280×720
+budget (at most a few drawn frames per second at Off with Drift and fade on, at 1280×720
 ×3 and 3840×2160 ×1). Browser checks do not establish TV
 smoothness, comfort or long-term OLED behaviour; physical acceptance is #111.
