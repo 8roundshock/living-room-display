@@ -29,7 +29,8 @@ their independent immediate-save behavior once.
 
 The authored canvas is stable by default. **Preview movement** explicitly enters
 the ambient arrangement preview; editing returns to authored placement. The plus
-opens a category rail, one actual widget renderer with synthetic content, family
+opens a grouped catalog (Time, Weather & sky, Personal, Pictures; a narrow rail on
+desktop) with one actual widget renderer with synthetic content, family
 choices and a reachable Add action. This replaces twenty-one tiny simultaneous
 miniatures. Clicking a widget selects its relevant controls; moving uses direct
 dragging, and only the selected/focused widget exposes a resize handle. Keyboard

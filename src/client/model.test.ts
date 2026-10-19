@@ -6,15 +6,16 @@ import {
   getVisual,
   precipitationOutlook,
   reminderPresentation,
-  sortReminders,
   upcomingRain,
   weatherAttributionWidget,
 } from './model.ts';
+import { pendingReminders } from '../shared/reminders.ts';
 
 test('weather attribution follows the first enabled weather module and can all be removed', () => {
   const settings = defaultSettings(); assert.equal(weatherAttributionWidget(settings), 'forecast');
   settings.widgets.forecast = false; assert.equal(weatherAttributionWidget(settings), 'weather');
-  settings.widgets.weather = false; assert.equal(weatherAttributionWidget(settings), 'rain');
+  // Rain is retired into Weather (#74): even an injected enabled Rain never carries the credit.
+  settings.widgets.weather = false; settings.widgets.rain = true; assert.equal(weatherAttributionWidget(settings), null);
   settings.widgets.rain = false; assert.equal(weatherAttributionWidget(settings), null);
 });
 import {
@@ -287,33 +288,27 @@ test('complete upcoming coverage includes both intersecting hour buckets and tot
   );
 });
 
-test('dated pending reminders lead undated/completed entries without mutating input', () => {
+test('the editor and display share one pending order: soon dated, undated, later dated; completed excluded', () => {
+  const now = Date.parse('2026-10-18T13:00:00Z');
+  const entry = (name: string, completed: boolean, dueAt: string | null) => ({
+    name, completed, dueAt, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
+  });
   const values = [
-    { name: 'undated', completed: false, dueAt: null, createdAt: '2026-10-01' },
-    {
-      name: 'done',
-      completed: true,
-      dueAt: '2026-10-01T12:00:00Z',
-      createdAt: '2026-10-01',
-    },
-    {
-      name: 'upcoming',
-      completed: false,
-      dueAt: '2026-10-20T12:00:00Z',
-      createdAt: '2026-10-01',
-    },
-    {
-      name: 'overdue',
-      completed: false,
-      dueAt: '2026-10-17T12:00:00Z',
-      createdAt: '2026-10-01',
-    },
+    entry('undated', false, null),
+    entry('done', true, '2026-10-01T12:00:00Z'),
+    entry('next month', false, '2026-11-20T12:00:00Z'),
+    entry('upcoming', false, '2026-10-20T12:00:00Z'),
+    entry('overdue', false, '2026-10-17T12:00:00Z'),
   ];
   assert.deepEqual(
-    sortReminders(values).map((value) => value.name),
-    ['overdue', 'upcoming', 'undated', 'done'],
+    pendingReminders(values, now).map((value) => value.name),
+    ['overdue', 'upcoming', 'undated', 'next month'],
   );
   assert.equal(values[0].name, 'undated');
+  const settings = defaultSettings();
+  assert.equal(reminderPresentation(settings, values), 'pending');
+  assert.equal(reminderPresentation(settings, values.filter((value) => value.completed)), 'hidden', 'history alone is a confirmed empty list');
+  assert.equal(reminderPresentation(settings, values.filter((value) => value.completed), true), 'unavailable');
 });
 
 test('appearance presets reset visuals while preserving personal data and named presets', () => {

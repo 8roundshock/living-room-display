@@ -8,7 +8,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 
 | Method/path                    | Request                                                                | Response                                                                     |
 | ------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `GET /api/health`              | None                                                                   | Status, version, storage recovery warning.                                   |
+| `GET /api/health`              | None                                                                   | Status, version (read once at startup from the shipped `package.json`), storage recovery warning. |
 | `GET /api/state`               | None                                                                   | Settings, reminders, weather, air quality (`off` unless enabled), preview metadata, storage warning. |
 | `PATCH /api/settings`          | Validated nested partial settings                                      | Full saved settings.                                                         |
 | `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |
@@ -16,6 +16,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `POST /api/reminders`          | `text`, optional ISO `dueAt` or null                                   | Created reminder (201).                                                      |
 | `PATCH /api/reminders/:id`     | Partial `text`, `completed`, `dueAt`                                   | Updated reminder.                                                            |
 | `DELETE /api/reminders/:id`    | None                                                                   | Empty 204.                                                                   |
+| `DELETE /api/reminders/completed` | None                                                                | `{ "deleted": n }`; removes only completed reminders, atomically.            |
 | `GET /api/weather`             | None                                                                   | Cached normalized forecast.                                                  |
 | `GET /api/air-quality`         | Optional `scale=us\|european` (defaults to the saved scale)            | Editor preview of [air quality](#air-quality) for the saved location, `no-store`. |
 | `GET /api/locations?q=Toronto` | City query, 2–100 characters                                           | Up to eight city results with coordinates/timezone.                          |
@@ -60,6 +61,21 @@ Reminder `dueAt` is one-time, nullable, and displayed in the editor's explicit
 local time context. Recurrence is not implemented. Daily forecast dates are civil
 `YYYY-MM-DD` labels; they are not instants to reinterpret in the server timezone.
 
+Reminder history (#73) adds no field: while `completed` is true, `updatedAt` is the
+completion time, and history is the completed subset of `reminders[]`. A completed
+reminder is immutable except restore (`completed: false`, optionally with `text`
+and/or `dueAt` in the same patch) and delete: a PATCH that changes its `text` or
+`dueAt` without `completed: false` returns 409 “Restore this reminder before editing
+it.” A PATCH whose every supplied field equals the stored value returns 200 with the
+stored reminder and writes nothing, so a retried or double-tapped completion keeps its
+original time. Completing a reminder keeps the newest 500 completed reminders and
+removes older completed ones in the same atomic write; pending reminders are never
+removed. The store still holds at most 1000 reminders in total (the previous release
+rejects more): at the limit, `POST /api/reminders` removes the oldest completed
+reminder in the same write, or returns 409 “Reminder limit reached” when all are
+pending. Exports and imports carry history in `reminders[]` unchanged; an import with
+more than 500 completed reminders is accepted as is and pruned at the next completion.
+
 Settings `idle.enabled` is a preference, not proof Windows idle activation is
 installed. Only the Windows host's explicit activation command changes that
 configuration. `/api/windows/status` reads existing settings without changing them.
@@ -74,6 +90,17 @@ catalog ID: `{column,row,size}` with zero-based cells and a supported family.
 requires `preview.enabled`; the editor keeps both flags coherent when adding or
 removing Last screen. Enabled placements may not intersect or leave the grid.
 PATCH accepts nested placement updates; import/presets validate the same rules.
+A free-size widget (the catalog `freeSize` rule; currently Reminders, #73) may add
+`span: {columns, rows}`: whole cells from its minimum (2×2) up to the full grid
+height and two-thirds of the width (Spacious 5×6, Balanced 8×8, Fine 10×10), in
+revision 2 only. `size` is always the largest family inside the span, and a span
+equal to that family's span is dropped, so spans are stored only when they differ.
+Other widgets reject a span (`<Name> does not support custom sizes`); too-small or
+too-wide spans return 400 with a clear message. In a placement PATCH, `span: null`
+clears a custom size, and so does a `size` without `span` (a family choice); a
+move keeps it. The editor sends a changed placement whole, with `span: null` when
+it has none. A saved span is not readable by `bedca44`; see the
+[strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
 Legacy version-one settings acquire the safe default grid while preserving old
 widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
 and `appearance.layout` remain parseable data but no longer affect rendering;
@@ -167,6 +194,38 @@ For device points, Open-Meteo receives only the rounded coordinates and
 used in WeatherState, so forecast dates/times never use the browser's potentially
 different zone. A missing/invalid resolved timezone makes that forecast
 unavailable. Settings retain `auto` to resolve again for a changed area.
+
+### Adaptive Weather outlook
+
+The Weather widget (#74) classifies the saved hourly intervals in the browser with
+`rainOutlook` in [`weather-outlook.ts`](../src/client/weather-outlook.ts); the API
+and persisted data are unchanged. The window is the 12 hours after now (intervals
+overlapping it; expired intervals are ignored, so a retained stale forecast is still
+classified from what remains). A **spell** is contiguous hours whose `rainAmount`
+(rain plus showers) is at least 0.1 mm (0.004 in); a dry or unknown hour or a
+coverage gap ends it. In precedence order:
+
+| Kind | When | Weather mode | Example |
+| --- | --- | --- | --- |
+| `unknown` | No future intervals | hint | “Rain outlook unavailable” |
+| `now` | A spell includes now | elevated | “Rain likely until 6 PM”; open end “Rain likely beyond 1 AM” (small: “Rain likely now”) |
+| `soon` | A spell starts within 6 hours (inclusive) | elevated | “Rain likely 3–6 PM”; open end or several spells “from 3 PM” (medium/large: “on and off from 3 PM”) |
+| `later` | A spell starts in 6–12 hours | hint | “Rain likely from 9 PM” (medium/large add the day when it differs: “from Tomorrow 7 AM”) |
+| `unknown` | No spell, but some rain amounts are missing | hint | “Rain timing unavailable” |
+| `possible` | Some hour has at least 30% chance, or precipitation without rain (for example snow) | hint | “Precipitation possible · 40%” |
+| `unknown` | Partial, gapped or null coverage | hint | “Rain outlook partial” |
+| `calm` | Otherwise: the 12-hour forecast is complete and dry | calm | nothing about rain |
+
+“Likely” means the spell's peak hourly chance is at least 60%; otherwise, or when the
+chance is unknown, “possible”. Probability covers all precipitation, so the wording
+never says it is or will be raining. The elevated detail covers every spell in the
+window: “Peak 60% · 4 mm rain” (imperial “0.16 in rain”), “Known rain 4 mm” when some
+rain amounts are missing, and “Chance unavailable” without a chance. The confidence
+label is “Forecast estimate”, “Partial forecast” (coverage under 12 hours) or
+“Partial data” (missing values), plus “ · coverage gaps”. Times use the weather
+city's timezone and the 12/24-hour setting; compact 12-hour times drop “:00” and
+share AM/PM (“3–6 PM”, “11 AM–2 PM”, “15:00–18:00”), keeping non-zero minutes in
+half-hour zones. Hours are real instants, so a DST change shows wall-clock times.
 
 ### Forecast normalization and caching
 
