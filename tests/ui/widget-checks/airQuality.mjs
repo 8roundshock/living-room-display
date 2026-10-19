@@ -28,8 +28,11 @@ async function reload(page) { await page.reload(); await page.locator('.display-
 export async function family({ page, widget, size, density, viewport, state }) {
   const text = await widget.innerText();
   assert.match(text, /Air quality/); assert.match(text, /US AQI/); assert.match(text, /\b42\b/); assert.match(text, /Good/);
-  // The page clock advances a few minutes across the suite.
-  assert.match(text, /Model estimate · Updated 1\d min ago/);
+  // The page clock advances across the suite, and further as the merged catalog grows (#73, #157), so
+  // the age is read against the page clock; the one-second tick may lag it by up to a second.
+  const clockNow = await page.evaluate(() => Date.now());
+  const ages = [clockNow, clockNow - 1000].map(at => Math.floor((at - Date.parse(state.airQuality.updatedAt)) / 60_000));
+  assert.ok(ages.some(age => text.includes(`Model estimate · Updated ${age} min ago`)), `age matches the page clock (${ages.join(' or ')} min): ${text}`);
   assert.match(text, /Air quality: CAMS via Open-Meteo/);
   if (size === 'small') assert.doesNotMatch(text, /Mostly/);
   else { assert.match(text, /Mostly PM2\.5 · 12 µg\/m³/); assert.match(text, /UV 3 · Moderate/); }
