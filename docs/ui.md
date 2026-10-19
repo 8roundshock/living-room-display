@@ -46,7 +46,9 @@ visible above it, including narrow screens and compact keyboard-height windows.
   and families until another widget edit. Cancel restores the saved arrangement.
 - **Free-size Reminders** (#73): its handle snaps to whole cells from 2 × 2 up to
   the full grid height and two-thirds of the width; neighbours reflow live, and an
-  impossible size keeps the board with “No room for that size”. On the focused
+  impossible size keeps the board with “No room for that size”. The default board's
+  large Clock, Weather (#74) and Forecast leave no room for a Column until one of
+  them is made smaller; naming what blocks a size is #183. On the focused
   handle Right/Left change width and Down/Up change height by one cell, announced
   as “Reminders resized to 2 × 6”. The inspector offers Small, Medium, Large and
   Column (2 × full height) presets plus Width and Height steppers that stop at
