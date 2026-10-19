@@ -404,11 +404,11 @@ function Uninstall-App {
     # Staging leftovers and the failed candidate are package-owned. A runtime
     # backup is removed only when the Setup package created it; one made by
     # hand for a deliberate runtime update is kept.
-    $directories = @('app','app.previous','app.failed','app.next','package.next','runtime.next','runtime','run','edge-profile')
-    if ($installed.PSObject.Properties['runtimePreviousOwner'] -and $installed.runtimePreviousOwner -eq 'package') { $directories += 'runtime.previous' }
-    foreach ($directory in $directories) { Remove-OwnedDirectory (Join-Path $InstallRoot $directory) }
+    $directories = @(@('app','app.previous') | ForEach-Object { Join-Path $InstallRoot $_ }) + (Get-AsideDirectories $script:asideNames) + @(@('package.next','runtime','run','edge-profile') | ForEach-Object { Join-Path $InstallRoot $_ })
+    if ($installed.PSObject.Properties['runtimePreviousOwner'] -and $installed.runtimePreviousOwner -eq 'package') { $directories += (Join-Path $InstallRoot 'runtime.previous') }
+    foreach ($directory in $directories) { Remove-OwnedDirectory $directory }
     # The record of an unfinished Setup rollback describes folders removed above.
-    if (Test-Path -LiteralPath $transaction -PathType Leaf) { Remove-Item -LiteralPath $transaction -Force }
+    foreach ($record in @($transaction, ($transaction + '.tmp'))) { if (Test-Path -LiteralPath $record -PathType Leaf) { Remove-Item -LiteralPath $record -Force } }
     if ($RemoveData) {
         Remove-OwnedDirectory $data
         Remove-OwnedDirectory (Join-Path $InstallRoot 'backups')
@@ -721,8 +721,24 @@ function Move-OwnedItem([string]$From, [string]$To) {
     Assert-NoReparseAncestor $From
     # Move-Item would put a folder inside an existing target instead of renaming it.
     if (Test-Path -LiteralPath $To) { throw "Move target already exists: $To" }
-    $faultName = 'move-' + (Split-Path $To -Leaf)
+    $faultName = 'move-' + ((Split-Path $To -Leaf) -replace '-\d{1,2}$', '')
     Invoke-Retried { Invoke-PackageFaultPoint $faultName; Move-Item -LiteralPath $From -Destination $To } "Renaming $From to $To"
+}
+# Folders a rollback renames things into. Older copies that couldn't be removed
+# yet keep their names; the next one gets a number (app.failed-2, ...).
+$script:asideNames = @('app.failed','app.next','runtime.next')
+function Get-FreeAsidePath([string]$Path) {
+    # A rollback never deletes a folder to free a name (#196). The suffix stays
+    # short so every path inside still fits where package.next fitted.
+    if (-not (Test-Path -LiteralPath $Path)) { return $Path }
+    for ($number = 2; $number -le 99; $number++) {
+        if (-not (Test-Path -LiteralPath "$Path-$number")) { return "$Path-$number" }
+    }
+    throw "No free name to set $Path aside."
+}
+function Get-AsideDirectories([string[]]$Names) {
+    if (-not (Test-Path -LiteralPath $InstallRoot -PathType Container)) { return @() }
+    return @(Get-ChildItem -LiteralPath $InstallRoot -Directory -Force | Where-Object { $Names -contains ($_.Name -replace '-\d{1,2}$', '') } | Sort-Object Name | ForEach-Object { $_.FullName })
 }
 function Restore-OwnedItem([string]$From, [string]$To) {
     # Safe to repeat when a later run resumes: done already if only the target exists.
@@ -740,33 +756,37 @@ function Clear-PackageTransaction {
     catch { Write-PackageLog "Warning: could not remove ${transaction}: $($_.Exception.Message)" }
 }
 function Restore-PackageSwap([hashtable]$State, [bool]$KeepCandidate) {
-    # Undo exactly what this run changed, newest first, by whole-folder renames:
-    # each step either happens or leaves its folders as they were. Nothing is
-    # deleted until every step is done. After a failed health check the
-    # candidate app is kept as app.failed for diagnosis.
-    $failedApp = Join-Path $InstallRoot 'app.failed'
+    # Undo exactly what this run changed, newest first, by whole-folder renames
+    # only: each step either happens or leaves its folders as they were. Nothing
+    # is deleted until the record is cleared; a set-aside name that an older copy
+    # still holds gets a number instead (#196). After a failed health check the
+    # candidate app is kept as app.failed for diagnosis. Returns that folder.
     $previousApp = Join-Path $InstallRoot 'app.previous'
     $previousRuntime = Join-Path $InstallRoot 'runtime.previous'
-    $asideApp = Join-Path $InstallRoot 'app.next'
-    $asideRuntime = Join-Path $InstallRoot 'runtime.next'
+    $kept = $null
     # A runtime placed by this run is set aside when an older one is restored, or
     # when an earlier app exists that ran without it. A fresh install keeps it.
     if ($State.NewRuntime -and ($State.RuntimeMoved -or $State.AppMoved)) {
-        if (Test-Path -LiteralPath $runtime) { Remove-OwnedDirectory $asideRuntime; Move-OwnedItem $runtime $asideRuntime }
+        if (Test-Path -LiteralPath $runtime) { Move-OwnedItem $runtime (Get-FreeAsidePath (Join-Path $InstallRoot 'runtime.next')) }
         $State.NewRuntime = $false; Save-PackageTransaction $State
     }
     if ($State.RuntimeMoved) { Restore-OwnedItem $previousRuntime $runtime; $State.RuntimeMoved = $false; Save-PackageTransaction $State }
     if ($State.NewApp) {
-        $candidateTarget = if ($KeepCandidate) { $failedApp } else { $asideApp }
-        if (Test-Path -LiteralPath $app) { Remove-OwnedDirectory $candidateTarget; Move-OwnedItem $app $candidateTarget }
+        if (Test-Path -LiteralPath $app) {
+            $target = Get-FreeAsidePath (Join-Path $InstallRoot $(if ($KeepCandidate) { 'app.failed' } else { 'app.next' }))
+            Move-OwnedItem $app $target
+            if ($KeepCandidate) { $kept = $target }
+        }
         $State.NewApp = $false; Save-PackageTransaction $State
     }
     if ($State.AppMoved) { Restore-OwnedItem $previousApp $app; $State.AppMoved = $false; Save-PackageTransaction $State }
     if ($null -ne $State.OriginalMarker) { [IO.File]::WriteAllText($marker, [string]$State.OriginalMarker, (New-Object Text.UTF8Encoding($false))) }
     Clear-PackageTransaction
-    foreach ($aside in @($asideApp,$asideRuntime)) {
+    # Only now: set-aside copies, including any left by an interrupted earlier run.
+    foreach ($aside in (Get-AsideDirectories @('app.next','runtime.next'))) {
         try { Remove-OwnedDirectory $aside } catch { Write-PackageLog "Could not remove $aside yet (the next Setup or uninstall removes it): $($_.Exception.Message)" }
     }
+    return $kept
 }
 function Get-RestoreFailureMessage([string]$Reason, [bool]$HadPrevious) {
     # The undo stopped part-way. package-transaction.json still describes it, so
@@ -785,12 +805,13 @@ function Resume-PackageTransaction {
     $state = @{Version=[string](Get-MarkerValue $journal 'version');OriginalMarker=(Get-MarkerValue $journal 'originalMarker');AppMoved=[bool](Get-MarkerValue $journal 'appMoved');NewApp=[bool](Get-MarkerValue $journal 'newApp');RuntimeMoved=[bool](Get-MarkerValue $journal 'runtimeMoved');NewRuntime=[bool](Get-MarkerValue $journal 'newRuntime')}
     # A Start-menu launch since then may have started the candidate.
     try { Stop-App } catch { Write-PackageLog "Stop before finishing the earlier rollback: $($_.Exception.Message)" }
-    try { Restore-PackageSwap $state $true }
+    try { $script:keptCandidate = Restore-PackageSwap $state $true }
     catch { throw "LRD-E20: Setup could not finish putting the previous version back: $($_.Exception.Message)" }
     Write-PackageLog 'The version from before the earlier run is back in place.'
 }
 function Install-Package {
     Write-PackageStep 'verify'
+    $script:keptCandidate = $null
     if (-not $script:installRootExplicit) { throw 'InstallPackage requires an explicit -InstallRoot.' }
     if (-not $PackageArchive) { throw 'LRD-E13: No package archive was given.' }
     $archive = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($PackageArchive))
@@ -847,8 +868,14 @@ function Install-Package {
     # lock is held) and only inside the install root, with reparse refusal.
     $stage = Join-Path $InstallRoot 'package.next'
     if ($isUpgrade) {
-        foreach ($stale in @('package.next','runtime.next','app.next')) {
-            try { Remove-OwnedDirectory (Join-Path $InstallRoot $stale) } catch { throw "LRD-E10: $($_.Exception.Message)" }
+        try { Remove-OwnedDirectory $stage } catch { throw "LRD-E10: $($_.Exception.Message)" }
+        # Set-aside copies from earlier runs. A rollback no longer needs their
+        # names (it numbers a new one), so one that can't be removed yet, for
+        # example while a scanner holds a file in it, is only logged (#196). The
+        # candidate kept by a rollback this run just finished stays for diagnosis.
+        foreach ($stale in (Get-AsideDirectories $script:asideNames)) {
+            if ($stale -eq $script:keptCandidate) { continue }
+            try { Remove-OwnedDirectory $stale } catch { Write-PackageLog "Could not remove $stale yet (a later Setup or uninstall removes it): $($_.Exception.Message)" }
         }
     }
     $null = New-Item -ItemType Directory -Path $InstallRoot -Force
@@ -903,7 +930,7 @@ function Install-Package {
             $failure = $_
             Write-PackageLog "Replacement failed, restoring the previous files: $($failure.Exception.Message)"
             $hadPrevious = $state.AppMoved
-            try { Restore-PackageSwap $state $false }
+            try { $null = Restore-PackageSwap $state $false }
             catch { throw (Get-RestoreFailureMessage $_.Exception.Message $hadPrevious) }
             if ($wasRunning) { try { Start-App } catch { Write-PackageLog "Previous version restart failed: $($_.Exception.Message)" } }
             throw $failure
@@ -917,7 +944,7 @@ function Install-Package {
             try { Stop-App } catch { Write-PackageLog "Stop after failed start: $($_.Exception.Message)" }
             $hadPrevious = $state.AppMoved
             # Never report "nothing changed" when the undo itself failed.
-            try { Restore-PackageSwap $state $true }
+            try { $null = Restore-PackageSwap $state $true }
             catch { throw (Get-RestoreFailureMessage $_.Exception.Message $hadPrevious) }
             if (-not $hadPrevious) { throw 'LRD-E16: Living Room Display did not start and there is no previous version to restore. Data was not changed.' }
             $restarted = $false

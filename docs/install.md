@@ -107,8 +107,9 @@ reinstall. Either way, uninstall does the following:
 - restores your previous screen saver, but only if this app is the selected one
   and a saved backup exists;
 - stops the display and server;
-- removes `app`, `app.previous`, `app.failed`, `runtime` (and a Setup-made
-  `runtime.previous`), `run`, `edge-profile`, leftover staging folders, the
+- removes `app`, `app.previous`, `app.failed` (and numbered copies such as
+  `app.failed-2`), `runtime` (and a Setup-made `runtime.previous`), `run`,
+  `edge-profile`, leftover staging folders, the
   record of an unfinished rollback (`package-transaction.json`), the shortcuts
   and the Apps & Features entry.
 
@@ -168,7 +169,11 @@ renamed, `Stop` waits (up to 10 seconds per process) until the display, its
 Edge processes and the server have exited, because a process that is still
 ending keeps its folders open. Each rename is retried for a few seconds, and
 every step is a whole-folder rename, so a step either happens or leaves its
-folders as they were.
+folders as they were. The rollback never deletes a folder part-way: if an
+older `app.failed` is still in use (for example while a virus scanner reads
+it), the candidate goes to the next free name, such as `app.failed-2`. The next
+Setup run removes earlier `app.failed` copies it can, and uninstall removes
+them all.
 
 While a swap or its rollback is under way, `package-transaction.json` in the
 install folder records which renames are done. If the rollback can't finish

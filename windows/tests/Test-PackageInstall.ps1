@@ -411,6 +411,55 @@ try {
     Assert-True ((Get-Content -Raw $logFile) -match 'did not finish') 'The helper log does not record the resumed rollback.'
     Complete-Check 'unfinished rollback'
 
+    # ---- an old app.failed that can't be deleted never stops a rollback (#196) --
+    # A scanner, an indexer or an open file can hold a file in an app.failed left
+    # by an earlier failed update. The rollback only renames: the candidate gets
+    # the next free name, so the result is E15 (never E20), on a health failure
+    # and on a resumed rollback alike.
+    function New-HeldFailedApp([string]$Name = 'app.failed') {
+        $folder = Join-Path $InstallRoot $Name
+        $null = New-Item -ItemType Directory -Path $folder -Force
+        [IO.File]::WriteAllText((Join-Path $folder 'release.json'), '{"version":"0.0.9"}')
+        return [IO.File]::Open((Join-Path $folder 'release.json'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    }
+    function Get-FolderVersion([string]$Name) { return [string](Get-Content -Raw (Join-Path $InstallRoot "$Name\release.json") | ConvertFrom-Json).version }
+    $held = $null
+    try {
+        Reset-Root; Reset-Mocks
+        New-SourceInstall '0.1.0'
+        $script:serverRunning = $true; $script:runtimeVersion = 'v24.10.0'
+        $script:healthResults.Enqueue($false)
+        $held = New-HeldFailedApp
+        $appBefore = Get-TreeState $app; $runtimeBefore = Get-TreeState $runtime; $dataBefore = Get-TreeState $data; $markerBefore = Get-Sha256 $marker
+        $code = Invoke-Package (New-TestPackage)
+        $log = Get-Content -Raw $logFile
+        Assert-True ($code -eq 15) "A held app.failed turned a health-failure rollback into $code instead of 15. Log: $log"
+        Assert-True ((Get-TreeState $app) -eq $appBefore -and (Get-TreeState $runtime) -eq $runtimeBefore -and (Get-TreeState $data) -eq $dataBefore -and (Get-Sha256 $marker) -eq $markerBefore) 'The rollback next to a held app.failed did not restore app, runtime and marker, or changed data.'
+        Assert-True ((Get-FolderVersion 'app.failed-2') -eq '0.2.0' -and -not (Test-Path -LiteralPath $transaction) -and $script:starts -eq 2) 'The candidate was not kept under the next free name, the record remained, or the previous version did not restart.'
+        Assert-True ($log -match 'Could not remove .*app\.failed yet') 'The helper log does not say the old app.failed could not be removed yet.'
+        Assert-NoStaging
+        $held.Dispose(); $held = $null
+        Assert-True ((Get-FolderVersion 'app.failed') -eq '0.0.9') 'The rollback deleted or replaced the old app.failed.'
+        # The next Setup run removes both copies once nothing holds them.
+        Reset-Mocks
+        Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and @(Get-AsideDirectories $script:asideNames).Count -eq 0) 'The next Setup did not remove the old set-aside copies.'
+
+        # A resumed rollback (crash or power cut mid-swap) next to a held app.failed.
+        Reset-Root; Reset-Mocks
+        New-SourceInstall '0.1.0'
+        $appBefore = Get-TreeState $app; $dataBefore = Get-TreeState $data; $oldMarker = [IO.File]::ReadAllText($marker)
+        Move-Item -LiteralPath $app -Destination (Join-Path $InstallRoot 'app.previous')
+        $null = New-Item -ItemType Directory -Path (Join-Path $app 'dist\server') -Force
+        [IO.File]::WriteAllText((Join-Path $app 'release.json'), '{"version":"0.2.0"}')
+        Write-Json $transaction ([ordered]@{product='living-room-display';schema=1;version='0.2.0';originalMarker=$oldMarker;appMoved=$true;newApp=$true;runtimeMoved=$false;newRuntime=$false})
+        $held = New-HeldFailedApp
+        $code = Invoke-Package (New-TestPackage)
+        Assert-True ($code -eq 0) "A resumed rollback next to a held app.failed returned $code. Log: $(Get-Content -Raw $logFile)"
+        Assert-True ((Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $appBefore -and (Get-TreeState $data) -eq $dataBefore -and -not (Test-Path -LiteralPath $transaction)) 'The resumed rollback lost the last working app, changed data or kept its record.'
+        Assert-True ((Get-FolderVersion 'app.failed-2') -eq '0.2.0') 'The resumed rollback did not keep the interrupted candidate under the next free name.'
+    } finally { if ($held) { $held.Dispose() } }
+    Complete-Check 'held app.failed during rollback'
+
     # ---- a run that stopped mid-swap (crash or power cut) is undone first ----
     foreach ($candidatePlaced in @($true,$false)) {
         Reset-Root; Reset-Mocks
@@ -493,14 +542,14 @@ try {
     Reset-Root; Reset-Mocks
     Assert-True ((Invoke-Package (New-TestPackage)) -eq 0) 'Install before uninstall failed.'
     $owner = Get-Marker; $owner.runtimePreviousOwner = 'package'; Write-Json $marker $owner
-    foreach ($leftover in @('app.previous','app.failed','app.next','package.next','runtime.next','run','edge-profile','runtime.previous','backups\data-before-0.1.0-20260101T000000000Z')) { $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot $leftover) -Force }
+    foreach ($leftover in @('app.previous','app.failed','app.failed-2','app.next','app.next-3','package.next','runtime.next','runtime.next-2','run','edge-profile','runtime.previous','backups\data-before-0.1.0-20260101T000000000Z')) { $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot $leftover) -Force }
     [IO.File]::WriteAllText($transaction, '{"product":"living-room-display","schema":1}')
     $null = New-Item -ItemType Directory -Path $data -Force
     [IO.File]::WriteAllText((Join-Path $data 'state.json'), '{"synthetic":true}')
     $dataBefore = Get-TreeState $data
     $FromInstaller = $true
     Uninstall-App | Out-Null
-    foreach ($gone in @('app','app.previous','app.failed','app.next','package.next','runtime.next','runtime','run','edge-profile','runtime.previous','package-transaction.json')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $gone))) "Uninstall left $gone." }
+    foreach ($gone in @('app','app.previous','app.failed','app.failed-2','app.next','app.next-3','package.next','runtime.next','runtime.next-2','runtime','run','edge-profile','runtime.previous','package-transaction.json')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $gone))) "Uninstall left $gone." }
     Assert-True ((Get-TreeState $data) -eq $dataBefore -and (Test-Path -LiteralPath (Join-Path $InstallRoot 'backups\data-before-0.1.0-20260101T000000000Z'))) 'Default uninstall removed data or backups.'
     Assert-True ((Get-Marker).state -eq 'uninstalled' -and (Get-Marker).channel -eq 'package') 'Uninstall did not retain the marker.'
     # The runtime.previous above was package-owned; a user-made one is kept.
