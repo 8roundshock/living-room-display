@@ -26,7 +26,8 @@
 .grid-ambient .weather-context, .grid-ambient .weather-age, .grid-ambient .weather-credit { font-size: calc(max(var(--min-text), min(5cqw, 6cqh)) * var(--font-scale)); line-height: 1.3; color: var(--ambient-accent); overflow-wrap: anywhere; }
 .grid-ambient .weather-context { margin: 0 0 3cqh; }
 .grid-ambient .weather-age { margin: 4cqh 0 0; opacity: 0.72; }
-/* The shared status cue (#223): stale and offline words in the caution tone at full opacity. */
+/* The shared status cue (#223): stale and offline words in the caution tone at full opacity. Any widget's
+   status line uses this one class (Weather's "Last known", Forecast's prefix, "Saved reminders · offline"). */
 .grid-ambient .weather-age.stale, .grid-ambient .status-caution { color: var(--ambient-caution); opacity: 1; }
 .grid-ambient .weather-credit { margin-top: 1cqh; opacity: 0.65; }
 
@@ -136,14 +137,17 @@
 .grid-ambient .ambient-forecast.widget-size-large .forecast-temperatures { font-size: calc(max(var(--min-data), min(5cqw, 13cqh)) * var(--font-scale)); }
 .grid-ambient .ambient-forecast.widget-size-large .forecast-rain { font-size: calc(max(var(--min-data), min(3cqw, 7cqh)) * var(--font-scale)); }
 
-/* Reminders show as many complete rows as the actual box holds (measured in Reminders.tsx), top-anchored
-   with black below. Titles follow the widget width but are capped near 3.2% of the display height, so a
-   tall box never inflates text; picker samples (no plane) keep the width-based size. A short box may only
-   shrink them (14cqh), so one long row still fits. Dates and labels keep the shared floors. The body stays
-   at 100cqh with overflow hidden, so the widget fit stays at 1. */
+/* Reminders show as many complete rows as the actual box holds (measured from layout boxes in Reminders.tsx,
+   so row transforms never change the count, #216), top-anchored with black below. Titles follow the widget
+   width but are capped near 3.2% of the display height, so a tall box never inflates text; picker samples
+   (no plane) keep the width-based size. A short box may only shrink them (14cqh), so one long row still fits.
+   When every pending reminder fits, the measured --reminder-lines (2, or 4 for one reminder) relaxes to 3–4
+   and --reminder-grow lets the width-based size grow toward the cap (#254). Dates and labels keep the shared
+   floors. The body stays at 100cqh with overflow hidden, so the widget fit stays at 1; it is the rows' offset
+   parent, so their offsets are measured inside it. */
 @property --ambient-reminder-title { syntax: '<length>'; inherits: true; initial-value: 1000px; }
 .grid-ambient > .ambient-content { --ambient-reminder-title: min(3.2cqh, 1.8cqw); }
-.grid-ambient .reminders-body { --reminder-title-size: calc(max(var(--min-data, 0px), min(9cqw, 14cqh, var(--ambient-reminder-title))) * var(--font-scale)); height: 100cqh; min-height: 0; overflow: hidden; justify-content: flex-start; }
+.grid-ambient .reminders-body { --reminder-title-size: calc(max(var(--min-data, 0px), min(9cqw * var(--reminder-grow, 1), 14cqh, var(--ambient-reminder-title))) * var(--font-scale)); position: relative; height: 100cqh; min-height: 0; overflow: hidden; justify-content: flex-start; }
 /* Even one row overflows: release the height so the shared whole-widget zoom-out applies. */
 .grid-ambient .reminders-body.reminders-overfull { height: auto; min-height: 100cqh; overflow: visible; }
 /* Measuring always uses the fixed box: a remeasure while overfull must not count rows against the grown body. */
@@ -157,8 +161,7 @@
 .grid-ambient .reminders-body[data-measuring] .ambient-reminder-list > li.reminder-overflow { display: flex; visibility: hidden; }
 .grid-ambient .ambient-reminder-copy { flex: 1; min-width: 0; }
 .grid-ambient .ambient-reminder-dot { width: calc(var(--reminder-title-size) * 0.3); height: calc(var(--reminder-title-size) * 0.3); margin-top: calc(var(--reminder-title-size) * 0.45); }
-.grid-ambient .ambient-reminder-title { font-size: var(--reminder-title-size); line-height: 1.2; font-weight: 500; -webkit-line-clamp: 2; }
-.grid-ambient .ambient-reminder-list.single .ambient-reminder-title { -webkit-line-clamp: 4; }
+.grid-ambient .ambient-reminder-title { font-size: var(--reminder-title-size); line-height: 1.2; font-weight: 500; -webkit-line-clamp: var(--reminder-lines, 2); }
 .grid-ambient .ambient-reminder-date { font-size: calc(max(var(--min-data), min(5.8cqw, 8cqh, var(--ambient-reminder-title) * 0.66)) * var(--font-scale)); line-height: 1.3; margin-top: calc(var(--reminder-title-size) * 0.12); overflow-wrap: anywhere; }
 .grid-ambient .ambient-reminder-overdue { color: var(--ambient-caution); }
 .grid-ambient .reminder-segment { white-space: nowrap; }

@@ -469,7 +469,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page
       .getByRole('button', { name: 'Complete: Synthetic changed', exact: true })
       .click();
-    await page.locator('.ambient-reminders').waitFor({ state: 'detached' });
+    // The empty list hides on the display; the editor canvas keeps its placeholder (#233).
+    await page.locator('.ambient-reminders .reminders-placeholder').waitFor();
     await page
       .getByRole('button', { name: 'History (1)', exact: true })
       .click();
