@@ -319,8 +319,14 @@ level as `data-animation` on the ambient root: Off whenever that screen prefers
 reduced motion, so turning off Windows Settings → Accessibility → Visual effects →
 Animation effects makes the TV show Off. Relocation through black continues either
 way. The [motion harness](../tests/ui/motion-browser.mjs) checks levels, reduced
-motion, the reveal sequence, entrance geometry, loop inventory, editor flows and a
-CDP performance budget; TV smoothness and comfort remain owner acceptance (#111).
+motion, the reveal sequence, entrance geometry (every family of every active widget,
+a full-height free-size Reminders span, the default board and a full board of every
+widget at 1080p and 4K), loop inventory, adaptive Weather (real-size hero glyph,
+calm → elevated fades and Lively bar growth), the measured Reminders list (only a
+newly pending row fades; re-sorts, completions and remeasurements replay nothing and
+the measured rows match at every level), value crossfades in the #78 widgets, editor
+flows and a CDP performance budget for the default and full boards at 1280×720; TV
+smoothness and comfort remain owner acceptance (#111).
 Motion/dimness do not guarantee protection from image retention. No audio, external
 fonts, telemetry, cloud accounts or LAN exposure is added.
 

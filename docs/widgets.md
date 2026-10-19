@@ -283,6 +283,20 @@ first shown with its widget never animates; later insertions may transition in.
 Reveal choreography uses `widgetRevealOrder()` and `--reveal-order`; only the hero
 glyph loops, at Lively, and loops pause on black.
 
+The merged renderers follow this through the same pieces (#162). Weather's rain
+timing, detail, hint and hour labels, Forecast's values, Air quality's AQI and
+category, Calendar's date, Countdown's count, Note's text, and the times in Sun &
+moon and World clocks are `TransitionText` (Clock keeps its per-character digits). Chart bars inserted later (Weather's
+`.rain-bar`, Air quality's `.air-bar`) fade in to their resting opacity, and existing
+bars ease to new heights. A list that measures its own rows must keep that geometry
+exact. Reminders marks only reminders that were not pending at the previous update
+with `data-new`, and fades them by opacity alone. A re-sorted row, which React moves
+with `insertBefore` and Chromium would otherwise restart from `@starting-style`
+(#172), and a row that stops overflowing stay still. Lively reminder rows also fade
+without moving. Its measuring pass hides the visible “+N more” with `visibility`
+and `position: absolute`, never `display: none`, because a box that disappears and
+returns replays its entrance and crossfade.
+
 These are design requirements to reduce recurring exposure, not a measured
 safety threshold. Finite screens and recurring content inevitably reuse pixels;
 do not promise zero overlap over time or prevention of OLED burn-in. Browser
