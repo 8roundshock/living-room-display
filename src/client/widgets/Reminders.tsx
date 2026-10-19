@@ -72,7 +72,8 @@ function lowestStep(body: HTMLElement, rows: readonly HTMLElement[], gridColumns
  * the body is fixed at 100cqh (so the shared Widget fit stays at 1 and its per-second refit never
  * changes this box), measurement runs only when the rows or the widget's own box change, and
  * state changes only when the result does. Overflow rows take no layout outside measuring.
- * `fit` is 0 when even one row overflows; the widget then shows one row and zooms out as a whole.
+ * `fit` is 0 when even the first row overflows at every step; the widget then shows one row and zooms
+ * out as a whole.
  * While measuring, the body is back at its fixed 100cqh box even in that overfull state (see
  * widgets.css), so a later remeasure never counts rows against the grown body.
  *

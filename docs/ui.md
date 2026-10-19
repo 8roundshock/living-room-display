@@ -330,8 +330,9 @@ the title, a due line (`Overdue · Yesterday · 3:00 PM`, `Today · 6:00 PM` or
 at least five fit the 1280×720 inspector (#366). Edit, Delete, Undo, **Clear history…** and
 the Up next/History switch are at least 44 px. The rows and their labels are worked out
 again only when the list, the minute or the time format changes, and the form renders on
-its own, so typing stays responsive with hundreds of dated reminders (#354; about 8 ms a
-keystroke with 500, against 110–140 ms before). One tap fills the circle and dims the title at once while
+its own, so typing stays responsive with hundreds of dated reminders (#354; in headless
+Edge on the owner's PC about 8 ms a keystroke with 500, against 110–140 ms before).
+One tap fills the circle and dims the title at once while
 the completion saves; the circle reports `aria-pressed` until the row leaves or is
 restored. After about 0.9 s the row collapses out of Up next (reduced motion keeps the
 delay without the collapse). The status line offers **Undo** for about 8 s, until the
@@ -399,7 +400,7 @@ small family's width-based size (or the data floor), keeping the most whole rows
 largest step that shows them. A medium box therefore shows at least as many reminders as a
 small one, and a wider span never fewer than a narrower one of the same height. A tall span
 with little vertical travel alternates its anchor between arrangements like a full-height
-column (#175). If even one row overflows, that row
+column (#175). If even the first row overflows at the smallest step, that row
 stays and the widget zooms out as a whole; any resize remeasures against the widget's
 fixed box, so the count and that state never flip on a remeasure. Dated rows add
 `Today · 6:00 PM`, `Tomorrow · 9:00 AM`, `Oct 24 · 3:00 PM` or
