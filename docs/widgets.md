@@ -21,7 +21,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
 | [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
-| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per widget (`Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview`, `Photo`; stubs for planned ids), shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). |
+| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157). |
 | [`src/client/Display.tsx`](../src/client/Display.tsx) | Ambient state and the shared movement/composition boundary. |
 | [`src/client/Editor.tsx`](../src/client/Editor.tsx) | Picker, grid interactions and settings draft integration. |
 
@@ -46,7 +46,8 @@ lines. Besides its families and defaults, an entry declares:
   `mergedInto` naming the active id that absorbs an enabled retired placement (the
   retiring change owns that migration). Planned and retired entries are hidden from
   the picker and inspector and never rendered. Planned ids always read as disabled
-  and a PATCH enabling one returns 400. Rain is retired and merged into Weather
+  and a PATCH enabling one returns 400. No entry is planned now: #157 and #171
+  activated all six #78 ids. Rain is retired and merged into Weather
   (#74, `absorbRetiredWidgets`); removing its id is tracked in #103.
 
 `WIDGET_IDS` keeps every id, because schemas and geometry need them all.
@@ -179,7 +180,7 @@ settings version remains 1.
 ### Catalog decisions (#78)
 
 Reviewed 2026-10-18 for [#78](https://github.com/8roundshock/living-room-display/issues/78).
-The target catalog is twelve active widgets once Weather absorbs Rain (#74), grouped
+The catalog has twelve active widgets now that Weather has absorbed Rain (#74), grouped
 in the picker by `WIDGET_CATEGORIES`: **Time** (Clock, World clocks, Calendar),
 **Weather & sky** (Weather, Forecast, Air quality, Sun & moon), **Personal**
 (Reminders, Countdown, Note) and **Pictures** (Photo, Last screen). Every new widget
@@ -190,12 +191,13 @@ composition stay identical.
   #74 and Reminders to #73.
 - **Changed:** the picker is a grouped list with keyboard navigation; Forecast uses
   its own `forecast` glyph because Calendar now owns the calendar glyph.
-- **Added here:** Calendar (local date, week start Automatic/Sunday/Monday; no data
+- **Added here (PR #157):** Calendar (local date, week start Automatic/Sunday/Monday; no data
   dependency), Countdown (up to 12 dated events, optionally yearly; whole civil days
   with UTC-noon arithmetic so DST cannot shift a count; February 29 falls on
   February 28 in common years) and Note (up to 200 characters and 4 lines). An empty
   Countdown or Note is hidden on the display and shows a placeholder in the editor.
-  World clocks, Sun & moon and Air quality are the parallel unit of the same ticket (#171).
+  World clocks, Sun & moon and Air quality shipped in the parallel unit of the same
+  ticket (PR #171).
   The three use fixed families and sit beside a free-size Reminders span; fuller
   boards keep relocating through the #93 reflection fallback described below.
 - **Rejected, with reasons:** timers and alarms (they need audio and on-screen
