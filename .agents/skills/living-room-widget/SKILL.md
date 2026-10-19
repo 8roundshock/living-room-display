@@ -49,6 +49,14 @@ code and tests for actual symbols and commands; the documentation is not a schem
   editing the inspector, editor or picker.
 - Use `WeatherGlyph` for weather symbols and `TransitionText` for changing values.
   Add no per-widget animation loop.
+- Colour follows the contract's [colour rules](../../../docs/widgets.md#ambient-appearance-and-recurring-exposure)
+  (#75, #214): primary content (times, temperatures, titles) uses the text colour;
+  labels, units, captions, secondary values, bars and dots use `var(--ambient-accent)`,
+  which Native mode turns into the widget's catalog tone. Never hard-code a hue,
+  fill or frame anything for colour, or tint an image. Mark a glyph icon `data-glyph`
+  (a `WEATHER_GLYPH_TONE` name) so it paints its own sub-tone, or wrap a subtree in
+  `tone-<role>`. Stale, offline and overdue cues use the one status tone,
+  `--ambient-caution`. A face of primary text only is allowed (Note).
 - A free-size widget uses the optional `freeSize` catalog rule (#73) rather than
   its own geometry.
 - Never delete a catalog id the previous release knows: mark it `retired` with
@@ -64,7 +72,11 @@ independent autosave path for a new widget's settings.
 
 Use isolated synthetic data. Run relevant build/tests and inspect actual rendering
 for each supported family, grid and relocation phase, including reduced motion,
-long content and no-data states. Check black transition intervals, clipping,
+long content and no-data states. Run the palette harness,
+`tests/ui/palette-browser.mjs`: add a newly active widget to its `FULL_BOARD`, and
+to `ACCENT_SELECTOR` when its accent element is a new kind or to `TEXT_ONLY` when
+it has none. It fails for any painted colour other than the element's accent, the
+text colour or the status tone. Check black transition intervals, clipping,
 overlap, pointer isolation and mobile/keyboard editing. Keep captures in memory.
 Report actual evidence and what still needs physical-display acceptance; a browser
 image cannot establish long-term OLED behavior.
