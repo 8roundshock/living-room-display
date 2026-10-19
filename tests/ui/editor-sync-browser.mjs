@@ -117,7 +117,7 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     await alert(page, 'This reminder was completed elsewhere. Restore it to edit.').waitFor();
     await page.unroute('**/api/reminders/*');
     await page.route('**/api/reminders', route => route.request().method() === 'POST' ? route.fulfill({ status: 409, json: { error: 'Reminder limit reached' } }) : route.continue());
-    await button(page, 'Cancel reminder').click(); await button(page, 'Add reminder').click();
+    await button(page, 'Discard').click(); await button(page, 'Add reminder').click();
     await page.getByRole('textbox', { name: 'Reminder' }).fill('Synthetic extra');
     await button(page, 'Save reminder').click();
     await alert(page, 'Reminder limit reached').waitFor();

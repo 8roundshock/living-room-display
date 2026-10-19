@@ -40,13 +40,25 @@ export function weekStartDay(setting: WeekStartSetting, tag?: string): Weekday {
   return setting === 'sunday' ? 0 : setting === 'monday' ? 1 : localeWeekStart(tag);
 }
 
+// Formatters ----------------------------------------------------------------------------------
+// The display re-renders every second. Building an Intl formatter costs about 100 µs against about
+// 1.5 µs for reusing one (#99), so each format below is built once per page and reused (#193).
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+function dateFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = JSON.stringify(options);
+  let format = dateFormats.get(key);
+  if (!format) { format = new Intl.DateTimeFormat('en', { ...options, timeZone: 'UTC' }); dateFormats.set(key, format); }
+  return format;
+}
+let countFormat: Intl.NumberFormat | undefined;
+
 export function weekdayName(day: Weekday, style: 'long' | 'short' | 'narrow' = 'long'): string {
   // 2023-01-01 was a Sunday; noon UTC is the same civil day in every zone.
-  return new Intl.DateTimeFormat('en', { weekday: style, timeZone: 'UTC' }).format(new Date(Date.UTC(2023, 0, 1 + day, 12)));
+  return dateFormat({ weekday: style }).format(new Date(Date.UTC(2023, 0, 1 + day, 12)));
 }
 
 /** Weekday labels in display order for a given week start. */
-export function weekdayLabels(weekStart: Weekday, style: 'short' | 'narrow' = 'narrow'): string[] {
+export function weekdayLabels(weekStart: Weekday, style: 'long' | 'short' | 'narrow' = 'narrow'): string[] {
   return Array.from({ length: 7 }, (_, index) => weekdayName(((weekStart + index) % 7) as Weekday, style));
 }
 
@@ -147,15 +159,64 @@ export function countdownPassed(event: Pick<CountdownEvent, 'date' | 'repeatsYea
 export function countdownLabel(days: number): { value: string; unit: string | null; text: string } {
   if (days === 0) return { value: 'Today', unit: null, text: 'Today' };
   if (days === 1) return { value: 'Tomorrow', unit: null, text: 'Tomorrow' };
-  const value = new Intl.NumberFormat('en').format(days);
+  const value = (countFormat ??= new Intl.NumberFormat('en')).format(days);
   return { value, unit: 'days', text: `${value} days` };
 }
 
 /** “Sat, Oct 31”, with the year only when it is not the current one. */
 export function countdownDate(date: CivilDate, today: CivilDate): string {
-  return new Intl.DateTimeFormat('en', { weekday: 'short', month: 'short', day: 'numeric', ...(date.year === today.year ? {} : { year: 'numeric' }), timeZone: 'UTC' }).format(new Date(utcNoon(date)));
+  return dateFormat({ weekday: 'short', month: 'short', day: 'numeric', ...(date.year === today.year ? {} : { year: 'numeric' }) }).format(new Date(utcNoon(date)));
 }
 
 export function monthName(date: CivilDate, style: 'long' | 'short' = 'long'): string {
-  return new Intl.DateTimeFormat('en', { month: style, timeZone: 'UTC' }).format(new Date(utcNoon(date)));
+  return dateFormat({ month: style }).format(new Date(utcNoon(date)));
+}
+
+/** An upcoming countdown with the strings the display shows for it. */
+export interface CountdownRow extends UpcomingCountdown { label: ReturnType<typeof countdownLabel>; dateText: string }
+
+const countdownCache = new WeakMap<readonly CountdownEvent[], { today: string; rows: CountdownRow[] }>();
+/**
+ * Upcoming countdowns and their labels for the local civil date `today` (YYYY-MM-DD). The display
+ * asks on every one-second tick, so the rows are built once per list and civil day: the same list
+ * on the same day returns the same array without formatting anything (#193).
+ */
+export function countdownRows(events: readonly CountdownEvent[], today: string): CountdownRow[] {
+  const cached = countdownCache.get(events);
+  if (cached?.today === today) return cached.rows;
+  const date = parseCivil(today);
+  const rows = date ? upcomingCountdowns(events, date).map(item => ({ ...item, label: countdownLabel(item.days), dateText: countdownDate(item.date, date) })) : [];
+  countdownCache.set(events, { today, rows });
+  return rows;
+}
+
+// Calendar view -------------------------------------------------------------------------------
+
+/** Everything the Calendar renders for one civil day and week start. */
+export interface CalendarView {
+  today: CivilDate; weekday: string; month: string; weekStart: Weekday;
+  weeks: (number | null)[][]; strip: StripDay[];
+  /** Weekday headers in display order (the week strip uses the same order). */
+  labels: { narrow: string[]; short: string[]; long: string[] };
+}
+
+const calendarViews = new Map<string, CalendarView>();
+/**
+ * The Calendar's month, week strip and weekday labels for `today` (YYYY-MM-DD), built once per civil
+ * day and week start, so the display's one-second tick neither recomputes nor formats anything (#193).
+ */
+export function calendarView(today: string, setting: WeekStartSetting): CalendarView {
+  const key = `${today}|${setting}`;
+  const cached = calendarViews.get(key);
+  if (cached) return cached;
+  const date = parseCivil(today) ?? civilFromDate(new Date()), weekStart = weekStartDay(setting);
+  const view: CalendarView = {
+    today: date, weekStart, weekday: weekdayName(civilWeekday(date)), month: monthName(date),
+    weeks: monthMatrix(date.year, date.month, weekStart), strip: weekStrip(date, weekStart),
+    labels: { narrow: weekdayLabels(weekStart, 'narrow'), short: weekdayLabels(weekStart, 'short'), long: weekdayLabels(weekStart, 'long') },
+  };
+  // A page shows one Calendar plus picker samples, so a few entries are plenty.
+  if (calendarViews.size >= 8) calendarViews.delete(calendarViews.keys().next().value!);
+  calendarViews.set(key, view);
+  return view;
 }

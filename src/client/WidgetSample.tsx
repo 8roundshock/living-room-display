@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { AppearanceSettings, AppState, WidgetId } from '../shared/contracts';
 import { defaultSettings } from '../shared/defaults';
 import { WIDGET_CATALOG, widgetSpan, type WidgetSize } from '../shared/widgets';
-import { toneVariables } from '../shared/palette';
+import { renderedAccent, toneVariables } from '../shared/palette';
 import { WIDGET_MODULES, WIDGET_RENDERERS } from './widgets/registry';
 
 // The catalog never previews private reminders, photo, city or desktop snapshot.
@@ -39,7 +39,7 @@ export function WidgetSample({ id, size, appearance = settings.appearance }: { i
   return <div className="sample-stage" aria-hidden="true">
     <div
       className="picker-sample ambient grid-ambient static layout-editing font-sans"
-      style={{ '--sample-columns': span.columns, '--sample-ratio': span.columns / span.rows, '--ambient-accent': appearance.accentColor, '--ambient-text': '#d0d3df', '--ambient-brightness': 1, '--font-scale': 1, ...toneVariables(appearance) } as CSSProperties}
+      style={{ '--sample-columns': span.columns, '--sample-ratio': span.columns / span.rows, '--ambient-accent': renderedAccent(appearance.accentColor), '--ambient-text': '#d0d3df', '--ambient-brightness': 1, '--font-scale': 1, ...toneVariables(appearance) } as CSSProperties}
       data-accent-mode={appearance.accentMode}
       data-animation="off"
     >

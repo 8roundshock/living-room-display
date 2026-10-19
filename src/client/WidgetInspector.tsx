@@ -10,8 +10,9 @@ import {
   type WidgetSize,
   type WidgetSpan,
 } from '../shared/widgets';
-import { FreeSizeControls } from './FreeSizeControls';
+import { FreeSizeControls, RoomNotice } from './FreeSizeControls';
 import { Icon } from './icons';
+import type { RoomFix, RoomProblem } from './make-room';
 import { WidgetPicker } from './WidgetPicker';
 import { WIDGET_MODULES } from './widgets/registry';
 
@@ -22,6 +23,9 @@ export function WidgetInspector({
   pickerOpen,
   onPicker,
   onAdd,
+  onFix,
+  roomProblem,
+  remindersHidden,
   onRemove,
   onResize,
   onResizeSpan,
@@ -39,7 +43,14 @@ export function WidgetInspector({
   onSelect: (id: WidgetId | null) => void;
   pickerOpen: boolean;
   onPicker: (open: boolean) => void;
-  onAdd: (id: WidgetId, size: WidgetSize) => void;
+  /** Adds a widget as a draft; returns the no-room explanation when it does not fit. */
+  onAdd: (id: WidgetId, size: WidgetSize) => RoomProblem | null;
+  /** Applies a no-room fix (an add or a resize); returns a fresh explanation if it no longer fits. */
+  onFix: (problem: RoomProblem, fix: RoomFix) => RoomProblem | null;
+  /** The current no-room explanation for a resize, shown with that widget's size controls. */
+  roomProblem: RoomProblem | null;
+  /** The display would hide Reminders right now (#233): enabled, Hide when empty and nothing pending. */
+  remindersHidden: boolean;
   onRemove: (id: WidgetId) => void;
   onResize: (id: WidgetId, size: WidgetSize) => void;
   onResizeSpan: (id: WidgetId, span: WidgetSpan) => void;
@@ -64,8 +75,8 @@ export function WidgetInspector({
       <WidgetPicker
         settings={settings}
         onAdd={onAdd}
+        onFix={onFix}
         onClose={() => onPicker(false)}
-        message={message}
       />
     );
   return (
@@ -102,7 +113,8 @@ export function WidgetInspector({
         {WIDGET_IDS.filter((id) => isActiveWidget(id) && settings.widgets[id]).map((id) => {
           const widget = WIDGET_CATALOG[id],
             placement = settings.widgetGrid.placements[id],
-            ModuleSettings = WIDGET_MODULES[id].Settings;
+            ModuleSettings = WIDGET_MODULES[id].Settings,
+            problem = roomProblem && roomProblem.request.kind !== 'add' && roomProblem.request.id === id ? roomProblem : null;
           return (
             <div
               key={id}
@@ -118,7 +130,7 @@ export function WidgetInspector({
                   <span className="widget-icon">
                     <Icon name={widget.icon} size={18} />
                   </span>
-                  <span className="widget-row-copy"><span>{widget.name}</span><small>{placementLabel(id, placement, settings.widgetGrid.density)}</small></span>
+                  <span className="widget-row-copy"><span>{widget.name}</span><small>{placementLabel(id, placement, settings.widgetGrid.density)}{id === 'reminders' && remindersHidden ? ' · Hidden when empty' : ''}</small></span>
                   <span aria-hidden="true" className="row-chevron">
                     ›
                   </span>
@@ -135,8 +147,8 @@ export function WidgetInspector({
                 <div className="widget-inspector">
                   <span className="field-label">Size</span>
                   {isFreeSize(id) ? (
-                    <FreeSizeControls id={id} settings={settings} onResize={onResize} onResizeSpan={onResizeSpan} />
-                  ) : <div className="size-options">
+                    <FreeSizeControls id={id} settings={settings} onResize={onResize} onResizeSpan={onResizeSpan} problem={problem} onFix={onFix} />
+                  ) : <><div className="size-options">
                     {widgetSizes(id).map((size) => (
                       <button
                         key={size}
@@ -148,7 +160,7 @@ export function WidgetInspector({
                         {size[0].toUpperCase() + size.slice(1)}
                       </button>
                     ))}
-                  </div>}
+                  </div><RoomNotice problem={problem} onFix={onFix} /></>}
                   {id === 'clock' && (
                     <>
                       <span className="field-label">Clock style</span>

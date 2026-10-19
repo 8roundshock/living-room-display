@@ -12,4 +12,6 @@ export async function family({ widget, size, density }) {
   if (size !== 'small') assert.match(await widget.innerText(), /mm rain/);
   assert.equal(await widget.locator('.rain-bars').count(), size === 'large' ? 1 : 0);
   if (size === 'large') assert.ok((await widget.locator('.rain-bars').boundingBox()).height >= (await widget.boundingBox()).height * 0.1, 'the rain chart retains real height');
+  // The chart's accessible name summarises its hours and peak (#166).
+  if (size === 'large') assert.match(await widget.locator('.rain-bars[role=img]').getAttribute('aria-label'), /^Hourly precipitation chance, \d.* to \d.*: peak \d+% at \d/);
 }

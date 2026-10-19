@@ -227,9 +227,8 @@ button {
   --ambient-text: #b8bfce;
   --ambient-brightness: 0.55;
   --font-scale: 1;
-  /* Status tones: stale or saved weather, and a disconnected display. */
+  /* The status tone: stale or saved data and an offline display share one amber (#223, #133). */
   --ambient-caution: #b0926b;
-  --ambient-offline: #977e88;
   position: relative;
   width: 100%;
   height: 100%;
@@ -532,15 +531,6 @@ button {
   border-color: #272936;
   font-size: 12px;
 }
-.display-disconnected {
-  position: absolute;
-  bottom: 3cqh;
-  left: 5.5cqw;
-  font-size: 1cqw;
-  color: var(--ambient-offline);
-  filter: brightness(var(--ambient-brightness));
-  animation: widget-drift 71s ease-in-out infinite alternate;
-}
 .font-serif {
   font-family: Georgia, 'Times New Roman', serif;
 }
@@ -567,7 +557,6 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .ambient-widget,
   .ambient-widget .widget-content,
-  .display-disconnected,
   .loading-orbit {
     animation: none;
   }
