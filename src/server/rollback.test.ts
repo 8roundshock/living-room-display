@@ -47,11 +47,20 @@ test('the frozen reader is an unedited copy of the previous release and its cata
   assert.deepEqual(PREVIOUS_READER.widgetIds, [...PREVIOUS_RELEASE.widgetIds]);
 });
 
-test('(a) a fresh data folder is readable by the previous release', async () => {
+test('(a) a fresh data folder differs from previous-release data only by Native colours (#75)', async () => {
   const directory = await temporary('lrd-rollback-fresh-');
   try {
-    await DataStore.open(directory);
-    await assertFilesAccepted(directory, 'fresh', false);
+    const store = await DataStore.open(directory);
+    // New installs start Native, the documented #75 exception; nothing else in a fresh folder is new.
+    const fresh = await readJson(directory, 'state.json') as { settings: { appearance: Record<string, unknown> } };
+    assertPreviousReaderRejects('data', fresh, 'fresh Native state.json');
+    assert.equal(fresh.settings.appearance.accentMode, 'native');
+    delete fresh.settings.appearance.accentMode;
+    assertPreviousReaderAccepts('data', fresh, 'fresh state.json without its accent mode');
+    // Choosing a colour and saving once more leaves both files readable.
+    await store.patchSettings({ appearance: { accentMode: 'color' } });
+    await store.patchSettings({ units: 'imperial' });
+    await assertFilesAccepted(directory, 'fresh after choosing a colour');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
@@ -124,6 +133,8 @@ test('(e) non-default additive choices are the documented exceptions the previou
   ] as const) {
     const directory = await temporary('lrd-rollback-negative-');
     try {
+      // Start from previous-release data: a fresh folder is already Native (#75).
+      await writeFile(join(directory, 'state.json'), JSON.stringify({ version: 1, settings: previousDefaults(), reminders: [], photoAsset: null }));
       const store = await DataStore.open(directory);
       await store.patchSettings(patch);
       assertPreviousReaderRejects('data', await readJson(directory, 'state.json'), label);

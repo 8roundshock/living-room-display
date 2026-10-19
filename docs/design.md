@@ -43,6 +43,54 @@ density restores its exact placement/families until a meaningful widget edit.
 Draft layout/visibility is one atomic arrangement during polling; unrelated saved
 settings still refresh. Impossible arrangements leave the current draft intact.
 
+## Native palette
+
+The accent is either one colour (`color`, the original behaviour) or **Native**
+(#75), where each widget takes its catalog tone so the board reads by kind at a
+glance: time is lilac, sky is mist, rain is sea glass, your own items are rose.
+Native is the default for new installs and built-in styles; the colour swatches
+stay available. The split follows Apple's accented widget rendering: primary
+content (time, temperatures, conditions, reminder titles) keeps the text colour,
+and only the accent group is tinted. Both modes tint exactly the same elements,
+so Native adds hue, not light. Status cues keep their own tones in both modes.
+
+| Role | Tone | Hex | OKLCH (L C h) | Meaning |
+| --- | --- | --- | --- | --- |
+| time | Lilac | `#aaa0ca` | 0.729 0.061 296 | Time and night (Clock, World clocks, Calendar, moon) |
+| sky | Mist | `#8aa8c2` | 0.718 0.050 245 | Sky and conditions (Weather, Forecast, Air quality, snow) |
+| water | Sea glass | `#73b1ab` | 0.717 0.065 188 | Precipitation (rain chance, rain and storm glyphs) |
+| sun | Gold | `#b3a774` | 0.726 0.070 96 | Clear daytime (Sun & moon, clear-day glyph) |
+| personal | Rose | `#c99695` | 0.721 0.062 20 | Your own items (Reminders, Countdown, Note) |
+| stone | Stone | `#a9a49c` | 0.721 0.013 80 | Images, clouds and neutral (Last screen, Photo, cloud glyph) |
+
+Status tones are unchanged: stale amber `#b0926b` and offline mauve `#977e88`.
+
+Method. Every tone sits in one OKLCH lightness band (0.72–0.73) with low chroma
+(0.05–0.07; stone ≤ 0.02), so relative luminance stays within 6% of the Mist
+default and no tone is brighter than the brightest single-accent swatch. Each has
+more than 8:1 contrast on true black at full brightness; the saved brightness cap
+then dims every mode alike, and a browser luminance check keeps the native
+composition within 5% of colour mode at Room and Night brightness. Hues are spread
+so any two tones that can share a screen, and every tone against both status
+tones, are at least ΔE_ok 0.05 apart. Gold was chosen over Sand because Sand sits
+too close to the stale amber. `src/shared/palette.test.ts` proves these numbers.
+
+Meaning is never carried by colour alone: every widget keeps its words, glyph
+shapes, positions and status labels ("Saved forecast", "Offline", "Overdue"). For
+protan and deutan vision (Machado 2009 simulation at full severity), Lilac/Mist,
+Sea glass/Stone and Rose/Stone converge to under ΔE_ok 0.03; they remain separated
+by glyph shape, labels and position, which is why colour is only a tint here.
+Nothing new is filled or framed and images are never tinted. Browser checks cannot
+establish perceived harmony, comfort or burn-in on the S90F; that stays with
+physical acceptance (#87). Per-widget colour overrides (#85) and a warm night tint
+(#86) are separate follow-ups.
+
+Sources: [Apple Widgets: accented rendering](https://developer.apple.com/design/human-interface-guidelines/widgets),
+[Apple Dark Mode contrast](https://developer.apple.com/design/human-interface-guidelines/dark-mode),
+[Material dark theme](https://m2.material.io/design/color/dark-theme.html) (desaturated
+tones on dark surfaces), and [OKLab](https://bottosson.github.io/posts/oklab/) for
+perceptual lightness and distance.
+
 ## Primary guidance and adaptation
 
 | Source | Application |

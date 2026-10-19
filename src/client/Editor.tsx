@@ -14,6 +14,7 @@ import type {
   WidgetId,
 } from '../shared/contracts';
 import { defaultSettings } from '../shared/defaults';
+import { ACCENT_SWATCHES, NATIVE_PALETTE } from '../shared/palette';
 import { api } from './api';
 import { AmbientDisplay } from './Display';
 import {
@@ -52,13 +53,6 @@ import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel } from './RemindersPanel';
 const sections = ['Style', 'Widgets', 'Weather', 'Reminders'] as const;
 type Section = (typeof sections)[number];
-const colors = [
-  { value: '#8aa8c2', name: 'Mist' },
-  { value: '#aaa0ca', name: 'Lilac' },
-  { value: '#8d9dcc', name: 'Dusk' },
-  { value: '#b8a17a', name: 'Sand' },
-  { value: '#88afa6', name: 'Sage' },
-];
 
 function Toggle({
   label,
@@ -812,9 +806,14 @@ export function Editor({
                         className={`preset-miniature miniature-${preset}`}
                       >
                         <span>9:41</span>
-                        <i />
-                        <i />
-                        <i />
+                        {(['time', 'sky', 'personal'] as const).map((role) => (
+                          <i
+                            key={role}
+                            style={
+                              { '--bar': NATIVE_PALETTE[role].hex } as React.CSSProperties
+                            }
+                          />
+                        ))}
                       </span>
                       <span className="preset-label">
                         {preset[0].toUpperCase() + preset.slice(1)}
@@ -842,37 +841,98 @@ export function Editor({
                   onChange={(value) => appearance('fontScale', value / 100)}
                 />
                 <div className="inspector-group">
-                  <h3>Accent</h3>
+                  <h3 className="accent-heading">
+                    Accent{' '}
+                    <span className="accent-current">
+                      {draft.appearance.accentMode === 'native'
+                        ? 'Native'
+                        : (ACCENT_SWATCHES.find(
+                            (swatch) =>
+                              swatch.value ===
+                              draft.appearance.accentColor.toLowerCase(),
+                          )?.name ?? 'Custom')}
+                    </span>
+                  </h3>
                   <div className="swatches">
-                    {colors.map((color) => (
-                      <button
-                        key={color.value}
-                        className={`swatch ${draft.appearance.accentColor.toLowerCase() === color.value ? 'active' : ''}`}
-                        style={
-                          { '--swatch': color.value } as React.CSSProperties
-                        }
-                        aria-label={color.name}
-                        aria-pressed={
-                          draft.appearance.accentColor.toLowerCase() ===
-                          color.value
-                        }
-                        onClick={() => appearance('accentColor', color.value)}
-                      >
-                        <span>
-                          {draft.appearance.accentColor.toLowerCase() ===
-                            color.value && <Icon name="check" size={14} />}
-                        </span>
-                      </button>
-                    ))}
+                    <button
+                      className={`swatch swatch-native ${draft.appearance.accentMode === 'native' ? 'active' : ''}`}
+                      style={
+                        {
+                          '--swatch': `conic-gradient(${(['time', 'sky', 'water', 'sun', 'personal'] as const).map((role, index) => `${NATIVE_PALETTE[role].hex} ${index * 20}% ${(index + 1) * 20}%`).join(', ')})`,
+                        } as React.CSSProperties
+                      }
+                      aria-label="Native colours"
+                      title="Each widget uses its own colour"
+                      aria-pressed={draft.appearance.accentMode === 'native'}
+                      onClick={() => {
+                        if (draft.appearance.accentMode === 'native') return;
+                        change((previous) => ({
+                          ...previous,
+                          appearance: {
+                            ...previous.appearance,
+                            accentMode: 'native',
+                            preset: 'custom',
+                          },
+                        }));
+                      }}
+                    >
+                      <span>
+                        {draft.appearance.accentMode === 'native' && (
+                          <Icon name="check" size={14} />
+                        )}
+                      </span>
+                    </button>
+                    {ACCENT_SWATCHES.map((color) => {
+                      const active =
+                        draft.appearance.accentMode !== 'native' &&
+                        draft.appearance.accentColor.toLowerCase() ===
+                          color.value;
+                      return (
+                        <button
+                          key={color.value}
+                          className={`swatch ${active ? 'active' : ''}`}
+                          style={
+                            { '--swatch': color.value } as React.CSSProperties
+                          }
+                          aria-label={color.name}
+                          aria-pressed={active}
+                          onClick={() => {
+                            if (active) return;
+                            change((previous) => ({
+                              ...previous,
+                              appearance: {
+                                ...previous.appearance,
+                                accentMode: 'color',
+                                accentColor: color.value,
+                                preset: 'custom',
+                              },
+                            }));
+                          }}
+                        >
+                          <span>
+                            {active && <Icon name="check" size={14} />}
+                          </span>
+                        </button>
+                      );
+                    })}
                     <label className="custom-color" title="Custom accent">
                       <span className="sr-only">Custom accent color</span>
                       <input
                         type="color"
                         aria-label="Custom accent color"
                         value={draft.appearance.accentColor}
-                        onChange={(event) =>
-                          appearance('accentColor', event.target.value)
-                        }
+                        onChange={(event) => {
+                          const accentColor = event.target.value;
+                          change((previous) => ({
+                            ...previous,
+                            appearance: {
+                              ...previous.appearance,
+                              accentMode: 'color',
+                              accentColor,
+                              preset: 'custom',
+                            },
+                          }));
+                        }}
                       />
                       <Icon name="plus" size={15} />
                     </label>

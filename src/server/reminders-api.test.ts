@@ -7,13 +7,15 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApplication } from './app.ts';
-import { forecastFixture } from './fixtures.ts';
+import { forecastFixture, seedColorAccentData } from './fixtures.ts';
 import { assertPreviousReaderAccepts } from './compat/previous-reader.ts';
 import { REMINDER_HISTORY_LIMIT, REMINDER_LIMIT } from '../shared/reminders.ts';
 import type { Reminder } from '../shared/contracts.ts';
 
 async function fixture(now?: () => number) {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-reminders-'));
+  // An existing user's colour-accent defaults: a fresh folder is Native, the separate #75 exception.
+  await seedColorAccentData(directory);
   const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()), now });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const address = app.server.address(); assert.ok(address && typeof address === 'object');

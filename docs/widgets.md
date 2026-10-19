@@ -215,6 +215,27 @@ including attribution and stale-state labels, belongs inside its movable group.
 The editor may be brighter and show controls; those styles must not leak into the
 ambient view or its error/loading states.
 
+Colour follows one rule in both accent modes (#75). Primary content always uses
+the text colour: time digits, temperatures, condition text, reminder titles and
+forecast highs. Accent content uses `--ambient-accent`: labels, place and units,
+secondary metrics, weather glyphs, chart bars, dots, captions, age and attribution.
+In `color` mode that is the single accent; in `native` mode `src/client/palette.css`
+redirects it to the section's catalog `tone`, so both modes colour exactly the same
+elements and Native never lights more of the panel. Inside a widget, an icon marked
+`data-glyph` (weather glyphs, World clocks' day/night icons, Sun & moon's sun dot,
+label icon and moon) paints with its own sub-tone (`WEATHER_GLYPH_TONE`), a subtree
+marked `tone-<role>` takes that role (Sun & moon's moon is `tone-time`), and
+Weather's rain visuals use the `--weather-rain` hook (Sea glass). A widget whose
+face is only primary text (a Note, a "Today" countdown) has nothing to tint. Status
+cues never change: stale amber `--ambient-caution`, offline mauve
+`--ambient-offline` and the Overdue word. Never hard-code a hue in widget CSS (Air
+quality has no category colours), fill or frame anything new for colour, or tint
+images; a new widget declares an existing palette role and uses `--ambient-accent`.
+The [palette harness](../tests/ui/palette-browser.mjs) fails for a widget with no
+accent element unless it is listed as text-only, and for any painted colour other
+than the element's accent, the text colour or a status tone.
+See [native palette](design.md#native-palette).
+
 Large clock numerals should offer a tasteful outline treatment with sparse lit
 area and sufficient stroke weight at real viewing distance. Other clock styles
 remain subject to the same dimness and movement contract. Do not add a fixed

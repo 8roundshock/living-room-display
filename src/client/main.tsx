@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';
 import './widgets.css';
+import './palette.css';
 import './studio.css';
 import './reminders.css';
 import './grid-editor.css';

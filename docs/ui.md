@@ -33,7 +33,17 @@ visible above it, including narrow screens and compact keyboard-height windows.
   undo saved reminders. Leaving with settings edits uses the browser's prompt.
 - **Phone**, **Room** and **Night** reset visuals/transforms while preserving
   location, units, reminders and named styles. Room brightness is 55%; Night is
-  28%. Up to twelve saved styles include visual/widget/empty-reminder settings.
+  28%. All three, Reset appearance and new installs use **Native** colours; their
+  miniatures show Lilac, Mist and Rose bars. Up to twelve saved styles include
+  visual/widget/empty-reminder settings and the accent mode.
+- The **Accent** row offers Native (a ring of palette tones named "Native colours":
+  each widget uses its own colour, see [native palette](design.md#native-palette)),
+  five colour swatches and a custom colour. The heading line names the current
+  choice (Native, the swatch name or Custom). A swatch or custom colour selects one
+  accent for every widget; Native keeps the last colour, so switching back restores
+  it. The live canvas, movement preview and picker samples show the draft's mode.
+  The row stays one line at desktop widths and wraps without horizontal overflow at 320px.
+  The [palette harness](../tests/ui/palette-browser.mjs) covers these flows.
 - The authored canvas stays still by default. **Edit layout** reveals a faint
   editor-only grid and whole-widget drag targets. Clicking/focusing selects a
   widget and exposes its resize handle. Arrow keys move the focused widget;
@@ -318,6 +328,13 @@ The [widget harness](../tests/ui/widgets-browser.mjs) checks every active family
 three densities and 1080p/4K, meaningful descendant bounds, readable fitting,
 unknown/partial/stale/image failures, browser F/cursor behavior and native-only
 document styling. Physical TV brightness/comfort remains a separate gate.
+The [palette harness](../tests/ui/palette-browser.mjs) renders every active widget in
+every family, the default composition and a full board of all active widgets at
+1280×720, 1080p and 4K in Native and colour modes. Each section must resolve its
+catalog tone (or the one accent), tint its accent element and paint nothing but that
+accent, the text colour or a status tone. It also checks the sub-tones inside the
+merged renderers (Weather's rain hook, Sun & moon's moon, World clocks' day/night
+icons, Air quality bars), picker samples in every family and the editor canvas.
 
 After `npm ci` and `npm run build`, use an existing Playwright/browser installation
 and run every `tests/ui/*-browser.mjs` suite as

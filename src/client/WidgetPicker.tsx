@@ -49,7 +49,7 @@ export function WidgetPicker({ settings, onAdd, onClose, message }: {
     </div>
     <section className="picker-detail" aria-label={`${widget.name} preview`}>
       <div className="picker-detail-heading"><h3>{widget.name}</h3><p>{widget.description}</p></div>
-      <WidgetSample id={selected} size={size} />
+      <WidgetSample id={selected} size={size} appearance={settings.appearance} />
       <div className="family-previews" aria-label={`${widget.name} size`}>
         {widgetSizes(selected).map(family => <button key={family} aria-label={`${widget.name} ${family}`} aria-pressed={size === family} onClick={() => setSizes(previous => ({ ...previous, [selected]: family }))}>
           {family[0].toUpperCase() + family.slice(1)}
