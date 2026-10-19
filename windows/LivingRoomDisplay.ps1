@@ -801,9 +801,10 @@ function Restore-PackageSwap([hashtable]$State, [bool]$KeepCandidate) {
     $previousApp = Join-Path $InstallRoot 'app.previous'
     $previousRuntime = Join-Path $InstallRoot 'runtime.previous'
     $kept = $null
-    # A runtime placed by this run is set aside when an older one is restored, or
-    # when an earlier app exists that ran without it. A fresh install keeps it.
-    if ($State.NewRuntime -and ($State.RuntimeMoved -or $State.AppMoved)) {
+    # A runtime placed by this run is always set aside: the folder was absent
+    # before, or held an older runtime that goes back now. A failed first install
+    # keeps nothing it added (#179).
+    if ($State.NewRuntime) {
         if (Test-Path -LiteralPath $runtime) { Move-OwnedItem $runtime (Get-FreeAsidePath (Join-Path $InstallRoot 'runtime.next')) }
         $State.NewRuntime = $false; Save-PackageTransaction $State
     }
@@ -870,11 +871,28 @@ function Resume-PackageTransaction {
     }
     # A Start-menu launch since then may have started the candidate.
     try { Stop-App } catch { Write-PackageLog "Stop before finishing the earlier rollback: $($_.Exception.Message)" }
-    try { $script:keptCandidate = Restore-PackageSwap $state $true }
+    # The candidate is kept for diagnosis only when there is a previous version.
+    try { $script:keptCandidate = Restore-PackageSwap $state $state.AppMoved }
     catch { throw "LRD-E20: Setup could not finish putting the previous version back: $($_.Exception.Message)" }
     # Setup reads this exact line to word a later refusal (LivingRoomDisplay.iss).
     $script:resumedEarlierRollback = $true
     Write-PackageLog $script:resumedRollbackNote
+}
+function Remove-UnfinishedFirstInstall([bool]$RemoveFolder) {
+    # A first install that failed has undone its renames and set the new app and
+    # runtime aside. Remove the run folder too; then, if only the marker is left
+    # (no data the app wrote, no copy that could not be removed yet), remove the
+    # marker and the folder this install created. Data is never touched (#179).
+    try {
+        Remove-OwnedDirectory $run
+        $rest = @(Get-ChildItem -LiteralPath $InstallRoot -Force | Where-Object { $_.Name -ne 'installation.json' } | ForEach-Object { $_.Name })
+        if ($rest.Count) { Write-PackageLog ("The failed first install leaves " + ($rest -join ', ') + ' beside installation.json; running Setup again cleans up and tries again.'); return }
+        $current = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+        if ((Get-MarkerValue $current 'state') -ne 'installing') { return }
+        Remove-Item -LiteralPath $marker -Force
+        if ($RemoveFolder) { [IO.Directory]::Delete($InstallRoot, $false) }
+        Write-PackageLog 'Removed everything the failed first install added.'
+    } catch { Write-PackageLog "Could not remove everything the failed first install added: $($_.Exception.Message)" }
 }
 function Install-Package {
     Write-PackageStep 'verify'
@@ -916,6 +934,7 @@ function Install-Package {
         $installedVersion = Get-InstalledAppVersion $installed
         $channel = if ((Get-MarkerValue $installed 'channel') -eq 'package') { 'package' } else { 'source' }
         Write-PackageLog "Existing $channel install, version $installedVersion, state $(Get-MarkerValue $installed 'state')."
+        if ((Get-MarkerValue $installed 'state') -eq 'installing') { Write-PackageLog 'An earlier first install did not finish; cleaning up what it left and installing again.' }
         if ($channel -eq 'package' -and $installedVersion -and (ConvertTo-PackageVersion $installedVersion) -gt (ConvertTo-PackageVersion $version)) {
             if (-not $AllowDowngrade) { throw "LRD-E12: A newer version of Living Room Display ($installedVersion) is already installed." }
             Write-PackageLog "Downgrade from $installedVersion to $version allowed by request."
@@ -946,15 +965,23 @@ function Install-Package {
             try { Remove-OwnedDirectory $stale } catch { Write-PackageLog "Could not remove $stale yet (a later Setup or uninstall removes it): $($_.Exception.Message)" }
         }
     }
+    # A first install (or a retry of one that failed or was interrupted) that
+    # fails leaves nothing it added except data the app wrote (#179).
+    $firstInstall = (-not $isUpgrade) -or (Get-MarkerValue $installed 'state') -eq 'installing'
+    $ownsFolder = if ($isUpgrade) { [bool](Get-MarkerValue $installed 'createdFolder') } else { -not (Test-Path -LiteralPath $InstallRoot) }
+    $cleanUpFirstInstall = $false
     $null = New-Item -ItemType Directory -Path $InstallRoot -Force
     $previousRuntime = Join-Path $InstallRoot 'runtime.previous'
     $previousApp = Join-Path $InstallRoot 'app.previous'
     $state = @{Id=[Guid]::NewGuid().ToString('N');Version=$version;OriginalMarker=$null;AppMoved=$false;NewApp=$false;RuntimeMoved=$false;NewRuntime=$false}
     $wasRunning = $null -ne $owned
     try {
+        # A first install writes its marker before staging, so if it is
+        # interrupted the next run knows the folder and its package.next as its
+        # own and cleans them under the lock (#179).
+        if (-not $isUpgrade) { Write-Json $marker ([ordered]@{product='living-room-display';state='installing';createdFolder=$ownsFolder}) }
         try { Expand-PackageArchive $archive $stage $manifest }
         catch { if ($_.Exception.Message -match '^LRD-E\d\d:') { throw }; throw "LRD-E13: The package could not be staged: $($_.Exception.Message)" }
-        if (-not $isUpgrade) { Write-Json $marker ([ordered]@{product='living-room-display';state='installing'}) }
         # A rollback writes this text back: the previous marker, or 'installing'
         # on a first install, so a failed first install never reads as installed.
         $state.OriginalMarker = [IO.File]::ReadAllText($marker)
@@ -1012,8 +1039,9 @@ function Install-Package {
             Write-PackageLog 'New version failed its health check; restoring the previous version.'
             try { Stop-App } catch { Write-PackageLog "Stop after failed start: $($_.Exception.Message)" }
             $hadPrevious = $state.AppMoved
-            # Never report "nothing changed" when the undo itself failed.
-            try { $null = Restore-PackageSwap $state $true }
+            # Never report "nothing changed" when the undo itself failed. The
+            # candidate is kept for diagnosis only next to a previous version.
+            try { $null = Restore-PackageSwap $state $hadPrevious }
             catch { throw (Get-RestoreFailureMessage $_.Exception.Message $hadPrevious) }
             if (-not $hadPrevious) { throw 'LRD-E16: Living Room Display did not start and there is no previous version to restore. Data was not changed.' }
             $restarted = $false
@@ -1027,8 +1055,14 @@ function Install-Package {
         $finalMarker['committedTransaction'] = $state.Id
         try { Write-Json $marker $finalMarker } catch { Write-PackageLog "Warning: could not mark the update committed in ${marker}: $($_.Exception.Message)" }
         Clear-PackageTransaction
+    } catch {
+        # Every rename was undone (no record left): remove what this first
+        # install added. After E20 the record and the folders stay for the next run.
+        if ($firstInstall -and -not (Test-Path -LiteralPath $transaction)) { $cleanUpFirstInstall = $true }
+        throw
     } finally {
         try { Remove-OwnedDirectory $stage } catch { Write-PackageLog "Could not remove staging: $($_.Exception.Message)" }
+        if ($cleanUpFirstInstall) { Remove-UnfinishedFirstInstall $ownsFolder }
     }
     Write-PackageLog "Installed $version at $InstallRoot; server healthy. Idle activation unchanged."
     Write-Output "Installed Living Room Display $version at $InstallRoot. Idle activation remains unchanged. Editor: $script:baseUrl/editor"

@@ -292,6 +292,11 @@ begin
     begin
       WizardForm.PageNameLabel.Caption := 'Ready to install Living Room Display';
       WizardForm.ReadyLabel.Caption := 'Install Living Room Display version ' + NewVersion + '. Setup found the settings, reminders and photo you kept when you removed it, and will use them again after saving a backup copy. It won''t change your screen saver or start automatically with Windows.';
+    end else if IsUpgrade and (MarkerState = 'installing') then
+    begin
+      // An earlier first install failed or was interrupted (#179).
+      WizardForm.PageNameLabel.Caption := 'Ready to install Living Room Display';
+      WizardForm.ReadyLabel.Caption := 'An earlier installation of Living Room Display didn''t finish. Setup will clean up what it left and install version ' + NewVersion + ' just for you (no administrator rights). It won''t change your screen saver or start automatically with Windows.';
     end else if IsUpgrade then
     begin
       WizardForm.PageNameLabel.Caption := 'Ready to update Living Room Display';
@@ -386,8 +391,13 @@ begin
     15: Result := 'The new version didn''t start, so Setup put the previous version back. Your data was not changed.' + LogHint;
     16: if HadPreviousApp then
           Result := 'The new version didn''t start, so Setup put the previous version back. Neither version could start; your data was not changed.' + LogHint
+        else if KeptDataOnly then
+          Result := 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it. The settings, reminders and photo you kept were not changed. Run Setup again to try again.' + LogHint
+        // A failed first install removes what it added (#179); say what is left.
+        else if DirExists(ExpandConstant('{app}')) then
+          Result := 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it and removed the program files it had added. Run Setup again to try again. If you don''t want to, you can delete the folder ' + ExpandConstant('{app}') + '.' + LogHint
         else
-          Result := 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it. Your data was not changed.' + LogHint;
+          Result := 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it and removed everything it had added. Run Setup again to try again.' + LogHint;
     17: Result := 'There isn''t enough free disk space (about 500 MB needed).' + NothingChanged;
     18: Result := 'An unexpected runtime is in the app folder; Setup left it untouched.' + NothingChanged;
     19: if ResumedEarlierRollback then

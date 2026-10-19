@@ -34,14 +34,18 @@ try {
         $script:starts = 0; $script:stops = 0; $script:portBusy = $false; $script:portBusyAfterStop = $false
         $script:runtimeVersion = 'v24.19.0'; $script:freeBytes = [int64]100GB
         $script:healthResults = New-Object 'Collections.Generic.Queue[bool]'; $script:serverRunning = $false
-        $script:restartHealthy = $true; $script:faults = @{}; $script:snapshotCalls = 0
+        $script:restartHealthy = $true; $script:faults = @{}; $script:snapshotCalls = 0; $script:startWritesData = $false
         $script:operationLockTimeoutMs = 300
         $script:moveRetryDelayMs = 10
         $script:controlScriptPath = $controlScript
         $script:PackageArchive = $null; $script:PackageSha256 = $null; $script:AllowDowngrade = $false; $script:RemoveData = $false
         if (Test-Path -LiteralPath $logFile) { Remove-Item -LiteralPath $logFile -Force }
     }
-    function Start-App { $script:starts++; $script:serverRunning = $true }
+    function Start-App {
+        $script:starts++; $script:serverRunning = $true
+        # A server that writes its default settings before it fails its health check.
+        if ($script:startWritesData) { $null = New-Item -ItemType Directory -Path $data -Force; [IO.File]::WriteAllText((Join-Path $data 'state.json'), '{"syntheticDefaults":true}') }
+    }
     function Stop-App { $script:stops++; $script:serverRunning = $false; if ($script:portBusyAfterStop) { $script:portBusy = $true } }
     function Set-Idle { param($Enable) }
     function Get-OwnedServer { if ($script:serverRunning) { return [pscustomobject]@{Id=1} }; return $null }
@@ -369,12 +373,55 @@ try {
         Assert-True ($script:starts -eq 2) 'The previous version was not restarted after the failed health check.'
         Assert-True (-not (Test-Path -LiteralPath $transaction) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.next')) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.previous'))) 'A completed rollback left its record or a set-aside runtime.'
     }
+    Complete-Check 'health rollback'
+
+    # ---- a failed or interrupted first install needs no manual cleanup (#179) --
+    # A first install that can't start removes everything it added; the next
+    # Setup run is a plain fresh install.
     Reset-Root; Reset-Mocks
     $script:healthResults.Enqueue($false)
     $code = Invoke-Package (New-TestPackage)
-    Assert-True ($code -eq 16 -and (Test-Path -LiteralPath (Join-Path $InstallRoot 'app.failed')) -and -not (Test-Path -LiteralPath $app)) "A fresh install that cannot start returned $code or left app in place."
-    Assert-True ((Get-Marker).state -eq 'installing' -and -not (Test-Path -LiteralPath $transaction)) 'A failed first install reads as installed, or kept its rollback record.'
-    Complete-Check 'health rollback'
+    Assert-True ($code -eq 16 -and -not (Test-Path -LiteralPath $testRoot)) "A fresh install that cannot start returned $code or left $testRoot behind."
+    Assert-True ((Get-Content -Raw $logFile) -match 'Removed everything the failed first install added') 'The helper log does not say the failed first install was removed.'
+    Reset-Mocks
+    Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and (Get-Marker).state -eq 'installed') 'A retry after a failed first install did not install.'
+    # If the app wrote data before failing, only that data and the marker that
+    # makes the folder ours stay; the retry keeps the data.
+    Reset-Root; Reset-Mocks
+    $script:healthResults.Enqueue($false); $script:startWritesData = $true
+    $code = Invoke-Package (New-TestPackage)
+    $left = @(Get-ChildItem -LiteralPath $testRoot -Force | ForEach-Object Name | Sort-Object)
+    Assert-True ($code -eq 16 -and ($left -join ',') -eq 'data,installation.json' -and (Get-Marker).state -eq 'installing' -and -not (Test-Path -LiteralPath $transaction)) "A failed first install that wrote data returned $code or left: $($left -join ', ')"
+    $dataBefore = Get-TreeState $data
+    Reset-Mocks
+    Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and (Get-Marker).state -eq 'installed' -and (Get-TreeState $data) -eq $dataBefore) 'A retry after a failed first install with data did not install or changed the data.'
+    # A first install interrupted while staging (Setup killed, power cut) leaves
+    # its marker and package.next; the older Setup also left runtime and
+    # app.failed after a failed first install. The next run cleans up and installs.
+    Reset-Root; Reset-Mocks
+    $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot 'package.next\app\dist'),(Join-Path $InstallRoot 'app.failed\dist'),$runtime -Force
+    [IO.File]::WriteAllText((Join-Path $runtime 'node.exe'), 'synthetic node 24.19.0')
+    Write-Json $marker ([ordered]@{product='living-room-display';state='installing';createdFolder=$true})
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 0 -and (Get-Marker).state -eq 'installed' -and @(Get-AsideDirectories $script:asideNames).Count -eq 0 -and (Get-Content -Raw $logFile) -match 'earlier first install did not finish') "Setup after an interrupted first install returned $code or left set-aside folders. Log: $(Get-Content -Raw $logFile)"
+    Assert-NoStaging
+    # A staging failure on a first install leaves nothing behind.
+    Reset-Root; Reset-Mocks
+    $script:faults['extracted'] = { throw 'synthetic staging failure' }
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 13 -and -not (Test-Path -LiteralPath $testRoot)) "A failed first staging returned $code or left $testRoot behind."
+    # A reinstall after "Keep my data" that can't start: the kept data, backups
+    # and uninstalled marker stay exactly as they were; nothing else is left.
+    Reset-Root; Reset-Mocks
+    $null = New-Item -ItemType Directory -Path (Join-Path $data 'photos') -Force
+    [IO.File]::WriteAllText((Join-Path $data 'state.json'), '{"syntheticSettings":"kept"}')
+    Write-Json $marker ([ordered]@{product='living-room-display';state='uninstalled';version='0.1.0';channel='package';uninstalledAt='2026-10-02T00:00:00.0000000Z'})
+    $dataBefore = Get-TreeState $data; $markerBefore = Get-Sha256 $marker
+    $script:healthResults.Enqueue($false)
+    $code = Invoke-Package (New-TestPackage)
+    $left = @(Get-ChildItem -LiteralPath $testRoot -Force | ForEach-Object Name | Sort-Object)
+    Assert-True ($code -eq 16 -and (Get-TreeState $data) -eq $dataBefore -and (Get-Sha256 $marker) -eq $markerBefore -and ($left -join ',') -eq 'backups,data,installation.json') "A failed kept-data reinstall returned $code, changed the kept data or left: $($left -join ', ')"
+    Complete-Check 'failed and interrupted first install'
 
     # ---- an undo that fails is reported honestly and finished by the next run --
     # Review finding: a rename during rollback can fail (a dying process still

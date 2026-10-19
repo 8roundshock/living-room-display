@@ -152,7 +152,7 @@ touched. Setup exits with code 7 in every case.
 | E13 | The setup files look damaged or incomplete. Download Setup again. Nothing was changed. |
 | E14 | Living Room Display is busy with another update or uninstall. Wait a moment and try again. |
 | E15 | The new version didn't start, so Setup put the previous version back. Your data was not changed. Details are in the setup log. |
-| E16 | As E15, plus: Neither version could start; your data was not changed. With no previous version (a first install, or one after a keep-data uninstall): Living Room Display didn't start on this PC, so Setup couldn't finish installing it. Your data was not changed. (Plus the log path.) |
+| E16 | As E15, plus: Neither version could start; your data was not changed. On a first install: Living Room Display didn't start on this PC, so Setup couldn't finish installing it and removed everything it had added. Run Setup again to try again. (If something is left: ...and removed the program files it had added. Run Setup again to try again. If you don't want to, you can delete the folder `<path>`.) On a reinstall after a keep-data uninstall: ...couldn't finish installing it. The settings, reminders and photo you kept were not changed. Run Setup again to try again. (Plus the log path.) |
 | E17 | There isn't enough free disk space (about 500 MB needed). |
 | E18 | An unexpected runtime is in the app folder; Setup left it untouched. |
 | E19 | Setup couldn't make a safe backup of your data, so nothing was changed. |
@@ -163,6 +163,21 @@ touched. Setup exits with code 7 in every case.
 | Other | Setup couldn't finish. Your previous version and data were not changed. (Plus the log path.) |
 
 Missing Edge or .NET Framework 4 shows a warning but doesn't stop Setup.
+
+**A first install that fails or is interrupted.** Setup writes
+`installation.json` (state `installing`) before it unpacks anything. If the app
+then doesn't start (E16), Setup removes what it added: the app and the runtime,
+and, when nothing else is left, `installation.json` and the folder it created.
+If the app had already written its default settings to `data`, that folder and
+`installation.json` stay. If Setup is killed or the PC loses power part-way,
+`installation.json` and `package.next` stay. In every case, running Setup again
+cleans up and installs; its Ready page then says that an earlier installation
+didn't finish. To give up instead, delete the install folder
+(`%LOCALAPPDATA%\LivingRoomDisplay` unless you chose another one with `/DIR`):
+an install that never started holds none of your settings or reminders. A
+failed reinstall after a keep-data uninstall is different: it leaves your kept
+`data`, `backups` and `installation.json` as they were, so don't delete that
+folder unless you want to remove your data.
 
 **Rollback.** If the new version fails its health check, Setup restores it
 automatically: `app.previous` goes back to `app` (and `runtime.previous` if
