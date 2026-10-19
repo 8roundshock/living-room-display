@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Settings, SettingsPatch, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, defaultWidgetGrid, firstPlacement, fitGridDensity, gridProblem, isPlannedWidget, normalizePlacement, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, absorbRetiredWidgets, absorbableGridProblem, defaultWidgetGrid, firstPlacement, fitGridDensity, isPlannedWidget, normalizePlacement, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
 import { ACCENT_MODES } from '../shared/palette.ts';
 import { ANIMATION_LEVELS } from '../shared/motion.ts';
 import { inspectPhoto, photoAssetSchema } from './photo.ts';
@@ -115,7 +115,8 @@ const widgetDataPatch = z.object({
   airQuality: z.object({ scale: airQualityScale }).strict().partial().optional(),
 }).strict();
 function checkGrid(value: Pick<Settings, 'widgetGrid' | 'widgets'>, context: z.RefinementCtx) {
-  const problem = gridProblem(value.widgetGrid, value.widgets);
+  // Strict, except that an enabled retired widget may overlap the target absorbing it (#74).
+  const problem = absorbableGridProblem(value.widgetGrid, value.widgets);
   if (problem) context.addIssue({ code: 'custom', path: ['widgetGrid'], message: problem });
 }
 function migrateGrid<T extends Pick<Settings, 'widgetGrid' | 'widgets'>>(value: T): T {
@@ -124,14 +125,14 @@ function migrateGrid<T extends Pick<Settings, 'widgetGrid' | 'widgets'>>(value: 
   if (!fit) throw new Error('This legacy widget layout cannot fit. Preserve the original settings and choose fewer widgets.');
   return { ...value, widgetGrid: fit.grid };
 }
-const visual = z.object(visualShape).strict().superRefine(checkGrid).transform(migrateGrid);
+const visual = z.object(visualShape).strict().superRefine(checkGrid).transform(migrateGrid).transform(absorbRetiredWidgets);
 const savedPresets = z.array(z.object({ id: z.string().min(1).max(80), name: z.string().trim().min(1).max(60), visual }).strict()).max(12)
   .refine(items => new Set(items.map(item => item.id)).size === items.length, 'Preset IDs must be unique');
 export const settingsSchema = z.object({ ...visualShape, version: z.literal(1), location,
   // Missing source means legacy/manual, so upgrades cannot replace an existing city.
   locationSource: z.enum(['device', 'manual', 'fallback']).default('manual'),
   units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets, widgetData,
-}).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(value => {
+}).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(absorbRetiredWidgets).transform(value => {
   if (value.locationSource === 'fallback') return { ...value, location: defaultSettings().location };
   if (value.locationSource === 'device') return { ...value, location: {
     name: 'Device area', latitude: Math.round(value.location.latitude * 10) / 10,

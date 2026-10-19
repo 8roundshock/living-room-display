@@ -1190,8 +1190,9 @@ export function Editor({
                       location. Changes apply after Save.
                     </p>
                     <p className="hint">
-                      Hourly precipitation chance includes snow. Rain timing and
-                      amounts are estimates and may change.
+                      Weather adds rain timing automatically when rain is near
+                      (within 12 hours). Hourly chance includes snow; rain
+                      timing and amounts are forecast estimates and may change.
                       {state.weather.error ? ` ${state.weather.error}` : ''}
                     </p>
                   </div>

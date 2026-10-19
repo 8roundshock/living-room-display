@@ -14,7 +14,12 @@ const HISTORY_PAGE = 50;
 
 type View = 'upnext' | 'history';
 interface Message { text: string; undo?: Reminder }
-type Settling = Record<string, 'saving' | 'settled' | 'leaving'>;
+/**
+ * A checked row stays in Up next through these phases: `saving` (PATCH in flight), `settled`
+ * (saved, waiting out the settle), `leaving` (collapsing) and `restoring` (a restore PATCH in
+ * flight; the settle timers leave the row alone until it returns).
+ */
+type Settling = Record<string, 'saving' | 'settled' | 'leaving' | 'restoring'>;
 
 function reducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -57,8 +62,9 @@ export function RemindersPanel({
   const panel = useRef<HTMLDivElement>(null);
   const timers = useRef(new Set<number>());
   const undoTimer = useRef<number | undefined>(undefined);
+  // Timers and handlers read the latest phases here; setPhase updates it before React renders.
   const settlingRef = useRef(settling);
-  settlingRef.current = settling;
+  const completions = useRef(new Map<string, number>());
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -85,21 +91,25 @@ export function RemindersPanel({
   function remove(ids: Set<string>) {
     setState(previous => previous ? { ...previous, reminders: previous.reminders.filter(item => !ids.has(item.id)) } : previous);
   }
-  function setPhase(id: string, phase: Settling[string] | null) {
-    setSettling(current => {
-      const next = { ...current };
-      if (phase) next[id] = phase; else delete next[id];
-      return next;
-    });
+  function setSettlingNow(next: Settling) {
+    settlingRef.current = next;
+    setSettling(next);
   }
-  function focusAfter(selector: string, ids: string[], index: number, fallback: string) {
-    // Next row, else the previous one, else a stable control, so keyboard users can keep going.
-    const target = ids[index + 1] ?? ids[index - 1];
+  function setPhase(id: string, phase: Settling[string] | null) {
+    const next = { ...settlingRef.current };
+    if (phase) next[id] = phase; else delete next[id];
+    setSettlingNow(next);
+  }
+  function focusRow(selector: string, target: string | undefined, fallback: string) {
     window.requestAnimationFrame(() => {
       const root = panel.current;
       const element = (target && root?.querySelector<HTMLElement>(`${selector}[data-reminder-id="${target}"]`)) || root?.querySelector<HTMLElement>(fallback);
       element?.focus();
     });
+  }
+  function focusAfter(selector: string, ids: string[], index: number, fallback: string) {
+    // Next row, else the previous one, else a stable control, so keyboard users can keep going.
+    focusRow(selector, ids[index + 1] ?? ids[index - 1], fallback);
   }
   async function refreshReminders() {
     try {
@@ -153,10 +163,14 @@ export function RemindersPanel({
   }
   async function complete(reminder: Reminder) {
     const phase = settlingRef.current[reminder.id];
-    if (phase === 'saving') return;
+    if (phase === 'saving' || phase === 'restoring') return;
     // Tapping the circle again during the settle restores the reminder.
     if (phase) { void restore(reminder); return; }
     const visible = upNext.filter(item => !settlingRef.current[item.id]).map(item => item.id);
+    // Timers from an earlier check-off of the same reminder (restored, then checked again) stand down.
+    const generation = (completions.current.get(reminder.id) ?? 0) + 1;
+    completions.current.set(reminder.id, generation);
+    const still = (phase: Settling[string]) => settlingRef.current[reminder.id] === phase && completions.current.get(reminder.id) === generation;
     onError(null);
     setPhase(reminder.id, 'saving');
     focusAfter('.complete-button', visible, visible.indexOf(reminder.id), '.add-reminder');
@@ -166,36 +180,48 @@ export function RemindersPanel({
       setPhase(reminder.id, 'settled');
       announce({ text: `Completed “${reminder.text}”`, undo: received });
       later(() => {
-        if (settlingRef.current[reminder.id] !== 'settled') return;
+        if (!still('settled')) return;
         if (reducedMotion()) { setPhase(reminder.id, null); return; }
         setPhase(reminder.id, 'leaving');
-        later(() => { if (settlingRef.current[reminder.id] === 'leaving') setPhase(reminder.id, null); }, COLLAPSE_MS);
+        later(() => { if (still('leaving')) setPhase(reminder.id, null); }, COLLAPSE_MS);
       }, SETTLE_MS);
     } catch {
       setPhase(reminder.id, null);
       onError('Could not complete reminder. It is still in Up next.');
     }
   }
-  async function restore(reminder: Reminder, focus?: { ids: string[]; index: number }) {
+  /**
+   * `focus` names where keyboard focus goes afterwards: the next History row after a History
+   * restore, or the restored reminder's own circle after Undo (whose button unmounts).
+   */
+  async function restore(reminder: Reminder, focus?: { ids: string[]; index: number } | 'restored') {
+    if (settlingRef.current[reminder.id] === 'restoring') return;
     onError(null);
+    // The row shows unchecked in Up next at once, and the settle timers leave it alone meanwhile.
+    setPhase(reminder.id, 'restoring');
     try {
       const received = await api<Reminder>(`/api/reminders/${reminder.id}`, { method: 'PATCH', body: JSON.stringify({ completed: false }) });
       setPhase(reminder.id, null);
       replace(received);
       announce({ text: `Restored “${received.text}”` });
-      if (focus) focusAfter('.history-check', focus.ids, focus.index, '.reminder-view[data-view="history"]');
+      if (focus === 'restored') focusRow('.complete-button', received.id, '.reminder-view[data-view="upnext"]');
+      else if (focus) focusAfter('.history-check', focus.ids, focus.index, '.reminder-view[data-view="history"]');
     } catch (caught) {
+      // Still completed, so it leaves Up next; an Undo offer stays (and keeps focus) for a retry.
+      setPhase(reminder.id, null);
       onError(caught instanceof Error ? caught.message : 'Could not restore reminder.');
     }
   }
-  async function deleteReminder(reminder: Reminder, ids: string[], selector: string, fallback: string) {
+  async function deleteReminder(reminder: Reminder, list: View, ids: string[]) {
+    const [selector, fallback] = list === 'history' ? ['.history-check', '.reminder-view[data-view="history"]'] : ['.complete-button', '.add-reminder'];
     onError(null);
     try {
       await api<void>(`/api/reminders/${reminder.id}`, { method: 'DELETE' });
       focusAfter(selector, ids, ids.indexOf(reminder.id), fallback);
       setPhase(reminder.id, null);
       remove(new Set([reminder.id]));
-      announce({ text: reminder.completed ? 'Deleted from history' : 'Reminder deleted' });
+      // A row deleted while it settles in Up next was deleted from Up next, not from History.
+      announce({ text: list === 'history' ? 'Deleted from history' : 'Reminder deleted' });
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : 'Could not delete reminder.');
     }
@@ -207,7 +233,7 @@ export function RemindersPanel({
       const result = await api<ClearCompletedResult>('/api/reminders/completed', { method: 'DELETE' });
       setState(previous => previous ? { ...previous, reminders: previous.reminders.filter(item => !item.completed) } : previous);
       setConfirmClear(false);
-      setSettling({});
+      setSettlingNow({});
       announce({ text: `History cleared (${result.deleted})` });
       window.requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>('.reminder-view[data-view="history"]')?.focus());
     } catch (caught) {
@@ -254,21 +280,23 @@ export function RemindersPanel({
         <ul className="reminder-list">
           {upNext.map(reminder => {
             const phase = settling[reminder.id];
+            // A restore in flight already shows the row unchecked.
+            const done = phase !== undefined && phase !== 'restoring';
             const dueLabel = reminderDueLabel(reminder, now, clockFormat);
             return (
               <li key={reminder.id} className={`editor-reminder-row ${phase === 'leaving' ? 'leaving' : ''}`}>
                 <div className="editor-reminder">
                   <button
-                    className={`complete-button ${phase ? 'done' : ''}`}
+                    className={`complete-button ${done ? 'done' : ''}`}
                     data-reminder-id={reminder.id}
                     aria-label={`Complete: ${reminder.text}`}
                     onClick={() => { void complete(state.reminders.find(item => item.id === reminder.id) ?? reminder); }}
                   >
-                    <span>{phase && <Icon name="check" size={13} />}</span>
+                    <span>{done && <Icon name="check" size={13} />}</span>
                   </button>
-                  <div className={`reminder-copy ${phase ? 'done' : ''}`}>
+                  <div className={`reminder-copy ${done ? 'done' : ''}`}>
                     <p>{reminder.text}</p>
-                    <span className={dueLabel.startsWith('Overdue') && !phase ? 'overdue' : undefined}><Segments text={dueLabel} /></span>
+                    <span className={dueLabel.startsWith('Overdue') && !done ? 'overdue' : undefined}><Segments text={dueLabel} /></span>
                   </div>
                   <div className="reminder-actions">
                     <button className="icon-button" aria-label={`Edit: ${reminder.text}`} disabled={!!phase} onClick={() => startForm(reminder)}>
@@ -277,8 +305,8 @@ export function RemindersPanel({
                     <button
                       className="icon-button"
                       aria-label={`Delete: ${reminder.text}`}
-                      disabled={phase === 'saving'}
-                      onClick={() => { void deleteReminder(state.reminders.find(item => item.id === reminder.id) ?? reminder, upNextIds, '.complete-button', '.add-reminder'); }}
+                      disabled={phase === 'saving' || phase === 'restoring'}
+                      onClick={() => { void deleteReminder(state.reminders.find(item => item.id === reminder.id) ?? reminder, 'upnext', upNextIds); }}
                     >
                       <Icon name="trash" size={15} />
                     </button>
@@ -327,7 +355,7 @@ export function RemindersPanel({
                         <button
                           className="icon-button"
                           aria-label={`Delete: ${reminder.text}`}
-                          onClick={() => { void deleteReminder(reminder, historyIds, '.history-check', '.reminder-view[data-view="history"]'); }}
+                          onClick={() => { void deleteReminder(reminder, 'history', historyIds); }}
                         >
                           <Icon name="trash" size={15} />
                         </button>
@@ -345,7 +373,7 @@ export function RemindersPanel({
           )}
           {confirmClear ? (
             <div className="clear-history-confirm" role="group" aria-label="Clear history">
-              <p>Delete {completedCount} completed reminders? This can’t be undone.</p>
+              <p>Delete {completedCount} completed {completedCount === 1 ? 'reminder' : 'reminders'}? This can’t be undone.</p>
               <div className="form-actions">
                 <button className="button" disabled={clearing} onClick={() => setConfirmClear(false)}>Keep</button>
                 <button className="button danger" disabled={clearing} onClick={() => { void clearHistory(); }}>
@@ -399,7 +427,7 @@ export function RemindersPanel({
         {message ? <>
           <span>{message.text}</span>
           {message.undo && (
-            <button className="text-button reminder-undo" onClick={() => { const target = message.undo!; announce(null); void restore(target); }}>
+            <button className="text-button reminder-undo" onClick={() => { void restore(message.undo!, 'restored'); }}>
               Undo
             </button>
           )}

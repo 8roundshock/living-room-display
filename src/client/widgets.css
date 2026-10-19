@@ -6,11 +6,11 @@
 @property --ambient-min-text { syntax: '<length>'; inherits: true; initial-value: 0px; }
 @property --ambient-min-data { syntax: '<length>'; inherits: true; initial-value: 0px; }
 .grid-ambient > .ambient-content { --ambient-min-text: min(1.4cqh, 0.7875cqw); --ambient-min-data: min(1.65cqh, 0.928cqw); }
-/* Widgets inherit the display floors. Small rain/forecast cap them by their own content height
+/* Widgets inherit the display floors. Small forecast caps them by its own content height
    (text 7.25%, data 8.5%), which binds only when that height is under ~19.4% of the display
    (fine grid: ~1.07%/1.26%), rather than letting the fit scale shrink everything. */
 .grid-ambient .ambient-widget { --min-text: var(--ambient-min-text, 0px); --min-data: var(--ambient-min-data, 0px); }
-.grid-ambient :is(.ambient-rain, .ambient-forecast).widget-size-small { --min-text: min(var(--ambient-min-text, 0px), 7.25cqh); --min-data: min(var(--ambient-min-data, 0px), 8.5cqh); }
+.grid-ambient .ambient-forecast.widget-size-small { --min-text: min(var(--ambient-min-text, 0px), 7.25cqh); --min-data: min(var(--ambient-min-data, 0px), 8.5cqh); }
 .grid-ambient .ambient-content { display: block; width: auto; height: auto; padding: 0; gap: 0; transform: translate(var(--motion-x, 0), var(--motion-y, 0)); }
 .grid-ambient.layout-editing .ambient-content { transform: none; }
 .grid-ambient .ambient-widget { position: absolute; grid-area: auto; padding: min(1.2cqw, 1.8cqh); container-type: size; animation: none; transform: none; }
@@ -50,58 +50,57 @@
 .grid-ambient .clock-family-medium .analog-clock { width: min(55cqw, 92cqh); height: min(55cqw, 92cqh); }
 .grid-ambient .clock-family-large .analog-clock { width: min(80cqw, 76cqh); height: min(80cqw, 76cqh); }
 
-/* Temperature leads; wider families add context, taller ones add useful metrics. */
-/* Age and credit share a wrapping row, so wider families spend one line on them. */
+/* Weather adapts to the rain outlook (#74) without changing its footprint: calm shows conditions,
+   a hint line replaces feels-like, and elevated leads with rain timing (large adds the hourly chance
+   chart). Age, confidence and credit share a wrapping row. Rain visuals use --weather-rain, which
+   defaults to the accent (the #75 hook); data-weather-mode and data-rain-kind mark the state. */
 .grid-ambient .weather-footer { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1cqh 3cqw; margin-top: 4cqh; }
-.grid-ambient .weather-footer .weather-age, .grid-ambient .weather-footer .weather-credit { margin: 0; }
+.grid-ambient .weather-footer > * { margin: 0; }
 .grid-ambient .weather-place { display: block; }
 .grid-ambient .weather-unit { font-size: max(var(--min-text) * var(--font-scale), 0.8em); opacity: 0.65; white-space: nowrap; }
 .grid-ambient .current-weather-main { display: flex; align-items: center; gap: 5cqw; }
 .grid-ambient .current-temperature { font-size: calc(min(33cqw, 40cqh) * var(--font-scale)); font-weight: 400; line-height: 1; }
-.grid-ambient .current-weather-main > .weather-symbol { width: min(19cqw, 25cqh); height: min(19cqw, 25cqh); }
+/* Icon size={null} leaves the glyph box to these rules (#128). */
+.grid-ambient .current-weather-main > .weather-symbol { flex: none; width: min(19cqw, 25cqh); height: min(19cqw, 25cqh); }
 .grid-ambient .weather-condition { font-size: calc(max(var(--min-text), min(8cqw, 11cqh)) * var(--font-scale)); line-height: 1.25; margin-top: 3cqh; }
-.grid-ambient .weather-details { font-size: calc(max(var(--min-text), min(5.5cqw, 8cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 2cqh; }
+.grid-ambient .weather-details, .grid-ambient .weather-hint { font-size: calc(max(var(--min-text), min(5.5cqw, 8cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 2cqh; }
+.grid-ambient .weather-hint, .grid-ambient .rain-detail, .grid-ambient .rain-hours { color: var(--weather-rain, var(--ambient-accent)); }
+.grid-ambient .rain-timing { font-size: calc(max(var(--min-text), min(8cqw, 11cqh)) * var(--font-scale)); line-height: 1.25; margin-top: 3cqh; }
+.grid-ambient .rain-detail { font-size: calc(max(var(--min-data), min(5.5cqw, 8cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 2cqh; }
+.grid-ambient .weather-footer .rain-confidence { font-size: calc(max(var(--min-text), min(5cqw, 6cqh)) * var(--font-scale)); line-height: 1.3; color: var(--ambient-accent); opacity: 0.72; }
+.grid-ambient .ambient-weather.widget-size-small :is(.weather-hint, .rain-timing) { font-size: calc(max(var(--min-text), min(7cqw, 10cqh)) * var(--font-scale)); line-height: 1.25; margin-top: 3cqh; }
+.grid-ambient .ambient-weather.widget-size-small .weather-footer { margin-top: 3cqh; }
 .grid-ambient .ambient-weather.widget-size-medium .weather-overview { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 5cqw; }
+.grid-ambient .ambient-weather.widget-size-medium [data-weather-mode="elevated"] .weather-overview { grid-template-columns: auto minmax(0, 1fr); }
 .grid-ambient .ambient-weather.widget-size-medium .current-temperature { font-size: calc(min(23cqw, 48cqh) * var(--font-scale)); }
 .grid-ambient .ambient-weather.widget-size-medium .current-weather-main > .weather-symbol { width: min(10cqw, 22cqh); height: min(10cqw, 22cqh); }
-.grid-ambient .ambient-weather.widget-size-medium .weather-condition { margin: 0; font-size: calc(max(var(--min-text), min(6.2cqw, 14cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-medium :is(.weather-condition, .rain-timing) { margin: 0; font-size: calc(max(var(--min-text), min(6.2cqw, 14cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-medium :is(.weather-details, .weather-hint, .rain-detail) { font-size: calc(max(var(--min-text), min(5cqw, 10cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-medium .rain-detail { font-size: calc(max(var(--min-data), min(5cqw, 10cqh)) * var(--font-scale)); }
 .grid-ambient .weather-metrics { display: flex; justify-content: space-between; gap: 5cqw; margin-top: 7cqh; font-size: calc(min(7cqw, 10cqh) * var(--font-scale)); }
 .grid-ambient .weather-metrics > div { display: flex; flex-direction: column; gap: 2cqh; }
 .grid-ambient .metric-label { display: block; color: var(--ambient-accent); font-size: max(var(--min-text) * var(--font-scale), 0.65em); line-height: 1.3; margin-bottom: 1cqh; }
 .grid-ambient .ambient-weather.widget-size-large .ambient-label { font-size: calc(max(var(--min-text), min(6cqw, 6cqh)) * var(--font-scale)); }
 .grid-ambient .ambient-weather.widget-size-large .current-temperature { font-size: calc(min(28cqw, 34cqh) * var(--font-scale)); }
 .grid-ambient .ambient-weather.widget-size-large .weather-condition { font-size: calc(max(var(--min-text), min(7cqw, 9cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-weather.widget-size-large .weather-details { font-size: calc(max(var(--min-text), min(5.5cqw, 7cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large :is(.weather-details, .weather-hint) { font-size: calc(max(var(--min-text), min(5.5cqw, 7cqh)) * var(--font-scale)); }
 .grid-ambient .ambient-weather.widget-size-large .weather-metrics { margin-top: 5cqh; font-size: calc(min(6.5cqw, 8cqh) * var(--font-scale)); }
-.grid-ambient .ambient-weather.widget-size-large .weather-age, .grid-ambient .ambient-weather.widget-size-large .weather-credit { font-size: calc(max(var(--min-text), min(5cqw, 5cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .weather-footer > * { font-size: calc(max(var(--min-text), min(5cqw, 5cqh)) * var(--font-scale)); }
 .grid-ambient .ambient-weather.widget-size-large .weather-footer { margin-top: 3cqh; }
-
-/* Rain has a clear chance, an estimated window, then a chart only with space. Compact
-   families keep related values on shared, wrapping rows so small text keeps its floor. */
-.grid-ambient .rain-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 4cqw; }
-.grid-ambient .rain-summary { display: flex; flex-direction: column; gap: 3cqh; }
-.grid-ambient .rain-chance { display: flex; align-items: last baseline; gap: 4cqw; font-size: calc(min(24cqw, 27cqh) * var(--font-scale)); line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.05em; }
-.grid-ambient .rain-chance > span { display: block; min-width: 0; color: var(--ambient-accent); font-size: max(var(--min-text) * var(--font-scale), 0.24em); line-height: 1.15; letter-spacing: 0; }
-.grid-ambient .rain-timing { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 3cqw; font-size: calc(max(var(--min-text), min(8cqw, 12cqh)) * var(--font-scale)); line-height: 1.2; }
-.grid-ambient .rain-amount { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1cqh 3cqw; font-size: calc(max(var(--min-data), min(5.5cqw, 8cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 3cqh; }
-.grid-ambient .rain-amount > span { color: var(--ambient-accent); font-size: max(var(--min-data) * var(--font-scale), 0.85em); }
-.grid-ambient .rain-confidence { font-size: calc(max(var(--min-text), min(4.8cqw, 6cqh)) * var(--font-scale)); color: var(--ambient-accent); line-height: 1.3; margin-top: 3cqh; }
-.grid-ambient .rain-footer { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1cqh 3cqw; margin-top: 3cqh; }
-.grid-ambient .rain-footer .rain-confidence, .grid-ambient .rain-footer .weather-age, .grid-ambient .rain-footer .weather-credit { margin: 0; font-size: calc(max(var(--min-text), min(4.5cqw, 5cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-rain:is(.widget-size-medium, .widget-size-large) .rain-chance, .grid-ambient .ambient-rain:is(.widget-size-medium, .widget-size-large) .rain-timing { display: block; }
-.grid-ambient .ambient-rain:is(.widget-size-medium, .widget-size-large) .rain-chance > span { margin-top: 2cqh; line-height: 1; }
-.grid-ambient .ambient-rain.widget-size-medium .rain-heading { justify-content: flex-start; }
-.grid-ambient .ambient-rain.widget-size-medium .rain-summary { flex-direction: row; align-items: center; justify-content: flex-start; gap: 6cqw; }
-.grid-ambient .ambient-rain.widget-size-medium .rain-chance { font-size: calc(min(18cqw, 30cqh) * var(--font-scale)); }
-.grid-ambient .ambient-rain.widget-size-medium .rain-timing { max-width: 46%; font-size: calc(max(var(--min-text), min(6.3cqw, 13cqh)) * var(--font-scale)); }
-.grid-ambient .rain-bars { display: flex; align-items: end; height: 16cqh; gap: 2cqw; margin: 3cqh 0 0; }
-.grid-ambient .rain-bar { flex: 1; width: auto; min-height: 1px; opacity: 0.65; background: var(--ambient-accent); border-radius: 1px 1px 0 0; }
-.grid-ambient .rain-bar-unknown { background: none; border-bottom: 1px dotted var(--ambient-accent); }
-.grid-ambient .rain-hours { font-size: calc(max(var(--min-text), min(4.5cqw, 6cqh)) * var(--font-scale)); max-width: none; margin-top: 2cqh; }
-.grid-ambient .ambient-rain.widget-size-large .rain-summary { flex-direction: row; align-items: center; justify-content: flex-start; gap: 5cqw; }
-.grid-ambient .ambient-rain.widget-size-large .rain-chance { font-size: calc(min(24cqw, 22cqh) * var(--font-scale)); }
-.grid-ambient .ambient-rain.widget-size-large .rain-timing { max-width: 48%; font-size: calc(max(var(--min-text), min(7cqw, 9cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-rain.widget-size-large .rain-heading { flex-wrap: nowrap; }
+/* Large elevated: a shorter hero leaves room for timing, detail and twelve hourly chance bars. */
+.grid-ambient .ambient-weather.widget-size-large [data-weather-mode="elevated"] .weather-overview { display: flex; align-items: center; justify-content: space-between; gap: 5cqw; }
+.grid-ambient .ambient-weather.widget-size-large [data-weather-mode="elevated"] .current-temperature { font-size: calc(min(24cqw, 22cqh) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large [data-weather-mode="elevated"] .current-weather-main > .weather-symbol { width: min(13cqw, 15cqh); height: min(13cqw, 15cqh); }
+.grid-ambient .ambient-weather.widget-size-large [data-weather-mode="elevated"] .weather-summary { min-width: 0; text-align: right; }
+.grid-ambient .ambient-weather.widget-size-large [data-weather-mode="elevated"] .weather-condition { margin: 0; }
+.grid-ambient .ambient-weather.widget-size-large .weather-rain { margin-top: 4cqh; }
+.grid-ambient .ambient-weather.widget-size-large .rain-timing { margin: 0; font-size: calc(max(var(--min-text), min(7cqw, 8.5cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-weather.widget-size-large .rain-detail { margin-top: 1.5cqh; font-size: calc(max(var(--min-data), min(5cqw, 6cqh)) * var(--font-scale)); }
+.grid-ambient .rain-bars { display: flex; align-items: end; height: 15cqh; gap: 2cqw; margin: 3cqh 0 0; }
+.grid-ambient .rain-bar { flex: 1; width: auto; min-height: 1px; max-height: 100%; opacity: 0.35; background: var(--weather-rain, var(--ambient-accent)); border-radius: 1px 1px 0 0; }
+.grid-ambient .rain-bar-spell { opacity: 0.65; }
+.grid-ambient .rain-bar-unknown { background: none; border-bottom: 1px dotted var(--weather-rain, var(--ambient-accent)); }
+.grid-ambient .rain-hours { display: flex; justify-content: space-between; max-width: none; font-size: calc(max(var(--min-text), min(4.5cqw, 5cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 1.5cqh; }
 
 .grid-ambient .forecast-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 4cqw; margin-bottom: 4cqh; }
 .grid-ambient .forecast-heading .ambient-label, .grid-ambient .forecast-heading .weather-context { margin: 0; }
@@ -130,6 +129,8 @@
 .grid-ambient .reminders-body { --reminder-title-size: calc(max(var(--min-data, 0px), min(9cqw, 14cqh, var(--ambient-reminder-title))) * var(--font-scale)); height: 100cqh; min-height: 0; overflow: hidden; justify-content: flex-start; }
 /* Even one row overflows: release the height so the shared whole-widget zoom-out applies. */
 .grid-ambient .reminders-body.reminders-overfull { height: auto; min-height: 100cqh; overflow: visible; }
+/* Measuring always uses the fixed box: a remeasure while overfull must not count rows against the grown body. */
+.grid-ambient .reminders-body.reminders-overfull[data-measuring] { height: 100cqh; min-height: 0; overflow: hidden; }
 .grid-ambient .reminders-body .ambient-label { font-size: calc(max(var(--min-text), min(6.4cqw, 8cqh, var(--ambient-reminder-title) * 0.72)) * var(--font-scale)); margin-bottom: calc(var(--reminder-title-size) * 0.35); }
 .grid-ambient .reminders-body .ambient-title { font-size: var(--reminder-title-size); }
 /* Row gaps and the dot follow the title size; the dot centers on the title's first line. */

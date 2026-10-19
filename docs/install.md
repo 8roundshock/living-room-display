@@ -24,6 +24,175 @@ SHA256 against that release's official `SHASUMS256.txt`, and keeps Node/npm insi
 the app directory. It does not replace system Node or alter PATH outside its own
 process. npm retrieves the pinned dependencies in `package-lock.json`.
 
+## Install with Setup (recommended)
+
+`LivingRoomDisplaySetup-<version>.exe` is a per-user setup for people who don't
+use Git or PowerShell ([#77](https://github.com/8roundshock/living-room-display/issues/77)).
+CI builds it from reviewed commits as the `living-room-display-setup` artifact,
+with a `.sha256` file and the `release.json` manifest. It is still a private,
+unsigned prerelease: how it is distributed ([#114](https://github.com/8roundshock/living-room-display/issues/114))
+and code signing ([#115](https://github.com/8roundshock/living-room-display/issues/115))
+are owner decisions, and clean-PC acceptance is tracked in
+[#116](https://github.com/8roundshock/living-room-display/issues/116).
+
+**Supported systems.** Windows 10 22H2 and Windows 11, x64. Setup refuses
+anything older than Windows 10 1809 and anything that isn't x64-compatible.
+Windows 11 on Arm runs it through x64 emulation; that path is checked in CI
+but doesn't gate releases yet ([#122](https://github.com/8roundshock/living-room-display/issues/122)).
+The full-screen display needs Microsoft Edge ([#119](https://github.com/8roundshock/living-room-display/issues/119))
+and the .NET Framework 4.x, which is built into Windows 10 and 11. Setup users
+don't need the C# compiler, Node.js, Git or a terminal.
+
+**Download warnings.** Until the file is signed, Edge may say it "isn't
+commonly downloaded" (choose **Keep**). Running it shows **Windows protected your
+PC**: choose **More info**, then **Run anyway**. On Windows 11 with Smart App
+Control turned on, unsigned setups are blocked with no override; that needs
+signing (#115). To check the download, compare
+`(Get-FileHash .\LivingRoomDisplaySetup-<version>.exe).Hash` with the `.sha256`
+file.
+
+**What Setup does.** One page, **Ready to install Living Room Display**, with
+one unchecked option: **Create a desktop shortcut**. Click **Install**. Setup
+installs for your account only (no administrator rights) into
+`%LOCALAPPDATA%\LivingRoomDisplay`, using the same layout as the
+[table below](#data-updates-recovery-and-removal) plus `backups\` (data snapshots),
+`uninstall\` (the uninstaller and its copy of the control script) and
+`app\release.json`. Setup does the following:
+
+- checks the download, including every file against `release.json` and the
+  bundled Node runtime against its pinned SHA-256;
+- installs the app;
+- starts the local server and confirms it answers before it reports success;
+- finishes with **Open Living Room Display** checked, which opens
+  <http://127.0.0.1:4318/editor>.
+
+It never adds startup entries, services, scheduled tasks or Run keys, and it
+never changes your screen saver. There's no firewall prompt because the server
+listens only on 127.0.0.1. No account and no cloud are involved.
+
+**Start menu.** **Living Room Display** opens the editor (it starts the server if
+needed). **Living Room Display - Show display** shows the ambient display now;
+move the mouse or press a key to close it. There's no Uninstall shortcut:
+right-click the Start entry, or use **Settings > Apps**.
+
+**Updating.** Download and run the newer Setup. The Ready page says
+**Update Living Room Display to version X**. Save any unsaved editor changes
+first: the display closes during the update. Setup then:
+
+1. stops this install's display and server;
+2. copies the whole `data` folder to `backups\data-before-<old version>-<UTC time>`
+   and verifies every file's size and SHA-256 (the newest three copies are kept);
+3. keeps the previous app as `app.previous`;
+4. installs the new app, restarts it and checks its health.
+
+Running the same version again repairs the install. Setup also adopts an
+existing source install at the same folder through its `installation.json`
+marker. After an uninstall that kept your data, the Ready page says **Install
+Living Room Display version X** and that Setup found the kept settings, reminders
+and photo; it uses them again after the same backup. Running an older Setup is
+refused (see E12), so an older version never
+"recovers" over newer data; agents may override this with `/ALLOWDOWNGRADE=1`
+only after following the rollback steps below.
+The runtime is replaced only when the packaged Node 24 is newer and any
+`runtime.previous` was made by Setup; a runtime that isn't Node 24 stops
+the update untouched (E18).
+A later source `Update` on a Setup install works, but Apps & Features keeps
+showing the Setup version and `Status` then reports `Channel` `source`.
+
+**Uninstalling.** From **Settings > Apps** or the Start menu, confirm **Remove
+Living Room Display from this PC?** Then choose **Keep my data** (the default)
+or **Delete my data**. Keeping it lets you pick up where you left off if you
+reinstall. Either way, uninstall does the following:
+
+- restores your previous screen saver, but only if this app is the selected one
+  and a saved backup exists;
+- stops the display and server;
+- removes `app`, `app.previous`, `app.failed`, `runtime` (and a Setup-made
+  `runtime.previous`), `run`, `edge-profile`, leftover staging folders, the
+  record of an unfinished rollback (`package-transaction.json`), the shortcuts
+  and the Apps & Features entry.
+
+**Keep my data** leaves `data`, `backups` and `installation.json`. **Delete my
+data** removes `data` and `backups` as well, then removes the folder once only
+the marker is left. If something can't be stopped or removed, uninstall stops
+with "Living Room Display couldn't stop or remove some files: ...". Your data is
+not deleted in that case: run Setup again to repair, then uninstall. The CLI
+`Uninstall` command on a Setup install hands over to the same uninstaller.
+
+**Silent use (agents and administrators).**
+
+| Command | Result |
+| --- | --- |
+| `LivingRoomDisplaySetup-<version>.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="<file>"` | Install or update. Exit 0 = success, 7 = refused by the checks below (nothing registered). The editor is not opened. |
+| add `/DIR="<dedicated folder>"` | Install elsewhere: a new empty folder, or an existing Living Room Display folder. Keep the path under about 130 characters. |
+| add `/ALLOWDOWNGRADE=1` | Allow installing an older version over a newer Setup install. |
+| add `/ALLOWELEVATED=1` | Build agents only (for example GitHub's runners, which are always elevated with UAC on). Setup otherwise refuses an elevated launch, because the server it starts would run elevated. |
+| `"%LOCALAPPDATA%\LivingRoomDisplay\uninstall\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART` | Uninstall and keep data. The first process can exit early; wait until the Apps & Features entry is gone. |
+| add `/REMOVEDATA=1` | Uninstall and delete data and backups. |
+
+Installed `Status` also reports `Channel` (`package` or `source`), `Version`,
+`RuntimeVersion` and `PackageSha256`. The Setup log (`/LOG`, or `Setup Log
+<date> #<n>.txt` in `%TEMP%`) includes the helper's own log.
+
+**When Setup stops.** Every refusal (E10 to E14, E17 to E19 and E21) happens
+before anything is replaced; your previous version and data stay as they were.
+E15, E16 and E20 come after the new version was put in place and failed to
+start, or after a replacement step failed; data is never touched. Setup exits
+with code 7 in every case.
+
+| Code | Message |
+| --- | --- |
+| E10 | Setup can't use the folder `<path>` because it contains other files. Nothing was changed. |
+| E11 | Another program is already using the connection Living Room Display needs (local port 4318). Close any other copy of Living Room Display, then run Setup again. Nothing was changed. |
+| E12 | A newer version of Living Room Display (`<v>`) is already installed. Nothing was changed. After a keep-data uninstall: The settings kept in this folder are from a newer version of Living Room Display (`<v>`). Install that version or a newer one to use them. Nothing was changed. |
+| E13 | The setup files look damaged or incomplete. Download Setup again. Nothing was changed. |
+| E14 | Living Room Display is busy with another update or uninstall. Wait a moment and try again. |
+| E15 | The new version didn't start, so Setup put the previous version back. Your data was not changed. Details are in the setup log. |
+| E16 | As E15, plus: Neither version could start; your data was not changed. With no previous version (a first install, or one after a keep-data uninstall): Living Room Display didn't start on this PC, so Setup couldn't finish installing it. Your data was not changed. (Plus the log path.) |
+| E17 | There isn't enough free disk space (about 500 MB needed). |
+| E18 | An unexpected runtime is in the app folder; Setup left it untouched. |
+| E19 | Setup couldn't make a safe backup of your data, so nothing was changed. |
+| E20 | Setup couldn't finish, and couldn't put the previous version back by itself. Your previous version and data are kept. Run Setup again: it puts the previous version back first, then tries the update again. (Plus the log path. With no previous version: "...couldn't undo all of its changes by itself. Your data was not changed. Run Setup again: it finishes undoing them first, then tries again.") |
+| E21 | The install folder `<path>` is too long a path for Living Room Display's files. Install it in a shorter folder. Nothing was changed. |
+| Script blocked | Windows settings on this PC don't allow Setup's helper script to run (common on work or school PCs). Ask the PC's administrator, or install on a personal PC. ([#117](https://github.com/8roundshock/living-room-display/issues/117)) |
+| Run as administrator | Please run Setup normally, without 'Run as administrator'. |
+| Other | Setup couldn't finish. Your previous version and data were not changed. (Plus the log path.) |
+
+Missing Edge or .NET Framework 4 shows a warning but doesn't stop Setup.
+
+**Rollback.** If the new version fails its health check, Setup restores it
+automatically: `app.previous` goes back to `app` (and `runtime.previous` if
+this run swapped the runtime). The candidate is kept as `app.failed` and the
+previous version is restarted; data is never touched. Before any folder is
+renamed, `Stop` waits (up to 10 seconds per process) until the display, its
+Edge processes and the server have exited, because a process that is still
+ending keeps its folders open. Each rename is retried for a few seconds, and
+every step is a whole-folder rename, so a step either happens or leaves its
+folders as they were.
+
+While a swap or its rollback is under way, `package-transaction.json` in the
+install folder records which renames are done. If the rollback can't finish
+(E20), or Setup is killed or the PC loses power part-way, that record stays.
+The next Setup run then finishes putting the previous version back before it
+does anything else, so `app.previous` is never mistaken for an older copy and
+deleted. A source `Update` refuses to run while the record exists. If E20
+repeats, follow the manual steps below, then delete `package-transaction.json`.
+To roll back by hand:
+
+1. Run the installed control script's `Stop`.
+2. Rename `app` to `app.failed` and `app.previous` to `app`.
+3. Swap `runtime` and `runtime.previous` only if `installation.json` says
+   `"runtimePreviousOwner": "package"`.
+4. Restore the matching `backups\data-before-...` copy only if the newer
+   version wrote data the older one can't read (see the
+   [compatibility table](#additive-data-and-rollback-compatibility-84)). Keep
+   the newer `data` folder separately.
+5. Run `Start`.
+
+`app.previous` carries its own `release.json`. Never run Setup on a PC that has
+a live install you care about without its owner's go-ahead and a saved editor
+([#130](https://github.com/8roundshock/living-room-display/issues/130)).
+
 ## Install from a source clone
 
 From the clone directory, in PowerShell:
@@ -117,6 +286,7 @@ selection, and retains the backup for inspection.
 | `edge-profile` | Dedicated Edge profile; ambient uses InPrivate/no-store preview responses. |
 | `screensaver-before.json` | Prior native screensaver settings, only after opt-in. |
 | `installation.json` | Non-secret ownership/state and source provenance, retained for reinstall. |
+| `package-transaction.json` | Setup installs only: present while an update or its rollback is unfinished (see [Rollback](#install-with-setup-recommended)). |
 
 Use the editor's export, or stop the app and copy `data` to a private backup.
 Snapshot pixels and native tokens are RAM only and excluded from persisted
@@ -185,7 +355,7 @@ keep the newer data directory and restore the matching pre-upgrade data copy.
 | --- | --- |
 | #73 reminder history | None: history is the completed subset of `reminders[]` and completion time is `updatedAt`, so the previous app reads it. It lists history under Show completed and can edit completed items there, which moves their derived completion time. |
 | #73 custom Reminders sizes | Readable until a custom size (anything other than Small, Medium or Large) is saved in settings or a saved style; from then on `state.json`, later `state.backup.json`, and exports carry `span` keys that `bedca44` rejects. Use the pre-upgrade data copy, or [remove the custom sizes](#removing-custom-reminders-sizes-before-a-downgrade). |
-| #74 Weather and Rain merge | Not shipped yet |
+| #74 Weather and Rain merge | None: no new keys, and `bedca44` reads everything written (`src/server/weather-merge.test.ts`). An enabled Rain merges into Weather in memory; the file changes only at the next ordinary save (any write, including a #73 reminder check-off or history change; a no-op reminder patch writes nothing), which writes `rain: false`, Rain's hidden placement and Weather in the merged cells. After upgrading, boards with the old default Weather and Rain show one large Weather in the same space; Rain-only boards show Weather in Rain's cell (now with conditions); users who had hidden only Rain see rain detail when relevant (no opt-out until #102). Save/Cancel stays hidden because the migrated settings are the saved baseline. After a rollback, `bedca44` shows the calm (old) Weather with Rain hidden; Rain re-added there is merged again after upgrading. The first save writes the already-merged state to `state.backup.json` too, so restoring the separate Rain placement needs a pre-upgrade data copy. |
 | #75 Native colours | Not shipped yet |
 | #76 Animation level | Not shipped yet |
 | #78 Calendar, Countdown and Note | Not shipped yet |

@@ -64,8 +64,8 @@ visible above it, including narrow screens and compact keyboard-height windows.
   cannot accommodate the board; it never silently removes existing content.
 - **Widgets** selects inline size/position and per-widget controls. **Add widget**
   opens a compact category rail and one actual renderer with synthetic family
-  content, size choices and a reachable Add action. Every module can be removed, including clock,
-  weather and rain separately. Small/medium/large families adapt their content.
+  content, size choices and a reachable Add action. Every module can be removed, including clock
+  and weather separately. Small/medium/large families adapt their content.
 - **Preview movement** explicitly reveals numbered arrangements and **Automatic**
   ambient preview. Editing returns to authored placement. **Open display** opens
   a browser tab; its pointer remains visible, including fullscreen. Unmodified
@@ -107,13 +107,25 @@ and reminder input use the computer timezone. Current conditions show age;
 retained stale data is marked throughout. Missing values stay unavailable.
 Hourly chance covers precipitation including snow; rain estimates use rain plus
 showers and label incomplete/gapped coverage. See [API semantics](api.md#weather-semantics).
+Rain timing lives inside Weather (#74): it stays calm when the next 12 hours are
+complete and dry, adds a hint line when rain is later, precipitation is possible or
+the outlook is unknown, and leads with rain timing (large adds hourly chance bars)
+when rain is current or starts within six hours. Wording says “likely” or
+“possible”, never that it is raining; times use the weather city's timezone and the
+12/24-hour setting, and “Forecast estimate”/“Partial forecast” labels stay visible.
+The footprint never changes, and the separate Rain widget is gone from the picker,
+list and canvas; an enabled Rain from older data is merged into Weather
+([upgrade](install.md#additive-data-and-rollback-compatibility-84)). There is no opt-out of
+rain detail yet (#102). The [weather harness](../tests/ui/weather-browser.mjs) checks
+every family × mode × density at 1280/1920/3840 widths, CSS glyph boxes (#128) and the
+upgrade of a pre-#74 data folder.
 Each weather module keeps its actual place and relevant units visible when used
 alone; weather and forecast show the unit beside the place (“Toronto · °C”), and
-rain keeps its timing beside the chance. Compact forecasts abbreviate Tomorrow as
+elevated Weather keeps the rain amount unit (“0.16 in rain”). Compact forecasts abbreviate Tomorrow as
 “Tom.” while retaining the full relative label and civil date for assistive text
 and hover details. Ambient labels, age, attribution, units and secondary values
 have a readability floor of 1.4% of the display height (1.65% for forecast
-chance/temperatures, rain amount/period and reminder dates), multiplied by
+chance/temperatures, the Weather rain detail and reminder dates), multiplied by
 **Text size**; very short compact widgets cap it by their own height. A larger
 Text size never renders scaled ambient labels or values smaller: an overfull
 widget zooms out as a whole (icons and the unavailable dash may still shrink). See the [widget contract](widgets.md#families-and-editing).
@@ -130,10 +142,12 @@ the title, a due line (`Overdue · Yesterday · 3:00 PM`, `Today · 6:00 PM` or
 `Anytime`) and Edit/Delete. One tap fills the circle and dims the title at once while
 the completion saves; after about 0.9 s the row collapses out of Up next (reduced
 motion keeps the delay without the collapse). The status line offers **Undo** for
-about 8 s; Undo, or tapping the circle again during the settle, restores the item.
-Focus moves to the next circle (else the previous one, else Add), so keyboard users
-can tick off several in a row. A failed save reverts the row: “Could not complete
-reminder. It is still in Up next.”
+about 8 s; Undo, or tapping the circle again during the settle, restores the item
+(it shows unchecked at once and stays in Up next while the restore saves). Focus
+moves to the next circle (else the previous one, else Add), so keyboard users can
+tick off several in a row; after Undo, focus moves to the restored reminder's circle.
+A failed save reverts the row: “Could not complete reminder. It is still in Up
+next.” Deleting from Up next reads “Reminder deleted”, also while a row settles.
 History groups completed reminders under TODAY, YESTERDAY, `Mon, Oct 12` or
 `Oct 12, 2025` by completion time in the computer timezone, newest first, 50 at a
 time. A row shows `Completed 3:42 PM` (plus ` · was due …` when it was dated), and
@@ -142,11 +156,14 @@ Delete. Completed reminders cannot be edited; an edit saved for a reminder compl
 in another tab reports “This reminder was completed elsewhere. Restore it to edit.”
 **Clear history…** asks inline before deleting every completed reminder. The
 computer keeps the latest 500 completed reminders. Every reminder time follows the
-12/24-hour setting.
+12/24-hour setting; like the canvas preview, the editor list follows an unsaved
+change to it, while the display keeps the saved setting until Save.
 The ambient widget shows as many pending reminders as fit its box, soonest first,
 never a partially visible row, then an exact “+N more”. Titles use up to two lines
 (four when only one reminder is pending) and scale with the widget width, capped
-near 3.2% of the display height. Dated rows add `Today · 6:00 PM`, `Tomorrow ·
+near 3.2% of the display height. If even one row overflows, that row stays and the
+widget zooms out as a whole; any resize remeasures against the widget's fixed box, so
+the count and that state never flip on a remeasure. Dated rows add `Today · 6:00 PM`, `Tomorrow ·
 9:00 AM`, `Oct 24 · 3:00 PM` or `Overdue · Yesterday · 3:00 PM` (the word Overdue in
 the dim caution tone). Completed reminders never appear; the display reflects a
 check-off within its 30 s refresh.

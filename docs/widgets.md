@@ -19,7 +19,8 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/server/photo.ts`](../src/server/photo.ts) | Strict normalized PNG ingestion and private selected-image validation. |
 | [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
-| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per widget (`Clock`, `Weather`, `Rain`, `Forecast`, `Reminders`, `Preview`, `Photo`; stubs for planned ids), shared weather pieces in `common.tsx`, and the `WeatherGlyph` and `TransitionText` primitives. |
+| [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
+| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per widget (`Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview`, `Photo`; stubs for planned ids), shared weather pieces in `common.tsx`, and the `WeatherGlyph` and `TransitionText` primitives. |
 | [`src/client/Display.tsx`](../src/client/Display.tsx) | Ambient state and the shared movement/composition boundary. |
 | [`src/client/Editor.tsx`](../src/client/Editor.tsx) | Picker, grid interactions and settings draft integration. |
 
@@ -44,7 +45,8 @@ lines. Besides its families and defaults, an entry declares:
   `mergedInto` naming the active id that absorbs an enabled retired placement (the
   retiring change owns that migration). Planned and retired entries are hidden from
   the picker and inspector and never rendered. Planned ids always read as disabled
-  and a PATCH enabling one returns 400.
+  and a PATCH enabling one returns 400. Rain is retired and merged into Weather
+  (#74, `absorbRetiredWidgets`); removing its id is tracked in #103.
 
 `WIDGET_IDS` keeps every id, because schemas and geometry need them all.
 `ACTIVE_WIDGET_IDS` is the load-time list of shipped ids for UI lists and test
@@ -91,21 +93,21 @@ Small labels, age, attribution, units and secondary values use the shared floors
 inherited from `--ambient-min-text` (1.4% of the display or editor canvas height)
 and `--ambient-min-data` (1.65%), times Text size. Wrap related values onto shared
 rows before letting the fit scale shrink a family. Only a family that truly cannot
-fit caps the floors by its own content height: small rain/forecast use 7.25% (text)
+fit caps the floors by its own content height: small forecast uses 7.25% (text)
 and 8.5% (data), which binds only when that height is under about 19.4% of the
 display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold).
 Overfull content is laid out proportionally wider before the fit scale shrinks it,
 so a larger Text size never renders text-size-scaled labels or values smaller.
 Icons and the fixed unavailable dash do not follow Text size and can still shrink
-with the fit. The picker sample has no floor.
+with the fit. The picker sample has no floor. Ambient glyphs pass `size={null}` so
+these container-query sizes apply rather than the Icon's default 20 px (#128).
 
 The renderer families have deliberate visual roles:
 
 | Widget | Small | Medium | Large |
 | --- | --- | --- | --- |
 | Clock | Compact time and calendar | Time beside a calendar column | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
-| Weather | Temperature and conditions | Temperature beside conditions and feels-like | Adds wind and the available daily high/low |
-| Rain | Peak hourly precipitation chance, estimated rain window and coverage | Adds rain amount and the shown interval | Adds the hourly probability plot; missing probabilities remain unknown |
+| Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”); confidence only when partial | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and twelve hourly chance bars (spell hours brighter, unknown hours dotted) |
 | Forecast | Three days | Five days | Seven days; compact weekday labels preserve room for temperatures and chance |
 | Reminders | As many pending reminders as fit the actual box, soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
