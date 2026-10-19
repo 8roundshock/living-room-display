@@ -316,8 +316,8 @@ result stays in bounds and collision-free. Measured on 36 generated dense boards
 (`src/server/relocation.test.ts`): over 200 cycles, moves that left a widget on more
 than half of its cells fell from 1,553 to 72 of 73,600, and compositions that repeat
 the one from two cycles earlier from 85 to none of 7,164; on the suites' full 12-widget
-board no widget keeps more than half of its cells between compositions (Sun & moon
-used to stay put on 38 of 200). Only a board that every reflection maps onto itself
+board no widget keeps more than half of its cells between compositions (a 4 × 4 widget,
+Sun & moon or Weather, used to stay put on 38 of 200). Only a board that every reflection maps onto itself
 falls through to the search that allows widgets to stay. A full-height span can only travel
 sideways; any span relocates as one whole group through the black rest. Its
 content therefore also alternates vertically: a full-height Reminders column

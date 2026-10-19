@@ -185,8 +185,9 @@ const FULL_BOARD: Partial<Record<WidgetId, { column: number; row: number; size: 
   note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
 };
 test('on the full board no widget keeps more than half of its cells between compositions (#338)', () => {
-  // At 3446400 Sun & moon (4 × 4, centred vertically) kept its cells under every other reflection fallback: 38 of
-  // 200 compositions left it in place. Same-size exchanges and the cell-by-cell search now move every widget.
+  // At 3446400 a 4 × 4 widget centred vertically kept its cells under every other reflection fallback: 38 of 200
+  // compositions left Sun & moon (18) or Weather (20) in place. Same-size exchanges and the cell-by-cell search
+  // now move every widget.
   const authored = defaultSettings().widgetGrid;
   const grid: WidgetGrid = { ...authored, density: 'balanced', placements: { ...authored.placements, ...structuredClone(FULL_BOARD) } };
   const enabled: Visibility = Object.fromEntries(WIDGET_IDS.map(id => [id, id in FULL_BOARD]));
