@@ -53,6 +53,18 @@ try {
     function Invoke-PackageFaultPoint { param($Name) if ($script:faults.ContainsKey($Name)) { & $script:faults[$Name] } }
     $realSaveDataSnapshot = ${function:Save-DataSnapshot}
     function Save-DataSnapshot { param($InstalledVersion) $script:snapshotCalls++; & $realSaveDataSnapshot $InstalledVersion }
+    # A source Install/Update (Install-App): no download, build or browser.
+    $NoBrowser = $true
+    $script:sourceVersion = '0.2.5'
+    function Install-Runtime { }
+    function Get-SourceProvenance { param($Source, $HostDirectory) return [pscustomobject]@{sourceRevision=('e' * 40);sourceState='clean'} }
+    function Build-InstallCandidate {
+        param($Source, $Next)
+        $null = New-Item -ItemType Directory -Path (Join-Path $Next 'dist\server'),(Join-Path $Next 'dist\client') -Force
+        [IO.File]::WriteAllText((Join-Path $Next 'dist\server\index.js'), 'source server')
+        [IO.File]::WriteAllText((Join-Path $Next 'dist\client\index.html'), 'source client')
+        [IO.File]::WriteAllText((Join-Path $Next 'package.json'), ('{"version":"' + $script:sourceVersion + '"}'))
+    }
 
     # ---- fixture helpers ---------------------------------------------------
     function Get-TreeState([string]$Path) {
@@ -459,6 +471,80 @@ try {
         Assert-True ((Get-FolderVersion 'app.failed-2') -eq '0.2.0') 'The resumed rollback did not keep the interrupted candidate under the next free name.'
     } finally { if ($held) { $held.Dispose() } }
     Complete-Check 'held app.failed during rollback'
+
+    # ---- rare cases of the rollback record (#190) ----------------------------
+    # The state an interrupted swap leaves: the old app in app.previous, the
+    # candidate in app, and (optionally) the old runtime in runtime.previous.
+    function New-InterruptedSwap([string]$Record, [switch]$RuntimeMoved) {
+        New-SourceInstall '0.1.0'
+        $before = [pscustomobject]@{App=(Get-TreeState $app);Data=(Get-TreeState $data);Marker=[IO.File]::ReadAllText($marker)}
+        Move-Item -LiteralPath $app -Destination (Join-Path $InstallRoot 'app.previous')
+        if ($RuntimeMoved) { Move-Item -LiteralPath $runtime -Destination (Join-Path $InstallRoot 'runtime.previous') }
+        $null = New-Item -ItemType Directory -Path (Join-Path $app 'dist\server') -Force
+        [IO.File]::WriteAllText((Join-Path $app 'release.json'), '{"version":"0.2.0"}')
+        if (-not $PSBoundParameters.ContainsKey('Record')) { Write-Json $transaction ([ordered]@{product='living-room-display';schema=1;id=('1' * 32);version='0.2.0';originalMarker=$before.Marker;appMoved=$true;newApp=$true;runtimeMoved=[bool]$RuntimeMoved;newRuntime=$false}) }
+        else { [IO.File]::WriteAllText($transaction, $Record) }
+        return $before
+    }
+    # 1. A record left after a healthy install: removing it failed, but
+    # installation.json names it as committed, so it is never rolled back.
+    $realClear = ${function:Clear-PackageTransaction}
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    function Clear-PackageTransaction { Write-PackageLog 'Warning: synthetic failure to remove the record.' }
+    try { $code = Invoke-Package (New-TestPackage) } finally { ${function:Clear-PackageTransaction} = $realClear }
+    $journal = Read-PackageTransaction
+    Assert-True ($code -eq 0 -and $journal -and $journal.id -match '^[0-9a-f]{32}$') "The synthetic leftover record was not left ($code)."
+    Assert-True ((Get-Marker).committedTransaction -eq $journal.id -and (Test-PackageTransactionCommitted $journal) -and -not (Test-Path -LiteralPath ($transaction + '.tmp'))) 'installation.json does not name the leftover record as committed, or a record write left its temporary file.'
+    Reset-Mocks
+    $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+    $log = Get-Content -Raw $logFile
+    Assert-True ($code -eq 0 -and $log -match 'left behind' -and -not $log.Contains($script:resumedRollbackNote)) "A committed leftover record was rolled back or refused ($code). Log: $log"
+    Assert-True ((Get-FolderVersion 'app.previous') -eq '0.2.0' -and (Get-FolderVersion 'app') -eq '0.3.0' -and -not (Test-Path -LiteralPath $transaction)) 'A committed leftover record rolled the healthy install back.'
+    # The same leftover does not block a source Update, while an uncommitted one does.
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    function Clear-PackageTransaction { }
+    try { $code = Invoke-Package (New-TestPackage) } finally { ${function:Clear-PackageTransaction} = $realClear }
+    Install-App | Out-Null
+    Assert-True (-not (Test-Path -LiteralPath $transaction) -and (Get-FolderVersion 'app.previous') -eq '0.2.0' -and [string](Get-Content -Raw (Join-Path $app 'package.json') | ConvertFrom-Json).version -eq $script:sourceVersion) 'A committed leftover record blocked a source Update.'
+
+    # 2. A refusal after a resumed rollback says what was done: the helper logs
+    # the line Setup looks for, and the previous version is back in place.
+    Reset-Root; Reset-Mocks
+    $before = New-InterruptedSwap
+    $script:portBusy = $true
+    $code = Invoke-Package (New-TestPackage)
+    $log = Get-Content -Raw $logFile
+    Assert-True ($code -eq 11 -and $log.Contains($script:resumedRollbackNote)) "A refusal after a resumed rollback returned $code or did not log the resumed rollback. Log: $log"
+    Assert-True ((Get-TreeState $app) -eq $before.App -and (Get-TreeState $data) -eq $before.Data -and [IO.File]::ReadAllText($marker) -eq $before.Marker -and -not (Test-Path -LiteralPath $transaction) -and (Get-FolderVersion 'app.failed') -eq '0.2.0') 'The resumed rollback before the refusal did not put the previous version back.'
+
+    # 3. A damaged record: the steps are worked out from the folders.
+    # A torn write with the candidate placed and the runtime moved.
+    Reset-Root; Reset-Mocks
+    $before = New-InterruptedSwap -Record ([string][char]0 * 6) -RuntimeMoved
+    $script:runtimeVersion = 'v24.10.0'
+    $code = Invoke-Package (New-TestPackage)
+    $log = Get-Content -Raw $logFile
+    Assert-True ($code -eq 0 -and $log -match 'record is unreadable' -and $log -match 'previous app to put back: True; candidate in app: True; runtime to put back: True') "A damaged record with a placed candidate returned $code. Log: $log"
+    Assert-True ((Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $before.App -and (Get-TreeState $data) -eq $before.Data -and [IO.File]::ReadAllText((Join-Path $InstallRoot 'runtime.previous\node.exe')) -eq 'previous node') 'A damaged record lost the last working app or runtime.'
+    Assert-True ((Get-FolderVersion 'app.failed') -eq '0.2.0' -and -not (Test-Path -LiteralPath $transaction)) 'A damaged record did not keep the candidate or was not removed.'
+    # An empty record from before the first rename: nothing to put back.
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    $appBefore = Get-TreeState $app
+    $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot 'package.next\app\dist') -Force
+    [IO.File]::WriteAllText($transaction, '')
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 0 -and (Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $appBefore -and @(Get-AsideDirectories $script:asideNames).Count -eq 0) "An empty record before the first rename returned $code or moved the wrong app."
+    # Unclear folders (app.previous, app and a staged app all present): untouched, E20.
+    Reset-Root; Reset-Mocks
+    $null = New-InterruptedSwap -Record '{"product":'
+    $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot 'package.next\app\dist') -Force
+    $before = Get-TreeState $InstallRoot
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 20 -and (Get-TreeState $InstallRoot) -eq $before -and (Get-Content -Raw $logFile) -match "folders don't show which app") "An unclear damaged record returned $code or moved folders."
+    Complete-Check 'rollback record edge cases'
 
     # ---- a run that stopped mid-swap (crash or power cut) is undone first ----
     foreach ($candidatePlaced in @($true,$false)) {

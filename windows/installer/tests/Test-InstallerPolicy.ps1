@@ -73,6 +73,12 @@ $codes = @([regex]::Matches([IO.File]::ReadAllText($controlScript), 'LRD-E(\d\d)
 $messages = [regex]::Match($iss, '(?s)function HelperFailureMessage\(.*?\r?\nend;').Value
 Assert-True ($codes.Count -ge 12 -and $messages) 'the control script codes and HelperFailureMessage were not found'
 foreach ($code in $codes) { Assert-True ($messages -match "(?m)^\s*$code\s*:") "LRD-E$code has no message in HelperFailureMessage" }
+# Setup words a refusal after a resumed rollback by finding the helper's exact
+# log line, so both files must carry the same text (#190).
+$scriptNote = [regex]::Match([IO.File]::ReadAllText($controlScript), "(?m)^\`$script:resumedRollbackNote = '([^']+)'").Groups[1].Value
+$issNote = [regex]::Match($iss, "(?m)^\s*ResumedNote = '([^']+)';").Groups[1].Value
+Assert-True ($scriptNote -and $scriptNote -eq $issNote) "the resumed-rollback log line differs between the control script ('$scriptNote') and Setup ('$issNote')"
+Assert-True ($messages -match 'NothingChanged' -and $messages -notmatch 'MsgNothingChanged') 'refusal messages must use NothingChanged, which mentions a resumed rollback'
 $checks++
 
 # Pins.

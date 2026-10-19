@@ -137,9 +137,12 @@ Installed `Status` also reports `Channel` (`package` or `source`), `Version`,
 
 **When Setup stops.** Every refusal (E10 to E14, E17 to E19 and E21) happens
 before anything is replaced; your previous version and data stay as they were.
-E15, E16 and E20 come after the new version was put in place and failed to
-start, or after a replacement step failed; data is never touched. Setup exits
-with code 7 in every case.
+The one exception is a run that first finished an earlier unfinished rollback
+(see **Rollback**): its refusal ends with "Setup first put back the version
+from before an earlier unfinished update. Nothing else was changed." instead of
+"Nothing was changed." E15, E16 and E20 come after the new version was put in
+place and failed to start, or after a replacement step failed; data is never
+touched. Setup exits with code 7 in every case.
 
 | Code | Message |
 | --- | --- |
@@ -176,13 +179,30 @@ Setup run removes earlier `app.failed` copies it can, and uninstall removes
 them all.
 
 While a swap or its rollback is under way, `package-transaction.json` in the
-install folder records which renames are done. If the rollback can't finish
-(E20), or Setup is killed or the PC loses power part-way, that record stays.
-The next Setup run then finishes putting the previous version back before it
-does anything else, so `app.previous` is never mistaken for an older copy and
-deleted. A source `Update` refuses to run while the record exists. If E20
-repeats, follow the manual steps below, then delete `package-transaction.json`.
-To roll back by hand:
+install folder records which renames are done. Each change to it is flushed to
+the disk and swapped in whole, so a crash leaves either the old or the new
+record. If the rollback can't finish (E20), or Setup is killed or the PC loses
+power part-way, that record stays. The next Setup run then finishes putting the
+previous version back before it does anything else, so `app.previous` is never
+mistaken for an older copy and deleted; a refusal later in that run says so
+(see **When Setup stops**). A source `Update` refuses to run while the record
+exists. Two rare cases:
+
+- **A record left after a healthy install.** Once the new version passes its
+  health check, `installation.json` names the swap as committed
+  (`committedTransaction`) before the record is removed. If the record still
+  can't be removed, the next Setup run or source `Update` deletes it and never
+  rolls that install back.
+- **A damaged record.** Setup logs its text and works the steps out from the
+  folders. While a record exists, `app.previous` can only be the app that swap
+  moved (the run removed any older one first), so it goes back to `app`; an
+  `app` beside it is the candidate and is kept as `app.failed`; a missing
+  `runtime` comes back from `runtime.previous`. If the folders don't make it
+  clear (`app`, `app.previous` and a staged `package.next\app` all present),
+  Setup moves nothing and stops with E20.
+
+If E20 repeats, follow the manual steps below, then delete
+`package-transaction.json`. To roll back by hand:
 
 1. Run the installed control script's `Stop`.
 2. Rename `app` to `app.failed` and `app.previous` to `app`.
