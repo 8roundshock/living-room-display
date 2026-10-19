@@ -94,6 +94,15 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     // World clocks: add by keyboard, cap at four, reorder, remove, label validation, persistence.
     await reset();
     let { context, page } = await open();
+    // The grouped picker (#157) files the three widgets by catalog category: World clocks under Time,
+    // Air quality and Sun & moon under Weather & sky, beside the other units' widgets.
+    await page.getByRole('button', { name: 'Add widget', exact: true }).click();
+    const groupItems = name => page.getByRole('group', { name, exact: true }).locator('.catalog-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label').replace(/^Preview /, '')));
+    assert.deepEqual(await groupItems('Time'), ['Clock', 'World clocks', 'Calendar']);
+    assert.deepEqual(await groupItems('Weather & sky'), ['Weather', 'Forecast', 'Air quality', 'Sun & moon']);
+    assert.deepEqual(await groupItems('Personal'), ['Reminders', 'Countdown', 'Note']);
+    await page.getByRole('button', { name: 'Close widget picker', exact: true }).click(); await page.clock.runFor(200);
+    checks.push('Grouped picker (#157): World clocks under Time; Air quality and Sun & moon under Weather & sky');
     await addWidget(page, 'World clocks');
     assert.match(await canvas(page, 'worldClocks').innerText(), /Add a city/, 'editor placeholder without cities');
     assert.match(await page.locator('.world-clock-editor').innerText(), /Times follow each city's time zone and daylight saving\./);
@@ -254,7 +263,7 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
       if (viewport.width === 1280) images.push({ label: `Dense small board ${reducedMotion}`, bytes: await page.screenshot({ type: 'png', animations: 'disabled' }) });
       await context.close();
     }
-    checks.push('All active widgets small (10): every relocation phase and black interval collision-free at 1280×720 and 4K, with and without reduced motion');
+    checks.push(`All active widgets small (${ACTIVE_WIDGET_IDS.length}): every relocation phase and black interval collision-free at 1280×720 and 4K, with and without reduced motion`);
     assert.deepEqual(errors, []);
     return { checks, images };
   } finally {
