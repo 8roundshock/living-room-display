@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { intlPerTick } from './countdown.mjs';
 
 // The suites run at 2026-10-18 09:00 in Toronto, a Sunday. A Monday week start puts today in the
 // last column; October 2026 needs five rows either way.
@@ -11,10 +12,11 @@ const OCTOBER = [
   ['19', '20', '21', '22', '23', '24', '25'], ['26', '27', '28', '29', '30', '31', ''],
 ];
 
-export async function family({ widget, size }) {
+export async function family({ page, widget, size, density, viewport }) {
   const grid = widget.locator('table.calendar-grid');
   const headers = await grid.locator('th').evaluateAll(cells => cells.map(cell => cell.textContent.trim()));
   assert.deepEqual(headers, size === 'large' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S'], `${size} honours the Monday week start`);
+  assert.deepEqual(await grid.locator('th').evaluateAll(cells => cells.map(cell => cell.getAttribute('abbr'))), ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], `${size} names each weekday in full for assistive technology`);
   const rows = await grid.locator('tbody tr').evaluateAll(rows => rows.map(row => [...row.cells].map(cell => cell.textContent.trim())));
   if (size === 'small') {
     assert.deepEqual(rows, [['12', '13', '14', '15', '16', '17', '18']], 'small shows this week as a strip');
@@ -41,4 +43,6 @@ export async function family({ widget, size }) {
     return { size: parseFloat(getComputedStyle(day).fontSize) * scale, floor: parseFloat(getComputedStyle(el).getPropertyValue('--min-data')) };
   });
   assert.ok(rendered.size >= rendered.floor * 0.99, `${size} day numbers keep the data floor: ${JSON.stringify(rendered)}`);
+  // Weekday labels and month strings are built once per civil day (#193): ticks construct no formatter.
+  if (viewport.width === 1920 && density === 'balanced') await intlPerTick(page, `${size} Calendar`);
 }
