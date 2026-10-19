@@ -206,6 +206,55 @@ test('ambient composition keeps spans, stays disjoint and moves a full-height co
   assert.equal(gridProblem(moved, solo), null);
 });
 
+test('custom spans compose with the #74 Rain merge and the #93 reflection fallback', () => {
+  const samePositions = (a: WidgetGrid, b: WidgetGrid, ids: WidgetId[]) => ids.every(id => a.placements[id].column === b.placements[id].column && a.placements[id].row === b.placements[id].row);
+  // Visible Weather and Rain stacked beside a Column: Weather takes their union, the span is untouched.
+  const stacked = defaultSettings();
+  stacked.widgets = { ...stacked.widgets, rain: true, preview: false }; stacked.preview.enabled = false;
+  Object.assign(stacked.widgetGrid.placements, {
+    reminders: { column: 0, row: 0, size: 'small', span: { columns: 2, rows: 8 } }, clock: { column: 2, row: 0, size: 'medium' },
+    weather: { column: 8, row: 0, size: 'medium' }, rain: { column: 8, row: 2, size: 'medium' }, forecast: { column: 2, row: 6, size: 'large' },
+  });
+  stacked.savedPresets = [{ id: 'legacy-column', name: 'Legacy column', visual: getVisual(stacked) }];
+  const merged = settingsSchema.parse(stacked);
+  for (const [label, visual] of [['settings', merged], ['saved style', merged.savedPresets[0]!.visual]] as const) {
+    assert.deepEqual(visual.widgetGrid.placements.weather, { column: 8, row: 0, size: 'large' }, `${label}: Weather takes the union`);
+    assert.equal(visual.widgets.rain, false, label);
+    assert.deepEqual(visual.widgetGrid.placements.rain, { column: 8, row: 2, size: 'medium' }, `${label}: Rain keeps its hidden placement`);
+    assert.deepEqual(visual.widgetGrid.placements.reminders, { column: 0, row: 0, size: 'small', span: { columns: 2, rows: 8 } }, `${label}: the span is untouched`);
+    assert.equal(gridProblem(visual.widgetGrid, visual.widgets), null, label);
+  }
+  // A stale editor re-enabling Rain over the saved Column board merges back to the same settings.
+  assert.deepEqual(mergeSettings(merged, { widgets: { rain: true } }), merged);
+  // Rollback: the span is the documented exception; stripping it leaves a board the previous release reads.
+  assertPreviousReaderRejects('data', { version: 1, settings: persistableSettings(merged), reminders: [], photoAsset: null }, 'merged board with a span');
+  const stripped = stripSpans(merged);
+  assert.equal(gridProblem(stripped.widgetGrid, stripped.widgets), null);
+  assertPreviousReaderAccepts('data', { version: 1, settings: persistableSettings(stripped), reminders: [], photoAsset: null }, 'merged board without spans');
+
+  // A hidden Weather takes an enabled Rain's cells on a 100% full board with a 4 × 8 span, which then keeps
+  // relocating through the reflection fallback without losing the span or overlapping.
+  const full = defaultSettings();
+  full.widgets = { ...full.widgets, weather: false, rain: true, preview: true, photo: false }; full.preview.enabled = true;
+  Object.assign(full.widgetGrid.placements, {
+    reminders: { column: 0, row: 0, size: 'large', span: { columns: 4, rows: 8 } }, clock: { column: 4, row: 0, size: 'large' },
+    rain: { column: 4, row: 4, size: 'medium' }, preview: { column: 8, row: 4, size: 'medium' }, forecast: { column: 4, row: 6, size: 'large' },
+  });
+  const board = settingsSchema.parse(full), enabled = { ...board.widgets };
+  assert.equal(enabled.weather, true); assert.equal(enabled.rain, false);
+  assert.deepEqual(board.widgetGrid.placements.weather, { column: 4, row: 4, size: 'medium' }, 'Weather takes Rain’s cells');
+  const ids = WIDGET_IDS.filter(id => enabled[id]);
+  assert.equal(ids.reduce((sum, id) => { const span = placementSpan(id, board.widgetGrid.placements[id]); return sum + span.columns * span.rows; }, 0), 96, 'every Balanced cell is used');
+  let previous = board.widgetGrid;
+  for (let cycle = 1; cycle <= 12; cycle++) {
+    const next = composeWidgetGrid(board.widgetGrid, enabled, cycle, previous);
+    assert.equal(gridProblem(next, enabled), null, `cycle ${cycle}`); disjoint(next, enabled);
+    assert.deepEqual(next.placements.reminders.span, { columns: 4, rows: 8 }, `cycle ${cycle} keeps the span`);
+    assert.equal(samePositions(next, previous, ids), false, `cycle ${cycle} relocates the full board`);
+    previous = next;
+  }
+});
+
 test('containment: deleting every span keeps a valid layout that the previous release reads', () => {
   const next = random(73); let withSpans = 0;
   for (let iteration = 0; iteration < 60; iteration++) {
