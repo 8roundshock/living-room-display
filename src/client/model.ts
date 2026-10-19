@@ -40,6 +40,9 @@ export function applyBuiltinPreset(
     appearance: {
       ...defaults.appearance,
       preset,
+      // The Animation level is a motion preference, not part of a look (#76). Soft motion and
+      // clock style still reset until #110 decides.
+      animation: settings.appearance.animation,
       ...(preset === 'night'
         ? {
             brightness: 0.28,

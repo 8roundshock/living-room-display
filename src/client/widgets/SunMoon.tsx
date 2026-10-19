@@ -105,8 +105,8 @@ function SunMoon({ state, settings, size, now }: WidgetContentProps) {
     </div>;
   }
   const sunTimes = sky.polar ? <div className="sun-polar">{polarLabel(sky.polar)}</div> : <>
-    <div className="sun-row"><span className="metric-label">Sunrise</span><span className="sun-value">{clock(sky.sunrise)}</span></div>
-    <div className="sun-row"><span className="metric-label">Sunset</span><span className="sun-value">{clock(sky.sunset)}</span></div>
+    <div className="sun-row"><span className="metric-label">Sunrise</span><TransitionText className="sun-value" value={clock(sky.sunrise)} /></div>
+    <div className="sun-row"><span className="metric-label">Sunset</span><TransitionText className="sun-value" value={clock(sky.sunset)} /></div>
   </>;
   const daylightLine = <div className="sun-daylight">{daylight}{sky.change !== null && <span className="sun-change"> · {signedMinutes(sky.change)}</span>}</div>;
   if (size === 'medium') {
@@ -123,8 +123,8 @@ function SunMoon({ state, settings, size, now }: WidgetContentProps) {
       {f !== null && <circle className="sun-dot" data-glyph="sun" cx={(100 + 92 * Math.cos(angle)).toFixed(2)} cy={(60 - 52 * Math.sin(angle)).toFixed(2)} r="4.5" />}
     </svg>}
     <div className="sun-arc-ends">{sky.polar ? <div className="sun-polar">{polarLabel(sky.polar)}</div> : <>
-      <div className="sun-row"><span className="metric-label">Sunrise</span><span className="sun-value">{clock(sky.sunrise)}</span></div>
-      <div className="sun-row sun-row-end"><span className="metric-label">Sunset</span><span className="sun-value">{clock(sky.sunset)}</span></div>
+      <div className="sun-row"><span className="metric-label">Sunrise</span><TransitionText className="sun-value" value={clock(sky.sunrise)} /></div>
+      <div className="sun-row sun-row-end"><span className="metric-label">Sunset</span><TransitionText className="sun-value" value={clock(sky.sunset)} /></div>
     </>}</div>
     {daylightLine}
     {moonGroup(true)}

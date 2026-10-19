@@ -117,8 +117,13 @@ At rest `color` is omitted; `native` is written and is a
 [rollback exception](install.md#additive-data-and-rollback-compatibility-84).
 
 `appearance.animation` is `off`, `subtle` or `lively`; data without it reads as
-`subtle`. It will govern motion inside widgets and the editor (#76); relocation
-through black is unaffected. The editor has no control yet.
+`subtle`, and `subtle` is omitted at rest. It governs motion inside widgets and the
+editor (#76): Off keeps widgets still, Subtle animates changes and the reveal after
+a black rest, and Lively adds reveal choreography and the current-weather glyph's
+slow loops. Each screen shows Off while it prefers reduced motion, whatever is
+saved. Relocation through black is unaffected, and Soft motion (`motionEnabled`)
+stays separate. The Style tab's Motion → Animation control edits it as an ordinary
+draft field; built-in styles keep it and saved styles store it.
 
 Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
 `accentMode` or `animation` keeps its saved value (#83). Only the persisted reader

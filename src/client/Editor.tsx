@@ -48,6 +48,7 @@ import {
 } from '../shared/widgets';
 import { GridEditor } from './GridEditor';
 import { WidgetInspector } from './WidgetInspector';
+import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel } from './RemindersPanel';
@@ -160,6 +161,10 @@ export function Editor({
     automaticAttempted = useRef(false),
     guardLocation = useRef(false);
   const savebar = useRef<HTMLElement>(null);
+  // #76: the editor's own reduced-motion preference turns its animation off; the canvas replays
+  // the entrance once after a level is chosen.
+  const editorReducedMotion = usePrefersReducedMotion();
+  const [revealNonce, setRevealNonce] = useState(0);
   const photoChanged =
     photoDraft !== undefined &&
     (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
@@ -574,7 +579,10 @@ export function Editor({
     (saved.units === 'metric' ? '°C' : '°F') !==
       state.weather.units.temperature;
   return (
-    <div className="studio">
+    <div
+      className="studio"
+      data-animation={editorReducedMotion ? 'off' : draft.appearance.animation}
+    >
       <header className="studio-header">
         <a className="brand" href="/editor" aria-label="Still editor">
           <span className="brand-symbol">
@@ -630,6 +638,8 @@ export function Editor({
                 compositionOverride={composition}
                 layoutEditing={layoutEditing || !movementPreview}
                 gesture={gridGesture}
+                motionSurface={layoutEditing ? 'editing' : 'preview'}
+                revealNonce={revealNonce}
                 photoPreview={
                   photoDraft === undefined
                     ? undefined
@@ -938,12 +948,48 @@ export function Editor({
                     </label>
                   </div>
                 </div>
-                <details className="disclosure">
+                <details className="disclosure motion-disclosure">
                   <summary>
-                    Soft motion
-                    <span>{draft.appearance.motionEnabled ? 'On' : 'Off'}</span>
+                    Motion
+                    <span>{ANIMATION_LABELS[draft.appearance.animation]}</span>
                   </summary>
                   <div className="disclosure-body">
+                    <div className="animation-setting">
+                      <span className="field-label">Animation</span>
+                      <div
+                        className="animation-options"
+                        role="group"
+                        aria-label="Animation"
+                      >
+                        {ANIMATION_LEVELS.map((level) => (
+                          <button
+                            key={level}
+                            className="button small"
+                            aria-pressed={draft.appearance.animation === level}
+                            onClick={() => {
+                              // A motion preference, not a look: the style preset stays as it is.
+                              change((previous) => ({
+                                ...previous,
+                                appearance: { ...previous.appearance, animation: level },
+                              }));
+                              setRevealNonce((value) => value + 1);
+                            }}
+                          >
+                            {ANIMATION_LABELS[level]}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="animation-hint">
+                        Off keeps widgets still. Subtle animates changes. Lively adds
+                        gentle weather motion.
+                      </p>
+                      {editorReducedMotion && (
+                        <p className="animation-hint">
+                          This screen asks for reduced motion, so animation stays off
+                          here. The display follows its own system setting.
+                        </p>
+                      )}
+                    </div>
                     <Toggle
                       label="Soft motion"
                       checked={draft.appearance.motionEnabled}

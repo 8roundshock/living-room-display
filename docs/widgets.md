@@ -268,6 +268,36 @@ periodic spatial relocation through a black interval and an instant reveal (or a
 brief opacity transition when permitted). It must not freeze the ambient display
 at one permanent position. Missing or hidden widgets must not leave a fixed frame.
 
+Motion inside widgets follows the Animation level (#76; Off, Subtle or Lively, see
+[motion levels](design.md#motion-levels)), which `motionPlan()` in
+[`src/shared/motion.ts`](../src/shared/motion.ts) turns into what may move on each
+surface; a screen that prefers reduced motion is always Off, and picker samples and
+Edit layout stay still. Renderers add no animation code of their own: use
+`TransitionText` for a changing value (the new value fades in; numbers are never
+tweened), `WeatherGlyph` with `hero` for a widget's main condition and `still` for
+stale, offline or unavailable data, and stable React keys (by id or source) so a new
+item or image is a new element. The shared CSS (`motion*.css`) then animates only
+transform and opacity, never above resting opacity, with offsets from above or the
+left that stay inside the widget rectangle and never change the fit scale. Content
+first shown with its widget never animates; later insertions may transition in.
+Reveal choreography uses `widgetRevealOrder()` and `--reveal-order`; only the hero
+glyph loops, at Lively, and loops pause on black.
+
+The merged renderers follow this through the same pieces (#162). Weather's rain
+timing, detail, hint and hour labels, Forecast's values, Air quality's AQI and
+category, Calendar's date, Countdown's count, Note's text, and the times in Sun &
+moon and World clocks are `TransitionText` (Clock keeps its per-character digits). Chart bars inserted later (Weather's
+`.rain-bar`, Air quality's `.air-bar`) fade in to their resting opacity, and existing
+bars ease to new heights. A list that measures its own rows must keep that geometry
+exact. Reminders marks only reminders that were not pending at the previous update
+with `data-new`, and fades them by opacity alone. A re-sorted row, which React moves
+with `insertBefore` and Chromium would otherwise restart from `@starting-style`
+(#172), and a row that stops overflowing stay still. Lively reminder rows also fade
+without moving, because the measurement reads transformed rectangles (#216 tracks
+measuring layout boxes instead). Its measuring pass hides the visible “+N more” with `visibility`
+and `position: absolute`, never `display: none`, because a box that disappears and
+returns replays its entrance and crossfade.
+
 These are design requirements to reduce recurring exposure, not a measured
 safety threshold. Finite screens and recurring content inevitably reuse pixels;
 do not promise zero overlap over time or prevention of OLED burn-in. Browser

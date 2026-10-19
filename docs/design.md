@@ -129,3 +129,56 @@ floor (1.4% of display height; 1.65% for secondary values), about 10/12 CSS px o
 a 720-CSS-pixel-tall display such as a 4K TV at 300% scaling, instead of shrinking
 with each widget. See [UI contracts](ui.md), [API](api.md)
 and the [UX role guide](roles/ux.md) for verification and future work.
+
+## Motion levels
+
+Style → Motion → **Animation** offers Off, Subtle (default) and Lively (#76). It is
+separate from Soft motion, which still controls whole-arrangement fades, drift and
+travel. Relocation through black always continues, at every level and under reduced
+motion. A screen that asks for reduced motion shows Off whatever is saved; on the
+TV that is Windows Settings → Accessibility → Visual effects → Animation effects.
+
+- **Off** keeps widgets still: no value, digit, glyph or entrance motion. The editor
+  keeps its existing brief transitions.
+- **Subtle** moves only when something changes and never loops. After a black rest
+  (Soft motion on, fade above 0) each widget settles from about 1.5% of the display
+  height above over 700 ms, 70 ms apart in reading order (capped at six steps).
+  Changed clock characters and values fade in (weather and rain timing, forecast,
+  Air quality, Calendar, Countdown, Note, Sun & moon and World clocks), as do newly
+  pending reminders (by opacity alone, so the measured list keeps its geometry), new
+  rain and air-quality bars (to their resting opacity) and new images. Existing bars
+  ease to new heights, analog hands ease clockwise, and the current-weather glyph
+  settles once (at most 1 s) on a reveal or a condition change.
+- **Lively** adds richer reveal choreography (forecast days, rain and air-quality bars
+  growing from their baseline, weather metrics, reminder rows fading in place) and
+  the only loops, all on the current-weather glyph: sun rays
+  turn once in 90 s while the core dims to 82% every 8 s, the moon rocks ±4°, clouds
+  drift ±2.5%, rain drops fall and fade every 1.8 s, snow turns once in 40 s, and the
+  storm bolt dims once for 1.2 s every 9 s. Loops pause during the black rest.
+
+Rules for every level: only transform (translate, rotate, scale) and opacity
+animate; opacity never rises above its resting value, so nothing flashes or
+brightens; offsets come from above or the left, or stay inside the glyph box, and
+never exceed the widget padding, so content stays inside its rectangle and the fit
+scale never changes; numbers are never tweened through invented values; stale,
+offline or unavailable weather keeps its glyph still; age and attribution never
+move; every animation lasts at most 2 s except the Lively glyph loops. Editor
+micro-interactions (sliding tab indicator, disclosures, picker, drag pickup and
+settle, new-widget drop-in, Save bar entrance) last at most 240 ms and never bounce.
+
+| Source | Application |
+| --- | --- |
+| [Apple Motion](https://developer.apple.com/design/human-interface-guidelines/motion) | Purposeful, brief, optional motion that never blocks; respect Reduce Motion. |
+| [WidgetKit: Animating data updates](https://developer.apple.com/documentation/widgetkit/animating-data-updates-in-widgets-and-live-activities) | Animate a change rather than continuously; each widget animation is capped at 2 s. |
+| [Apple Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Always-On widgets do not animate; here only Lively's one hero glyph loops, and only when chosen. |
+| [WCAG 2.2.2 Pause, Stop, Hide](https://www.w3.org/WAI/WCAG22/Understanding/pause-stop-hide.html) | Perpetual motion is opt-in (Lively); Off or the system setting stops it. |
+| [WCAG 2.3.3 Animation from Interactions](https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html) | `prefers-reduced-motion: reduce` turns all animation off on that screen. |
+| [WCAG 2.3.1 Three Flashes](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html) | No flashes: opacity only dims, and the bolt pulse is one 1.2 s dip in 9 s. |
+| [Chrome compositing](https://developer.chrome.com/docs/lighthouse/performance/non-composited-animations) | Transform and opacity on HTML boxes run on the compositor. Chromium does not composite them on SVG roots (verified in Edge 155), so glyph loops move HTML wrappers. |
+
+`tests/ui/motion-browser.mjs` checks the levels, reduced motion, the reveal
+sequence, rectangles and fit at 50% of an entrance for the whole merged catalog,
+the loop inventory, glyph pixel parity, adaptive Weather, the measured Reminders
+list, value changes in every widget unit, and a 15 s CDP budget at 1280×720 ×3 for
+the default board and a full board of every widget. Browser checks do not establish TV
+smoothness, comfort or long-term OLED behaviour; physical acceptance is #111.
