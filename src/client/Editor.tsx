@@ -68,7 +68,7 @@ import { WidgetInspector } from './WidgetInspector';
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
-import { RemindersPanel } from './RemindersPanel';
+import { RemindersPanel, reminderFormPending } from './RemindersPanel';
 import { FirstRunCard, readFirstRunDismissed, rememberFirstRunDismissed } from './FirstRunCard';
 import {
   addToGrid,
@@ -399,9 +399,9 @@ export function Editor({
     };
   }, []);
   useEffect(() => {
-    if (!dirty) return;
+    // Unsaved settings, or an open reminder form with typed text it has not saved (#274), ask first.
     const leave = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
+      if (dirty || reminderFormPending()) event.preventDefault();
     };
     window.addEventListener('beforeunload', leave);
     return () => window.removeEventListener('beforeunload', leave);

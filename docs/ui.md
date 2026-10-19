@@ -326,7 +326,12 @@ The Reminders tab has an **Up next (N)** / **History (M)** switch (`aria-pressed
 Up next uses the display's order: overdue or due within seven days (soonest first),
 then undated (newest first), then later dates. Each row has a 44 px check circle,
 the title, a due line (`Overdue · Yesterday · 3:00 PM`, `Today · 6:00 PM` or
-`Anytime`) and Edit/Delete. One tap fills the circle and dims the title at once while
+`Anytime`) and Edit and Delete side by side, so a one-line reminder takes about 60 px and
+at least five fit the 1280×720 inspector (#366). Edit, Delete, Undo, **Clear history…** and
+the Up next/History switch are at least 44 px. The rows and their labels are worked out
+again only when the list, the minute or the time format changes, and the form renders on
+its own, so typing stays responsive with hundreds of dated reminders (#354; about 8 ms a
+keystroke with 500, against 110–140 ms before). One tap fills the circle and dims the title at once while
 the completion saves; the circle reports `aria-pressed` until the row leaves or is
 restored. After about 0.9 s the row collapses out of Up next (reduced motion keeps the
 delay without the collapse). The status line offers **Undo** for about 8 s, until the
@@ -334,10 +339,27 @@ next message replaces it; Undo, or tapping the circle again during the settle, r
 the item (it shows unchecked at once and stays in Up next while the restore saves).
 Deleting a pending reminder from Up next offers the same Undo, which re-creates it with
 its text, exact due instant and creation time, so it returns to its sorted place. A
+stored creation time later than the clock (the clock was set back, or the data came from
+a computer whose clock ran ahead) is left out, and retried without when the server's
+clock is behind, so the reminder still returns, perhaps a place away, and no schema text
+shows (#296). Plain messages (“Reminder saved”, “Restored …”) also go after about 8 s,
+even while another tab is open (#295). A focused Undo that expires, or gives way to a
+plain message, hands focus to the Up next switch rather than the page (#297). A
 shown message sticks to the bottom of the visible panel (above the Save bar on narrow
 screens), and the focused row scrolls clear of it; with no message the empty line stays
 at the end of the list and covers no row. The message, its Undo and any row
-still settling survive switching editor tabs and back.
+still settling survive switching editor tabs and back. So does an open form (#274): a new
+or edit form keeps its typed text and date and comes back where it was (in place for an
+edit) without taking focus from the tab; only an incomplete date, which has no value yet,
+is lost with its message. **+** or another row's **Edit** never replaces a form with unsaved
+typing: it stays, takes focus and reads “Save or discard this reminder first.” Leaving
+the editor page while a form holds unsaved typed text shows the browser's leave prompt,
+as unsaved settings do.
+A check-off, edit, restore or delete of a reminder that another window already deleted
+says “This reminder was deleted in another window.” and drops its row, never a false
+“still in Up next” or the server's “Reminder not found” (#355). An open edit form keeps its
+text and offers **Save as a new reminder**, with the same due instant unless the date was
+changed; a poll that removes the reminder first shows the same offer before Save.
 Focus moves to the next circle (else the previous one, else Add), so keyboard users can
 tick off several in a row; after Undo, focus moves to the restored reminder's circle.
 A failed save reverts the row: “Could not complete reminder. It is still in Up
@@ -370,7 +392,14 @@ up to two lines (four when only one reminder is pending) and scale with the widg
 width, capped near 3.2% of the display height. When every pending reminder fits with
 room to spare, a cut-off title may use up to four lines, and titles that all show in
 full grow toward that cap while everything still fits (#254), so a tall column shows
-whole titles instead of “…” beside empty space. If even one row overflows, that row
+whole titles instead of “…” beside empty space. When not every pending reminder fits,
+more rows win over bigger titles (#359): the rows after the first may clamp to one line
+with an ellipsis, then titles, with the label, dates and “+N more”, step down to about the
+small family's width-based size (or the data floor), keeping the most whole rows at the
+largest step that shows them. A medium box therefore shows at least as many reminders as a
+small one, and a wider span never fewer than a narrower one of the same height. A tall span
+with little vertical travel alternates its anchor between arrangements like a full-height
+column (#175). If even one row overflows, that row
 stays and the widget zooms out as a whole; any resize remeasures against the widget's
 fixed box, so the count and that state never flip on a remeasure. Dated rows add
 `Today · 6:00 PM`, `Tomorrow · 9:00 AM`, `Oct 24 · 3:00 PM` or

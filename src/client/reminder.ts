@@ -1,5 +1,7 @@
 import type { Reminder, Settings } from '../shared/contracts.ts';
 import { isOverdue, reminderCompletedAt } from '../shared/reminders.ts';
+import { localTimeZone } from './astronomy.ts';
+import { dateTimeFormat } from './format.ts';
 
 type ClockFormat = Settings['clockFormat'];
 
@@ -25,9 +27,25 @@ function plain(text: string): string {
   return text.replace(/[  ]/g, ' ');
 }
 
+/*
+ * Labels use the cached formatters from format.ts (#354, as #99 did for the widgets): an editor list of
+ * hundreds of dated reminders builds no Intl formatter per row or per render. Like the reminder form's
+ * date input, they use the computer's own time zone, looked up at most once a minute, so a changed zone
+ * still reaches the labels within a minute.
+ */
+let zone = { at: Number.NEGATIVE_INFINITY, name: 'UTC' };
+function computerZone(): string {
+  const now = Date.now();
+  if (!(Math.abs(now - zone.at) < 60_000)) zone = { at: now, name: localTimeZone() };
+  return zone.name;
+}
+function formatter(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  return dateTimeFormat('en', { ...options, timeZone: computerZone() });
+}
+
 /** Time of day in the user's 12/24-hour setting (#129). */
 export function reminderTime(date: Date, format: ClockFormat): string {
-  return plain(new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit', hourCycle: format === '24h' ? 'h23' : 'h12' }).format(date));
+  return plain(formatter({ hour: 'numeric', minute: '2-digit', hourCycle: format === '24h' ? 'h23' : 'h12' }).format(date));
 }
 
 function relativeDay(date: Date, now: Date): string {
@@ -35,7 +53,7 @@ function relativeDay(date: Date, now: Date): string {
   if (offset === 0) return 'Today';
   if (offset === 1) return 'Tomorrow';
   if (offset === -1) return 'Yesterday';
-  return new Intl.DateTimeFormat('en', date.getFullYear() === now.getFullYear()
+  return formatter(date.getFullYear() === now.getFullYear()
     ? { month: 'short', day: 'numeric' }
     : { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 }
@@ -77,7 +95,7 @@ export function historyDayHeading(completedAt: string, now: Date): string {
   const offset = dayOffset(date, now);
   if (offset === 0) return 'TODAY';
   if (offset === -1) return 'YESTERDAY';
-  return new Intl.DateTimeFormat('en', date.getFullYear() === now.getFullYear()
+  return formatter(date.getFullYear() === now.getFullYear()
     ? { weekday: 'short', month: 'short', day: 'numeric' }
     : { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 }
