@@ -160,15 +160,16 @@ Installed `Status` also reports `Channel` (`package` or `source`), `Version`,
 
 **When Setup stops.** Every refusal (E10 to E14, E17 to E19, E21 and E22)
 happens before anything is replaced; your previous version and data stay as
-they were. A refusal after Setup stopped the app (E11 when another program takes
-the port meanwhile, E13 when unpacking fails, E19) restarts the previous version;
-by then Setup has cleared leftovers of earlier runs, such as an older
-`app.previous` (step 1 of **Updating**). The one exception is a run that first
-finished an earlier unfinished rollback (see **Rollback**): its refusal ends with
-"Setup first put back the version from before an earlier unfinished update.
-Nothing else was changed." instead of "Nothing was changed." (or "Setup first
-undid an earlier unfinished installation." when that earlier run was a first
-install), and E15, E16 and E20 start with the same sentence
+they were. Setup clears leftovers of earlier runs, such as an older
+`app.previous` (step 1 of **Updating**), before it unpacks the update, so they
+are already gone after a later refusal: E13 when unpacking fails, or E11 (another
+program took the port after Stop) and E19, which restart the previous version. A
+run that first finished an earlier unfinished rollback (see **Rollback**) says
+so: its refusal ends with "Setup first put back the version from before an
+earlier unfinished update. Nothing else was changed." instead of "Nothing was
+changed." (or "Setup first undid an earlier unfinished installation." when that
+earlier run was a first install), and E15,
+E16 and E20 start with the same sentence
 ([#206](https://github.com/8roundshock/living-room-display/issues/206)). E15, E16
 and E20 come after the new version was put in place and failed to start, or
 after a replacement step failed; data is never touched. Setup exits with code 7
