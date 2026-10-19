@@ -20,10 +20,10 @@ function legacyWidgets(value: unknown) {
   return merged;
 }
 
-const timezone = z.string().max(100).refine(value => {
+export const timezone = z.string().max(100).refine(value => {
   try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
 }, 'Use an IANA timezone, for example America/Toronto');
-const location = z.object({
+export const location = z.object({
   name: z.string().trim().min(1).max(100), latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180), timezone: z.union([timezone, z.literal('auto')]),
 }).strict();
@@ -166,6 +166,15 @@ export const settingsPatchSchema = z.object({
 }).strict();
 const dueAt = z.iso.datetime({ offset: true }).nullable();
 export const reminderInputSchema = z.object({ text: z.string().trim().min(1).max(240), dueAt: dueAt.optional() }).strict();
+/**
+ * POST only: Undo after a delete re-creates the reminder with its original `createdAt` (#237), in
+ * the persisted format and never later than the server's `now`. PATCH never accepts it.
+ */
+export function reminderCreateSchema(now: number) {
+  return reminderInputSchema.extend({
+    createdAt: z.iso.datetime().refine(value => Date.parse(value) <= now, 'Use a creation time that is not in the future').optional(),
+  }).strict();
+}
 export const reminderPatchSchema = reminderInputSchema.partial().extend({ completed: z.boolean().optional() }).strict();
 export const reminderSchema = reminderInputSchema.extend({ id: z.uuid(), completed: z.boolean(), dueAt, createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() }).strict();
 const uniqueReminders = (data: { reminders: { id: string }[] }) => new Set(data.reminders.map(item => item.id)).size === data.reminders.length;

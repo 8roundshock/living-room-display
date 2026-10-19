@@ -11,7 +11,20 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
-import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES } from '../../src/shared/widgets.ts';
+import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, fitWidgetFamily } from '../../src/shared/widgets.ts';
+import { addToGrid } from '../../src/client/make-room.ts';
+
+/** The picker's grouped order (#154): WIDGET_CATEGORIES order, catalog order inside each group. */
+const GROUPED = Object.keys(WIDGET_CATEGORIES).flatMap(category => ACTIVE_WIDGET_IDS.filter(id => WIDGET_CATALOG[id].category === category));
+/** A picker item's name carries its added state (#241). */
+const itemName = (id, widgets) => `Preview ${WIDGET_CATALOG[id].name}${widgets[id] ? ', on your display' : ''}`;
+/** The 2026-10-19 QA board (#238): the default board plus Calendar, World clocks, Sun & moon and Air quality. */
+function qaBoard(settings) {
+  for (const id of ['calendar', 'worldClocks', 'sunMoon', 'airQuality']) {
+    settings.widgetGrid = addToGrid(settings.widgetGrid, id, WIDGET_CATALOG[id].defaultSize, settings.widgets); settings.widgets[id] = true;
+  }
+  settings.locationSource = 'manual';
+}
 
 export async function runCatalogTimeQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -66,17 +79,32 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     // 1. Grouped picker: categories in WIDGET_CATEGORIES order, only active widgets, keyboard navigation.
     await reset(); await open();
     await tab('Widgets'); await button('Add widget').click();
+    const defaults = defaultSettings().widgets;
     const groups = await page.locator('.widget-catalog .catalog-group').evaluateAll(nodes => nodes.map(node => ({
       label: node.querySelector('.catalog-group-label').textContent, labelled: node.getAttribute('aria-labelledby') === node.querySelector('.catalog-group-label').id && node.getAttribute('role') === 'group',
       items: [...node.querySelectorAll('.catalog-item')].map(item => item.getAttribute('aria-label')),
     })));
-    const expected = Object.entries(WIDGET_CATEGORIES).map(([category, label]) => ({ label, labelled: true, items: ACTIVE_WIDGET_IDS.filter(id => WIDGET_CATALOG[id].category === category).map(id => `Preview ${WIDGET_CATALOG[id].name}`) })).filter(group => group.items.length);
+    const expected = Object.entries(WIDGET_CATEGORIES).map(([category, label]) => ({ label, labelled: true, items: ACTIVE_WIDGET_IDS.filter(id => WIDGET_CATALOG[id].category === category).map(id => itemName(id, defaults)) })).filter(group => group.items.length);
     assert.deepEqual(groups, expected);
     assert.deepEqual(groups.map(group => group.label), ['Time', 'Weather & sky', 'Personal', 'Pictures']);
     for (const name of ['Calendar', 'Countdown', 'Note']) assert.ok(groups.flatMap(group => group.items).includes(`Preview ${name}`), name);
     // Rain is part of the adaptive Weather since #74, so the group lists Weather and never Rain.
-    assert.ok(groups.find(group => group.label === 'Weather & sky').items.includes('Preview Weather'), 'Weather & sky lists Weather');
-    assert.equal(groups.flatMap(group => group.items).includes('Preview Rain'), false, 'Rain is not offered (#74)');
+    assert.ok(groups.find(group => group.label === 'Weather & sky').items.includes('Preview Weather, on your display'), 'Weather & sky lists Weather, named as added (#241)');
+    assert.equal(groups.flatMap(group => group.items).some(item => item.startsWith('Preview Rain')), false, 'Rain is not offered (#74)');
+    // #154: the initial selection is the first widget not on the display in the grouped order.
+    const firstUnadded = GROUPED.find(id => !defaults[id]);
+    assert.equal(await page.locator('.catalog-item[aria-pressed="true"]').getAttribute('aria-label'), itemName(firstUnadded, defaults), 'opens on the first unadded widget in grouped order');
+    assert.equal(await page.locator('.picker-detail h3').innerText(), WIDGET_CATALOG[firstUnadded].name);
+    // #241: the Add button's name is its visible text, also while disabled for an added widget.
+    const addButton = page.locator('.picker-add');
+    assert.equal(await addButton.getAttribute('aria-label'), null);
+    assert.equal((await addButton.innerText()).trim(), `Add ${WIDGET_CATALOG[firstUnadded].name}`);
+    assert.equal(await button(`Add ${WIDGET_CATALOG[firstUnadded].name}`).isEnabled(), true);
+    await button(itemName('clock', defaults)).click();
+    assert.equal((await addButton.innerText()).trim(), 'Add Clock');
+    assert.equal(await button('Add Clock').isDisabled(), true, 'the disabled button is found by its visible text');
+    assert.equal(await page.locator('#picker-added-note').innerText(), 'Clock is on your display');
+    assert.equal(await addButton.getAttribute('aria-describedby'), 'picker-added-note');
     const order = groups.flatMap(group => group.items);
     const focused = () => page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
     await button(order[0]).focus();
@@ -101,12 +129,55 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     assert.equal((await page.locator('.picker-sample .note-text').innerText()).trim(), 'Dinner at seven');
     // The #73 free-size caption follows the catalog rule: none for these fixed-family widgets, kept for Reminders.
     assert.equal(await page.locator('.picker-free-size').count(), 0, 'fixed-family widgets show no free-size caption');
-    await button('Preview Reminders').click();
-    assert.equal(await page.locator('.picker-free-size').innerText(), 'Resize freely after adding — up to the full height', 'Reminders keeps its caption in the grouped picker');
+    await button(itemName('reminders', defaults)).click();
+    // #238/#183: the default board's large Clock, Weather and Forecast leave no room for a full-height column.
+    assert.equal(await page.locator('.picker-free-size').innerText(), 'Resize freely. Full height needs room first: make Clock, Weather or Forecast smaller.', 'Reminders keeps its caption, qualified for this board');
     assert.match(await page.locator('.picker-footnote').innerText(), /Sample content/);
     if (capture) images.push({ name: 'picker-1440', bytes: await page.screenshot() });
     await page.keyboard.press('Escape');
-    checks.push('Grouped picker: Time / Weather & sky / Personal / Pictures in catalog order with labelled groups, Weather and no Rain (#74), Up/Down/Home/End (clamped, across groups) preview the focused widget, Tab order kept, synthetic samples for the three widgets, free-size caption only for Reminders (#73)');
+    checks.push('Grouped picker: Time / Weather & sky / Personal / Pictures in catalog order with labelled groups, Weather and no Rain (#74), opens on the first unadded widget in that order (#154), item names carry the added state and Add names match their visible text (#241), Up/Down/Home/End (clamped, across groups) preview the focused widget, Tab order kept, synthetic samples for the three widgets, free-size caption only for Reminders, qualified when a column has no room (#73, #238)');
+
+    // 1b. "No room" (#238): one live region, cleared on close, and fixes that apply as draft edits.
+    await reset(qaBoard); await open();
+    const noRoom = 'No room for Countdown at medium size.';
+    const announcing = () => page.locator('[role="status"], [aria-live]').evaluateAll(nodes => nodes.filter(node => node.textContent.includes('No room')).length);
+    async function tryCountdownMedium() {
+      await tab('Widgets'); await button('Add widget').click();
+      await button('Preview Countdown').click(); await button('Countdown medium').click(); await button('Add Countdown').click(); await page.clock.runFor(100);
+    }
+    await tryCountdownMedium();
+    assert.equal(await page.getByText(noRoom, { exact: true }).count(), 1, 'the message is shown once');
+    assert.equal(await announcing(), 1, 'one live region announces it');
+    assert.deepEqual(await page.locator('.widget-picker .room-fix').allInnerTexts(), ['Switch the grid to Fine', 'Make room: Weather medium']);
+    assert.equal(await savebar().count(), 0, 'nothing changes before a fix is chosen');
+    await button('Countdown small').click();
+    assert.equal(await page.getByText(noRoom).count(), 0, 'a different size clears the stale message');
+    await page.keyboard.press('Escape'); await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    assert.equal(await page.getByText(/No room/).count(), 0, 'closing the picker clears it everywhere');
+    await tryCountdownMedium();
+    await page.keyboard.press('Escape'); await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    assert.equal(await announcing(), 0, 'nothing is left in any live region after close');
+    await tryCountdownMedium();
+    await button('Switch the grid to Fine').click(); await page.clock.runFor(200);
+    await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    await savebar().waitFor();
+    assert.equal(await page.getByRole('combobox', { name: 'Grid density' }).inputValue(), 'fine', 'the grid switched as part of the draft');
+    assert.equal(await canvas('countdown').getAttribute('data-widget-size'), 'medium');
+    assert.equal(await page.locator('.widget-list .inline-message').innerText(), 'Grid switched to Fine. Countdown added.');
+    await cancel();
+    assert.equal(await canvas('countdown').count(), 0, 'Cancel restores the board');
+    assert.equal(await page.getByRole('combobox', { name: 'Grid density' }).inputValue(), 'balanced', 'Cancel restores the grid');
+    // "Try Small" when only the small family fits.
+    await reset(settings => { qaBoard(settings); settings.widgetGrid = fitWidgetFamily(settings.widgetGrid, 'preview', 'small', settings.widgets); });
+    await open();
+    await tab('Widgets'); await button('Add widget').click();
+    await button('Preview Note').click(); await button('Note medium').click(); await button('Add Note').click(); await page.clock.runFor(100);
+    assert.equal(await page.getByText('No room for Note at medium size.', { exact: true }).count(), 1);
+    await button('Try Small').click(); await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    assert.equal(await canvas('note').getAttribute('data-widget-size'), 'small');
+    await cancel();
+    await reset(); await open();
+    checks.push('“No room” (#238): shown once in one live region, cleared by another size or closing the picker; “Switch the grid to Fine” and “Try Small” add the widget as one draft edit that Cancel restores');
 
     // 2. Calendar: add, week start, Cancel, Save, reload.
     await addFromPicker('Calendar');
@@ -251,9 +322,16 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     if (capture) images.push({ name: 'editor-1440', bytes: await page.screenshot() });
     checks.push('Note: live counter, Clear, 4-line and 200-character limits, Save bar only while effective, line breaks kept, Save and reload persist');
 
-    // 5. Styles never erase widget content.
-    await tab('Style'); await button('Night').click(); await save();
+    // 5. Styles never erase widget content, and built-in styles are looks only (#153): the added
+    // Calendar, Countdown and Note stay enabled and in place. The look is Night already, so Room changes it.
+    const added = () => Object.fromEntries(['calendar', 'countdown', 'note'].map(id => [id, [snapshot().widgets[id], snapshot().widgetGrid.placements[id]]]));
+    const board = added();
+    assert.deepEqual(Object.values(board).map(([enabled]) => enabled), [true, true, true], 'the three widgets are on the board');
+    await tab('Style'); await button('Room').click(); await save();
     assert.equal(snapshot().widgetData.note.text, 'Dinner at seven\nBack by nine'); assert.equal(snapshot().widgetData.countdowns.length, 1); assert.equal(snapshot().widgetData.calendar.weekStart, 'monday');
+    assert.deepEqual(added(), board, 'Room keeps Calendar, Countdown and Note enabled and in place');
+    await button('Night').click(); await save();
+    assert.deepEqual(added(), board, 'Night keeps them too');
     await page.getByText('Saved styles', { exact: true }).click();
     await page.getByLabel('Style name', { exact: true }).fill('Synthetic style'); await button('Add style').click(); await save();
     await button('Room').click(); await save();
@@ -261,12 +339,12 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await save();
     assert.equal(snapshot().widgetData.note.text, 'Dinner at seven\nBack by nine'); assert.equal(snapshot().widgetData.countdowns[0].title, 'Weekend trip');
     assert.equal('widgetData' in snapshot().savedPresets[0].visual, false);
-    checks.push('Built-in Night/Room and a saved style keep the note, countdowns and week start; saved styles never contain widget content');
+    assert.deepEqual(added(), board, 'a saved style made from this board keeps them as well');
+    checks.push('Built-in Room/Night keep Calendar, Countdown and Note enabled and in place (#153); built-in and saved styles keep the note, countdowns and week start; saved styles never contain widget content');
 
     // 6. Display: visible with content; hidden when empty while the editor keeps placeholders.
-    // Built-in styles reset the widget set to the catalog defaults, so turn the three back on.
-    assert.equal(snapshot().widgets.note, false, 'a built-in style restores the default widget set');
-    await app.store.patchSettings({ widgets: { calendar: true, countdown: true, note: true } });
+    // Built-in styles keep the widget set (#153), so the three are still on.
+    assert.equal(snapshot().widgets.note, true, 'a built-in style keeps the widget set');
     await open({ route: '/display', viewport: { width: 1280, height: 720 } });
     assert.equal(await page.locator('[data-widget-id="note"]').count(), 1); assert.equal(await page.locator('[data-widget-id="countdown"]').count(), 1); assert.equal(await page.locator('[data-widget-id="calendar"]').count(), 1);
     if (capture) images.push({ name: 'display-1280', bytes: await page.screenshot() });
@@ -368,13 +446,28 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
       }
       const labels = await page.locator('.catalog-group-label').evaluateAll(nodes => nodes.map(node => { const r = node.getBoundingClientRect(); return r.width > 0 && r.height > 0 && node.scrollWidth <= Math.ceil(r.width) + 1; }));
       assert.ok(labels.every(Boolean), `${viewport.width}×${viewport.height} group labels are visible and unclipped`);
+      if (viewport.width > 700) {
+        // #195: rail labels and button names are at least 11 px on desktop widths, and never clipped.
+        const sizes = await page.locator('.catalog-group-label, .catalog-item span').evaluateAll(nodes => nodes.map(node => Number.parseFloat(getComputedStyle(node).fontSize)));
+        assert.ok(Math.min(...sizes) >= 11, `${viewport.width}×${viewport.height} rail text is at least 11 px: ${Math.min(...sizes)}`);
+        const clipped = await page.locator('.catalog-item span').evaluateAll(nodes => nodes.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent));
+        assert.deepEqual(clipped, [], `${viewport.width}×${viewport.height} widget names are not clipped`);
+        // #154: the initial selection is visible inside the rail.
+        const selection = await page.locator('.catalog-item[aria-pressed="true"]').evaluate(item => {
+          const rail = item.closest('.widget-catalog').getBoundingClientRect(), box = item.getBoundingClientRect();
+          return { name: item.getAttribute('aria-label'), visible: box.top >= rail.top - 1 && box.bottom <= rail.bottom + 1 && box.top >= 0 && box.bottom <= innerHeight };
+        });
+        const widgets = defaultSettings().widgets;
+        assert.equal(selection.name, itemName(GROUPED.find(id => !widgets[id]), widgets));
+        assert.ok(selection.visible, `${viewport.width}×${viewport.height} the initial selection is in view: ${JSON.stringify(selection)}`);
+      }
       for (const name of ['Calendar', 'Countdown', 'Note']) {
         const item = button(`Preview ${name}`); await item.scrollIntoViewIfNeeded(); await item.click();
         const add = button(`Add ${name}`); await add.scrollIntoViewIfNeeded(); await inView(add, `${viewport.width}×${viewport.height} Add ${name}`);
       }
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
     }
-    checks.push('Grouped picker fits 1280×720, 1280×600, 1024×600, 760×600, 390×700, 390×480 and 640×300 with visible group labels and reachable Add actions');
+    checks.push('Grouped picker fits 1280×720, 1280×600, 1024×600, 760×600, 390×700, 390×480 and 640×300 with visible group labels, rail text of at least 11 px on desktop widths (#195), the initial selection in view (#154) and reachable Add actions');
     assert.deepEqual(errors, []);
     return { checks, images };
   } finally {

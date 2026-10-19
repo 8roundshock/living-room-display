@@ -14,15 +14,31 @@ import type {
   WidgetId,
 } from '../shared/contracts';
 import { defaultSettings } from '../shared/defaults';
-import { ACCENT_SWATCHES, NATIVE_PALETTE } from '../shared/palette';
-import { api } from './api';
+import { ACCENT_SWATCHES, NATIVE_PALETTE, accentSwatch } from '../shared/palette';
+import { NETWORK_ERROR_MESSAGE, api, isNetworkError } from './api';
+import {
+  BACKUP_MAX_BYTES,
+  BackupError,
+  backupContents,
+  backupDate,
+  parseBackup,
+  type BackupFile,
+} from './backup';
 import { AmbientDisplay } from './Display';
 import {
   ageLabel,
   nextComposition,
 } from './format';
 import { Icon } from './icons';
-import { applyBuiltinPreset, getVisual } from './model';
+import {
+  BUILTIN_PRESETS,
+  applyBuiltinPreset,
+  builtinLook,
+  getVisual,
+  matchingBuiltinPreset,
+  reminderPresentation,
+  resetAppearance,
+} from './model';
 import { browserLocationPlatform, getDeviceLocation } from './location';
 import {
   rebaseSettings,
@@ -36,8 +52,9 @@ import {
   GRID_DENSITIES,
   WIDGET_CATALOG,
   WIDGET_IDS,
-  firstPlacement,
   fitWidgetFamily,
+  isActiveWidget,
+  isFreeSize,
   reflowWidget,
   resizeWidgetSpan as resizeSpanGrid,
   switchGridDensity,
@@ -52,8 +69,61 @@ import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './u
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel } from './RemindersPanel';
+import { FirstRunCard, readFirstRunDismissed, rememberFirstRunDismissed } from './FirstRunCard';
+import {
+  addToGrid,
+  applyRoomFix,
+  fulfilRequest,
+  roomFixResult,
+  roomProblem as diagnoseRoomProblem,
+  type RoomFix,
+  type RoomProblem,
+  type RoomRequest,
+} from './make-room';
 const sections = ['Style', 'Widgets', 'Weather', 'Reminders'] as const;
+/** A check mark colour that stays visible on any custom accent swatch. */
+function readableMark(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((index) => {
+    const value = parseInt(hex.slice(index, index + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b! > 0.18 ? '#24222d' : '#ece8f4';
+}
 type Section = (typeof sections)[number];
+/** Feedback for one action (Save, a photo, a reminder): the next successful action clears it. */
+interface ActionError {
+  text: string;
+  /** Caused by a lost connection: a later successful state request clears it (#232). */
+  network: boolean;
+  /** `performance.now()` when it failed, compared with `serverReachedAt`. */
+  at: number;
+}
+interface StudioAlert {
+  key: string;
+  text: string;
+  kind: 'action' | 'connection' | 'storage';
+}
+
+const ACTIVE_TAB = '.inspector-tabs [role="tab"][aria-selected="true"]';
+
+/** Focus the first selector that matches a connected, enabled, rendered element. */
+function focusFirst(candidates: (string | HTMLElement | null | undefined)[]): boolean {
+  for (const candidate of candidates) {
+    const element =
+      typeof candidate === 'string'
+        ? document.querySelector<HTMLElement>(candidate)
+        : candidate;
+    if (
+      element?.isConnected &&
+      !element.matches(':disabled') &&
+      element.getClientRects().length
+    ) {
+      element.focus();
+      return true;
+    }
+  }
+  return false;
+}
 
 function Toggle({
   label,
@@ -122,11 +192,14 @@ export function Editor({
   state,
   setState,
   connectionError,
+  serverReachedAt,
   reload,
 }: {
   state: AppState;
   setState: Dispatch<SetStateAction<AppState | null>>;
   connectionError: string | null;
+  /** `performance.now()` when the latest state request that reached the server was sent. */
+  serverReachedAt: number;
   reload: () => Promise<void>;
 }) {
   const [saved, setSaved] = useState(() => structuredClone(state.settings));
@@ -135,7 +208,21 @@ export function Editor({
     draftRef = useRef(draft);
   const [section, setSection] = useState<Section>('Widgets');
   const [saving, setSaving] = useState(false),
-    [error, setError] = useState<string | null>(null);
+    [error, setErrorState] = useState<ActionError | null>(null);
+  const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
+  // #229: an always-mounted live region reports Save/Cancel after the Save bar unmounts.
+  const [announcement, setAnnouncement] = useState('');
+  const lastEdited = useRef<HTMLElement | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{
+    candidates: (string | HTMLElement | null)[];
+    /** Only move focus when it was lost (to the page) or is still in the Save bar. */
+    onlyIfLost: boolean;
+  } | null>(null);
+  function setError(message: string | null, network = message === NETWORK_ERROR_MESSAGE) {
+    setErrorState(
+      message === null ? null : { text: message, network, at: performance.now() },
+    );
+  }
   const [composition, setComposition] = useState<number | undefined>(0);
   const [movementPreview, setMovementPreview] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<WidgetId | null>(null);
@@ -144,6 +231,15 @@ export function Editor({
   const [gridPreview, setGridPreview] = useState<WidgetGrid | null>(null),
     [gridMessage, setGridMessage] = useState('');
   const [gridEpoch, setGridEpoch] = useState(0);
+  // A resize with no room explains itself beside that widget's size controls (#183).
+  const [roomProblem, setRoomProblem] = useState<RoomProblem | null>(null);
+  // #252: the first-run location card; dismissal lives in this browser only.
+  const [firstRunDismissed, setFirstRunDismissed] = useState(readFirstRunDismissed);
+  const [cityFocus, setCityFocus] = useState(0);
+  useEffect(() => {
+    // "Choose a city" opens the Weather tab with the city field focused.
+    if (cityFocus) document.getElementById('city-search')?.focus();
+  }, [cityFocus]);
   const densityHistory = useRef<GridDensityHistory | undefined>(undefined);
   const [gridGesture, setGridGesture] = useState<{ id: WidgetId; x: number; y: number; width?: number; height?: number } | null>(null);
   const [photoDraft, setPhotoDraft] = useState<PhotoDraft | null | undefined>(),
@@ -153,6 +249,13 @@ export function Editor({
     photoId = useRef(state.photo?.id ?? null);
   const [presetName, setPresetName] = useState(''),
     [presetId, setPresetId] = useState('');
+  // Style → Data & recovery (#234): a checked backup awaiting confirmation, the section's status
+  // line, an import in flight and the inline Reset appearance question.
+  const [backup, setBackup] = useState<BackupFile | null>(null),
+    [dataMessage, setDataMessage] = useState<{ text: string; error?: boolean } | null>(null),
+    [restoring, setRestoring] = useState(false),
+    [confirmReset, setConfirmReset] = useState(false);
+  const backupInput = useRef<HTMLInputElement>(null);
   const [locationQuery, setLocationQuery] = useState(''),
     [locationMessage, setLocationMessage] = useState('');
   const [locationBusy, setLocationBusy] = useState(false);
@@ -182,6 +285,59 @@ export function Editor({
   function change(update: (settings: Settings) => Settings) {
     updateDraft(update(draftRef.current));
     setError(null);
+    setAnnouncement('');
+    // Save and Cancel return focus here (#229) while it is still on screen.
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      active.closest('.studio-workspace')
+    )
+      lastEdited.current = active;
+  }
+  // Save/Cancel/Remove unmount the control that had focus; move it after the DOM commits.
+  useEffect(() => {
+    if (!focusRequest) return;
+    setFocusRequest(null);
+    const active = document.activeElement;
+    if (
+      focusRequest.onlyIfLost &&
+      active &&
+      active !== document.body &&
+      active.isConnected &&
+      !savebar.current?.contains(active)
+    )
+      return;
+    focusFirst(focusRequest.candidates);
+  }, [focusRequest]);
+  // A failure caused by a lost connection clears once a later state request reaches the server.
+  useEffect(() => {
+    setErrorState((current) =>
+      current?.network && serverReachedAt > current.at ? null : current,
+    );
+  }, [serverReachedAt]);
+  // A lost connection's Retry offer replaces a network failure saying the same thing.
+  const alerts: StudioAlert[] = [];
+  if (error && !(error.network && connectionError))
+    alerts.push({ key: `action:${error.text}`, text: error.text, kind: 'action' });
+  if (connectionError)
+    alerts.push({ key: `connection:${connectionError}`, text: connectionError, kind: 'connection' });
+  if (state.storageWarning)
+    alerts.push({ key: `storage:${state.storageWarning}`, text: state.storageWarning, kind: 'storage' });
+  const alertKeys = alerts.map((item) => item.key).join('\n');
+  // A dismissed connection or storage alert shows again once it has gone away and come back.
+  useEffect(() => {
+    const present = alertKeys.split('\n');
+    setDismissedAlerts((keys) =>
+      keys.every((key) => present.includes(key))
+        ? keys
+        : keys.filter((key) => present.includes(key)),
+    );
+  }, [alertKeys]);
+  const alert = alerts.find((item) => !dismissedAlerts.includes(item.key));
+  function dismissAlert(item: StudioAlert) {
+    if (item.kind === 'action') setError(null);
+    else setDismissedAlerts((keys) => [...keys, item.key]);
   }
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -250,7 +406,8 @@ export function Editor({
     window.addEventListener('beforeunload', leave);
     return () => window.removeEventListener('beforeunload', leave);
   }, [dirty]);
-  function cancelChanges() {
+  /** Puts the draft and its local editing state back to the saved settings. */
+  function resetDraft() {
     cancelPhoto();
     updatePhoto(undefined);
     setGridPreview(null);
@@ -267,6 +424,20 @@ export function Editor({
     setPresetId('');
     setPresetName('');
     setError(null);
+  }
+  function cancelChanges() {
+    resetDraft();
+    setAnnouncement(
+      announcement === 'Changes discarded' ? 'Changes discarded ' : 'Changes discarded',
+    );
+    restoreFocusAfterSaveBar();
+  }
+  /** After Save or Cancel: the last edited control while it is still shown, else the active tab. */
+  function restoreFocusAfterSaveBar() {
+    setFocusRequest({
+      candidates: [lastEdited.current, ACTIVE_TAB],
+      onlyIfLost: true,
+    });
   }
   function updatePhoto(value: PhotoDraft | null | undefined) {
     photoDraftRef.current = value;
@@ -305,23 +476,16 @@ export function Editor({
     setGridMessage('');
     change((previous) => ({ ...previous, widgetGrid: grid }));
   }
-  function addWidget(id: WidgetId, size: WidgetSize) {
-    const placement = firstPlacement(
-      draftRef.current.widgetGrid,
-      id,
-      size,
-      draftRef.current.widgets,
-    );
-    const next = placement ? reflowWidget(
-      draftRef.current.widgetGrid,
-      id,
-      placement,
-      draftRef.current.widgets,
-    ) : fitWidgetFamily(draftRef.current.widgetGrid, id, size, draftRef.current.widgets);
-    if (!next) { setGridMessage('No room. Try a smaller size or finer grid.'); return; }
+  /** The no-room explanation for a request on the current draft (#183, #238). */
+  function explainNoRoom(request: RoomRequest): RoomProblem {
+    const grid = draftRef.current.widgetGrid, enabled = draftRef.current.widgets;
+    return diagnoseRoomProblem(grid, request, enabled)
+      ?? { request, grid, enabled: { ...enabled }, blockers: [], fixes: [], message: 'Layout changed. Try again.' };
+  }
+  function finishAdd(id: WidgetId, grid: WidgetGrid, message: string) {
     change((previous) => ({
       ...previous,
-      widgetGrid: next,
+      widgetGrid: grid,
       widgets: { ...previous.widgets, [id]: true },
       preview:
         id === 'preview'
@@ -331,9 +495,59 @@ export function Editor({
     setSelectedWidget(id);
     setPickerOpen(false);
     setLayoutEditing(true);
-    setGridMessage(`${WIDGET_CATALOG[id].name} added`);
+    setRoomProblem(null);
+    setGridMessage(message);
+  }
+  /** Adds a widget as a draft; the picker shows the returned explanation when it has no room. */
+  function addWidget(id: WidgetId, size: WidgetSize): RoomProblem | null {
+    const next = addToGrid(draftRef.current.widgetGrid, id, size, draftRef.current.widgets);
+    if (!next) return explainNoRoom({ kind: 'add', id, size });
+    finishAdd(id, next, `${WIDGET_CATALOG[id].name} added`);
+    return null;
+  }
+  /** Applies a no-room fix and its request as one draft edit; Cancel restores the board. */
+  function applyFix(problem: RoomProblem, fix: RoomFix): RoomProblem | null {
+    const { request } = problem, enabled = draftRef.current.widgets;
+    const grid = draftRef.current.widgetGrid;
+    const fixed = applyRoomFix(grid, request, fix, enabled);
+    // The draft may have changed since the explanation; a request that now fits needs no fix.
+    const next = fixed ?? fulfilRequest(grid, request, enabled);
+    if (!next) {
+      const fresh = explainNoRoom(request);
+      if (request.kind !== 'add') setRoomProblem(fresh);
+      return fresh;
+    }
+    const message = fixed ? roomFixResult(request, fix, next) : `${WIDGET_CATALOG[request.id].name} ${request.kind === 'add' ? 'added' : 'resized'}`;
+    if (request.kind === 'add') finishAdd(request.id, next, message);
+    else {
+      commitGrid(next);
+      setRoomProblem(null);
+      setGridMessage(message);
+    }
+    return null;
+  }
+  function reportNoRoom(request: RoomRequest) {
+    setRoomProblem(explainNoRoom(request));
+    setGridMessage('');
   }
   function removeWidget(id: WidgetId) {
+    // #229: the removed row's buttons unmount; keyboard focus moves to the next row (else the
+    // previous one), or to Add widget when none remains. Rows follow the inspector's list order.
+    const rows = WIDGET_IDS.filter(
+      (item) => isActiveWidget(item) && draftRef.current.widgets[item],
+    );
+    const index = rows.indexOf(id);
+    const neighbour = index < 0 ? undefined : (rows[index + 1] ?? rows[index - 1]);
+    setFocusRequest({
+      candidates: [
+        neighbour
+          ? `.widget-list .widget-select[aria-label="${CSS.escape(WIDGET_CATALOG[neighbour].name)}"]`
+          : null,
+        '.panel-heading .add-widget',
+        ACTIVE_TAB,
+      ],
+      onlyIfLost: true,
+    });
     if (id === 'photo' && !savedRef.current.widgets.photo) {
       cancelPhoto();
       updatePhoto(undefined);
@@ -347,7 +561,7 @@ export function Editor({
           : previous.preview,
     }));
     setSelectedWidget(null);
-    setGridMessage('');
+    setGridMessage(`${WIDGET_CATALOG[id].name} removed`);
   }
   function resizeWidget(id: WidgetId, size: WidgetSize) {
     const next = fitWidgetFamily(
@@ -356,8 +570,8 @@ export function Editor({
       size,
       draftRef.current.widgets,
     );
-    if (next) commitGrid(next);
-    else setGridMessage('No room for that size');
+    if (next) { commitGrid(next); setRoomProblem(null); }
+    else reportNoRoom({ kind: 'family', id, size });
   }
   function resizeWidgetSpan(id: WidgetId, span: WidgetSpan) {
     const next = resizeSpanGrid(
@@ -366,7 +580,8 @@ export function Editor({
       span,
       draftRef.current.widgets,
     );
-    if (next) commitGrid(next);
+    if (next) { commitGrid(next); setRoomProblem(null); }
+    else if (isFreeSize(id)) reportNoRoom({ kind: 'span', id, span });
     else setGridMessage('No room for that size');
   }
   function moveWidget(id: WidgetId, dx: number, dy: number) {
@@ -533,14 +748,25 @@ export function Editor({
       }
       guardLocation.current = false;
       setLocationMessage('');
+      setAnnouncement(
+        announcement === 'Changes saved' ? 'Changes saved ' : 'Changes saved',
+      );
+      restoreFocusAfterSaveBar();
       void reload();
     } catch (caught) {
-      if (mounted.current)
+      if (mounted.current) {
         setError(
           caught instanceof Error
             ? caught.message
             : 'Could not save. Try again.',
+          isNetworkError(caught),
         );
+        // The Save button was disabled while saving; give focus back to it for a retry.
+        setFocusRequest({
+          candidates: ['.studio-savebar .button.primary', lastEdited.current, ACTIVE_TAB],
+          onlyIfLost: true,
+        });
+      }
     } finally {
       if (mounted.current) setSaving(false);
     }
@@ -568,7 +794,104 @@ export function Editor({
     }));
     setPresetId(id);
   }
+  // Data & recovery questions belong to the Style tab; leaving it drops them.
+  useEffect(() => {
+    if (section === 'Style') return;
+    setBackup(null);
+    setConfirmReset(false);
+    setDataMessage(null);
+  }, [section]);
+  const unsavedBeforeRestore = 'Save or cancel your changes before restoring a backup.';
+  /** Restore from backup (#234): refused while edits are unsaved, which a restore would otherwise mix in. */
+  function chooseBackup() {
+    setConfirmReset(false);
+    setBackup(null);
+    if (dirty || saving) {
+      setDataMessage({ text: unsavedBeforeRestore, error: true });
+      return;
+    }
+    setDataMessage(null);
+    backupInput.current?.click();
+  }
+  async function readBackup(file: File) {
+    try {
+      if (file.size > BACKUP_MAX_BYTES)
+        throw new BackupError(
+          'That file is too large to be a backup. Choose one made with Export saved data.',
+        );
+      const parsed = parseBackup(await file.text());
+      if (!mounted.current) return;
+      setBackup(parsed);
+      setDataMessage(null);
+    } catch (caught) {
+      if (!mounted.current) return;
+      setBackup(null);
+      setDataMessage({
+        text: caught instanceof BackupError ? caught.message : 'Could not read that file.',
+        error: true,
+      });
+    }
+  }
+  async function restoreBackup() {
+    const chosen = backup;
+    if (!chosen || restoring) return;
+    if (dirty || saving) {
+      setDataMessage({ text: unsavedBeforeRestore, error: true });
+      return;
+    }
+    setRestoring(true);
+    setDataMessage({ text: 'Restoring…' });
+    try {
+      // The server validates it again and keeps the replaced state as state.backup.json.
+      await api('/api/import', { method: 'POST', body: JSON.stringify(chosen) });
+      if (!mounted.current) return;
+      setBackup(null);
+      // The draft is clean, so the refreshed state replaces it; local photo, grid and style form state go too.
+      // Not cancelChanges(): nothing was discarded, so there is no "Changes discarded" announcement.
+      resetDraft();
+      setDataMessage({ text: `Backup restored: ${backupContents(chosen)}.` });
+      await reload();
+    } catch (caught) {
+      if (mounted.current)
+        setDataMessage({
+          text: `Could not restore the backup. ${caught instanceof Error ? caught.message : ''}`.trim(),
+          error: true,
+        });
+    } finally {
+      if (mounted.current) setRestoring(false);
+    }
+  }
+  function confirmResetAppearance() {
+    const after = resetAppearance(draftRef.current);
+    setConfirmReset(false);
+    setPresetId('');
+    change(() => after);
+    setDataMessage({
+      text: sameEffectiveSettings(savedRef.current, after)
+        ? 'Appearance is back to the defaults.'
+        : 'Appearance reset. Save changes to keep it.',
+    });
+  }
   const pendingCount = state.reminders.filter((item) => !item.completed).length;
+  // The built-in style whose look is showing (#153): pressed whenever applying it changes nothing.
+  const lookPreset = matchingBuiltinPreset(draft.appearance);
+  // #151: the kept custom colour (the draft's, else the saved one), selectable again after Native.
+  // A built-in style's own single colour is not one the user chose, so it is offered only while it
+  // is the accent (for example older data that applied Night before Native colours).
+  const customAccent =
+    draft.appearance.accentMode === 'color' && !accentSwatch(draft.appearance.accentColor)
+      ? draft.appearance.accentColor
+      : ([draft.appearance.accentColor, saved.appearance.accentColor].find(
+          (color) =>
+            !accentSwatch(color) &&
+            !BUILTIN_PRESETS.some(
+              (preset) => builtinLook(preset).accentColor === color.toLowerCase(),
+            ),
+        ) ?? null);
+  const customActive =
+    customAccent !== null &&
+    draft.appearance.accentMode === 'color' &&
+    draft.appearance.accentColor.toLowerCase() === customAccent.toLowerCase();
   const weatherPending =
     !same(draft.location, state.settings.location) ||
     draft.locationSource !== state.settings.locationSource ||
@@ -615,6 +938,7 @@ export function Editor({
                 setGridGesture(null);
                 setMovementPreview(false);
                 setGridMessage('');
+                setError(null);
                 if (!layoutEditing) setSection('Widgets');
               }}
             >
@@ -622,10 +946,11 @@ export function Editor({
               {layoutEditing ? 'Done' : 'Edit layout'}
             </button>
             <button className="icon-button canvas-add" aria-label="Add widget to display" title="Add widget" onClick={() => {
-              setSection('Widgets'); setPickerOpen(true); setLayoutEditing(true); setMovementPreview(false);
+              setSection('Widgets'); setPickerOpen(true); setLayoutEditing(true); setMovementPreview(false); setError(null);
             }}><Icon name="plus" size={20} /></button>
             </div>
           </div>
+          <div className="canvas-stage">
           <div className="preview-frame">
             <div className="preview-screen">
               <AmbientDisplay
@@ -663,6 +988,7 @@ export function Editor({
               )}
             </div>
           </div>
+          </div>
           <div className="canvas-toolbar">
             <span>{layoutEditing ? 'Drag to move · pull corner to resize' : 'Your saved arrangement'}</span>
             {layoutEditing ? (
@@ -685,7 +1011,7 @@ export function Editor({
               </label>
             ) : (
               <>
-                <button className={`button small movement-preview ${movementPreview ? 'active' : ''}`} aria-pressed={movementPreview} onClick={() => setMovementPreview(value => !value)}>
+                <button className={`button small movement-preview ${movementPreview ? 'active' : ''}`} aria-pressed={movementPreview} onClick={() => { setMovementPreview(value => !value); setError(null); }}>
                   <Icon name={movementPreview ? 'check' : 'refresh'} size={15} />{movementPreview ? 'Back to layout' : 'Preview movement'}
                 </button>
                 {movementPreview && <>
@@ -728,26 +1054,79 @@ export function Editor({
               </>
             )}
           </div>
-          <p
-            className="grid-status"
-            role={section === 'Widgets' ? undefined : 'status'}
-          >
-            {gridMessage}
-          </p>
-          {weatherPending && (
-            <p className="canvas-note" role="status">
-              Weather updates after Save · preview still shows{' '}
-              {state.weather.location.name}
+          {/* One reserved line for layout messages and the weather note (#231). */}
+          <div className="canvas-messages">
+            <p
+              className="grid-status"
+              role={section === 'Widgets' ? undefined : 'status'}
+            >
+              {gridMessage}
             </p>
-          )}
-          {!weatherPending && weatherRefreshing && (
+            {/* Always mounted, so a screen reader announces the note when it appears. */}
             <p className="canvas-note" role="status">
-              Updating weather · preview still shows{' '}
-              {state.weather.location.name}
+              {weatherPending
+                ? `Weather updates after Save · preview still shows ${state.weather.location.name}`
+                : weatherRefreshing
+                  ? `Updating weather · preview still shows ${state.weather.location.name}`
+                  : ''}
             </p>
+          </div>
+          {/* #227: the alert has its own row below the canvas actions and never covers them. */}
+          {alert && (
+            <div className={`studio-error studio-error-${alert.kind}`}>
+              <p role="alert">{alert.text}</p>
+              <div className="studio-error-actions">
+                {alert.kind === 'connection' && (
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      void reload();
+                    }}
+                  >
+                    Retry
+                  </button>
+                )}
+                <button
+                  className="icon-button studio-error-dismiss"
+                  aria-label="Dismiss message"
+                  title="Dismiss"
+                  onClick={() => {
+                    dismissAlert(alert);
+                    setFocusRequest({
+                      candidates: ['.studio-error-dismiss', '.canvas-toolbar button', ACTIVE_TAB],
+                      onlyIfLost: true,
+                    });
+                  }}
+                >
+                  <Icon name="close" size={16} />
+                </button>
+              </div>
+            </div>
           )}
         </section>
         <aside className="inspector" aria-label="Display settings">
+          {/* Shown with the default Widgets tab only: Style has no spare height at 1280×720, Weather
+              holds the same actions, and the picker is a focused mode. */}
+          {saved.locationSource === 'fallback' && !firstRunDismissed && section === 'Widgets' && !pickerOpen && (
+            <FirstRunCard
+              place={saved.location.name}
+              draft={draft.locationSource === 'fallback' ? null : draft.locationSource === 'device' ? 'Your area' : draft.location.name}
+              busy={locationBusy}
+              saving={saving}
+              message={locationMessage}
+              onUseLocation={() => {
+                void deviceLocation(false);
+              }}
+              onChooseCity={() => {
+                setSection('Weather');
+                setCityFocus((value) => value + 1);
+              }}
+              onDismiss={() => {
+                rememberFirstRunDismissed();
+                setFirstRunDismissed(true);
+              }}
+            />
+          )}
           <div
             className="inspector-tabs"
             role="tablist"
@@ -760,6 +1139,8 @@ export function Editor({
                 role="tab"
                 aria-selected={section === name}
                 aria-controls={`panel-${name}`}
+                // The count is named, “Reminders, 8 pending” (#241); the visible count stays compact.
+                aria-label={name === 'Reminders' && pendingCount > 0 ? `Reminders, ${pendingCount} pending` : undefined}
                 tabIndex={section === name ? 0 : -1}
                 onClick={() => setSection(name)}
                 onKeyDown={(event) => {
@@ -782,7 +1163,7 @@ export function Editor({
               >
                 {name}
                 {name === 'Reminders' && pendingCount > 0 && (
-                  <span className="tab-count">{pendingCount}</span>
+                  <span className="tab-count" aria-hidden="true">{pendingCount}</span>
                 )}
               </button>
             ))}
@@ -799,11 +1180,12 @@ export function Editor({
               <>
                 <h2>Make it yours</h2>
                 <div className="preset-list">
-                  {(['phone', 'room', 'night'] as const).map((preset) => (
+                  {BUILTIN_PRESETS.map((preset) => (
                     <button
                       key={preset}
-                      className={`preset-button ${draft.appearance.preset === preset ? 'active' : ''}`}
-                      aria-pressed={draft.appearance.preset === preset}
+                      className={`preset-button ${lookPreset === preset ? 'active' : ''}`}
+                      aria-pressed={lookPreset === preset}
+                      title="Sets brightness, colours and typeface; widgets, Text size and motion stay"
                       onClick={() => {
                         change((previous) =>
                           applyBuiltinPreset(previous, preset),
@@ -827,7 +1209,7 @@ export function Editor({
                       </span>
                       <span className="preset-label">
                         {preset[0].toUpperCase() + preset.slice(1)}
-                        {draft.appearance.preset === preset && (
+                        {lookPreset === preset && (
                           <Icon name="check" size={13} />
                         )}
                       </span>
@@ -851,18 +1233,38 @@ export function Editor({
                   onChange={(value) => appearance('fontScale', value / 100)}
                 />
                 <div className="inspector-group">
-                  <h3 className="accent-heading">
-                    Accent{' '}
-                    <span className="accent-current">
-                      {draft.appearance.accentMode === 'native'
-                        ? 'Native'
-                        : (ACCENT_SWATCHES.find(
-                            (swatch) =>
-                              swatch.value ===
-                              draft.appearance.accentColor.toLowerCase(),
-                          )?.name ?? 'Custom')}
-                    </span>
-                  </h3>
+                  {/* #137: the custom colour picker rides on the heading line, so the row keeps
+                      44 px targets on one line at 1280×720 even with a kept custom colour. */}
+                  <div className="accent-heading">
+                    <h3>
+                      Accent{' '}
+                      <span className="accent-current">
+                        {draft.appearance.accentMode === 'native'
+                          ? 'Native'
+                          : (accentSwatch(draft.appearance.accentColor)?.name ?? 'Custom')}
+                      </span>
+                    </h3>
+                    <label className="custom-color" title="Choose a custom colour">
+                      <input
+                        type="color"
+                        aria-label="Custom accent color"
+                        value={draft.appearance.accentColor}
+                        onChange={(event) => {
+                          const accentColor = event.target.value;
+                          change((previous) => ({
+                            ...previous,
+                            appearance: {
+                              ...previous.appearance,
+                              accentMode: 'color',
+                              accentColor,
+                              preset: 'custom',
+                            },
+                          }));
+                        }}
+                      />
+                      <Icon name="plus" size={15} />
+                    </label>
+                  </div>
                   <div className="swatches">
                     <button
                       className={`swatch swatch-native ${draft.appearance.accentMode === 'native' ? 'active' : ''}`}
@@ -895,7 +1297,7 @@ export function Editor({
                     {ACCENT_SWATCHES.map((color) => {
                       const active =
                         draft.appearance.accentMode !== 'native' &&
-                        draft.appearance.accentColor.toLowerCase() ===
+                        accentSwatch(draft.appearance.accentColor)?.value ===
                           color.value;
                       return (
                         <button
@@ -913,7 +1315,16 @@ export function Editor({
                               appearance: {
                                 ...previous.appearance,
                                 accentMode: 'color',
-                                accentColor: color.value,
+                                // A kept value of this swatch, including a retired one (#224),
+                                // stays as stored, so returning to it is not an edit.
+                                accentColor:
+                                  [
+                                    previous.appearance.accentColor,
+                                    savedRef.current.appearance.accentColor,
+                                  ].find(
+                                    (value) =>
+                                      accentSwatch(value)?.value === color.value,
+                                  ) ?? color.value,
                                 preset: 'custom',
                               },
                             }));
@@ -925,27 +1336,37 @@ export function Editor({
                         </button>
                       );
                     })}
-                    <label className="custom-color" title="Custom accent">
-                      <span className="sr-only">Custom accent color</span>
-                      <input
-                        type="color"
-                        aria-label="Custom accent color"
-                        value={draft.appearance.accentColor}
-                        onChange={(event) => {
-                          const accentColor = event.target.value;
+                    {customAccent && (
+                      // #151: a kept custom colour is one activation away, also after Native.
+                      <button
+                        className={`swatch swatch-custom ${customActive ? 'active' : ''}`}
+                        style={
+                          {
+                            '--swatch': customAccent,
+                            '--swatch-mark': readableMark(customAccent),
+                          } as React.CSSProperties
+                        }
+                        aria-label="Custom colour"
+                        title={`Custom colour ${customAccent}`}
+                        aria-pressed={customActive}
+                        onClick={() => {
+                          if (customActive) return;
                           change((previous) => ({
                             ...previous,
                             appearance: {
                               ...previous.appearance,
                               accentMode: 'color',
-                              accentColor,
+                              accentColor: customAccent,
                               preset: 'custom',
                             },
                           }));
                         }}
-                      />
-                      <Icon name="plus" size={15} />
-                    </label>
+                      >
+                        <span>
+                          {customActive && <Icon name="check" size={14} />}
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
                 <details className="disclosure motion-disclosure">
@@ -990,13 +1411,14 @@ export function Editor({
                         </p>
                       )}
                     </div>
+                    {/* #240: plain names for motionEnabled and motionIntervalSeconds. */}
                     <Toggle
-                      label="Soft motion"
+                      label="Drift and fade between moves"
                       checked={draft.appearance.motionEnabled}
                       onChange={(value) => appearance('motionEnabled', value)}
                     />
                     <Range
-                      label="New arrangement"
+                      label="Move widgets every"
                       min={30}
                       max={1800}
                       step={30}
@@ -1018,9 +1440,11 @@ export function Editor({
                       display={`${draft.appearance.fadeSeconds}s`}
                       onChange={(value) => appearance('fadeSeconds', value)}
                     />
-                    <p className="hint">
-                      Reduced motion removes drift. Widgets still change places
-                      through black.
+                    <p className="hint motion-hint">
+                      Widgets always move to a new place through black. With
+                      Drift and fade off, or with Animation effects off in
+                      Windows Settings › Accessibility › Visual effects on the
+                      display PC, they appear without a fade and nothing drifts.
                     </p>
                   </div>
                 </details>
@@ -1146,31 +1570,132 @@ export function Editor({
                     </div>
                   </div>
                 </details>
-                <details className="disclosure">
+                <details className="disclosure data-disclosure">
                   <summary>Data & recovery</summary>
                   <div className="disclosure-body">
-                    <a
-                      className="button small"
-                      href="/api/export"
-                      download="still-backup.json"
+                    <p className="hint data-hint">
+                      A backup holds your saved settings, styles and reminders.
+                      Your photo isn't included.
+                    </p>
+                    <div className="data-actions">
+                      <a
+                        className="button small"
+                        href="/api/export"
+                        download="still-backup.json"
+                      >
+                        <Icon name="download" size={15} />
+                        Export saved data
+                      </a>
+                      <button
+                        className="button small restore-backup"
+                        disabled={restoring}
+                        onClick={chooseBackup}
+                      >
+                        <Icon name="undo" size={15} />
+                        Restore from backup…
+                      </button>
+                      <input
+                        ref={backupInput}
+                        className="backup-file"
+                        type="file"
+                        accept="application/json,.json"
+                        aria-label="Backup file"
+                        tabIndex={-1}
+                        hidden
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          // Clear it, so choosing the same file again is a new choice.
+                          event.target.value = '';
+                          if (file) void readBackup(file);
+                        }}
+                      />
+                    </div>
+                    {backup && (
+                      <div
+                        className="data-confirm restore-confirm"
+                        role="group"
+                        aria-label="Restore backup"
+                      >
+                        <p className="data-confirm-title">
+                          Restore the backup from{' '}
+                          {backupDate(backup, draft.clockFormat)}?
+                        </p>
+                        <p>
+                          It replaces your saved settings, styles and reminders
+                          with the backup's: {backupContents(backup)}. Your
+                          photo stays as it is.
+                        </p>
+                        <p className="hint">
+                          What's saved now is kept as this computer's recovery
+                          backup until your next save. To keep it longer,
+                          export it first.
+                        </p>
+                        <div className="data-confirm-actions">
+                          <button
+                            className="button small primary"
+                            disabled={restoring}
+                            onClick={() => {
+                              void restoreBackup();
+                            }}
+                          >
+                            {restoring ? 'Restoring…' : 'Restore'}
+                          </button>
+                          <button
+                            className="button small"
+                            disabled={restoring}
+                            onClick={() => {
+                              setBackup(null);
+                              setDataMessage({ text: 'Nothing was restored.' });
+                            }}
+                          >
+                            Don't restore
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {confirmReset ? (
+                      <div
+                        className="data-confirm reset-confirm"
+                        role="group"
+                        aria-label="Reset appearance"
+                      >
+                        <p>
+                          Reset brightness, colours, typeface, Text size and
+                          motion to the defaults? Widgets, their layout, the
+                          clock style and saved styles stay.
+                        </p>
+                        <div className="data-confirm-actions">
+                          <button
+                            className="button small primary"
+                            onClick={confirmResetAppearance}
+                          >
+                            Reset
+                          </button>
+                          <button
+                            className="button small"
+                            onClick={() => setConfirmReset(false)}
+                          >
+                            Keep my appearance
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="text-button reset-appearance"
+                        onClick={() => {
+                          setBackup(null);
+                          setDataMessage(null);
+                          setConfirmReset(true);
+                        }}
+                      >
+                        Reset appearance…
+                      </button>
+                    )}
+                    <p
+                      className={`inline-message data-status ${dataMessage?.error ? 'error' : ''}`}
+                      role="status"
                     >
-                      <Icon name="download" size={15} />
-                      Export saved data
-                    </a>
-                    <button
-                      className="text-button reset-appearance"
-                      onClick={() => {
-                        change((previous) =>
-                          applyBuiltinPreset(previous, 'room'),
-                        );
-                        setPresetId('');
-                      }}
-                    >
-                      Reset appearance
-                    </button>
-                    <p className="hint">
-                      Includes saved settings and reminders. Windows idle
-                      activation is managed by the installed helper.
+                      {dataMessage?.text ?? ''}
                     </p>
                   </div>
                 </details>
@@ -1181,10 +1706,20 @@ export function Editor({
                 message={gridMessage}
                 settings={draft}
                 selected={selectedWidget}
-                onSelect={setSelectedWidget}
+                onSelect={(id) => {
+                  setSelectedWidget(id);
+                  setRoomProblem(null);
+                }}
                 pickerOpen={pickerOpen}
                 onPicker={setPickerOpen}
                 onAdd={addWidget}
+                onFix={applyFix}
+                roomProblem={
+                  roomProblem && same(roomProblem.grid, draft.widgetGrid) && same(roomProblem.enabled, draft.widgets)
+                    ? roomProblem
+                    : null
+                }
+                remindersHidden={reminderPresentation(draft, state.reminders, connectionError !== null) === 'hidden'}
                 onRemove={removeWidget}
                 onResize={resizeWidget}
                 onResizeSpan={resizeWidgetSpan}
@@ -1245,32 +1780,57 @@ export function Editor({
                   <label className="field-label" htmlFor="city-search">
                     City
                   </label>
+                  {/* The visible label is the accessible name (#241); the search hint is a description. */}
                   <CitySearch
                     value={locationQuery}
                     onChange={setLocationQuery}
                     onSelect={selectCity}
                     disabled={saving}
+                    label="City"
+                    description="Type two or more letters to search for a city"
                   />
                 </div>
                 <p className="inline-message" role="status">
                   {locationMessage || '\u00a0'}
                 </p>
-                <label>
-                  <span className="field-label">Units</span>
-                  <select
-                    className="select-input"
-                    value={draft.units}
-                    onChange={(event) =>
-                      change((previous) => ({
-                        ...previous,
-                        units: event.target.value as Settings['units'],
-                      }))
-                    }
-                  >
-                    <option value="metric">Celsius · metric</option>
-                    <option value="imperial">Fahrenheit · imperial</option>
-                  </select>
-                </label>
+                {/* #235: Time format applies to every widget, so it sits beside Units, outside any widget. */}
+                <div className="inspector-group time-units" role="group" aria-labelledby="time-units-heading">
+                  <h3 id="time-units-heading">Time &amp; units</h3>
+                  <div className="input-row">
+                    <label>
+                      <span className="field-label">Units</span>
+                      <select
+                        className="select-input"
+                        value={draft.units}
+                        onChange={(event) =>
+                          change((previous) => ({
+                            ...previous,
+                            units: event.target.value as Settings['units'],
+                          }))
+                        }
+                      >
+                        <option value="metric">°C · metric</option>
+                        <option value="imperial">°F · imperial</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span className="field-label">Time format</span>
+                      <select
+                        className="select-input"
+                        value={draft.clockFormat}
+                        onChange={(event) =>
+                          change((previous) => ({
+                            ...previous,
+                            clockFormat: event.target.value as Settings['clockFormat'],
+                          }))
+                        }
+                      >
+                        <option value="12h">12-hour</option>
+                        <option value="24h">24-hour</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
                 <div className={`weather-status-row ${state.weather.status}`}>
                   <span className="status-dot" />
                   {state.weather.status === 'fresh'
@@ -1318,22 +1878,10 @@ export function Editor({
             )}
           </div>
         </aside>
-        {(error || connectionError || state.storageWarning) && (
-          <div className="studio-error" role="alert">
-            {error || connectionError || state.storageWarning}
-            {connectionError && (
-              <button
-                className="text-button"
-                onClick={() => {
-                  void reload();
-                }}
-              >
-                Retry
-              </button>
-            )}
-          </div>
-        )}
       </main>
+      <p className="sr-only save-announcer" role="status">
+        {announcement}
+      </p>
       {dirty && (
         <footer
           ref={savebar}

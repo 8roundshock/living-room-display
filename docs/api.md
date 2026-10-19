@@ -13,7 +13,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `PATCH /api/settings`          | Validated nested partial settings                                      | Full saved settings.                                                         |
 | `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |
 | `GET /api/reminders`           | None                                                                   | Reminder array.                                                              |
-| `POST /api/reminders`          | `text`, optional ISO `dueAt` or null                                   | Created reminder (201).                                                      |
+| `POST /api/reminders`          | `text`, optional ISO `dueAt` or null, optional past `createdAt`        | Created reminder (201).                                                      |
 | `PATCH /api/reminders/:id`     | Partial `text`, `completed`, `dueAt`                                   | Updated reminder.                                                            |
 | `DELETE /api/reminders/:id`    | None                                                                   | Empty 204.                                                                   |
 | `DELETE /api/reminders/completed` | None                                                                | `{ "deleted": n }`; removes only completed reminders, atomically.            |
@@ -76,6 +76,15 @@ reminder in the same write, or returns 409 “Reminder limit reached” when all
 pending. Exports and imports carry history in `reminders[]` unchanged; an import with
 more than 500 completed reminders is accepted as is and pruned at the next completion.
 
+`POST /api/reminders` also accepts an optional `createdAt` (#237), which the editor's
+Undo after a single delete sends with the deleted reminder's `text` and exact `dueAt`
+string, so the re-created reminder (with a new `id`) returns to its sorted place. It
+uses the persisted UTC format (`2026-10-18T13:00:00.000Z`, the same rule as stored
+`createdAt`) and must not be later than the server's current time; an offset, a date
+without a time or a future time returns 400 and writes nothing. `updatedAt` is the
+re-create time. PATCH never accepts `createdAt`. The persisted reminder shape is
+unchanged, so the previous release reads re-created reminders.
+
 Settings `idle.enabled` is a preference, not proof Windows idle activation is
 installed. Only the Windows host's explicit activation command changes that
 configuration. `/api/windows/status` reads existing settings without changing them.
@@ -99,7 +108,8 @@ Other widgets reject a span (`<Name> does not support custom sizes`); too-small 
 too-wide spans return 400 with a clear message. In a placement PATCH, `span: null`
 clears a custom size, and so does a `size` without `span` (a family choice); a
 move keeps it. The editor sends a changed placement whole, with `span: null` when
-it has none. A saved span is not readable by `bedca44`; see the
+it has none. The previous installed release (`3fee844`) reads a saved span; the older
+`bedca44` does not, so a downgrade that far needs the
 [strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
 Legacy version-one settings acquire the safe default grid while preserving old
 widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
@@ -113,6 +123,8 @@ saved styles and imports without the key read as `color`, so existing data looks
 unchanged until Native is chosen. `color` tints every widget's accent elements with
 `accentColor`; `native` uses each widget's catalog palette tone (see
 [native palette](design.md#native-palette)). `accentColor` is kept in both modes.
+A stored retired swatch value (Sand `#b8a17a`, retuned in #224) renders as that
+swatch's current value and is never rewritten.
 At rest `color` is omitted; `native` is written and is a
 [rollback exception](install.md#additive-data-and-rollback-compatibility-84).
 
@@ -121,9 +133,11 @@ At rest `color` is omitted; `native` is written and is a
 editor (#76): Off keeps widgets still, Subtle animates changes and the reveal after
 a black rest, and Lively adds reveal choreography and the current-weather glyph's
 slow loops. Each screen shows Off while it prefers reduced motion, whatever is
-saved. Relocation through black is unaffected, and Soft motion (`motionEnabled`)
-stays separate. The Style tab's Motion → Animation control edits it as an ordinary
-draft field; built-in styles keep it and saved styles store it.
+saved. Relocation through black is unaffected, and Drift and fade between moves
+(`motionEnabled`) stays separate. The Style tab's Motion → Animation control edits
+it as an ordinary draft field; built-in styles keep it and saved styles store it.
+Built-in styles are looks (#153, #110, #226): they write only `brightness`,
+`accentMode`, `accentColor`, `textColor`, `fontFamily`, `layout` and `preset`.
 
 Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
 `accentMode` or `animation` keeps its saved value (#83). Only the persisted reader
@@ -217,7 +231,7 @@ coverage gap ends it. In precedence order:
 | Kind | When | Weather mode | Example |
 | --- | --- | --- | --- |
 | `unknown` | No future intervals | hint | “Rain outlook unavailable” |
-| `now` | A spell includes now | elevated | “Rain likely until 6 PM”; open end “Rain likely beyond 1 AM” (small: “Rain likely now”) |
+| `now` | A spell includes now | elevated | “Rain likely until 6 PM”; open end “Rain likely beyond 1 AM”; later spells too “on and off until 4 PM” (small: “Rain likely now” for an open end or later spells) |
 | `soon` | A spell starts within 6 hours (inclusive) | elevated | “Rain likely 3–6 PM”; open end or several spells “from 3 PM” (medium/large: “on and off from 3 PM”) |
 | `later` | A spell starts in 6–12 hours | hint | “Rain likely from 9 PM” (medium/large add the day when it differs: “from Tomorrow 7 AM”) |
 | `unknown` | No spell, but some rain amounts are missing | hint | “Rain timing unavailable” |
@@ -225,21 +239,35 @@ coverage gap ends it. In precedence order:
 | `unknown` | Partial, gapped or null coverage | hint | “Rain outlook partial” |
 | `calm` | Otherwise: the 12-hour forecast is complete and dry | calm | nothing about rain |
 
-“Likely” means the spell's peak hourly chance is at least 60%; otherwise, or when the
-chance is unknown, “possible”. Probability covers all precipitation, so the wording
-never says it is or will be raining. The elevated detail covers every spell in the
-window: “Peak 60% · 4 mm rain” (imperial “0.16 in rain”), “Known rain 4 mm” when some
-rain amounts are missing, and “Chance unavailable” without a chance. The confidence
-label is “Forecast estimate”, “Partial forecast” (coverage under 12 hours) or
-“Partial data” (missing values), plus “ · coverage gaps”. Times use the weather
-city's timezone and the 12/24-hour setting; compact 12-hour times drop “:00” and
-share AM/PM (“3–6 PM”, “11 AM–2 PM”, “15:00–18:00”), keeping non-zero minutes in
-half-hour zones. Hours are real instants, so a DST change shows wall-clock times.
+The headline, its qualifier, the detail's peak and the amount all cover the same spells:
+every spell in the window (#167). “Likely” means the highest known peak hourly chance
+of those spells is at least 60%; otherwise, or when no chance is known, “possible”. So
+a 40% spell followed by an 80% one reads “Rain likely on and off from 10 AM” beside
+“Peak 80%”. A headline names an end only when no spell follows it (“until 11 AM”);
+with later spells it reads “on and off until 2 PM” (medium/large) or names no end
+(small). Probability covers all precipitation, so the wording never says it is or
+will be raining. The elevated detail reads “Peak 60% · 4 mm rain” (imperial “0.16 in
+rain”), “Known rain 4 mm” when some rain amounts are missing, and “Chance unavailable”
+without a chance. The confidence label is “Forecast estimate”, “Partial forecast”
+(coverage under 12 hours) or “Partial data” (missing values), plus “ · coverage
+gaps”. Times use the weather city's timezone and the 12/24-hour setting; compact
+12-hour times drop “:00” and share AM/PM (“3–6 PM”, “11 AM–2 PM”, “15:00–18:00”),
+keeping non-zero minutes in half-hour zones. A no-break space joins each time to its
+AM/PM and a word joiner follows the range dash, so a line never starts with AM/PM
+or the second end of a range; “Precipitation possible · 40%” keeps “· 40%” with its
+words (#197). Hours are real instants, so a DST change shows wall-clock times.
+The large family's hourly chance bars are one image whose accessible name summarises
+them: “Hourly precipitation chance, 9 AM to 9 PM: peak 60% at 10 AM, 1 hour unknown”
+(#166). The window and thresholds are defined once, in `weather-outlook.ts` (#147).
 
 ### Forecast normalization and caching
 
 The server requests Open-Meteo epoch timestamps and the configured timezone.
-It normalizes seven daily forecasts and 24 upcoming hourly intervals. Hourly
+It normalizes seven daily forecasts and the hourly intervals from the current hour,
+the earlier of the provider's current time and this computer's, through 24 hours past
+this computer's clock. A fast clock at arrival therefore never discards hours that are
+actually upcoming, and a slow one never shortens the window (#244); the browser ignores
+expired intervals again when it renders. Hourly
 precipitation amount and probability apply to the **preceding hour**; each result
 therefore includes both `intervalStart` and `intervalEnd`. Probability covers all
 precipitation, including snow. `rainAmount` separately sums rain and showers;
@@ -253,9 +281,20 @@ offset boundaries; hourly epoch instants retain unambiguous timing across DST.
 Successful forecasts are cached for 15 minutes in memory. Failed refreshes retain
 the last successful timestamp/data and mark them stale; without prior data the
 state is unavailable. Failed requests retry no more often than once per minute.
+These intervals count by whichever of the monotonic and wall clocks says more time
+has passed (#244): a clock set back (for example a fast hardware clock corrected
+after boot) neither stalls a retry nor keeps old data fresh, and a sleep still ages
+it. A saved `updatedAt` more than 2 minutes in the future is refreshed at once, and
+the display calls such a time “Update time unknown” rather than “just now”. The
+retained data has no age limit; the display drops past days and qualifies an
+hours-old reading ([widget contract](widgets.md#data-and-image-boundaries)).
 Switching location/units never reuses a mismatched forecast. City search uses the
 [Open-Meteo geocoding API](https://open-meteo.com/en/docs/geocoding-api), with an
-hour-long in-memory query cache. No IP/address auto-location is used.
+hour-long in-memory query cache. Each result is checked on its own (#246): one
+without a valid IANA timezone (the same check as saved settings), with out-of-range
+coordinates or without a name is left out rather than failing the search, and names
+are trimmed to the 100-character settings limit, so every offered city can be saved.
+No IP/address auto-location is used.
 
 ## Air quality
 
@@ -276,15 +315,19 @@ timeout and `redirect: 'error'`.
 
 Normalization keeps the current AQI, the dominant pollutant (the highest known
 sub-index, or null), PM2.5/PM10 in µg/m³ and the UV index. Hourly values are
-instantaneous readings stored as instants (`time`): the current hour and up to 23
-following ones. A missing, non-numeric or misaligned value stays `null` or makes
-the reading `unavailable`; nothing is filled in. The widget applies the same
+instantaneous readings stored as instants (`time`): from the current hour (the earlier of
+the provider's and this computer's, as for the forecast) through 23 hours past this
+computer's current hour.
+A missing, non-numeric or misaligned value stays `null` or makes the reading
+`unavailable`; nothing is filled in. The widget applies the same
 current-hour rule again at render time (instants after now − 1 hour, recomputed each
 minute), because a cached or `stale` reading keeps the series it was fetched with.
 
 Readings are cached in memory for 30 minutes, keyed by location and scale (at most
 8 entries). A failed refresh keeps the last good reading as `stale`; without one the
-state is `unavailable`. Failures retry no more often than every 2 minutes.
+state is `unavailable`. Failures retry no more often than every 2 minutes. Both
+intervals use the forecast's monotonic-and-wall timing, and a future `updatedAt` is
+refreshed at once (#244).
 
 The widget labels every value as a model estimate with its age, and credits
 "Air quality: CAMS via Open-Meteo". It is not a local sensor reading or an official
@@ -340,9 +383,11 @@ copy is valid, startup fails without resetting user data. Preserve the folder an
 restore a known-good export. Export/import includes settings and reminders only;
 weather, snapshot pixels, and native tokens are excluded. Store backups privately.
 
-At rest, `state.json`, `state.backup.json` and exports omit additive values that
-the previous installed release cannot parse while they equal the current read
-default: `appearance.accentMode` `color`, `appearance.animation` `subtle`, disabled
-widget ids the previous release does not know (the six #78 ids), and default `widgetData` sections. API responses
+At rest, `state.json`, `state.backup.json` and exports omit additive values while
+they equal the current read default: `appearance.accentMode` `color`,
+`appearance.animation` `subtle`, default `widgetData` sections, and disabled widget
+ids the previous installed release does not know. The previous release (`3fee844`)
+reads every one of these keys and knows every widget id, so all widget ids are
+written. API responses
 (`/api/state`, the `PATCH /api/settings` response and the native session) always
 include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).

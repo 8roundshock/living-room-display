@@ -39,22 +39,48 @@ export const NATIVE_PALETTE: Record<PaletteRole, PaletteTone> = {
   stone: { name: 'Stone', hex: '#a9a49c', oklch: [0.721, 0.013, 80], meaning: 'Images, clouds and neutral' },
 };
 
-/** Status cues that never change with the accent mode; equal to --ambient-caution and --ambient-offline in styles.css. */
-export const STATUS_TONES = { caution: '#b0926b', offline: '#977e88' } as const;
+/**
+ * Status cues that never change with the accent mode; equal to --ambient-caution in styles.css.
+ * Stale and offline share the amber (#223, #133): there is no separate offline colour.
+ */
+export const STATUS_TONES = { caution: '#b0926b' } as const;
 export type StatusTone = keyof typeof STATUS_TONES;
 
-/** Single-colour accent choices in the editor's Style tab. */
+/**
+ * Single-colour accent choices in the editor's Style tab. Each stays at least 0.05 OKLab from every
+ * status tone (src/shared/palette.test.ts); Sand was retuned for that in #224.
+ */
 export const ACCENT_SWATCHES = [
   { value: '#8aa8c2', name: 'Mist' },
   { value: '#aaa0ca', name: 'Lilac' },
   { value: '#8d9dcc', name: 'Dusk' },
-  { value: '#b8a17a', name: 'Sand' },
+  { value: '#b6a588', name: 'Sand' },
   { value: '#88afa6', name: 'Sage' },
 ] as const;
+export type AccentSwatch = typeof ACCENT_SWATCHES[number];
+
+/**
+ * Earlier swatch values and the swatch that replaced each (#224: Sand was #b8a17a, too close to the
+ * stale amber). They are read-time aliases only: a stored old value stays as it is on disk, reads as
+ * that swatch in the editor and renders with the swatch's current value.
+ */
+export const ACCENT_ALIASES: Readonly<Record<string, AccentSwatch['value']>> = { '#b8a17a': '#b6a588' };
+
+/** The colour an accent value renders as: a retired swatch value becomes its current swatch. */
+export function renderedAccent(color: string): string {
+  return ACCENT_ALIASES[color.toLowerCase()] ?? color;
+}
+
+/** The swatch an accent value selects, including a retired value of that swatch; null for a custom colour. */
+export function accentSwatch(color: string): AccentSwatch | null {
+  const value = renderedAccent(color).toLowerCase();
+  return ACCENT_SWATCHES.find(swatch => swatch.value === value) ?? null;
+}
 
 /** Every role's colour: the accent colour for all of them in `color` mode, the palette in `native`. */
 export function paletteTones(appearance: Pick<AppearanceSettings, 'accentMode' | 'accentColor'>): Record<PaletteRole, string> {
-  return Object.fromEntries(PALETTE_ROLES.map(role => [role, appearance.accentMode === 'native' ? NATIVE_PALETTE[role].hex : appearance.accentColor])) as Record<PaletteRole, string>;
+  const accent = renderedAccent(appearance.accentColor);
+  return Object.fromEntries(PALETTE_ROLES.map(role => [role, appearance.accentMode === 'native' ? NATIVE_PALETTE[role].hex : accent])) as Record<PaletteRole, string>;
 }
 
 export type ToneVariable = `--tone-${PaletteRole}`;
@@ -70,7 +96,7 @@ export type WeatherGlyphName = keyof typeof WEATHER_GLYPH_TONE;
 
 /**
  * Pairs of colours that can appear on one screen: every two palette roles (any widgets can be
- * enabled together and glyphs mix tones inside one widget), and every role against both status tones.
+ * enabled together and glyphs mix tones inside one widget), and every role against every status tone.
  */
 export const CO_OCCURRING_TONES: readonly (readonly [PaletteRole | StatusTone, PaletteRole | StatusTone])[] = [
   ...PALETTE_ROLES.flatMap((role, index) => PALETTE_ROLES.slice(index + 1).map(other => [role, other] as const)),

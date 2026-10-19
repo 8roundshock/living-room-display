@@ -13,7 +13,8 @@ export function CitySearch({
   onSelect,
   disabled,
   id = 'city-search',
-  label = 'Search for a city',
+  label = 'City',
+  description,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -21,11 +22,14 @@ export function CitySearch({
   disabled: boolean;
   /** Input id for an external label; the Weather tab keeps `city-search`. */
   id?: string;
-  /** Accessible name of the combobox. */
+  /** Accessible name of the combobox; match the visible label (#241). */
   label?: string;
+  /** Optional accessible description, such as how to search. */
+  description?: string;
 }) {
   const instance = useId();
   const listId = `${instance}-options`,
+    descriptionId = `${instance}-description`,
     optionId = (index: number) => `${instance}-option-${index}`;
   const [cities, setCities] = useState<LocationResult[]>([]);
   const [open, setOpen] = useState(false),
@@ -89,6 +93,7 @@ export function CitySearch({
         className="text-input"
         role="combobox"
         aria-label={label}
+        aria-describedby={description ? descriptionId : undefined}
         aria-autocomplete="list"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
@@ -181,6 +186,11 @@ export function CitySearch({
       {!open && (
         <span className="sr-only" role="status">
           {status}
+        </span>
+      )}
+      {description && (
+        <span className="sr-only" id={descriptionId}>
+          {description}
         </span>
       )}
     </div>

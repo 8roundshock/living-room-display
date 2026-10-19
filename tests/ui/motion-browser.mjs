@@ -564,7 +564,7 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
       const { page, close } = await editorPage();
       await page.getByRole('button', { name: 'Add widget to display' }).click();
       for (const name of ['Preview Weather', 'Preview Forecast']) {
-        const catalog = page.getByRole('button', { name, exact: true });
+        const catalog = page.getByRole('button', { name: new RegExp(`^${name}(, on your display)?$`) });
         if (await catalog.count()) await catalog.click();
         await page.waitForTimeout(250);
         assert.equal(await page.locator('.picker-sample').getAttribute('data-animation'), 'off');

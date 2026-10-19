@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import type { AppState, Settings, WidgetId } from '../shared/contracts.ts';
 import { GRID_DENSITIES, WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset, placementSpan, widgetRevealOrder } from '../shared/widgets.ts';
 import { DEFAULT_ANIMATION_LEVEL, MAX_REVEAL_STEPS, motionPlan, revealTiming, type EntranceLevel, type MotionSurface } from '../shared/motion.ts';
-import { toneVariables } from '../shared/palette.ts';
+import { renderedAccent, toneVariables } from '../shared/palette.ts';
 import { Icon } from './icons.tsx';
 import { MotionContext, usePrefersReducedMotion, type MotionState } from './useMotion.ts';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
@@ -217,7 +217,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   const motion = useMemo<MotionState>(() => ({ plan, revealEpoch: reveal.epoch, revealing: reveal.active, resting: fading }), [plan, reveal.epoch, reveal.active, fading]);
   const animation = plan.valueTransitions ? plan.level : 'off';
 
-  const ambientStyle = { '--ambient-accent': settings.appearance.accentColor, '--ambient-text': settings.appearance.textColor, '--ambient-brightness': settings.appearance.brightness, '--font-scale': settings.appearance.fontScale,
+  const ambientStyle = { '--ambient-accent': renderedAccent(settings.appearance.accentColor), '--ambient-text': settings.appearance.textColor, '--ambient-brightness': settings.appearance.brightness, '--font-scale': settings.appearance.fontScale,
     ...toneVariables(settings.appearance),
     '--fade-duration': reducedMotion || !settings.appearance.motionEnabled ? '0s' : `${settings.appearance.fadeSeconds}s`, '--motion-x': `${offset.x}%`, '--motion-y': `${offset.y}%` } as CSSProperties;
   // Editor polish: a released or invalid drag settles into its cell; a newly added widget drops in.

@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { ACCENT_SWATCHES, CO_OCCURRING_TONES, NATIVE_PALETTE, PALETTE_ROLES, STATUS_TONES, WEATHER_GLYPH_TONE, paletteTones, toneVariables, type PaletteRole, type StatusTone } from './palette.ts';
+import { ACCENT_ALIASES, ACCENT_SWATCHES, CO_OCCURRING_TONES, NATIVE_PALETTE, PALETTE_ROLES, STATUS_TONES, WEATHER_GLYPH_TONE, accentSwatch, paletteTones, renderedAccent, toneVariables, type PaletteRole, type StatusTone } from './palette.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG } from './widgets.ts';
 import { defaultSettings } from './defaults.ts';
 
@@ -58,7 +58,7 @@ test('native tones weigh the same as one accent and stay readable on black', () 
   }
 });
 
-test('tones that can share a screen, and every role against both status cues, stay apart', () => {
+test('tones that can share a screen, and every role against every status cue, stay apart', () => {
   const pairs = new Set(CO_OCCURRING_TONES.map(pair => [...pair].sort().join('/')));
   for (const [index, role] of PALETTE_ROLES.entries()) {
     for (const other of PALETTE_ROLES.slice(index + 1)) assert.ok(pairs.has([role, other].sort().join('/')), `${role}/${other} is listed`);
@@ -68,6 +68,46 @@ test('tones that can share a screen, and every role against both status cues, st
     const delta = distance(oklab(colour(a)), oklab(colour(b)));
     assert.ok(delta >= 0.05, `${a} and ${b} ΔE_ok ${delta.toFixed(4)}`);
   }
+});
+
+test('every colour swatch stays apart from every status cue, so stale and offline never read as the accent (#224)', () => {
+  assert.deepEqual(Object.keys(STATUS_TONES), ['caution'], 'offline shares the stale amber; there is no separate offline tone (#133, #223)');
+  assert.deepEqual(ACCENT_SWATCHES.map(swatch => swatch.name), ['Mist', 'Lilac', 'Dusk', 'Sand', 'Sage'], 'the swatch names stay the same');
+  for (const swatch of ACCENT_SWATCHES) {
+    for (const [status, value] of Object.entries(STATUS_TONES)) {
+      const delta = distance(oklab(swatch.value), oklab(value));
+      assert.ok(delta >= 0.05, `${swatch.name} ${swatch.value} and ${status} ${value} ΔE_ok ${delta.toFixed(4)}`);
+    }
+  }
+  // The retired Sand sat about 0.043 from the amber; the retune is a small step, not a different colour.
+  const sand = ACCENT_SWATCHES.find(swatch => swatch.name === 'Sand')!.value;
+  assert.ok(distance(oklab('#b8a17a'), oklab(STATUS_TONES.caution)) < 0.05, 'the old Sand is why Sand was retuned');
+  assert.ok(distance(oklab('#b8a17a'), oklab(sand)) < 0.025, 'Sand keeps its character');
+  // It weighs like the other swatches: within 6% of Mist, like the native tones.
+  assert.ok(Math.abs(luminance(sand) - luminance('#8aa8c2')) / luminance('#8aa8c2') <= 0.06, `Sand luminance ${luminance(sand).toFixed(4)}`);
+});
+
+test('a retired swatch value reads as its swatch and renders the current value, without a stored change (#224)', () => {
+  const values = new Set<string>(ACCENT_SWATCHES.map(swatch => swatch.value));
+  assert.ok(Object.keys(ACCENT_ALIASES).length > 0);
+  for (const [old, current] of Object.entries(ACCENT_ALIASES)) {
+    assert.match(old, /^#[0-9a-f]{6}$/);
+    assert.equal(values.has(old), false, `${old} is no longer a swatch`);
+    assert.ok(values.has(current), `${old} maps to the current swatch ${current}`);
+  }
+  assert.equal(renderedAccent('#b8a17a'), '#b6a588');
+  assert.equal(renderedAccent('#B8A17A'), '#b6a588', 'case does not matter');
+  assert.equal(renderedAccent('#123456'), '#123456', 'a custom colour renders as stored');
+  assert.equal(accentSwatch('#b8a17a')?.name, 'Sand', 'the old Sand selects Sand');
+  assert.equal(accentSwatch('#b6a588')?.name, 'Sand');
+  assert.equal(accentSwatch('#8AA8C2')?.name, 'Mist');
+  assert.equal(accentSwatch('#123456'), null, 'a custom colour selects no swatch');
+  const appearance = { ...defaultSettings().appearance, accentMode: 'color' as const, accentColor: '#b8a17a' };
+  for (const role of PALETTE_ROLES) {
+    assert.equal(paletteTones(appearance)[role], '#b6a588', `the old Sand renders the retuned value for ${role}`);
+    assert.equal(toneVariables(appearance)[`--tone-${role}`], '#b6a588');
+  }
+  assert.equal(appearance.accentColor, '#b8a17a', 'reading never rewrites the stored value');
 });
 
 test('catalog tones and weather glyphs all map to palette roles', () => {
@@ -100,12 +140,12 @@ test('the merged catalog keeps its tone decisions, and every literal data-glyph 
 
 test('paletteTones and toneVariables: one accent for every role in color mode, the palette in native', () => {
   const appearance = defaultSettings().appearance;
-  const color = { ...appearance, accentMode: 'color' as const, accentColor: '#b8a17a' };
-  const native = { ...appearance, accentMode: 'native' as const, accentColor: '#b8a17a' };
+  const color = { ...appearance, accentMode: 'color' as const, accentColor: '#88afa6' };
+  const native = { ...appearance, accentMode: 'native' as const, accentColor: '#88afa6' };
   for (const role of PALETTE_ROLES) {
-    assert.equal(paletteTones(color)[role], '#b8a17a');
+    assert.equal(paletteTones(color)[role], '#88afa6');
     assert.equal(paletteTones(native)[role], NATIVE_PALETTE[role].hex);
-    assert.equal(toneVariables(color)[`--tone-${role}`], '#b8a17a');
+    assert.equal(toneVariables(color)[`--tone-${role}`], '#88afa6');
     assert.equal(toneVariables(native)[`--tone-${role}`], NATIVE_PALETTE[role].hex);
   }
   assert.equal(Object.keys(toneVariables(native)).length, PALETTE_ROLES.length);
@@ -122,5 +162,7 @@ test('palette.css applies every role and glyph tone; status tones equal the CSS 
   assert.match(css, /\.grid-ambient \[data-glyph\] \{ color: var\(--ambient-accent\); \}/, 'data-glyph colour rule');
   const styles = read('../client/styles.css');
   assert.equal(styles.match(/--ambient-caution:\s*(#[0-9a-f]{6})/)?.[1], STATUS_TONES.caution);
-  assert.equal(styles.match(/--ambient-offline:\s*(#[0-9a-f]{6})/)?.[1], STATUS_TONES.offline);
+  // #133: nothing rendered the mauve offline token or the display-level disconnected line, so neither remains.
+  const allCss = readdirSync(new URL('../client/', import.meta.url)).filter(name => name.endsWith('.css')).map(name => read(`../client/${name}`)).join('\n');
+  assert.doesNotMatch(allCss, /--ambient-offline|display-disconnected/, 'no unused offline status style remains');
 });
