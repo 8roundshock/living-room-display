@@ -141,7 +141,9 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   // device pixel across a 4K panel) with no transition, so nothing animates and the display draws a
   // frame only when the plane moves. A CSS animation, even with steps(), keeps the compositor ticking
   // every frame. The plane's own transform rule (the composition offset) applies when it is still, and
-  // the drift starts from its midpoint, that same position, so starting or stopping never jumps.
+  // the drift starts from its midpoint, that same position, so starting never jumps. Stopping (Soft
+  // motion off, reduced motion, Edit layout) removes the inline transform at once, so the plane can
+  // shift by up to ±0.5% of its size in one frame, as the earlier CSS animation did.
   const plane = useRef<HTMLDivElement>(null);
   const drifting = settings.appearance.motionEnabled && !reducedMotion && !layoutEditing;
   useLayoutEffect(() => {
