@@ -110,7 +110,7 @@ The renderer families have deliberate visual roles:
 | Calendar | Planned (#78), not shipped | | |
 | Countdown | Planned (#78), not shipped | | |
 | Note | Planned (#78), not shipped | | |
-| Air quality | AQI and category word with place and scale; "Model estimate", age and CAMS credit always | Adds the main pollutant and UV with its WHO category | Adds 24 hourly AQI bars (unknown hours dotted) and today's UV peak |
+| Air quality | AQI and category word with place and scale; age and CAMS credit always, "Model estimate" with a reading | Adds the main pollutant and UV with its WHO category | Adds 24 hourly AQI bars (unknown hours dotted) and today's UV peak |
 | Sun & moon | Next sunrise or sunset, its time and the place | Sunrise, sunset, daylight length and change from yesterday, moon glyph and phase | Dim dotted day arc with the sun's position, times, daylight, phase with illumination and the next full (or new) moon |
 
 The large clock requires actual vertical room in the central catalog; do not

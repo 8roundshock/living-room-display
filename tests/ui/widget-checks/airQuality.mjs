@@ -50,8 +50,9 @@ export async function family({ page, widget, size, density, viewport, state }) {
   state.airQuality = { ...structuredClone(fresh), status: 'unavailable', updatedAt: null, current: null, hourly: [] }; await reload(page);
   const unavailable = await page.locator('.ambient-airQuality').innerText();
   assert.match(unavailable, /Air quality unavailable/); assert.doesNotMatch(unavailable, /Good|\b42\b/, 'a failure never reads as clean air');
+  assert.doesNotMatch(unavailable, /Model estimate/, 'no estimate label without a reading'); assert.match(unavailable, /Not updated yet/); assert.match(unavailable, /Air quality: CAMS via Open-Meteo/);
   state.airQuality = { ...structuredClone(fresh), status: 'off', updatedAt: null, current: null, hourly: [] }; await reload(page);
   const off = await page.locator('.ambient-airQuality').innerText();
-  assert.match(off, /not loaded yet/); assert.doesNotMatch(off, /Good/);
+  assert.match(off, /not loaded yet/); assert.doesNotMatch(off, /Good|Model estimate/);
   state.airQuality = fresh; await reload(page);
 }
