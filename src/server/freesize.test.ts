@@ -14,7 +14,7 @@ import {
   repackGrid, resizeWidgetSpan, switchGridDensity, type GridDensity,
 } from '../shared/widgets.ts';
 import { createApplication } from './app.ts';
-import { forecastFixture } from './fixtures.ts';
+import { colorAccentDefaults, forecastFixture, seedColorAccentData } from './fixtures.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
 import { PREVIOUS_RELEASE, persistableSettings } from './persistence.ts';
 import { assertPreviousReaderAccepts, assertPreviousReaderRejects } from './compat/previous-reader.ts';
@@ -209,7 +209,8 @@ test('ambient composition keeps spans, stays disjoint and moves a full-height co
 test('custom spans compose with the #74 Rain merge and the #93 reflection fallback', () => {
   const samePositions = (a: WidgetGrid, b: WidgetGrid, ids: WidgetId[]) => ids.every(id => a.placements[id].column === b.placements[id].column && a.placements[id].row === b.placements[id].row);
   // Visible Weather and Rain stacked beside a Column: Weather takes their union, the span is untouched.
-  const stacked = defaultSettings();
+  // Colour-accent defaults, so the rollback checks below see only the span (Native is the #75 exception).
+  const stacked = colorAccentDefaults();
   stacked.widgets = { ...stacked.widgets, rain: true, preview: false }; stacked.preview.enabled = false;
   Object.assign(stacked.widgetGrid.placements, {
     reminders: { column: 0, row: 0, size: 'small', span: { columns: 2, rows: 8 } }, clock: { column: 2, row: 0, size: 'medium' },
@@ -258,7 +259,8 @@ test('custom spans compose with the #74 Rain merge and the #93 reflection fallba
 test('containment: deleting every span keeps a valid layout that the previous release reads', () => {
   const next = random(73); let withSpans = 0, withNewWidgets = 0;
   for (let iteration = 0; iteration < 60; iteration++) {
-    const settings = defaultSettings(), density = (['spacious', 'balanced', 'fine'] as GridDensity[])[Math.floor(next() * 3)]!;
+    // Colour-accent defaults: Native is the separate #75 exception, so only spans and #78 widgets are tested.
+    const settings = colorAccentDefaults(), density = (['spacious', 'balanced', 'fine'] as GridDensity[])[Math.floor(next() * 3)]!;
     for (const id of ACTIVE_WIDGET_IDS) settings.widgets[id] = id === 'reminders' || next() < 0.6;
     settings.preview.enabled = settings.widgets.preview;
     const fitted = fitGridDensity(settings.widgetGrid, density, settings.widgets); if (!fitted) continue;
@@ -294,6 +296,7 @@ test('containment: deleting every span keeps a valid layout that the previous re
 
 async function application() {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-freesize-'));
+  await seedColorAccentData(directory); // colour-accent defaults: Native is the separate #75 exception
   const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const address = app.server.address(); assert.ok(address && typeof address === 'object');

@@ -8,7 +8,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApplication } from './app.ts';
-import { forecastFixture } from './fixtures.ts';
+import { forecastFixture, seedColorAccentData } from './fixtures.ts';
 import { DataStore } from './store.ts';
 import { settingsPatchSchema, settingsSchema } from './validation.ts';
 import { assertPreviousReaderAccepts, assertPreviousReaderRejects } from './compat/previous-reader.ts';
@@ -93,8 +93,11 @@ test('enabling the widgets and editing their content goes through the API with m
 });
 
 test('rollback: default data stays readable; enabling a widget or entering content is the documented exception', async () => {
+  // Every folder starts from an existing user's colour-accent defaults, so only these widgets' data can
+  // make a file unreadable: a fresh folder is Native, the separate #75 exception.
   const fresh = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-fresh-'));
   try {
+    await seedColorAccentData(fresh);
     const store = await DataStore.open(fresh);
     await store.patchSettings({ units: 'imperial' });
     assertPreviousReaderAccepts('data', await stateFile(fresh), 'defaults with the three widgets off and no content');
@@ -111,6 +114,7 @@ test('rollback: default data stays readable; enabling a widget or entering conte
   for (const [label, patch] of exceptions) {
     const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-exception-'));
     try {
+      await seedColorAccentData(directory);
       const store = await DataStore.open(directory);
       await store.patchSettings(patch);
       assertPreviousReaderRejects('data', await stateFile(directory), label);
@@ -120,6 +124,7 @@ test('rollback: default data stays readable; enabling a widget or entering conte
   // A saved style captured while a widget was on keeps it, so it stays unreadable until re-saved.
   const styled = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-style-'));
   try {
+    await seedColorAccentData(styled);
     const store = await DataStore.open(styled);
     const on = await store.patchSettings({ widgets: { calendar: true } });
     const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = on;
@@ -135,6 +140,7 @@ test('rollback: default data stays readable; enabling a widget or entering conte
   // save refreshes the backup, which still holds the previous (exceptional) save until then.
   const reverted = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-reverted-'));
   try {
+    await seedColorAccentData(reverted);
     const store = await DataStore.open(reverted);
     await store.patchSettings({ widgets: { calendar: true, countdown: true, note: true }, widgetData: { calendar: { weekStart: 'sunday' }, countdowns: [event('Synthetic', '2026-12-24')], note: { text: 'Synthetic' } } });
     assertPreviousReaderRejects('data', await stateFile(reverted), 'all three in use');
@@ -149,6 +155,7 @@ test('rollback: default data stays readable; enabling a widget or entering conte
 
 test('Calendar, Countdown and Note sit beside a custom Reminders span and keep a full board moving (#73, #93)', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-span-'));
+  await seedColorAccentData(directory); // colour-accent defaults: Native is the separate #75 exception
   const app = await application(directory);
   try {
     // Every Balanced cell used: a 2 × 8 Reminders column, the default widgets, Photo and the three new widgets.

@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { request as httpRequest } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { createApplication } from './app.ts';
-import { forecastFixture } from './fixtures.ts';
+import { forecastFixture, seedColorAccentData } from './fixtures.ts';
 import { DataStore } from './store.ts';
 import { assertPreviousReaderAccepts, assertPreviousReaderRejects } from './compat/previous-reader.ts';
 
@@ -26,6 +26,8 @@ function airPayload(scale: string) {
 
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-air-api-'));
+  // An existing user's colour-accent defaults: a fresh folder is Native, the separate #75 exception.
+  await seedColorAccentData(directory);
   const requests: URL[] = [];
   const app = await createApplication({ dataDirectory: directory, now: () => NOW, fetcher: async input => {
     const url = new URL(input); requests.push(url);
@@ -91,6 +93,8 @@ const city = (label: string) => ({ id: randomUUID(), label, timezone: 'Asia/Toky
 test('rollback: defaults stay readable by the previous release; enabling or filling these widgets is the documented exception', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-air-rollback-'));
   try {
+    // Colour-accent defaults, so only these widgets' data can make the files unreadable (Native is #75's exception).
+    await seedColorAccentData(directory);
     const store = await DataStore.open(directory);
     // Saves that leave the new widgets off and their data at defaults stay readable.
     await store.patchSettings({ widgets: { worldClocks: false, sunMoon: false, airQuality: false }, widgetData: { worldClocks: [], airQuality: { scale: 'us' } }, units: 'imperial' });
@@ -107,6 +111,7 @@ test('rollback: defaults stay readable by the previous release; enabling or fill
   ] as const) {
     const folder = await mkdtemp(join(tmpdir(), 'lrd-air-rollback-'));
     try {
+      await seedColorAccentData(folder);
       const store = await DataStore.open(folder);
       await store.patchSettings(patch);
       assertPreviousReaderRejects('data', await readState(folder), label);

@@ -12,7 +12,7 @@ import { createApplication } from './app.ts';
 import { assertPreviousReaderAccepts } from './compat/previous-reader.ts';
 import { defaultSettings as previousDefaults } from './compat/bedca44/shared/defaults.ts';
 import { defaultWidgetGrid as previousGrid } from './compat/bedca44/shared/widgets.ts';
-import { forecastFixture } from './fixtures.ts';
+import { colorAccentDefaults, forecastFixture, seedColorAccentData } from './fixtures.ts';
 import { persistableSettings } from './persistence.ts';
 import { DataStore } from './store.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
@@ -31,9 +31,9 @@ function legacy(): Loose {
   assert.equal(settings.widgets.rain, true);
   return settings;
 }
-/** The same board in the current shape (every catalog id present), with overrides. */
+/** The same board in the current shape (every catalog id present), with overrides; an existing user's colour accent (#75). */
 function board(placements: Partial<Record<WidgetId, WidgetPlacement>> = {}, widgets: Partial<Record<WidgetId, boolean>> = {}): Loose {
-  const settings = JSON.parse(JSON.stringify(defaultSettings()));
+  const settings = JSON.parse(JSON.stringify(colorAccentDefaults()));
   settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' }; settings.widgets.rain = true;
   Object.assign(settings.widgetGrid.placements, placements); Object.assign(settings.widgets, widgets);
   return settings;
@@ -205,7 +205,8 @@ test('importing a legacy export merges Rain, and the next export has rain:false'
 test('files and exports written after a save stay readable by the previous release', async t => {
   const styled = () => { const settings = legacy(); settings.savedPresets = [{ id: 'style', name: 'Style', visual: visualOf(legacy()) }, { id: 'rain-only', name: 'Rain only', visual: visualOf(board({}, { weather: false })) }]; return settings; };
   const scenarios: [string, (() => Loose) | null][] = [
-    ['defaults', null],
+    // A fresh folder is Native, the separate #75 exception; an existing user's defaults have a colour accent.
+    ['defaults (colour accent)', null],
     ['revision-2 legacy file with both enabled', legacy],
     ['rain only', () => board({}, { weather: false })],
     ['small beside small', CASES[1]![1]],
@@ -217,6 +218,7 @@ test('files and exports written after a save stay readable by the previous relea
   for (const [label, make] of scenarios) await t.test(label, async () => {
     const directory = await temporary();
     if (make) await writeFile(join(directory, 'state.json'), JSON.stringify({ version: 1, settings: make(), reminders: [] }));
+    else await seedColorAccentData(directory);
     const app = await application(directory);
     try {
       await app.send('PATCH', '/api/settings', { appearance: { brightness: 0.45, preset: 'custom' } });
