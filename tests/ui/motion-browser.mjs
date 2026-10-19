@@ -671,6 +671,10 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
           const session = await view.context.newCDPSession(view.page);
           await session.send('Performance.enable');
           await view.page.waitForTimeout(3_000);
+          // Keep the 15 s window inside one wall-clock minute, so a minute change (clock digits,
+          // world clocks) never lands in only one level's window.
+          const second = Date.now() % 60_000 / 1000;
+          if (second > 42) await view.page.waitForTimeout((61 - second) * 1000);
           const read = async () => Object.fromEntries((await session.send('Performance.getMetrics')).metrics.map(metric => [metric.name, metric.value]));
           const start = await read();
           await view.page.waitForTimeout(15_000);
