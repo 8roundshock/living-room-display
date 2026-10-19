@@ -132,6 +132,10 @@ var
   StepFile: String;
   LastStep: String;
   RemoveDataChosen: Boolean;
+  // Taken before the helper runs, which changes the folder: they choose the
+  // wording of its failure messages.
+  HadPreviousApp: Boolean;
+  KeptDataOnly: Boolean;
 
 function SetTimer(hWnd, nIDEvent, uElapse, lpTimerFunc: Longword): Longword;
   external 'SetTimer@user32.dll stdcall';
@@ -180,6 +184,21 @@ end;
 function IsUpgrade: Boolean;
 begin
   Result := FileExists(AddBackslash(InstallDir) + 'installation.json');
+end;
+
+function MarkerState: String;
+var
+  Json: AnsiString;
+begin
+  Result := '';
+  if LoadStringFromFile(AddBackslash(InstallDir) + 'installation.json', Json) then
+    Result := JsonStringValue(String(Json), 'state');
+end;
+
+// An earlier uninstall chose "Keep my data": the marker remains, the app doesn't.
+function IsKeptDataReinstall: Boolean;
+begin
+  Result := IsUpgrade and (MarkerState = 'uninstalled');
 end;
 
 function InstalledVersion: String;
@@ -263,7 +282,11 @@ begin
   if CurPageID = wpReady then
   begin
     WizardForm.ReadyLabel.WordWrap := True;
-    if IsUpgrade then
+    if IsKeptDataReinstall then
+    begin
+      WizardForm.PageNameLabel.Caption := 'Ready to install Living Room Display';
+      WizardForm.ReadyLabel.Caption := 'Install Living Room Display version ' + NewVersion + '. Setup found the settings, reminders and photo you kept when you removed it, and will use them again after saving a backup copy. It won''t change your screen saver or start automatically with Windows.';
+    end else if IsUpgrade then
     begin
       WizardForm.PageNameLabel.Caption := 'Ready to update Living Room Display';
       WizardForm.ReadyLabel.Caption := 'Update Living Room Display to version ' + NewVersion + '. Your settings, reminders and photo stay where they are, and Setup saves a backup copy first. If the editor is open with unsaved changes, save them before continuing. The display will close during the update.';
@@ -336,14 +359,25 @@ begin
   case Code of
     10: Result := 'Setup can''t use the folder ' + ExpandConstant('{app}') + ' because it contains other files.' + MsgNothingChanged;
     11: Result := 'Another program is already using the connection Living Room Display needs (local port 4318). Close any other copy of Living Room Display, then run Setup again.' + MsgNothingChanged;
-    12: Result := 'A newer version of Living Room Display (' + InstalledVersion + ') is already installed.' + MsgNothingChanged;
+    12: if KeptDataOnly then
+          Result := 'The settings kept in this folder are from a newer version of Living Room Display (' + InstalledVersion + '). Install that version or a newer one to use them.' + MsgNothingChanged
+        else
+          Result := 'A newer version of Living Room Display (' + InstalledVersion + ') is already installed.' + MsgNothingChanged;
     13: Result := 'The setup files look damaged or incomplete. Download Setup again.' + MsgNothingChanged;
     14: Result := 'Living Room Display is busy with another update or uninstall. Wait a moment and try again.';
     15: Result := 'The new version didn''t start, so Setup put the previous version back. Your data was not changed.' + LogHint;
-    16: Result := 'The new version didn''t start, so Setup put the previous version back. Neither version could start; your data was not changed.' + LogHint;
+    16: if HadPreviousApp then
+          Result := 'The new version didn''t start, so Setup put the previous version back. Neither version could start; your data was not changed.' + LogHint
+        else
+          Result := 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it. Your data was not changed.' + LogHint;
     17: Result := 'There isn''t enough free disk space (about 500 MB needed).' + MsgNothingChanged;
     18: Result := 'An unexpected runtime is in the app folder; Setup left it untouched.' + MsgNothingChanged;
     19: Result := 'Setup couldn''t make a safe backup of your data, so nothing was changed.';
+    20: if HadPreviousApp then
+          Result := 'Setup couldn''t finish, and couldn''t put the previous version back by itself. Your previous version and data are kept. Run Setup again: it puts the previous version back first, then tries the update again.' + LogHint
+        else
+          Result := 'Setup couldn''t finish, and couldn''t undo all of its changes by itself. Your data was not changed. Run Setup again: it finishes undoing them first, then tries again.' + LogHint;
+    21: Result := 'The install folder ' + ExpandConstant('{app}') + ' is too long a path for Living Room Display''s files. Install it in a shorter folder.' + MsgNothingChanged;
   else
     if not LogWritten then
       Result := 'Windows settings on this PC don''t allow Setup''s helper script to run (common on work or school PCs). Ask the PC''s administrator, or install on a personal PC.'
@@ -376,6 +410,8 @@ begin
     HelperLog := ExpandConstant('{tmp}\setup-helper.log');
     StepFile := HelperLog + '.step';
     LastStep := '';
+    HadPreviousApp := DirExists(ExpandConstant('{app}\app')) or DirExists(ExpandConstant('{app}\app.previous'));
+    KeptDataOnly := IsKeptDataReinstall;
     Params := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Helper + '" InstallPackage -InstallRoot "' + ExpandConstant('{app}') + '" -PackageArchive "' + Payload + '" -PackageSha256 ' + PayloadSha256 + ' -LogPath "' + HelperLog + '"';
     if ExpandConstant('{param:ALLOWDOWNGRADE|0}') = '1' then
       Params := Params + ' -AllowDowngrade';

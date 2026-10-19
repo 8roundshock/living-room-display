@@ -67,6 +67,14 @@ Assert-True ($iss -match 'ExtractTemporaryFile\(HelperName\)' -and $iss -match '
 Assert-True ($iss -match '(?m)^Source: "\{#PayloadZip\}"; Flags: dontcopy$' -and $iss -match '(?m)^Source: "\{#ControlScript\}"; DestDir: "\{app\}\\uninstall"') 'payload is never copied; the script copy goes to {app}\uninstall'
 $checks++
 
+# Every LRD-E code the control script can return has its own Setup message, so
+# no failure falls through to the generic "nothing was changed" text.
+$codes = @([regex]::Matches([IO.File]::ReadAllText($controlScript), 'LRD-E(\d\d):') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+$messages = [regex]::Match($iss, '(?s)function HelperFailureMessage\(.*?\r?\nend;').Value
+Assert-True ($codes.Count -ge 12 -and $messages) 'the control script codes and HelperFailureMessage were not found'
+foreach ($code in $codes) { Assert-True ($messages -match "(?m)^\s*$code\s*:") "LRD-E$code has no message in HelperFailureMessage" }
+$checks++
+
 # Pins.
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($controlScript, [ref]$tokens, [ref]$errors)

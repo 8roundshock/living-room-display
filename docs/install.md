@@ -87,7 +87,9 @@ first: the display closes during the update. Setup then:
 
 Running the same version again repairs the install. Setup also adopts an
 existing source install at the same folder through its `installation.json`
-marker. Running an older Setup is refused (see E12), so an older version never
+marker. After an uninstall that kept your data, the Ready page says **Install
+Living Room Display version X** and that Setup found the kept settings, reminders
+and photo; it uses them again after the same backup. Running an older Setup is refused (see E12), so an older version never
 "recovers" over newer data; agents may override this with `/ALLOWDOWNGRADE=1`
 only after following the rollback steps below.
 The runtime is replaced only when the packaged Node 24 is newer and any
@@ -106,7 +108,8 @@ reinstall. Either way, uninstall does the following:
 - stops the display and server;
 - removes `app`, `app.previous`, `app.failed`, `runtime` (and a Setup-made
   `runtime.previous`), `run`, `edge-profile`, leftover staging folders, the
-  shortcuts and the Apps & Features entry.
+  record of an unfinished rollback (`package-transaction.json`), the shortcuts
+  and the Apps & Features entry.
 
 **Keep my data** leaves `data`, `backups` and `installation.json`. **Delete my
 data** removes `data` and `backups` as well, then removes the folder once only
@@ -130,21 +133,26 @@ Installed `Status` also reports `Channel` (`package` or `source`), `Version`,
 `RuntimeVersion` and `PackageSha256`. The Setup log (`/LOG`, or `Setup Log
 <date> #<n>.txt` in `%TEMP%`) includes the helper's own log.
 
-**When Setup stops.** Every refusal happens before anything is replaced; your
-previous version and data stay as they were.
+**When Setup stops.** Every refusal (E10 to E14, E17 to E19 and E21) happens
+before anything is replaced; your previous version and data stay as they were.
+E15, E16 and E20 come after the new version was put in place and failed to
+start, or after a replacement step failed; data is never touched. Setup exits
+with code 7 in every case.
 
 | Code | Message |
 | --- | --- |
 | E10 | Setup can't use the folder `<path>` because it contains other files. Nothing was changed. |
 | E11 | Another program is already using the connection Living Room Display needs (local port 4318). Close any other copy of Living Room Display, then run Setup again. Nothing was changed. |
-| E12 | A newer version of Living Room Display (`<v>`) is already installed. Nothing was changed. |
+| E12 | A newer version of Living Room Display (`<v>`) is already installed. Nothing was changed. After a keep-data uninstall: The settings kept in this folder are from a newer version of Living Room Display (`<v>`). Install that version or a newer one to use them. Nothing was changed. |
 | E13 | The setup files look damaged or incomplete. Download Setup again. Nothing was changed. |
 | E14 | Living Room Display is busy with another update or uninstall. Wait a moment and try again. |
 | E15 | The new version didn't start, so Setup put the previous version back. Your data was not changed. Details are in the setup log. |
-| E16 | As E15, plus: Neither version could start; your data was not changed. |
+| E16 | As E15, plus: Neither version could start; your data was not changed. With no previous version (a first install, or one after a keep-data uninstall): Living Room Display didn't start on this PC, so Setup couldn't finish installing it. Your data was not changed. (Plus the log path.) |
 | E17 | There isn't enough free disk space (about 500 MB needed). |
 | E18 | An unexpected runtime is in the app folder; Setup left it untouched. |
 | E19 | Setup couldn't make a safe backup of your data, so nothing was changed. |
+| E20 | Setup couldn't finish, and couldn't put the previous version back by itself. Your previous version and data are kept. Run Setup again: it puts the previous version back first, then tries the update again. (Plus the log path. With no previous version: "...couldn't undo all of its changes by itself. Your data was not changed. Run Setup again: it finishes undoing them first, then tries again.") |
+| E21 | The install folder `<path>` is too long a path for Living Room Display's files. Install it in a shorter folder. Nothing was changed. |
 | Script blocked | Windows settings on this PC don't allow Setup's helper script to run (common on work or school PCs). Ask the PC's administrator, or install on a personal PC. ([#117](https://github.com/8roundshock/living-room-display/issues/117)) |
 | Run as administrator | Please run Setup normally, without 'Run as administrator'. |
 | Other | Setup couldn't finish. Your previous version and data were not changed. (Plus the log path.) |
@@ -154,7 +162,21 @@ Missing Edge or .NET Framework 4 shows a warning but doesn't stop Setup.
 **Rollback.** If the new version fails its health check, Setup restores it
 automatically: `app.previous` goes back to `app` (and `runtime.previous` if
 this run swapped the runtime). The candidate is kept as `app.failed` and the
-previous version is restarted; data is never touched. To roll back by hand:
+previous version is restarted; data is never touched. Before any folder is
+renamed, `Stop` waits (up to 10 seconds per process) until the display, its
+Edge processes and the server have exited, because a process that is still
+ending keeps its folders open. Each rename is retried for a few seconds, and
+every step is a whole-folder rename, so a step either happens or leaves its
+folders as they were.
+
+While a swap or its rollback is under way, `package-transaction.json` in the
+install folder records which renames are done. If the rollback can't finish
+(E20), or Setup is killed or the PC loses power part-way, that record stays.
+The next Setup run then finishes putting the previous version back before it
+does anything else, so `app.previous` is never mistaken for an older copy and
+deleted. A source `Update` refuses to run while the record exists. If E20
+repeats, follow the manual steps below, then delete `package-transaction.json`.
+To roll back by hand:
 
 1. Run the installed control script's `Stop`.
 2. Rename `app` to `app.failed` and `app.previous` to `app`.
@@ -263,6 +285,7 @@ selection, and retains the backup for inspection.
 | `edge-profile` | Dedicated Edge profile; ambient uses InPrivate/no-store preview responses. |
 | `screensaver-before.json` | Prior native screensaver settings, only after opt-in. |
 | `installation.json` | Non-secret ownership/state and source provenance, retained for reinstall. |
+| `package-transaction.json` | Setup installs only: present while an update or its rollback is unfinished (see [Rollback](#install-with-setup-recommended)). |
 
 Use the editor's export, or stop the app and copy `data` to a private backup.
 Snapshot pixels and native tokens are RAM only and excluded from persisted
