@@ -52,6 +52,18 @@ export class RefreshClock {
   /** A saved update time this far ahead of the wall clock means the clock went back: refresh rather than trust it. */
   inFuture(timestamp: string | null): boolean { return timestamp !== null && Date.parse(timestamp) - this.wall() > FUTURE_TOLERANCE; }
 }
+/**
+ * How long a request waits for a due refresh before it answers with the cached state (#351). The
+ * refresh carries on in the background and a later request sees its result; the state says
+ * `refreshing` meanwhile, so a client can ask again soon instead of waiting for its next poll.
+ */
+export const REFRESH_WAIT_MS = 1000;
+/** Settles when `work` settles or after `ms`, whichever comes first; the work itself is not cancelled. */
+export async function waitAtMost(work: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { await Promise.race([work, new Promise<void>(resolve => { timer = setTimeout(resolve, ms); })]); }
+  finally { clearTimeout(timer); }
+}
 /** Due when nothing is saved, the saved data is older than `ttl` or dated in the future; never inside a failure's back-off. */
 export function refreshDue(clock: RefreshClock, entry: { fetched: Stamp | null; failed: Stamp | null; state: { updatedAt: string | null } }, ttl: number, retry: number): boolean {
   if (entry.failed && clock.since(entry.failed) < retry) return false;
@@ -108,15 +120,20 @@ export function normalizeForecast(payload: unknown, settings: Settings, now: num
 }
 
 interface Entry { state: WeatherState; fetched: Stamp | null; failed: Stamp | null; pending?: Promise<void> }
+const cacheKey = (settings: Settings) => JSON.stringify([settings.location, settings.units]);
 export class WeatherService {
   #fetch: FetchLike;
   #clock: RefreshClock;
+  #waitMs: number;
   #cache = new Map<string, Entry>();
   #locations = new Map<string, { cached: Stamp; value: LocationResult[] }>();
-  constructor(fetcher: FetchLike = fetch, now: () => number = Date.now, monotonic?: () => number) { this.#fetch = fetcher; this.#clock = new RefreshClock(now, monotonic); }
+  constructor(fetcher: FetchLike = fetch, now: () => number = Date.now, monotonic?: () => number, waitMs = REFRESH_WAIT_MS) {
+    this.#fetch = fetcher; this.#clock = new RefreshClock(now, monotonic); this.#waitMs = waitMs;
+  }
 
+  /** The forecast for these settings, refreshed first when due, waiting for that at most `waitMs` (#351). */
   async get(settings: Settings): Promise<WeatherState> {
-    const key = JSON.stringify([settings.location, settings.units]);
+    const key = cacheKey(settings);
     let entry = this.#cache.get(key);
     if (!entry) {
       entry = { state: emptyWeather(settings), fetched: null, failed: null };
@@ -124,11 +141,24 @@ export class WeatherService {
       this.#cache.set(key, entry);
     }
     if (refreshDue(this.#clock, entry, TTL, RETRY)) {
-      entry.pending ??= this.#refresh(settings, entry).finally(() => { delete entry!.pending; });
-      await entry.pending;
+      const current = entry;
+      // Parallel requests share one refresh; until the first one ever completes the state carries no error.
+      current.pending ??= this.#refresh(settings, current).finally(() => { delete current.pending; });
+      await waitAtMost(current.pending, this.#waitMs);
     }
+    return this.#read(entry);
+  }
+
+  /** The cached forecast for these settings, or an empty one, without contacting the provider (#352). */
+  peek(settings: Settings): WeatherState {
+    const entry = this.#cache.get(cacheKey(settings));
+    return entry ? this.#read(entry) : emptyWeather(settings);
+  }
+
+  #read(entry: Entry): WeatherState {
     const result = structuredClone(entry.state);
     if (result.updatedAt && entry.fetched && this.#clock.since(entry.fetched) >= TTL) result.status = 'stale';
+    if (entry.pending) result.refreshing = true;
     return result;
   }
 
