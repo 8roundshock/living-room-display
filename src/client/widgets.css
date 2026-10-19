@@ -36,7 +36,8 @@
 .grid-ambient .clock-date { font-size: calc(max(var(--min-text), min(7cqw, 10cqh)) * var(--font-scale)); margin: 1cqh 0 0; line-height: 1.2; }
 .grid-ambient .clock-time { display: flex; align-items: baseline; font-size: calc(min(31cqw, 48cqh) * var(--font-scale)); font-weight: 400; line-height: 1; letter-spacing: -0.065em; }
 .grid-ambient .clock-period { font-size: max(var(--min-text) * var(--font-scale), 0.2em); margin-left: 0.45em; letter-spacing: 0.01em; }
-.grid-ambient .clock-outline .clock-digits { -webkit-text-fill-color: transparent; -webkit-text-stroke: max(0.8px, 0.35cqw) currentColor; }
+/* The outline never thins below 1.2 px at 720p (12% of the shared 1.4% text floor, so it scales with the display, #222). */
+.grid-ambient .clock-outline .clock-digits { -webkit-text-fill-color: transparent; -webkit-text-stroke: max(var(--min-text, 0px) * 0.12, 0.35cqw) currentColor; }
 .grid-ambient .clock-family-medium { flex-direction: row; align-items: center; justify-content: space-between; gap: 5cqw; }
 .grid-ambient .clock-family-medium .clock-time { font-size: calc(min(23cqw, 57cqh) * var(--font-scale)); }
 .grid-ambient .clock-family-medium .clock-calendar { max-width: 31%; }
@@ -45,10 +46,22 @@
 .grid-ambient .clock-family-large .clock-time { font-size: calc(min(31cqw, 66cqh) * var(--font-scale)); }
 .grid-ambient .clock-family-large .clock-calendar { display: flex; align-items: baseline; gap: 2cqw; }
 .grid-ambient .clock-family-large .clock-calendar .ambient-label, .grid-ambient .clock-family-large .clock-date { font-size: calc(max(var(--min-text), min(4cqw, 9cqh)) * var(--font-scale)); margin: 0; }
-.grid-ambient .analog-clock { display: block; flex: none; width: min(75cqw, 65cqh); height: min(75cqw, 65cqh); fill: none; stroke: var(--ambient-text); stroke-width: 1.4; stroke-linecap: round; }
-.grid-ambient .analog-minute { stroke: var(--ambient-accent); stroke-width: 1; }
-.grid-ambient .clock-family-medium .analog-clock { width: min(55cqw, 92cqh); height: min(55cqw, 92cqh); }
-.grid-ambient .clock-family-large .analog-clock { width: min(80cqw, 76cqh); height: min(80cqw, 76cqh); }
+/* Analog (#222): hands only, no face, bezel or tick ring. Small and medium size the graphic to the cell
+   height with the date beside it (the graphic gives way when the date needs the width); large keeps
+   its centred composition. Hands are HTML bars on full-box wrappers whose rotation composites (#161).
+   Lengths are a share of the drawn box; strokes are a share of it too, never under 3 px (hour) and
+   2 px (minute) at 720p, scaled with the display through the shared 1.4% text floor. Both hands use
+   the text colour; a dim accent pivot dot covers the junction the hands always light. The box clips
+   (the hands stay inside its circle), so rotated wrappers never add overflow to the widget fit. */
+.grid-ambient .analog-clock { position: relative; display: block; flex: none; width: min(80cqw, 76cqh); aspect-ratio: 1; overflow: clip; color: var(--ambient-text); }
+.grid-ambient .clock-style-analog:is(.clock-family-small, .clock-family-medium) { flex-direction: row; align-items: center; justify-content: flex-start; gap: 6cqw; }
+.grid-ambient .clock-style-analog:is(.clock-family-small, .clock-family-medium) .analog-clock { flex: 0 1 auto; width: 90cqh; min-width: 0; }
+.grid-ambient .clock-style-analog:is(.clock-family-small, .clock-family-medium) .clock-calendar { flex: none; max-width: none; white-space: nowrap; }
+.grid-ambient .analog-hand { position: absolute; inset: 0; --hand-tail: calc(var(--hand-stroke) / 2); }
+.grid-ambient .analog-stroke { position: absolute; left: 50%; bottom: calc(50% - var(--hand-tail)); width: var(--hand-stroke); height: calc(var(--hand-reach) + var(--hand-tail)); margin-left: calc(var(--hand-stroke) / -2); border-radius: 999px; background: currentColor; }
+.grid-ambient .analog-hour { --hand-stroke: max(var(--min-text, 0px) * 0.3, 2.4%); --hand-reach: 30%; }
+.grid-ambient .analog-minute { --hand-stroke: max(var(--min-text, 0px) * 0.2, 1.6%); --hand-reach: 45%; }
+.grid-ambient .analog-pivot { position: absolute; left: 50%; top: 50%; width: max(var(--min-text, 0px) * 0.6, 4.8%); aspect-ratio: 1; translate: -50% -50%; border-radius: 50%; background: var(--ambient-accent); }
 
 /* Weather adapts to the rain outlook (#74) without changing its footprint: calm shows conditions,
    a hint line replaces feels-like, and elevated leads with rain timing (large adds the hourly chance
