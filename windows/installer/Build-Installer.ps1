@@ -241,7 +241,8 @@ try {
             "/DWizardSmallImages=$($art.WizardSmall -join ',')", "/DWizardImages=$($art.WizardLarge -join ',')", "/DUninstallSize=$($Archive.Size)")
         if ($Sign -and $SignCommand) { $isccArguments += @('/DSignToolName=lrdsign', ('/Slrdsign=' + $SignCommand.Replace('{file}', '$f'))) }
         $isccArguments += (Join-Path $source 'windows\installer\LivingRoomDisplay.iss')
-        Invoke-Checked $iscc $isccArguments 'Inno Setup compilation'
+        # To the host: ISCC's output must not become part of this function's result.
+        Invoke-Checked $iscc $isccArguments 'Inno Setup compilation' | Out-Host
         $setup = Join-Path $Destination "$BaseName.exe"
         if (-not (Test-Path -LiteralPath $setup)) { throw 'Inno Setup did not produce the expected setup file.' }
         $setupSha = Get-Sha256 $setup
