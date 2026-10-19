@@ -96,8 +96,15 @@ only after following the rollback steps below.
 The runtime is replaced only when the packaged Node 24 is newer and any
 `runtime.previous` was made by Setup; a runtime that isn't Node 24 stops
 the update untouched (E18).
-A later source `Update` on a Setup install works, but Apps & Features keeps
-showing the Setup version and `Status` then reports `Channel` `source`.
+A later source `Update` on a Setup install works. It records
+`"channel": "source"` and keeps what is still true of the Setup install
+([#159](https://github.com/8roundshock/living-room-display/issues/159)):
+`runtimeVersion`, the ownership of a Setup-made `runtime.previous`
+(`runtimePreviousOwner`, so uninstall still removes it and a later Setup may
+still replace it) and `lastPackageVersion`, the newest version Setup installed
+there. A Setup older than `lastPackageVersion` is still refused (E12).
+`Status` reports `Channel` `source`, and Apps & Features keeps showing the
+Setup version until the next Setup run.
 
 **Uninstalling.** From **Settings > Apps** or the Start menu, confirm **Remove
 Living Room Display from this PC?** Then choose **Keep my data** (the default)
@@ -148,7 +155,7 @@ touched. Setup exits with code 7 in every case.
 | --- | --- |
 | E10 | Setup can't use the folder `<path>` because it contains other files. Nothing was changed. |
 | E11 | Another program is already using the connection Living Room Display needs (local port 4318). Close any other copy of Living Room Display, then run Setup again. Nothing was changed. |
-| E12 | A newer version of Living Room Display (`<v>`) is already installed. Nothing was changed. After a keep-data uninstall: The settings kept in this folder are from a newer version of Living Room Display (`<v>`). Install that version or a newer one to use them. Nothing was changed. |
+| E12 | A newer version of Living Room Display (`<v>`) is already installed. Nothing was changed. After a keep-data uninstall: The settings kept in this folder are from a newer version of Living Room Display (`<v>`). Install that version or a newer one to use them. Nothing was changed. After a source `Update` on a Setup install: Living Room Display in this folder was installed by a newer Setup (`<v>`) and updated from source since. Use Setup `<v>` or newer. Nothing was changed. |
 | E13 | The setup files look damaged or incomplete. Download Setup again. Nothing was changed. |
 | E14 | Living Room Display is busy with another update or uninstall. Wait a moment and try again. |
 | E15 | The new version didn't start, so Setup put the previous version back. Your data was not changed. Details are in the setup log. |

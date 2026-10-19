@@ -750,23 +750,56 @@ try {
     Assert-True ((Invoke-Package (New-TestPackage)) -eq 0) 'Install before old-reader check failed.'
     $oldScript = Join-Path $PSScriptRoot 'fixtures\LivingRoomDisplay-bedca44.ps1'
     Assert-True ((Get-Sha256 $oldScript) -eq 'b00bc5d716962643052d63fa8d7eb05c948e8043e469c05db2e44d99ee8d8542') 'The bedca44 control script fixture was edited.'
-    $launch = New-Object Diagnostics.ProcessStartInfo
-    $launch.FileName = $shell
-    $launch.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { $r = & ''' + $oldScript + ''' Status -InstallRoot ''' + $testRoot + '''; if ($r.InstallRoot -ne ''' + $testRoot + ''' -or $r.SourceRevision -ne ''' + ('a' * 40) + ''' -or $r.SourceState -ne ''clean'') { exit 3 }; . ''' + $oldScript + ''' -InstallRoot ''' + $testRoot + ''' -FunctionsOnly; Assert-Installed; exit 0 }"'
-    $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true; $launch.RedirectStandardError = $true; $launch.RedirectStandardOutput = $true
-    $process = [Diagnostics.Process]::Start($launch)
-    try {
-        $stderr = $process.StandardError.ReadToEndAsync(); $null = $process.StandardOutput.ReadToEndAsync()
-        Assert-True ($process.WaitForExit(60000)) 'Old reader check timed out.'
-        $process.WaitForExit()
-        Assert-True ($process.ExitCode -eq 0) "The previous script could not read the new marker: exit $($process.ExitCode) $($stderr.Result)"
-    } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+    function Assert-OldReaderReads([string]$Revision) {
+        $launch = New-Object Diagnostics.ProcessStartInfo
+        $launch.FileName = $shell
+        $launch.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { $r = & ''' + $oldScript + ''' Status -InstallRoot ''' + $testRoot + '''; if ($r.InstallRoot -ne ''' + $testRoot + ''' -or $r.SourceRevision -ne ''' + $Revision + ''' -or $r.SourceState -ne ''clean'') { exit 3 }; . ''' + $oldScript + ''' -InstallRoot ''' + $testRoot + ''' -FunctionsOnly; Assert-Installed; exit 0 }"'
+        $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true; $launch.RedirectStandardError = $true; $launch.RedirectStandardOutput = $true
+        $process = [Diagnostics.Process]::Start($launch)
+        try {
+            $stderr = $process.StandardError.ReadToEndAsync(); $null = $process.StandardOutput.ReadToEndAsync()
+            Assert-True ($process.WaitForExit(60000)) 'Old reader check timed out.'
+            $process.WaitForExit()
+            Assert-True ($process.ExitCode -eq 0) "The previous script could not read the new marker: exit $($process.ExitCode) $($stderr.Result)"
+        } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+    }
+    Assert-OldReaderReads ('a' * 40)
     $status = Get-InstallStatus
     Assert-True ($status.Channel -eq 'package' -and $status.Version -eq '0.2.0' -and $status.RuntimeVersion -eq '24.19.0' -and $status.PackageSha256 -match '^[0-9a-f]{64}$' -and $status.ServerRunning) 'Status did not report the package fields.'
     Write-Json $marker @{product='living-room-display';state='installed'}
     $status = Get-InstallStatus
     Assert-True ($status.Channel -eq 'source' -and $null -eq $status.Version) 'A marker without channel is not reported as source.'
     Complete-Check 'previous reader and status'
+
+    # ---- a source Update keeps the Setup install's ownership facts (#159) -----
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    $script:runtimeVersion = 'v24.10.0'
+    Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and (Get-Marker).runtimePreviousOwner -eq 'package') 'The Setup install with a runtime swap failed.'
+    $script:runtimeVersion = 'v24.19.0'
+    Install-App | Out-Null
+    $installed = Get-Marker
+    Assert-True ($installed.channel -eq 'source' -and $installed.lastPackageVersion -eq '0.2.0' -and $installed.runtimePreviousOwner -eq 'package' -and $installed.runtimeVersion -eq '24.19.0' -and $installed.version -eq $script:sourceVersion -and -not $installed.PSObject.Properties['packageSha256']) "A source Update dropped or kept the wrong Setup facts: $($installed | ConvertTo-Json -Compress)"
+    Assert-True ((Get-InstallStatus).Channel -eq 'source') 'Status does not report the source channel after a source Update.'
+    Assert-OldReaderReads ('e' * 40)
+    # An older Setup is still refused against the last Setup version (E12).
+    Reset-Mocks
+    $before = Get-TreeState $InstallRoot
+    $code = Invoke-Package (New-TestPackage -Version '0.1.5')
+    Assert-True ($code -eq 12 -and (Get-TreeState $InstallRoot) -eq $before -and (Get-Content -Raw $logFile) -match '\(0\.2\.0\) was installed here by Setup before a source update') "An older Setup after a source Update returned $code or changed files."
+    # A second source Update keeps the facts; a later Setup may then replace the
+    # Setup-made runtime.previous, and uninstall removes it.
+    Install-App | Out-Null
+    Assert-True ((Get-Marker).lastPackageVersion -eq '0.2.0' -and (Get-Marker).runtimePreviousOwner -eq 'package') 'A second source Update lost the Setup facts.'
+    Reset-Mocks
+    $script:runtimeVersion = 'v24.18.0'
+    Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and [IO.File]::ReadAllText((Join-Path $InstallRoot 'runtime.previous\node.exe')) -eq 'synthetic node 24.19.0' -and (Get-Marker).channel -eq 'package') 'A later Setup did not replace the Setup-made runtime.previous after a source Update.'
+    $script:runtimeVersion = 'v24.19.0'
+    Install-App | Out-Null
+    $FromInstaller = $true
+    Uninstall-App | Out-Null
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.previous')) -and (Get-Marker).state -eq 'uninstalled') 'Uninstall kept a Setup-made runtime.previous after a source Update.'
+    Complete-Check 'source update keeps Setup ownership'
 
     # ---- CLI Uninstall delegates to the Setup uninstaller without the lock --
     if (Test-Path -LiteralPath $script:UninstallKeyPath) {

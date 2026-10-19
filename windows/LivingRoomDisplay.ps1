@@ -283,6 +283,20 @@ function Get-SourceProvenance([string]$Source, [string]$HostDirectory = $PSScrip
         return [pscustomobject]@{sourceRevision=[string]$revision;sourceState=$(if ($changes.Count) { 'dirty' } else { 'clean' })}
     } catch { return $unknown }
 }
+function Add-SetupOwnership($Fields, $Previous) {
+    # A source Update on a Setup install keeps the Setup facts that stay true
+    # (#159): who made runtime.previous (uninstall removes a Setup-made one and a
+    # later Setup may replace it), the runtime's version, and the newest version
+    # Setup installed here, which keeps the downgrade guard (E12). packageSha256
+    # no longer describes the app, so it goes.
+    $lastPackage = if ((Get-MarkerValue $Previous 'channel') -eq 'package') { [string](Get-MarkerValue $Previous 'version') } else { [string](Get-MarkerValue $Previous 'lastPackageVersion') }
+    if (-not (ConvertTo-PackageVersion $lastPackage)) { return }
+    $Fields['channel'] = 'source'
+    $Fields['lastPackageVersion'] = $lastPackage
+    $reported = Get-RuntimeVersion $script:node
+    if ($reported -match '^v(\d+\.\d+\.\d+)$') { $Fields['runtimeVersion'] = $matches[1] }
+    if ((Get-MarkerValue $Previous 'runtimePreviousOwner') -eq 'package' -and (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.previous'))) { $Fields['runtimePreviousOwner'] = 'package' }
+}
 function Install-App {
     # An unfinished Setup rollback means app.previous holds the last working app;
     # a source update would replace app.previous and lose it.
@@ -298,7 +312,8 @@ function Install-App {
     if (-not (Test-Path -LiteralPath (Join-Path $source 'package-lock.json')) -or -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Build-Host.ps1')) -or -not (Test-Path -LiteralPath (Join-Path $source 'src'))) { throw 'Run Install or Update from a complete source clone, not from installed app files.' }
     Assert-NoReparseAncestor $InstallRoot
     if ($source -eq $app -or $source.StartsWith($InstallRoot + '\',[StringComparison]::OrdinalIgnoreCase)) { throw 'SourceRoot must be outside the install directory.' }
-    if (Test-Path -LiteralPath $marker) { Assert-Installed }
+    $previousMarker = $null
+    if (Test-Path -LiteralPath $marker) { Assert-Installed; $previousMarker = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json }
     elseif (Test-Path -LiteralPath $InstallRoot) {
         if (@(Get-ChildItem -LiteralPath $InstallRoot -Force).Count -gt 0) { throw 'Install directory is nonempty without an app marker. Choose an empty dedicated path.' }
     }
@@ -321,7 +336,9 @@ function Install-App {
         if (Test-Path -LiteralPath $app) { Move-Item -LiteralPath $app -Destination $previous }
         try { Move-Item -LiteralPath $next -Destination $app }
         catch { if (Test-Path -LiteralPath $previous) { Move-Item -LiteralPath $previous -Destination $app }; throw }
-        Write-Json $marker @{product='living-room-display';state='installed';installedAt=[DateTime]::UtcNow.ToString('o');version=(Get-Content (Join-Path $app 'package.json') -Raw | ConvertFrom-Json).version;sourceRevision=$provenance.sourceRevision;sourceState=$provenance.sourceState}
+        $fields = [ordered]@{product='living-room-display';state='installed';installedAt=[DateTime]::UtcNow.ToString('o');version=(Get-Content (Join-Path $app 'package.json') -Raw | ConvertFrom-Json).version;sourceRevision=$provenance.sourceRevision;sourceState=$provenance.sourceState}
+        Add-SetupOwnership $fields $previousMarker
+        Write-Json $marker $fields
     } finally {
         $env:PATH = $oldPath
         Remove-OwnedDirectory $next
@@ -943,9 +960,12 @@ function Install-Package {
         $channel = if ((Get-MarkerValue $installed 'channel') -eq 'package') { 'package' } else { 'source' }
         Write-PackageLog "Existing $channel install, version $installedVersion, state $(Get-MarkerValue $installed 'state')."
         if ((Get-MarkerValue $installed 'state') -eq 'installing') { Write-PackageLog 'An earlier first install did not finish; cleaning up what it left and installing again.' }
-        if ($channel -eq 'package' -and $installedVersion -and (ConvertTo-PackageVersion $installedVersion) -gt (ConvertTo-PackageVersion $version)) {
-            if (-not $AllowDowngrade) { throw "LRD-E12: A newer version of Living Room Display ($installedVersion) is already installed." }
-            Write-PackageLog "Downgrade from $installedVersion to $version allowed by request."
+        # A Setup install is guarded by its version; one updated from source
+        # since, by the newest version Setup installed there (#159).
+        $guardVersion = if ($channel -eq 'package') { $installedVersion } else { [string](Get-MarkerValue $installed 'lastPackageVersion') }
+        if ($guardVersion -and (ConvertTo-PackageVersion $guardVersion) -gt (ConvertTo-PackageVersion $version)) {
+            if (-not $AllowDowngrade) { throw "LRD-E12: A newer version of Living Room Display ($guardVersion) $(if ($channel -eq 'package') { 'is already installed' } else { 'was installed here by Setup before a source update' })." }
+            Write-PackageLog "Downgrade from $guardVersion to $version allowed by request."
         }
     }
     $owned = $null

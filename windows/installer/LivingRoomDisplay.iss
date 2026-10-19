@@ -192,13 +192,25 @@ begin
   Result := FileExists(AddBackslash(InstallDir) + 'installation.json');
 end;
 
-function MarkerState: String;
+function MarkerValue(const Key: String): String;
 var
   Json: AnsiString;
 begin
   Result := '';
   if LoadStringFromFile(AddBackslash(InstallDir) + 'installation.json', Json) then
-    Result := JsonStringValue(String(Json), 'state');
+    Result := JsonStringValue(String(Json), Key);
+end;
+
+function MarkerState: String;
+begin
+  Result := MarkerValue('state');
+end;
+
+// A Setup install updated from source since keeps the newest Setup version as
+// its downgrade guard (#159).
+function SourceUpdatedFromSetup: Boolean;
+begin
+  Result := (MarkerValue('lastPackageVersion') <> '') and (MarkerValue('channel') <> 'package');
 end;
 
 // An earlier uninstall chose "Keep my data": the marker remains, the app doesn't.
@@ -382,8 +394,12 @@ begin
   case Code of
     10: Result := 'Setup can''t use the folder ' + ExpandConstant('{app}') + ' because it contains other files.' + NothingChanged;
     11: Result := 'Another program is already using the connection Living Room Display needs (local port 4318). Close any other copy of Living Room Display, then run Setup again.' + NothingChanged;
-    12: if KeptDataOnly then
+    12: if KeptDataOnly and SourceUpdatedFromSetup then
+          Result := 'The settings kept in this folder are from a newer version of Living Room Display (' + MarkerValue('lastPackageVersion') + ' or later). Install that version or a newer one to use them.' + NothingChanged
+        else if KeptDataOnly then
           Result := 'The settings kept in this folder are from a newer version of Living Room Display (' + InstalledVersion + '). Install that version or a newer one to use them.' + NothingChanged
+        else if SourceUpdatedFromSetup then
+          Result := 'Living Room Display in this folder was installed by a newer Setup (' + MarkerValue('lastPackageVersion') + ') and updated from source since. Use Setup ' + MarkerValue('lastPackageVersion') + ' or newer.' + NothingChanged
         else
           Result := 'A newer version of Living Room Display (' + InstalledVersion + ') is already installed.' + NothingChanged;
     13: Result := 'The setup files look damaged or incomplete. Download Setup again.' + NothingChanged;
