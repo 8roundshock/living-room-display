@@ -213,9 +213,10 @@ delay without the collapse). The status line offers **Undo** for about 8 s, unti
 next message replaces it; Undo, or tapping the circle again during the settle, restores
 the item (it shows unchecked at once and stays in Up next while the restore saves).
 Deleting a pending reminder from Up next offers the same Undo, which re-creates it with
-its text, exact due instant and creation time, so it returns to its sorted place. The
-status line sticks to the bottom of the visible panel (above the Save bar on narrow
-screens), and the focused row scrolls clear of it. The message, its Undo and any row
+its text, exact due instant and creation time, so it returns to its sorted place. A
+shown message sticks to the bottom of the visible panel (above the Save bar on narrow
+screens), and the focused row scrolls clear of it; with no message the empty line stays
+at the end of the list and covers no row. The message, its Undo and any row
 still settling survive switching editor tabs and back.
 Focus moves to the next circle (else the previous one, else Add), so keyboard users can
 tick off several in a row; after Undo, focus moves to the restored reminder's circle.

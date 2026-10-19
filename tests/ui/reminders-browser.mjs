@@ -129,6 +129,60 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     return { top: Math.round(box.top), bottom: Math.round(box.bottom), visibleTop: Math.round(visibleTop), visibleBottom: Math.round(visibleBottom), hit: element === hit || element.contains(hit), viewport: `${innerWidth}×${innerHeight}`, mask: scrolls ? getComputedStyle(panel).maskImage : 'n/a' };
   });
   const assertInView = (where, label) => assert.ok(where.top >= where.visibleTop - 1 && where.bottom <= where.visibleBottom + 1 && where.hit, `${label}: ${JSON.stringify(where)}`);
+  /**
+   * With no status message nothing covers the rows (review of #279). The scroll area (the inspector
+   * on desktop, the page on a phone) steps through its whole range; at each step every row control
+   * centred in the lower half of what can be seen must be what a click there reaches. `nearEdge`
+   * counts the checks within 40 px of the visible bottom edge, where an empty sticky line would sit.
+   */
+  const rowsReachable = page => page.evaluate(() => {
+    const panel = document.querySelector('.inspector-panel');
+    const scroller = getComputedStyle(panel).overflowY !== 'visible' ? panel : document.scrollingElement;
+    const max = scroller.scrollHeight - scroller.clientHeight;
+    const blocked = [];
+    let checked = 0, nearEdge = 0;
+    for (let top = 0; top < max + 6; top += 6) {
+      scroller.scrollTop = Math.min(top, max);
+      const area = panel.getBoundingClientRect();
+      const bar = document.querySelector('.studio-savebar')?.getBoundingClientRect();
+      for (const control of document.querySelectorAll('.reminders-panel .reminder-list button')) {
+        const box = control.getBoundingClientRect();
+        const x = box.left + box.width / 2, y = box.top + box.height / 2;
+        const visibleTop = Math.max(0, scroller === panel ? area.top : 0);
+        const visibleBottom = Math.min(innerHeight, scroller === panel ? area.bottom : innerHeight, bar && bar.left < box.right && bar.right > box.left ? bar.top : Infinity);
+        if (y < (visibleTop + visibleBottom) / 2 || y > visibleBottom - 2) continue;
+        checked++;
+        if (visibleBottom - y <= 40) nearEdge++;
+        const hit = document.elementFromPoint(x, y);
+        if (hit !== control && !control.contains(hit)) blocked.push(`${control.getAttribute('aria-label')} at y ${Math.round(y)} (scroll ${Math.round(scroller.scrollTop)}) under ${hit?.tagName}.${hit?.className}`);
+      }
+    }
+    scroller.scrollTop = 0;
+    return { blocked: blocked.slice(0, 4), checked, nearEdge, max };
+  });
+  const assertRowsReachable = async (page, label) => {
+    const result = await rowsReachable(page);
+    assert.ok(result.max > 0 && result.nearEdge > 0, `${label}: the list scrolls past the bottom edge ${JSON.stringify(result)}`);
+    assert.deepEqual(result.blocked, [], `${label}: every row control in the lower half receives the click (${result.checked} checks)`);
+  };
+  /** Scrolls the lowest Edit button that can get there to sit 19 px above the visible bottom edge; returns its centre. */
+  const editAtBottomEdge = page => page.evaluate(() => {
+    const panel = document.querySelector('.inspector-panel');
+    const scroller = getComputedStyle(panel).overflowY !== 'visible' ? panel : document.scrollingElement;
+    const max = scroller.scrollHeight - scroller.clientHeight;
+    const bar = document.querySelector('.studio-savebar')?.getBoundingClientRect();
+    let chosen = null;
+    for (const control of document.querySelectorAll('.reminders-panel .reminder-list .edit-reminder')) {
+      const box = control.getBoundingClientRect();
+      const visibleBottom = Math.min(innerHeight, scroller === panel ? panel.getBoundingClientRect().bottom : innerHeight, bar && bar.left < box.right && bar.right > box.left ? bar.top : Infinity);
+      const scroll = scroller.scrollTop + (box.top + box.height / 2) - (visibleBottom - 19);
+      if (scroll >= 0 && scroll <= max) chosen = { control, scroll };
+    }
+    if (!chosen) return null;
+    scroller.scrollTop = chosen.scroll;
+    const box = chosen.control.getBoundingClientRect();
+    return { label: chosen.control.getAttribute('aria-label'), x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  });
 
   try {
     await reset();
@@ -457,6 +511,33 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
       }
     }
     checks.push('after checking off the first of five (clean) or eight (Save bar shown) reminders, the status line and Undo are in view, unmasked and clickable at 1280×720, 1024×600 and 390×844 (the focused next circle stays clear of it), also after the row leaves');
+
+    // Only a shown message sticks over the rows (review of #279): with no message, the empty status
+    // line leaves every row reachable at the bottom edge, before any message and after an Undo expires.
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 1024, height: 600 }, { width: 390, height: 844 }]) {
+      for (const draft of [false, true]) {
+        const label = `${viewport.width}×${viewport.height}${draft ? ' Save bar' : ''}`;
+        await reset({ extra: true });
+        ({ page, context } = await open({ viewport }));
+        if (draft) await dirty(page);
+        assert.equal(await status(page).evaluate(element => element.classList.contains('has-message')), false);
+        await assertRowsReachable(page, `${label}, no message yet`);
+        const target = await editAtBottomEdge(page);
+        assert.ok(target, `${label}: an Edit button reaches the bottom edge`);
+        await page.mouse.click(target.x, target.y);
+        await page.getByRole('heading', { name: 'Edit reminder', exact: true }).waitFor({ timeout: 2000 });
+        await page.keyboard.press('Escape');
+        await focusIs(page, target.label, `${label}: Escape returns to ${target.label}`);
+        await page.getByRole('button', { name: 'Delete: Call a friend', exact: true }).click();
+        await status(page).getByText('Reminder deleted', { exact: true }).waitFor();
+        await page.clock.runFor(8200);
+        await eventually(() => status(page).evaluate(element => element.classList.contains('has-message')), false, `${label}: the Undo offer expires`);
+        await assertRowsReachable(page, `${label}, after the Undo expires`);
+        if (capture && !draft) images.push({ name: `no-message-${label}`, bytes: await page.screenshot({ animations: 'disabled' }) });
+        await context.close();
+      }
+    }
+    checks.push('with no status message (before any, and after a delete Undo expires) the empty status line covers nothing: at 1280×720, 1024×600 and 390×844, clean and with the Save bar, every row control in the lower half of the visible list receives the click while it scrolls, and a mouse click on an Edit button 19 px above the bottom edge opens its form');
 
     // Forms stay in view (#236), the date message is the app's own (#258) and a delete Undo shows
     // in the same status area, at the owner's TV editor size and a phone.

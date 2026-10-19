@@ -555,7 +555,7 @@ export function RemindersPanel({
         </div>
       ))}
       {view === 'history' && <p className="history-footnote">Kept on this computer · latest {REMINDER_HISTORY_LIMIT}</p>}
-      {/* Sticky at the bottom of the visible panel, so the message and its Undo stay in view (#228). */}
+      {/* With a message, sticky at the bottom of the visible panel so it and its Undo stay in view (#228). */}
       <p className={`inline-message reminder-status ${message ? 'has-message' : ''}`} role="status">
         {message ? <>
           <span>{message.text}</span>

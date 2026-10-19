@@ -113,19 +113,20 @@
   color: #9d92a8;
 }
 /*
- * The status line, Undo included, stays in view (#228): it sticks to the bottom of the inspector's
- * scroll area on desktop, and above the Save bar (or the screen edge) when the page scrolls.
+ * A shown message, Undo included, stays in view (#228): it sticks to the bottom of the inspector's
+ * scroll area on desktop, and above the Save bar (or the screen edge) when the page scrolls. The
+ * empty line stays static at the end of the list, so it never covers a row.
  */
 .studio .reminder-status {
-  position: sticky;
-  bottom: 10px;
-  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 2px 10px;
 }
 .studio .reminder-status.has-message {
+  position: sticky;
+  bottom: 10px;
+  z-index: 2;
   min-height: 46px;
   padding: 4px 6px 4px 14px;
   border: 1px solid #ffffff17;
@@ -151,7 +152,7 @@
   }
 }
 @media (max-width: 700px) {
-  .studio .reminder-status {
+  .studio .reminder-status.has-message {
     bottom: calc(var(--studio-footer-clearance, 24px) - 12px);
   }
   html.studio-editor:has(.reminder-status.has-message) {
