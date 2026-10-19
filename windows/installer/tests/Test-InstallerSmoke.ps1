@@ -109,6 +109,10 @@ function Get-Shortcut([string]$Path) {
     $shell = New-Object -ComObject WScript.Shell
     try { $link = $shell.CreateShortcut($Path); return [pscustomobject]@{Target=$link.TargetPath;Arguments=$link.Arguments} } finally { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($shell) }
 }
+function Stop-UninstallerPhases {
+    # The uninstaller's second phase runs as %TEMP%\_iu*.tmp; end any left behind.
+    foreach ($phase in @(Get-CimInstance Win32_Process | Where-Object { $_.Name -like '_iu*.tmp' })) { Stop-Process -Id $phase.ProcessId -Force -ErrorAction SilentlyContinue }
+}
 function Assert-Healthy([string]$When) {
     $health = (Get-Http '/api/health').Content | ConvertFrom-Json
     Assert-True ($health.status -eq 'ok' -and $health.version -eq $expectedVersion) "health $When`: $($health | ConvertTo-Json -Compress)"
@@ -199,6 +203,28 @@ try {
     Assert-Healthy 'after the repair that followed the rollback'
     Assert-True ((Get-TreeState $data) -eq $dataHash) 'the repair after the rollback changed data'
 
+    Write-Step 'A failed uninstall keeps the registration, and a repair then works (#158)'
+    # Hold one app file open without sharing: Uninstall stops the server, then
+    # can't remove app, so the uninstaller must abort with the registration kept.
+    $uninstaller = Join-Path $installRoot 'uninstall\unins000.exe'
+    $uninstallLog = Join-Path $work 'uninstall-failure.log'
+    $held = [IO.File]::Open((Join-Path $installRoot 'app\package.json'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    try {
+        # /SUPPRESSMSGBOXES suppresses the error box (Inno's ShowExceptionMsg is
+        # suppressible); the timeout and phase cleanup keep a hang from blocking CI.
+        try { $code = Invoke-Program $uninstaller ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="' + $uninstallLog + '"') 300 }
+        catch { Stop-UninstallerPhases; Show-Log $uninstallLog; throw "SMOKE FAILED: the failing uninstaller did not finish: $($_.Exception.Message)" }
+    } finally { $held.Dispose() }
+    Write-Host "Uninstaller exit code after the forced removal failure: $code"
+    $uninstallText = if (Test-Path -LiteralPath $uninstallLog) { Get-Content -LiteralPath $uninstallLog -Raw } else { '' }
+    if ($code -eq 0 -or -not (Test-Path -LiteralPath $appIdKey) -or -not (Test-Path -LiteralPath $uninstaller)) { Show-Log $uninstallLog; throw "SMOKE FAILED: a failed uninstall exited $code or removed the registration or the uninstaller" }
+    Assert-True ((Get-TreeState $data) -eq $dataHash -and (Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).state -eq 'installed') 'a failed uninstall changed data or the marker'
+    if ($uninstallText -notmatch 'Failed: [^\r\n]{10,}' -or -not $uninstallText.Contains('couldn''t stop or remove some files')) { Show-Log $uninstallLog; throw 'SMOKE FAILED: the helper''s Failed: reason or the abort message is missing from the uninstall log' }
+    $result = Invoke-Setup 'repair-after-failed-uninstall'
+    if ($result.Code -ne 0) { Show-Log $result.Log; throw "SMOKE FAILED: repair after a failed uninstall exit code $($result.Code)" }
+    Assert-Healthy 'after the repair that followed the failed uninstall'
+    Assert-True ((Get-TreeState $data) -eq $dataHash) 'the repair after a failed uninstall changed data'
+
     Write-Step 'Silent default uninstall keeps data'
     Invoke-Uninstall ''
     foreach ($gone in @('app','runtime','run','edge-profile','app.previous','app.failed','package-transaction.json','uninstall\unins000.exe')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot $gone))) "uninstall left $gone" }
@@ -238,6 +264,7 @@ try {
     Write-Host 'Installer smoke test passed.'
 } finally {
     if ($listener) { $listener.Stop() }
+    Stop-UninstallerPhases
     foreach ($process in (Get-OwnedProcesses)) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }
     if (([IO.Path]::GetFullPath($work)).StartsWith($runnerTemp + '\', [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $work)) {
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue

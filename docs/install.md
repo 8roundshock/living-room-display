@@ -124,7 +124,9 @@ reinstall. Either way, uninstall does the following:
 data** removes `data` and `backups` as well, then removes the folder once only
 the marker is left. If something can't be stopped or removed, uninstall stops
 with "Living Room Display couldn't stop or remove some files: ...". Your data is
-not deleted in that case: run Setup again to repair, then uninstall. The CLI
+not deleted in that case, and the Apps & Features entry stays: run Setup again
+to repair, then uninstall (CI checks this path,
+[#158](https://github.com/8roundshock/living-room-display/issues/158)). The CLI
 `Uninstall` command on a Setup install hands over to the same uninstaller.
 
 **Silent use (agents and administrators).**
