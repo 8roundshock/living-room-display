@@ -38,12 +38,34 @@ function assertAnchored(result, label) {
   assert.ok(result.inside, `${label}: image and caption stay inside the cell`);
 }
 
+/**
+ * The editor canvas sits in the studio's own `.preview-frame` (Editor.tsx); the widget's frame must take
+ * none of its chrome or sizing, so the snapshot fits at fit 1 with its caption anchored and visible
+ * (#286 review: a shared class zoomed the widget out to 0.488 and pushed the caption out of the cell).
+ */
+async function assertEditorCanvas(page, base, label) {
+  await page.goto(`${base}/editor`);
+  const widget = page.locator('.preview-screen [data-widget-id="preview"]');
+  await widget.locator('.preview-image').waitFor(); await page.clock.runFor(300);
+  const chrome = await widget.evaluate(section => {
+    const frame = getComputedStyle(section.querySelector('.preview-image-shell').parentElement), caption = section.querySelector('.preview-caption').getBoundingClientRect();
+    const canvas = section.closest('.preview-frame')?.getBoundingClientRect();
+    return {
+      canvasFrames: document.querySelectorAll('.preview-frame').length, border: frame.borderTopWidth, radius: frame.borderTopLeftRadius, shadow: frame.boxShadow, overflow: frame.overflow,
+      captionInCanvas: Boolean(canvas) && caption.width > 0 && caption.height > 0 && caption.left >= canvas.left && caption.right <= canvas.right && caption.top >= canvas.top && caption.bottom <= canvas.bottom,
+    };
+  });
+  assert.deepEqual(chrome, { canvasFrames: 1, border: '0px', radius: '0px', shadow: 'none', overflow: 'visible', captionInCanvas: true }, `${label}: the snapshot frame takes none of the editor canvas frame's chrome and its caption is visible`);
+  assertAnchored(await anchoring(widget), label);
+}
+
 export async function family({ widget, size, density, viewport }) {
   assertAnchored(await anchoring(widget), `last screen ${size}/${density} ${viewport.width}`);
 }
 
-export async function sweep({ page, viewport, state, now }) {
+export async function sweep({ page, viewport, state, base, now }) {
   if (viewport.width !== 1920) return;
+  const authored = structuredClone(state);
   const only = (target, { size = 'medium', density = 'balanced', animation = 'off' } = {}) => {
     target.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'preview'])); target.settings.preview.enabled = true;
     target.settings.widgetGrid.density = density; target.settings.widgetGrid.placements.preview = { column: 0, row: 0, size };
@@ -56,6 +78,19 @@ export async function sweep({ page, viewport, state, now }) {
     only(state, { size, density }); await reload(page);
     assertAnchored(await anchoring(page.locator('[data-widget-id="preview"]')), `last screen ${size}/${density} 1280`);
   }
+  // The editor canvas with a snapshot at the owner's TV (1280×720) and a phone width: the authored board
+  // and every family alone.
+  for (const editorViewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(editorViewport);
+    for (const size of ['board', ...widgetSizes('preview')]) {
+      if (size === 'board') {
+        Object.assign(state, structuredClone(authored)); state.settings.widgets.preview = true; state.settings.preview.enabled = true; state.settings.appearance.motionEnabled = false;
+        state.preview = { available: true, capturedAt: new Date(now).toISOString(), width: 320, height: 200 };
+      } else only(state, { size });
+      await assertEditorCanvas(page, base, `editor canvas last screen ${size} ${editorViewport.width}`);
+    }
+  }
+  await page.goto(`${base}/display`); await page.locator('.display-page').waitFor();
   await page.setViewportSize(viewport);
   only(state); await reload(page);
   assert.equal(await intlPerTicks(page), 0, 'the caption builds no Intl formatter per tick');
@@ -64,5 +99,5 @@ export async function sweep({ page, viewport, state, now }) {
     setup: (target, animation) => only(target, { animation }),
     swap(target) { const next = new Date(Date.parse(target.preview.capturedAt) + 60_000).toISOString(); target.preview = { ...target.preview, capturedAt: next }; return encodeURIComponent(next); },
   });
-  return `Last screen caption on the drawn image's left edge (±1 px), ≤ 6 px below, image filling the limiting dimension, fit 1, in every family and density at 720p/1080p/4K; no per-tick caption formatter; a 1.5 s delayed new snapshot (${levels.join(', ')}) holds at 0 until loaded at Subtle/Lively and shows at once at Off/reduced motion`;
+  return `Last screen caption on the drawn image's left edge (±1 px), ≤ 6 px below, image filling the limiting dimension, fit 1, in every family and density at 720p/1080p/4K, and in the editor canvas (authored board and every family) at 1280×720 and 390 px with none of the canvas frame's chrome; no per-tick caption formatter; a 1.5 s delayed new snapshot (${levels.join(', ')}) holds at 0 until loaded at Subtle/Lively and shows at once at Off/reduced motion`;
 }

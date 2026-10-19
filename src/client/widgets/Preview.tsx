@@ -29,7 +29,7 @@ function Preview({ state: { preview }, settings, embedded }: WidgetContentProps)
   const shape = aspect(preview.width, preview.height) ?? (natural?.at === capturedAt ? natural.aspect : null) ?? 16 / 9;
   const loaded = (image: HTMLImageElement) => { const value = aspect(image.naturalWidth, image.naturalHeight); if (value && !aspect(preview.width, preview.height)) setNatural({ at: capturedAt, aspect: value }); };
   return <div className="widget-body snapshot-body" style={{ '--snapshot-ratio': shape } as CSSProperties}>
-    <div className="preview-frame">
+    <div className="snapshot-frame">
       <SnapshotShell key={capturedAt} src={`/api/preview/image?t=${encodeURIComponent(capturedAt)}`} opacity={settings.preview.opacity} hold={shown} onError={() => setFailed(true)} onLoad={loaded} />
       <div className="preview-caption">Last screen · {caption}</div>
     </div>

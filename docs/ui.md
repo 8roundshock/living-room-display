@@ -256,7 +256,9 @@ the retained legacy `preview.widthPercent` field no longer shrinks that region.
 The image takes the snapshot's own shape at the largest size that fits above one
 caption line, centred in the cell, and "Last screen · 8:40 AM" starts on the image's
 left edge a few pixels below it in every family and density (#225; under 6 px even at
-4K). A newer snapshot that arrives while the display is shown stays hidden until it has
+4K). The same holds on the editor canvas at 1280×720 and 390 px: the widget's own frame
+class is distinct from the studio's canvas frame, so it takes none of that frame's border,
+radius or sizing. A newer snapshot that arrives while the display is shown stays hidden until it has
 loaded and decoded, then fades in at Subtle and Lively; Off and reduced motion show it
 as soon as it is ready (#173). The caption's time is formatted once per capture, not on
 every one-second tick (#99).

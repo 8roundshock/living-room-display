@@ -178,7 +178,7 @@
    display-relative gap below it (under 6 px even at 4K). The line is reserved at 1.35em, not its
    1.2 line-height, because its text fragments (the font's ascent and descent) count as overflow. */
 .grid-ambient .snapshot-body { align-items: center; height: 100cqh; min-height: 0; --caption-size: calc(max(var(--min-text), min(5cqw, 7cqh)) * var(--font-scale)); --caption-gap: max(1px, var(--min-text, 0px) * 0.18); }
-.grid-ambient .preview-frame { display: flex; flex-direction: column; align-items: flex-start; width: min(100%, (100cqh - var(--caption-size) * 1.35 - var(--caption-gap)) * var(--snapshot-ratio, 1.7778)); }
+.grid-ambient .snapshot-frame { display: flex; flex-direction: column; align-items: flex-start; width: min(100%, (100cqh - var(--caption-size) * 1.35 - var(--caption-gap)) * var(--snapshot-ratio, 1.7778)); }
 .grid-ambient .preview-image-shell { width: 100%; }
 .grid-ambient .preview-image { display: block; width: 100%; height: auto; max-height: none; aspect-ratio: var(--snapshot-ratio, 1.7778); object-fit: contain; object-position: center; border-radius: 0; }
 .grid-ambient .preview-caption { flex: none; font-size: var(--caption-size); line-height: 1.2; margin: var(--caption-gap) 0 0; }
