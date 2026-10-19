@@ -230,8 +230,9 @@ label icon and moon) paints with its own sub-tone (`WEATHER_GLYPH_TONE`), a subt
 marked `tone-<role>` takes that role (Sun & moon's moon is `tone-time`), and
 Weather's rain visuals use the `--weather-rain` hook (Sea glass). A widget whose
 face is only primary text (a Note, a "Today" countdown) has nothing to tint. Status
-cues never change: stale amber `--ambient-caution`, offline mauve
-`--ambient-offline` and the Overdue word. Never hard-code a hue in widget CSS (Air
+cues never change: stale and offline labels and the Overdue word use the one amber
+status tone, `--ambient-caution` (there is no separate offline colour, #223, #133).
+Never hard-code a hue in widget CSS (Air
 quality has no category colours), fill or frame anything new for colour, or tint
 images; a new widget declares an existing palette role and uses `--ambient-accent`.
 The [palette harness](../tests/ui/palette-browser.mjs) fails for a widget with no

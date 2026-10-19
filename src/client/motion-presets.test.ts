@@ -29,10 +29,39 @@ test('#76 Phone, Room and Night keep the chosen Animation level', () => {
       assert.equal(styled.appearance.preset, preset);
     }
   }
-  // Soft motion and clock style still reset until #110 decides.
-  const custom = defaultSettings(); custom.appearance.motionEnabled = false; custom.appearance.clockStyle = 'analog';
-  const room = applyBuiltinPreset(custom, 'room');
-  assert.equal(room.appearance.motionEnabled, true); assert.equal(room.appearance.clockStyle, 'outline');
+});
+
+test('#110 Phone, Room and Night keep drift and fade, the move interval, the fade length and the clock style', () => {
+  const custom = defaultSettings();
+  Object.assign(custom.appearance, { motionEnabled: false, motionIntervalSeconds: 900, fadeSeconds: 0, clockStyle: 'analog', animation: 'off' });
+  for (const preset of ['phone', 'room', 'night'] as const) {
+    const styled = applyBuiltinPreset(custom, preset).appearance;
+    assert.deepEqual(
+      { motionEnabled: styled.motionEnabled, motionIntervalSeconds: styled.motionIntervalSeconds, fadeSeconds: styled.fadeSeconds, clockStyle: styled.clockStyle, animation: styled.animation },
+      { motionEnabled: false, motionIntervalSeconds: 900, fadeSeconds: 0, clockStyle: 'analog', animation: 'off' },
+      `${preset} keeps every motion preference`,
+    );
+  }
+  // Phone's former 2-minute interval is gone: the default 3 minutes stays.
+  assert.equal(applyBuiltinPreset(defaultSettings(), 'phone').appearance.motionIntervalSeconds, 180);
+});
+
+test('#110 applying a look over a saved board changes only the look, and the Save bar follows effective changes', () => {
+  const saved = defaultSettings();
+  Object.assign(saved.appearance, { motionEnabled: false, clockStyle: 'analog' });
+  const night = applyBuiltinPreset(saved, 'night');
+  assert.equal(sameEffectiveSettings(saved, night), false, 'a different look is an edit');
+  assert.deepEqual(Object.keys(settingsChanges(saved, night).appearance ?? {}).sort(), ['accentColor', 'brightness', 'layout', 'preset', 'textColor'], 'only look fields are sent');
+  const back = applyBuiltinPreset(night, 'room');
+  assert.equal(sameEffectiveSettings(saved, back), true, 'returning to the saved look hides the Save bar');
+  assert.deepEqual(settingsChanges(saved, back), {});
+});
+
+test('#224 rollback: choosing the retuned Sand keeps colour-accent data readable by the previous release', async () => {
+  const sand = await stateAfter({ appearance: { accentColor: '#b6a588' } });
+  assertPreviousReaderAccepts('data', sand.state, 'retuned Sand state.json');
+  assertPreviousReaderAccepts('data', sand.backup, 'retuned Sand state.backup.json');
+  assert.equal((sand.state as { settings: { appearance: { accentColor: string } } }).settings.appearance.accentColor, '#b6a588');
 });
 
 test('#76 choosing a level is one dirty field without a preset change, and reverting is clean', () => {

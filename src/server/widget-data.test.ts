@@ -10,6 +10,8 @@ import { forecastFixture } from './fixtures.ts';
 import { DataStore } from './store.ts';
 import { importSchema, mergeSettings, settingsPatchSchema, settingsSchema } from './validation.ts';
 import { applyBuiltinPreset, getVisual } from '../client/model.ts';
+import { settingsChanges } from '../client/draft.ts';
+import { firstPlacement } from '../shared/widgets.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import type { CountdownEvent, Settings, WorldClockCity } from '../shared/contracts.ts';
 
@@ -91,6 +93,36 @@ test('saved styles and built-in presets leave widgetData untouched and never con
   assert.deepEqual(applied.widgetData, settings.widgetData, 'applying a saved style');
   for (const preset of ['phone', 'room', 'night'] as const) assert.deepEqual(settingsSchema.parse(applyBuiltinPreset(settings, preset)).widgetData, settings.widgetData, preset);
   assert.throws(() => settingsSchema.parse({ ...settings, savedPresets: [{ id: 'bad', name: 'Bad', visual: { ...getVisual(settings), widgetData: settings.widgetData } }] }), 'saved styles are strict visuals');
+});
+
+test('#153 each built-in style saved over a board with an added Note keeps the Note, its place, its text and the rest of the board', async () => {
+  for (const preset of ['phone', 'room', 'night'] as const) {
+    const directory = await mkdtemp(join(tmpdir(), `lrd-widget-data-${preset}-`));
+    try {
+      const store = await DataStore.open(directory);
+      const start = store.snapshot().settings;
+      const place = firstPlacement(start.widgetGrid, 'note', 'small', start.widgets);
+      assert.ok(place, 'the default board has room for a small Note');
+      // A non-default widget set: Note added with text, Last screen removed, Reminders shown when empty.
+      const board = await store.patchSettings(settingsPatchSchema.parse({
+        widgets: { note: true, preview: false }, preview: { enabled: false }, widgetBehavior: { reminders: { hideWhenEmpty: false } },
+        widgetGrid: { placements: { note: place } }, widgetData: { note: { text: 'Synthetic note' } },
+        // A look other than the target, so applying it is always an effective change.
+        appearance: { brightness: 0.4 },
+      }));
+      const styled = applyBuiltinPreset(board, preset);
+      const saved = await store.patchSettings(settingsPatchSchema.parse(settingsChanges(board, styled)));
+      assert.equal(saved.widgets.note, true, `${preset} keeps Note enabled`);
+      assert.deepEqual(saved.widgetGrid.placements.note, board.widgetGrid.placements.note, `${preset} keeps Note in place`);
+      assert.deepEqual(saved.widgets, board.widgets, `${preset} keeps the widget set`);
+      assert.deepEqual(saved.widgetGrid, board.widgetGrid, `${preset} keeps the layout`);
+      assert.deepEqual(saved.widgetBehavior, board.widgetBehavior, `${preset} keeps Hide when empty`);
+      assert.deepEqual(saved.preview, board.preview, `${preset} keeps Last screen off`);
+      assert.deepEqual(saved.widgetData, board.widgetData, `${preset} keeps the note text`);
+      assert.equal(saved.appearance.brightness, applyBuiltinPreset(defaultSettings(), preset).appearance.brightness, `${preset} sets its brightness`);
+      assert.equal(saved.appearance.preset, preset);
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  }
 });
 
 test('exports include non-default widgetData and imports restore it', async () => {

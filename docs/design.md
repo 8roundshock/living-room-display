@@ -63,7 +63,17 @@ so Native adds hue, not light. Status cues keep their own tones in both modes.
 | personal | Rose | `#c99695` | 0.721 0.062 20 | Your own items (Reminders, Countdown, Note) |
 | stone | Stone | `#a9a49c` | 0.721 0.013 80 | Images, clouds and neutral (Last screen, Photo, cloud glyph) |
 
-Status tones are unchanged: stale amber `#b0926b` and offline mauve `#977e88`.
+There is one status tone: stale and offline both use the amber `#b0926b`
+(`--ambient-caution`), as Weather and Air quality already showed (#223). The unused
+mauve offline token and the display-level disconnected line are gone (#133).
+
+The five single-colour swatches are Mist `#8aa8c2`, Lilac `#aaa0ca`, Dusk `#8d9dcc`,
+Sand `#b6a588` and Sage `#88afa6`. Sand was retuned in #224 from `#b8a17a`, which sat
+ΔE_ok 0.043 from the amber, to a lighter, quieter sand at 0.055 (OKLCH 0.729 0.045
+81, the same hue and within 6% of Mist's luminance), so a stale or offline label
+never reads as the accent. Data that stores the old value is aliased at read time:
+the editor selects it as Sand and the display renders the new value, while the
+saved file keeps the old value until another colour is saved.
 
 Method. Every tone sits in one OKLCH lightness band (0.72–0.73) with low chroma
 (0.05–0.07; stone ≤ 0.02), so relative luminance stays within 6% of the Mist
@@ -71,9 +81,10 @@ default and no tone is brighter than the brightest single-accent swatch. Each ha
 more than 8:1 contrast on true black at full brightness; the saved brightness cap
 then dims every mode alike, and a browser luminance check keeps the native
 composition within 5% of colour mode at Room and Night brightness. Hues are spread
-so any two tones that can share a screen, and every tone against both status
-tones, are at least ΔE_ok 0.05 apart. Gold was chosen over Sand because Sand sits
-too close to the stale amber. `src/shared/palette.test.ts` proves these numbers.
+so any two tones that can share a screen, every tone against the status tone, and
+every colour swatch against the status tone, are at least ΔE_ok 0.05 apart. Gold
+was chosen over the old Sand because it sat too close to the stale amber.
+`src/shared/palette.test.ts` proves these numbers.
 
 Meaning is never carried by colour alone: every widget keeps its words, glyph
 shapes, positions and status labels ("Saved forecast", "Offline", "Overdue"). For
@@ -133,15 +144,16 @@ and the [UX role guide](roles/ux.md) for verification and future work.
 ## Motion levels
 
 Style → Motion → **Animation** offers Off, Subtle (default) and Lively (#76). It is
-separate from Soft motion, which still controls whole-arrangement fades, drift and
-travel. Relocation through black always continues, at every level and under reduced
+separate from **Drift and fade between moves** (called Soft motion before #240),
+which still controls whole-arrangement fades, drift and travel. Relocation through
+black always continues, at every level and under reduced
 motion. A screen that asks for reduced motion shows Off whatever is saved; on the
 TV that is Windows Settings → Accessibility → Visual effects → Animation effects.
 
 - **Off** keeps widgets still: no value, digit, glyph or entrance motion. The editor
   keeps its existing brief transitions.
 - **Subtle** moves only when something changes and never loops. After a black rest
-  (Soft motion on, fade above 0) each widget settles from about 1.5% of the display
+  (Drift and fade on, fade above 0) each widget settles from about 1.5% of the display
   height above over 700 ms, 70 ms apart in reading order (capped at six steps).
   Changed clock characters and values fade in (weather and rain timing, forecast,
   Air quality, Calendar, Countdown, Note, Sun & moon and World clocks), as do newly

@@ -123,6 +123,8 @@ saved styles and imports without the key read as `color`, so existing data looks
 unchanged until Native is chosen. `color` tints every widget's accent elements with
 `accentColor`; `native` uses each widget's catalog palette tone (see
 [native palette](design.md#native-palette)). `accentColor` is kept in both modes.
+A stored retired swatch value (Sand `#b8a17a`, retuned in #224) renders as that
+swatch's current value and is never rewritten.
 At rest `color` is omitted; `native` is written and is a
 [rollback exception](install.md#additive-data-and-rollback-compatibility-84).
 
@@ -131,9 +133,11 @@ At rest `color` is omitted; `native` is written and is a
 editor (#76): Off keeps widgets still, Subtle animates changes and the reveal after
 a black rest, and Lively adds reveal choreography and the current-weather glyph's
 slow loops. Each screen shows Off while it prefers reduced motion, whatever is
-saved. Relocation through black is unaffected, and Soft motion (`motionEnabled`)
-stays separate. The Style tab's Motion → Animation control edits it as an ordinary
-draft field; built-in styles keep it and saved styles store it.
+saved. Relocation through black is unaffected, and Drift and fade between moves
+(`motionEnabled`) stays separate. The Style tab's Motion → Animation control edits
+it as an ordinary draft field; built-in styles keep it and saved styles store it.
+Built-in styles are looks (#153, #110, #226): they write only `brightness`,
+`accentMode`, `accentColor`, `textColor`, `fontFamily`, `layout` and `preset`.
 
 Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
 `accentMode` or `animation` keeps its saved value (#83). Only the persisted reader

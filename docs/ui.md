@@ -31,29 +31,66 @@ visible above it, including narrow screens and compact keyboard-height windows.
 - **Cancel** restores the latest saved settings across every section, resets the
   city query/style form, and invalidates pending device/photo callbacks. It does not
   undo saved reminders. Leaving with settings edits uses the browser's prompt.
-- **Phone**, **Room** and **Night** reset visuals/transforms while preserving
-  location, units, reminders, named styles and the Animation level (Soft motion
-  and clock style still reset until #110). Room brightness is 55%; Night is
-  28%. All three, Reset appearance and new installs use **Native** colours; their
-  miniatures show Lilac, Mist and Rose bars. Up to twelve saved styles include
-  visual/widget/empty-reminder settings, the accent mode and the Animation level.
+- **Phone**, **Room** and **Night** are looks (#153, #110, #226): each sets the
+  brightness, the accent (**Native** colours, keeping a single colour of its own
+  for switching back), the text colour, the typeface and the retained legacy layout,
+  and keeps everything else: the widgets and their layout, widget options (clock
+  style, Hide when empty, Last screen), Text size, the Animation level, Drift and
+  fade, the move interval and the fade length, as well as location, units,
+  reminders and saved styles. Room brightness is 55%, Phone 70% and Night 28%.
+  Phone no longer sets its own 2-minute interval, and no built-in style lowers Text
+  size, so labels keep the readability floors. A style's card shows as chosen
+  whenever its look is showing (also after an edit is reverted), and choosing a look
+  is an ordinary draft change, so Save appears only for effective changes. Their
+  miniatures show Lilac, Mist and Rose bars. New installs use the Room look. Up to
+  twelve saved styles include visual/widget/empty-reminder settings, the accent mode
+  and the Animation level; applying one restores its whole board.
 - The **Accent** row offers Native (a ring of palette tones named "Native colours":
-  each widget uses its own colour, see [native palette](design.md#native-palette)),
-  five colour swatches and a custom colour. The heading line names the current
-  choice (Native, the swatch name or Custom). A swatch or custom colour selects one
-  accent for every widget; Native keeps the last colour, so switching back restores
-  it. The live canvas, movement preview and picker samples show the draft's mode.
-  The row stays one line at desktop widths and wraps without horizontal overflow at 320px.
-  The [palette harness](../tests/ui/palette-browser.mjs) covers these flows.
+  each widget uses its own colour, see [native palette](design.md#native-palette))
+  and five colour swatches; a custom colour picker (**+**) sits on the heading line,
+  which also names the current choice (Native, the swatch name or Custom). A swatch
+  or custom colour selects one accent for every widget; Native keeps the last
+  colour, so switching back restores it. A custom colour you chose appears as a
+  **Custom colour** swatch, pressed while it is the accent, so after Native one
+  activation restores it, and the saved one stays offered while a swatch is only a
+  draft (#151). A built-in style's own single colour is offered there only while it
+  is the accent. Sand was retuned in
+  #224; data saved with the earlier Sand reads as Sand and renders the new value
+  without being rewritten. Every accent control keeps a 44 × 44 CSS px hit area
+  (#137): seven fit one line in the 1280 × 720 inspector and at 390 px, and narrower
+  panels (320 px, or 760 px with a kept custom colour) wrap without horizontal
+  overflow. The live canvas, movement preview and picker samples show the draft's
+  mode. The [palette harness](../tests/ui/palette-browser.mjs) covers these flows.
 - The Style tab's **Motion** disclosure (its summary shows the level) starts with
-  **Animation**: Off, Subtle or Lively as pressed buttons, then Soft motion, New
-  arrangement and Fade duration. Choosing a level is an ordinary draft change (the
+  **Animation**: Off, Subtle or Lively as pressed buttons, then **Drift and fade
+  between moves** (`motionEnabled`), **Move widgets every** (the interval) and Fade
+  duration (#240). Its hint says that widgets always move to a new place through
+  black, and that with Drift and fade off, or with Windows Settings › Accessibility
+  › Visual effects › Animation effects off on the display PC, they appear without a
+  fade and nothing drifts. Choosing a level is an ordinary draft change (the
   Save bar appears only while it differs from the saved level), does not mark the
   style Custom, and replays the canvas entrance once. When the editor's own screen
   prefers reduced motion, a hint explains that animation stays off there while the
   control still edits the saved value. Editor polish (tab indicator, disclosures,
   picker, drag settle, new-widget drop-in, Save bar entrance) follows the editor's
   effective level and stays within 240 ms; Off keeps the existing transitions.
+- **Data & recovery** (#234): **Export saved data** downloads a backup of the saved
+  settings, styles and reminders (never the photo). **Restore from backup…** is
+  refused while settings edits are unsaved ("Save or cancel your changes before
+  restoring a backup."); otherwise it opens a file picker. The editor checks that
+  the file is an export (version 1; a newer version asks to update the app first),
+  then shows its date and contents, for example "2 reminders (1 completed) and 1
+  saved style", with **Restore** and **Don't restore**. Restore sends the file to
+  `POST /api/import`, which validates it again; an unreadable or rejected file changes
+  nothing and the section's status line says why. A restore replaces the saved
+  settings, styles and reminders, keeps the current photo and refreshes the editor
+  with a clean draft. The server keeps the replaced state as `state.backup.json`,
+  its previous-state recovery backup, until the next save, so the confirmation
+  suggests exporting first to keep it longer. **Reset appearance…** asks inline;
+  **Reset** returns every Style tab value to its default (the Room look, Text size
+  100%, Subtle, Drift and fade on, every 3 minutes, a 2 s fade) as an ordinary draft
+  change, while widgets, their layout, the clock style and saved styles stay. The
+  [studio harness](../tests/ui/studio-browser.mjs) covers these flows.
 - The authored canvas never relocates; outside Edit layout it shows value and glyph
   motion for the draft Animation level, and during Edit layout widgets stay still. **Edit layout** reveals a faint
   editor-only grid and whole-widget drag targets. Clicking/focusing selects a
@@ -345,7 +382,7 @@ Browser suite: `tests/ui/catalog-sky-browser.mjs`.
 The edited layout is the first composition. Later collision-free compositions
 vary legal widget origins and whole-plane offsets, with a fully black rest before
 revealing each replacement (default three minutes/two-second fade). Black remains
-`#000`; brightness affects content only. Reduced motion/Soft motion off removes
+`#000`; brightness affects content only. Reduced motion or Drift and fade off removes
 drift/travel and reveal effects while discrete relocation continues through black.
 The separate **Animation** setting (Off, Subtle by default, Lively) governs motion
 inside widgets: Subtle animates only changes and the reveal after each black rest,
