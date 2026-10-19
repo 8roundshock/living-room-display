@@ -44,14 +44,30 @@ visible above it, including narrow screens and compact keyboard-height windows.
   the prior board. Density changes immediately fit every enabled module, reducing
   families only when necessary; a round trip restores exact explored positions
   and families until another widget edit. Cancel restores the saved arrangement.
+- **Free-size Reminders** (#73): its handle snaps to whole cells from 2 × 2 up to
+  the full grid height and two-thirds of the width; neighbours reflow live, and an
+  impossible size keeps the board with “No room for that size”. The default board's
+  large Clock, Weather (#74) and Forecast leave no room for a Column until one of
+  them is made smaller; naming what blocks a size is #183. On the focused
+  handle Right/Left change width and Down/Up change height by one cell, announced
+  as “Reminders resized to 2 × 6”. The inspector offers Small, Medium, Large and
+  Column (2 × full height) presets plus Width and Height steppers that stop at
+  their limits; the list subtitle reads the family, Column or `C × R`, and a hint
+  reads “Shows as many reminders as fit · soonest first”. Sizes join the draft
+  (resizing back to the saved shape is clean). Density changes scale the span with
+  full height and minimum width kept, so a Column stays a Column; a span dropped
+  to fit is named (“Reminders 2 × 8 → small to fit. Switch back to restore.”). The
+  picker still adds a family with a caption noting free resizing. On the display a
+  full-height Reminders column alternates top and bottom anchoring between
+  arrangements while it relocates sideways.
 - Density/family/position and visibility form one atomic local layout during a
   concurrent poll, preserving its validity while unrelated saved settings refresh.
   Adding a widget can seek nearby legal origins when its previous hidden origin
   cannot accommodate the board; it never silently removes existing content.
 - **Widgets** selects inline size/position and per-widget controls. **Add widget**
   opens a compact category rail and one actual renderer with synthetic family
-  content, size choices and a reachable Add action. Every module can be removed, including clock,
-  weather and rain separately. Small/medium/large families adapt their content.
+  content, size choices and a reachable Add action. Every module can be removed, including clock
+  and weather separately. Small/medium/large families adapt their content.
 - **Preview movement** explicitly reveals numbered arrangements and **Automatic**
   ambient preview. Editing returns to authored placement. **Open display** opens
   a browser tab; its pointer remains visible, including fullscreen. Unmodified
@@ -135,27 +151,71 @@ and reminder input use the computer timezone. Current conditions show age;
 retained stale data is marked throughout. Missing values stay unavailable.
 Hourly chance covers precipitation including snow; rain estimates use rain plus
 showers and label incomplete/gapped coverage. See [API semantics](api.md#weather-semantics).
+Rain timing lives inside Weather (#74): it stays calm when the next 12 hours are
+complete and dry, adds a hint line when rain is later, precipitation is possible or
+the outlook is unknown, and leads with rain timing (large adds hourly chance bars)
+when rain is current or starts within six hours. Wording says “likely” or
+“possible”, never that it is raining; times use the weather city's timezone and the
+12/24-hour setting, and “Forecast estimate”/“Partial forecast” labels stay visible.
+The footprint never changes, and the separate Rain widget is gone from the picker,
+list and canvas; an enabled Rain from older data is merged into Weather
+([upgrade](install.md#additive-data-and-rollback-compatibility-84)). There is no opt-out of
+rain detail yet (#102). The [weather harness](../tests/ui/weather-browser.mjs) checks
+every family × mode × density at 1280/1920/3840 widths, CSS glyph boxes (#128) and the
+upgrade of a pre-#74 data folder.
 Each weather module keeps its actual place and relevant units visible when used
 alone; weather and forecast show the unit beside the place (“Toronto · °C”), and
-rain keeps its timing beside the chance. Compact forecasts abbreviate Tomorrow as
+elevated Weather keeps the rain amount unit (“0.16 in rain”). Compact forecasts abbreviate Tomorrow as
 “Tom.” while retaining the full relative label and civil date for assistive text
 and hover details. Ambient labels, age, attribution, units and secondary values
 have a readability floor of 1.4% of the display height (1.65% for forecast
-chance/temperatures, rain amount/period and reminder dates), multiplied by
+chance/temperatures, the Weather rain detail and reminder dates), multiplied by
 **Text size**; very short compact widgets cap it by their own height. A larger
 Text size never renders scaled ambient labels or values smaller: an overfull
 widget zooms out as a whole (icons and the unavailable dash may still shrink). See the [widget contract](widgets.md#families-and-editing).
 
 ## Reminders and last screen
 
-Reminder Add/Edit/Complete/Delete actions save immediately with separate short
-feedback. Reminder form Cancel abandons that form only. Items are silent, dated
-or undated and one-time; families show one, two or four pending items, dated first.
-Ambient items show a date line only when dated; the editor list labels undated
-items Anytime.
-**Widgets → Reminders → Hide when empty** defaults on. Confirmed empty/all-completed
-lists hide the widget; failure cannot masquerade as an empty list. Disabling the
-widget always hides it. Completed items remain editable until deleted.
+Reminder actions (add, edit, check off, restore, delete, clear history) save
+immediately with a short status line and never join the settings draft. Reminder
+form Cancel abandons that form only. Items are silent, dated or undated and one-time.
+The Reminders tab has an **Up next (N)** / **History (M)** switch (`aria-pressed`).
+Up next uses the display's order: overdue or due within seven days (soonest first),
+then undated (newest first), then later dates. Each row has a 44 px check circle,
+the title, a due line (`Overdue · Yesterday · 3:00 PM`, `Today · 6:00 PM` or
+`Anytime`) and Edit/Delete. One tap fills the circle and dims the title at once while
+the completion saves; after about 0.9 s the row collapses out of Up next (reduced
+motion keeps the delay without the collapse). The status line offers **Undo** for
+about 8 s; Undo, or tapping the circle again during the settle, restores the item
+(it shows unchecked at once and stays in Up next while the restore saves). Focus
+moves to the next circle (else the previous one, else Add), so keyboard users can
+tick off several in a row; after Undo, focus moves to the restored reminder's circle.
+A failed save reverts the row: “Could not complete reminder. It is still in Up
+next.” Deleting from Up next reads “Reminder deleted”, also while a row settles.
+History groups completed reminders under TODAY, YESTERDAY, `Mon, Oct 12` or
+`Oct 12, 2025` by completion time in the computer timezone, newest first, 50 at a
+time. A row shows `Completed 3:42 PM` (plus ` · was due …` when it was dated), and
+offers Restore (the check or the undo icon, back to its sorted place in Up next) and
+Delete. Completed reminders cannot be edited; an edit saved for a reminder completed
+in another tab reports “This reminder was completed elsewhere. Restore it to edit.”
+**Clear history…** asks inline before deleting every completed reminder. The
+computer keeps the latest 500 completed reminders. Every reminder time follows the
+12/24-hour setting; like the canvas preview, the editor list follows an unsaved
+change to it, while the display keeps the saved setting until Save.
+The ambient widget shows as many pending reminders as fit its box, soonest first,
+never a partially visible row, then an exact “+N more”. Titles use up to two lines
+(four when only one reminder is pending) and scale with the widget width, capped
+near 3.2% of the display height. If even one row overflows, that row stays and the
+widget zooms out as a whole; any resize remeasures against the widget's fixed box, so
+the count and that state never flip on a remeasure. Dated rows add `Today · 6:00 PM`, `Tomorrow ·
+9:00 AM`, `Oct 24 · 3:00 PM` or `Overdue · Yesterday · 3:00 PM` (the word Overdue in
+the dim caution tone). Completed reminders never appear; the display reflects a
+check-off within its 30 s refresh.
+**Widgets → Reminders → Hide when empty** defaults on. A confirmed list with no
+pending reminders (history only) hides the widget, or shows “All clear” when the
+option is off; a missing list or a disconnected display with nothing saved shows
+“Reminders unavailable”, and saved items stay listed with “Saved reminders ·
+offline”. Disabling the widget always hides it.
 An unchanged due-date input is omitted from an edit, preserving its exact saved
 instant (including repeated daylight-saving hours and imported seconds/offsets)
 and any concurrent date update. Explicitly changing or clearing the date still

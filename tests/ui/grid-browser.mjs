@@ -158,6 +158,8 @@ export async function runGridQa({ playwright, edge } = {}) {
     await clean();
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     await clean();
+    // Rain is part of Weather (#74): the picker never offers it.
+    assert.equal(await page.getByRole('button', { name: 'Preview Rain', exact: true }).count(), 0);
     assert.equal(
       await page
         .getByRole('button', { name: 'Close widget picker' })
@@ -227,7 +229,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       'spacious',
     );
     await dirty();
-    assert.equal(await page.locator('.grid-widget-frame').count(), 6);
+    assert.equal(await page.locator('.grid-widget-frame').count(), 5, 'five default widgets; Rain is part of Weather (#74)');
     assert.equal(await page.locator('.ambient-clock').getAttribute('data-widget-size'), 'medium');
     const fittedFrames = await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style')));
     await move().focus(); await page.keyboard.press('Tab');
@@ -289,6 +291,7 @@ export async function runGridQa({ playwright, edge } = {}) {
 
     const concurrent = onlyClock(); concurrent.widgetGrid.placements.clock.size = 'medium';
     concurrent.widgets.weather = true;
+    concurrent.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' };
     for (const collision of [false, true]) {
       await open(concurrent);
       await layout();
@@ -393,7 +396,6 @@ export async function runGridQa({ playwright, edge } = {}) {
     for (const name of [
       'Clock',
       'Weather',
-      'Rain',
       'Forecast',
       'Reminders',
       'Last screen',
@@ -413,13 +415,13 @@ export async function runGridQa({ playwright, edge } = {}) {
       .click();
     await clean();
     checks.push(
-      'all modules optional including independent rain and clock; styles render distinctly; add/remove returns clean',
+      'all modules optional including independent weather and clock; styles render distinctly; add/remove returns clean',
     );
 
     const settings = defaultSettings();
     settings.widgets.photo = true;
     // Repack a smaller visible board to leave room for the local image.
-    for (const id of ['rain', 'reminders', 'preview', 'forecast'])
+    for (const id of ['reminders', 'preview', 'forecast'])
       settings.widgets[id] = false;
     await open(settings);
     await tab('Widgets');
@@ -568,7 +570,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       'real JPEG/WebP browser decode and 1280px normalized PNG downsample stay cancellable',
     );
 
-    for (const id of ['weather', 'rain']) {
+    for (const id of ['weather']) {
       const settings = onlyClock();
       settings.widgets.clock = false;
       settings.widgets[id] = true;
@@ -584,10 +586,10 @@ export async function runGridQa({ playwright, edge } = {}) {
       );
     }
     checks.push(
-      'provider credit remains inside the relocating current-weather or rain widget without Forecast',
+      'provider credit remains inside the relocating Weather widget without Forecast',
     );
 
-    for (const id of ['weather', 'rain', 'forecast'])
+    for (const id of ['weather', 'forecast'])
       for (const size of ['small', 'medium', 'large']) {
         const settings = onlyClock();
         settings.widgets.clock = false;
@@ -611,10 +613,11 @@ export async function runGridQa({ playwright, edge } = {}) {
             await widget.locator('.weather-context').innerText(),
             /°F/,
           );
-        if (id === 'rain')
+        // The fixture rains, so Weather is elevated; wider families show the amount in inches (#74).
+        if (id === 'weather' && size !== 'small')
           assert.match(
-            await widget.innerText(),
-            /\bin\b/,
+            await widget.locator('.rain-detail').innerText(),
+            / in rain$/,
           );
       }
     checks.push(

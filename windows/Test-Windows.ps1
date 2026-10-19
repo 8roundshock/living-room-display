@@ -17,10 +17,12 @@ function Expect-Failure([scriptblock]$Action, [string]$Message) {
     Assert-True $failed $Message
 }
 try {
-    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1','tests\Test-InstallLifecycle.ps1','tests\Test-SourceProvenance.ps1')) {
+    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1','tests\Test-InstallLifecycle.ps1','tests\Test-SourceProvenance.ps1','tests\Test-PackageInstall.ps1','installer\Build-Installer.ps1','installer\New-InstallerArt.ps1','installer\tests\Test-InstallerPolicy.ps1','installer\tests\Test-InstallerPayload.ps1','installer\tests\Test-InstallerSmoke.ps1')) {
         $parseErrors = $null
         $null = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $file),[ref]$null,[ref]$parseErrors)
         Assert-True ($parseErrors.Count -eq 0) "PowerShell syntax failed: $file"
+        # Windows PowerShell 5.1 reads BOM-less scripts as ANSI: keep them ASCII.
+        Assert-True (-not ([IO.File]::ReadAllText((Join-Path $PSScriptRoot $file)) -match '[^\x00-\x7F]')) "PowerShell script is not ASCII: $file"
     }
     $passed++
     $binary = & (Join-Path $PSScriptRoot 'Build-Host.ps1') -OutputDirectory $compiled
@@ -70,6 +72,17 @@ try {
     $passed++
     & (Join-Path $PSScriptRoot 'tests\Test-SourceProvenance.ps1')
     $passed++
+    & (Join-Path $PSScriptRoot 'tests\Test-PackageInstall.ps1')
+    $passed++
+    & (Join-Path $PSScriptRoot 'installer\tests\Test-InstallerPolicy.ps1')
+    $passed++
+    # Release metadata: generated icon and version info on the helper.
+    $art = & (Join-Path $PSScriptRoot 'installer\New-InstallerArt.ps1') -OutputDirectory (Join-Path $scratch 'art')
+    $versioned = & (Join-Path $PSScriptRoot 'Build-Host.ps1') -OutputDirectory (Join-Path $scratch 'versioned') -IconFile $art.Icon -Version '9.8.7'
+    $versionInfo = (Get-Item -LiteralPath $versioned).VersionInfo
+    Assert-True ($versionInfo.ProductName -eq 'Living Room Display' -and $versionInfo.FileVersion -eq '9.8.7.0' -and $versionInfo.FileDescription -eq 'Living Room Display') 'Versioned helper lacks product/version info.'
+    Assert-True ([string]::IsNullOrEmpty((Get-Item -LiteralPath $binary).VersionInfo.ProductName)) 'The default helper build changed: it gained version info.'
+    $passed++
     . (Join-Path $PSScriptRoot 'LivingRoomDisplay.ps1') -InstallRoot $fixture -FunctionsOnly
     Write-Json $marker @{product='living-room-display'}
     Assert-Installed
@@ -106,9 +119,34 @@ try {
         [IO.File]::WriteAllText($entry, 'setTimeout(() => {}, 60000);')
         $ownedTestProcess = Start-Process -FilePath $NodeExe -ArgumentList ('"' + $entry + '"') -WindowStyle Hidden -PassThru
         Write-Json (Join-Path $run 'server.json') @{processId=$ownedTestProcess.Id;startedAt=$ownedTestProcess.StartTime.ToUniversalTime().ToString('o')}
-        Assert-True ($null -ne (Get-OwnedServer)) 'Exact owned test process was not recognized.'
+        # A just-started process can briefly report no command line through CIM
+        # (seen on a CI runner), so allow it a moment before judging ownership.
+        for ($attempt = 0; $attempt -lt 20 -and $null -eq (Get-OwnedServer); $attempt++) { Start-Sleep -Milliseconds 150 }
+        if ($null -eq (Get-OwnedServer)) {
+            $seen = Get-CimInstance Win32_Process -Filter "ProcessId=$($ownedTestProcess.Id)"
+            $record = Get-Content -LiteralPath (Join-Path $run 'server.json') -Raw
+            throw ("Exact owned test process was not recognized. PS $($PSVersionTable.PSVersion); node=$script:node; exe=$($seen.ExecutablePath); cmd=$($seen.CommandLine); record=$record; start=" + (Get-Process -Id $ownedTestProcess.Id).StartTime.ToUniversalTime().ToString('o') + '; parsed=' + ([DateTimeOffset](ConvertFrom-Json $record).startedAt).UtcDateTime.ToString('o'))
+        }
         Write-Json (Join-Path $run 'server.json') @{processId=$ownedTestProcess.Id;startedAt='2000-01-01T00:00:00.0000000Z'}
         Assert-True ($null -eq (Get-OwnedServer)) 'Reused PID/start-time mismatch was adopted.'
+        $passed++
+        # Stop must not return until the server is gone. Stop-Process only starts
+        # ending it, and meanwhile it keeps app as its working folder, so Setup's
+        # rename of app right after Stop could fail (#77 review of d2dd04f). The
+        # rename goes through Setup's own Move-OwnedItem, as in a rollback.
+        $ownedTestProcess | Stop-Process -Force
+        $null = $ownedTestProcess.WaitForExit(10000)
+        $renamedApp = Join-Path $fixture 'app.renamed'
+        for ($round = 1; $round -le 5; $round++) {
+            $ownedTestProcess = Start-Process -FilePath $NodeExe -ArgumentList ('"' + $entry + '"') -WorkingDirectory $app -WindowStyle Hidden -PassThru
+            Write-Json (Join-Path $run 'server.json') @{processId=$ownedTestProcess.Id;startedAt=$ownedTestProcess.StartTime.ToUniversalTime().ToString('o')}
+            for ($attempt = 0; $attempt -lt 20 -and $null -eq (Get-OwnedServer); $attempt++) { Start-Sleep -Milliseconds 150 }
+            Assert-True ($null -ne (Get-OwnedServer)) "Round ${round}: the owned test server was not recognized."
+            Stop-App
+            Assert-True $ownedTestProcess.HasExited "Round ${round}: Stop returned before the owned server had exited."
+            Move-OwnedItem $app $renamedApp
+            Move-OwnedItem $renamedApp $app
+        }
         $passed++
     }
 } finally {
