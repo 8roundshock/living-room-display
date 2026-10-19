@@ -10,8 +10,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApplication } from './app.ts';
 import { assertPreviousReaderAccepts } from './compat/previous-reader.ts';
-import { defaultSettings as previousDefaults } from './compat/bedca44/shared/defaults.ts';
-import { defaultWidgetGrid as previousGrid } from './compat/bedca44/shared/widgets.ts';
+import { defaultSettings as legacyDefaults } from './compat/bedca44/shared/defaults.ts'; // the bedca44 legacy-data fixture
+import { defaultWidgetGrid as legacyGrid } from './compat/bedca44/shared/widgets.ts';
 import { colorAccentDefaults, forecastFixture, seedColorAccentData } from './fixtures.ts';
 import { persistableSettings } from './persistence.ts';
 import { DataStore } from './store.ts';
@@ -25,7 +25,7 @@ const visualOf = (settings: Loose) => structuredClone({ appearance: settings.app
 
 /** The pre-#74 default board (revision 2): medium Weather over medium Rain, both enabled. */
 function legacy(): Loose {
-  const settings = JSON.parse(JSON.stringify(previousDefaults()));
+  const settings = JSON.parse(JSON.stringify(legacyDefaults()));
   assert.deepEqual(settings.widgetGrid.placements.weather, { column: 8, row: 0, size: 'medium' });
   assert.deepEqual(settings.widgetGrid.placements.rain, { column: 8, row: 2, size: 'medium' });
   assert.equal(settings.widgets.rain, true);
@@ -130,8 +130,8 @@ test('saved styles migrate independently of the settings', () => {
 });
 
 function revisionOne(): Loose {
-  const settings = JSON.parse(JSON.stringify(previousDefaults()));
-  settings.widgetGrid = previousGrid(1); delete settings.widgetGrid.revision;
+  const settings = JSON.parse(JSON.stringify(legacyDefaults()));
+  settings.widgetGrid = legacyGrid(1); delete settings.widgetGrid.revision;
   return settings;
 }
 function denseSpacious(): Loose {
@@ -181,8 +181,8 @@ test('the store merges a legacy file in memory, leaves its bytes until an ordina
     const primary = await readJson(directory, 'state.json'), backup = await readJson(directory, 'state.backup.json');
     assert.equal(primary.settings.widgets.rain, false); assert.deepEqual(primary.settings.widgetGrid.placements.weather, { column: 8, row: 0, size: 'large' });
     assert.equal(primary.settings.appearance.brightness, 0.4);
-    // The backup is the previous in-memory state (already merged), written in the previous release's shape.
-    assert.equal(backup.settings.appearance.brightness, previousDefaults().appearance.brightness);
+    // The backup is the previous in-memory state (already merged), written in its at-rest form.
+    assert.equal(backup.settings.appearance.brightness, legacyDefaults().appearance.brightness);
     assert.equal(backup.settings.widgets.rain, false);
     assertPreviousReaderAccepts('data', primary, 'primary after save'); assertPreviousReaderAccepts('data', backup, 'backup after save');
     const reopened = (await DataStore.open(directory)).snapshot().settings;
@@ -205,7 +205,7 @@ test('importing a legacy export merges Rain, and the next export has rain:false'
 test('files and exports written after a save stay readable by the previous release', async t => {
   const styled = () => { const settings = legacy(); settings.savedPresets = [{ id: 'style', name: 'Style', visual: visualOf(legacy()) }, { id: 'rain-only', name: 'Rain only', visual: visualOf(board({}, { weather: false })) }]; return settings; };
   const scenarios: [string, (() => Loose) | null][] = [
-    // A fresh folder is Native, the separate #75 exception; an existing user's defaults have a colour accent.
+    // An existing user's defaults have a colour accent (fresh Native data is covered in rollback.test.ts).
     ['defaults (colour accent)', null],
     ['revision-2 legacy file with both enabled', legacy],
     ['rain only', () => board({}, { weather: false })],
