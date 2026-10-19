@@ -20,13 +20,13 @@ const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'off
  * still zoom out below it; each allowance names the ticket fixing it. An allowance no longer needed fails,
  * so it is removed when that work lands.
  */
-const FLOOR_FIT_ALLOWANCES = { 'airQuality/small': '#271', 'airQuality/medium': '#271', 'weather/small': '#283', 'weather/medium': '#283', 'note/small': '#291' };
+const FLOOR_FIT_ALLOWANCES = { 'weather/small': '#283', 'weather/medium': '#283', 'note/small': '#291' };
 /**
  * #99: widgets that still construct Intl formatters on a one-second tick within the same minute, each with
  * the ticket caching them. An allowance no longer needed fails; with none left the full board must
  * construct none.
  */
-const INTL_TICK_ALLOWANCES = { clock: '#271', preview: '#271' };
+const INTL_TICK_ALLOWANCES = {};
 /** Every active widget on one Balanced 12 x 8 board (as in motion-browser.mjs). */
 const FULL_BOARD = {
   clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
@@ -324,7 +324,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       intlPerTick.fullBoard = await perTick();
       if (!Object.keys(INTL_TICK_ALLOWANCES).length) assert.equal(intlPerTick.fullBoard, 0, 'the full board constructs no Intl formatter per tick within one minute');
     } finally { await intlContext.close(); }
-    checks.push(`#99 Intl constructions per tick within one minute: ${JSON.stringify(intlPerTick)}; still allowed: ${Object.entries(INTL_TICK_ALLOWANCES).map(([id, ticket]) => `${id} (${ticket})`).join(', ')}`);
+    checks.push(`#99 Intl constructions per tick within one minute: ${JSON.stringify(intlPerTick)}; still allowed: ${Object.entries(INTL_TICK_ALLOWANCES).map(([id, ticket]) => `${id} (${ticket})`).join(', ') || 'none'}`);
     assert.deepEqual(errors, []); return { checks, images, clockFonts, fitMetrics, intlPerTick };
   } finally { await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 }
