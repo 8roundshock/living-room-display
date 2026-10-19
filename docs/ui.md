@@ -167,8 +167,12 @@ both times, daylight length, its change from yesterday and the moon phase (mediu
 and a dim dotted day arc with the sun's position, illumination and the next full
 (or new) moon (large); polar days read "Sun up all day" / "Sun stays down today".
 Air quality shows the AQI and its category word (no category colours), adds the
-main pollutant and UV (medium), and 24 hourly bars with unknown hours dotted and the
-UV peak (large). Its footer always shows the age and "Air quality: CAMS via
+main pollutant and UV (medium), and up to 24 hourly bars with unknown hours dotted
+and the UV peak (large). Bars, hour labels and the peak use only the current and
+later hours, so a saved reading never shows a past hour or a peak that has already
+happened; with fewer than two upcoming hours the line reads "Hourly estimate
+unavailable". The chart is named for screen readers ("US AQI estimate for the next
+24 hours: 40 to 45"). Its footer always shows the age and "Air quality: CAMS via
 Open-Meteo": "Model estimate · Updated …" with a reading, "Saved reading · Updated …"
 in the caution tone when stale. A failure reads "Air quality unavailable" (age only,
 caution tone), never clean air. Calculations are cached

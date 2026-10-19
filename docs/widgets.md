@@ -17,7 +17,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/server/persistence.ts`](../src/server/persistence.ts) | The previous release and the additive defaults omitted at rest so it can still read files and exports. |
 | [`src/server/compat/previous-reader.ts`](../src/server/compat/previous-reader.ts) | Test-only frozen reader of the previous release and its assertion helpers ([rollback compatibility](development.md#rollback-compatibility-check)). |
 | [`src/server/photo.ts`](../src/server/photo.ts) | Strict normalized PNG ingestion and private selected-image validation. |
-| [`src/server/air.ts`](../src/server/air.ts) | Keyless CAMS air quality via Open-Meteo: request, normalization, 30-minute cache and the `off` state; [`src/client/astronomy.ts`](../src/client/astronomy.ts) holds the local sun, moon and time-zone calculations. |
+| [`src/server/air.ts`](../src/server/air.ts) | Keyless CAMS air quality via Open-Meteo: request, normalization, 30-minute cache and the `off` state; [`src/client/airHourly.ts`](../src/client/airHourly.ts) rebuilds the widget's upcoming-hour bars and UV peak each minute; [`src/client/astronomy.ts`](../src/client/astronomy.ts) holds the local sun, moon and time-zone calculations. |
 | [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
 | [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per widget (`Clock`, `Weather`, `Rain`, `Forecast`, `Reminders`, `Preview`, `Photo`; stubs for planned ids), shared weather pieces in `common.tsx`, and the `WeatherGlyph` and `TransitionText` primitives. |
@@ -110,7 +110,7 @@ The renderer families have deliberate visual roles:
 | Calendar | Planned (#78), not shipped | | |
 | Countdown | Planned (#78), not shipped | | |
 | Note | Planned (#78), not shipped | | |
-| Air quality | AQI and category word with place and scale; age and CAMS credit always, "Model estimate" with a reading | Adds the main pollutant and UV with its WHO category | Adds 24 hourly AQI bars (unknown hours dotted) and today's UV peak |
+| Air quality | AQI and category word with place and scale; age and CAMS credit always, "Model estimate" with a reading | Adds the main pollutant and UV with its WHO category | Adds AQI bars for the current and up to 23 following hours (unknown hours dotted) and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
 | Sun & moon | Next sunrise or sunset, its time and the place | Sunrise, sunset, daylight length and change from yesterday, moon glyph and phase | Dim dotted day arc with the sun's position, times, daylight, phase with illumination and the next full (or new) moon |
 
 The large clock requires actual vertical room in the central catalog; do not

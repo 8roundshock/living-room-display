@@ -1,6 +1,7 @@
-import type { CSSProperties } from 'react';
-import type { AirPollutant, AirQualityState, AppState, Settings } from '../../shared/contracts.ts';
-import { civilDateKey, formatTime, isValidTimeZone, localTimeZone, zoneFormatter } from '../astronomy.ts';
+import { useMemo, type CSSProperties } from 'react';
+import type { AirPollutant, AirQualityReading, AirQualityState, AppState } from '../../shared/contracts.ts';
+import { airHourly } from '../airHourly.ts';
+import { isValidTimeZone, localTimeZone } from '../astronomy.ts';
 import { ageLabel } from '../format.ts';
 import { Icon } from '../icons.tsx';
 import { TransitionText } from './TransitionText.tsx';
@@ -36,18 +37,7 @@ function pollutantLine(current: NonNullable<AirQualityState['current']>): string
   const concentration = current.dominant === 'pm2_5' ? current.pm2_5 : current.dominant === 'pm10' ? current.pm10 : null;
   return `Mostly ${POLLUTANTS[current.dominant]}${concentration === null ? '' : ` · ${Math.round(concentration)} µg/m³`}`;
 }
-function uvPeak(air: AirQualityState, timeZone: string, now: Date, clockFormat: Settings['clockFormat']): string {
-  const known = air.hourly.filter(reading => reading.uvIndex !== null);
-  if (!known.length) return 'UV forecast unavailable';
-  const today = civilDateKey(now, timeZone);
-  const hour = (iso: string) => zoneFormatter(timeZone, clockFormat === '12h' ? { hour: 'numeric', hour12: true } : { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
-  for (const tomorrow of [false, true]) {
-    const day = known.filter(reading => (civilDateKey(new Date(reading.time), timeZone) === today) !== tomorrow);
-    const peak = day.reduce<typeof day[number] | null>((best, reading) => !best || reading.uvIndex! > best.uvIndex! ? reading : best, null);
-    if (peak && Math.round(peak.uvIndex!) >= 1) return `UV peaks ${Math.round(peak.uvIndex!)}${tomorrow ? ' tomorrow' : ''} at ${hour(peak.time)}`;
-  }
-  return 'UV low for the next 24 h';
-}
+const NO_HOURS: AirQualityReading[] = [];
 
 function AirQuality({ state, settings, size, now, disconnected }: WidgetContentProps) {
   const air = airState(state);
@@ -58,8 +48,11 @@ function AirQuality({ state, settings, size, now, disconnected }: WidgetContentP
   // "Model estimate" labels an actual reading; with none (off or unavailable) only the age shows.
   const kind = air.status === 'stale' ? 'Saved reading · ' : current ? 'Model estimate · ' : '';
   const age = `${disconnected ? 'Offline · ' : ''}${kind}${ageLabel(air.updatedAt, now.getTime())}`;
-  // Bars are relative to the top of the "Moderate" band, or to the highest hour when worse.
-  const top = Math.max(air.scale === 'us' ? 100 : 60, ...air.hourly.map(reading => reading.aqi ?? 0));
+  // Upcoming hours only (a saved reading keeps its old series), built once per minute.
+  const minute = Math.floor(now.getTime() / 60_000);
+  const series = size === 'large' && current ? air.hourly : NO_HOURS;
+  const hourly = useMemo(() => series.length ? airHourly(series, minute * 60_000, air.scale, SCALE_LABELS[air.scale], timeZone, settings.clockFormat) : null,
+    [series, minute, air.scale, timeZone, settings.clockFormat]);
   return <div className="widget-body air-body">
     <div className="ambient-label"><Icon name="air" size={null} />Air quality</div>
     <div className="weather-context air-context">{air.location.name} · <span className="air-scale">{SCALE_LABELS[air.scale]}</span></div>
@@ -71,14 +64,12 @@ function AirQuality({ state, settings, size, now, disconnected }: WidgetContentP
           {pollutantLine(current) && <div>{pollutantLine(current)}</div>}
           <div>{current.uvIndex === null ? 'UV unavailable' : `UV ${Math.round(current.uvIndex)} · ${uvCategory(current.uvIndex)}`}</div>
         </div>}
-        {size === 'large' && air.hourly.length > 0 && <>
-          <div className="air-bars" aria-label={`Next ${air.hourly.length} hours of ${SCALE_LABELS[air.scale]}`}>{air.hourly.map(reading => <span key={reading.time}
-            className={`air-bar ${reading.aqi === null ? 'air-bar-unknown' : ''}`}
-            style={{ '--air-bar': reading.aqi === null ? '8%' : `${Math.max(3, Math.min(100, reading.aqi / top * 100))}%` } as CSSProperties}
-            title={`${formatTime(new Date(reading.time), timeZone, settings.clockFormat)}: ${reading.aqi === null ? 'unknown' : Math.round(reading.aqi)}`} />)}</div>
-          <div className="air-hours"><span>{formatTime(new Date(air.hourly[0]!.time), timeZone, settings.clockFormat)}</span><span>{formatTime(new Date(air.hourly[air.hourly.length - 1]!.time), timeZone, settings.clockFormat)}</span></div>
-          <div className="air-uv-peak">{uvPeak(air, timeZone, now, settings.clockFormat)}</div>
-        </>}
+        {size === 'large' && (hourly ? <>
+          <div className="air-bars" role="img" aria-label={hourly.summary}>{hourly.bars.map(bar => <span key={bar.time}
+            className={`air-bar ${bar.unknown ? 'air-bar-unknown' : ''}`} style={{ '--air-bar': bar.height } as CSSProperties} title={bar.title} />)}</div>
+          <div className="air-hours"><span>{hourly.start}</span><span>{hourly.end}</span></div>
+          <div className="air-uv-peak">{hourly.uvPeak}</div>
+        </> : <div className="air-hourly-missing">Hourly estimate unavailable</div>)}
       </>}
     <div className="air-footer"><div className={`weather-age air-age ${caution ? 'stale' : ''}`}>{age}</div><div className="weather-credit air-credit">{AIR_CREDIT}</div></div>
   </div>;

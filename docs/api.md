@@ -210,7 +210,9 @@ Normalization keeps the current AQI, the dominant pollutant (the highest known
 sub-index, or null), PM2.5/PM10 in µg/m³ and the UV index. Hourly values are
 instantaneous readings stored as instants (`time`): the current hour and up to 23
 following ones. A missing, non-numeric or misaligned value stays `null` or makes
-the reading `unavailable`; nothing is filled in.
+the reading `unavailable`; nothing is filled in. The widget applies the same
+current-hour rule again at render time (instants after now − 1 hour, recomputed each
+minute), because a cached or `stale` reading keeps the series it was fetched with.
 
 Readings are cached in memory for 30 minutes, keyed by location and scale (at most
 8 entries). A failed refresh keeps the last good reading as `stale`; without one the
