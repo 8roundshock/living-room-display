@@ -262,7 +262,7 @@ const CATALOG_78: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 
 test('containment: boards with spans are readable by the previous release, and deleting every span keeps a valid layout it reads', () => {
   // The previous release (3fee844) knows every active widget and the span (#211): no widget has to be
   // turned off before reading, so each acceptance below is about the span and the board around it.
-  assert.deepEqual(ACTIVE_WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id)), [], 'the previous release knows every active widget');
+  assert.deepEqual(ACTIVE_WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id)), [], 'the previous release knows every active widget: turn the ids it lacks off before the acceptance checks, as before #263');
   assert.deepEqual(CATALOG_78.filter(id => !ACTIVE_WIDGET_IDS.includes(id)), [], 'every #78 widget is active and takes part');
   const next = random(73); let withSpans = 0, besideNewWidgets = 0;
   for (let iteration = 0; iteration < 60; iteration++) {

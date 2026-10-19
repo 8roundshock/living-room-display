@@ -246,7 +246,7 @@ test('#135 a non-identity transform for a #78 id, sent by PATCH or import, stays
   // persistableSettings writes every transform of an id the previous release knows. Planned ids are the
   // case #135 guards against; revisit that rule (normalise or reject) before adding one.
   assert.deepEqual(WIDGET_IDS.filter(isPlannedWidget), [], 'the catalog has no planned ids');
-  assert.deepEqual(WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id)), [], 'the previous release knows every catalog id');
+  assert.deepEqual(WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id)), [], 'the previous release knows every catalog id: a new id needs its non-identity transforms kept out of saved data (#135) or a documented exception');
   const directory = await temporary('lrd-rollback-135-'), target = await temporary('lrd-rollback-135-import-');
   await seedColorAccentData(directory); await seedColorAccentData(target);
   const app = await application(directory), imported = await application(target);

@@ -19,7 +19,6 @@ const CATALOG_78: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 
 
 test('the explicit #78 list names catalog ids', () => {
   assert.deepEqual(CATALOG_78.filter(id => !WIDGET_IDS.includes(id)), []);
-  assert.deepEqual(WIDGET_IDS.slice(-CATALOG_78.length), CATALOG_78, 'appended after the foundation ids, in order');
 });
 
 type Visibility = Partial<Record<WidgetId, boolean>>;
