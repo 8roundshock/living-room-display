@@ -251,9 +251,16 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     if (capture) images.push({ name: 'editor-1440', bytes: await page.screenshot() });
     checks.push('Note: live counter, Clear, 4-line and 200-character limits, Save bar only while effective, line breaks kept, Save and reload persist');
 
-    // 5. Styles never erase widget content.
-    await tab('Style'); await button('Night').click(); await save();
+    // 5. Styles never erase widget content, and built-in styles are looks only (#153): the added
+    // Calendar, Countdown and Note stay enabled and in place. The look is Night already, so Room changes it.
+    const added = () => Object.fromEntries(['calendar', 'countdown', 'note'].map(id => [id, [snapshot().widgets[id], snapshot().widgetGrid.placements[id]]]));
+    const board = added();
+    assert.deepEqual(Object.values(board).map(([enabled]) => enabled), [true, true, true], 'the three widgets are on the board');
+    await tab('Style'); await button('Room').click(); await save();
     assert.equal(snapshot().widgetData.note.text, 'Dinner at seven\nBack by nine'); assert.equal(snapshot().widgetData.countdowns.length, 1); assert.equal(snapshot().widgetData.calendar.weekStart, 'monday');
+    assert.deepEqual(added(), board, 'Room keeps Calendar, Countdown and Note enabled and in place');
+    await button('Night').click(); await save();
+    assert.deepEqual(added(), board, 'Night keeps them too');
     await page.getByText('Saved styles', { exact: true }).click();
     await page.getByLabel('Style name', { exact: true }).fill('Synthetic style'); await button('Add style').click(); await save();
     await button('Room').click(); await save();
@@ -261,12 +268,12 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await save();
     assert.equal(snapshot().widgetData.note.text, 'Dinner at seven\nBack by nine'); assert.equal(snapshot().widgetData.countdowns[0].title, 'Weekend trip');
     assert.equal('widgetData' in snapshot().savedPresets[0].visual, false);
-    checks.push('Built-in Night/Room and a saved style keep the note, countdowns and week start; saved styles never contain widget content');
+    assert.deepEqual(added(), board, 'a saved style made from this board keeps them as well');
+    checks.push('Built-in Room/Night keep Calendar, Countdown and Note enabled and in place (#153); built-in and saved styles keep the note, countdowns and week start; saved styles never contain widget content');
 
     // 6. Display: visible with content; hidden when empty while the editor keeps placeholders.
-    // Built-in styles reset the widget set to the catalog defaults, so turn the three back on.
-    assert.equal(snapshot().widgets.note, false, 'a built-in style restores the default widget set');
-    await app.store.patchSettings({ widgets: { calendar: true, countdown: true, note: true } });
+    // Built-in styles keep the widget set (#153), so the three are still on.
+    assert.equal(snapshot().widgets.note, true, 'a built-in style keeps the widget set');
     await open({ route: '/display', viewport: { width: 1280, height: 720 } });
     assert.equal(await page.locator('[data-widget-id="note"]').count(), 1); assert.equal(await page.locator('[data-widget-id="countdown"]').count(), 1); assert.equal(await page.locator('[data-widget-id="calendar"]').count(), 1);
     if (capture) images.push({ name: 'display-1280', bytes: await page.screenshot() });

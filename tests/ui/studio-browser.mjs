@@ -2,7 +2,7 @@
 // synthetic provider and device responses only. Screenshots are RAM buffers.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -903,6 +903,180 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await context.close();
     checks.push(
       '#83 clock style Analog survives a later Brightness save and reload',
+    );
+
+    // #153, #110, #226: built-in styles are looks only. A personal board (Note added, Drift and
+    // fade off, Analog, Text size 125%) survives Night, Room and Phone; Save follows effective changes.
+    await reset();
+    ({ page, context } = await open());
+    const pressedPreset = () =>
+      page.locator('.preset-button[aria-pressed="true"]').evaluateAll((els) =>
+        els.map((el) => el.querySelector('.preset-label').textContent.trim()),
+      );
+    await tab(page, 'Widgets');
+    await page.getByRole('button', { name: 'Add widget', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview Note', exact: true }).click();
+    await page.getByRole('button', { name: 'Add Note', exact: true }).click();
+    await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    await page.getByRole('button', { name: 'Clock', exact: true }).click();
+    await page.getByRole('button', { name: 'Analog', exact: true }).click();
+    await tab(page, 'Style');
+    await page.getByRole('slider', { name: 'Text size', exact: true }).fill('125');
+    await page.locator('summary', { hasText: 'Motion' }).click();
+    await page
+      .getByRole('checkbox', { name: 'Drift and fade between moves', exact: true })
+      .uncheck();
+    await save(page).click();
+    await saved(page);
+    const board = structuredClone(app.store.snapshot().settings);
+    assert.deepEqual(
+      [board.widgets.note, board.appearance.clockStyle, board.appearance.fontScale, board.appearance.motionEnabled],
+      [true, 'analog', 1.25, false],
+    );
+    assert.deepEqual(await pressedPreset(), ['Room'], 'the default look shows Room pressed');
+    await page.getByRole('button', { name: 'Night', exact: true }).click();
+    await page.locator('.studio-savebar').waitFor();
+    assert.deepEqual(await pressedPreset(), ['Night']);
+    assert.equal(await page.locator('.preview-frame [data-widget-id="note"]').count(), 1, 'Night keeps the added Note on the canvas');
+    assert.equal(await page.locator('.preview-frame .analog-clock').count(), 1, 'Night keeps Analog');
+    assert.equal(await page.getByRole('slider', { name: 'Text size', exact: true }).inputValue(), '125', 'Night keeps Text size');
+    assert.equal(await page.getByRole('checkbox', { name: 'Drift and fade between moves', exact: true }).isChecked(), false, 'Night keeps Drift and fade off');
+    await page.getByRole('button', { name: 'Room', exact: true }).click();
+    await saved(page);
+    assert.deepEqual(await pressedPreset(), ['Room'], 'back to the saved look: no Save bar');
+    await range(page, 'Brightness');
+    await page.locator('.studio-savebar').waitFor();
+    assert.deepEqual(await pressedPreset(), [], 'a different brightness is no built-in look');
+    await range(page, 'Brightness', 'ArrowLeft');
+    await saved(page);
+    assert.deepEqual(await pressedPreset(), ['Room'], 'reverting the brightness presses Room again');
+    await page.getByRole('button', { name: 'Phone', exact: true }).click();
+    await save(page).click();
+    await saved(page);
+    const phone = app.store.snapshot().settings;
+    assert.deepEqual(phone.widgets, board.widgets, 'Phone keeps the widget set');
+    assert.deepEqual(phone.widgetGrid, board.widgetGrid, 'Phone keeps the layout');
+    assert.deepEqual(phone.widgetData, board.widgetData);
+    assert.deepEqual(
+      { ...phone.appearance, brightness: board.appearance.brightness, accentColor: board.appearance.accentColor, preset: board.appearance.preset },
+      board.appearance,
+      'Phone changes only its look',
+    );
+    assert.equal(phone.appearance.brightness, 0.7);
+    assert.equal(phone.appearance.motionIntervalSeconds, 180, 'Phone no longer sets a 2-minute interval');
+    await page.reload();
+    await page.locator('.clock-time, .analog-clock').first().waitFor();
+    await tab(page, 'Style');
+    assert.deepEqual(await pressedPreset(), ['Phone'], 'the saved look shows Phone pressed after reload');
+    checks.push(
+      '#153 #110 #226 built-in styles change only the look: Note, Analog, Text size 125% and Drift and fade off survive Night, Room and Phone; the card pressed follows the look (also after a reverted brightness nudge and reload); Save appears only for effective changes; Phone keeps the 3-minute interval',
+    );
+
+    // #240: plain Motion wording, with the stable structure other suites rely on.
+    await page.locator('summary', { hasText: 'Motion' }).click();
+    const motionBody = page.locator('.motion-disclosure .disclosure-body');
+    await motionBody.getByRole('checkbox', { name: 'Drift and fade between moves', exact: true }).waitFor();
+    await motionBody.getByRole('slider', { name: 'Move widgets every', exact: true }).waitFor();
+    assert.match(await motionBody.locator('.motion-hint').innerText(), /^Widgets always move to a new place through black\. With Drift and fade off, or with Animation effects off in Windows Settings › Accessibility › Visual effects on the display PC, they appear without a fade and nothing drifts\.$/);
+    assert.equal(await page.getByText(/Soft motion|New arrangement|Reduced motion removes/).count(), 0, 'the old wording is gone');
+    checks.push('#240 Motion reads "Drift and fade between moves", "Move widgets every" and a hint naming Windows Animation effects');
+    await context.close();
+
+    // #234: Restore from backup. A real export restores after confirmation; unsaved edits, an invalid
+    // file, a server-rejected file and "Don't restore" change nothing; the replaced state becomes the
+    // recovery backup; Reset appearance asks first.
+    await reset();
+    const created = new Date(now).toISOString();
+    await app.store.update((data) => {
+      data.settings.appearance.brightness = 0.4;
+      data.settings.savedPresets = [{ id: 'backup-style', name: 'Synthetic backup style', visual: { appearance: data.settings.appearance, widgets: data.settings.widgets, widgetOverrides: data.settings.widgetOverrides, widgetBehavior: data.settings.widgetBehavior, widgetGrid: data.settings.widgetGrid, preview: data.settings.preview } }];
+      data.reminders = [
+        { id: '00000000-0000-4000-8000-000000000234', text: 'Synthetic backup reminder', completed: false, dueAt: null, createdAt: created, updatedAt: created },
+        { id: '00000000-0000-4000-8000-000000000235', text: 'Synthetic done reminder', completed: true, dueAt: null, createdAt: created, updatedAt: created },
+      ];
+    });
+    const backupText = await (await fetch(`${base}/api/export`)).text();
+    await reset();
+    await app.store.patchSettings({ appearance: { brightness: 0.7 } });
+    const current = () => JSON.parse(JSON.stringify(app.store.snapshot()));
+    const before = current();
+    const stateFile = async (name) => JSON.parse(await readFile(join(directory, name), 'utf8'));
+    ({ page, context } = await open());
+    await tab(page, 'Style');
+    await page.locator('summary', { hasText: 'Data & recovery' }).click();
+    const status = page.locator('.data-status');
+    const restore = page.getByRole('button', { name: 'Restore from backup…', exact: true });
+    let choosers = 0;
+    page.on('filechooser', () => { choosers++; });
+    const choose = async (text) => {
+      const chooser = page.waitForEvent('filechooser');
+      await restore.click();
+      await (await chooser).setFiles({ name: 'living-room-display-backup.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+    };
+    await page.locator('.data-hint').waitFor();
+    assert.match(await page.locator('.data-hint').innerText(), /^A backup holds your saved settings, styles and reminders\. Your photo isn't included\.$/);
+    assert.equal(await page.getByText(/idle activation|installed helper/).count(), 0, 'the idle-helper sentence is gone');
+    // Unsaved edits are refused before any file is chosen.
+    await range(page, 'Brightness');
+    await restore.click();
+    await status.filter({ hasText: 'Save or cancel your changes before restoring a backup.' }).waitFor();
+    assert.equal(choosers, 0, 'no file picker while edits are unsaved');
+    await cancel(page).click();
+    await saved(page);
+    // A file that is not an export.
+    await choose('{"not":"a backup"}');
+    await status.filter({ hasText: "That file isn't a backup. Choose one made with Export saved data." }).waitFor();
+    assert.equal(await page.getByRole('group', { name: 'Restore backup' }).count(), 0);
+    // A real export: summary, then Don't restore changes nothing.
+    await choose(backupText);
+    const confirm = page.getByRole('group', { name: 'Restore backup' });
+    await confirm.waitFor();
+    assert.match((await confirm.innerText()).replace(/\s+/g, ' '), /Restore the backup from Oct 18, 2026, 9:00 AM\? It replaces your saved settings, styles and reminders with the backup's: 2 reminders \(1 completed\) and 1 saved style\. Your photo stays as it is\. What's saved now is kept as this computer's recovery backup until your next save\./);
+    await confirm.getByRole('button', { name: "Don't restore", exact: true }).click();
+    await confirm.waitFor({ state: 'detached' });
+    await status.filter({ hasText: 'Nothing was restored.' }).waitFor();
+    assert.deepEqual(current(), before, "Don't restore changes nothing");
+    // A file the server rejects changes nothing either.
+    const invalid = JSON.parse(backupText); invalid.settings.appearance.brightness = 5;
+    await choose(JSON.stringify(invalid));
+    await confirm.getByRole('button', { name: 'Restore', exact: true }).click();
+    await status.filter({ hasText: /^Could not restore the backup\. settings\.appearance\.brightness/ }).waitFor();
+    assert.deepEqual(current(), before, 'a rejected backup changes nothing');
+    // The browser logs that expected 400 response; it is the only console error this check allows.
+    for (let attempt = 0; attempt < 40 && !errors.some((text) => /status of 400/.test(text)); attempt++) await new Promise((done) => setTimeout(done, 50));
+    const rejectedLog = errors.findIndex((text) => /status of 400/.test(text));
+    assert.ok(rejectedLog >= 0, 'the rejected import was a 400 response');
+    errors.splice(rejectedLog, 1);
+    // Restore: the data, the draft and the recovery backup.
+    const previousState = await stateFile('state.json');
+    await choose(backupText);
+    await confirm.getByRole('button', { name: 'Restore', exact: true }).click();
+    await status.filter({ hasText: 'Backup restored: 2 reminders (1 completed) and 1 saved style.' }).waitFor();
+    const restored = app.store.snapshot(), exported = JSON.parse(backupText);
+    assert.equal(restored.settings.appearance.brightness, 0.4);
+    assert.deepEqual(restored.reminders, exported.reminders);
+    assert.deepEqual(restored.settings.savedPresets.map((style) => style.name), ['Synthetic backup style']);
+    assert.deepEqual(await stateFile('state.backup.json'), previousState, 'the replaced state is kept as the recovery backup');
+    await page.waitForFunction(() => document.querySelector('input[aria-label="Brightness"]')?.value === '40');
+    assert.equal(await page.locator('.studio-savebar').count(), 0, 'the refreshed draft is clean');
+    assert.match(await page.getByRole('tab', { name: /^Reminders/ }).innerText(), /1/, 'the restored reminders reach the editor');
+    // Reset appearance asks first; keeping changes nothing.
+    await page.getByRole('button', { name: 'Reset appearance…', exact: true }).click();
+    const reset234 = page.getByRole('group', { name: 'Reset appearance' });
+    assert.match(await reset234.innerText(), /Reset brightness, colours, typeface, Text size and motion to the defaults\? Widgets, their layout, the clock style and saved styles stay\./);
+    await reset234.getByRole('button', { name: 'Keep my appearance', exact: true }).click();
+    await reset234.waitFor({ state: 'detached' });
+    assert.equal(await page.locator('.studio-savebar').count(), 0);
+    await page.getByRole('button', { name: 'Reset appearance…', exact: true }).click();
+    await reset234.getByRole('button', { name: 'Reset', exact: true }).click();
+    await page.locator('.studio-savebar').waitFor();
+    await status.filter({ hasText: 'Appearance reset. Save changes to keep it.' }).waitFor();
+    assert.equal(await page.getByRole('slider', { name: 'Brightness', exact: true }).inputValue(), '55');
+    await cancel(page).click();
+    await saved(page);
+    await context.close();
+    checks.push(
+      "#234 Restore from backup: refused with unsaved edits (no file picker), an invalid file and a server-rejected file change nothing, the summary names the date and contents, Don't restore changes nothing, Restore replaces data and reminders, refreshes a clean draft and keeps the replaced state.json as state.backup.json; Reset appearance asks inline and Keep changes nothing",
     );
     assert.deepEqual(errors, []);
     return { checks, images };
