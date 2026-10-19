@@ -27,6 +27,7 @@ try {
     . $controlScript -InstallRoot $testRoot -LogPath $logFile -FunctionsOnly
     Initialize-ZipSupport
     $realScriptBytes = [IO.File]::ReadAllBytes($controlScript)
+    $realStopApp = ${function:Stop-App}
 
     # ---- mocks for external boundaries -------------------------------------
     function Reset-Mocks {
@@ -35,6 +36,7 @@ try {
         $script:healthResults = New-Object 'Collections.Generic.Queue[bool]'; $script:serverRunning = $false
         $script:restartHealthy = $true; $script:faults = @{}; $script:snapshotCalls = 0
         $script:operationLockTimeoutMs = 300
+        $script:moveRetryDelayMs = 10
         $script:controlScriptPath = $controlScript
         $script:PackageArchive = $null; $script:PackageSha256 = $null; $script:AllowDowngrade = $false; $script:RemoveData = $false
         if (Test-Path -LiteralPath $logFile) { Remove-Item -LiteralPath $logFile -Force }
@@ -209,7 +211,7 @@ try {
     New-SourceInstall '0.1.0'
     $before = Get-TreeState $InstallRoot
     $code = Invoke-Package (New-TestPackage -LongPath ('app/' + ('d' * 60) + '/' + ('e' * 60) + '/' + ('f' * 60) + '/' + ('g' * 40) + '.txt'))
-    Assert-True ($code -eq 1 -and (Get-TreeState $InstallRoot) -eq $before -and (Get-Content -Raw $logFile) -match 'too long') "A too-long install path returned $code or changed files."
+    Assert-True ($code -eq 21 -and (Get-TreeState $InstallRoot) -eq $before -and (Get-Content -Raw $logFile) -match 'too long') "A too-long install path returned $code or changed files."
     Complete-Check 'path length preflight'
 
     # ---- explicit InstallRoot and archive placement (real -File runs) -------
@@ -353,12 +355,83 @@ try {
         Assert-True ((Get-TreeState $app) -eq $appBefore -and (Get-TreeState $runtime) -eq $runtimeBefore -and (Get-Sha256 $marker) -eq $markerBefore -and (Get-TreeState $data) -eq $dataBefore) 'Health failure did not restore the previous app/runtime/marker or changed data.'
         Assert-True ((Get-Content -Raw (Join-Path $InstallRoot 'app.failed\release.json') | ConvertFrom-Json).version -eq '0.2.0') 'The failed candidate was not kept as app.failed.'
         Assert-True ($script:starts -eq 2) 'The previous version was not restarted after the failed health check.'
+        Assert-True (-not (Test-Path -LiteralPath $transaction) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.next')) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.previous'))) 'A completed rollback left its record or a set-aside runtime.'
     }
     Reset-Root; Reset-Mocks
     $script:healthResults.Enqueue($false)
     $code = Invoke-Package (New-TestPackage)
     Assert-True ($code -eq 16 -and (Test-Path -LiteralPath (Join-Path $InstallRoot 'app.failed')) -and -not (Test-Path -LiteralPath $app)) "A fresh install that cannot start returned $code or left app in place."
+    Assert-True ((Get-Marker).state -eq 'installing' -and -not (Test-Path -LiteralPath $transaction)) 'A failed first install reads as installed, or kept its rollback record.'
     Complete-Check 'health rollback'
+
+    # ---- an undo that fails is reported honestly and finished by the next run --
+    # Review finding: a rename during rollback can fail (a dying process still
+    # holds app). A brief failure is retried; a lasting one must give E20, keep
+    # app.previous, and the next Setup run must put it back instead of deleting it.
+    $transientFault = { if ($script:moveFailuresLeft -gt 0) { $script:moveFailuresLeft--; throw (New-Object IO.IOException 'The process cannot access the file because it is being used by another process.') } }
+    $lastingFault = { throw (New-Object IO.IOException 'The process cannot access the file because it is being used by another process.') }
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    $script:serverRunning = $true; $script:runtimeVersion = 'v24.10.0'
+    $script:healthResults.Enqueue($false)
+    $script:moveFailuresLeft = 1; $script:faults['move-app.failed'] = $transientFault
+    $appBefore = Get-TreeState $app
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 15 -and (Get-TreeState $app) -eq $appBefore -and (Get-Content -Raw $logFile) -match 'attempt 1 of') "A rename that failed once was not retried into E15 ($code)."
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    $script:serverRunning = $true; $script:runtimeVersion = 'v24.10.0'
+    $script:healthResults.Enqueue($false)
+    $script:faults['move-app.failed'] = $lastingFault
+    $appBefore = Get-TreeState $app; $runtimeBefore = Get-TreeState $runtime; $dataBefore = Get-TreeState $data; $markerBefore = [IO.File]::ReadAllText($marker)
+    $code = Invoke-Package (New-TestPackage)
+    $log = Get-Content -Raw $logFile
+    Assert-True ($code -eq 20) "A rollback that could not finish returned $code instead of 20. Log: $log"
+    Assert-True ($log -match 'Failed \(exit 20\): LRD-E20: .*app\.previous' -and $log -notmatch 'previous version was restored') 'E20 does not say where the previous version is.'
+    Assert-True ((Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $appBefore -and (Get-TreeState $data) -eq $dataBefore -and (Test-Path -LiteralPath $transaction)) 'A failed rollback lost app.previous, changed data or dropped its record.'
+    Assert-True ($script:starts -eq 1) 'A failed rollback started a half-restored install.'
+    # The same failure on the next run: still E20, and nothing is lost.
+    Reset-Mocks
+    $script:faults['move-app.failed'] = $lastingFault
+    $before = Get-TreeState $InstallRoot
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 20 -and (Get-TreeState $InstallRoot) -eq $before -and (Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $appBefore) "A repeated failed resume returned $code or changed files."
+    # A source Update must not replace app.previous meanwhile.
+    $refused = $false
+    try { Install-App } catch { $refused = $_.Exception.Message -match 'did not finish putting the previous version back' }
+    Assert-True ($refused -and (Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $appBefore) 'A source Update was not refused during an unfinished rollback.'
+    # Once the folder is free, the next Setup finishes the rollback and then installs.
+    Reset-Mocks
+    $script:runtimeVersion = 'v24.10.0'
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 0) "Setup after an unfinished rollback returned $code. Log: $(Get-Content -Raw $logFile)"
+    Assert-True ((Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $appBefore -and (Get-TreeState $data) -eq $dataBefore) 'Finishing the rollback deleted the last working app or changed data.'
+    Assert-True ((Get-Marker).version -eq '0.2.0' -and -not (Test-Path -LiteralPath $transaction) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.next')) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'app.next'))) 'The resumed install left its record or set-aside folders.'
+    Assert-True ([IO.File]::ReadAllText((Join-Path $InstallRoot 'runtime.previous\node.exe')) -eq 'previous node' -and (Get-Content -Raw (Join-Path $app 'release.json') | ConvertFrom-Json).version -eq '0.2.0') 'The resumed install did not swap in the new app and runtime.'
+    Assert-True ((Get-Content -Raw $logFile) -match 'did not finish') 'The helper log does not record the resumed rollback.'
+    Complete-Check 'unfinished rollback'
+
+    # ---- a run that stopped mid-swap (crash or power cut) is undone first ----
+    foreach ($candidatePlaced in @($true,$false)) {
+        Reset-Root; Reset-Mocks
+        New-SourceInstall '0.1.0'
+        $appBefore = Get-TreeState $app; $dataBefore = Get-TreeState $data; $oldMarker = [IO.File]::ReadAllText($marker)
+        Move-Item -LiteralPath $app -Destination (Join-Path $InstallRoot 'app.previous')
+        if ($candidatePlaced) {
+            $null = New-Item -ItemType Directory -Path (Join-Path $app 'dist\server') -Force
+            [IO.File]::WriteAllText((Join-Path $app 'release.json'), '{"version":"0.2.0"}')
+            [IO.File]::WriteAllText((Join-Path $app 'package.json'), '{"version":"0.2.0"}')
+            Write-Json $marker ([ordered]@{product='living-room-display';state='installed';version='0.2.0';channel='package';runtimeVersion='24.19.0';runtimePreviousOwner=$null;packageSha256=('f' * 64)})
+        }
+        Write-Json $transaction ([ordered]@{product='living-room-display';schema=1;version='0.2.0';originalMarker=$oldMarker;appMoved=$true;newApp=$true;runtimeMoved=$false;newRuntime=$false})
+        $code = Invoke-Package (New-TestPackage)
+        Assert-True ($code -eq 0) "Setup after an interrupted swap (candidate placed=$candidatePlaced) returned $code. Log: $(Get-Content -Raw $logFile)"
+        Assert-True ((Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $appBefore -and (Get-TreeState $data) -eq $dataBefore -and -not (Test-Path -LiteralPath $transaction)) "An interrupted swap (candidate placed=$candidatePlaced) lost the last working app or changed data."
+        Assert-True ((Test-Path -LiteralPath (Join-Path $InstallRoot 'app.failed')) -eq $candidatePlaced) 'The interrupted candidate was not kept as app.failed.'
+        $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $InstallRoot 'backups') -Directory)
+        Assert-True ($snapshots.Count -eq 1 -and $snapshots[0].Name -match '^data-before-0\.1\.0-') 'The snapshot after an interrupted swap is not labelled with the restored version.'
+    }
+    Complete-Check 'interrupted swap'
 
     # ---- stale staging, operation lock and reparse refusal -----------------
     Reset-Root; Reset-Mocks
@@ -420,13 +493,14 @@ try {
     Reset-Root; Reset-Mocks
     Assert-True ((Invoke-Package (New-TestPackage)) -eq 0) 'Install before uninstall failed.'
     $owner = Get-Marker; $owner.runtimePreviousOwner = 'package'; Write-Json $marker $owner
-    foreach ($leftover in @('app.previous','app.failed','package.next','runtime.next','run','edge-profile','runtime.previous','backups\data-before-0.1.0-20260101T000000000Z')) { $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot $leftover) -Force }
+    foreach ($leftover in @('app.previous','app.failed','app.next','package.next','runtime.next','run','edge-profile','runtime.previous','backups\data-before-0.1.0-20260101T000000000Z')) { $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot $leftover) -Force }
+    [IO.File]::WriteAllText($transaction, '{"product":"living-room-display","schema":1}')
     $null = New-Item -ItemType Directory -Path $data -Force
     [IO.File]::WriteAllText((Join-Path $data 'state.json'), '{"synthetic":true}')
     $dataBefore = Get-TreeState $data
     $FromInstaller = $true
     Uninstall-App | Out-Null
-    foreach ($gone in @('app','app.previous','app.failed','package.next','runtime.next','runtime','run','edge-profile','runtime.previous')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $gone))) "Uninstall left $gone." }
+    foreach ($gone in @('app','app.previous','app.failed','app.next','package.next','runtime.next','runtime','run','edge-profile','runtime.previous','package-transaction.json')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $gone))) "Uninstall left $gone." }
     Assert-True ((Get-TreeState $data) -eq $dataBefore -and (Test-Path -LiteralPath (Join-Path $InstallRoot 'backups\data-before-0.1.0-20260101T000000000Z'))) 'Default uninstall removed data or backups.'
     Assert-True ((Get-Marker).state -eq 'uninstalled' -and (Get-Marker).channel -eq 'package') 'Uninstall did not retain the marker.'
     # The runtime.previous above was package-owned; a user-made one is kept.
@@ -439,6 +513,55 @@ try {
     Assert-True ((Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.previous\keep')) -and -not (Test-Path -LiteralPath $data) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'backups')) -and (Test-Path -LiteralPath $marker)) 'RemoveData did not remove data and backups, kept a user runtime.previous, or lost the marker.'
     $script:RemoveData = $false
     Complete-Check 'uninstall removal rules'
+
+    # ---- Stop waits only for Edge running with this install's own profile -----
+    $edgeProfile = Join-Path $InstallRoot 'edge-profile'
+    Assert-True (Test-OwnedBrowserCommandLine ('"msedge.exe" --kiosk "http://127.0.0.1:4318/display" --edge-kiosk-type=fullscreen --inprivate --user-data-dir="' + $edgeProfile + '"')) 'The display browser was not recognized.'
+    Assert-True (Test-OwnedBrowserCommandLine ('"msedge.exe" --type=renderer --user-data-dir="' + $edgeProfile + '" --lang=en-US')) 'A display browser child process was not recognized.'
+    Assert-True (Test-OwnedBrowserCommandLine ('msedge.exe --type=gpu-process --user-data-dir=' + $edgeProfile.ToUpperInvariant() + ' --field-trial-handle=1')) 'An unquoted or differently cased profile path was not recognized.'
+    foreach ($other in @('"msedge.exe" --profile-directory=Default', ('"msedge.exe" --user-data-dir="' + $edgeProfile + '2"'), ('"msedge.exe" --user-data-dir="' + $edgeProfile + '\nested"'), ('"msedge.exe" --user-data-dir="' + (Join-Path $env:LOCALAPPDATA 'LivingRoomDisplay\edge-profile') + '"'), '')) {
+        Assert-True (-not (Test-OwnedBrowserCommandLine $other)) "A browser that is not this install's display was matched: $other"
+    }
+    Complete-Check 'display browser ownership'
+
+    # ---- Stop waits for every process it stops (review of d2dd04f) -----------
+    # The real Stop-App against scripted processes. Stop-Process only starts
+    # ending a process, so each stopped display, display browser and server is
+    # waited for, and one that doesn't exit fails Stop instead of racing the
+    # rename of app that follows. Only the scripted processes below are touched.
+    $script:stopEvents = New-Object 'Collections.Generic.List[string]'
+    function New-FakeProcess([int]$Id, [bool[]]$Waits) {
+        $fake = [pscustomobject]@{Id=$Id;Waits=(New-Object 'Collections.Generic.Queue[bool]')}
+        foreach ($wait in $Waits) { $fake.Waits.Enqueue($wait) }
+        $fake | Add-Member -MemberType ScriptProperty -Name HasExited -Value { $false }
+        $fake | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { param($Milliseconds) $script:stopEvents.Add("wait $($this.Id) $Milliseconds"); if ($this.Waits.Count) { return $this.Waits.Dequeue() }; return $true }
+        return $fake
+    }
+    function Invoke-RealStop([hashtable]$Processes) {
+        function Get-CimInstance {
+            param([Parameter(Position=0)]$ClassName, $Filter)
+            if ($Filter -eq "Name='LivingRoomDisplay.scr'") { return @([pscustomobject]@{ProcessId=11;ExecutablePath=$hostExe},[pscustomobject]@{ProcessId=98;ExecutablePath='C:\Other\LivingRoomDisplay.scr'}) }
+            if ($Filter -eq "Name='msedge.exe'") { return @([pscustomobject]@{ProcessId=12;CommandLine=('"msedge.exe" --type=renderer --user-data-dir="' + (Join-Path $InstallRoot 'edge-profile') + '"')},[pscustomobject]@{ProcessId=99;CommandLine='"msedge.exe" --profile-directory=Default'}) }
+            if ($Filter -eq "ParentProcessId=13 AND Name='conhost.exe'") { return [pscustomobject]@{ProcessId=14} }
+            throw "Unexpected process query: $Filter"
+        }
+        function Get-Process { param($Id, $ErrorAction) if ($Processes.ContainsKey([int]$Id)) { return $Processes[[int]$Id] }; throw "Unexpected process lookup: $Id" }
+        function Stop-Process { param([Parameter(ValueFromPipeline=$true)]$InputObject, [switch]$Force) process { $script:stopEvents.Add("kill $($InputObject.Id)") } }
+        function Get-OwnedServer { return $Processes[13] }
+        & $realStopApp
+    }
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    $script:stopEvents.Clear()
+    Invoke-RealStop @{11=(New-FakeProcess 11 @($false,$true));12=(New-FakeProcess 12 @($true));13=(New-FakeProcess 13 @($true));14=(New-FakeProcess 14 @($true))}
+    Assert-True (($script:stopEvents -join ', ') -eq 'wait 11 4000, kill 11, wait 11 10000, wait 12 10000, kill 13, wait 13 10000, wait 14 10000') "Stop did not wait for what it stopped: $($script:stopEvents -join ', ')"
+    $script:stopEvents.Clear()
+    Invoke-RealStop @{11=(New-FakeProcess 11 @($true));12=(New-FakeProcess 12 @($false,$true));13=(New-FakeProcess 13 @($true));14=(New-FakeProcess 14 @($true))}
+    Assert-True (($script:stopEvents -join ', ') -eq 'wait 11 4000, wait 12 10000, kill 12, wait 12 10000, kill 13, wait 13 10000, wait 14 10000') "Stop did not end a lingering display browser: $($script:stopEvents -join ', ')"
+    $stopFailure = $null
+    try { Invoke-RealStop @{11=(New-FakeProcess 11 @($true));12=(New-FakeProcess 12 @($true));13=(New-FakeProcess 13 @($false));14=(New-FakeProcess 14 @($true))} } catch { $stopFailure = $_.Exception.Message }
+    Assert-True ($stopFailure -match 'server \(process 13\) did not exit within 10 seconds') "Stop returned although the server had not exited: $stopFailure"
+    Complete-Check 'stop waits for stopped processes'
 
     # ---- the new marker is readable by the previous control script ----------
     Reset-Root; Reset-Mocks

@@ -100,7 +100,7 @@ Constrained Language Mode can still block it; Setup then shows a plain message
 | Windows PowerShell 5.1 | Present on Windows 10 and 11; used only by Setup, the uninstaller and the helper's Start. | CI runs `Test-Windows.ps1` under 5.1 and 7. |
 | Port 4318 | Bound to 127.0.0.1 only, so there's no firewall prompt. A port already in use stops Setup with E11. | The CI smoke asserts a loopback-only listener and the E11 refusal; alternate port: [#121](https://github.com/8roundshock/living-room-display/issues/121). |
 | Windows on Arm | `x64compatible`: the x64 Node runs under emulation; the AnyCPU helper runs natively. | Non-gating CI on windows-11-arm, recorded under [#122](https://github.com/8roundshock/living-room-display/issues/122). |
-| Path length | The deepest payload path is 111 characters. InstallPackage refuses roots longer than about 134 characters before writing anything. | Unit test in `Test-PackageInstall.ps1`. |
+| Path length | The deepest payload path is 111 characters. InstallPackage refuses roots longer than about 134 characters before writing anything (E21). | Unit test in `Test-PackageInstall.ps1`. |
 
 ### Inno Setup assumptions
 
@@ -149,8 +149,11 @@ v4.0.30319 compiler, PowerShell 7 and Windows PowerShell 5.1. Helper compilation
 parses under both PowerShell engines. Run `windows/Test-Windows.ps1` for native
 compile/argument checks, cleanup containment including nested junction refusal,
 malformed/unrelated PID refusal, and optional real process/start-time ownership
-checks (`-NodeExe '<node.exe>'`). Fourteen check groups with Node (thirteen without)
-pass on PowerShell 7 and 5.1, including successful final cleanup. They now also
+checks (`-NodeExe '<node.exe>'`). With Node they also stop a real owned test
+server whose working folder is `app` and rename `app` straight after `Stop`,
+which only works because `Stop` waits for the process to exit. Fifteen check
+groups with Node (thirteen without) pass on PowerShell 7 and 5.1, including
+successful final cleanup. They now also
 cover the InstallPackage transaction (`tests/Test-PackageInstall.ps1`), the static
 installer policy and the versioned helper build, and every script is checked to be
 ASCII for Windows PowerShell 5.1; use process-scoped

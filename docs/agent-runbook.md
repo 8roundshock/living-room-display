@@ -100,7 +100,11 @@ a Living Room Display install without that PC owner's explicit go-ahead.** Setup
 stops and replaces the running install. Check the editor for unsaved changes
 first. On the original owner's PC, adoption is the coordinated rollout in
 [#130](https://github.com/8roundshock/living-room-display/issues/130). Never use
-`/ALLOWDOWNGRADE=1` to "recover": follow the manual rollback steps.
+`/ALLOWDOWNGRADE=1` to "recover": follow the manual rollback steps. After an
+`LRD-E20` (Setup couldn't finish its own rollback), the last working app is
+still in `app.previous` and `package-transaction.json` records the unfinished
+steps: run the same Setup again, which finishes the rollback first. Don't delete
+`app.previous` or the record by hand unless you complete the manual steps.
 
 ## Diagnose before reporting
 

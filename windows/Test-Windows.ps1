@@ -130,6 +130,24 @@ try {
         Write-Json (Join-Path $run 'server.json') @{processId=$ownedTestProcess.Id;startedAt='2000-01-01T00:00:00.0000000Z'}
         Assert-True ($null -eq (Get-OwnedServer)) 'Reused PID/start-time mismatch was adopted.'
         $passed++
+        # Stop must not return until the server is gone. Stop-Process only starts
+        # ending it, and meanwhile it keeps app as its working folder, so Setup's
+        # rename of app right after Stop could fail (#77 review of d2dd04f). The
+        # rename goes through Setup's own Move-OwnedItem, as in a rollback.
+        $ownedTestProcess | Stop-Process -Force
+        $null = $ownedTestProcess.WaitForExit(10000)
+        $renamedApp = Join-Path $fixture 'app.renamed'
+        for ($round = 1; $round -le 5; $round++) {
+            $ownedTestProcess = Start-Process -FilePath $NodeExe -ArgumentList ('"' + $entry + '"') -WorkingDirectory $app -WindowStyle Hidden -PassThru
+            Write-Json (Join-Path $run 'server.json') @{processId=$ownedTestProcess.Id;startedAt=$ownedTestProcess.StartTime.ToUniversalTime().ToString('o')}
+            for ($attempt = 0; $attempt -lt 20 -and $null -eq (Get-OwnedServer); $attempt++) { Start-Sleep -Milliseconds 150 }
+            Assert-True ($null -ne (Get-OwnedServer)) "Round ${round}: the owned test server was not recognized."
+            Stop-App
+            Assert-True $ownedTestProcess.HasExited "Round ${round}: Stop returned before the owned server had exited."
+            Move-OwnedItem $app $renamedApp
+            Move-OwnedItem $renamedApp $app
+        }
+        $passed++
     }
 } finally {
     if ($ownedTestProcess -and -not $ownedTestProcess.HasExited) { $ownedTestProcess | Stop-Process -Force }

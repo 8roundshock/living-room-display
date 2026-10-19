@@ -34,6 +34,13 @@ if ($LogPath) { $script:packageLogPath = $ExecutionContext.SessionState.Path.Get
 $script:InnoAppId = '{838B4E42-F1FC-44A0-B108-53DE8DF4563C}'
 $script:UninstallKeyPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\' + $script:InnoAppId + '_is1'
 $script:operationLockTimeoutMs = 10000
+# Stop-Process returns as soon as Windows starts ending a process; wait this long
+# for it to be gone before its folders are renamed.
+$script:processExitTimeoutMs = 10000
+# Package folder renames retry briefly: a scanner or a just-ended process can hold
+# a folder open for a moment.
+$script:moveAttempts = 10
+$script:moveRetryDelayMs = 300
 function Write-PackageLog([string]$Message) {
     if (-not $script:packageLogPath) { return }
     $line = '[' + [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ') + '] ' + $Message + [Environment]::NewLine
@@ -66,6 +73,8 @@ $runtime = Join-Path $InstallRoot 'runtime'
 $data = Join-Path $InstallRoot 'data'
 $run = Join-Path $InstallRoot 'run'
 $marker = Join-Path $InstallRoot 'installation.json'
+# Present only while a Setup swap or its rollback is unfinished.
+$transaction = Join-Path $InstallRoot 'package-transaction.json'
 $script:baseUrl = 'http://127.0.0.1:4318'
 $script:node = Join-Path $runtime 'node.exe'
 $hostExe = Join-Path $app 'windows\LivingRoomDisplay.scr'
@@ -157,6 +166,18 @@ function Start-App {
     Stop-App
     throw 'Local server startup timed out.'
 }
+function Stop-OwnedProcess($Process, [string]$What) {
+    try { $Process | Stop-Process -Force } catch { if (-not $Process.HasExited) { throw } }
+    # TerminateProcess only starts the end of a process. Until it is gone it keeps
+    # its working folder (app), its mapped executable and its handles, so a rename
+    # right after Stop-Process can fail. Wait, with a bound.
+    if (-not $Process.WaitForExit($script:processExitTimeoutMs)) { throw "$What (process $($Process.Id)) did not exit within $([int]($script:processExitTimeoutMs / 1000)) seconds after it was stopped" }
+}
+function Test-OwnedBrowserCommandLine([string]$CommandLine) {
+    # The display host starts Edge with this install's own profile folder.
+    if (-not $CommandLine) { return $false }
+    return ($CommandLine -match ('--user-data-dir="?' + [regex]::Escape((Join-Path $InstallRoot 'edge-profile')) + '("|\s|$)'))
+}
 function Stop-App {
     Assert-Installed
     try {
@@ -168,10 +189,21 @@ function Stop-App {
     $hosts = @(Get-CimInstance Win32_Process -Filter "Name='LivingRoomDisplay.scr'" | Where-Object { $_.ExecutablePath -eq $hostExe })
     foreach ($item in $hosts) {
         $process = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
-        if ($process -and -not $process.WaitForExit(4000)) { $process | Stop-Process -Force }
+        if ($process -and -not $process.WaitForExit(4000)) { Stop-OwnedProcess $process 'The Living Room Display display' }
+    }
+    # Edge runs in the host's job, which Windows closes with the host, but those
+    # processes also end asynchronously and may share the host's working folder.
+    $browsers = @(foreach ($item in @(Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction SilentlyContinue | Where-Object { Test-OwnedBrowserCommandLine $_.CommandLine })) { Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue })
+    foreach ($process in $browsers) {
+        if (-not $process.WaitForExit($script:processExitTimeoutMs)) { Stop-OwnedProcess $process 'The display browser' }
     }
     $owned = Get-OwnedServer
-    if ($owned) { $owned | Stop-Process -Force }
+    if ($owned) {
+        # The server's hidden console host ends just after it; give it a moment too.
+        $consoles = @(foreach ($item in @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$([int]$owned.Id) AND Name='conhost.exe'" -ErrorAction SilentlyContinue)) { Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue })
+        Stop-OwnedProcess $owned 'The Living Room Display server'
+        foreach ($console in $consoles) { $null = $console.WaitForExit($script:processExitTimeoutMs) }
+    }
     $pidFile = Join-Path $run 'server.json'
     if (Test-Path -LiteralPath $pidFile) { Remove-Item -LiteralPath $pidFile -Force }
 }
@@ -241,6 +273,9 @@ function Get-SourceProvenance([string]$Source, [string]$HostDirectory = $PSScrip
     } catch { return $unknown }
 }
 function Install-App {
+    # An unfinished Setup rollback means app.previous holds the last working app;
+    # a source update would replace app.previous and lose it.
+    if (Test-Path -LiteralPath $transaction) { throw "A Windows Setup update at $InstallRoot did not finish putting the previous version back. Run that Setup again to finish it, then retry." }
     $source = [IO.Path]::GetFullPath($SourceRoot)
     if (-not (Test-Path -LiteralPath (Join-Path $source 'package-lock.json')) -or -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Build-Host.ps1')) -or -not (Test-Path -LiteralPath (Join-Path $source 'src'))) { throw 'Run Install or Update from a complete source clone, not from installed app files.' }
     Assert-NoReparseAncestor $InstallRoot
@@ -372,6 +407,8 @@ function Uninstall-App {
     $directories = @('app','app.previous','app.failed','app.next','package.next','runtime.next','runtime','run','edge-profile')
     if ($installed.PSObject.Properties['runtimePreviousOwner'] -and $installed.runtimePreviousOwner -eq 'package') { $directories += 'runtime.previous' }
     foreach ($directory in $directories) { Remove-OwnedDirectory (Join-Path $InstallRoot $directory) }
+    # The record of an unfinished Setup rollback describes folders removed above.
+    if (Test-Path -LiteralPath $transaction -PathType Leaf) { Remove-Item -LiteralPath $transaction -Force }
     if ($RemoveData) {
         Remove-OwnedDirectory $data
         Remove-OwnedDirectory (Join-Path $InstallRoot 'backups')
@@ -666,31 +703,91 @@ function Save-DataSnapshot([string]$InstalledVersion) {
     Write-PackageLog "Data snapshot verified: $target"
     return $target
 }
+function Invoke-Retried([scriptblock]$Operation, [string]$Description) {
+    for ($attempt = 1; ; $attempt++) {
+        try { & $Operation; return }
+        catch {
+            if ($attempt -ge $script:moveAttempts) { throw }
+            Write-PackageLog "$Description failed (attempt $attempt of $($script:moveAttempts)), retrying: $($_.Exception.Message)"
+            Start-Sleep -Milliseconds $script:moveRetryDelayMs
+        }
+    }
+}
 function Move-OwnedItem([string]$From, [string]$To) {
     foreach ($path in @($From,$To)) {
         $full = [IO.Path]::GetFullPath($path)
         if (-not $full.StartsWith($InstallRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "Move path is outside the application directory: $full" }
     }
     Assert-NoReparseAncestor $From
-    Move-Item -LiteralPath $From -Destination $To
+    # Move-Item would put a folder inside an existing target instead of renaming it.
+    if (Test-Path -LiteralPath $To) { throw "Move target already exists: $To" }
+    $faultName = 'move-' + (Split-Path $To -Leaf)
+    Invoke-Retried { Invoke-PackageFaultPoint $faultName; Move-Item -LiteralPath $From -Destination $To } "Renaming $From to $To"
 }
-function Restore-PackageSwap([hashtable]$State, [string]$OriginalMarker, [bool]$KeepCandidate) {
-    # Undo exactly what this run changed, newest first. After a failed health
-    # check the candidate app is kept as app.failed for diagnosis.
+function Restore-OwnedItem([string]$From, [string]$To) {
+    # Safe to repeat when a later run resumes: done already if only the target exists.
+    if (Test-Path -LiteralPath $From) { Move-OwnedItem $From $To; return }
+    if (-not (Test-Path -LiteralPath $To)) { throw "Cannot restore $To because $From is missing." }
+}
+function Save-PackageTransaction([hashtable]$State) {
+    # Each flag is recorded before its rename and cleared after its undo, so a
+    # later run can finish an interrupted swap or rollback (see Resume-PackageTransaction).
+    Write-Json $transaction ([ordered]@{product='living-room-display';schema=1;version=$State.Version;originalMarker=$State.OriginalMarker;appMoved=$State.AppMoved;newApp=$State.NewApp;runtimeMoved=$State.RuntimeMoved;newRuntime=$State.NewRuntime})
+}
+function Clear-PackageTransaction {
+    if (-not (Test-Path -LiteralPath $transaction)) { return }
+    try { Invoke-Retried { Remove-Item -LiteralPath $transaction -Force } "Removing $transaction" }
+    catch { Write-PackageLog "Warning: could not remove ${transaction}: $($_.Exception.Message)" }
+}
+function Restore-PackageSwap([hashtable]$State, [bool]$KeepCandidate) {
+    # Undo exactly what this run changed, newest first, by whole-folder renames:
+    # each step either happens or leaves its folders as they were. Nothing is
+    # deleted until every step is done. After a failed health check the
+    # candidate app is kept as app.failed for diagnosis.
     $failedApp = Join-Path $InstallRoot 'app.failed'
     $previousApp = Join-Path $InstallRoot 'app.previous'
     $previousRuntime = Join-Path $InstallRoot 'runtime.previous'
-    # A runtime placed by this run is removed when an older one is restored, or
+    $asideApp = Join-Path $InstallRoot 'app.next'
+    $asideRuntime = Join-Path $InstallRoot 'runtime.next'
+    # A runtime placed by this run is set aside when an older one is restored, or
     # when an earlier app exists that ran without it. A fresh install keeps it.
-    if ($State.NewRuntime -and ($State.RuntimeMoved -or $State.AppMoved)) { Remove-OwnedDirectory $runtime; $State.NewRuntime = $false }
-    if ($State.RuntimeMoved) { Move-OwnedItem $previousRuntime $runtime; $State.RuntimeMoved = $false }
-    if ($State.NewApp) {
-        if ($KeepCandidate) { Remove-OwnedDirectory $failedApp; Move-OwnedItem $app $failedApp }
-        else { Remove-OwnedDirectory $app }
-        $State.NewApp = $false
+    if ($State.NewRuntime -and ($State.RuntimeMoved -or $State.AppMoved)) {
+        if (Test-Path -LiteralPath $runtime) { Remove-OwnedDirectory $asideRuntime; Move-OwnedItem $runtime $asideRuntime }
+        $State.NewRuntime = $false; Save-PackageTransaction $State
     }
-    if ($State.AppMoved) { Move-OwnedItem $previousApp $app }
-    if ($OriginalMarker) { [IO.File]::WriteAllText($marker, $OriginalMarker, (New-Object Text.UTF8Encoding($false))) }
+    if ($State.RuntimeMoved) { Restore-OwnedItem $previousRuntime $runtime; $State.RuntimeMoved = $false; Save-PackageTransaction $State }
+    if ($State.NewApp) {
+        $candidateTarget = if ($KeepCandidate) { $failedApp } else { $asideApp }
+        if (Test-Path -LiteralPath $app) { Remove-OwnedDirectory $candidateTarget; Move-OwnedItem $app $candidateTarget }
+        $State.NewApp = $false; Save-PackageTransaction $State
+    }
+    if ($State.AppMoved) { Restore-OwnedItem $previousApp $app; $State.AppMoved = $false; Save-PackageTransaction $State }
+    if ($null -ne $State.OriginalMarker) { [IO.File]::WriteAllText($marker, [string]$State.OriginalMarker, (New-Object Text.UTF8Encoding($false))) }
+    Clear-PackageTransaction
+    foreach ($aside in @($asideApp,$asideRuntime)) {
+        try { Remove-OwnedDirectory $aside } catch { Write-PackageLog "Could not remove $aside yet (the next Setup or uninstall removes it): $($_.Exception.Message)" }
+    }
+}
+function Get-RestoreFailureMessage([string]$Reason, [bool]$HadPrevious) {
+    # The undo stopped part-way. package-transaction.json still describes it, so
+    # the next Setup run finishes it before doing anything else.
+    $kept = if ($HadPrevious) { 'The previous version is still in app.previous; running Setup again puts it back first.' } else { 'Running Setup again finishes undoing them first.' }
+    return "LRD-E20: Setup could not finish undoing its changes: $(([string]$Reason).Trim().TrimEnd('.')). $kept Data was not changed."
+}
+function Resume-PackageTransaction {
+    # An earlier run stopped part-way through a swap or its rollback (E20, a crash
+    # or a power cut). Put the previous version back first, so its app.previous is
+    # never mistaken for an older copy and deleted by this run.
+    Write-PackageLog "An earlier Setup run did not finish ($transaction); putting the previous version back first."
+    $journal = $null
+    try { $journal = Get-Content -LiteralPath $transaction -Raw | ConvertFrom-Json } catch { }
+    if (-not $journal -or (Get-MarkerValue $journal 'product') -ne 'living-room-display' -or [string](Get-MarkerValue $journal 'schema') -ne '1') { throw "LRD-E20: The record of an earlier unfinished update is unreadable: $transaction" }
+    $state = @{Version=[string](Get-MarkerValue $journal 'version');OriginalMarker=(Get-MarkerValue $journal 'originalMarker');AppMoved=[bool](Get-MarkerValue $journal 'appMoved');NewApp=[bool](Get-MarkerValue $journal 'newApp');RuntimeMoved=[bool](Get-MarkerValue $journal 'runtimeMoved');NewRuntime=[bool](Get-MarkerValue $journal 'newRuntime')}
+    # A Start-menu launch since then may have started the candidate.
+    try { Stop-App } catch { Write-PackageLog "Stop before finishing the earlier rollback: $($_.Exception.Message)" }
+    try { Restore-PackageSwap $state $true }
+    catch { throw "LRD-E20: Setup could not finish putting the previous version back: $($_.Exception.Message)" }
+    Write-PackageLog 'The version from before the earlier run is back in place.'
 }
 function Install-Package {
     Write-PackageStep 'verify'
@@ -703,7 +800,8 @@ function Install-Package {
     if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'LRD-E13: The package archive is missing.' }
     if ([string]$PackageSha256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'LRD-E13: The expected package hash is not a SHA-256 value.' }
 
-    # Preflight: nothing below writes until every check has passed.
+    # Preflight: nothing below writes until every check has passed (finishing an
+    # earlier unfinished rollback is the one exception; it only puts files back).
     $installed = Assert-PackageFolder
     $packageHash = Get-Sha256 $archive
     if ($packageHash -ne $PackageSha256.ToLowerInvariant()) { throw 'LRD-E13: The package archive hash does not match Setup.' }
@@ -715,7 +813,13 @@ function Install-Package {
     # Windows PowerShell 5.1 file APIs stop at MAX_PATH; refuse before writing
     # anything rather than failing halfway through staging.
     $longest = [int](@($manifest.files) | ForEach-Object { ([string]$_.path).Length } | Measure-Object -Maximum).Maximum
-    if ($InstallRoot.Length + '\package.next\'.Length + $longest -gt 259) { throw "The install folder path is too long for this package: keep it under $(259 - '\package.next\'.Length - $longest) characters." }
+    if ($InstallRoot.Length + '\package.next\'.Length + $longest -gt 259) { throw "LRD-E21: The install folder path is too long for this package: keep it under $(259 - '\package.next\'.Length - $longest) characters." }
+    # The package itself checks out. Finish an earlier unfinished rollback before
+    # reading the installed state, which that rollback changes.
+    if ($installed -and (Test-Path -LiteralPath $transaction)) {
+        Resume-PackageTransaction
+        $installed = Assert-PackageFolder
+    }
 
     $isUpgrade = $null -ne $installed
     $installedVersion = $null
@@ -748,14 +852,17 @@ function Install-Package {
         }
     }
     $null = New-Item -ItemType Directory -Path $InstallRoot -Force
-    $originalMarker = if ($isUpgrade) { [IO.File]::ReadAllText($marker) } else { $null }
     $previousRuntime = Join-Path $InstallRoot 'runtime.previous'
-    $state = @{AppMoved=$false;NewApp=$false;RuntimeMoved=$false;NewRuntime=$false}
+    $previousApp = Join-Path $InstallRoot 'app.previous'
+    $state = @{Version=$version;OriginalMarker=$null;AppMoved=$false;NewApp=$false;RuntimeMoved=$false;NewRuntime=$false}
     $wasRunning = $null -ne $owned
     try {
         try { Expand-PackageArchive $archive $stage $manifest }
         catch { if ($_.Exception.Message -match '^LRD-E\d\d:') { throw }; throw "LRD-E13: The package could not be staged: $($_.Exception.Message)" }
         if (-not $isUpgrade) { Write-Json $marker ([ordered]@{product='living-room-display';state='installing'}) }
+        # A rollback writes this text back: the previous marker, or 'installing'
+        # on a first install, so a failed first install never reads as installed.
+        $state.OriginalMarker = [IO.File]::ReadAllText($marker)
         if ($isUpgrade) {
             Stop-App
             if (Test-PortInUse) {
@@ -774,16 +881,18 @@ function Install-Package {
 
         Write-PackageStep 'install'
         try {
-            Remove-OwnedDirectory (Join-Path $InstallRoot 'app.previous')
-            if (Test-Path -LiteralPath $app) { Move-OwnedItem $app (Join-Path $InstallRoot 'app.previous'); $state.AppMoved = $true }
-            Move-OwnedItem (Join-Path $stage 'app') $app; $state.NewApp = $true
+            Remove-OwnedDirectory $previousApp
+            Save-PackageTransaction $state
+            # Each flag is recorded before its rename (see Save-PackageTransaction).
+            if (Test-Path -LiteralPath $app) { $state.AppMoved = $true; Save-PackageTransaction $state; Move-OwnedItem $app $previousApp }
+            $state.NewApp = $true; Save-PackageTransaction $state; Move-OwnedItem (Join-Path $stage 'app') $app
             Copy-Item -LiteralPath (Join-Path $stage 'release.json') -Destination (Join-Path $app 'release.json')
             if ($plan.Action -eq 'install') {
-                Move-OwnedItem (Join-Path $stage 'runtime') $runtime; $state.NewRuntime = $true
+                $state.NewRuntime = $true; Save-PackageTransaction $state; Move-OwnedItem (Join-Path $stage 'runtime') $runtime
             } elseif ($plan.Action -eq 'swap') {
                 Remove-OwnedDirectory $previousRuntime
-                Move-OwnedItem $runtime $previousRuntime; $state.RuntimeMoved = $true
-                Move-OwnedItem (Join-Path $stage 'runtime') $runtime; $state.NewRuntime = $true
+                $state.RuntimeMoved = $true; Save-PackageTransaction $state; Move-OwnedItem $runtime $previousRuntime
+                $state.NewRuntime = $true; Save-PackageTransaction $state; Move-OwnedItem (Join-Path $stage 'runtime') $runtime
             }
             Invoke-PackageFaultPoint 'after-swap'
             $runtimeVersion = if ($plan.Action -eq 'keep') { $plan.CurrentVersion } else { [string]$manifest.node.version }
@@ -793,7 +902,9 @@ function Install-Package {
         } catch {
             $failure = $_
             Write-PackageLog "Replacement failed, restoring the previous files: $($failure.Exception.Message)"
-            Restore-PackageSwap $state $originalMarker $false
+            $hadPrevious = $state.AppMoved
+            try { Restore-PackageSwap $state $false }
+            catch { throw (Get-RestoreFailureMessage $_.Exception.Message $hadPrevious) }
             if ($wasRunning) { try { Start-App } catch { Write-PackageLog "Previous version restart failed: $($_.Exception.Message)" } }
             throw $failure
         }
@@ -804,13 +915,17 @@ function Install-Package {
         if (-not $healthy) {
             Write-PackageLog 'New version failed its health check; restoring the previous version.'
             try { Stop-App } catch { Write-PackageLog "Stop after failed start: $($_.Exception.Message)" }
-            Restore-PackageSwap $state $originalMarker $true
-            if (-not $state.AppMoved) { throw 'LRD-E16: Living Room Display did not start and there is no previous version to restore. Data was not changed.' }
+            $hadPrevious = $state.AppMoved
+            # Never report "nothing changed" when the undo itself failed.
+            try { Restore-PackageSwap $state $true }
+            catch { throw (Get-RestoreFailureMessage $_.Exception.Message $hadPrevious) }
+            if (-not $hadPrevious) { throw 'LRD-E16: Living Room Display did not start and there is no previous version to restore. Data was not changed.' }
             $restarted = $false
             try { Start-App; $restarted = Test-Server } catch { Write-PackageLog "Previous version failed to start: $($_.Exception.Message)" }
             if ($restarted) { throw 'LRD-E15: The new version did not start, so the previous version was restored. Data was not changed.' }
             throw 'LRD-E16: Neither version could start; data was not changed.'
         }
+        Clear-PackageTransaction
     } finally {
         try { Remove-OwnedDirectory $stage } catch { Write-PackageLog "Could not remove staging: $($_.Exception.Message)" }
     }
