@@ -95,11 +95,13 @@ function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) 
   const latest = useRef({ settings, onChange });
   latest.current = { settings, onChange };
   // Incomplete rows can only be fixed in this panel. When it closes (the widget is removed or
-  // collapsed, or the tab changes), an edited row gets back its last saved or loaded title or date
-  // and an incomplete row that was never saved is dropped, so Save is never blocked by a field
-  // nobody can see and closing the panel never deletes a saved date.
+  // collapsed, or the tab changes), an edited row gets back the last complete title or date this
+  // panel received for it and a row it never received complete is dropped, so Save is never
+  // blocked by a field nobody can see and closing the panel never deletes a saved date.
   // `known` holds the latest complete version of each row that arrived from outside this panel:
-  // at opening, after Save (the editor rebases onto the server response), Cancel or a poll.
+  // at opening, after Save (the editor rebases onto the server response), Cancel or a poll (which
+  // also carries unsaved complete edits). Rows are read-only while a Save is running, so the
+  // rebase after Save always records what the server stored.
   const own = useRef(new WeakSet<readonly CountdownEvent[]>());
   const known = useRef(new Map<string, CountdownEvent>());
   const seen = useRef<readonly CountdownEvent[] | null>(null);
@@ -146,6 +148,7 @@ function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) 
           className="text-input"
           aria-label={`Countdown ${number} title`}
           data-countdown-title={event.id}
+          disabled={saving}
           placeholder="Title"
           maxLength={MAX_TITLE}
           value={event.title}
@@ -159,6 +162,7 @@ function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) 
           <input
             className="text-input countdown-date-input"
             type="date"
+            disabled={saving}
             aria-label={`Countdown ${number} date`}
             min={`${FIRST_YEAR}-01-01`}
             max={`${LAST_YEAR}-12-31`}
@@ -169,9 +173,9 @@ function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) 
           />
           <label className="toggle-row countdown-yearly">
             <span>Every year</span>
-            <input className="toggle" type="checkbox" aria-label={`Countdown ${number} every year`} checked={event.repeatsYearly} onChange={change => edit(event.id, { repeatsYearly: change.target.checked })} />
+            <input className="toggle" type="checkbox" disabled={saving} aria-label={`Countdown ${number} every year`} checked={event.repeatsYearly} onChange={change => edit(event.id, { repeatsYearly: change.target.checked })} />
           </label>
-          <button type="button" className="icon-button countdown-remove" aria-label={`Remove countdown ${number}`} title="Remove" onClick={() => update(events => events.filter(item => item.id !== event.id))}>
+          <button type="button" className="icon-button countdown-remove" disabled={saving} aria-label={`Remove countdown ${number}`} title="Remove" onClick={() => update(events => events.filter(item => item.id !== event.id))}>
             <Icon name="trash" size={16} />
           </button>
         </div>

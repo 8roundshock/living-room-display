@@ -193,6 +193,16 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await page.reload(); await button('Edit layout').waitFor(); await page.clock.runFor(300);
     row = await inspector('Countdown');
     await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('Weekend trip'); await save();
+    // Rows are read-only while a Save is running, so the rebase records what the server stored.
+    let releasePatch;
+    await page.route('**/api/settings', async route => { if (route.request().method() === 'PATCH') await new Promise(resolve => { releasePatch = resolve; }); await route.continue(); });
+    await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('Weekend trip!');
+    await button('Save changes').click();
+    await page.waitForFunction(() => document.querySelector('[data-countdown-title]')?.disabled === true);
+    for (const control of [row.getByRole('textbox', { name: 'Countdown 1 title' }), row.getByLabel('Countdown 1 date', { exact: true }), row.getByRole('checkbox', { name: 'Countdown 1 every year' }), row.getByRole('button', { name: 'Remove countdown 1' })]) assert.equal(await control.isDisabled(), true);
+    releasePatch(); await savebar().waitFor({ state: 'detached' }); await page.unroute('**/api/settings');
+    assert.equal(await row.getByRole('textbox', { name: 'Countdown 1 title' }).isDisabled(), false);
+    await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('Weekend trip'); await save();
     // A date saved while the panel stays open is protected too, and so is a saved retitle.
     await row.getByRole('button', { name: 'Add date', exact: true }).click();
     await row.getByRole('textbox', { name: 'Countdown 2 title' }).fill('Concert'); await save();
