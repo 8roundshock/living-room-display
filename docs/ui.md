@@ -19,7 +19,8 @@ the 16:9 preview fits the height. Narrow windows stack a normally scrolling
 inspector below a nonsticky preview, leaving room for the keyboard.
 Above 1050 CSS pixels the Save bar centers under the canvas, so the inspector uses
 the full height unless an alert row is shown; at 1280×720 each tab's default,
-collapsed contents fit without scrolling. Whenever settings
+collapsed contents fit without scrolling, including the Widgets tab with the first-run
+location card ([Weather and location](#weather-and-location)). Whenever settings
 remain below, the inspector's bottom edge fades (scroll-linked, kept with reduced
 motion). Focus scrolling reserves the measured Save bar height so fields and labels remain
 visible above it, including narrow screens and compact keyboard-height windows.
@@ -68,17 +69,28 @@ visible above it, including narrow screens and compact keyboard-height windows.
 - **Free-size Reminders** (#73): its handle snaps to whole cells from 2 × 2 up to
   the full grid height and two-thirds of the width; neighbours reflow live, and an
   impossible size keeps the board with “No room for that size”. The default board's
-  large Clock, Weather (#74) and Forecast leave no room for a Column until one of
-  them is made smaller; naming what blocks a size is #183. On the focused
+  large Clock, Weather (#74) and Forecast leave no room for a Column, so its preset
+  is `aria-disabled` (still focusable) with the reason “Column needs more room on
+  this board.” Choosing a preset or stepper size that has no room changes nothing
+  and names what takes the space in one live region beside the presets: “No room
+  for a full-height Reminders column beside Clock, Weather and Forecast.” (#183).
+  **Make room: Weather medium** applies the smallest single family reduction that
+  fits, found with the shared reflow helpers (`src/client/make-room.ts`), together
+  with the requested size as one draft edit; Cancel restores both. Fixed-family
+  size buttons explain a missing room the same way. Pointer and handle resizes on
+  the canvas still say only “No room for that size” (#285). On the focused
   handle Right/Left change width and Down/Up change height by one cell, announced
   as “Reminders resized to 2 × 6”. The inspector offers Small, Medium, Large and
   Column (2 × full height) presets plus Width and Height steppers that stop at
-  their limits; the list subtitle reads the family, Column or `C × R`, and a hint
+  their limits; the list subtitle reads the family, Column or `C × R` (plus
+  “· Hidden when empty” while the display hides an empty Reminders, #233), and a hint
   reads “Shows as many reminders as fit · soonest first”. Sizes join the draft
   (resizing back to the saved shape is clean). Density changes scale the span with
   full height and minimum width kept, so a Column stays a Column; a span dropped
   to fit is named (“Reminders 2 × 8 → small to fit. Switch back to restore.”). The
-  picker still adds a family with a caption noting free resizing. On the display a
+  picker still adds a family with a caption noting free resizing, qualified while
+  the board has no room for a full-height column (“Resize freely after adding. Full
+  height needs room first: make Clock, Weather or Forecast smaller.”). On the display a
   full-height Reminders column alternates top and bottom anchoring between
   arrangements while it relocates sideways.
 - Density/family/position and visibility form one atomic local layout during a
@@ -89,6 +101,17 @@ visible above it, including narrow screens and compact keyboard-height windows.
   opens a compact category rail and one actual renderer with synthetic family
   content, size choices and a reachable Add action. Every module can be removed, including clock
   and weather separately. Small/medium/large families adapt their content.
+  The picker opens on the first widget not yet on the display in its grouped order,
+  scrolled into view inside the rail (#154). Rail items already on the display are
+  named with that state (“Preview Clock, on your display”); their Add button keeps
+  its visible name as its accessible name (“Add Clock”, disabled) under “Clock is on
+  your display” (#241). An add with no room is reported once, in the picker's own
+  live region (“No room for Countdown at medium size.”), and cleared by another size
+  or widget or by closing the picker. Up to two fixes apply as one draft edit that
+  Cancel restores: **Try Small** (a smaller family of the same widget), **Switch the
+  grid to Fine** (a finer grid that changes no family) or **Make room: Weather
+  medium** (#238). The Reminders tab is named with its count (“Reminders, 8
+  pending”).
 - **Preview movement** explicitly reveals numbered arrangements and **Automatic**
   ambient preview. Editing returns to authored placement. **Open display** opens
   a browser tab; its pointer remains visible, including fullscreen. Unmodified
@@ -107,7 +130,8 @@ acceptance. Appearance saves do not enable Windows idle.
 
 **Add widget** groups the catalog by category in this order: **Time**, **Weather &
 sky**, **Personal** and **Pictures**; groups without an available widget are not shown.
-Desktop shows a narrow scrolling rail with each group label above its buttons;
+Desktop shows a narrow scrolling rail with each group label above its buttons (labels
+and names at least 11 px, #195);
 narrow screens show three buttons per row under each label. Up/Down move through the
 whole list (across groups) and preview the focused widget (Left/Right do the same, matching
 the narrow three-column layout); Home/End jump to the first or last; Tab keeps its normal
@@ -143,9 +167,11 @@ and built-in or saved styles never change the week start, countdowns or note (st
 do reset which widgets are shown). Countdowns and the note are private content stored
 on this device and included in exports. `tests/ui/catalog-time-browser.mjs` checks the
 picker groups and keyboard (Weather listed, no Rain; the free-size caption only for
-Reminders), each panel, Save/Cancel, reload, styles, display hiding, a dense board where
-the three sit beside a full-height Reminders column and keep relocating, 320/390 px
-reflow, Save-bar clearance and the compact picker viewports.
+Reminders, qualified on the default board), the initial selection, item and Add names,
+the single “No room” region and its Fine/Small fixes, each panel, Save/Cancel, reload,
+styles, display hiding, a dense board where the three sit beside a full-height
+Reminders column and keep relocating, 320/390 px reflow, Save-bar clearance and the
+compact picker viewports with rail text of at least 11 px.
 
 ## Weather and location
 
@@ -166,7 +192,27 @@ invalidates late callbacks. Only 0.1-degree coordinates leave the adapter; no ra
 fix, accuracy, altitude or timestamp is stored. Failed lookup preserves a manual
 city; automatic drafts cannot overwrite a manual city saved in another editor.
 No background watch or IP lookup exists. `/display` never queries location or
-permission, and its Permissions-Policy disables geolocation.
+permission, and its Permissions-Policy disables geolocation. The City field is named
+by its visible label (“City”); “Type two or more letters to search for a city” is its
+description (#241).
+
+Until a location is saved, a small card above the inspector tabs reads “Showing
+Toronto weather” while the default Widgets tab is open (#252). **Use my location** runs
+the same permission-aware lookup and **Choose a city** opens the Weather tab with the
+City field focused; both only change the draft, and the card names a pending choice
+(“London is ready. Save changes to use it.”) or a blocked lookup. It steps aside on the
+other tabs (Weather holds the same actions; Style has no spare height at 1280×720) and
+while the picker is open, so every tab's default contents still fit at 1280×720, and it
+is gone for good once a location is saved. **Hide location tip** dismisses it in this
+browser only (`localStorage`); no key joins the saved data, so older releases still
+read it. `tests/ui/first-run-browser.mjs` covers the card.
+
+**Time & units** in the Weather tab holds Units (°C · metric or °F · imperial) and
+**Time format** (12-hour or 24-hour) side by side, so the format stays reachable with
+the Clock removed (#235); the Clock panel keeps a mirrored Time format control. The
+format drives the clock, reminder times, World clocks, rain timing, Sun & moon, Air
+quality hours and the Last screen caption; the editor list and canvas follow an unsaved
+change.
 
 Preview weather retains its actual city/units while a selection is unsaved or
 refreshing. Forecast dates/intervals use the weather city's timezone; the clock
@@ -270,7 +316,9 @@ Size control and join the normal draft (Save/Cancel, no autosave).
   editable label (1–40 characters, defaulting to the city name), the region (the
   search result's region in this session, otherwise the time-zone name), the
   city's current time, and Move up, Move down and Remove buttons; focus stays with
-  the moved city. The add field is disabled at four cities. An empty label blocks
+  the moved city. Each label field is named by its row (“City 1 label”), so the name
+  stays the same while typing or empty, and is described by the region and time
+  (#192). The add field is disabled at four cities. An empty label blocks
   Save with "Each world clock needs a label". Hint: "Times follow each city's time
   zone and daylight saving." Coordinates are used only for the day/night icon. With
   no cities the widget is hidden on the display and shows "Add a city" on the canvas.
