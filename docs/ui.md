@@ -125,14 +125,16 @@ content (the sample clock, “Weekend trip”, “Birthday” and “Holiday”,
   the Save bar reads “Countdown needs a title” until it is fixed; the server remains the
   authority; a year outside 1900–2200 shows “Use a date between 1900 and 2200”. Closing
   the panel (removing or collapsing the widget, or changing tab) gives an edited row back
-  the last complete title or date it had (as saved, or as loaded by the editor's refresh)
-  and drops a row that was never complete there, so Save is never blocked by a field that
-  is not on screen and closing never deletes a saved date. Rows are read-only while a Save
-  is running.
+  the last complete title or date it had (as saved, as it was when the panel opened, or as
+  loaded by the editor's refresh) and drops a row that was never complete in any of those,
+  so Save is never blocked by a field that is not on screen and closing never deletes a
+  saved date (#191). Rows are read-only while a Save is running.
   Each row shows its count (“In 12 days · Fri, Oct 30”) or **Passed** for a
   past one-time date, which the display ignores until it is removed. Counts are whole
   days on this computer's calendar. The display shows the widget only while a date is
-  upcoming; the editor canvas shows “Add a date to count down to” otherwise.
+  upcoming; the editor canvas shows “Add a date to count down to” otherwise. The large
+  family lists as many dates as fit its box, soonest first, then an exact “+N more”
+  (#221).
 - **Note** (Personal, default small) is a textarea limited to 200 characters and 4
   lines with a live “37/200” counter and **Clear**. Line breaks are kept. The display
   hides an empty note; the editor canvas shows “Write a note”.
@@ -226,19 +228,25 @@ computer keeps the latest 500 completed reminders. Every reminder time follows t
 12/24-hour setting; like the canvas preview, the editor list follows an unsaved
 change to it, while the display keeps the saved setting until Save.
 The ambient widget shows as many pending reminders as fit its box, soonest first,
-never a partially visible row, then an exact “+N more”. Titles use up to two lines
-(four when only one reminder is pending) and scale with the widget width, capped
-near 3.2% of the display height. If even one row overflows, that row stays and the
-widget zooms out as a whole; any resize remeasures against the widget's fixed box, so
-the count and that state never flip on a remeasure. Dated rows add `Today · 6:00 PM`, `Tomorrow ·
-9:00 AM`, `Oct 24 · 3:00 PM` or `Overdue · Yesterday · 3:00 PM` (the word Overdue in
-the dim caution tone). Completed reminders never appear; the display reflects a
-check-off within its 30 s refresh.
+never a partially visible row, then an exact “+N more”. Rows are measured from layout
+boxes, so an entrance or transition on a row never changes the count (#216). Titles use
+up to two lines (four when only one reminder is pending) and scale with the widget
+width, capped near 3.2% of the display height. When every pending reminder fits with
+room to spare, a cut-off title may use up to four lines, and titles that all show in
+full grow toward that cap while everything still fits (#254), so a tall column shows
+whole titles instead of “…” beside empty space. If even one row overflows, that row
+stays and the widget zooms out as a whole; any resize remeasures against the widget's
+fixed box, so the count and that state never flip on a remeasure. Dated rows add
+`Today · 6:00 PM`, `Tomorrow · 9:00 AM`, `Oct 24 · 3:00 PM` or
+`Overdue · Yesterday · 3:00 PM` (the word Overdue in the dim caution tone). Completed
+reminders never appear; the display reflects a check-off within its 30 s refresh.
 **Widgets → Reminders → Hide when empty** defaults on. A confirmed list with no
-pending reminders (history only) hides the widget, or shows “All clear” when the
-option is off; a missing list or a disconnected display with nothing saved shows
-“Reminders unavailable”, and saved items stay listed with “Saved reminders ·
-offline”. Disabling the widget always hides it.
+pending reminders (history only) hides the widget on the display, or shows “All clear”
+when the option is off; the editor canvas keeps a hidden widget at its real span as a
+dim “Hidden while empty · Add a reminder” placeholder, so adding and resizing it stay
+visible (#233). A missing list or a disconnected display with nothing saved shows
+“Reminders unavailable”, and saved items stay listed with “Saved reminders · offline”
+in the status tone (#223). Disabling the widget always hides it.
 An unchanged due-date input is omitted from an edit, preserving its exact saved
 instant (including repeated daylight-saving hours and imported seconds/offsets)
 and any concurrent date update. Explicitly changing or clearing the date still
