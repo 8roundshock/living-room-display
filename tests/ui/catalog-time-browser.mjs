@@ -74,6 +74,9 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     assert.deepEqual(groups, expected);
     assert.deepEqual(groups.map(group => group.label), ['Time', 'Weather & sky', 'Personal', 'Pictures']);
     for (const name of ['Calendar', 'Countdown', 'Note']) assert.ok(groups.flatMap(group => group.items).includes(`Preview ${name}`), name);
+    // Rain is part of the adaptive Weather since #74, so the group lists Weather and never Rain.
+    assert.ok(groups.find(group => group.label === 'Weather & sky').items.includes('Preview Weather'), 'Weather & sky lists Weather');
+    assert.equal(groups.flatMap(group => group.items).includes('Preview Rain'), false, 'Rain is not offered (#74)');
     const order = groups.flatMap(group => group.items);
     const focused = () => page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
     await button(order[0]).focus();
@@ -96,10 +99,14 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     assert.match(await page.locator('.picker-sample').innerText(), /12\s*days\s*Weekend trip/);
     await button('Preview Note').click();
     assert.equal((await page.locator('.picker-sample .note-text').innerText()).trim(), 'Dinner at seven');
+    // The #73 free-size caption follows the catalog rule: none for these fixed-family widgets, kept for Reminders.
+    assert.equal(await page.locator('.picker-free-size').count(), 0, 'fixed-family widgets show no free-size caption');
+    await button('Preview Reminders').click();
+    assert.equal(await page.locator('.picker-free-size').innerText(), 'Resize freely after adding — up to the full height', 'Reminders keeps its caption in the grouped picker');
     assert.match(await page.locator('.picker-footnote').innerText(), /Sample content/);
     if (capture) images.push({ name: 'picker-1440', bytes: await page.screenshot() });
     await page.keyboard.press('Escape');
-    checks.push('Grouped picker: Time / Weather & sky / Personal / Pictures in catalog order with labelled groups, Up/Down/Home/End (clamped, across groups) preview the focused widget, Tab order kept, synthetic samples for the three widgets');
+    checks.push('Grouped picker: Time / Weather & sky / Personal / Pictures in catalog order with labelled groups, Weather and no Rain (#74), Up/Down/Home/End (clamped, across groups) preview the focused widget, Tab order kept, synthetic samples for the three widgets, free-size caption only for Reminders (#73)');
 
     // 2. Calendar: add, week start, Cancel, Save, reload.
     await addFromPicker('Calendar');
@@ -270,6 +277,59 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await open();
     assert.match(await canvas('note').innerText(), /Write a note/); assert.match(await canvas('countdown').innerText(), /Add a date to count down to/);
     checks.push('Display shows the three widgets with content; an empty note and a countdown with only passed dates are hidden there while the editor canvas shows placeholders');
+
+    // 6b. With free-size Reminders (#73) and the #93 fallback: a dense Balanced board (88 of 96 cells) with a
+    // full-height column beside Calendar, Countdown and Note keeps every widget whole on screen and keeps moving.
+    const restore = structuredClone(app.store.snapshot());
+    await app.store.update(data => {
+      data.reminders = Array.from({ length: 12 }, (_, index) => ({ id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, text: `Synthetic reminder ${index + 1}`, completed: false, dueAt: null, createdAt: new Date(now - index * 60_000).toISOString(), updatedAt: new Date(now - index * 60_000).toISOString() }));
+    });
+    await app.store.patchSettings({
+      appearance: { motionIntervalSeconds: 30 },
+      widgets: { clock: true, weather: true, forecast: false, reminders: true, preview: false, photo: false, calendar: true, countdown: true, note: true },
+      widgetGrid: { placements: {
+        reminders: { column: 0, row: 0, size: 'small', span: { columns: 2, rows: 8 } }, clock: { column: 2, row: 0, size: 'large' },
+        countdown: { column: 10, row: 0, size: 'small' }, note: { column: 10, row: 2, size: 'small' },
+        weather: { column: 2, row: 4, size: 'large' }, calendar: { column: 6, row: 4, size: 'large' },
+      } },
+      widgetData: { countdowns: [{ id: '00000000-0000-4000-8000-000000000101', title: 'Weekend trip', date: '2026-10-30', repeatsYearly: false }], note: { text: 'Dinner at seven' } },
+    });
+    assert.deepEqual(snapshot().widgetGrid.placements.reminders.span, { columns: 2, rows: 8 }, 'the server keeps the column beside the three widgets');
+    await open({ route: '/display', viewport: { width: 1280, height: 720 } });
+    const dense = ['reminders', 'clock', 'countdown', 'note', 'weather', 'calendar'];
+    const arrangements = [];
+    for (let composition = 0; composition < 4; composition++) {
+      if (composition) { await page.clock.runFor(30_000); await page.clock.runFor(1_200); }
+      assert.equal(await page.locator('.ambient').getAttribute('data-composition'), String(composition));
+      const layout = await page.evaluate(ids => {
+        const plane = document.querySelector('.widget-grid-plane').getBoundingClientRect();
+        return Object.fromEntries(ids.map(id => {
+          const element = document.querySelector(`[data-widget-id="${id}"]`);
+          if (!element) return [id, null];
+          const box = element.getBoundingClientRect();
+          const outside = [...element.querySelectorAll('*')].filter(node => { const r = node.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.left < box.left - 1 || r.right > box.right + 1 || r.top < box.top - 1 || r.bottom > box.bottom + 1); }).length;
+          return [id, { left: box.left - plane.left, top: box.top - plane.top, right: box.right - plane.left, bottom: box.bottom - plane.top, width: plane.width, height: plane.height, span: element.getAttribute('data-widget-span'), full: element.hasAttribute('data-full-height'), outside }];
+        }));
+      }, dense);
+      const label = `dense board composition ${composition}`;
+      for (const id of dense) {
+        const rect = layout[id];
+        assert.ok(rect, `${label}: ${id} is on screen`);
+        assert.ok(rect.left >= -1 && rect.top >= -1 && rect.right <= rect.width + 1 && rect.bottom <= rect.height + 1, `${label}: ${id} stays inside the plane ${JSON.stringify(rect)}`);
+        if (['calendar', 'countdown', 'note'].includes(id)) assert.equal(rect.outside, 0, `${label}: ${id} content stays inside its box`);
+      }
+      for (const a of dense) for (const b of dense) {
+        if (a >= b) continue;
+        const [p, q] = [layout[a], layout[b]];
+        assert.ok(p.right <= q.left + 1 || q.right <= p.left + 1 || p.bottom <= q.top + 1 || q.bottom <= p.top + 1, `${label}: ${a} and ${b} never overlap`);
+      }
+      assert.equal(layout.reminders.span, '2x8', label); assert.equal(layout.reminders.full, true, `${label}: the column stays full height`);
+      arrangements.push(JSON.stringify(dense.map(id => [Math.round(layout[id].left), Math.round(layout[id].top)])));
+      if (capture) images.push({ name: `dense-1280-composition-${composition}`, bytes: await page.screenshot() });
+    }
+    for (let index = 1; index < arrangements.length; index++) assert.notEqual(arrangements[index], arrangements[index - 1], `dense board composition ${index} relocates`);
+    await app.store.update(data => { data.settings = restore.settings; data.reminders = restore.reminders; });
+    checks.push('Dense Balanced board (88/96 cells) with a 2 × 8 Reminders column beside Calendar, Countdown and Note: the server keeps the span, and display compositions 0–3 keep every widget whole, inside the plane, disjoint and relocating (#73, #93)');
 
     // 7. Narrow reflow and Save-bar clearance for focused fields.
     for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 844 }, { width: 390, height: 480 }]) {

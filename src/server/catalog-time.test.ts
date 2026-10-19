@@ -13,7 +13,10 @@ import { DataStore } from './store.ts';
 import { settingsPatchSchema, settingsSchema } from './validation.ts';
 import { assertPreviousReaderAccepts, assertPreviousReaderRejects } from './compat/previous-reader.ts';
 import { defaultSettings } from '../shared/defaults.ts';
-import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, defaultWidgetVisibility, gridProblem, isActiveWidget, widgetSizes, type WidgetDefinition } from '../shared/widgets.ts';
+import {
+  ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, WIDGET_IDS, composeWidgetGrid, defaultWidgetVisibility, gridProblem, isActiveWidget, placementSpan,
+  widgetSizes, type WidgetDefinition,
+} from '../shared/widgets.ts';
 import type { CountdownEvent, SettingsPatch, WidgetId } from '../shared/contracts.ts';
 
 const IDS = ['calendar', 'countdown', 'note'] as const satisfies readonly WidgetId[];
@@ -142,4 +145,42 @@ test('rollback: default data stays readable; enabling a widget or entering conte
     assertPreviousReaderAccepts('data', await stateFile(reverted), 'after turning the widgets off and clearing their content');
     assertPreviousReaderAccepts('data', await stateFile(reverted, 'state.backup.json'), 'its backup');
   } finally { await rm(reverted, { recursive: true, force: true }); }
+});
+
+test('Calendar, Countdown and Note sit beside a custom Reminders span and keep a full board moving (#73, #93)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-span-'));
+  const app = await application(directory);
+  try {
+    // Every Balanced cell used: a 2 × 8 Reminders column, the default widgets, Photo and the three new widgets.
+    const widgets = { ...defaultWidgetVisibility(), photo: true, calendar: true, countdown: true, note: true };
+    const placements = {
+      reminders: { column: 0, row: 0, size: 'small', span: { columns: 2, rows: 8 } }, clock: { column: 2, row: 0, size: 'large' },
+      calendar: { column: 10, row: 0, size: 'small' }, countdown: { column: 10, row: 2, size: 'small' },
+      forecast: { column: 2, row: 4, size: 'large' }, note: { column: 10, row: 4, size: 'small' },
+      weather: { column: 2, row: 6, size: 'medium' }, preview: { column: 6, row: 6, size: 'medium' }, photo: { column: 10, row: 6, size: 'small' },
+    };
+    const response = await app.send('PATCH', '/api/settings', { widgets, widgetGrid: { placements } });
+    assert.equal(response.status, 200, await response.clone().text());
+    const saved = app.store.snapshot().settings, enabled = { ...saved.widgets, preview: saved.widgets.preview && saved.preview.enabled };
+    for (const id of IDS) assert.equal(enabled[id], true, id);
+    assert.deepEqual(saved.widgetGrid.placements.reminders, placements.reminders, 'the span is stored as sent');
+    assert.equal(gridProblem(saved.widgetGrid, enabled), null);
+    const ids = WIDGET_IDS.filter(id => enabled[id]);
+    assert.equal(ids.reduce((sum, id) => { const span = placementSpan(id, saved.widgetGrid.placements[id]); return sum + span.columns * span.rows; }, 0), 96, 'every Balanced cell is used');
+    let previous = saved.widgetGrid;
+    for (let cycle = 1; cycle <= 12; cycle++) {
+      const next = composeWidgetGrid(saved.widgetGrid, enabled, cycle, previous);
+      assert.equal(gridProblem(next, enabled), null, `cycle ${cycle}`);
+      for (const id of ids) assert.deepEqual(placementSpan(id, next.placements[id]), placementSpan(id, saved.widgetGrid.placements[id]), `cycle ${cycle}: ${id} keeps its size`);
+      assert.ok(ids.some(id => next.placements[id].column !== previous.placements[id].column || next.placements[id].row !== previous.placements[id].row), `cycle ${cycle} relocates the full board through a reflection`);
+      previous = next;
+    }
+    // Rollback: the span (#73) and the new widgets (#78) are separate documented exceptions; clearing both recovers.
+    assertPreviousReaderRejects('data', await stateFile(directory), 'a span beside the three widgets');
+    assert.equal((await app.send('PATCH', '/api/settings', { widgets: { calendar: false, countdown: false, note: false } })).status, 200);
+    assertPreviousReaderRejects('data', await stateFile(directory), 'the span alone is still the #73 exception');
+    assert.equal((await app.send('PATCH', '/api/settings', { widgetGrid: { placements: { reminders: { size: 'small' } } } })).status, 200);
+    assert.equal(Object.hasOwn(app.store.snapshot().settings.widgetGrid.placements.reminders, 'span'), false);
+    assertPreviousReaderAccepts('data', await stateFile(directory), 'with the three widgets off and the span cleared');
+  } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
 });
