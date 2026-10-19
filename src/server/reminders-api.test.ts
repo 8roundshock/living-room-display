@@ -14,7 +14,7 @@ import type { Reminder } from '../shared/contracts.ts';
 
 async function fixture(now?: () => number) {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-reminders-'));
-  // An existing user's colour-accent defaults: a fresh folder is Native, the separate #75 exception.
+  // An existing user's colour-accent defaults (fresh Native data is covered in rollback.test.ts).
   await seedColorAccentData(directory);
   const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()), now });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');

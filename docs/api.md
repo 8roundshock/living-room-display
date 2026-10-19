@@ -108,7 +108,8 @@ Other widgets reject a span (`<Name> does not support custom sizes`); too-small 
 too-wide spans return 400 with a clear message. In a placement PATCH, `span: null`
 clears a custom size, and so does a `size` without `span` (a family choice); a
 move keeps it. The editor sends a changed placement whole, with `span: null` when
-it has none. A saved span is not readable by `bedca44`; see the
+it has none. The previous installed release (`3fee844`) reads a saved span; the older
+`bedca44` does not, so a downgrade that far needs the
 [strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
 Legacy version-one settings acquire the safe default grid while preserving old
 widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
@@ -340,9 +341,11 @@ copy is valid, startup fails without resetting user data. Preserve the folder an
 restore a known-good export. Export/import includes settings and reminders only;
 weather, snapshot pixels, and native tokens are excluded. Store backups privately.
 
-At rest, `state.json`, `state.backup.json` and exports omit additive values that
-the previous installed release cannot parse while they equal the current read
-default: `appearance.accentMode` `color`, `appearance.animation` `subtle`, disabled
-widget ids the previous release does not know (the six #78 ids), and default `widgetData` sections. API responses
+At rest, `state.json`, `state.backup.json` and exports omit additive values while
+they equal the current read default: `appearance.accentMode` `color`,
+`appearance.animation` `subtle`, default `widgetData` sections, and disabled widget
+ids the previous installed release does not know. The previous release (`3fee844`)
+reads every one of these keys and knows every widget id, so all widget ids are
+written. API responses
 (`/api/state`, the `PATCH /api/settings` response and the native session) always
 include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).

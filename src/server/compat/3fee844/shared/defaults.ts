@@ -1,0 +1,27 @@
+import type { Settings, WidgetId, WidgetTransform } from './contracts.ts';
+import { WIDGET_IDS, defaultWidgetGrid, defaultWidgetVisibility } from './widgets.ts';
+
+export { WIDGET_IDS } from './widgets.ts';
+export const DEFAULT_SETTINGS: Settings = {
+  version: 1,
+  location: { name: 'Toronto', latitude: 43.6532, longitude: -79.3832, timezone: 'America/Toronto' },
+  locationSource: 'fallback',
+  units: 'metric', clockFormat: '12h',
+  appearance: {
+    preset: 'room', accentColor: '#8aa8c2', textColor: '#b8c1ca', brightness: 0.55,
+    fontScale: 1, fontFamily: 'sans', layout: 'balanced',
+    motionEnabled: true, motionIntervalSeconds: 180, fadeSeconds: 2,
+    clockStyle: 'outline',
+    // New installs and built-in styles use native colours (#75); data without the key reads as color.
+    accentMode: 'native', animation: 'subtle',
+  },
+  widgets: defaultWidgetVisibility(),
+  widgetGrid: defaultWidgetGrid(),
+  widgetBehavior: { reminders: { hideWhenEmpty: true } },
+  widgetOverrides: Object.fromEntries(WIDGET_IDS.map(id => [id, { offsetX: 0, offsetY: 0, scale: 1 }])) as Record<WidgetId, WidgetTransform>,
+  preview: { enabled: true, opacity: 0.24, widthPercent: 20 },
+  idle: { enabled: false, idleMinutes: 10 }, savedPresets: [],
+  widgetData: { worldClocks: [], calendar: { weekStart: 'locale' }, countdowns: [], note: { text: '' }, airQuality: { scale: 'us' } },
+};
+
+export function defaultSettings(): Settings { return structuredClone(DEFAULT_SETTINGS); }
