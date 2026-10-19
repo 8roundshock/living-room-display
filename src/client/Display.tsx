@@ -19,27 +19,42 @@ function Widget({ id, settings, children, index, revealOrder, style }: { id: Wid
   // reminder) may transition in through @starting-style once the widget has settled (#76).
   const [settled, setSettled] = useState(false);
   useEffect(() => setSettled(true), []);
+  const refit = useRef<() => void>(() => undefined);
+  // #99: the display re-renders every widget on its one-second tick, so the fit must not follow
+  // `children` (a new element each render). One ResizeObserver (the box and the content's size) and
+  // one MutationObserver (text or structure that React actually changed, such as a new minute or a
+  // data refresh) live as long as the widget; Text size and typeface changes refit explicitly below.
   useLayoutEffect(() => {
+    const area = region.current, body = content.current; if (!area || !body) return;
     const update = () => {
-      const area = region.current, body = content.current; if (!area || !body) return;
       const computed = getComputedStyle(area);
       const width = area.clientWidth - parseFloat(computed.paddingLeft) - parseFloat(computed.paddingRight);
       const height = area.clientHeight - parseFloat(computed.paddingTop) - parseFloat(computed.paddingBottom);
       // Overfull content is laid out proportionally wider before scaling, like zooming out, so a
       // larger Text size never wraps into extra lines that would render the text smaller.
       const fits = (scale: number) => { body.style.width = `${100 / scale}%`; return body.scrollHeight * scale <= height + 1 && body.scrollWidth * scale <= width + 1; };
+      // #249: one tolerance. A scale below 1 that still fits, while 0.002 more does not, is settled;
+      // otherwise the search result is accepted as found (never snapped back to a scale that overflows).
       let next = 1;
       if (!fits(1)) {
         const prior = current.current;
         if (prior < 1 && fits(prior) && !fits(Math.min(1, prior + 0.002))) next = prior;
         else { let low = 0.05, high = 1; for (let step = 0; step < 12; step++) { const middle = (low + high) / 2; if (fits(middle)) low = middle; else high = middle; } next = low; }
       }
-      if (Math.abs(current.current - next) < 0.002) next = current.current;
       body.style.width = `${100 / next}%`; current.current = next; setFit(next);
     };
-    const observer = new ResizeObserver(update); if (region.current) observer.observe(region.current); if (content.current) observer.observe(content.current); update();
-    return () => observer.disconnect();
-  }, [settings.appearance.fontScale, settings.appearance.fontFamily, children]);
+    refit.current = update;
+    const resize = new ResizeObserver(update); resize.observe(area); resize.observe(body);
+    const mutation = new MutationObserver(update); mutation.observe(body, { childList: true, characterData: true, subtree: true });
+    update();
+    return () => { resize.disconnect(); mutation.disconnect(); refit.current = () => undefined; };
+  }, []);
+  const { fontScale, fontFamily } = settings.appearance;
+  const fontKey = useRef(`${fontScale}:${fontFamily}`);
+  useLayoutEffect(() => {
+    if (fontKey.current === `${fontScale}:${fontFamily}`) return;
+    fontKey.current = `${fontScale}:${fontFamily}`; refit.current();
+  }, [fontScale, fontFamily]);
   const size = settings.widgetGrid.placements[id].size, span = placementSpan(id, settings.widgetGrid.placements[id]);
   return <section
     ref={region}
@@ -62,6 +77,15 @@ function Widget({ id, settings, children, index, revealOrder, style }: { id: Wid
 }
 
 interface Reveal { epoch: number; active: boolean }
+
+/** Soft motion drift (#248): ±0.5% of the plane over 71 s each way, in 36 discrete steps. */
+const DRIFT_SECONDS = 71, DRIFT_STEPS = 36;
+/** The drift offset (percent of the plane) after `seconds`, and the seconds until its next step. */
+function planeDrift(seconds: number): { offset: number; next: number } {
+  const step = DRIFT_SECONDS / DRIFT_STEPS, index = Math.floor(seconds / step), position = index % (2 * DRIFT_STEPS);
+  const level = position <= DRIFT_STEPS ? position : 2 * DRIFT_STEPS - position;
+  return { offset: Number((level / DRIFT_STEPS - 0.5).toFixed(4)), next: (index + 1) * step - seconds };
+}
 
 export function AmbientDisplay({ state, settings = state.settings, embedded = false, native = false, disconnected = false, compositionOverride, layoutEditing = false, photoPreview, gesture, motionSurface = 'editing', revealNonce }: {
   state: AppState; settings?: Settings; embedded?: boolean; native?: boolean; disconnected?: boolean; compositionOverride?: number; layoutEditing?: boolean; photoPreview?: string | null; gesture?: WidgetGesture | null;
@@ -113,6 +137,26 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   const grid = useMemo(() => composeWidgetGrid(settings.widgetGrid, enabled, effectiveCycle, previous.current), [gridKey, enabled, effectiveCycle]);
   useEffect(() => { previous.current = grid; }, [grid]);
   const offset = motionOffset(effectiveCycle);
+  // Soft motion drift (#248): a timer moves the whole plane one step about every 2 s (about one
+  // device pixel across a 4K panel) with no transition, so nothing animates and the display draws a
+  // frame only when the plane moves. A CSS animation, even with steps(), keeps the compositor ticking
+  // every frame. The plane's own transform rule (the composition offset) applies when it is still, and
+  // the drift starts from its midpoint, that same position, so starting never jumps. Stopping (Soft
+  // motion off, reduced motion, Edit layout) removes the inline transform at once, so the plane can
+  // shift by up to ±0.5% of its size in one frame, as the earlier CSS animation did.
+  const plane = useRef<HTMLDivElement>(null);
+  const drifting = settings.appearance.motionEnabled && !reducedMotion && !layoutEditing;
+  useLayoutEffect(() => {
+    const element = plane.current; if (!element || !drifting) return;
+    const started = performance.now() - (DRIFT_STEPS / 2 + 0.5) * (DRIFT_SECONDS / DRIFT_STEPS) * 1000; let timer: number | undefined;
+    const step = () => {
+      const { offset: drift, next } = planeDrift((performance.now() - started) / 1000);
+      element.style.transform = `translate(calc(var(--motion-x, 0%) + ${drift}%), calc(var(--motion-y, 0%) + ${drift}%))`;
+      timer = window.setTimeout(step, Math.max(50, next * 1000));
+    };
+    element.style.willChange = 'transform'; step();
+    return () => { window.clearTimeout(timer); element.style.removeProperty('transform'); element.style.removeProperty('will-change'); };
+  }, [drifting]);
 
   // Motion levels (#76). The ambient page and the editor's Preview movement behave as the display;
   // the authored canvas shows the draft level; Edit layout keeps widgets still.
@@ -198,6 +242,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     >
       <MotionContext.Provider value={motion}>
         <div
+          ref={plane}
           className={['ambient-content', 'widget-grid-plane', fading ? 'fading' : '', reveal.active ? 'revealing' : ''].filter(Boolean).join(' ')}
           data-reveal={reveal.active ? reveal.epoch : undefined}
           data-settled={planeSettled ? 'true' : undefined}
@@ -212,6 +257,6 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
         </div>
       </MotionContext.Provider>
     </div>
-    {!embedded && !native && <nav className="display-help" aria-label="Display controls"><button className="button" onClick={toggleFullscreen}><Icon name="monitor" size={15} />Fullscreen · F</button><a className="button" href="/editor"><Icon name="settings" size={15} />Editor · Esc</a></nav>}
+    {!embedded && !native && <nav className="display-help" aria-label="Display controls"><button className="button display-control" onClick={toggleFullscreen}><Icon name="monitor" size={15} />Fullscreen · F</button><a className="button display-control" href="/editor"><Icon name="settings" size={15} />Editor · Esc</a></nav>}
   </Surface>;
 }

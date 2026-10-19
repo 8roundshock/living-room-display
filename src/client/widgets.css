@@ -15,8 +15,8 @@
 .grid-ambient.layout-editing .ambient-content { transform: none; }
 .grid-ambient .ambient-widget { position: absolute; grid-area: auto; padding: min(1.2cqw, 1.8cqh); container-type: size; animation: none; transform: none; }
 .grid-ambient .ambient-widget .widget-content { animation: none; width: 100%; height: auto; }
-.grid-ambient:not(.static) .ambient-content { animation: grid-plane-drift 71s ease-in-out infinite alternate; }
-@keyframes grid-plane-drift { from { transform: translate(calc(var(--motion-x, 0%) - 0.5%), calc(var(--motion-y, 0%) - 0.5%)); } to { transform: translate(calc(var(--motion-x, 0%) + 0.5%), calc(var(--motion-y, 0%) + 0.5%)); } }
+/* Soft motion drift (±0.5% of the plane in 36 discrete steps, one about every 2 s) is a timer in Display.tsx
+   rather than an animation, so the display draws a frame only when the plane moves (#248). */
 .grid-ambient .widget-body { width: 100%; min-height: 100cqh; height: auto; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .grid-ambient .widget-body > * { flex-shrink: 0; }
 .grid-ambient .ambient-label { display: flex; align-items: center; gap: 2cqw; font-size: calc(max(var(--min-text), min(6.4cqw, 8cqh)) * var(--font-scale)); line-height: 1.2; margin: 0 0 3cqh; font-weight: 500; color: var(--ambient-accent); overflow-wrap: anywhere; }

@@ -7,7 +7,7 @@ import type { WidgetGrid, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import {
   GRID_DENSITIES, WIDGET_IDS, WIDGET_SIZES, composeWidgetGrid, displayPlacement, firstPlacement, freeSpanLimits, gridProblem,
-  placementSpan, reflowWidget, resizeWidgetSpan, widgetSizes, type GridDensity,
+  placementSpan, reflectedComposition, reflowWidget, resizeWidgetSpan, widgetSizes, type GridDensity,
 } from '../shared/widgets.ts';
 
 /**
@@ -91,6 +91,102 @@ test('dense boards in every density keep moving unless no reflected alternative 
       assert.ok(elapsed < 4_000, `${density} board ${index}: 24 compositions took ${Math.round(elapsed)} ms`);
     }
   }
+});
+
+const positions = (board: WidgetGrid, ids: WidgetId[]) => ids.map(id => `${board.placements[id].column},${board.placements[id].row}`).join('|');
+/** The arrangements a board's whole-board reflections reach, itself included: 1, 2 or 4. */
+function reflectedArrangements(board: WidgetGrid, ids: WidgetId[]): Set<string> {
+  return new Set([0, 1, 2, 3].map(variant => ids.map(id => { const point = displayPlacement(board, id, variant); return `${point.column},${point.row}`; }).join('|')));
+}
+/** Compositions equal to the one two cycles earlier: how many, and the longest run of consecutive ones. */
+function twoCycleRepeats(keys: string[]): { total: number; longest: number } {
+  let total = 0, run = 0, longest = 0;
+  for (let cycle = 2; cycle < keys.length; cycle++) { if (keys[cycle] === keys[cycle - 2]) { total++; longest = Math.max(longest, ++run); } else run = 0; }
+  return { total, longest };
+}
+interface DenseRun { grid: WidgetGrid; enabled: Visibility; ids: WidgetId[]; boards: WidgetGrid[]; keys: string[] }
+/** A board's compositions over `cycles` cycles, the authored board first, each checked collision-free and in bounds. */
+function compositionRun(grid: WidgetGrid, enabled: Visibility, cycles: number): DenseRun {
+  const ids = WIDGET_IDS.filter(id => enabled[id]); const boards = [grid]; let previous = grid;
+  for (let cycle = 1; cycle <= cycles; cycle++) {
+    const next = composeWidgetGrid(grid, enabled, cycle, previous);
+    assert.equal(gridProblem(next, enabled), null, `cycle ${cycle} is collision-free and in bounds`);
+    boards.push(next); previous = next;
+  }
+  return { grid, enabled, ids, boards, keys: boards.map(board => positions(board, ids)) };
+}
+/** 24-cycle runs of the 12 generated dense boards per density, computed once for the #182 tests. */
+const denseRuns = new Map<GridDensity, DenseRun[]>();
+function denseRunsFor(density: GridDensity): DenseRun[] {
+  if (!denseRuns.has(density)) {
+    const boards = denseBoards(density, 12);
+    assert.ok(boards.length >= 10, `${density}: generated ${boards.length} boards at 90–100% fill`);
+    denseRuns.set(density, boards.map(({ grid, enabled }) => compositionRun(grid, enabled, 24)));
+  }
+  return denseRuns.get(density)!;
+}
+
+test('dense boards vary their reflections instead of alternating between two arrangements (#182)', () => {
+  // Measured on 2026-10-19 with these 36 boards × 24 cycles (828 compositions from cycle 2 on): before #182
+  // the fallback always chose the reflection moving the most widgets (ties: most travel), and 470 repeated the
+  // composition from two cycles earlier (31 boards; 3 boards showed only two arrangements). At 1e3566d, which
+  // alternated a unique best reflection only with one moving exactly one widget fewer, 33 did (9 boards). Now
+  // 10 do (5 boards), none of them from two consecutive fallbacks (next test), and every board reaches more
+  // than two arrangements.
+  let total = 0, repeats = 0;
+  for (const density of Object.keys(GRID_DENSITIES) as GridDensity[]) {
+    for (const [index, { ids, boards, keys }] of denseRunsFor(density).entries()) {
+      total += keys.length - 2; repeats += twoCycleRepeats(keys).total;
+      // A third legal arrangement exists when the whole-board reflections of a composition differ.
+      if (reflectedArrangements(boards.at(-1)!, ids).size > 2) assert.ok(new Set(keys.slice(1)).size > 2, `${density} board ${index}: more than two arrangements in 24 cycles`);
+    }
+  }
+  assert.equal(total, 828);
+  assert.ok(repeats <= total * 0.03, `two-cycle repeats ${repeats} of ${total}`);
+});
+
+test('consecutive reflection fallbacks differ whenever another reflection moves widgets, over 200 cycles (#182)', () => {
+  // Counted on 2026-10-19 with an instrumented copy over 200 composeWidgetGrid cycles on these 36 boards:
+  // before #182 all 3,902 consecutive fallback pairs applied the same reflection; at 1e3566d 267 of 3,861 still
+  // did, and Fine board 4 alternated between two arrangements for cycles 100–192 (next test); now 0 of 3,868.
+  // Here the fallback runs on its own, as on a board where the search never succeeds: for 200 cycles from each
+  // authored board, and for two cycles from every composition of its 24-cycle run (other centred widgets, both
+  // parities). The same reflection twice in a row would return to the arrangement from two cycles earlier.
+  let chains = 0, checked = 0;
+  for (const density of Object.keys(GRID_DENSITIES) as GridDensity[]) {
+    for (const [index, { grid, enabled, ids, boards }] of denseRunsFor(density).entries()) {
+      const chain = (start: WidgetGrid, first: number, cycles: number, label: string) => {
+        const reachable = reflectedArrangements(start, ids); const seen = new Set([positions(start, ids)]);
+        let previous = start, twoBack: WidgetGrid | null = null; chains++;
+        for (let cycle = first; cycle < first + cycles; cycle++) {
+          const next = reflectedComposition(grid, ids, previous, cycle);
+          if (reachable.size === 1) { assert.equal(next, null, `${label}: a board every reflection maps onto itself has no fallback`); return seen; }
+          assert.ok(next, `${label} cycle ${cycle}: a reflection moves widgets`);
+          assert.equal(gridProblem(next, enabled), null, `${label} cycle ${cycle} is collision-free and in bounds`);
+          for (const id of ids) assert.deepEqual(placementSpan(id, next.placements[id]), placementSpan(id, grid.placements[id]), 'whole groups keep their size');
+          const key = positions(next, ids);
+          assert.ok(reachable.has(key) && key !== positions(previous, ids), `${label} cycle ${cycle}: a whole-board reflection that moves widgets`);
+          if (twoBack && reachable.size === 4) { checked++; assert.notEqual(key, positions(twoBack, ids), `${label} cycle ${cycle}: the same reflection twice in a row`); }
+          seen.add(key); twoBack = previous; previous = next;
+        }
+        return seen;
+      };
+      const seen = chain(grid, 1, 200, `${density} board ${index}`);
+      if (reflectedArrangements(grid, ids).size === 4) assert.ok(seen.size > 2, `${density} board ${index}: the fallback alone reaches more than two arrangements`);
+      for (const [cycle, board] of boards.entries()) if (cycle) chain(board, cycle + 1, 2, `${density} board ${index} from cycle ${cycle}`);
+    }
+  }
+  assert.ok(chains >= 30 * 25 && checked > 6_000, `${chains} fallback chains, ${checked} consecutive pairs with a third arrangement`);
+});
+
+test('the Fine board that settled into a two-arrangement loop keeps varying over 200 cycles (#182)', () => {
+  // At 1e3566d this board (13 widgets) repeated the composition from two cycles earlier on cycles 14–20 and on
+  // every cycle from 102 to 192: one reflection moved all 13 widgets and no other moved 12 (they moved 11 and 10).
+  const { grid, enabled } = denseBoards('fine', 12)[4]!;
+  const { keys } = compositionRun(grid, enabled, 200); const repeats = twoCycleRepeats(keys);
+  assert.ok(repeats.longest <= 2, `longest run of two-cycle repeats ${repeats.longest}`);
+  const late = new Set(keys.slice(101)).size;
+  assert.ok(late >= 4, `${late} arrangements in cycles 101–200`);
 });
 
 test('the #93 probe board (default plus a medium Photo) never stalls', () => {

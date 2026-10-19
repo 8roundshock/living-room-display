@@ -525,6 +525,13 @@ button {
   opacity: 1;
   pointer-events: auto;
 }
+/* One shared layout for the button and the link (#262): icon and label 8px apart. */
+.display-help .display-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
 .display-help .button {
   background: #14151d;
   color: #a8acc0;

@@ -22,14 +22,38 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false }
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.clock.install({ time: new Date('2026-10-18T13:00:00Z') });
-    const open = async (path = '/display') => { await page.goto(base + path); await page.locator(path === '/editor' ? '.preview-surface' : '.display-page').waitFor(); };
+    // #209: a capture listener counts handled pointer moves, so the fake clock never advances past a move
+    // the page has not dispatched yet (a coalesced or late pointermove once hid the controls early).
+    const open = async (path = '/display') => {
+      await page.goto(base + path); await page.locator(path === '/editor' ? '.preview-surface' : '.display-page').waitFor();
+      await page.evaluate(() => { window.__lrdPointerMoves = 0; document.addEventListener('pointermove', () => { window.__lrdPointerMoves++; }, true); });
+    };
+    const moves = () => page.evaluate(() => window.__lrdPointerMoves);
+    const move = async (x, y) => {
+      const before = await moves(); await page.mouse.move(x, y);
+      for (let attempt = 0; (await moves()) <= before; attempt++) { assert.ok(attempt < 300, 'the page handles the pointer move'); await page.waitForTimeout(10); }
+    };
     const interacting = () => page.locator('.display-page').evaluate(el => el.classList.contains('interacting'));
     const controls = page.getByRole('navigation', { name: 'Display controls' });
     const opacity = () => controls.evaluate(el => Number(getComputedStyle(el).opacity));
 
     await open(); assert.equal(await opacity(), 0);
-    await page.mouse.move(200, 200); await page.clock.runFor(2500);
-    await page.mouse.move(250, 220); await page.clock.runFor(2500);
+    // #262: the button and the link share one inline-flex layout: icon and label 8px apart, centred.
+    const layout = await controls.evaluate(nav => [...nav.querySelectorAll('.display-control')].map(control => {
+      const icon = control.querySelector('svg').getBoundingClientRect(), label = [...control.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+      const range = document.createRange(); range.selectNodeContents(label); const text = range.getBoundingClientRect();
+      return { label: label.textContent.trim(), tag: control.tagName, display: getComputedStyle(control).display, align: getComputedStyle(control).alignItems, columnGap: getComputedStyle(control).columnGap, gap: Number((text.left - icon.right).toFixed(2)), offset: Math.abs((icon.top + icon.bottom) / 2 - (text.top + text.bottom) / 2) };
+    }));
+    assert.deepEqual(layout.map(item => [item.tag, item.label]), [['BUTTON', 'Fullscreen · F'], ['A', 'Editor · Esc']]);
+    for (const item of layout) {
+      // inline-flex, blockified to flex inside the flex row of controls.
+      assert.deepEqual([item.display, item.align, item.columnGap], ['flex', 'center', '8px'], `${item.label} uses the shared layout`);
+      assert.ok(Math.abs(item.gap - 8) <= 0.5, `${item.label}: 8px between icon and label, got ${item.gap}`);
+      assert.ok(item.offset <= 2, `${item.label}: icon and label share a centre line (${item.offset}px)`);
+    }
+    checks.push(`Both display controls share one inline-flex layout with an 8px icon gap: ${JSON.stringify(layout.map(item => [item.label, item.gap]))}`);
+    await move(200, 200); await page.clock.runFor(2500);
+    await move(250, 220); await page.clock.runFor(2500);
     assert.equal(await interacting(), true, 'Pointer activity restarts the idle deadline instead of hiding after the first movement');
     assert.equal(await opacity(), 1);
     if (capture) images.push({ name: 'ongoing-pointer-controls', bytes: await page.screenshot() });
@@ -46,10 +70,10 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false }
     await page.locator('body').evaluate(el => { el.tabIndex = -1; el.focus(); }); assert.equal(await opacity(), 0);
     checks.push('Keyboard activity refreshes the deadline; focus remains visible without moving focus on timeout');
 
-    await page.mouse.move(300, 250); await open('/editor'); await page.clock.runFor(4000);
+    await move(300, 250); await open('/editor'); await page.clock.runFor(4000);
     assert.equal(await page.locator('.display-help').count(), 0);
     await open('/display?native=1'); assert.equal(await controls.count(), 0);
-    await page.mouse.move(350, 280); await tabSignal(); await page.clock.runFor(4000);
+    await move(350, 280); await tabSignal(); await page.clock.runFor(4000);
     assert.equal(await controls.count(), 0); assert.equal(await page.locator('html').evaluate(el => getComputedStyle(el).cursor), 'none');
     assert.deepEqual(errors, []);
     checks.push('Editor/navigation and explicit native presentation retain their existing control exclusions; no native helper or fullscreen launch');

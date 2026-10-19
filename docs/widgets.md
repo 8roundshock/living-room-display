@@ -256,10 +256,23 @@ Use the centralized scheduler/wrapper, not a new per-widget motion loop.
 
 Dense boards keep relocating (#93). The bounded composition search may fail to
 find a board where every widget moves; it then reflects the previous composition
-horizontally, vertically or both (`displayPlacement`, span-aware), choosing the
-reflection that moves the most widgets. A reflection is always in bounds and
-collision-free. Only a board that every reflection maps onto itself falls through
-to the search that allows widgets to stay. A full-height span can only travel
+horizontally, vertically or both (`displayPlacement`, span-aware), choosing a
+reflection that moves the most widgets. Whenever another reflection also moves
+widgets, consecutive fallbacks apply different reflections (#182): reflections that
+tie rotate with the cycle, and a unique best one (usually both at once, when a widget
+is centred on one axis) alternates on odd cycles with the best of the others, however
+many fewer widgets it moves. A reflection leaves the same widgets in place in every
+reflected arrangement of a board, so this ranking holds from one fallback to the next.
+Reflections commute, so a board with a third reflected arrangement visits three or
+four arrangements instead of returning to the one from two cycles earlier. On 36
+generated dense boards over 200 cycles, consecutive fallbacks that applied the same
+reflection fell from 3,902 of 3,902 pairs to none of 3,868; over 24 cycles,
+compositions that repeat the one from two cycles earlier fell from 470 to 10 of 828.
+Each remaining repeat involves a search step; the search does not look two cycles
+back (#317). Only a board with a single moving reflection, or two that reach the
+same arrangement, still alternates between two arrangements. A reflection is always
+in bounds and collision-free. Only a board that every reflection maps onto itself
+falls through to the search that allows widgets to stay. A full-height span can only travel
 sideways; any span relocates as one whole group through the black rest. Its
 content therefore also alternates vertically: a full-height Reminders column
 (`data-full-height`) anchors its list to the top on even compositions (the authored
