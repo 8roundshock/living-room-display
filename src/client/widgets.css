@@ -147,7 +147,8 @@
 .grid-ambient .reminder-segment { white-space: nowrap; }
 .grid-ambient .reminders-body .ambient-description { font-size: calc(max(var(--min-text), min(6.2cqw, 8cqh, var(--ambient-reminder-title) * 0.66)) * var(--font-scale)); margin-top: calc(var(--reminder-title-size) * 0.4); }
 .grid-ambient .reminder-more-probe { display: none; }
-.grid-ambient .reminders-body[data-measuring] .reminder-more { display: none; }
+/* Out of flow but still rendered while measuring: display: none would replay its entrance and count crossfade (#76). */
+.grid-ambient .reminders-body[data-measuring] .reminder-more { position: absolute; visibility: hidden; }
 .grid-ambient .reminders-body[data-measuring] .reminder-more-probe { display: block; visibility: hidden; }
 
 /* Free size (#73): a full-height Reminders column can only relocate sideways, so odd compositions

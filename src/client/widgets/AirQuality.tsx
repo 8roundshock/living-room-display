@@ -59,7 +59,7 @@ function AirQuality({ state, settings, size, now, disconnected }: WidgetContentP
     {air.status === 'off' ? <div className="air-message">Air quality not loaded yet</div>
       : !current ? <div className="ambient-title air-message">Air quality unavailable</div>
       : <>
-        <div className="air-reading"><TransitionText className="air-aqi" value={current.aqi === null ? '—' : String(Math.round(current.aqi))} /><span className="air-category">{category ?? 'AQI unavailable'}</span></div>
+        <div className="air-reading"><TransitionText className="air-aqi" value={current.aqi === null ? '—' : String(Math.round(current.aqi))} /><TransitionText className="air-category" value={category ?? 'AQI unavailable'} /></div>
         {size !== 'small' && <div className="air-details">
           {pollutantLine(current) && <div>{pollutantLine(current)}</div>}
           <div>{current.uvIndex === null ? 'UV unavailable' : `UV ${Math.round(current.uvIndex)} · ${uvCategory(current.uvIndex)}`}</div>

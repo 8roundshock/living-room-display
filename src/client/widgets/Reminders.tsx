@@ -1,4 +1,4 @@
-import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { pendingReminders } from '../../shared/reminders.ts';
 import { reminderPresentation } from '../model.ts';
@@ -53,6 +53,16 @@ function Reminders({ state, settings, now, disconnected }: WidgetContentProps) {
   const pending = useMemo(() => Array.isArray(source) ? pendingReminders(source, minute) : [], [source, minute]);
   const rows = useMemo(() => pending.slice(0, MAX_ROWS).map(reminder => ({ id: reminder.id, text: reminder.text, due: reminderDue(reminder, new Date(minute), format) })), [pending, minute, format]);
   const total = pending.length;
+  // Only reminders that were not pending at the previous update may fade in (#76). React moves a
+  // re-sorted row with insertBefore, which would otherwise replay its entrance (#172). The first
+  // render marks nothing; the mark lasts until the next poll or minute.
+  const pendingIds = useMemo(() => pending.map(reminder => reminder.id), [pending]);
+  const previousIds = useRef<ReadonlySet<string> | null>(null);
+  const fresh = useMemo(() => {
+    const before = previousIds.current;
+    return new Set(before ? pendingIds.filter(id => !before.has(id)) : []);
+  }, [pendingIds]);
+  useEffect(() => { previousIds.current = new Set(pendingIds); }, [pendingIds]);
   const offline = disconnected && total > 0;
   const layoutKey = JSON.stringify([rows, total, offline, settings.appearance.fontScale, settings.appearance.fontFamily]);
   const body = useRef<HTMLDivElement>(null);
@@ -88,7 +98,7 @@ function Reminders({ state, settings, now, disconnected }: WidgetContentProps) {
     <div className="ambient-label">Up next</div>
     {rows.length ? <>
       <ul className={`ambient-reminder-list ${total === 1 ? 'single' : ''}`}>
-        {rows.map((row, index) => <li key={row.id} className={index >= shown ? 'reminder-overflow' : undefined}>
+        {rows.map((row, index) => <li key={row.id} className={index >= shown ? 'reminder-overflow' : undefined} data-new={fresh.has(row.id) ? '' : undefined}>
           <span className="ambient-reminder-dot" />
           <div className="ambient-reminder-copy">
             <p className="ambient-reminder-title">{row.text}</p>

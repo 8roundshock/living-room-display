@@ -124,19 +124,43 @@
   }
 }
 
-/* Rain bars ease to new heights (the existing behaviour, now only above Off). */
-.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .rain-bar {
+/* Hourly bars in adaptive Weather (#74) and Air quality (#78): existing bars ease to new heights
+   (the existing behaviour, now only above Off). Bars inserted later (a mode change into elevated,
+   the next hour) fade in to their resting opacity, never above it; the rain timing, detail and
+   hour labels crossfade through TransitionText. */
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) :is(.rain-bar, .air-bar) {
   transition: height 700ms var(--motion-ease);
 }
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.rain-bar, .air-bar) {
+  transition:
+    height 700ms var(--motion-ease),
+    opacity var(--motion-value) var(--motion-ease);
+}
+@starting-style {
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.rain-bar, .air-bar) {
+    opacity: 0;
+  }
+}
 
-/* Reminders: newly pending items, "+N more" and "All clear" fade and settle; removal is instant. */
-.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.ambient-reminder-list > li, .reminders-more, .reminders-clear) {
+/* Reminders (#73's measured list): only newly pending rows (data-new) fade in, by opacity alone so
+   the measured geometry never moves. A re-sorted row (#172) or one that no longer overflows stays
+   still, and removal is instant. "+N more" and "All clear" fade and settle when they appear, and
+   the count crossfades through TransitionText. */
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .ambient-reminder-list > li[data-new] {
+  transition: opacity var(--motion-value) var(--motion-ease);
+}
+@starting-style {
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .ambient-reminder-list > li[data-new] {
+    opacity: 0;
+  }
+}
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.reminder-more, .reminders-clear) {
   transition:
     opacity var(--motion-value) var(--motion-ease),
     translate var(--motion-value) var(--motion-ease);
 }
 @starting-style {
-  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.ambient-reminder-list > li, .reminders-more, .reminders-clear) {
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.reminder-more, .reminders-clear) {
     opacity: 0;
     translate: 0 -0.3em;
   }
@@ -159,16 +183,17 @@
   animation: lrd-enter-left 600ms var(--motion-ease) backwards;
   animation-delay: var(--reveal-delay);
 }
-.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .rain-bars > .rain-bar {
+.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing :is(.rain-bars > .rain-bar, .air-bars > .air-bar) {
   transform-origin: 50% 100%;
   animation: lrd-bar-grow 600ms var(--motion-ease) backwards;
   animation-delay: var(--reveal-delay);
 }
-.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .rain-bars > .rain-bar-unknown {
+.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing :is(.rain-bars > .rain-bar-unknown, .air-bars > .air-bar-unknown) {
   animation-name: lrd-fade-in;
 }
+/* Reminder rows fade without moving, so a measurement during the entrance stays exact (#73). */
 .grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing :is(.ambient-reminder-list > li) {
-  animation: lrd-enter var(--motion-value) var(--motion-ease) backwards;
+  animation: lrd-fade-in var(--motion-value) var(--motion-ease) backwards;
   animation-delay: var(--reveal-delay);
 }
 .grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .ambient-weather .weather-metrics > div {
@@ -181,6 +206,9 @@
   }
   .grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .rain-bars > .rain-bar {
     animation-delay: calc(var(--reveal-delay) + (min(sibling-index(), 13) - 1) * 25ms);
+  }
+  .grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .air-bars > .air-bar {
+    animation-delay: calc(var(--reveal-delay) + (min(sibling-index(), 24) - 1) * 12ms);
   }
   .grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing :is(.ambient-reminder-list > li) {
     animation-delay: calc(var(--reveal-delay) + (min(sibling-index(), 7) - 1) * 60ms);
