@@ -61,9 +61,9 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const errors = [], checks = [];
   let context, page;
-  async function open(settings, options = {}) {
+  async function open(settings, options = {}, items = reminders()) {
     await context?.close();
-    await app.store.update(data => { data.settings = structuredClone(settings); data.reminders = reminders(); data.photoAsset = null; });
+    await app.store.update(data => { data.settings = structuredClone(settings); data.reminders = structuredClone(items); data.photoAsset = null; });
     context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'America/Toronto', ...options });
     page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
@@ -109,6 +109,12 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     const row = page.getByRole('button', { name: 'Reminders', exact: true });
     if (await row.getAttribute('aria-expanded') !== 'true') await row.click();
   }
+  const preset = name => page.getByRole('button', { name: `Reminders size ${name}`, exact: true });
+  const subtitle = () => page.locator('.widget-option').filter({ has: page.getByRole('button', { name: 'Reminders', exact: true }) }).locator('.widget-row-copy small');
+  /** Every visible widget's family and span on the canvas, to prove nothing moved. */
+  const shapes = () => page.locator('.preview-screen [data-widget-id]').evaluateAll(nodes => nodes.map(node => `${node.dataset.widgetId}:${node.dataset.widgetSize}:${node.dataset.widgetSpan ?? ''}`).sort());
+  /** Live regions that currently say "No room". */
+  const announcing = () => page.locator('[role="status"], [aria-live]').evaluateAll(nodes => nodes.filter(node => node.textContent.includes('No room')).map(node => node.textContent));
   try {
     // Pointer: snapping, live reflow, Escape and commit.
     await open(crowded()); await layout(); await clean();
@@ -208,6 +214,62 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     assert.deepEqual(await page.locator('.grid-widget-frame').evaluateAll(elements => elements.map(element => element.getAttribute('style'))), board, 'every placement is unchanged');
     checks.push('an impossible resize keeps the previous board, marks the widget and shows “No room for that size”');
 
+    // #183: on the default board a full-height column has no room. The Column preset says so before it
+    // is chosen; choosing it names what takes the space and offers one draft fix; nothing changes until then.
+    const fresh = defaultSettings();
+    assert.equal(resizeWidgetSpan(fresh.widgetGrid, 'reminders', { columns: 2, rows: 8 }, fresh.widgets), null, 'the default board has no room for a column');
+    await open(fresh); await clean();
+    await selectReminders();
+    const before = await shapes();
+    assert.equal(await preset('column').getAttribute('aria-disabled'), 'true', 'Column is unavailable on this board');
+    for (const name of ['small', 'medium', 'large']) assert.equal(await preset(name).getAttribute('aria-disabled'), null, `${name} fits`);
+    const reason = await preset('column').getAttribute('aria-describedby');
+    assert.equal(await page.locator(`[id="${reason}"]`).textContent(), 'Column needs more room on this board.');
+    await preset('column').focus(); await page.keyboard.press('Enter'); await page.clock.runFor(100);
+    const columnProblem = 'No room for a full-height Reminders column beside Clock, Weather and Forecast.';
+    assert.deepEqual(await announcing(), [columnProblem], 'one live region names what takes the space');
+    assert.equal(await page.getByText(columnProblem, { exact: true }).count(), 1, 'shown once');
+    assert.equal(await preset('column').evaluate(element => element === document.activeElement), true, 'focus stays on the unavailable preset');
+    assert.deepEqual(await shapes(), before, 'no widget is resized without an explicit action');
+    assert.equal(await page.locator('.studio-savebar').count(), 0);
+    const makeRoom = page.getByRole('button', { name: 'Make room: Weather medium', exact: true });
+    await makeRoom.click(); await page.clock.runFor(200);
+    await dirty();
+    assert.equal(await page.locator('.preview-screen [data-widget-id="weather"]').getAttribute('data-widget-size'), 'medium');
+    assert.equal(await ambient().getAttribute('data-widget-span'), '2x8');
+    assert.equal(await ambient().getAttribute('data-full-height'), '');
+    assert.equal(await subtitle().textContent(), 'Column');
+    assert.equal(await preset('column').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('.widget-list .inline-message').textContent(), 'Weather is now medium. Reminders is now a full-height column.');
+    assert.deepEqual(await announcing(), [], 'the explanation clears once the column fits');
+    await cancel().click(); await clean();
+    assert.deepEqual(await shapes(), before, 'Cancel restores the board');
+    // A stepper with no room explains itself the same way: from 2 × 6 on the default board, 2 × 7 has none.
+    const tall = defaultSettings();
+    tall.widgetGrid = resizeWidgetSpan(tall.widgetGrid, 'reminders', { columns: 2, rows: 6 }, tall.widgets);
+    assert.ok(tall.widgetGrid);
+    await open(tall); await clean(); await selectReminders();
+    const tallBefore = await shapes();
+    await page.getByRole('group', { name: 'Reminders height' }).getByRole('button', { name: 'Taller' }).click(); await page.clock.runFor(100);
+    assert.deepEqual(await announcing(), ['No room for a 2 × 7 Reminders beside Clock, Weather and Forecast.']);
+    assert.deepEqual(await shapes(), tallBefore, 'nothing changes');
+    await page.getByRole('button', { name: 'Make room: Weather medium', exact: true }).click(); await dirty();
+    assert.equal(await ambient().getAttribute('data-widget-span'), '2x7');
+    assert.equal(await page.getByRole('group', { name: 'Reminders height' }).locator('output').textContent(), '7 rows');
+    await cancel().click(); await clean();
+    checks.push('default board (#183): Column is aria-disabled with its reason; choosing it names Clock, Weather and Forecast in one live region and changes nothing; “Make room: Weather medium” makes the column as one draft that Cancel restores; a stepper with no room explains itself too');
+
+    // #233: the list subtitle says when the display hides an empty Reminders.
+    await open(roomy(), {}, []); await clean();
+    await selectReminders();
+    assert.equal(await subtitle().textContent(), 'Small · Hidden when empty');
+    await page.getByRole('checkbox', { name: 'Hide when empty' }).click(); await dirty();
+    assert.equal(await subtitle().textContent(), 'Small', 'shown (“All clear”) when the option is off');
+    await cancel().click(); await clean();
+    await open(roomy()); await selectReminders();
+    assert.equal(await subtitle().textContent(), 'Small', 'pending reminders are shown');
+    checks.push('the Widgets list subtitle reads “Small · Hidden when empty” only while the display hides an empty Reminders (#233)');
+
     // Touch: real pointer capture through CDP touch input.
     await open(crowded(), { hasTouch: true }); await layout(); await clean();
     await mover().focus();
@@ -225,7 +287,6 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     // Presets and steppers.
     await open(roomy());
     await selectReminders();
-    const preset = name => page.getByRole('button', { name: `Reminders size ${name}`, exact: true });
     assert.equal(await preset('small').getAttribute('aria-pressed'), 'true');
     await preset('column').click(); await dirty();
     assert.equal(await ambient().getAttribute('data-widget-span'), '2x8');
@@ -279,21 +340,27 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     }
     checks.push('presets and steppers fit at 1280×720, 1280×600, 1024×600, 760×600, 390×700, 390×480 and 640×300 with keyboard focus clear of the Save bar');
 
-    // The picker keeps every family action and adds one caption for free-size widgets.
+    // The picker keeps every family action and adds one caption for free-size widgets, qualified while
+    // the board has no room for a full-height column (#238).
+    const roomyPicker = roomy(); roomyPicker.widgets.reminders = false;
+    await open(roomyPicker);
+    await page.getByRole('button', { name: 'Add widget', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview Reminders', exact: true }).click();
+    assert.equal(await page.locator('.picker-free-size').textContent(), 'Resize freely after adding — up to the full height');
     const pickerSettings = defaultSettings(); pickerSettings.widgets.reminders = false;
     await open(pickerSettings);
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     await page.getByRole('button', { name: 'Preview Reminders', exact: true }).click();
     for (const family of ['small', 'medium', 'large']) assert.equal(await page.getByRole('button', { name: `Reminders ${family}`, exact: true }).count(), 1);
-    assert.equal(await page.getByText('Resize freely after adding — up to the full height', { exact: true }).count(), 1);
-    await page.getByRole('button', { name: 'Preview Clock', exact: true }).click();
+    assert.equal(await page.getByText('Resize freely after adding. Full height needs room first: make Clock, Weather or Forecast smaller.', { exact: true }).count(), 1);
+    await page.getByRole('button', { name: 'Preview Clock, on your display', exact: true }).click();
     assert.equal(await page.locator('.picker-free-size').count(), 0, 'only free-size widgets show the caption');
     await page.getByRole('button', { name: 'Preview Reminders', exact: true }).click();
     await page.getByRole('button', { name: 'Reminders medium', exact: true }).click();
     await page.getByRole('button', { name: 'Add Reminders', exact: true }).click();
     await dirty();
     assert.equal(await ambient().getAttribute('data-widget-size'), 'medium');
-    checks.push('the picker exposes every family action plus the free-size caption, and adding still uses a family');
+    checks.push('the picker exposes every family action plus the free-size caption (qualified on the default board), and adding still uses a family');
 
     assert.deepEqual(errors, []);
     return { checks };

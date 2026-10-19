@@ -214,7 +214,7 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
     await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     assert.equal(await page.getByRole('button', { name: 'Preview Rain', exact: true }).count(), 0);
-    await page.getByRole('button', { name: 'Preview Weather', exact: true }).click();
+    await page.getByRole('button', { name: /^Preview Weather(, on your display)?$/ }).click();
     assert.match(await page.locator('.picker-detail-heading').innerText(), /Conditions now, with rain timing when rain is near/);
     for (const size of SIZES) {
       await page.getByRole('button', { name: `Weather ${size}`, exact: true }).click();

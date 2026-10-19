@@ -65,14 +65,14 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       assert.ok(panel[1] <= panel[0] + 1, 'catalog and Add must fit the contained panel');
       for (const id of ACTIVE_WIDGET_IDS) {
         const name = WIDGET_CATALOG[id].name;
-        await button(`Preview ${name}`).focus(); await page.keyboard.press('Enter');
+        await page.getByRole('button', { name: new RegExp(`^Preview ${name}(, on your display)?$`) }).focus(); await page.keyboard.press('Enter');
         await inView(button(`Add ${name}`), `${name} Add`);
         for (const size of widgetSizes(id)) { await button(`${name} ${size}`).click(); await inView(button(`Add ${name}`), `${name}/${size} Add`); }
       }
       assert.doesNotMatch(await page.locator('.widget-picker').innerText(), /Private reminder sentinel|Toronto/);
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
       await page.keyboard.press('Escape'); assert.equal(await page.locator('.widget-picker').count(), 0); assert.equal(await button('Add widget').evaluate(element => element === document.activeElement), true);
-      await tab('Weather'); const input = page.getByRole('combobox', { name: 'Search for a city' }); await input.focus(); await input.fill('unsaved');
+      await tab('Weather'); const input = page.getByRole('combobox', { name: 'City', exact: true }); await input.focus(); await input.fill('unsaved');
       await tab('Style'); await page.getByRole('slider', { name: 'Brightness', exact: true }).focus(); await page.keyboard.press('ArrowRight'); await tab('Weather'); await input.focus();
       const field = await input.boundingBox(), savebar = await page.locator('.studio-savebar').boundingBox();
       assert.ok(field.y >= 0 && field.y + field.height < savebar.y, 'focused desktop field must clear Save');
@@ -94,7 +94,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       await button('Add Photo').click(); await button('Save changes').waitFor();
       const upload = page.locator('.photo-upload-control'); await upload.scrollIntoViewIfNeeded();
       const icon = await upload.locator('svg').boundingBox(); assert.ok(icon.width === 16 && icon.height === 16, 'upload icon keeps explicit geometry');
-      await tab('Weather'); const input = page.getByRole('combobox', { name: 'Search for a city' }); await input.focus();
+      await tab('Weather'); const input = page.getByRole('combobox', { name: 'City', exact: true }); await input.focus();
       const field = await input.boundingBox(), bar = await page.locator('.studio-savebar').boundingBox(); assert.ok(field.y >= 0 && field.y + field.height < bar.y, 'focused narrow field must clear Save');
       await button('Cancel').click();
       checks.push(`${viewport.width}x${viewport.height}: narrow/200% equivalent reflow, reachable picker/Add, fixed photo icon, focus clear of dirty Save`);

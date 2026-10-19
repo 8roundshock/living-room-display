@@ -166,6 +166,8 @@ export async function runGridQa({ playwright, edge } = {}) {
         .evaluate((e) => document.activeElement === e),
       true,
     );
+    // The picker opens on the first unadded widget in grouped order (#154), so choose Photo.
+    await page.getByRole('button', { name: 'Preview Photo', exact: true }).click();
     await page
       .getByRole('button', { name: 'Photo medium', exact: true })
       .click();
@@ -178,7 +180,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       true,
     );
     await tab('Weather');
-    await page.getByRole('combobox', { name: 'Search for a city' }).fill('Tor');
+    await page.getByRole('combobox', { name: 'City', exact: true }).fill('Tor');
     await clean();
     await open(onlyClock());
     await layout();
@@ -410,6 +412,7 @@ export async function runGridQa({ playwright, edge } = {}) {
     await cancel().click();
     await clean();
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview Photo', exact: true }).click();
     await page.getByRole('button', { name: 'Add Photo', exact: true }).click();
     await dirty();
     await page
