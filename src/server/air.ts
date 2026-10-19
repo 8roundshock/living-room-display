@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { AirPollutant, AirQualityState, Settings } from '../shared/contracts.ts';
-import type { FetchLike } from './weather.ts';
+import { RefreshClock, refreshDue, type FetchLike, type Stamp } from './weather.ts';
 
 /**
  * Air quality for the saved weather location from the keyless Open-Meteo air-quality API (CAMS
@@ -56,37 +56,43 @@ export function normalizeAirQuality(payload: unknown, settings: Settings, scale:
   let dominant: AirPollutant | null = null, highest = -Infinity;
   for (const { pollutant, index } of subIndices) if (index !== null && index > highest) { highest = index; dominant = pollutant; }
   state.status = 'fresh'; state.updatedAt = new Date(now).toISOString();
+  // Keep the hour that both this computer and the provider consider current, and 24 from this computer's
+  // current hour: a fast clock at arrival must not discard the upcoming hours (#244). The widget filters
+  // past hours again each minute.
+  const reference = Math.min(now, data.current.time * 1000);
   state.current = {
     time: new Date(data.current.time * 1000).toISOString(), aqi: read(data.current, `${scale}_aqi`), dominant,
     pm2_5: read(data.current, 'pm2_5'), pm10: read(data.current, 'pm10'), uvIndex: read(data.current, 'uv_index'),
   };
   // Hourly values are instantaneous: keep the current hour and the upcoming ones.
   state.hourly = data.hourly.time.map((time, index) => ({ time: new Date(time * 1000).toISOString(), aqi: aqiSeries[index]!, uvIndex: uvSeries[index]! }))
-    .filter(reading => Date.parse(reading.time) > now - 3600_000).slice(0, 24);
+    .filter(reading => Date.parse(reading.time) > reference - 3600_000);
+  state.hourly = state.hourly.slice(0, 24 + state.hourly.filter(reading => Date.parse(reading.time) <= now - 3600_000).length);
   return state;
 }
 
-interface Entry { state: AirQualityState; fetchedAt: number; retryAt: number; pending?: Promise<void> }
+interface Entry { state: AirQualityState; fetched: Stamp | null; failed: Stamp | null; pending?: Promise<void> }
 export class AirQualityService {
   #fetch: FetchLike;
-  #now: () => number;
+  /** Wall and monotonic time, as for the forecast (#244): a clock set back neither stalls refreshes nor freshens a reading. */
+  #clock: RefreshClock;
   #cache = new Map<string, Entry>();
-  constructor(fetcher: FetchLike = fetch, now: () => number = Date.now) { this.#fetch = fetcher; this.#now = now; }
+  constructor(fetcher: FetchLike = fetch, now: () => number = Date.now, monotonic?: () => number) { this.#fetch = fetcher; this.#clock = new RefreshClock(now, monotonic); }
 
   async get(settings: Settings, scale: AirScale = settings.widgetData.airQuality.scale): Promise<AirQualityState> {
     const key = JSON.stringify([settings.location, scale]);
     let entry = this.#cache.get(key);
     if (!entry) {
-      entry = { state: emptyAirQuality(settings, scale), fetchedAt: 0, retryAt: 0 };
+      entry = { state: emptyAirQuality(settings, scale), fetched: null, failed: null };
       if (this.#cache.size >= MAX_ENTRIES) this.#cache.delete(this.#cache.keys().next().value!);
       this.#cache.set(key, entry);
     }
-    if (this.#now() >= entry.retryAt && (!entry.state.updatedAt || this.#now() - entry.fetchedAt >= TTL)) {
+    if (refreshDue(this.#clock, entry, TTL, RETRY)) {
       entry.pending ??= this.#refresh(settings, scale, entry).finally(() => { delete entry!.pending; });
       await entry.pending;
     }
     const result = structuredClone(entry.state);
-    if (result.updatedAt && this.#now() - entry.fetchedAt >= TTL) result.status = 'stale';
+    if (result.updatedAt && entry.fetched && this.#clock.since(entry.fetched) >= TTL) result.status = 'stale';
     return result;
   }
 
@@ -100,12 +106,12 @@ export class AirQualityService {
     try {
       const response = await this.#fetch(url, { signal: AbortSignal.timeout(8000), redirect: 'error' });
       if (!response.ok) throw new Error(`Provider returned ${response.status}`);
-      entry.state = normalizeAirQuality(await response.json(), settings, scale, this.#now());
-      entry.fetchedAt = this.#now(); entry.retryAt = entry.fetchedAt + TTL;
+      entry.state = normalizeAirQuality(await response.json(), settings, scale, this.#clock.wall());
+      entry.fetched = this.#clock.stamp(); entry.failed = null;
     } catch {
       entry.state.status = entry.state.updatedAt ? 'stale' : 'unavailable';
       entry.state.error = entry.state.updatedAt ? 'Air quality update failed. Showing the last successful reading.' : 'Air quality is unavailable. Check the connection and location settings.';
-      entry.retryAt = this.#now() + RETRY;
+      entry.failed = this.#clock.stamp();
     }
   }
 }

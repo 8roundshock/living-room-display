@@ -20,10 +20,10 @@ function legacyWidgets(value: unknown) {
   return merged;
 }
 
-const timezone = z.string().max(100).refine(value => {
+export const timezone = z.string().max(100).refine(value => {
   try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
 }, 'Use an IANA timezone, for example America/Toronto');
-const location = z.object({
+export const location = z.object({
   name: z.string().trim().min(1).max(100), latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180), timezone: z.union([timezone, z.literal('auto')]),
 }).strict();

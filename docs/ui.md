@@ -169,9 +169,16 @@ No background watch or IP lookup exists. `/display` never queries location or
 permission, and its Permissions-Policy disables geolocation.
 
 Preview weather retains its actual city/units while a selection is unsaved or
-refreshing. Forecast dates/intervals use the weather city's timezone; the clock
-and reminder input use the computer timezone. Current conditions show age;
-retained stale data is marked throughout. Missing values stay unavailable.
+refreshing. Forecast dates/intervals use the weather city's timezone, or the computer's
+while a device location's zone is still `auto` before its first forecast (Weather and
+Forecast then read unavailable); the clock and reminder input use the computer timezone. Current conditions show age;
+retained stale data is marked throughout, with Forecast's “Saved forecast” or
+“Offline” prefix in the same amber status tone as Weather's age (#223). Missing values
+stay unavailable. A retained forecast never shows past days, and a reading more than
+3 hours old reads “Last known · 9 AM” (#243, [rule](widgets.md#data-and-image-boundaries)).
+An update time in the future reads “Update time unknown” (#244). City search leaves
+out a result it could not save (no valid timezone or coordinates) and keeps the rest
+(#246).
 Hourly chance covers precipitation including snow; rain estimates use rain plus
 showers and label incomplete/gapped coverage. See [API semantics](api.md#weather-semantics).
 Rain timing lives inside Weather (#74): it stays calm when the next 12 hours are
@@ -179,18 +186,21 @@ complete and dry, adds a hint line when rain is later, precipitation is possible
 the outlook is unknown, and leads with rain timing (large adds hourly chance bars)
 when rain is current or starts within six hours. Wording says “likely” or
 “possible”, never that it is raining; times use the weather city's timezone and the
-12/24-hour setting, and “Forecast estimate”/“Partial forecast” labels stay visible.
+12/24-hour setting, never leave AM/PM or “· 40%” alone on a line (#197), and
+“Forecast estimate”/“Partial forecast” labels stay visible. The headline and the
+detail describe the same spells (#167).
 The footprint never changes, and the separate Rain widget is gone from the picker,
 list and canvas; an enabled Rain from older data is merged into Weather
 ([upgrade](install.md#additive-data-and-rollback-compatibility-84)). There is no opt-out of
 rain detail yet (#102). The [weather harness](../tests/ui/weather-browser.mjs) checks
-every family × mode × density at 1280/1920/3840 widths, CSS glyph boxes (#128) and the
-upgrade of a pre-#74 data folder.
+every family × mode × density at 1280/1920/3840 widths, CSS glyph boxes (#128), the
+upgrade of a pre-#74 data folder, and a device location whose zone is still `auto`
+while the provider is down (editor and display render, then recover).
 Each weather module keeps its actual place and relevant units visible when used
 alone; weather and forecast show the unit beside the place (“Toronto · °C”), and
-elevated Weather keeps the rain amount unit (“0.16 in rain”). Compact forecasts abbreviate Tomorrow as
-“Tom.” while retaining the full relative label and civil date for assistive text
-and hover details. Ambient labels, age, attribution, units and secondary values
+elevated Weather keeps the rain amount unit (“0.16 in rain”). Forecast labels read
+Today and then weekdays, tomorrow included (#256), while assistive text and hover
+details keep the full relative label and civil date (“Tomorrow, 2026-10-19”). Ambient labels, age, attribution, units and secondary values
 have a readability floor of 1.4% of the display height (1.65% for forecast
 chance/temperatures, the Weather rain detail and reminder dates), multiplied by
 **Text size**; very short compact widgets cap it by their own height. A larger
