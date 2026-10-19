@@ -90,7 +90,6 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
   }, ['offset', 'computedOffset', 'easing', 'composite']);
   function assertCompositable(list, label) {
     for (const animation of list) {
-      if (animation.plane && animation.name === 'grid-plane-drift') continue;
       if (animation.name.startsWith('transition:')) continue; // checked separately where they occur
       for (const property of animation.properties) assert.ok(ALLOWED_PROPERTIES.has(property), `${label}: ${animation.name} animates ${property}`);
       for (const opacity of animation.opacities) assert.ok(opacity <= 1, `${label}: ${animation.name} opacity ${opacity}`);
@@ -101,9 +100,9 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
     for (let attempt = 0; attempt < 150; attempt++) { if (await page.evaluate(predicate)) return; await page.waitForTimeout(40); }
     throw new Error(`Timed out waiting for ${label}`);
   }
-  const loops = list => list.filter(animation => animation.iterations === Infinity && !(animation.plane && animation.name === 'grid-plane-drift'));
-  /** Widget motion in the plane (the Soft motion drift excluded): animation names or transition:<property>. */
-  const planeMotion = async page => (await inventory(page)).filter(item => !(item.plane && item.name === 'grid-plane-drift')).map(item => item.name);
+  const loops = list => list.filter(animation => animation.iterations === Infinity);
+  /** Motion in the plane (the Soft motion drift is a discrete timer, #248, so it never appears): animation names or transition:<property>. */
+  const planeMotion = async page => (await inventory(page)).map(item => item.name);
   /** Animation names or transition:<property> running on the elements matching `selector`. */
   const motionIn = (page, selector) => page.evaluate(query => [...document.querySelectorAll(query)].flatMap(element => element.getAnimations().map(animation => animation.animationName ?? `transition:${animation.transitionProperty}`)), selector);
   /** Steps the page clock until the next arrangement's entrance starts. */
@@ -138,7 +137,7 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
       const during = await inventory(page);
       assertCompositable(during, `${animation}/${glyph} reveal`);
       if (animation === 'off') {
-        assert.equal(during.filter(item => !(item.plane && item.name === 'grid-plane-drift')).length, 0, 'Off has no widget motion');
+        assert.equal(during.length, 0, 'Off has no motion in the plane: no widget motion, and the Soft motion drift is a discrete timer (#248)');
         // Resting pixels: the stacked parts render exactly like one SVG holding the same paths.
         await page.evaluate(() => {
           const glyph = document.querySelector('.weather-symbol'), parts = [...glyph.querySelectorAll('.glyph-part svg')];
@@ -174,6 +173,38 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
       await view.close();
     }
     checks.push('getAnimations inventory: Off/Subtle zero loops; Lively ≤3 hero-glyph loops ≥1.2 s (bolt ≥8 s) that pause on black; only transform/opacity keyframes, opacity ≤1; stacked glyph pixels equal one SVG at rest');
+
+    // (2b) #248: the Soft motion drift moves the whole plane in discrete steps of 1/36 of ±0.5% about every
+    // 2 s, with no animation or transition in between; Soft motion off and reduced motion keep it still.
+    {
+      const drift = async page => page.locator('.widget-grid-plane').evaluate(plane => {
+        const matrix = new DOMMatrix(getComputedStyle(plane).transform);
+        return { x: matrix.e, y: matrix.f, width: plane.offsetWidth, height: plane.offsetHeight, animations: plane.getAnimations().length, transition: getComputedStyle(plane).transitionProperty };
+      });
+      const view = await displayPage({ state: scenario(level('off')), viewport: { width: 1280, height: 720 } });
+      const samples = [];
+      for (let step = 0; step < 48; step++) { samples.push({ at: step * 250, ...await drift(view.page) }); await view.page.clock.runFor(250); }
+      const { width, height } = samples[0];
+      const changes = samples.filter((sample, index) => index && (sample.x !== samples[index - 1].x || sample.y !== samples[index - 1].y));
+      assert.ok(changes.length >= 4 && changes.length <= 7, `about one step every 2 s over 12 s: ${changes.length} ${JSON.stringify(changes.map(change => change.at))}`);
+      for (const [index, change] of changes.entries()) {
+        const before = samples[samples.indexOf(change) - 1];
+        assert.ok(Math.abs(Math.abs(change.x - before.x) - width * 0.01 / 36) < 0.02 && Math.abs(Math.abs(change.y - before.y) - height * 0.01 / 36) < 0.02, `one 1/36 step of ±0.5%: ${JSON.stringify([before, change])}`);
+        if (index) assert.ok(change.at - changes[index - 1].at >= 1_750, `steps are about 2 s apart: ${changes.map(item => item.at)}`);
+      }
+      for (const sample of samples) {
+        assert.ok(Math.abs(sample.x) <= width * 0.005 + 0.01 && Math.abs(sample.y) <= height * 0.005 + 0.01, `within ±0.5% of the plane: ${JSON.stringify(sample)}`);
+        assert.equal(sample.animations, 0, 'nothing animates on the plane'); assert.doesNotMatch(sample.transition, /transform|all/, 'the plane never tweens between steps');
+      }
+      await view.close();
+      for (const [label, options] of [['Soft motion off', { state: scenario(state => { level('off')(state); state.settings.appearance.motionEnabled = false; }) }], ['reduced motion', { state: scenario(level('subtle')), reducedMotion: 'reduce' }]]) {
+        const still = await displayPage(options); const first = await drift(still.page);
+        await still.page.clock.runFor(10_000);
+        assert.deepEqual(await drift(still.page), first, `${label}: the plane stays still`);
+        await still.close();
+      }
+    }
+    checks.push('#248 Soft motion drift: discrete 1/36 steps of ±0.5% of the plane about every 2 s, no animation or transform transition on the plane; Soft motion off and reduced motion keep the plane still');
 
     // (3) Stale, offline or unavailable weather keeps the glyph still.
     for (const status of ['stale', 'offline', 'unavailable']) {
@@ -533,7 +564,7 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
       const { page, close } = await editorPage();
       await page.getByRole('button', { name: 'Add widget to display' }).click();
       for (const name of ['Preview Weather', 'Preview Forecast']) {
-        const catalog = page.getByRole('button', { name, exact: true });
+        const catalog = page.getByRole('button', { name: new RegExp(`^${name}(, on your display)?$`) });
         if (await catalog.count()) await catalog.click();
         await page.waitForTimeout(250);
         assert.equal(await page.locator('.picker-sample').getAttribute('data-animation'), 'off');
@@ -690,6 +721,28 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
         if (board === 'full') assert.ok(result.off.widgets === ACTIVE_WIDGET_IDS.length && result.lively.widgets === ACTIVE_WIDGET_IDS.length, 'the full board shows every widget');
         checks.push(`performance over 15 s at 1280×720 ×3, ${board} board: Off ${JSON.stringify(result.off)}; Lively ${JSON.stringify(result.lively)}`);
       }
+      // #248 frame budget: at Off with Soft motion on (the default), the display draws only when the plane
+      // steps or a value changes, a few frames per second at most (a continuous drift drew about 120 per
+      // second). Whole-browser CPU (all Edge processes, % of one core) is recorded alongside.
+      const frames = metrics.frames = {};
+      for (const [label, viewport, deviceScaleFactor] of [['1280×720 ×3', { width: 1280, height: 720 }, 3], ['3840×2160 ×1', { width: 3840, height: 2160 }, 1]]) {
+        const view = await displayPage({ clock: false, viewport, deviceScaleFactor, state: scenario(state => { level('off')(state); fullBoard(state); }) });
+        assert.equal(await view.page.locator('.grid-ambient:not(.static)').count(), 1, 'Soft motion is on');
+        await view.page.waitForTimeout(3_000);
+        const session = await view.context.newCDPSession(view.page); const browserSession = await browser.newBrowserCDPSession();
+        const cpu = async () => (await browserSession.send('SystemInfo.getProcessInfo')).processInfo.reduce((sum, item) => sum + item.cpuTime, 0);
+        const events = []; session.on('Tracing.dataCollected', data => events.push(...data.value));
+        await session.send('Tracing.start', { categories: 'disabled-by-default-devtools.timeline.frame', transferMode: 'ReportEvents' });
+        const cpuStart = await cpu(), started = Date.now();
+        await view.page.waitForTimeout(10_000);
+        const seconds = (Date.now() - started) / 1000, cpuEnd = await cpu();
+        const complete = new Promise(done => session.once('Tracing.tracingComplete', done)); await session.send('Tracing.end'); await complete;
+        frames[label] = { drawFramesPerSecond: Number((events.filter(event => event.name === 'DrawFrame').length / seconds).toFixed(2)), browserCpuPercent: Number(((cpuEnd - cpuStart) / seconds * 100).toFixed(1)) };
+        await browserSession.detach().catch(() => undefined);
+        await view.close();
+        assert.ok(frames[label].drawFramesPerSecond <= 4, `${label}: at most a few frames per second at rest ${JSON.stringify(frames[label])}`);
+      }
+      checks.push(`#248 frame budget at Off with Soft motion on, full board over 10 s: ${JSON.stringify(frames)}`);
     }
     assert.deepEqual(errors, []);
     return { checks, metrics, images: 'none written; all state stays in RAM' };

@@ -89,12 +89,14 @@ test('enabling the widgets and editing their content goes through the API with m
     const exported = await (await app.send('GET', '/api/export')).json();
     assert.deepEqual(exported.settings.widgetData, { calendar: { weekStart: 'monday' }, countdowns: [birthday], note: { text: 'Kept' } }, 'exports carry the private content');
     assert.equal(settingsSchema.parse(exported.settings).widgetData.note.text, 'Kept');
+    assertPreviousReaderAccepts('import', exported, 'an export with the three widgets on and their content');
+    assertPreviousReaderAccepts('data', await stateFile(directory), 'state.json with the three widgets on and their content');
+    assertPreviousReaderAccepts('data', await stateFile(directory, 'state.backup.json'), 'state.backup.json with the three widgets on and their content');
   } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
-test('rollback: default data stays readable; enabling a widget or entering content is the documented exception', async () => {
-  // Every folder starts from an existing user's colour-accent defaults, so only these widgets' data can
-  // make a file unreadable: a fresh folder is Native, the separate #75 exception.
+test('rollback: default data, enabled widgets and their content stay readable by the previous release (3fee844 knows them)', async () => {
+  // Every folder starts from an existing user's colour-accent defaults, so each choice is a change the files must carry.
   const fresh = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-fresh-'));
   try {
     await seedColorAccentData(fresh);
@@ -102,26 +104,33 @@ test('rollback: default data stays readable; enabling a widget or entering conte
     await store.patchSettings({ units: 'imperial' });
     assertPreviousReaderAccepts('data', await stateFile(fresh), 'defaults with the three widgets off and no content');
   } finally { await rm(fresh, { recursive: true, force: true }); }
-  const exceptions: [string, SettingsPatch][] = [
-    ['Calendar enabled', { widgets: { calendar: true } }],
-    ['Countdown enabled', { widgets: { countdown: true } }],
-    ['Note enabled', { widgets: { note: true } }],
-    ['a countdown', { widgetData: { countdowns: [event('Synthetic', '2026-12-24')] } }],
-    ['note text', { widgetData: { note: { text: 'Synthetic note' } } }],
-    ['week start Monday', { widgetData: { calendar: { weekStart: 'monday' } } }],
-    ['week start Sunday', { widgetData: { calendar: { weekStart: 'sunday' } } }],
+  type File = { settings: { widgets: Record<string, boolean>; widgetData?: Record<string, any> } };
+  const choices: [string, SettingsPatch, (file: File) => boolean][] = [
+    ['Calendar enabled', { widgets: { calendar: true } }, file => file.settings.widgets.calendar === true],
+    ['Countdown enabled', { widgets: { countdown: true } }, file => file.settings.widgets.countdown === true],
+    ['Note enabled', { widgets: { note: true } }, file => file.settings.widgets.note === true],
+    ['a countdown', { widgetData: { countdowns: [event('Synthetic', '2026-12-24')] } }, file => file.settings.widgetData?.countdowns?.length === 1],
+    ['note text', { widgetData: { note: { text: 'Synthetic note' } } }, file => file.settings.widgetData?.note?.text === 'Synthetic note'],
+    ['week start Monday', { widgetData: { calendar: { weekStart: 'monday' } } }, file => file.settings.widgetData?.calendar?.weekStart === 'monday'],
+    ['week start Sunday', { widgetData: { calendar: { weekStart: 'sunday' } } }, file => file.settings.widgetData?.calendar?.weekStart === 'sunday'],
   ];
-  for (const [label, patch] of exceptions) {
-    const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-exception-'));
+  for (const [label, patch, written] of choices) {
+    const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-choice-'));
     try {
       await seedColorAccentData(directory);
       const store = await DataStore.open(directory);
       await store.patchSettings(patch);
-      assertPreviousReaderRejects('data', await stateFile(directory), label);
+      const state = await stateFile(directory) as File;
+      assert.ok(written(state), `${label}: state.json carries the choice`);
+      assertPreviousReaderAccepts('data', state, label);
       assertPreviousReaderAccepts('data', await stateFile(directory, 'state.backup.json'), `${label}: the backup of the previous save`);
+      await store.patchSettings({ units: 'imperial' });
+      const backup = await stateFile(directory, 'state.backup.json') as File;
+      assert.ok(written(backup), `${label}: state.backup.json carries the choice after the next save`);
+      assertPreviousReaderAccepts('data', backup, `${label}: state.backup.json after the next save`);
     } finally { await rm(directory, { recursive: true, force: true }); }
   }
-  // A saved style captured while a widget was on keeps it, so it stays unreadable until re-saved.
+  // A saved style captured while a widget was on keeps it, and stays readable.
   const styled = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-style-'));
   try {
     await seedColorAccentData(styled);
@@ -131,31 +140,32 @@ test('rollback: default data stays readable; enabling a widget or entering conte
     await store.patchSettings({ savedPresets: [{ id: 'synthetic-style', name: 'Synthetic style', visual: { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } }] });
     await store.patchSettings({ widgets: { calendar: false } });
     await store.patchSettings({ units: 'imperial' });
-    assertPreviousReaderRejects('data', await stateFile(styled), 'a saved style that includes Calendar');
-    await store.patchSettings({ savedPresets: [] });
-    await store.patchSettings({ units: 'metric' });
-    assertPreviousReaderAccepts('data', await stateFile(styled), 'after deleting that saved style');
+    const state = await stateFile(styled) as { settings: { savedPresets: { visual: File['settings'] }[] } };
+    assert.equal(state.settings.savedPresets[0]!.visual.widgets.calendar, true, 'the saved style keeps Calendar on');
+    assertPreviousReaderAccepts('data', state, 'a saved style that includes Calendar');
+    assertPreviousReaderAccepts('data', await stateFile(styled, 'state.backup.json'), 'its backup');
   } finally { await rm(styled, { recursive: true, force: true }); }
-  // Turning the widgets off and clearing their content makes the files readable again; one more
-  // save refreshes the backup, which still holds the previous (exceptional) save until then.
+  // All three in use, then turned off and cleared: every file at every step stays readable.
   const reverted = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-reverted-'));
   try {
     await seedColorAccentData(reverted);
     const store = await DataStore.open(reverted);
     await store.patchSettings({ widgets: { calendar: true, countdown: true, note: true }, widgetData: { calendar: { weekStart: 'sunday' }, countdowns: [event('Synthetic', '2026-12-24')], note: { text: 'Synthetic' } } });
-    assertPreviousReaderRejects('data', await stateFile(reverted), 'all three in use');
+    const inUse = await stateFile(reverted);
+    assertPreviousReaderAccepts('data', inUse, 'all three in use');
     await store.patchSettings({ widgets: { calendar: false, countdown: false, note: false }, widgetData: { calendar: { weekStart: 'locale' }, countdowns: [], note: { text: '' } } });
-    assertPreviousReaderAccepts('data', await stateFile(reverted), 'state.json right after turning the widgets off and clearing their content');
-    assertPreviousReaderRejects('data', await stateFile(reverted, 'state.backup.json'), 'the backup still holds the previous save');
-    await store.patchSettings({ units: 'imperial' });
-    assertPreviousReaderAccepts('data', await stateFile(reverted), 'after turning the widgets off and clearing their content');
-    assertPreviousReaderAccepts('data', await stateFile(reverted, 'state.backup.json'), 'its backup');
+    assertPreviousReaderAccepts('data', await stateFile(reverted), 'state.json after turning the widgets off and clearing their content');
+    assertPreviousReaderAccepts('data', await stateFile(reverted, 'state.backup.json'), 'the backup that holds all three in use');
+    // Negative controls: content the previous release would refuse is still rejected.
+    const loose = inUse as { settings: Record<string, any> };
+    assertPreviousReaderRejects('data', { ...loose, settings: { ...loose.settings, widgetData: { ...loose.settings.widgetData, note: { text: '1\n2\n3\n4\n5' } } } }, 'a five-line note');
+    assertPreviousReaderRejects('data', { ...loose, settings: { ...loose.settings, widgetData: { ...loose.settings.widgetData, calendar: { weekStart: 'friday' } } } }, 'an unknown week start');
   } finally { await rm(reverted, { recursive: true, force: true }); }
 });
 
 test('Calendar, Countdown and Note sit beside a custom Reminders span and keep a full board moving (#73, #93)', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-span-'));
-  await seedColorAccentData(directory); // colour-accent defaults: Native is the separate #75 exception
+  await seedColorAccentData(directory); // an existing user's colour-accent defaults
   const app = await application(directory);
   try {
     // Every Balanced cell used: a 2 × 8 Reminders column, the default widgets, Photo and the three new widgets.
@@ -182,12 +192,15 @@ test('Calendar, Countdown and Note sit beside a custom Reminders span and keep a
       assert.ok(ids.some(id => next.placements[id].column !== previous.placements[id].column || next.placements[id].row !== previous.placements[id].row), `cycle ${cycle} relocates the full board through a reflection`);
       previous = next;
     }
-    // Rollback: the span (#73) and the new widgets (#78) are separate documented exceptions; clearing both recovers.
-    assertPreviousReaderRejects('data', await stateFile(directory), 'a span beside the three widgets');
+    // Rollback: the previous release (3fee844) reads the span (#73) and the new widgets (#78) at every step.
+    assertPreviousReaderAccepts('data', await stateFile(directory), 'a span beside the three widgets');
+    assertPreviousReaderAccepts('import', await (await app.send('GET', '/api/export')).json(), 'the export of a span beside the three widgets');
     assert.equal((await app.send('PATCH', '/api/settings', { widgets: { calendar: false, countdown: false, note: false } })).status, 200);
-    assertPreviousReaderRejects('data', await stateFile(directory), 'the span alone is still the #73 exception');
+    assertPreviousReaderAccepts('data', await stateFile(directory), 'the span alone');
+    assertPreviousReaderAccepts('data', await stateFile(directory, 'state.backup.json'), 'the backup with the span beside the three widgets');
     assert.equal((await app.send('PATCH', '/api/settings', { widgetGrid: { placements: { reminders: { size: 'small' } } } })).status, 200);
     assert.equal(Object.hasOwn(app.store.snapshot().settings.widgetGrid.placements.reminders, 'span'), false);
     assertPreviousReaderAccepts('data', await stateFile(directory), 'with the three widgets off and the span cleared');
+    assertPreviousReaderAccepts('data', await stateFile(directory, 'state.backup.json'), 'the backup with the span alone');
   } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
 });

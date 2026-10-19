@@ -188,9 +188,11 @@ dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
 verify metadata refresh on successful install and retention after failed update
 or uninstall. No paths, remotes, changes or credentials are saved in provenance.
 The current installed baseline is recorded in [STATUS.md](../STATUS.md) (clean
-`bedca44`, PR #70, on 2026-10-18). The preceding rollout installed clean `7e654fd`, the normal
-merge of PR #57. Its 79 application tests, full production build, independent
-final-head reviews and Windows/Linux CI passed before rollout. The
+`3fee844`, the merge of PR #163, on 2026-10-19, replacing `bedca44` from PR #70;
+[evidence](https://github.com/8roundshock/living-room-display/issues/130#issuecomment-6260374373)).
+An earlier rollout installed clean `7e654fd`, the normal merge of PR #57. Its 79
+application tests, full production build, independent final-head reviews and
+Windows/Linux CI passed before rollout. The
 [dated rollout evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)
 verifies installed provenance, owned backend/listener, health, served asset hashes
 and unchanged private data after the owner confirmed a clean editor and authorized
@@ -200,9 +202,10 @@ No native launch, capture, editor reload or screensaver registration accompanied
 that rollout. This documentation correction adds no live probes. Recheck current
 provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](install.md).
-A later marker-only read reports clean `bedca44e` after PR #70, installed at
-19:08:23 UTC. The coordinator has not rechecked current backend/served assets,
-private data/backup equality or registration; see [current status](../STATUS.md).
+On 2026-10-18 a later marker-only read reported clean `bedca44e` after PR #70,
+installed at 19:08:23 UTC, without rechecking backend/served assets, private
+data/backup equality or registration. The `3fee844` install rechecked provenance,
+health, served assets, data hashes and screensaver values; see [current status](../STATUS.md).
 The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
 passes actual computed-style checks for loading/error, viewport edges, widget
 controls, display-to-editor navigation, the embedded preview and a new display

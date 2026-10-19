@@ -122,13 +122,14 @@ function WorldClocksSettings({ settings, onChange, saving }: WidgetSettingsProps
   return <div className="world-clock-editor">
     <span className="field-label">Cities</span>
     {cities.length ? <ul className="world-clock-list" ref={list} aria-label="World clock cities">{cities.map((city, index) => {
-      const name = city.label.trim() || `city ${index + 1}`, empty = !city.label.trim(), errorId = `${inputId}-error-${city.id}`;
+      const name = city.label.trim() || `city ${index + 1}`, empty = !city.label.trim(), errorId = `${inputId}-error-${city.id}`, metaId = `${inputId}-meta-${city.id}`;
       const time = isValidTimeZone(city.timezone) ? timeParts(now, city.timezone, settings.clockFormat) : null;
       return <li key={city.id} data-city-id={city.id} className="world-clock-item">
-        <input className="text-input world-clock-label" aria-label={`Label for ${name}`} value={city.label} maxLength={40} disabled={saving}
-          aria-invalid={empty || undefined} aria-describedby={empty ? errorId : undefined}
+        {/* A position-based name stays the same while typing (#192); the row's region and time describe it. */}
+        <input className="text-input world-clock-label" aria-label={`City ${index + 1} label`} value={city.label} maxLength={40} disabled={saving}
+          aria-invalid={empty || undefined} aria-describedby={empty ? `${errorId} ${metaId}` : metaId}
           onChange={event => { const value = event.target.value; edit(list => list.map(item => item.id === city.id ? { ...item, label: value } : item)); }} />
-        <span className="world-clock-meta"><span>{regions[city.id] || zoneName(city.timezone)}</span><span className="world-clock-now">{time ? `${time.time}${time.period ? ` ${time.period}` : ''}` : '—'}</span></span>
+        <span className="world-clock-meta" id={metaId}><span>{regions[city.id] || zoneName(city.timezone)}</span>{' '}<span className="world-clock-now">{time ? `${time.time}${time.period ? ` ${time.period}` : ''}` : '—'}</span></span>
         {empty && <span className="world-clock-error" id={errorId}>Enter a label</span>}
         <span className="world-clock-actions">
           <button type="button" className="icon-button" data-action="up" aria-label={`Move ${name} up`} disabled={saving || index === 0} onClick={() => move(city.id, -1, 'up')}><Icon name="arrow" size={15} className="world-clock-up" /></button>

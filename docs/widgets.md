@@ -21,7 +21,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
 | [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
-| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per widget (`Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview`, `Photo`; stubs for planned ids), shared weather pieces in `common.tsx`, and the `WeatherGlyph` and `TransitionText` primitives. |
+| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157). |
 | [`src/client/Display.tsx`](../src/client/Display.tsx) | Ambient state and the shared movement/composition boundary. |
 | [`src/client/Editor.tsx`](../src/client/Editor.tsx) | Picker, grid interactions and settings draft integration. |
 
@@ -46,7 +46,8 @@ lines. Besides its families and defaults, an entry declares:
   `mergedInto` naming the active id that absorbs an enabled retired placement (the
   retiring change owns that migration). Planned and retired entries are hidden from
   the picker and inspector and never rendered. Planned ids always read as disabled
-  and a PATCH enabling one returns 400. Rain is retired and merged into Weather
+  and a PATCH enabling one returns 400. No entry is planned now: #157 and #171
+  activated all six #78 ids. Rain is retired and merged into Weather
   (#74, `absorbRetiredWidgets`); removing its id is tracked in #103.
 
 `WIDGET_IDS` keeps every id, because schemas and geometry need them all.
@@ -96,7 +97,10 @@ and `--ambient-min-data` (1.65%), times Text size. Wrap related values onto shar
 rows before letting the fit scale shrink a family. Only a family that truly cannot
 fit caps the floors by its own content height: small forecast uses 7.25% (text)
 and 8.5% (data), which binds only when that height is under about 19.4% of the
-display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold).
+display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold). Its high
+and low share a row when they fit, and its “Saved forecast”/“Offline” prefix takes its
+own short line, so fresh, stale and offline small forecasts render at fit 1 at Text
+100% in every density at 720p, 1080p and 4K, with “5 hr ago” kept together (#221).
 Overfull content is laid out proportionally wider before the fit scale shrinks it,
 so a larger Text size never renders text-size-scaled labels or values smaller.
 Icons and the fixed unavailable dash do not follow Text size and can still shrink
@@ -109,14 +113,14 @@ The renderer families have deliberate visual roles:
 | --- | --- | --- | --- |
 | Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date | Time beside a calendar column; analog sizes its hands to the cell height | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”); confidence only when partial | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and twelve hourly chance bars (spell hours brighter, unknown hours dotted) |
-| Forecast | Three days | Five days | Seven days; compact weekday labels preserve room for temperatures and chance |
-| Reminders | As many pending reminders as fit the actual box, soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height |
+| Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance. Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”) |
+| Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete, faint captured desktop with its "Last screen · 8:40 AM" caption on the image's left edge just below it (every family) | Wider complete desktop | Larger complete desktop; no crop hides screen context |
 | World clocks | First city's label, time in regular-weight numerals, relation ("Tomorrow · +13 h"), day/night icon and a dim "+N" | Two cities side by side | Up to four rows, label and relation left, time right; hidden on the display with no cities |
 | Calendar | Month name over this week's strip (weekday initials and dates) | Weekday, large date and month beside a compact month grid | Month and year, a weekday header row and a generous month grid; every grid has only the 4–6 weeks the month needs |
-| Countdown | The next date as a large count (“12” over “days”, or Today/Tomorrow), its title and a short date | The next date on the left; the following two as compact rows | Up to five rows (title, date, days right-aligned) and an honest “+N more” |
-| Note | The text, set large | The text, wider | The text, generous; long notes step down and an overfull one zooms out through the shared fit |
+| Countdown | The next date as a large count (“12” over “days”, or Today/Tomorrow), its title and a short date | The next date on the left; the following two as compact rows | As many rows as fit the box (title, date, days right-aligned), measured like Reminders, then an exact “+N more” (#221) |
+| Note | The text at the largest size that fits the box (measured from its lines and wrapping, #194), up to a family cap | The same, wider | The same, generous; only a note that cannot fit at the text floor zooms out through the shared fit |
 | Air quality | AQI and category word with place and scale; one footer row with the age ("Model est. · 12 min ago" with a reading) and "CAMS · Open-Meteo"; values over 3 hours old read "Saved estimate" or "Last known · 9 AM" | Adds the main pollutant and UV with its WHO category (both hidden once the values are over 3 hours old, UV then from the saved estimate) | Adds AQI bars for the current and up to 23 following hours (unknown hours dotted) and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
 | Sun & moon | Next sunrise or sunset, its time and the place | Sunrise, sunset, daylight length and change from yesterday, moon glyph and phase | Dim dotted day arc with the sun's position, times, daylight, phase with illumination and the next full (or new) moon |
 
@@ -176,7 +180,7 @@ settings version remains 1.
 ### Catalog decisions (#78)
 
 Reviewed 2026-10-18 for [#78](https://github.com/8roundshock/living-room-display/issues/78).
-The target catalog is twelve active widgets once Weather absorbs Rain (#74), grouped
+The catalog has twelve active widgets now that Weather has absorbed Rain (#74), grouped
 in the picker by `WIDGET_CATEGORIES`: **Time** (Clock, World clocks, Calendar),
 **Weather & sky** (Weather, Forecast, Air quality, Sun & moon), **Personal**
 (Reminders, Countdown, Note) and **Pictures** (Photo, Last screen). Every new widget
@@ -187,12 +191,13 @@ composition stay identical.
   #74 and Reminders to #73.
 - **Changed:** the picker is a grouped list with keyboard navigation; Forecast uses
   its own `forecast` glyph because Calendar now owns the calendar glyph.
-- **Added here:** Calendar (local date, week start Automatic/Sunday/Monday; no data
+- **Added here (PR #157):** Calendar (local date, week start Automatic/Sunday/Monday; no data
   dependency), Countdown (up to 12 dated events, optionally yearly; whole civil days
   with UTC-noon arithmetic so DST cannot shift a count; February 29 falls on
   February 28 in common years) and Note (up to 200 characters and 4 lines). An empty
   Countdown or Note is hidden on the display and shows a placeholder in the editor.
-  World clocks, Sun & moon and Air quality are the parallel unit of the same ticket (#171).
+  World clocks, Sun & moon and Air quality shipped in the parallel unit of the same
+  ticket (PR #171).
   The three use fixed families and sit beside a free-size Reminders span; fuller
   boards keep relocating through the #93 reflection fallback described below.
 - **Rejected, with reasons:** timers and alarms (they need audio and on-screen
@@ -227,8 +232,9 @@ label icon and moon) paints with its own sub-tone (`WEATHER_GLYPH_TONE`), a subt
 marked `tone-<role>` takes that role (Sun & moon's moon is `tone-time`), and
 Weather's rain visuals use the `--weather-rain` hook (Sea glass). A widget whose
 face is only primary text (a Note, a "Today" countdown) has nothing to tint. Status
-cues never change: stale amber `--ambient-caution`, offline mauve
-`--ambient-offline` and the Overdue word. Never hard-code a hue in widget CSS (Air
+cues never change: stale and offline labels and the Overdue word use the one amber
+status tone, `--ambient-caution` (there is no separate offline colour, #223, #133).
+Never hard-code a hue in widget CSS (Air
 quality has no category colours), fill or frame anything new for colour, or tint
 images; a new widget declares an existing palette role and uses `--ambient-accent`.
 The [palette harness](../tests/ui/palette-browser.mjs) fails for a widget with no
@@ -267,10 +273,23 @@ Use the centralized scheduler/wrapper, not a new per-widget motion loop.
 
 Dense boards keep relocating (#93). The bounded composition search may fail to
 find a board where every widget moves; it then reflects the previous composition
-horizontally, vertically or both (`displayPlacement`, span-aware), choosing the
-reflection that moves the most widgets. A reflection is always in bounds and
-collision-free. Only a board that every reflection maps onto itself falls through
-to the search that allows widgets to stay. A full-height span can only travel
+horizontally, vertically or both (`displayPlacement`, span-aware), choosing a
+reflection that moves the most widgets. Whenever another reflection also moves
+widgets, consecutive fallbacks apply different reflections (#182): reflections that
+tie rotate with the cycle, and a unique best one (usually both at once, when a widget
+is centred on one axis) alternates on odd cycles with the best of the others, however
+many fewer widgets it moves. A reflection leaves the same widgets in place in every
+reflected arrangement of a board, so this ranking holds from one fallback to the next.
+Reflections commute, so a board with a third reflected arrangement visits three or
+four arrangements instead of returning to the one from two cycles earlier. On 36
+generated dense boards over 200 cycles, consecutive fallbacks that applied the same
+reflection fell from 3,902 of 3,902 pairs to none of 3,868; over 24 cycles,
+compositions that repeat the one from two cycles earlier fell from 470 to 10 of 828.
+Each remaining repeat involves a search step; the search does not look two cycles
+back (#317). Only a board with a single moving reflection, or two that reach the
+same arrangement, still alternates between two arrangements. A reflection is always
+in bounds and collision-free. Only a board that every reflection maps onto itself
+falls through to the search that allows widgets to stay. A full-height span can only travel
 sideways; any span relocates as one whole group through the black rest. Its
 content therefore also alternates vertically: a full-height Reminders column
 (`data-full-height`) anchors its list to the top on even compositions (the authored
@@ -310,8 +329,9 @@ exact. Reminders marks only reminders that were not pending at the previous upda
 with `data-new`, and fades them by opacity alone. A re-sorted row, which React moves
 with `insertBefore` and Chromium would otherwise restart from `@starting-style`
 (#172), and a row that stops overflowing stay still. Lively reminder rows also fade
-without moving, because the measurement reads transformed rectangles (#216 tracks
-measuring layout boxes instead). Its measuring pass hides the visible “+N more” with `visibility`
+without moving. That is a design choice, no longer a constraint: the list (like the large
+Countdown) measures layout boxes, which ignore transforms, so a row caught mid-transition
+cannot change the count (#216). Its measuring pass hides the visible “+N more” with `visibility`
 and `position: absolute`, never `display: none`, because a box that disappears and
 returns replays its entrance and crossfade.
 
@@ -326,6 +346,18 @@ Render content according to available space without changing its meaning. Keep
 forecast estimates, age, stale/unknown states, place and units honest. For a
 hide-when-empty option, distinguish confirmed empty from unavailable or failed.
 Keep management available in the editor when the ambient widget is hidden.
+
+Saved weather keeps no age limit on the server, so the renderers judge its age (#243).
+A forecast strip starts at the weather city's civil today and drops earlier saved days;
+with none left it says “Forecast unavailable”, and Weather looks up today's high/low
+by date, not list position. A saved current reading more than **3 hours** old while
+the forecast is stale or the display is offline is no longer presented as current:
+Weather shows “Last known · 9 AM” (with the weekday when not today, “Last known ·
+Thu 9 AM”) in the status tone in place of the condition line (above the rain timing
+where the family shows timing instead), and keeps the glyph still and the age line.
+Three hours matches the hourly model: after that the saved temperature describes a
+different part of the day. Air quality's hours-old current values are decided in #188 with the same
+threshold.
 
 A photo widget uses a user-selected local image, remains optional, and follows
 the shared size/brightness/motion rules. Retain its image only in the documented

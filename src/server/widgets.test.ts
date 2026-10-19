@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, composeWidgetGrid, firstPlacement, fitGridDensity, fitWidgetFamily, gridProblem, motionOffset, placeWidget, reflowWidget, repackGrid, switchGridDensity, widgetContentLimits, widgetSizes } from '../shared/widgets.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
-import { PREVIOUS_RELEASE } from './persistence.ts';
 
 test('all optional widgets and their family metadata have a valid independent default', () => {
   const settings = defaultSettings();
@@ -112,8 +111,9 @@ test('direct manipulation pins the requested widget, displaces neighbors, and le
 
 test('legacy family geometry is validated before migration while current invalid layouts remain errors', () => {
   const legacy = JSON.parse(JSON.stringify(defaultSettings())); delete legacy.widgetGrid.revision;
+  // Revision-one positions of the foundation (pre-#78) ids, written out rather than read from PREVIOUS_RELEASE (#263).
   const positions = { clock: [0, 0], weather: [8, 0], rain: [0, 3], forecast: [2, 6], reminders: [5, 3], preview: [8, 3], photo: [4, 3] };
-  for (const id of PREVIOUS_RELEASE.widgetIds) { const [column, row] = positions[id]; legacy.widgetGrid.placements[id] = { ...legacy.widgetGrid.placements[id], column, row }; }
+  for (const [id, [column, row]] of Object.entries(positions)) legacy.widgetGrid.placements[id] = { ...legacy.widgetGrid.placements[id], column, row };
   // Legacy boards predate #74: a medium Weather and an enabled Rain, which Weather now absorbs.
   legacy.widgetGrid.placements.weather.size = 'medium'; legacy.widgets.rain = true;
   const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = legacy;

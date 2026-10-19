@@ -4,9 +4,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { CountdownEvent } from '../shared/contracts.ts';
 import {
-  countdownDate, countdownLabel, countdownPassed, daysBetween, daysInMonth, daysUntil, localeFirstDay, localeWeekStart,
-  monthMatrix, nextOccurrence, parseCivil, todayCivil, upcomingCountdowns, weekStartDay, weekStrip, weekdayLabels, type CivilDate,
+  calendarView, countdownDate, countdownLabel, countdownPassed, countdownRows, daysBetween, daysInMonth, daysUntil, localeFirstDay, localeWeekStart,
+  monthMatrix, monthName, nextOccurrence, parseCivil, todayCivil, upcomingCountdowns, weekStartDay, weekStrip, weekdayLabels, weekdayName, type CivilDate,
 } from './calendar.ts';
+
+type IntlName = 'DateTimeFormat' | 'NumberFormat' | 'Locale' | 'PluralRules' | 'RelativeTimeFormat';
+/** Counts every Intl constructor call (with or without `new`) while `run` executes. */
+function intlConstructions(run: () => void): Record<IntlName, number> {
+  const names: IntlName[] = ['DateTimeFormat', 'NumberFormat', 'Locale', 'PluralRules', 'RelativeTimeFormat'];
+  const counts = Object.fromEntries(names.map(name => [name, 0])) as Record<IntlName, number>;
+  const intl = Intl as unknown as Record<IntlName, new (...args: unknown[]) => object>;
+  const originals = Object.fromEntries(names.map(name => [name, intl[name]])) as Record<IntlName, new (...args: unknown[]) => object>;
+  for (const name of names) {
+    intl[name] = new Proxy(originals[name], {
+      construct(target, args) { counts[name]++; return Reflect.construct(target, args); },
+      apply(target, self, args) { counts[name]++; return Reflect.apply(target as unknown as (...values: unknown[]) => unknown, self, args); },
+    });
+  }
+  try { run(); } finally { for (const name of names) intl[name] = originals[name]; }
+  return counts;
+}
+const none = { DateTimeFormat: 0, NumberFormat: 0, Locale: 0, PluralRules: 0, RelativeTimeFormat: 0 };
 
 const civil = (value: string): CivilDate => { const parsed = parseCivil(value); assert.ok(parsed, value); return parsed; };
 const event = (title: string, date: string, repeatsYearly = false, id = `00000000-0000-4000-8000-${title.length.toString().padStart(12, '0')}`): CountdownEvent => ({ id, title, date, repeatsYearly });
@@ -137,4 +155,62 @@ test('upcoming countdowns exclude past one-time events and sort soonest first', 
   assert.equal(countdownPassed(events[2]!, today), false, 'a yearly event never passes');
   assert.equal(countdownPassed(events[6]!, today), false, 'today is not passed');
   assert.deepEqual(upcomingCountdowns([], today), []);
+});
+
+test('the calendar view carries its weekday labels in display order and is built once per day (#193)', () => {
+  const monday = calendarView('2026-10-18', 'monday');
+  assert.deepEqual(monday.labels.narrow, ['M', 'T', 'W', 'T', 'F', 'S', 'S']);
+  assert.deepEqual(monday.labels.short, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+  assert.deepEqual(monday.labels.long, ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
+  assert.deepEqual(monday.strip.map(day => weekdayName(day.weekday)), monday.labels.long, 'the week strip shares the header order');
+  assert.deepEqual([monday.weekday, monday.month, monday.weekStart], ['Sunday', 'October', 1]);
+  assert.deepEqual(monday.weeks, monthMatrix(2026, 10, 1));
+  assert.equal(calendarView('2026-10-18', 'monday'), monday, 'the same day and week start reuse the view');
+  assert.deepEqual(calendarView('2026-10-18', 'sunday').labels.short, ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']);
+  assert.notEqual(calendarView('2026-10-19', 'monday'), monday, 'a new day builds a new view');
+  assert.equal(calendarView('2026-10-19', 'monday').weekday, 'Monday');
+});
+
+const SYNTHETIC = [
+  event('Holiday', '2026-12-24'), event('Weekend trip', '2026-10-30'), event('Synthetic today', '2026-10-18'),
+  event('Next spring', '2027-03-01'), event('Passed one-time', '2026-10-01'), event('Birthday', '1990-11-03', true),
+];
+
+test('countdown rows carry their display strings and are rebuilt only for a new day or list (#193)', () => {
+  const rows = countdownRows(SYNTHETIC, '2026-10-18');
+  assert.deepEqual(rows.map(row => [row.event.title, row.label.text, row.dateText]), [
+    ['Synthetic today', 'Today', 'Sun, Oct 18'], ['Weekend trip', '12 days', 'Fri, Oct 30'], ['Birthday', '16 days', 'Tue, Nov 3'],
+    ['Holiday', '67 days', 'Thu, Dec 24'], ['Next spring', '134 days', 'Mon, Mar 1, 2027'],
+  ]);
+  assert.deepEqual(rows.map(row => row.days), upcomingCountdowns(SYNTHETIC, civil('2026-10-18')).map(item => item.days), 'the same order and counts as upcomingCountdowns');
+  assert.equal(countdownRows(SYNTHETIC, '2026-10-18'), rows, 'the same list on the same day reuses the rows');
+  const tomorrow = countdownRows(SYNTHETIC, '2026-10-19');
+  assert.notEqual(tomorrow, rows, 'a new day rebuilds them');
+  assert.deepEqual(tomorrow.slice(0, 2).map(row => [row.event.title, row.label.text]), [['Weekend trip', '11 days'], ['Birthday', '15 days']]);
+  assert.notEqual(countdownRows([...SYNTHETIC], '2026-10-19'), tomorrow, 'a new list rebuilds them');
+  assert.deepEqual(countdownRows([], '2026-10-18'), []);
+  assert.deepEqual(countdownRows(SYNTHETIC, 'not a date'), []);
+});
+
+test('a one-second tick with the same civil date and settings constructs no Intl formatter (#193)', () => {
+  const settings = ['locale', 'sunday', 'monday'] as const;
+  // The first render of a day builds its strings, creating the page's shared formatters once.
+  for (const setting of settings) calendarView('2026-10-18', setting);
+  countdownRows(SYNTHETIC, '2026-10-18');
+  const ticks = intlConstructions(() => {
+    for (let tick = 0; tick < 60; tick++) {
+      for (const setting of settings) calendarView('2026-10-18', setting);
+      countdownRows(SYNTHETIC, '2026-10-18');
+    }
+  });
+  assert.deepEqual(ticks, none, 'sixty ticks of every Calendar setting and the countdown list');
+  // A new civil day rebuilds its strings with the same shared formatters.
+  assert.deepEqual(intlConstructions(() => { calendarView('2026-10-20', 'monday'); calendarView('2026-10-20', 'sunday'); countdownRows(SYNTHETIC, '2026-10-20'); }), none, 'a new day reuses the formatters');
+  // The formatting helpers reuse one formatter per format, editor rows included.
+  assert.deepEqual(intlConstructions(() => {
+    for (let index = 0; index < 10; index++) {
+      countdownDate(civil('2027-01-02'), civil('2026-10-18')); countdownDate(civil('2026-10-31'), civil('2026-10-18'));
+      countdownLabel(1200); monthName(civil('2026-10-18')); weekdayName(3, 'short'); weekdayLabels(0, 'narrow');
+    }
+  }), none);
 });

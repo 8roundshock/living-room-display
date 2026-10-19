@@ -5,6 +5,18 @@
 .widget-inspector .size-options.free-size-presets {
   margin-bottom: 16px;
 }
+/* A preset this board cannot fit stays focusable; choosing it explains why (#183). */
+.studio .free-size-presets .button[aria-disabled='true'] {
+  color: #8d889a;
+  border-style: dashed;
+  background: transparent;
+}
+.studio .free-size-unavailable {
+  margin: -8px 2px 14px;
+  color: #a39dae;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .studio .free-size-heading {
   margin-bottom: 6px;
 }
@@ -63,4 +75,30 @@
 @media (max-width: 380px) {
   .free-size-stepper { grid-template-columns: minmax(44px, auto) 40px minmax(0, 1fr) 40px; }
   .studio .free-size-step { width: 40px; min-width: 40px; height: 40px; }
+}
+
+/* The single live region for a size or add with no room (#183, #238) and its draft fixes. */
+.room-notice {
+  margin: -8px 0 18px;
+}
+.room-notice[data-empty] {
+  margin: 0;
+}
+.studio .room-message {
+  margin: 0;
+  color: #dccaa6;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.room-fixes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.studio .button.small.room-fix {
+  min-height: 36px;
+  padding: 6px 12px;
+  white-space: normal;
+  text-align: center;
 }

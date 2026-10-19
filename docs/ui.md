@@ -15,11 +15,14 @@ acceptance are recorded separately in [STATUS](../STATUS.md).
 Style, Widgets, Weather and Reminders share one settings draft. Desktop keeps the
 preview beside a height-bounded inspector with fixed tabs and contained scrolling
 above 700 CSS pixels. Canvas actions remain visible at compact desktop heights;
-the 16:9 preview fits the height. Narrow windows stack a normally scrolling
+the 16:9 preview takes the height left after the heading, the canvas actions, one
+reserved message line (layout messages and the weather note) and any alert, so none
+of them reaches the Save bar's reserved space (#231). Narrow windows stack a normally scrolling
 inspector below a nonsticky preview, leaving room for the keyboard.
-Above 1050 CSS pixels the Save bar centers under the canvas, so the inspector uses
-the full height unless an alert row is shown; at 1280×720 each tab's default,
-collapsed contents fit without scrolling. Whenever settings
+Above 1050 CSS pixels the Save bar centers under the canvas, so the inspector always
+uses the full height; at 1280×720 each tab's default, collapsed contents fit without
+scrolling, including the Widgets tab with the first-run location card
+([Weather and location](#weather-and-location)). Whenever settings
 remain below, the inspector's bottom edge fades (scroll-linked, kept with reduced
 motion). Focus scrolling reserves the measured Save bar height so fields and labels remain
 visible above it, including narrow screens and compact keyboard-height windows.
@@ -27,33 +30,93 @@ visible above it, including narrow screens and compact keyboard-height windows.
 - **Save changes** atomically persists settings, appearance, location, widget
   options, selected local photo and saved styles. The bar exists only while
   effective saved values differ; reverting all edits hides it. Edits made while saving remain unsaved afterward.
-  Failed saves preserve the draft. Untouched fields refresh from server polling.
+  Failed saves preserve the draft and return keyboard focus to Save. Untouched fields refresh from server polling.
+  Countdowns, world clocks and saved styles merge by item when another editor saved
+  them meanwhile (#242): additions and removals from both are kept, an item changed
+  on both keeps each side's changed fields (this editor wins only on a field both
+  changed; a saved style's look counts as one field), and an item removed elsewhere
+  but edited here stays. This editor's order wins only when it moved items; otherwise
+  the saved order stays and its own additions follow. The merge happens at each
+  30-second poll; a Save sent before the next poll still replaces those lists whole (#287).
+- After **Save** or **Cancel** keyboard focus returns to the last edited control while
+  it is still shown, else to the active tab, and an always-mounted status region
+  announces “Changes saved” or “Changes discarded” (#229). Removing a widget announces
+  “Clock removed” and focuses the next row (else the previous one, else Add widget).
+- **Alerts** (a failed action, a lost connection with **Retry**, a storage warning) have
+  their own row under the canvas actions and never cover them; the canvas shrinks while
+  one shows (#227). One shows at a time with a dismiss (×) control. An action's error
+  clears with the next successful action (an edit, Save, Cancel, Edit layout or Done,
+  Preview movement or a reminder action); a dismissed connection or storage alert
+  returns only after it has gone away and comes back. When the server cannot be
+  reached, every message reads “Can't reach the display server on this computer. Your
+  changes are kept — try again.”, never the browser's “Failed to fetch”. Drafts and
+  open reminder forms are kept, and an error caused by the lost connection clears
+  once a later poll or Retry reaches the server; a server's own error message stays
+  until the next action (#232). The loading page explains the same failure beside
+  **Try again**.
 - **Cancel** restores the latest saved settings across every section, resets the
   city query/style form, and invalidates pending device/photo callbacks. It does not
   undo saved reminders. Leaving with settings edits uses the browser's prompt.
-- **Phone**, **Room** and **Night** reset visuals/transforms while preserving
-  location, units, reminders, named styles and the Animation level (Soft motion
-  and clock style still reset until #110). Room brightness is 55%; Night is
-  28%. All three, Reset appearance and new installs use **Native** colours; their
-  miniatures show Lilac, Mist and Rose bars. Up to twelve saved styles include
-  visual/widget/empty-reminder settings, the accent mode and the Animation level.
+- **Phone**, **Room** and **Night** are looks (#153, #110, #226): each sets the
+  brightness, the accent (**Native** colours, keeping a single colour of its own
+  for switching back), the text colour, the typeface and the retained legacy layout,
+  and keeps everything else: the widgets and their layout, widget options (clock
+  style, Hide when empty, Last screen), Text size, the Animation level, Drift and
+  fade, the move interval and the fade length, as well as location, units,
+  reminders and saved styles. Room brightness is 55%, Phone 70% and Night 28%.
+  Phone no longer sets its own 2-minute interval, and no built-in style lowers Text
+  size, so labels keep the readability floors. A style's card shows as chosen
+  whenever its look is showing (also after an edit is reverted), and choosing a look
+  is an ordinary draft change, so Save appears only for effective changes. Their
+  miniatures show Lilac, Mist and Rose bars. New installs use the Room look. Up to
+  twelve saved styles include visual/widget/empty-reminder settings, the accent mode
+  and the Animation level; applying one restores its whole board.
 - The **Accent** row offers Native (a ring of palette tones named "Native colours":
-  each widget uses its own colour, see [native palette](design.md#native-palette)),
-  five colour swatches and a custom colour. The heading line names the current
-  choice (Native, the swatch name or Custom). A swatch or custom colour selects one
-  accent for every widget; Native keeps the last colour, so switching back restores
-  it. The live canvas, movement preview and picker samples show the draft's mode.
-  The row stays one line at desktop widths and wraps without horizontal overflow at 320px.
-  The [palette harness](../tests/ui/palette-browser.mjs) covers these flows.
+  each widget uses its own colour, see [native palette](design.md#native-palette))
+  and five colour swatches; a custom colour picker (**+**) sits on the heading line,
+  which also names the current choice (Native, the swatch name or Custom). A swatch
+  or custom colour selects one accent for every widget; Native keeps the last
+  colour, so switching back restores it. A custom colour you chose appears as a
+  **Custom colour** swatch, pressed while it is the accent, so after Native one
+  activation restores it, and the saved one stays offered while a swatch is only a
+  draft (#151). A built-in style's own single colour is offered there only while it
+  is the accent. Sand was retuned in
+  #224; data saved with the earlier Sand reads as Sand and renders the new value
+  without being rewritten. Every accent control keeps a 44 × 44 CSS px hit area
+  (#137): seven fit one line in the 1280 × 720 inspector and at 390 px, and narrower
+  panels (320 px, or 760 px with a kept custom colour) wrap without horizontal
+  overflow. The live canvas, movement preview and picker samples show the draft's
+  mode. The [palette harness](../tests/ui/palette-browser.mjs) covers these flows.
 - The Style tab's **Motion** disclosure (its summary shows the level) starts with
-  **Animation**: Off, Subtle or Lively as pressed buttons, then Soft motion, New
-  arrangement and Fade duration. Choosing a level is an ordinary draft change (the
+  **Animation**: Off, Subtle or Lively as pressed buttons, then **Drift and fade
+  between moves** (`motionEnabled`), **Move widgets every** (the interval) and Fade
+  duration (#240). Its hint says that widgets always move to a new place through
+  black, and that with Drift and fade off, or with Windows Settings › Accessibility
+  › Visual effects › Animation effects off on the display PC, they appear without a
+  fade and nothing drifts. Choosing a level is an ordinary draft change (the
   Save bar appears only while it differs from the saved level), does not mark the
   style Custom, and replays the canvas entrance once. When the editor's own screen
   prefers reduced motion, a hint explains that animation stays off there while the
   control still edits the saved value. Editor polish (tab indicator, disclosures,
   picker, drag settle, new-widget drop-in, Save bar entrance) follows the editor's
   effective level and stays within 240 ms; Off keeps the existing transitions.
+- **Data & recovery** (#234): **Export saved data** downloads a backup of the saved
+  settings, styles and reminders (never the photo). **Restore from backup…** is
+  refused while settings edits are unsaved ("Save or cancel your changes before
+  restoring a backup."); otherwise it opens a file picker. The editor checks that
+  the file is an export (version 1; a newer version asks to update the app first),
+  then shows its date and contents, for example "2 reminders (1 completed) and 1
+  saved style", with **Restore** and **Don't restore**. Restore sends the file to
+  `POST /api/import`, which validates it again; an unreadable or rejected file changes
+  nothing and the section's status line says why. A restore replaces the saved
+  settings, styles and reminders, keeps the current photo and refreshes the editor
+  with a clean draft. The server keeps the replaced state as `state.backup.json`,
+  its previous-state recovery backup, until the next save, so the confirmation
+  suggests exporting first to keep it longer. **Reset appearance…** asks inline;
+  **Reset** returns every Style tab value to its default (the Room look, Text size
+  100%, Subtle, Drift and fade on, every 3 minutes, a 2 s fade) as an ordinary draft
+  change, while widgets, their layout, the clock style and saved styles stay. The
+  [studio harness](../tests/ui/studio-browser.mjs) covers these flows.
 - The authored canvas never relocates; outside Edit layout it shows value and glyph
   motion for the draft Animation level, and during Edit layout widgets stay still. **Edit layout** reveals a faint
   editor-only grid and whole-widget drag targets. Clicking/focusing selects a
@@ -68,17 +131,28 @@ visible above it, including narrow screens and compact keyboard-height windows.
 - **Free-size Reminders** (#73): its handle snaps to whole cells from 2 × 2 up to
   the full grid height and two-thirds of the width; neighbours reflow live, and an
   impossible size keeps the board with “No room for that size”. The default board's
-  large Clock, Weather (#74) and Forecast leave no room for a Column until one of
-  them is made smaller; naming what blocks a size is #183. On the focused
+  large Clock, Weather (#74) and Forecast leave no room for a Column, so its preset
+  is `aria-disabled` (still focusable) with the reason “Column needs more room on
+  this board.” Choosing a preset or stepper size that has no room changes nothing
+  and names what takes the space in one live region beside the presets: “No room
+  for a full-height Reminders column beside Clock, Weather and Forecast.” (#183).
+  **Make room: Weather medium** applies the smallest single family reduction that
+  fits, found with the shared reflow helpers (`src/client/make-room.ts`), together
+  with the requested size as one draft edit; Cancel restores both. Fixed-family
+  size buttons explain a missing room the same way. Pointer and handle resizes on
+  the canvas still say only “No room for that size” (#285). On the focused
   handle Right/Left change width and Down/Up change height by one cell, announced
   as “Reminders resized to 2 × 6”. The inspector offers Small, Medium, Large and
   Column (2 × full height) presets plus Width and Height steppers that stop at
-  their limits; the list subtitle reads the family, Column or `C × R`, and a hint
+  their limits; the list subtitle reads the family, Column or `C × R` (plus
+  “· Hidden when empty” while the display hides an empty Reminders, #233), and a hint
   reads “Shows as many reminders as fit · soonest first”. Sizes join the draft
   (resizing back to the saved shape is clean). Density changes scale the span with
   full height and minimum width kept, so a Column stays a Column; a span dropped
   to fit is named (“Reminders 2 × 8 → small to fit. Switch back to restore.”). The
-  picker still adds a family with a caption noting free resizing. On the display a
+  picker still adds a family with a caption noting free resizing, qualified while
+  the board has no room for a full-height column (“Resize freely after adding. Full
+  height needs room first: make Clock, Weather or Forecast smaller.”). On the display a
   full-height Reminders column alternates top and bottom anchoring between
   arrangements while it relocates sideways.
 - Density/family/position and visibility form one atomic local layout during a
@@ -89,6 +163,17 @@ visible above it, including narrow screens and compact keyboard-height windows.
   opens a compact category rail and one actual renderer with synthetic family
   content, size choices and a reachable Add action. Every module can be removed, including clock
   and weather separately. Small/medium/large families adapt their content.
+  The picker opens on the first widget not yet on the display in its grouped order,
+  scrolled into view inside the rail (#154). Rail items already on the display are
+  named with that state (“Preview Clock, on your display”); their Add button keeps
+  its visible name as its accessible name (“Add Clock”, disabled) under “Clock is on
+  your display” (#241). An add with no room is reported once, in the picker's own
+  live region (“No room for Countdown at medium size.”), and cleared by another size
+  or widget or by closing the picker. Up to two fixes apply as one draft edit that
+  Cancel restores: **Try Small** (a smaller family of the same widget), **Switch the
+  grid to Fine** (a finer grid that changes no family) or **Make room: Weather
+  medium** (#238). The Reminders tab is named with its count (“Reminders, 8
+  pending”).
 - **Preview movement** explicitly reveals numbered arrangements and **Automatic**
   ambient preview. Editing returns to authored placement. **Open display** opens
   a browser tab; its pointer remains visible, including fullscreen. Unmodified
@@ -107,7 +192,8 @@ acceptance. Appearance saves do not enable Windows idle.
 
 **Add widget** groups the catalog by category in this order: **Time**, **Weather &
 sky**, **Personal** and **Pictures**; groups without an available widget are not shown.
-Desktop shows a narrow scrolling rail with each group label above its buttons;
+Desktop shows a narrow scrolling rail with each group label above its buttons (labels
+and names at least 11 px, #195);
 narrow screens show three buttons per row under each label. Up/Down move through the
 whole list (across groups) and preview the focused widget (Left/Right do the same, matching
 the narrow three-column layout); Home/End jump to the first or last; Tab keeps its normal
@@ -125,14 +211,16 @@ content (the sample clock, “Weekend trip”, “Birthday” and “Holiday”,
   the Save bar reads “Countdown needs a title” until it is fixed; the server remains the
   authority; a year outside 1900–2200 shows “Use a date between 1900 and 2200”. Closing
   the panel (removing or collapsing the widget, or changing tab) gives an edited row back
-  the last complete title or date it had (as saved, or as loaded by the editor's refresh)
-  and drops a row that was never complete there, so Save is never blocked by a field that
-  is not on screen and closing never deletes a saved date. Rows are read-only while a Save
-  is running.
+  the last complete title or date it had (as saved, as it was when the panel opened, or as
+  loaded by the editor's refresh) and drops a row that was never complete in any of those,
+  so Save is never blocked by a field that is not on screen and closing never deletes a
+  saved date (#191). Rows are read-only while a Save is running.
   Each row shows its count (“In 12 days · Fri, Oct 30”) or **Passed** for a
   past one-time date, which the display ignores until it is removed. Counts are whole
   days on this computer's calendar. The display shows the widget only while a date is
-  upcoming; the editor canvas shows “Add a date to count down to” otherwise.
+  upcoming; the editor canvas shows “Add a date to count down to” otherwise. The large
+  family lists as many dates as fit its box, soonest first, then an exact “+N more”
+  (#221).
 - **Note** (Personal, default small) is a textarea limited to 200 characters and 4
   lines with a live “37/200” counter and **Clear**. Line breaks are kept. The display
   hides an empty note; the editor canvas shows “Write a note”.
@@ -143,9 +231,11 @@ and built-in or saved styles never change the week start, countdowns or note (st
 do reset which widgets are shown). Countdowns and the note are private content stored
 on this device and included in exports. `tests/ui/catalog-time-browser.mjs` checks the
 picker groups and keyboard (Weather listed, no Rain; the free-size caption only for
-Reminders), each panel, Save/Cancel, reload, styles, display hiding, a dense board where
-the three sit beside a full-height Reminders column and keep relocating, 320/390 px
-reflow, Save-bar clearance and the compact picker viewports.
+Reminders, qualified on the default board), the initial selection, item and Add names,
+the single “No room” region and its Fine/Small fixes, each panel, Save/Cancel, reload,
+styles, display hiding, a dense board where the three sit beside a full-height
+Reminders column and keep relocating, 320/390 px reflow, Save-bar clearance and the
+compact picker viewports with rail text of at least 11 px.
 
 ## Weather and location
 
@@ -166,12 +256,39 @@ invalidates late callbacks. Only 0.1-degree coordinates leave the adapter; no ra
 fix, accuracy, altitude or timestamp is stored. Failed lookup preserves a manual
 city; automatic drafts cannot overwrite a manual city saved in another editor.
 No background watch or IP lookup exists. `/display` never queries location or
-permission, and its Permissions-Policy disables geolocation.
+permission, and its Permissions-Policy disables geolocation. The City field is named
+by its visible label (“City”); “Type two or more letters to search for a city” is its
+description (#241).
+
+Until a location is saved, a small card above the inspector tabs reads “Showing
+Toronto weather” while the default Widgets tab is open (#252). **Use my location** runs
+the same permission-aware lookup and **Choose a city** opens the Weather tab with the
+City field focused; both only change the draft, and the card names a pending choice
+(“London is ready. Save changes to use it.”) or a blocked lookup. It steps aside on the
+other tabs (Weather holds the same actions; Style has no spare height at 1280×720) and
+while the picker is open, so every tab's default contents still fit at 1280×720, and it
+is gone for good once a location is saved. **Hide location tip** dismisses it in this
+browser only (`localStorage`); no key joins the saved data, so older releases still
+read it. `tests/ui/first-run-browser.mjs` covers the card.
+
+**Time & units** in the Weather tab holds Units (°C · metric or °F · imperial) and
+**Time format** (12-hour or 24-hour) side by side, so the format stays reachable with
+the Clock removed (#235); the Clock panel keeps a mirrored Time format control. The
+format drives the clock, reminder times, World clocks, rain timing, Sun & moon, Air
+quality hours and the Last screen caption; the editor list and canvas follow an unsaved
+change.
 
 Preview weather retains its actual city/units while a selection is unsaved or
-refreshing. Forecast dates/intervals use the weather city's timezone; the clock
-and reminder input use the computer timezone. Current conditions show age;
-retained stale data is marked throughout. Missing values stay unavailable.
+refreshing. Forecast dates/intervals use the weather city's timezone, or the computer's
+while a device location's zone is still `auto` before its first forecast (Weather and
+Forecast then read unavailable); the clock and reminder input use the computer timezone. Current conditions show age;
+retained stale data is marked throughout, with Forecast's “Saved forecast” or
+“Offline” prefix in the same amber status tone as Weather's age (#223). Missing values
+stay unavailable. A retained forecast never shows past days, and a reading more than
+3 hours old reads “Last known · 9 AM” (#243, [rule](widgets.md#data-and-image-boundaries)).
+An update time in the future reads “Update time unknown” (#244). City search leaves
+out a result it could not save (no valid timezone or coordinates) and keeps the rest
+(#246).
 Hourly chance covers precipitation including snow; rain estimates use rain plus
 showers and label incomplete/gapped coverage. See [API semantics](api.md#weather-semantics).
 Rain timing lives inside Weather (#74): it stays calm when the next 12 hours are
@@ -179,18 +296,21 @@ complete and dry, adds a hint line when rain is later, precipitation is possible
 the outlook is unknown, and leads with rain timing (large adds hourly chance bars)
 when rain is current or starts within six hours. Wording says “likely” or
 “possible”, never that it is raining; times use the weather city's timezone and the
-12/24-hour setting, and “Forecast estimate”/“Partial forecast” labels stay visible.
+12/24-hour setting, never leave AM/PM or “· 40%” alone on a line (#197), and
+“Forecast estimate”/“Partial forecast” labels stay visible. The headline and the
+detail describe the same spells (#167).
 The footprint never changes, and the separate Rain widget is gone from the picker,
 list and canvas; an enabled Rain from older data is merged into Weather
 ([upgrade](install.md#additive-data-and-rollback-compatibility-84)). There is no opt-out of
 rain detail yet (#102). The [weather harness](../tests/ui/weather-browser.mjs) checks
-every family × mode × density at 1280/1920/3840 widths, CSS glyph boxes (#128) and the
-upgrade of a pre-#74 data folder.
+every family × mode × density at 1280/1920/3840 widths, CSS glyph boxes (#128), the
+upgrade of a pre-#74 data folder, and a device location whose zone is still `auto`
+while the provider is down (editor and display render, then recover).
 Each weather module keeps its actual place and relevant units visible when used
 alone; weather and forecast show the unit beside the place (“Toronto · °C”), and
-elevated Weather keeps the rain amount unit (“0.16 in rain”). Compact forecasts abbreviate Tomorrow as
-“Tom.” while retaining the full relative label and civil date for assistive text
-and hover details. Ambient labels, age, attribution, units and secondary values
+elevated Weather keeps the rain amount unit (“0.16 in rain”). Forecast labels read
+Today and then weekdays, tomorrow included (#256), while assistive text and hover
+details keep the full relative label and civil date (“Tomorrow, 2026-10-19”). Ambient labels, age, attribution, units and secondary values
 have a readability floor of 1.4% of the display height (1.65% for forecast
 chance/temperatures, the Weather rain detail and reminder dates), multiplied by
 **Text size**; very short compact widgets cap it by their own height. A larger
@@ -200,45 +320,69 @@ widget zooms out as a whole (icons and the unavailable dash may still shrink). S
 ## Reminders and last screen
 
 Reminder actions (add, edit, check off, restore, delete, clear history) save
-immediately with a short status line and never join the settings draft. Reminder
-form Cancel abandons that form only. Items are silent, dated or undated and one-time.
+immediately with a short status line and never join the settings draft. Items are
+silent, dated or undated and one-time.
 The Reminders tab has an **Up next (N)** / **History (M)** switch (`aria-pressed`).
 Up next uses the display's order: overdue or due within seven days (soonest first),
 then undated (newest first), then later dates. Each row has a 44 px check circle,
 the title, a due line (`Overdue · Yesterday · 3:00 PM`, `Today · 6:00 PM` or
 `Anytime`) and Edit/Delete. One tap fills the circle and dims the title at once while
-the completion saves; after about 0.9 s the row collapses out of Up next (reduced
-motion keeps the delay without the collapse). The status line offers **Undo** for
-about 8 s; Undo, or tapping the circle again during the settle, restores the item
-(it shows unchecked at once and stays in Up next while the restore saves). Focus
-moves to the next circle (else the previous one, else Add), so keyboard users can
+the completion saves; the circle reports `aria-pressed` until the row leaves or is
+restored. After about 0.9 s the row collapses out of Up next (reduced motion keeps the
+delay without the collapse). The status line offers **Undo** for about 8 s, until the
+next message replaces it; Undo, or tapping the circle again during the settle, restores
+the item (it shows unchecked at once and stays in Up next while the restore saves).
+Deleting a pending reminder from Up next offers the same Undo, which re-creates it with
+its text, exact due instant and creation time, so it returns to its sorted place. A
+shown message sticks to the bottom of the visible panel (above the Save bar on narrow
+screens), and the focused row scrolls clear of it; with no message the empty line stays
+at the end of the list and covers no row. The message, its Undo and any row
+still settling survive switching editor tabs and back.
+Focus moves to the next circle (else the previous one, else Add), so keyboard users can
 tick off several in a row; after Undo, focus moves to the restored reminder's circle.
 A failed save reverts the row: “Could not complete reminder. It is still in Up
-next.” Deleting from Up next reads “Reminder deleted”, also while a row settles.
+next.” Deleting from Up next reads “Reminder deleted”, also while a row settles (a
+checked-off row offers no delete Undo).
+**+** opens a **New reminder** form at the top of Up next; **Edit** turns that row into
+an **Edit reminder** form in place, so the row and its form stay in view. **Discard** or
+Escape closes the form only (unlike the settings Cancel); Discard, Escape and Save
+return focus to that row's Edit button, or to Add after a new reminder. An incomplete
+date or time shows “Enter both a date and a time, or clear the field.” under the field
+(`aria-invalid`, `aria-describedby`), keeps focus there and saves nothing; the
+browser's own bubble is off. The edited row has no circle; if its reminder is checked
+off anyway (for example in another tab), Save waits with “Checked off. Undo or restore
+it to edit.” until it is restored, and the typed edit is kept.
 History groups completed reminders under TODAY, YESTERDAY, `Mon, Oct 12` or
 `Oct 12, 2025` by completion time in the computer timezone, newest first, 50 at a
 time. A row shows `Completed 3:42 PM` (plus ` · was due …` when it was dated), and
 offers Restore (the check or the undo icon, back to its sorted place in Up next) and
 Delete. Completed reminders cannot be edited; an edit saved for a reminder completed
 in another tab reports “This reminder was completed elsewhere. Restore it to edit.”
-**Clear history…** asks inline before deleting every completed reminder. The
-computer keeps the latest 500 completed reminders. Every reminder time follows the
-12/24-hour setting; like the canvas preview, the editor list follows an unsaved
+**Clear history…** asks inline before deleting every completed reminder and focuses
+**Keep**; Keep or Escape returns focus to Clear history…, and Delete all moves it to the
+History switch. The computer keeps the latest 500 completed reminders. Every reminder
+time follows the 12/24-hour setting; like the canvas preview, the editor list follows an unsaved
 change to it, while the display keeps the saved setting until Save.
 The ambient widget shows as many pending reminders as fit its box, soonest first,
-never a partially visible row, then an exact “+N more”. Titles use up to two lines
-(four when only one reminder is pending) and scale with the widget width, capped
-near 3.2% of the display height. If even one row overflows, that row stays and the
-widget zooms out as a whole; any resize remeasures against the widget's fixed box, so
-the count and that state never flip on a remeasure. Dated rows add `Today · 6:00 PM`, `Tomorrow ·
-9:00 AM`, `Oct 24 · 3:00 PM` or `Overdue · Yesterday · 3:00 PM` (the word Overdue in
-the dim caution tone). Completed reminders never appear; the display reflects a
-check-off within its 30 s refresh.
+never a partially visible row, then an exact “+N more”. Rows are measured from layout
+boxes, so an entrance or transition on a row never changes the count (#216). Titles use
+up to two lines (four when only one reminder is pending) and scale with the widget
+width, capped near 3.2% of the display height. When every pending reminder fits with
+room to spare, a cut-off title may use up to four lines, and titles that all show in
+full grow toward that cap while everything still fits (#254), so a tall column shows
+whole titles instead of “…” beside empty space. If even one row overflows, that row
+stays and the widget zooms out as a whole; any resize remeasures against the widget's
+fixed box, so the count and that state never flip on a remeasure. Dated rows add
+`Today · 6:00 PM`, `Tomorrow · 9:00 AM`, `Oct 24 · 3:00 PM` or
+`Overdue · Yesterday · 3:00 PM` (the word Overdue in the dim caution tone). Completed
+reminders never appear; the display reflects a check-off within its 30 s refresh.
 **Widgets → Reminders → Hide when empty** defaults on. A confirmed list with no
-pending reminders (history only) hides the widget, or shows “All clear” when the
-option is off; a missing list or a disconnected display with nothing saved shows
-“Reminders unavailable”, and saved items stay listed with “Saved reminders ·
-offline”. Disabling the widget always hides it.
+pending reminders (history only) hides the widget on the display, or shows “All clear”
+when the option is off; the editor canvas keeps a hidden widget at its real span as a
+dim “Hidden when empty · Add a reminder” placeholder, so adding and resizing it stay
+visible (#233); the Widgets list subtitle uses the same phrase. A missing list or a disconnected display with nothing saved shows
+“Reminders unavailable”, and saved items stay listed with “Saved reminders · offline”
+in the status tone (#223). Disabling the widget always hides it.
 An unchanged due-date input is omitted from an edit, preserving its exact saved
 instant (including repeated daylight-saving hours and imported seconds/offsets)
 and any concurrent date update. Explicitly changing or clearing the date still
@@ -285,7 +429,9 @@ Size control and join the normal draft (Save/Cancel, no autosave).
   editable label (1–40 characters, defaulting to the city name), the region (the
   search result's region in this session, otherwise the time-zone name), the
   city's current time, and Move up, Move down and Remove buttons; focus stays with
-  the moved city. The add field is disabled at four cities. An empty label blocks
+  the moved city. Each label field is named by its row (“City 1 label”), so the name
+  stays the same while typing or empty, and is described by the region and time
+  (#192). The add field is disabled at four cities. An empty label blocks
   Save with "Each world clock needs a label". Hint: "Times follow each city's time
   zone and daylight saving." Coordinates are used only for the day/night icon. With
   no cities the widget is hidden on the display and shows "Add a city" on the canvas.
@@ -333,7 +479,7 @@ Browser suite: `tests/ui/catalog-sky-browser.mjs`.
 The edited layout is the first composition. Later collision-free compositions
 vary legal widget origins and whole-plane offsets, with a fully black rest before
 revealing each replacement (default three minutes/two-second fade). Black remains
-`#000`; brightness affects content only. Reduced motion/Soft motion off removes
+`#000`; brightness affects content only. Reduced motion or Drift and fade off removes
 drift/travel and reveal effects while discrete relocation continues through black.
 The separate **Animation** setting (Off, Subtle by default, Lively) governs motion
 inside widgets: Subtle animates only changes and the reveal after each black rest,
@@ -371,7 +517,15 @@ The [workspace harness](../tests/ui/workspace-browser.mjs) checks bounded deskto
 tabs/canvas/actions, unchanged canvas bounds when Save appears, selected/focused
 resize handles, every active family picker action, Escape/focus return, private-data
 separation, successful large Photo Add, explicit icon dimensions and focus clear
-of Save. Verified logical viewports are 1280×720, 1280×600, 1024×600, 760×600,
+of Save. At every viewport a storage warning, a lost connection and a rejected photo
+show in their own row clear of every canvas action (each still the topmost element at
+its centre), and dismiss, recovery and next-action clearing work; at 1280×720/600 the
+weather note is not covered by the Save bar (`elementFromPoint` sampling), and at
+1280×720 keyboard focus after Save, Cancel and Remove widget plus the announcements are
+asserted. The [editor sync harness](../tests/ui/editor-sync-browser.mjs) aborts
+`/api/*` for the loading page, Save, Add reminder and a poll, checks the clear message
+and its clearing after recovery, recognises a reminder 409 by status and ends a
+two-tab countdown edit with both countdowns. Verified logical viewports are 1280×720, 1280×600, 1024×600, 760×600,
 390×700, 390×480 and 640×300 (the CSS viewport equivalent of 1280×600 at 200% zoom).
 The actual browser-chrome zoom setting was not changed. Final-source compact
 picker screenshots were inspected in RAM at 1280×600, 760×600 and 390×480.

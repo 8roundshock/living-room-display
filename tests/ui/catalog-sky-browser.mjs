@@ -97,7 +97,7 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     // The grouped picker (#157) files the three widgets by catalog category: World clocks under Time,
     // Air quality and Sun & moon under Weather & sky, beside the other units' widgets.
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
-    const groupItems = name => page.getByRole('group', { name, exact: true }).locator('.catalog-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label').replace(/^Preview /, '')));
+    const groupItems = name => page.getByRole('group', { name, exact: true }).locator('.catalog-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label').replace(/^Preview /, '').replace(/, on your display$/, '')));
     assert.deepEqual(await groupItems('Time'), ['Clock', 'World clocks', 'Calendar']);
     assert.deepEqual(await groupItems('Weather & sky'), ['Weather', 'Forecast', 'Air quality', 'Sun & moon']);
     assert.deepEqual(await groupItems('Personal'), ['Reminders', 'Countdown', 'Note']);
@@ -119,12 +119,22 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     await page.getByRole('button', { name: 'Remove Vancouver', exact: true }).focus(); await page.keyboard.press('Enter'); await page.clock.runFor(50);
     assert.deepEqual(await labels(page), ['London', 'Tokyo', 'Sydney']); assert.equal(await focused(page), 'Remove Sydney');
     assert.equal(await page.getByRole('combobox', { name: 'Add a city' }).isDisabled(), false);
-    const london = page.getByRole('textbox', { name: 'Label for London', exact: true });
+    // #192: each label field keeps one name while typing or empty; the row's region and time describe it.
+    const london = page.getByRole('textbox', { name: 'City 1 label', exact: true });
+    assert.equal(await london.inputValue(), 'London');
+    const description = await london.getAttribute('aria-describedby');
+    assert.match(await page.locator(`[id="${description}"]`).textContent(), /England, United Kingdom/, 'described by its region and current time');
     await london.fill('');
     assert.equal(await save(page).isDisabled(), true, 'an empty label blocks Save');
     assert.match(await page.locator('.save-status').innerText(), /Each world clock needs a label/);
-    assert.equal(await page.getByRole('textbox', { name: 'Label for city 1', exact: true }).getAttribute('aria-invalid'), 'true');
-    await page.getByRole('textbox', { name: 'Label for city 1', exact: true }).fill('Home');
+    assert.equal(await london.getAttribute('aria-label'), 'City 1 label', 'the name does not change when the field is cleared');
+    assert.equal(await london.getAttribute('aria-invalid'), 'true');
+    const [errorId] = (await london.getAttribute('aria-describedby')).split(' ');
+    assert.equal(await page.locator(`[id="${errorId}"]`).textContent(), 'Enter a label', 'the error stays associated');
+    await london.pressSequentially('Ho');
+    assert.equal(await london.getAttribute('aria-label'), 'City 1 label', 'the name does not change while typing');
+    await london.fill('Home');
+    assert.equal(await london.getAttribute('aria-invalid'), null);
     assert.equal(await save(page).isDisabled(), false);
     assert.deepEqual(await canvas(page, 'worldClocks').locator('.wc-name').allTextContents(), ['Home'], 'canvas follows the draft');
     images.push({ label: 'World clocks editor 1440', bytes: await page.screenshot({ type: 'png', animations: 'disabled' }) });
@@ -135,9 +145,9 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     await page.getByRole('button', { name: 'World clocks', exact: true }).click();
     assert.deepEqual(await labels(page), ['Home', 'Tokyo', 'Sydney'], 'persisted after reload');
     // An edit and its reversal is not dirty.
-    await page.getByRole('textbox', { name: 'Label for Home', exact: true }).fill('Homes'); await page.locator('.studio-savebar').waitFor();
-    await page.getByRole('textbox', { name: 'Label for Homes', exact: true }).fill('Home'); await clean(page);
-    checks.push('World clocks: keyboard city search, max 4, keyboard reorder/remove with focus kept, empty label blocks Save, editor placeholder, Save bar only while dirty, reload persists');
+    await page.getByRole('textbox', { name: 'City 1 label', exact: true }).fill('Homes'); await page.locator('.studio-savebar').waitFor();
+    await page.getByRole('textbox', { name: 'City 1 label', exact: true }).fill('Home'); await clean(page);
+    checks.push('World clocks: keyboard city search, max 4, keyboard reorder/remove with focus kept, empty label blocks Save, label fields keep a stable name while typing or empty with the error and row details as descriptions (#192), editor placeholder, Save bar only while dirty, reload persists');
 
     // Built-in and saved styles change visuals only; the cities stay.
     await tab(page, 'Style');
@@ -202,10 +212,10 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 844 }, { width: 320, height: 480 }]) {
       ({ context, page } = await open({ viewport }));
       await page.getByRole('button', { name: 'World clocks', exact: true }).click();
-      await page.getByRole('textbox', { name: 'Label for London', exact: true }).fill('London office');
+      await page.getByRole('textbox', { name: 'City 1 label', exact: true }).fill('London office');
       await page.locator('.studio-savebar').waitFor();
       // Reach each field with Tab from the control before it, as a keyboard user would.
-      for (const [from, target] of [['Remove London office', 'Label for Tokyo'], ['Remove Tokyo', 'Add a city']]) {
+      for (const [from, target] of [['Remove London office', 'City 2 label'], ['Remove Tokyo', 'Add a city']]) {
         await page.getByRole('button', { name: from, exact: true }).focus();
         await page.keyboard.press('Tab'); await page.clock.runFor(100);
         const position = await page.evaluate(name => {

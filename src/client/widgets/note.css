@@ -1,21 +1,15 @@
-/* Note (#78): only the text, sized by family and length. Line breaks are kept, long words wrap
-   anywhere, and an overfull note zooms out through the shared fit instead of clipping. */
+/* Note (#78): only the text. Line breaks are kept and long words wrap anywhere. Note.tsx measures the
+   largest size, between the text floor and the family cap below, at which the whole note fits the box
+   (#194), so a short multi-line note fills the cell; an overfull note keeps the floor and zooms out
+   through the shared fit instead of clipping. The caps are the sizes of a very short note. */
+@property --note-cap { syntax: '<length>'; inherits: true; initial-value: 0px; }
 .grid-ambient .ambient-note .note-face { width: 100%; min-height: 100cqh; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-.grid-ambient .ambient-note .note-text { display: block; white-space: pre-line; overflow-wrap: anywhere; word-break: normal; line-height: 1.22; font-weight: 400; font-size: calc(max(var(--min-text), var(--note-size)) * var(--font-scale)); }
+.grid-ambient .ambient-note .note-text { display: block; white-space: pre-line; overflow-wrap: anywhere; word-break: normal; line-height: 1.22; font-weight: 400; font-size: calc(max(var(--min-text), var(--note-size, var(--note-cap))) * var(--font-scale)); }
 .grid-ambient .ambient-note .note-text > .value-transition { white-space: inherit; }
 
-.grid-ambient .ambient-note.widget-size-small .note-length-xs { --note-size: min(14cqw, 18cqh); }
-.grid-ambient .ambient-note.widget-size-small .note-length-s { --note-size: min(10cqw, 13cqh); }
-.grid-ambient .ambient-note.widget-size-small .note-length-m { --note-size: min(8cqw, 10cqh); }
-.grid-ambient .ambient-note.widget-size-small .note-length-l { --note-size: min(6.6cqw, 8.3cqh); }
-.grid-ambient .ambient-note.widget-size-medium .note-length-xs { --note-size: min(10.5cqw, 26cqh); }
-.grid-ambient .ambient-note.widget-size-medium .note-length-s { --note-size: min(6.4cqw, 16cqh); }
-.grid-ambient .ambient-note.widget-size-medium .note-length-m { --note-size: min(4.9cqw, 12.5cqh); }
-.grid-ambient .ambient-note.widget-size-medium .note-length-l { --note-size: min(3.8cqw, 9.6cqh); }
-.grid-ambient .ambient-note.widget-size-large .note-length-xs { --note-size: min(12.5cqw, 15cqh); }
-.grid-ambient .ambient-note.widget-size-large .note-length-s { --note-size: min(8.4cqw, 10cqh); }
-.grid-ambient .ambient-note.widget-size-large .note-length-m { --note-size: min(6.4cqw, 7.7cqh); }
-.grid-ambient .ambient-note.widget-size-large .note-length-l { --note-size: min(5cqw, 6cqh); }
+.grid-ambient .ambient-note.widget-size-small .note-face { --note-cap: min(14cqw, 18cqh); }
+.grid-ambient .ambient-note.widget-size-medium .note-face { --note-cap: min(10.5cqw, 26cqh); }
+.grid-ambient .ambient-note.widget-size-large .note-face { --note-cap: min(12.5cqw, 15cqh); }
 
 /* Editor panel. */
 .studio .note-settings .note-input { display: block; min-height: 112px; resize: vertical; font-family: inherit; white-space: pre-wrap; }

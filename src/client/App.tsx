@@ -8,13 +8,23 @@ import {
   type SetStateAction,
 } from 'react';
 import type { AppState } from '../shared/contracts';
-import { api } from './api';
+import { ApiError, api } from './api';
 import { AmbientDisplay } from './Display';
 import { Editor } from './Editor';
 
+interface LoadError {
+  message: string;
+  /** No answer from the server at all, as opposed to an answer with an error. */
+  network: boolean;
+}
+
 export function App() {
   const [state, setState] = useState<AppState | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadError | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  // When the latest state request that reached the server was sent (`performance.now()`), so the
+  // editor can clear an error caused by an earlier lost connection (#232).
+  const [reachedAt, setReachedAt] = useState(0);
   const revision = useRef(0);
   const request = useRef(0);
   const updateState = useCallback<Dispatch<SetStateAction<AppState | null>>>(
@@ -37,19 +47,25 @@ export function App() {
   const reload = useCallback(async () => {
     const startedAt = revision.current;
     const requestId = ++request.current;
+    const sentAt = performance.now();
     try {
       const received = await api<AppState>('/api/state');
+      setReachedAt((previous) => Math.max(previous, sentAt));
       if (requestId === request.current && startedAt === revision.current) {
         setState(received);
         setError(null);
       }
     } catch (caught) {
+      if (caught instanceof ApiError && !caught.network)
+        setReachedAt((previous) => Math.max(previous, sentAt));
       if (requestId === request.current)
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : 'Cannot reach the local display server.',
-        );
+        setError({
+          message:
+            caught instanceof Error
+              ? caught.message
+              : 'Cannot reach the local display server.',
+          network: !(caught instanceof ApiError) || caught.network,
+        });
     }
   }, []);
   useEffect(() => {
@@ -69,14 +85,32 @@ export function App() {
         <div className="fallback-content" key={error ? 'error' : 'loading'}>
           {error ? (
             <>
-              <p>{display ? 'Display unavailable' : error}</p>
+              {display ? (
+                <p>Display unavailable</p>
+              ) : (
+                <div className="fallback-message" role="alert">
+                  <p className="fallback-title">
+                    {error.network
+                      ? "Can't reach the display server on this computer."
+                      : error.message}
+                  </p>
+                  <p className="fallback-hint">
+                    {error.network
+                      ? 'The editor needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.'
+                      : 'The display server answered but could not open your settings. Try again in a moment.'}
+                  </p>
+                </div>
+              )}
               <button
                 className="button"
+                aria-busy={retrying}
                 onClick={() => {
-                  void reload();
+                  if (retrying) return;
+                  setRetrying(true);
+                  void reload().finally(() => setRetrying(false));
                 }}
               >
-                Try again
+                {retrying ? 'Trying again…' : 'Try again'}
               </button>
             </>
           ) : (
@@ -94,7 +128,8 @@ export function App() {
     <Editor
       state={state}
       setState={updateState}
-      connectionError={error}
+      connectionError={error?.message ?? null}
+      serverReachedAt={reachedAt}
       reload={reload}
     />
   );

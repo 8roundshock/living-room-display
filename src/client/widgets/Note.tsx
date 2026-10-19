@@ -1,5 +1,8 @@
+import { useRef, type CSSProperties } from 'react';
 import type { Settings } from '../../shared/contracts.ts';
+import type { WidgetSize } from '../../shared/widgets.ts';
 import { Icon } from '../icons.tsx';
+import { atNaturalWidth, useMeasured } from './measure.ts';
 import { TransitionText } from './TransitionText.tsx';
 import type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
 import './note.css';
@@ -7,23 +10,61 @@ import './note.css';
 /** Same limits as the server, which remains the authority. */
 export const NOTE_MAX_LENGTH = 200, NOTE_MAX_LINES = 4;
 
-/** Short notes are set large; longer ones step down so a full note fits each family. */
-export function noteLength(text: string): 'xs' | 's' | 'm' | 'l' {
-  const score = text.length + (text.split('\n').length - 1) * 12;
-  return score <= 20 ? 'xs' : score <= 60 ? 's' : score <= 120 ? 'm' : 'l';
-}
-
 /** Keeps a draft within 4 lines and 200 characters, with Windows line endings normalized. */
 export function limitNote(value: string): string {
   return value.replace(/\r\n?/g, '\n').split('\n').slice(0, NOTE_MAX_LINES).join('\n').slice(0, NOTE_MAX_LENGTH);
 }
 
-function Note({ settings, embedded }: WidgetContentProps) {
+/**
+ * The largest text size, between the display's text floor and the family's cap (--note-cap), at which
+ * the whole note fits the widget's box (#194). Sizing from the actual box and wrapping lets a short
+ * multi-line note fill the cell instead of following a character score. When even the floor
+ * overflows, the floor stays and the shared fit zooms the widget out. Sizes are before Text size,
+ * which multiplies the result in CSS. Measured from layout sizes at the natural width, so the fit's
+ * transform never affects the result.
+ */
+function measureNote(face: HTMLElement): number | null {
+  const content = face.parentElement, section = face.closest<HTMLElement>('.ambient-widget');
+  if (!content || !section) return null;
+  const box = getComputedStyle(section), style = getComputedStyle(face);
+  // The same box and test as the shared Widget fit, so a size that fits here never zooms out there.
+  const width = section.clientWidth - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight);
+  const height = section.clientHeight - parseFloat(box.paddingTop) - parseFloat(box.paddingBottom);
+  const cap = parseFloat(style.getPropertyValue('--note-cap')), floor = Math.min(parseFloat(style.getPropertyValue('--min-text')) || 0, cap);
+  if (!(height > 0) || !(cap > 0)) return null;
+  const saved = face.style.getPropertyValue('--note-size');
+  const fits = (size: number) => {
+    face.style.setProperty('--note-size', `${size}px`);
+    return content.scrollHeight <= height + 1 && content.scrollWidth <= width + 1;
+  };
+  try {
+    return atNaturalWidth(face, () => {
+      if (fits(cap)) return cap;
+      if (!fits(floor)) return floor;
+      let low = floor, high = cap;
+      while (high - low > 0.25) { const middle = (low + high) / 2; if (fits(middle)) low = middle; else high = middle; }
+      return Math.floor(low * 4) / 4;
+    });
+  } finally {
+    if (saved) face.style.setProperty('--note-size', saved); else face.style.removeProperty('--note-size');
+  }
+}
+
+function NoteFace({ text, size, settings }: { text: string; size: WidgetSize; settings: Settings }) {
+  const face = useRef<HTMLDivElement>(null);
+  const key = JSON.stringify([text, size, settings.appearance.fontScale, settings.appearance.fontFamily]);
+  const fitted = useMeasured<number | null>(face, key, measureNote, null);
+  return <div ref={face} className="note-face" style={fitted === null ? undefined : { '--note-size': `${fitted}px` } as CSSProperties}>
+    <TransitionText className="note-text" value={text} />
+  </div>;
+}
+
+function Note({ settings, size, embedded }: WidgetContentProps) {
   const text = settings.widgetData.note.text.trim();
   if (!text) return embedded ? <div className="widget-body image-placeholder note-placeholder">
     <Icon name="note" /><div className="ambient-label">Note</div><div className="ambient-description">Write a note</div>
   </div> : null;
-  return <div className={`note-face note-length-${noteLength(text)}`}><TransitionText className="note-text" value={text} /></div>;
+  return <NoteFace text={text} size={size} settings={settings} />;
 }
 
 function NoteSettings({ settings, onChange }: WidgetSettingsProps) {

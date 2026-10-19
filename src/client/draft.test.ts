@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { defaultSettings } from '../shared/defaults.ts';
 import { gridProblem, switchGridDensity } from '../shared/widgets.ts';
+import { getVisual } from './model.ts';
 import {
   rebaseDraft,
   rebaseSettings,
@@ -166,4 +167,94 @@ test('widgetData edits submit a minimal patch with exact dirty detection and reb
   assert.equal(next.widgetData.note.text, 'Saved elsewhere');
   assert.equal(next.widgetData.calendar.weekStart, 'monday');
   assert.deepEqual(settingsChanges(incoming, next), { widgetData: { countdowns: [event] } });
+});
+
+// #242: two editor tabs keep each other's list edits.
+const countdown = (id: string, title: string, date = '2026-12-25') => ({ id: `${id}0000000-0000-4000-8000-000000000000`, title, date, repeatsYearly: false });
+
+test('concurrent countdown additions from two tabs keep both', () => {
+  const base = defaultSettings();
+  const fromA = structuredClone(base), fromB = structuredClone(base);
+  fromA.widgetData.countdowns = [countdown('a', 'From tab A')];
+  fromB.widgetData.countdowns = [countdown('b', 'From tab B')];
+  // Tab B's poll brings tab A's saved countdown while B's own is unsaved.
+  const next = rebaseSettings(base, fromB, fromA);
+  assert.deepEqual(next.widgetData.countdowns.map((item) => item.title), ['From tab A', 'From tab B']);
+  assert.deepEqual(settingsChanges(fromA, next), { widgetData: { countdowns: next.widgetData.countdowns } }, 'Save sends the merged list');
+  // A second poll with nothing new keeps the merged draft as it is.
+  assert.deepEqual(rebaseSettings(fromA, next, structuredClone(fromA)), next);
+});
+
+test('removals from either side survive a concurrent addition', () => {
+  const base = defaultSettings();
+  const x = countdown('1', 'Kept'), y = countdown('2', 'Removed');
+  base.widgetData.countdowns = [x, y];
+  const server = structuredClone(base), local = structuredClone(base);
+  server.widgetData.countdowns = [x];
+  local.widgetData.countdowns = [x, y, countdown('b', 'Added here')];
+  assert.deepEqual(rebaseSettings(base, local, server).widgetData.countdowns.map((item) => item.title), ['Kept', 'Added here'], 'a removal saved elsewhere applies');
+  const removedHere = structuredClone(base), addedThere = structuredClone(base);
+  removedHere.widgetData.countdowns = [x];
+  addedThere.widgetData.countdowns = [x, y, countdown('a', 'Added there')];
+  assert.deepEqual(rebaseSettings(base, removedHere, addedThere).widgetData.countdowns.map((item) => item.title), ['Kept', 'Added there'], 'a local removal stays removed');
+  const bothRemoved = rebaseSettings(base, removedHere, server);
+  assert.equal(sameEffectiveSettings(server, bothRemoved), true, 'the same removal on both sides leaves nothing to save');
+});
+
+test('a countdown edited on both sides merges per field and the local side wins only on the same field', () => {
+  const base = defaultSettings();
+  const event = countdown('1', 'Birthday', '2026-12-01');
+  base.widgetData.countdowns = [event];
+  const server = structuredClone(base), local = structuredClone(base);
+  server.widgetData.countdowns = [{ ...event, date: '2026-12-24' }];
+  local.widgetData.countdowns = [{ ...event, title: 'Birthday party' }];
+  assert.deepEqual(rebaseSettings(base, local, server).widgetData.countdowns, [{ ...event, title: 'Birthday party', date: '2026-12-24' }], 'date from one tab, title from the other');
+  server.widgetData.countdowns = [{ ...event, title: 'Saved elsewhere', repeatsYearly: true }];
+  assert.deepEqual(rebaseSettings(base, local, server).widgetData.countdowns, [{ ...event, title: 'Birthday party', repeatsYearly: true }], 'the local title wins on the same field');
+  const removedThere = structuredClone(base);
+  removedThere.widgetData.countdowns = [];
+  assert.deepEqual(rebaseSettings(base, local, removedThere).widgetData.countdowns, local.widgetData.countdowns, 'an edit here keeps an item removed elsewhere');
+});
+
+test('world clocks keep a local reorder and append a city saved elsewhere', () => {
+  const base = defaultSettings();
+  const city = (id: string, label: string) => ({ id: `${id}0000000-0000-4000-8000-000000000000`, label, timezone: 'Europe/London', latitude: 51.5, longitude: -0.1 });
+  const tokyo = city('1', 'Tokyo'), paris = city('2', 'Paris'), home = city('3', 'Home');
+  base.widgetData.worldClocks = [tokyo, paris];
+  const server = structuredClone(base), local = structuredClone(base);
+  server.widgetData.worldClocks = [tokyo, paris, home];
+  local.widgetData.worldClocks = [paris, { ...tokyo, label: 'Tokyo office' }];
+  assert.deepEqual(rebaseSettings(base, local, server).widgetData.worldClocks.map((item) => item.label), ['Paris', 'Tokyo office', 'Home']);
+  // Without a local move the server's order stays and a local addition goes last.
+  const added = structuredClone(base);
+  added.widgetData.worldClocks = [tokyo, paris, city('4', 'Sydney')];
+  const moved = structuredClone(base);
+  moved.widgetData.worldClocks = [paris, tokyo];
+  assert.deepEqual(rebaseSettings(base, added, moved).widgetData.worldClocks.map((item) => item.label), ['Paris', 'Tokyo', 'Sydney']);
+});
+
+test('saved styles merge by id and keep each look as one snapshot', () => {
+  const base = defaultSettings();
+  const style = { id: 'a0000000-0000-4000-8000-000000000000', name: 'Evening', visual: getVisual(base) };
+  base.savedPresets = [style];
+  const server = structuredClone(base), local = structuredClone(base);
+  const dimmer = getVisual(base); dimmer.appearance.brightness = 0.3;
+  const larger = getVisual(base); larger.appearance.fontScale = 1.3;
+  server.savedPresets = [{ ...style, name: 'Late evening', visual: larger }, { id: 'b0000000-0000-4000-8000-000000000000', name: 'Style A', visual: getVisual(base) }];
+  local.savedPresets = [{ ...style, visual: dimmer }, { id: 'c0000000-0000-4000-8000-000000000000', name: 'Style B', visual: getVisual(base) }];
+  const next = rebaseSettings(base, local, server);
+  assert.deepEqual(next.savedPresets.map((item) => item.name), ['Late evening', 'Style A', 'Style B']);
+  assert.deepEqual(next.savedPresets[0].visual, dimmer, 'the local look wins whole, not mixed with the other tab’s');
+});
+
+test('lists keep whole-value rebasing when their items have no unique ids', () => {
+  assert.deepEqual(rebaseDraft([1, 2], [1, 2, 3], [1]), [1, 2, 3]);
+  const duplicate = [{ id: 'x', v: 1 }, { id: 'x', v: 2 }];
+  assert.deepEqual(rebaseDraft([], duplicate, [{ id: 'y', v: 3 }]), duplicate);
+});
+
+test('an item the other side inserted goes before the item that followed it there', () => {
+  const x = { id: 'x' }, y = { id: 'y' }, a = { id: 'a' }, b = { id: 'b' };
+  assert.deepEqual(rebaseDraft([x, y], [x, b, y], [x, y, a]), [x, b, y, a]);
+  assert.deepEqual(rebaseDraft([x], [b, x], [x, a]), [b, x, a]);
 });

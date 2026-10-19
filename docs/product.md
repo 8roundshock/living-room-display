@@ -22,7 +22,7 @@ busy dashboards. The application must produce no audio.
 | Time and date | Optional clock with outline numerals by default, solid digital or minimal analog hands, and 12/24-hour format. |
 | Weather | Conditions with a clear place label, units, and update age; when rain is near it adds the chance and estimated timing of upcoming rain inside the same widget, with uncertainty visible (#74). |
 | Forecast | Readable seven-day outlook. |
-| Reminders | Add, edit, delete and one-tap check off one-time/undated reminders in the local editor, with Undo and a local history (restore, delete, clear; the latest 500 kept on this computer). The display shows as many pending reminders as fit, soonest first, with an honest “+N more”. |
+| Reminders | Add, edit, delete and one-tap check off one-time/undated reminders in the local editor, with Undo and a local history (restore, delete, clear; the latest 500 kept on this computer). The display shows as many pending reminders as fit, soonest first, with an honest “+N more”. The widget can be any whole-cell size from 2 × 2 up to the full grid height and two-thirds of the width; a taller box lists more (#73, #203). |
 | Appearance | User-editable layout, colors, typography, motion, and saved presets. The accent is one colour or Native, where each widget uses its own tone from one harmonious dim palette (default for new installs and built-in styles). |
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 | Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |
@@ -78,8 +78,9 @@ Move whole widget groups through substantially different screen areas. Allow
 periodic recomposition and gentle fades so content does not remain anchored to
 one location. Motion inside an otherwise fixed widget is insufficient. Motion
 style and cadence remain user-editable choices. Recompose collision-free layouts
-with varied legal origins and offsets, fully black between compositions. Soft
-motion and reduced-motion settings remove travel/effects while protective discrete
+with varied legal origins and offsets, fully black between compositions. Turning
+off Drift and fade between moves (called Soft motion before #240), or a
+reduced-motion preference, removes travel/effects while protective discrete
 relocation continues. No fixed decorative frame, footer or source credit remains.
 
 Keep transitions calm, avoid flashes, and provide a reduced-motion option in the

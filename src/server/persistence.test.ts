@@ -11,9 +11,17 @@ import { dataSchema, mergeSettings } from './validation.ts';
 import { sameEffectiveSettings } from '../client/draft.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import { WIDGET_IDS, defaultWidgetGrid } from '../shared/widgets.ts';
-import type { Settings, VisualSettings } from '../shared/contracts.ts';
+import type { Settings, VisualSettings, WidgetId } from '../shared/contracts.ts';
 
 const previous: ReadonlySet<string> = new Set(PREVIOUS_RELEASE.widgetIds);
+/**
+ * Catalog ids the previous release does not know, written out so the omission checks below cannot go
+ * silently vacuous. Empty since the 3fee844 baseline (#263), which knows all 13 ids. A new catalog id
+ * belongs here until the baseline knows it: while off and at its defaults it is omitted at rest.
+ */
+const NOT_IN_PREVIOUS: WidgetId[] = [];
+/** The #78 ids, which bedca44 lacked and 3fee844 knows: their keys are now always written. */
+const KNOWN_SINCE_3FEE844: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
 const visualOf = ({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview }: Settings): VisualSettings => structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview });
 function data(settings: Settings) { return { version: 1 as const, settings, reminders: [], photoAsset: null }; }
 function variants(): [string, Settings][] {
@@ -23,6 +31,11 @@ function variants(): [string, Settings][] {
   return [['defaults', base], ['non-default choices', chosen], ['saved styles', mergeSettings(styled, {})]];
 }
 
+test('the written-out list of ids the previous release lacks matches PREVIOUS_RELEASE', () => {
+  assert.deepEqual(WIDGET_IDS.filter(id => !previous.has(id)), NOT_IN_PREVIOUS);
+  assert.deepEqual(KNOWN_SINCE_3FEE844.filter(id => !previous.has(id)), [], 'the previous release knows the #78 ids');
+});
+
 test('persisted data reads back to effectively the same settings, and the input is never mutated', () => {
   for (const [label, settings] of variants()) {
     const original = data(settings), before = structuredClone(original);
@@ -30,16 +43,17 @@ test('persisted data reads back to effectively the same settings, and the input 
     assert.deepEqual(original, before, `${label}: input unmutated`);
     const read = dataSchema.parse(written);
     assert.ok(sameEffectiveSettings(read.settings, settings), `${label}: effectively equal`);
-    // Identical except hidden placements of disabled non-previous ids, which return to catalog defaults.
+    // Identical except hidden placements of disabled ids the previous release lacks, which return to
+    // catalog defaults (none since #263, so the read is identical).
     const expected = structuredClone(original);
     for (const visual of [expected.settings, ...expected.settings.savedPresets.map(preset => preset.visual)]) {
-      for (const id of WIDGET_IDS) if (!previous.has(id) && visual.widgets[id] !== true) visual.widgetGrid.placements[id] = defaultWidgetGrid().placements[id];
+      for (const id of NOT_IN_PREVIOUS) if (visual.widgets[id] !== true) visual.widgetGrid.placements[id] = defaultWidgetGrid().placements[id];
     }
-    assert.deepEqual(read, expected, `${label}: identical apart from hidden non-previous placements`);
+    assert.deepEqual(read, expected, `${label}: identical apart from hidden placements of ids the previous release lacks`);
   }
 });
 
-test('previous-release keys are always written; only additive defaults are omitted', () => {
+test('keys the previous release knows are always written; only additive defaults are omitted', () => {
   // New installs default to native (#75); color is the additive default omitted at rest.
   const settings = mergeSettings(defaultSettings(), { widgets: { rain: false }, appearance: { accentMode: 'color' } });
   settings.savedPresets = [{ id: 'style', name: 'Style', visual: visualOf(settings) }];
@@ -50,11 +64,13 @@ test('previous-release keys are always written; only additive defaults are omitt
       assert.ok(visual.widgetOverrides[id], `${id} transform is written`);
       assert.ok(visual.widgetGrid.placements[id], `${id} placement is written even when hidden`);
     }
+    for (const id of KNOWN_SINCE_3FEE844) assert.equal(visual.widgets[id], false, `${id} is written while off: the previous release knows it (#263)`);
     assert.equal(visual.widgets.rain, false);
     for (const key of Object.keys(AT_REST.appearance)) assert.equal(key in visual.appearance, false, `${key} omitted while default`);
     assert.equal(visual.appearance.clockStyle, 'outline', 'previous-release appearance keys stay');
   }
-  for (const id of WIDGET_IDS.filter(id => !previous.has(id))) {
+  assert.equal('widgetData' in written, false, 'default widgetData is still omitted at rest');
+  for (const id of NOT_IN_PREVIOUS) {
     assert.equal(id in written.widgets, false); assert.equal(id in written.widgetOverrides, false); assert.equal(id in written.widgetGrid.placements, false);
   }
   const chosen = persistableSettings(mergeSettings(defaultSettings(), { appearance: { accentMode: 'native', animation: 'off' } })) as any;
@@ -83,7 +99,7 @@ test('files and exports omit additive defaults while state and PATCH responses c
     for (const settings of [exported.settings, file.settings, backup.settings]) {
       assert.equal('accentMode' in settings.appearance, false); assert.equal('animation' in settings.appearance, false);
       assert.equal('widgetData' in settings, false);
-      assert.deepEqual(Object.keys(settings.widgets), [...PREVIOUS_RELEASE.widgetIds]);
+      assert.deepEqual(Object.keys(settings.widgets), WIDGET_IDS.filter(id => !NOT_IN_PREVIOUS.includes(id)), 'every id the previous release knows is written');
     }
   } finally { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }
 });
