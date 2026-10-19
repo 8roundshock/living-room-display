@@ -8,7 +8,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 
 | Method/path                    | Request                                                                | Response                                                                     |
 | ------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `GET /api/health`              | None                                                                   | Status, version, storage recovery warning.                                   |
+| `GET /api/health`              | None                                                                   | Status, version (read once at startup from the shipped `package.json`), storage recovery warning. |
 | `GET /api/state`               | None                                                                   | Settings, reminders, weather, preview metadata, storage warning.             |
 | `PATCH /api/settings`          | Validated nested partial settings                                      | Full saved settings.                                                         |
 | `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |

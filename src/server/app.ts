@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
@@ -10,6 +11,10 @@ import { persistableSettings } from './persistence.ts';
 import { WeatherService, type FetchLike } from './weather.ts';
 import { windowsStatus } from './windows.ts';
 import { automaticLocationSchema, importSchema, mergeSettings, reminderInputSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
+
+// Read once at module load. src/server and the built dist/server both sit two
+// levels below the package.json shipped with the app, so health matches it.
+const APP_VERSION = String((JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version?: unknown }).version ?? 'unknown');
 
 class HttpError extends Error {
   status: number;
@@ -100,7 +105,7 @@ export async function createApplication(options: ApplicationOptions) {
     const path = url.pathname;
     response.setHeader('Permissions-Policy', path.startsWith('/display') ? 'geolocation=()' : 'geolocation=(self)');
 
-    if (method === 'GET' && path === '/api/health') { json(response, 200, { status: 'ok', version: '0.1.0', storageWarning: store.warning }); return; }
+    if (method === 'GET' && path === '/api/health') { json(response, 200, { status: 'ok', version: APP_VERSION, storageWarning: store.warning }); return; }
     if (method === 'GET' && path === '/api/windows/status') { json(response, 200, await windowsStatus()); return; }
     if (method === 'GET' && path === '/api/state') {
       const { settings, reminders, photoAsset } = store.snapshot();
