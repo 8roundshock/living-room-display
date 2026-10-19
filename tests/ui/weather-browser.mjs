@@ -282,6 +282,11 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
     // The boundary and offline: three hours exactly is not yet last known; an offline display qualifies an old reading.
     only('medium', 'calm', 'balanced', state => { state.weather.status = 'stale'; state.weather.updatedAt = new Date(NOW - 3 * HOUR).toISOString(); }); await open();
     m = await measure(weather(), MEANINGFUL); assert.equal(m.lastKnown, null); assert.equal(m.condition, 'Overcast'); assert.equal(m.age, 'Saved forecast · Updated 3 hr ago');
+    // The age value never wraps inside ("5" / "hr ago"), even in the Fine small family (#221).
+    for (const density of Object.keys(GRID_DENSITIES)) {
+      only('small', 'calm', density, state => { state.weather.status = 'stale'; state.weather.updatedAt = new Date(NOW - 5 * HOUR).toISOString(); }); await open();
+      assert.equal(await weather().locator('.weather-age-value').evaluate(node => new Set([...node.getClientRects()].map(rect => Math.round(rect.top))).size), 1, `small/${density} age stays on one line`);
+    }
     only('medium', 'calm', 'balanced', state => { state.weather.updatedAt = new Date(NOW - 5 * HOUR).toISOString(); }); failing = false; await open();
     failing = true; await page.clock.runFor(31_000); await page.locator('.weather-age.stale').waitFor(); failing = false;
     m = await measure(weather(), MEANINGFUL); assert.equal(m.lastKnown, 'Last known · 4 AM'); assert.match(m.age, /^Offline · Updated 5 hr ago$/);
