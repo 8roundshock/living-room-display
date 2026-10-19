@@ -89,7 +89,8 @@ Running the same version again repairs the install. Setup also adopts an
 existing source install at the same folder through its `installation.json`
 marker. After an uninstall that kept your data, the Ready page says **Install
 Living Room Display version X** and that Setup found the kept settings, reminders
-and photo; it uses them again after the same backup. Running an older Setup is refused (see E12), so an older version never
+and photo; it uses them again after the same backup. Running an older Setup is
+refused (see E12), so an older version never
 "recovers" over newer data; agents may override this with `/ALLOWDOWNGRADE=1`
 only after following the rollback steps below.
 The runtime is replaced only when the packaged Node 24 is newer and any
