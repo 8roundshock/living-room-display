@@ -328,6 +328,13 @@ The [widget harness](../tests/ui/widgets-browser.mjs) checks every active family
 three densities and 1080p/4K, meaningful descendant bounds, readable fitting,
 unknown/partial/stale/image failures, browser F/cursor behavior and native-only
 document styling. Physical TV brightness/comfort remains a separate gate.
+The [palette harness](../tests/ui/palette-browser.mjs) renders every active widget in
+every family, the default composition and a full board of all active widgets at
+1280×720, 1080p and 4K in Native and colour modes. Each section must resolve its
+catalog tone (or the one accent), tint its accent element and paint nothing but that
+accent, the text colour or a status tone. It also checks the sub-tones inside the
+merged renderers (Weather's rain hook, Sun & moon's moon, World clocks' day/night
+icons, Air quality bars), picker samples in every family and the editor canvas.
 
 After `npm ci` and `npm run build`, use an existing Playwright/browser installation
 and run every `tests/ui/*-browser.mjs` suite as
