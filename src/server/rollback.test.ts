@@ -116,9 +116,11 @@ test('#272 every value omitted at rest is readable by the previous release when 
     for (const key of Object.keys(AT_REST.appearance)) assert.equal(key in appearance, false, `${key} is omitted at rest`);
   }
   assert.equal('widgetData' in atRest, false, 'default widgetData is omitted at rest');
+  // A future AT_REST key that the previous release does not know fails below: its omission is then
+  // required, not optional, until the baseline knows it.
   const written = JSON.parse(JSON.stringify(full)) as Loose;
   for (const appearance of [written.settings.appearance, written.settings.savedPresets[0].visual.appearance]) {
-    assert.deepEqual({ accentMode: appearance.accentMode, animation: appearance.animation }, AT_REST.appearance, 'each AT_REST value is written');
+    for (const [key, value] of Object.entries(AT_REST.appearance)) assert.equal(appearance[key], value, `${key} is written`);
   }
   assert.deepEqual(written.settings.widgetData, colorAccentDefaults().widgetData, 'every default widgetData section is written');
   assertPreviousReaderAccepts('data', written, 'every omitted value written in state.json');
