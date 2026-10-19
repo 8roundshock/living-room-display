@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, composeWidgetGrid, firstPlacement, fitGridDensity, fitWidgetFamily, gridProblem, motionOffset, placeWidget, reflowWidget, repackGrid, switchGridDensity, widgetContentLimits, widgetSizes } from '../shared/widgets.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
+import { PREVIOUS_RELEASE } from './persistence.ts';
 
 test('all optional widgets and their family metadata have a valid independent default', () => {
   const settings = defaultSettings();
   assert.equal(gridProblem(settings.widgetGrid, settings.widgets), null);
   assert.equal(settings.appearance.clockStyle, 'outline');
-  assert.equal(settings.widgets.rain, true); assert.equal(settings.widgets.photo, false);
+  assert.equal(settings.widgets.rain, false, 'Rain is part of Weather (#74)'); assert.equal(settings.widgets.photo, false);
   for (const id of WIDGET_IDS) assert.ok(widgetSizes(id).includes(WIDGET_CATALOG[id].defaultSize));
-  assert.deepEqual(widgetContentLimits('small'), { forecastDays: 3, reminders: 1 });
-  assert.deepEqual(widgetContentLimits('large'), { forecastDays: 7, reminders: 4 });
+  assert.deepEqual(widgetContentLimits('small'), { forecastDays: 3 });
+  assert.deepEqual(widgetContentLimits('large'), { forecastDays: 7 });
   const empty = mergeSettings(settings, { widgets: Object.fromEntries(WIDGET_IDS.map(id => [id, false])) });
   assert.equal(Object.values(empty.widgets).some(Boolean), false, 'even time and current weather are optional');
 });
@@ -20,10 +21,10 @@ test('invalid drops, overlaps, unsupported sizes and bounds cannot mutate saved 
   const settings = defaultSettings(); const original = structuredClone(settings.widgetGrid);
   assert.equal(placeWidget(settings.widgetGrid, 'clock', { column: 8, row: 0, size: 'large' }, settings.widgets), null);
   assert.equal(placeWidget(settings.widgetGrid, 'clock', { column: -1, row: 0, size: 'small' }, settings.widgets), null);
-  assert.throws(() => mergeSettings(settings, { widgetGrid: { placements: { rain: { column: 8, row: 0 } } } }), /overlaps/);
+  assert.throws(() => mergeSettings(settings, { widgetGrid: { placements: { preview: { column: 8, row: 0 } } } }), /overlaps/);
   assert.throws(() => mergeSettings(settings, { widgetGrid: { placements: { forecast: { column: 10 } } } }), /outside/);
   const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = settings;
-  const visual = { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid: { ...widgetGrid, placements: { ...widgetGrid.placements, rain: { column: 8, row: 0, size: 'medium' } } }, preview };
+  const visual = { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid: { ...widgetGrid, placements: { ...widgetGrid.placements, preview: { column: 8, row: 0, size: 'medium' } } }, preview };
   assert.throws(() => settingsSchema.parse({ ...settings, savedPresets: [{ id: 'bad', name: 'Bad board', visual }] }), /overlaps/);
   assert.deepEqual(settings.widgetGrid, original);
 });
@@ -112,13 +113,15 @@ test('direct manipulation pins the requested widget, displaces neighbors, and le
 test('legacy family geometry is validated before migration while current invalid layouts remain errors', () => {
   const legacy = JSON.parse(JSON.stringify(defaultSettings())); delete legacy.widgetGrid.revision;
   const positions = { clock: [0, 0], weather: [8, 0], rain: [0, 3], forecast: [2, 6], reminders: [5, 3], preview: [8, 3], photo: [4, 3] };
-  for (const id of WIDGET_IDS) { const [column, row] = positions[id]; legacy.widgetGrid.placements[id] = { ...legacy.widgetGrid.placements[id], column, row }; }
+  for (const id of PREVIOUS_RELEASE.widgetIds) { const [column, row] = positions[id]; legacy.widgetGrid.placements[id] = { ...legacy.widgetGrid.placements[id], column, row }; }
+  // Legacy boards predate #74: a medium Weather and an enabled Rain, which Weather now absorbs.
+  legacy.widgetGrid.placements.weather.size = 'medium'; legacy.widgets.rain = true;
   const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = legacy;
   legacy.savedPresets = [{ id: 'legacy', name: 'Legacy layout', visual: { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } }];
   const migrated = settingsSchema.parse(legacy);
   assert.equal(migrated.widgetGrid.revision, 2);
   assert.equal(gridProblem(migrated.widgetGrid, migrated.widgets), null);
-  assert.deepEqual(migrated.widgets, legacy.widgets);
+  assert.deepEqual(migrated.widgets, { ...legacy.widgets, rain: false });
   assert.equal(migrated.savedPresets[0]!.visual.widgetGrid.revision, 2);
   assert.equal(gridProblem(migrated.savedPresets[0]!.visual.widgetGrid, migrated.widgets), null);
   const malformed = structuredClone(legacy); malformed.widgetGrid.placements.rain.row = 0;
@@ -133,7 +136,7 @@ test('legacy family geometry is validated before migration while current invalid
   };
   const migratedDense = settingsSchema.parse(dense);
   assert.equal(gridProblem(migratedDense.widgetGrid, migratedDense.widgets), null);
-  assert.deepEqual(migratedDense.widgets, dense.widgets, 'a full legacy board never loses a widget to the larger clock');
+  assert.deepEqual(migratedDense.widgets, { ...dense.widgets, rain: false }, 'a full legacy board never loses a widget to the larger clock; Weather absorbs Rain');
   assert.equal(migratedDense.widgetGrid.placements.clock.size, 'medium');
 });
 
@@ -148,6 +151,10 @@ test('additive legacy migration preserves visibility, cities, presets and obsole
   assert.equal(saved.widgets.photo, false); assert.equal(saved.widgetOverrides.clock.offsetX, 12);
   assert.equal(saved.savedPresets[0]!.visual.widgetGrid.density, 'balanced');
   assert.equal(saved.savedPresets[0]!.visual.appearance.clockStyle, 'outline');
+  // With Weather on, the legacy toggle also enabled Rain: Weather absorbs it in the default space (#74).
+  const withWeather = settingsSchema.parse({ ...legacy, widgets: { ...legacy.widgets, weather: true } });
+  assert.equal(withWeather.widgets.weather, true); assert.equal(withWeather.widgets.rain, false, 'Weather absorbs the legacy Rain');
+  assert.deepEqual(withWeather.widgetGrid.placements.weather, { column: 8, row: 0, size: 'large' });
 });
 
 test('missing additive modules use accepted revision-one origins before settings and preset migration', () => {
@@ -162,11 +169,12 @@ test('missing additive modules use accepted revision-one origins before settings
   const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = legacy;
   legacy.savedPresets = [{ id: 'old-default', name: 'Existing style', visual: { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } }];
   const untouched = structuredClone(legacy), migrated = settingsSchema.parse(legacy);
-  assert.equal(migrated.widgets.rain, true);
+  // The legacy toggle enabled Rain; Weather absorbs it (#74).
+  assert.equal(migrated.widgets.rain, false); assert.equal(migrated.widgets.weather, true);
   assert.equal(migrated.location.name, 'Preserved legacy city'); assert.equal(migrated.units, 'imperial');
   assert.equal(migrated.widgetGrid.revision, 2); assert.equal(gridProblem(migrated.widgetGrid, migrated.widgets), null);
   const preset = migrated.savedPresets[0]!.visual;
-  assert.equal(preset.widgets.rain, true); assert.equal(preset.widgetGrid.revision, 2); assert.equal(gridProblem(preset.widgetGrid, preset.widgets), null);
+  assert.equal(preset.widgets.rain, false); assert.equal(preset.widgets.weather, true); assert.equal(preset.widgetGrid.revision, 2); assert.equal(gridProblem(preset.widgetGrid, preset.widgets), null);
   assert.deepEqual(legacy, untouched, 'parsing/import migration does not rewrite the original bytes/object');
   const malformed = structuredClone(legacy); malformed.widgetGrid.placements.rain = { column: 8, row: 3, size: 'medium' };
   assert.throws(() => settingsSchema.parse(malformed), /overlaps/, 'an explicitly invalid legacy placement is not silently repaired');

@@ -227,6 +227,9 @@ button {
   --ambient-text: #b8bfce;
   --ambient-brightness: 0.55;
   --font-scale: 1;
+  /* Status tones: stale or saved weather, and a disconnected display. */
+  --ambient-caution: #b0926b;
+  --ambient-offline: #977e88;
   position: relative;
   width: 100%;
   height: 100%;
@@ -285,78 +288,6 @@ button {
 }
 .ambient.static .widget-content {
   animation: none;
-}
-.ambient-clock {
-  grid-area: 1/1/2/3;
-}
-.ambient-weather {
-  grid-area: 1/3/2/4;
-}
-.ambient-rain {
-  grid-area: 2/1/3/2;
-}
-.ambient-reminders {
-  grid-area: 2/2/3/3;
-}
-.ambient-preview {
-  grid-area: 2/3/3/4;
-}
-.ambient-forecast {
-  grid-area: 3/1/4/4;
-}
-.composition-1 .ambient-clock {
-  grid-area: 3/2/4/4;
-}
-.composition-1 .ambient-weather {
-  grid-area: 3/1/4/2;
-}
-.composition-1 .ambient-rain {
-  grid-area: 2/3/3/4;
-}
-.composition-1 .ambient-reminders {
-  grid-area: 2/2/3/3;
-}
-.composition-1 .ambient-preview {
-  grid-area: 2/1/3/2;
-}
-.composition-1 .ambient-forecast {
-  grid-area: 1/1/2/4;
-}
-.composition-2 .ambient-clock {
-  grid-area: 1/2/2/4;
-}
-.composition-2 .ambient-weather {
-  grid-area: 1/1/2/2;
-}
-.composition-2 .ambient-rain {
-  grid-area: 2/2/3/3;
-}
-.composition-2 .ambient-reminders {
-  grid-area: 2/3/3/4;
-}
-.composition-2 .ambient-preview {
-  grid-area: 2/1/3/2;
-}
-.composition-2 .ambient-forecast {
-  grid-area: 3/1/4/4;
-}
-.composition-3 .ambient-clock {
-  grid-area: 3/1/4/3;
-}
-.composition-3 .ambient-weather {
-  grid-area: 3/3/4/4;
-}
-.composition-3 .ambient-rain {
-  grid-area: 1/2/2/3;
-}
-.composition-3 .ambient-reminders {
-  grid-area: 1/1/2/2;
-}
-.composition-3 .ambient-preview {
-  grid-area: 1/3/2/4;
-}
-.composition-3 .ambient-forecast {
-  grid-area: 2/1/3/4;
 }
 @keyframes widget-drift {
   0% {
@@ -437,7 +368,7 @@ button {
   opacity: 0.75;
 }
 .weather-age.stale {
-  color: #b0926b;
+  color: var(--ambient-caution);
 }
 .ambient-title {
   font-size: calc(2.1cqw * var(--font-scale));
@@ -530,7 +461,7 @@ button {
   color: var(--ambient-accent);
   font-weight: 500;
 }
-.forecast-day svg {
+.forecast-day > .weather-glyph {
   width: 2.6cqw;
   height: 2.6cqw;
   color: var(--ambient-accent);
@@ -606,7 +537,7 @@ button {
   bottom: 3cqh;
   left: 5.5cqw;
   font-size: 1cqw;
-  color: #977e88;
+  color: var(--ambient-offline);
   filter: brightness(var(--ambient-brightness));
   animation: widget-drift 71s ease-in-out infinite alternate;
 }

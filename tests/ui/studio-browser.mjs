@@ -180,9 +180,10 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.clock.runFor(300);
     await page.getByRole('option').first().waitFor();
     await input.press('ArrowDown');
+    // Option ids are unique per combobox instance (useId); the first option is active.
     assert.equal(
       await input.getAttribute('aria-activedescendant'),
-      'city-option-0',
+      await page.getByRole('option').first().getAttribute('id'),
     );
     assert.equal(
       await input.evaluate((e) => document.activeElement === e),
@@ -470,12 +471,12 @@ export async function runStudioQa({ playwright, edge } = {}) {
       .click();
     await page.locator('.ambient-reminders').waitFor({ state: 'detached' });
     await page
-      .getByRole('button', { name: 'Show completed (1)', exact: true })
+      .getByRole('button', { name: 'History (1)', exact: true })
       .click();
     await page
       .getByRole('button', { name: 'Delete: Synthetic changed', exact: true })
       .click();
-    await page.getByText('Reminder deleted', { exact: true }).waitFor();
+    await page.getByText('Deleted from history', { exact: true }).waitFor();
     assert.equal(app.store.snapshot().reminders.length, 0);
     checks.push(
       'independent reminder add/edit/complete/delete; confirmed-empty widget hides',
@@ -871,6 +872,37 @@ export async function runStudioQa({ playwright, edge } = {}) {
     }
     checks.push(
       'keyboard-focused reminder field and label stay above fixed Save bar at 390/320px and compact keyboard heights',
+    );
+
+    // #83: a later Style save must not reset the saved clock style.
+    await reset();
+    ({ page, context } = await open());
+    await tab(page, 'Widgets');
+    await page.getByRole('button', { name: 'Clock', exact: true }).click();
+    await page.getByRole('button', { name: 'Analog', exact: true }).click();
+    await save(page).click();
+    await saved(page);
+    assert.equal(app.store.snapshot().settings.appearance.clockStyle, 'analog');
+    await tab(page, 'Style');
+    await range(page, 'Brightness');
+    await save(page).click();
+    await saved(page);
+    assert.equal(app.store.snapshot().settings.appearance.clockStyle, 'analog');
+    assert.notEqual(app.store.snapshot().settings.appearance.brightness, 0.55);
+    await page.reload();
+    await page.locator('.analog-clock').first().waitFor();
+    await page.clock.runFor(500);
+    await tab(page, 'Widgets');
+    await page.getByRole('button', { name: 'Clock', exact: true }).click();
+    assert.equal(
+      await page
+        .getByRole('button', { name: 'Analog', exact: true })
+        .getAttribute('aria-pressed'),
+      'true',
+    );
+    await context.close();
+    checks.push(
+      '#83 clock style Analog survives a later Brightness save and reload',
     );
     assert.deepEqual(errors, []);
     return { checks, images };

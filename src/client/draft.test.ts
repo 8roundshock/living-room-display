@@ -92,7 +92,7 @@ test('a density draft remains a valid atomic layout through a concurrent placeme
   const base = defaultSettings(), draft = structuredClone(base), incoming = structuredClone(base);
   const compact = switchGridDensity(base.widgetGrid, 'spacious', base.widgets); assert.ok(compact);
   draft.widgetGrid = compact.grid;
-  incoming.widgetGrid.placements.weather.row = 6;
+  incoming.widgetGrid.placements.weather = { column: 8, row: 6, size: 'medium' };
   incoming.widgets.clock = false;
   incoming.appearance.brightness = 0.3;
   incoming.location.name = 'Concurrent city';
@@ -138,4 +138,32 @@ test('restoring a value removes dirty state despite a custom preset descriptor',
   assert.equal(sameEffectiveSettings(base, draft), true);
   draft.units = 'imperial';
   assert.deepEqual(settingsChanges(base, draft), { units: 'imperial' });
+});
+
+test('widgetData edits submit a minimal patch with exact dirty detection and rebase', () => {
+  const base = defaultSettings();
+  const event = { id: '11111111-1111-4111-8111-111111111111', title: 'Synthetic', date: '2026-12-25', repeatsYearly: true };
+  const listed = structuredClone(base);
+  listed.widgetData.countdowns = [event];
+  assert.equal(sameEffectiveSettings(base, listed), false);
+  assert.deepEqual(settingsChanges(base, listed), { widgetData: { countdowns: [event] } }, 'lists are sent whole');
+  const noted = structuredClone(base);
+  noted.widgetData.note.text = 'Synthetic note';
+  assert.deepEqual(settingsChanges(base, noted), { widgetData: { note: { text: 'Synthetic note' } } });
+  const reverted = structuredClone(noted);
+  reverted.widgetData.note.text = '';
+  assert.equal(sameEffectiveSettings(base, reverted), true, 'reverting the edit is clean');
+  assert.deepEqual(settingsChanges(base, reverted), {});
+  const grown = structuredClone(listed);
+  grown.widgetData.countdowns = [event, { ...event, id: '22222222-2222-4222-8222-222222222222' }];
+  assert.deepEqual(settingsChanges(listed, grown), { widgetData: { countdowns: grown.widgetData.countdowns } });
+  const incoming = structuredClone(base);
+  incoming.widgetData.note.text = 'Saved elsewhere';
+  incoming.widgetData.calendar.weekStart = 'monday';
+  incoming.widgetData.countdowns = [{ ...event, title: 'Saved elsewhere' }];
+  const next = rebaseSettings(base, listed, incoming);
+  assert.deepEqual(next.widgetData.countdowns, [event], 'a local list edit survives');
+  assert.equal(next.widgetData.note.text, 'Saved elsewhere');
+  assert.equal(next.widgetData.calendar.weekStart, 'monday');
+  assert.deepEqual(settingsChanges(incoming, next), { widgetData: { countdowns: [event] } });
 });

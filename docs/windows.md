@@ -75,6 +75,87 @@ including fullscreen video, controller-only games, presentations and lock/resume
 Keep automatic activation off until those tests pass. A manual smoke test cannot
 establish them.
 
+## Windows Setup and Windows 11
+
+`LivingRoomDisplaySetup-<version>.exe` ([#77](https://github.com/8roundshock/living-room-display/issues/77),
+[user guide](install.md#install-with-setup-recommended)) is a per-user Inno Setup
+6.7 wrapper. Setup ships a prebuilt `LivingRoomDisplay.scr` with an icon and
+version info, so **setup users don't need `csc.exe` at install time**. Only
+source installs compile the helper. Setup runs the version-matched control script
+(`InstallPackage`) with Windows PowerShell 5.1 from `{sys}` using a per-process
+`-ExecutionPolicy Bypass`. A Group Policy execution policy, AppLocker or
+Constrained Language Mode can still block it; Setup then shows a plain message
+([#117](https://github.com/8roundshock/living-room-display/issues/117)).
+
+### Windows 11 compatibility review (2026-10-18)
+
+| Area | Windows 11 behaviour | Evidence and status |
+| --- | --- | --- |
+| Per-user install | `%LOCALAPPDATA%\LivingRoomDisplay`, no elevation (`PrivilegesRequired=lowest`, no override). Not MSIX, so there is no AppData or registry virtualization. | CI smoke on windows-2025 (Windows Server 2025 shares the Windows 11 24H2 base); a real Windows 11 desktop and a fresh standard account remain [#116](https://github.com/8roundshock/living-room-display/issues/116). |
+| Setup UI | `WizardStyle=modern dynamic` follows the Windows light/dark setting at startup (Inno 6.6+). | Token checked against the Inno documentation; not inspected on screen. |
+| SmartScreen and Smart App Control | Unsigned Setup shows **Windows protected your PC** (More info, Run anyway). Smart App Control blocks unsigned code with no override. | Owner decision on signing: [#115](https://github.com/8roundshock/living-room-display/issues/115). |
+| `.scr` screensaver | Windows 11 still selects `.scr` files per user (`HKCU\Control Panel\Desktop`) through **Settings > Personalization > Lock screen > Screen saver**. Setup never selects it; `EnableIdle` stays opt-in. | Unchanged code path; idle opt-in after review: [#118](https://github.com/8roundshock/living-room-display/issues/118). |
+| Edge kiosk | Edge is built in; `--kiosk --edge-kiosk-type=fullscreen` with an isolated profile and job object is unchanged. Setup warns if Edge is missing. | `--check` passes in CI. Kiosk use on a Windows 11 desktop is part of #116. Edge-free fallback: [#119](https://github.com/8roundshock/living-room-display/issues/119). |
+| .NET Framework | 4.8.1 is built into Windows 11 and runs the AnyCPU helper. | CI runs `--check` on every smoke runner. |
+| Windows PowerShell 5.1 | Present on Windows 10 and 11; used only by Setup, the uninstaller and the helper's Start. | CI runs `Test-Windows.ps1` under 5.1 and 7. |
+| Port 4318 | Bound to 127.0.0.1 only, so there's no firewall prompt. A port already in use stops Setup with E11. | The CI smoke asserts a loopback-only listener and the E11 refusal; alternate port: [#121](https://github.com/8roundshock/living-room-display/issues/121). |
+| Windows on Arm | `x64compatible`: the x64 Node runs under emulation; the AnyCPU helper runs natively. | Non-gating CI on windows-11-arm, recorded under [#122](https://github.com/8roundshock/living-room-display/issues/122). |
+| Path length | Windows PowerShell 5.1 file APIs stop at 259 characters. Every payload path stays within 115 characters, so install folders of up to 130 characters always fit; InstallPackage refuses a folder too long for the payload before writing anything (E21). Both numbers come from `packagePathBudget` in the control script. | `Test-InstallerPayload.ps1` fails a payload over the budget; `Test-InstallerPolicy.ps1` checks that both docs quote the same limit; E21 unit test in `Test-PackageInstall.ps1`. |
+
+### Inno Setup assumptions
+
+| Assumption | How it was checked |
+| --- | --- |
+| `ExtractTemporaryFile` places each `dontcopy` file in `{tmp}` under its own name. | CI silent install: the helper runs from `{tmp}` and verifies `payload.zip`. |
+| `Exec` keeps the `PrepareToInstall` marquee responsive. | Inno 6.7.1 source: `Exec` waits with `MsgWaitForMultipleObjects` and processes messages; `TOutputMarqueeProgressWizardPage.Animate` only pumps messages for the native marquee. The step timer (`SetTimer` + `CreateCallback`) fires in the same loop, and CI exercises it in silent mode. **Not visually inspected.** |
+| The uninstaller's first phase waits for the second. | Inno 6.7.1 `Setup.Uninstall.pas` (`RunFirstPhase`): it waits for the second phase's signal or exit. The control script and smoke test still poll for the registration to disappear (up to 120 s). |
+| `{param:REMOVEDATA}` is readable in the uninstaller. | CI: the `/REMOVEDATA=1` uninstall removes data, snapshots and the folder. |
+| Raising in `CurUninstallStepChanged(usUninstall)` aborts the uninstall. | Inno 6.7.1 source (`Setup.Uninstall.pas`): the exception is logged as fatal and shown through `ShowExceptionMsg`, whose message box is suppressible, so `/VERYSILENT /SUPPRESSMSGBOXES` can't block on it; then `Abort`. The first phase exits with code 1 because the second phase never reports success. CI exercises it ([#158](https://github.com/8roundshock/living-room-display/issues/158)): the smoke test holds a file in `app` open, and the silent uninstall must exit non-zero within 5 minutes and keep the registration, the uninstaller, `installation.json` and data, and the uninstall log must carry the helper's `Failed:` reason and the abort message. A repair with Setup then exits 0. |
+| `TaskDialogMsgBox` custom labels (**Keep my data** / **Delete my data**). | Documented Inno API; interactive only. **Not verified in CI.** |
+| `WizardStyle` tokens in 6.7.x. | Inno documentation: base `classic` or `modern`, plus `light`, `dark` or `dynamic`. |
+| `ISCC.exe` has no numeric file version. | Observed in CI (version info read as 0.0.0). The build asks the preprocessor (`DecodeVer(Ver)`) instead. |
+| Windows PowerShell 5.1 started (through Setup) from PowerShell 7 can inherit PowerShell 7 module folders. | Observed in CI: `Get-FileHash` was not recognized. The control script now keeps only Windows PowerShell module folders on 5.1 and hashes with .NET ([#123](https://github.com/8roundshock/living-room-display/issues/123)). |
+| GitHub runners run Setup elevated with UAC on. | Observed in CI: the refusal of an elevated launch fired. The smoke test passes the automation-only `/ALLOWELEVATED=1`. Normal users still get the refusal. |
+
+### Installer CI
+
+`.github/workflows/installer.yml` runs on installer-related pull requests, pushes
+to `main` and manual dispatch.
+
+- **Build** (windows-2025): `Test-Windows.ps1` under PowerShell 5.1 and 7, the
+  Inno version check (installs the pinned, hash-verified 6.7.1 if needed),
+  `Build-Installer.ps1`, the payload checks, and the artifact (14 days).
+- **Smoke** (windows-2022 and windows-2025 gating, windows-11-arm non-gating,
+  each with the default folder and a folder path containing a space and a
+  non-ASCII character): records the before-state, then installs silently. It then
+  checks the marker, the manifest, health and routes, `--check`, the
+  loopback-only listener, the uninstall key and the shortcuts, and that the
+  before-state is unchanged. Then it runs a synthetic reminder, a repair
+  (snapshot, `app.previous`, `Status`), a keep-data uninstall, a reinstall and a
+  `/REMOVEDATA=1` uninstall. Two refusal cases must exit 7: a foreign folder and
+  a taken port.
+- **Automatic rollback on a real install** ([#189](https://github.com/8roundshock/living-room-display/issues/189)):
+  after the repair, the smoke test runs the rollback-test Setup (see
+  [development](development.md#building-the-windows-installer)), whose real
+  server reports the wrong version. It must exit 7 with `Helper exit code: 15`,
+  leave `app` and `runtime` hash-identical to before, keep the candidate in
+  `app.failed`, leave no `package-transaction.json`, restore
+  `installation.json`, keep data unchanged and leave the previous version
+  answering `/api/health`. A repair with the normal Setup then exits 0 and
+  removes `app.failed`. Setup has to stop the real server and wait for it to
+  exit before it renames `app`; a `Stop` that returned early would race that
+  rename (12 of 20 such renames failed in the review repro on PR #149).
+- **A failed uninstall** ([#158](https://github.com/8roundshock/living-room-display/issues/158)):
+  with `app\package.json` held open, the silent uninstaller must fail as
+  described under [Inno Setup assumptions](#inno-setup-assumptions), and a
+  repair must then succeed before the normal uninstall steps run.
+
+**Evidence (2026-10-18).** Run 39177635973 (PR #149) passed every job: the build (Setup 0.1.0, 27.1 MB, Inno Setup 6.7.1 preinstalled on windows-2025; the payload and both Windows check runs passed) and all six smoke jobs. That covers windows-2022, windows-2025 and windows-11-arm (x64 emulation) × the default folder and the `Living Room Ünicode` folder. The refusal with port 4318 taken left no install folder, which confirms that Setup doesn't create `{app}` before `PrepareToInstall`. Earlier runs on the same PR found the elevated runners, the ISCC version probe and the inherited module path recorded above. After the review fixes (Stop waits for stopped processes, the resumable rollback record, E20 and E21 and the #180 wording), run 39181451761 on 66eeec5 passed the build again (15 Windows check groups under 5.1 and 7, including the real owned-server Stop-then-rename check; the payload checks; Setup 27.1 MB) and all six smoke jobs. PR #201 then added the real-install rollback ([#189](https://github.com/8roundshock/living-room-display/issues/189)) and the failed uninstall ([#158](https://github.com/8roundshock/living-room-display/issues/158)). Run 39187153452 on bd26691 passed the build (15 Windows check groups under 5.1 and 7, with 26 InstallPackage and 9 policy groups; the payload checks; Setup 27.1 MB and the rollback-test Setup) and all six smoke jobs. In each, the rollback-test Setup exited 7 with helper exit code 15 and the repair after it exited 0; the forced uninstall failure exited 1 with the registration kept, and the repair after it exited 0.
+
+The smoke script refuses to run outside GitHub Actions, or with an existing
+install, a 4318 listener or the Setup registration. It never starts the kiosk,
+captures the screen or selects the screensaver.
+
 ## Verification
 
 Observed 2026-10-18: Windows 10 Pro 10.0.19045 x64, existing Edge, Framework
@@ -83,8 +164,14 @@ v4.0.30319 compiler, PowerShell 7 and Windows PowerShell 5.1. Helper compilation
 parses under both PowerShell engines. Run `windows/Test-Windows.ps1` for native
 compile/argument checks, cleanup containment including nested junction refusal,
 malformed/unrelated PID refusal, and optional real process/start-time ownership
-checks (`-NodeExe '<node.exe>'`). Eleven check groups with Node (ten without) pass
-on PowerShell 7 and 5.1, including successful final cleanup; use process-scoped
+checks (`-NodeExe '<node.exe>'`). With Node they also stop a real owned test
+server whose working folder is `app` and rename `app` straight after `Stop`,
+which only works because `Stop` waits for the process to exit. Fifteen check
+groups with Node (thirteen without) pass on PowerShell 7 and 5.1, including
+successful final cleanup. They now also
+cover the InstallPackage transaction (`tests/Test-PackageInstall.ps1`), the static
+installer policy and the versioned helper build, and every script is checked to be
+ASCII for Windows PowerShell 5.1; use process-scoped
 `-ExecutionPolicy Bypass` where script policy requires it. These include seven native lifecycle scenarios using the production
 startup coordinator with delayed fake transport/synthesized session ends, plus
 four real restore-function scenarios with mocked registry/file/SPI boundaries

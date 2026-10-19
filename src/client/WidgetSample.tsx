@@ -1,8 +1,9 @@
 import type { CSSProperties } from 'react';
-import type { AppState, WidgetId } from '../shared/contracts';
+import type { AppearanceSettings, AppState, WidgetId } from '../shared/contracts';
 import { defaultSettings } from '../shared/defaults';
-import { widgetSpan, type WidgetSize } from '../shared/widgets';
-import { WIDGET_RENDERERS } from './widgets/registry';
+import { WIDGET_CATALOG, widgetSpan, type WidgetSize } from '../shared/widgets';
+import { toneVariables } from '../shared/palette';
+import { WIDGET_MODULES, WIDGET_RENDERERS } from './widgets/registry';
 
 // The catalog never previews private reminders, photo, city or desktop snapshot.
 const now = new Date(2026, 9, 18, 9, 41);
@@ -25,14 +26,25 @@ const sample: AppState = {
 };
 const landscape = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360"><defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#789296"/><stop offset="1" stop-color="#ced6c6"/></linearGradient></defs><path fill="url(#sky)" d="M0 0h480v360H0z"/><circle fill="#e0cfac" cx="360" cy="95" r="29"/><path fill="#586f69" d="m0 260 140-147 115 118 93-79 132 99v109H0z"/><path fill="#344f47" d="m0 309 142-92 134 67 120-60 84 59v77H0z"/></svg>');
 
-/** Actual renderers keep the family examples honest; all content is synthetic. */
-export function WidgetSample({ id, size }: { id: WidgetId; size: WidgetSize }) {
+/**
+ * Actual renderers keep the family examples honest; all content is synthetic. `appearance`
+ * supplies the draft's accent mode and colour; samples keep their own text colour and full brightness.
+ */
+export function WidgetSample({ id, size, appearance = settings.appearance }: { id: WidgetId; size: WidgetSize; appearance?: AppearanceSettings }) {
   const Renderer = WIDGET_RENDERERS[id];
   const span = widgetSpan(id, size);
+  // A widget may adjust the synthetic sample (new objects only, never private content).
+  const base = { state: sample, settings };
+  const prepared = WIDGET_MODULES[id].sample?.(base) ?? base;
   return <div className="sample-stage" aria-hidden="true">
-    <div className="picker-sample ambient grid-ambient static layout-editing font-sans" style={{ '--sample-columns': span.columns, '--sample-ratio': span.columns / span.rows, '--ambient-accent': '#b1b9d0', '--ambient-text': '#d0d3df', '--ambient-brightness': 1, '--font-scale': 1 } as CSSProperties}>
-      <div className={`ambient-widget ambient-${id} widget-size-${size}`}>
-        <div className="widget-content"><Renderer state={sample} settings={settings} size={size} now={now} embedded disconnected={false} photoPreview={landscape} /></div>
+    <div
+      className="picker-sample ambient grid-ambient static layout-editing font-sans"
+      style={{ '--sample-columns': span.columns, '--sample-ratio': span.columns / span.rows, '--ambient-accent': appearance.accentColor, '--ambient-text': '#d0d3df', '--ambient-brightness': 1, '--font-scale': 1, ...toneVariables(appearance) } as CSSProperties}
+      data-accent-mode={appearance.accentMode}
+      data-animation="off"
+    >
+      <div className={`ambient-widget ambient-${id} widget-size-${size} tone-${WIDGET_CATALOG[id].tone}`}>
+        <div className="widget-content"><Renderer state={prepared.state} settings={prepared.settings} size={size} now={now} embedded disconnected={false} photoPreview={landscape} /></div>
       </div>
     </div>
   </div>;

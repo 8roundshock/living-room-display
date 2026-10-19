@@ -10,7 +10,8 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
-import { WIDGET_IDS, GRID_DENSITIES, widgetSizes } from '../../src/shared/widgets.ts';
+import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, isActiveWidget, widgetSizes } from '../../src/shared/widgets.ts';
+import { WIDGET_CHECKS } from './widget-checks/index.mjs';
 
 export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -24,9 +25,11 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
   try {
     const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
     const source = await (await fetch(`${base}/api/state`)).json();
-    source.reminders = Array.from({ length: 5 }, (_, i) => ({ id: `fixture-${i}`, text: ['Read a chapter', 'Water the plants', 'Plan the weekend', 'Call a friend', 'A later reminder'][i], completed: false, dueAt: null, createdAt: new Date(now + i).toISOString(), updatedAt: new Date(now).toISOString() }));
-    source.preview = { available: true, capturedAt: new Date(now).toISOString(), width: 320, height: 200 };
-    source.photo = { available: true, id: 'synthetic', width: 320, height: 200, updatedAt: new Date(now).toISOString() };
+    // Every active widget has a check module (tests/ui/widget-checks); their prepare hooks give it content.
+    for (const id of ACTIVE_WIDGET_IDS) assert.ok(WIDGET_CHECKS[id], `${id} needs a tests/ui/widget-checks module`);
+    for (const check of Object.values(WIDGET_CHECKS)) check.prepare?.(source, { now });
+    const clippingSelectors = [...new Set(['.ambient-label', ...Object.values(WIDGET_CHECKS).flatMap(check => check.selectors ?? [])])].join(',');
+    const familyCount = ACTIVE_WIDGET_IDS.reduce((total, id) => total + widgetSizes(id).length, 0);
     // Deliberately synthetic geometry, never a personal image or desktop capture.
     const pixels = Buffer.alloc((320 * 4 + 1) * 200);
     for (let y = 0; y < 200; y++) for (let x = 0; x < 320; x++) {
@@ -64,33 +67,46 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     const clockFonts = {};
     for (const viewport of [{ width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       await page.setViewportSize(viewport);
-      for (const density of Object.keys(GRID_DENSITIES)) for (const id of WIDGET_IDS) for (const size of widgetSizes(id)) {
+      for (const density of Object.keys(GRID_DENSITIES)) for (const id of ACTIVE_WIDGET_IDS) for (const size of widgetSizes(id)) {
         current = structuredClone(source); current.settings.appearance.motionEnabled = false;
         current.settings.widgetGrid.density = density; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id]));
         current.settings.widgetGrid.placements[id] = { column: 0, row: 0, size };
         await open(); const widget = page.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
-        const bounds = await widget.evaluate(el => { const r = el.getBoundingClientRect(); const content = el.querySelector('.widget-content'); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, scale: new DOMMatrix(getComputedStyle(content).transform).a, border: getComputedStyle(el).borderWidth, background: getComputedStyle(el).backgroundColor }; });
+        const bounds = await widget.evaluate(el => { const r = el.getBoundingClientRect(); const content = el.querySelector('.widget-content'); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, scale: new DOMMatrix(getComputedStyle(content).transform).a, border: getComputedStyle(el).borderWidth, background: getComputedStyle(el).backgroundColor, tone: [...el.classList].filter(name => name.startsWith('tone-')), accentMode: el.closest('.ambient')?.getAttribute('data-accent-mode') }; });
         assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.right <= viewport.width + 1 && bounds.bottom <= viewport.height + 1, `${id}/${size}/${density} stays inside display`);
         assert.ok(bounds.scale >= 0.75, `${id}/${size}/${density} should fit by design, scale=${bounds.scale}`);
         assert.equal(bounds.border, '0px'); assert.equal(bounds.background, 'rgba(0, 0, 0, 0)');
-        const clipped = await widget.evaluate(el => {
+        assert.deepEqual(bounds.tone, [`tone-${WIDGET_CATALOG[id].tone}`]); assert.equal(bounds.accentMode, current.settings.appearance.accentMode);
+        const clipped = await widget.evaluate((el, selectors) => {
           const outer = el.getBoundingClientRect();
-          return [...el.querySelectorAll('.ambient-label,.weather-context,.weather-age,.weather-credit,.rain-bars,.rain-confidence,.rain-amount,.clock-calendar,.forecast-strip,.preview-caption,li')].filter(child => { const r = child.getBoundingClientRect(); return r.top < outer.top - 1 || r.bottom > outer.bottom + 1 || r.left < outer.left - 1 || r.right > outer.right + 1; }).map(child => child.className);
-        });
+          return [...el.querySelectorAll(selectors)].filter(child => { const r = child.getBoundingClientRect(); return r.top < outer.top - 1 || r.bottom > outer.bottom + 1 || r.left < outer.left - 1 || r.right > outer.right + 1; }).map(child => child.className);
+        }, clippingSelectors);
         assert.deepEqual(clipped, [], `${id}/${size}/${density} meaningful descendants stay visible`);
         if (viewport.width === 1920 && density === 'balanced') {
           if (id === 'clock') clockFonts[size] = await widget.locator('.clock-time').evaluate(el => parseFloat(getComputedStyle(el).fontSize));
           if (capture) images.push({ name: `${id}-${size}`, bytes: await widget.screenshot() });
         }
-        if (id === 'forecast') assert.equal(await widget.locator('.forecast-day').count(), size === 'small' ? 3 : size === 'medium' ? 5 : 7);
-        if (id === 'reminders') assert.equal(await widget.locator('li').count(), size === 'small' ? 1 : size === 'medium' ? 2 : 4);
-        if (id === 'photo') assert.equal(await widget.locator('img').evaluate(el => getComputedStyle(el).objectFit), size === 'large' ? 'contain' : 'cover');
-        if (id === 'preview') assert.equal(await widget.locator('img').evaluate(el => getComputedStyle(el).objectFit), 'contain');
-        if (id === 'rain') { assert.match(await widget.innerText(), /mm rain/); if (size === 'large') assert.ok((await widget.locator('.rain-bars').boundingBox()).height >= (await widget.boundingBox()).height * 0.1, 'Rain chart retains real height'); }
+        await WIDGET_CHECKS[id].family?.({ page, widget, size, density, viewport, state: current });
+      }
+      // Checks beyond the families (tests/ui/widget-checks sweep hooks) run once per viewport.
+      for (const check of Object.values(WIDGET_CHECKS)) if (check.sweep) {
+        current = structuredClone(source);
+        const summary = await check.sweep({ page, viewport, state: current, base, now });
+        if (summary && !checks.includes(summary)) checks.push(summary);
       }
     }
     assert.ok(clockFonts.large > clockFonts.medium * 1.4, `Large clock should be visibly larger: ${JSON.stringify(clockFonts)}`);
-    checks.push('All 21 widget families × 3 densities × 1080p/4K: bounds, useful content, no frames/fills, photo crops, whole-screen snapshot');
+    checks.push(`All ${familyCount} widget families × 3 densities × 1080p/4K: bounds, useful content, no frames/fills, tone classes, photo crops, whole-screen snapshot`);
+    // Every #78 id has shipped (#157, #171), so the inactive ids are retired ones (Rain, #74) plus any
+    // future planned entry; the catalog contract says neither is ever rendered.
+    const inactiveIds = WIDGET_IDS.filter(id => !isActiveWidget(id));
+    assert.ok(inactiveIds.length > 0, 'at least one inactive id to inject');
+    for (const id of inactiveIds) {
+      current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id || key === 'clock']));
+      await open(); await page.locator('[data-widget-id="clock"]').waitFor();
+      assert.equal(await page.locator(`[data-widget-id="${id}"]`).count(), 0, `inactive ${id} never renders even when injected as enabled`);
+    }
+    checks.push(`Inactive widget ids (${inactiveIds.join(', ')}) injected as enabled render nothing`);
     await page.setViewportSize({ width: 1920, height: 1080 });
     for (const size of ['small', 'medium', 'large']) {
       current = structuredClone(source); current.settings.appearance.fontScale = 1.25;
@@ -106,17 +122,18 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       current.reminders[0].text = 'A deliberately long synthetic reminder that wraps across the available line length';
       await open(); const longReminderScale = await page.locator('.ambient-reminders .widget-content').evaluate(el => new DOMMatrix(getComputedStyle(el).transform).a); assert.ok(longReminderScale >= 0.65, `${size} long reminders retain their scale: ${longReminderScale}`);
     }
-    current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'rain'])); current.settings.widgetGrid.placements.rain = { column: 0, row: 0, size: 'large' };
+    // Rain timing lives in Weather (#74); see tests/ui/weather-browser.mjs for every mode.
+    current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'weather'])); current.settings.widgetGrid.placements.weather = { column: 0, row: 0, size: 'large' };
     current.weather.hourly[10].precipitationProbability = null; current.weather.hourly[11].rainAmount = null;
-    await open(); assert.equal(await page.locator('.rain-bar-unknown').count(), 1); assert.match(await page.locator('.ambient-rain').innerText(), /Partial data/);
-    if (capture) images.push({ name: 'rain-partial', bytes: await page.locator('.ambient-rain').screenshot() });
+    await open(); assert.equal(await page.locator('.rain-bar-unknown').count(), 1); assert.match(await page.locator('.ambient-weather').innerText(), /Partial data/);
+    if (capture) images.push({ name: 'rain-partial', bytes: await page.locator('.ambient-weather').screenshot() });
     checks.push('Long city/reminder text at125% type, unavailable measurements/condition without an invented icon, partial rain and unknown probability bars');
     for (const style of ['outline', 'digital', 'analog']) {
       current = structuredClone(source); current.settings.appearance.clockStyle = style; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock']));
       await open(); if (capture) images.push({ name: `clock-style-${style}`, bytes: await page.locator('[data-widget-id="clock"]').screenshot() });
     }
     current = structuredClone(source); current.settings.clockFormat = '24h'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'preview'])); await open(); assert.doesNotMatch(await page.locator('.preview-caption').innerText(), /AM|PM/);
-    current = structuredClone(source); current.weather.units.precipitation = 'in'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'rain'])); current.settings.widgetGrid.placements.rain.size = 'small'; current.weather.hourly.forEach(hour => { hour.rainAmount = 0.03; }); await open(); assert.match(await page.locator('.ambient-rain').innerText(), /in rain/);
+    current = structuredClone(source); current.weather.units.precipitation = 'in'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'weather'])); current.settings.widgetGrid.placements.weather.size = 'medium'; current.weather.hourly.forEach(hour => { hour.rainAmount = 0.03; }); await open(); assert.match(await page.locator('.ambient-weather').innerText(), /in rain/);
     current = structuredClone(source); current.settings.appearance.motionEnabled = false; await page.setViewportSize({ width: 1920, height: 1080 }); await open();
     const inset = await page.locator('.widget-grid-plane').evaluate(el => el.getBoundingClientRect().left / innerWidth); assert.ok(Math.abs(inset - 0.04) < 0.002);
     if (capture) images.push({ name: 'default-composition', bytes: await page.screenshot() });
