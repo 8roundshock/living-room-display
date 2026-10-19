@@ -176,7 +176,10 @@ export async function sweep({ page, viewport, state }) {
     }
     // 9:xx: an old-style 9 would descend below the 0s and 1s and a 6 or 8 would rise above them.
     assert.match(digits.map(digit => digit.text).join(''), /^9\d\d$/);
-    for (const digit of digits) for (const edge of ['top', 'bottom']) assert.ok(Math.abs(digit[edge] - digits[0][edge]) <= 2, `Classic digit ${digit.text} ${edge} ${digit[edge]} vs ${digits[0][edge]}: ${JSON.stringify(digits)}`);
+    // Round digits overshoot a flat top or baseline by a few percent of their height; old-style figures differ by
+    // about a fifth of it.
+    const tolerance = Math.max(2, 0.05 * (digits[0].bottom - digits[0].top));
+    for (const digit of digits) for (const edge of ['top', 'bottom']) assert.ok(Math.abs(digit[edge] - digits[0][edge]) <= tolerance, `Classic digit ${digit.text} ${edge} ${digit[edge]} vs ${digits[0][edge]} (±${tolerance.toFixed(1)}): ${JSON.stringify(digits)}`);
     state.settings.appearance.fontFamily = 'sans';
   }
 
