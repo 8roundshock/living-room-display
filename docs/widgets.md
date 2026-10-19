@@ -96,7 +96,10 @@ and `--ambient-min-data` (1.65%), times Text size. Wrap related values onto shar
 rows before letting the fit scale shrink a family. Only a family that truly cannot
 fit caps the floors by its own content height: small forecast uses 7.25% (text)
 and 8.5% (data), which binds only when that height is under about 19.4% of the
-display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold).
+display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold). Its high
+and low share a row when they fit, and its “Saved forecast”/“Offline” prefix takes its
+own short line, so fresh, stale and offline small forecasts render at fit 1 at Text
+100% in every density at 720p, 1080p and 4K, with “5 hr ago” kept together (#221).
 Overfull content is laid out proportionally wider before the fit scale shrinks it,
 so a larger Text size never renders text-size-scaled labels or values smaller.
 Icons and the fixed unavailable dash do not follow Text size and can still shrink
@@ -109,7 +112,7 @@ The renderer families have deliberate visual roles:
 | --- | --- | --- | --- |
 | Clock | Compact time and calendar | Time beside a calendar column | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”); confidence only when partial | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and twelve hourly chance bars (spell hours brighter, unknown hours dotted) |
-| Forecast | Three days | Five days | Seven days; compact weekday labels preserve room for temperatures and chance |
+| Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance. Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”) |
 | Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete, faint captured desktop | Wider complete desktop | Larger complete desktop; no crop hides screen context |
@@ -310,6 +313,18 @@ Render content according to available space without changing its meaning. Keep
 forecast estimates, age, stale/unknown states, place and units honest. For a
 hide-when-empty option, distinguish confirmed empty from unavailable or failed.
 Keep management available in the editor when the ambient widget is hidden.
+
+Saved weather keeps no age limit on the server, so the renderers judge its age (#243).
+A forecast strip starts at the weather city's civil today and drops earlier saved days;
+with none left it says “Forecast unavailable”, and Weather looks up today's high/low
+by date, not list position. A saved current reading more than **3 hours** old while
+the forecast is stale or the display is offline is no longer presented as current:
+Weather shows “Last known · 9 AM” (with the weekday when not today, “Last known ·
+Thu 9 AM”) in the status tone in place of the condition line (above the rain timing
+where the family shows timing instead), and keeps the glyph still and the age line.
+Three hours matches the hourly model: after that the saved temperature describes a
+different part of the day. Air quality's hours-old current values are decided in #188 with the same
+threshold.
 
 A photo widget uses a user-selected local image, remains optional, and follows
 the shared size/brightness/motion rules. Retain its image only in the documented

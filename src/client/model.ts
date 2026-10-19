@@ -1,5 +1,4 @@
 import type {
-  RainInterval,
   Reminder,
   Settings,
   VisualSettings,
@@ -60,84 +59,5 @@ export function applyBuiltinPreset(
             }
           : {}),
     },
-  };
-}
-
-export function upcomingRain(
-  intervals: RainInterval[],
-  now: number,
-): RainInterval[] {
-  return intervals
-    .filter((interval) => {
-      const start = Date.parse(interval.intervalStart);
-      const end = Date.parse(interval.intervalEnd);
-      return (
-        Number.isFinite(start) &&
-        Number.isFinite(end) &&
-        end > start &&
-        end > now &&
-        start < now + 12 * 3_600_000
-      );
-    })
-    .sort((a, b) => Date.parse(a.intervalStart) - Date.parse(b.intervalStart));
-}
-
-export function precipitationOutlook(
-  source: RainInterval[],
-  unit: 'mm' | 'in',
-  now: number,
-) {
-  const intervals = upcomingRain(source, now);
-  let coveredUntil = now;
-  let hasGaps = false;
-  for (const interval of intervals) {
-    const start = Date.parse(interval.intervalStart);
-    const end = Date.parse(interval.intervalEnd);
-    if (start > coveredUntil) hasGaps = true;
-    coveredUntil = Math.max(coveredUntil, end);
-  }
-  const coverageComplete =
-    intervals.length > 0 && !hasGaps && coveredUntil >= now + 12 * 3_600_000;
-  const knownChances = intervals
-    .map((hour) => hour.precipitationProbability)
-    .filter((value) => value !== null);
-  const knownAmounts = intervals
-    .map((hour) => hour.precipitationAmount)
-    .filter((value) => value !== null);
-  const knownRain = intervals
-    .map((hour) => hour.rainAmount)
-    .filter((value) => value !== null);
-  const wetThreshold = unit === 'in' ? 0.004 : 0.1;
-  return {
-    intervals,
-    coverageComplete,
-    hasGaps,
-    coverageStart: intervals[0]?.intervalStart ?? null,
-    coverageEnd: intervals.length
-      ? new Date(
-          Math.max(
-            ...intervals.map((interval) => Date.parse(interval.intervalEnd)),
-          ),
-        ).toISOString()
-      : null,
-    chance: knownChances.length ? Math.max(...knownChances) : null,
-    expected: knownAmounts.length
-      ? knownAmounts.reduce((total, amount) => total + amount, 0)
-      : null,
-    rainExpected: knownRain.length
-      ? knownRain.reduce((total, amount) => total + amount, 0)
-      : null,
-    rainIncomplete: !coverageComplete || knownRain.length !== intervals.length,
-    rainDataIncomplete: knownRain.length !== intervals.length,
-    rainy: intervals.filter((hour) => (hour.rainAmount ?? 0) >= wetThreshold),
-    incomplete:
-      !coverageComplete ||
-      knownChances.length !== intervals.length ||
-      knownAmounts.length !== intervals.length,
-    wet: intervals.filter(
-      (hour) =>
-        (hour.precipitationProbability ?? 0) >= 30 ||
-        (hour.precipitationAmount ?? 0) >= wetThreshold,
-    ),
   };
 }

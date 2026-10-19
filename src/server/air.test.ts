@@ -127,3 +127,30 @@ test('off state makes no request and carries the saved scale and location', () =
   assert.deepEqual({ status: off.status, scale: off.scale, current: off.current, hourly: off.hourly, updatedAt: off.updatedAt }, { status: 'off', scale: 'european', current: null, hourly: [], updatedAt: null });
   assert.equal(off.location.name, settings.location.name);
 });
+
+test('a clock set back neither stalls air-quality refreshes nor keeps a future-dated reading fresh (#244)', async () => {
+  // (A) The provider failed while the wall clock was 4 h fast; after the correction the retry comes on the monotonic clock.
+  const clock = { wall: NOW + 4 * 3600_000, mono: 0 };
+  let calls = 0, offline = true;
+  const service = new AirQualityService(async () => { calls++; if (offline) throw new Error('offline'); return Response.json(airFixture()); }, () => clock.wall, () => clock.mono);
+  const settings = defaultSettings();
+  assert.equal((await service.get(settings)).status, 'unavailable');
+  clock.wall = NOW; offline = false; clock.mono += 60_000;
+  await service.get(settings); assert.equal(calls, 1, 'inside the two-minute back-off');
+  clock.mono += 61_000;
+  const recovered = await service.get(settings);
+  assert.equal(calls, 2, 'retried after two monotonic minutes, not four hours'); assert.equal(recovered.status, 'fresh');
+  // (B) A reading fetched while the clock was fast keeps its upcoming hours and is refreshed after the correction.
+  const fast = { wall: NOW + 4 * 3600_000, mono: 0 };
+  let fetches = 0;
+  const other = new AirQualityService(async () => { fetches++; return Response.json(airFixture()); }, () => fast.wall, () => fast.mono);
+  const early = await other.get(settings);
+  assert.equal(early.hourly[0]?.time, '2026-10-18T13:00:00.000Z', 'the provider\'s current hour is kept, not dropped by the fast clock');
+  assert.equal(early.updatedAt, new Date(NOW + 4 * 3600_000).toISOString());
+  fast.wall = NOW; fast.mono += 5_000;
+  const corrected = await other.get(settings);
+  assert.equal(fetches, 2, 'an update time in the future is due at once'); assert.equal(corrected.updatedAt, new Date(NOW).toISOString());
+  // A sleep the monotonic clock did not count still ages the reading by the wall clock.
+  fast.wall += 31 * 60_000; fast.mono += 1000;
+  await other.get(settings); assert.equal(fetches, 3);
+});
