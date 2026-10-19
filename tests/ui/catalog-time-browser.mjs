@@ -193,6 +193,22 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await page.reload(); await button('Edit layout').waitFor(); await page.clock.runFor(300);
     row = await inspector('Countdown');
     await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('Weekend trip'); await save();
+    // A date saved while the panel stays open is protected too, and so is a saved retitle.
+    await row.getByRole('button', { name: 'Add date', exact: true }).click();
+    await row.getByRole('textbox', { name: 'Countdown 2 title' }).fill('Concert'); await save();
+    await row.getByRole('textbox', { name: 'Countdown 2 title' }).fill('');
+    await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('Weekend away'); await page.keyboard.press('Tab');
+    await button('Countdown').click();
+    row = await inspector('Countdown');
+    assert.deepEqual(await row.locator('input[data-countdown-title]').evaluateAll(inputs => inputs.map(input => input.value)), ['Weekend away', 'Concert'], 'a date saved after the panel opened reverts instead of disappearing');
+    await save();
+    await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('');
+    await button('Countdown').click(); await savebar().waitFor({ state: 'detached' });
+    row = await inspector('Countdown');
+    assert.equal(await row.getByRole('textbox', { name: 'Countdown 1 title' }).inputValue(), 'Weekend away', 'a cleared title reverts to the latest saved title');
+    assert.deepEqual(snapshot().widgetData.countdowns.map(event => event.title), ['Weekend away', 'Concert']);
+    await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('Weekend trip');
+    await row.getByRole('button', { name: 'Remove countdown 2' }).click(); await save();
     checks.push('Countdown: editor placeholder, Add date (one week ahead, title focused), inline empty-title error blocks Save via draftProblem, live preview, Passed label, Every year, Remove, Cancel restores, trailing spaces trimmed on blur leave no Save bar');
 
     // 4. Note: counter, Clear, 4-line limit, dirty-only Save bar, reload.

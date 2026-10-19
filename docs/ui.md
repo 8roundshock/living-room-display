@@ -88,8 +88,9 @@ content (the sample clock, “Weekend trip”, “Birthday” and “Holiday”,
   the Save bar reads “Countdown needs a title” until it is fixed; the server remains the
   authority; a year outside 1900–2200 shows “Use a date between 1900 and 2200”. Closing
   the panel (removing or collapsing the widget, or changing tab) gives an edited row back
-  the title or date it had when the panel opened and drops an incomplete new row, so Save
-  is never blocked by a field that is not on screen and closing never deletes a date.
+  its last saved or loaded title or date and drops an incomplete row that was never saved,
+  so Save is never blocked by a field that is not on screen and closing never deletes a
+  saved date.
   Each row shows its count (“In 12 days · Fri, Oct 30”) or **Passed** for a
   past one-time date, which the display ignores until it is removed. Counts are whole
   days on this computer's calendar. The display shows the widget only while a date is
