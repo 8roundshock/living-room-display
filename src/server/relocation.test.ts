@@ -1,14 +1,18 @@
 // Dense-board relocation (#93): when the bounded search cannot move every widget, a whole-board
-// reflection keeps the composition moving. Geometry is status-agnostic, so the planned #78 widgets are
-// enabled here to model the fuller boards they will make common.
+// reflection keeps the composition moving. Geometry is status-agnostic, so every #78 widget (shipped, like
+// Calendar, Countdown and Note, or still planned) is enabled here to model the fuller boards they make common.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { WidgetGrid, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import {
   GRID_DENSITIES, WIDGET_IDS, WIDGET_SIZES, composeWidgetGrid, displayPlacement, firstPlacement, freeSpanLimits, gridProblem,
-  isPlannedWidget, placementSpan, reflowWidget, resizeWidgetSpan, widgetSizes, type GridDensity,
+  placementSpan, reflowWidget, resizeWidgetSpan, widgetSizes, type GridDensity,
 } from '../shared/widgets.ts';
+import { PREVIOUS_RELEASE } from './persistence.ts';
+
+/** The ids #78 appended after the previous release's ones, whatever their current status. */
+const CATALOG_78: WidgetId[] = WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id));
 
 type Visibility = Partial<Record<WidgetId, boolean>>;
 function random(seed: number) {
@@ -66,7 +70,7 @@ test('dense boards in every density keep moving unless no reflected alternative 
   for (const density of Object.keys(GRID_DENSITIES) as GridDensity[]) {
     const boards = denseBoards(density, 6);
     assert.ok(boards.length >= 4, `${density}: generated ${boards.length} boards at 90–100% fill`);
-    assert.ok(boards.some(board => WIDGET_IDS.some(id => board.enabled[id] && isPlannedWidget(id))), `${density}: planned #78 widgets take part`);
+    assert.ok(boards.some(board => CATALOG_78.some(id => board.enabled[id])), `${density}: #78 widgets take part`);
     for (const [index, { grid, enabled }] of boards.entries()) {
       const ids = WIDGET_IDS.filter(id => enabled[id]); let previous = grid; const started = performance.now();
       for (let cycle = 1; cycle <= 24; cycle++) {

@@ -113,9 +113,9 @@ The renderer families have deliberate visual roles:
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete, faint captured desktop | Wider complete desktop | Larger complete desktop; no crop hides screen context |
 | World clocks | Planned (#78), not shipped | | |
-| Calendar | Planned (#78), not shipped | | |
-| Countdown | Planned (#78), not shipped | | |
-| Note | Planned (#78), not shipped | | |
+| Calendar | Month name over this week's strip (weekday initials and dates) | Weekday, large date and month beside a compact month grid | Month and year, a weekday header row and a generous month grid; every grid has only the 4–6 weeks the month needs |
+| Countdown | The next date as a large count (“12” over “days”, or Today/Tomorrow), its title and a short date | The next date on the left; the following two as compact rows | Up to five rows (title, date, days right-aligned) and an honest “+N more” |
+| Note | The text, set large | The text, wider | The text, generous; long notes step down and an overfull one zooms out through the shared fit |
 | Air quality | Planned (#78), not shipped | | |
 | Sun & moon | Planned (#78), not shipped | | |
 
@@ -171,6 +171,39 @@ invalid overlapping placement; the latter still rejects. Current saves use
 geometry revision 2. Follow the [pre-upgrade data backup and rollback](install.md#widget-geometry-revision-2-update-and-rollback)
 procedure; the previous app does not understand revision 2 even though the outer
 settings version remains 1.
+
+### Catalog decisions (#78)
+
+Reviewed 2026-10-18 for [#78](https://github.com/8roundshock/living-room-display/issues/78).
+The target catalog is twelve active widgets once Weather absorbs Rain (#74), grouped
+in the picker by `WIDGET_CATEGORIES`: **Time** (Clock, World clocks, Calendar),
+**Weather & sky** (Weather, Forecast, Air quality, Sun & moon), **Personal**
+(Reminders, Countdown, Note) and **Pictures** (Photo, Last screen). Every new widget
+is optional, off by default and appended after `photo`, so existing packing and
+composition stay identical.
+
+- **Kept as is:** Clock, Forecast, Last screen and Photo. Weather and Rain belong to
+  #74 and Reminders to #73.
+- **Changed:** the picker is a grouped list with keyboard navigation; Forecast uses
+  its own `forecast` glyph because Calendar now owns the calendar glyph.
+- **Added here:** Calendar (local date, week start Automatic/Sunday/Monday; no data
+  dependency), Countdown (up to 12 dated events, optionally yearly; whole civil days
+  with UTC-noon arithmetic so DST cannot shift a count; February 29 falls on
+  February 28 in common years) and Note (up to 200 characters and 4 lines). An empty
+  Countdown or Note is hidden on the display and shows a placeholder in the editor.
+  World clocks, Sun & moon and Air quality are the parallel unit of the same ticket.
+  The three use fixed families and sit beside a free-size Reminders span; fuller
+  boards keep relocating through the #93 reflection fallback described below.
+- **Rejected, with reasons:** timers and alarms (they need audio and on-screen
+  interaction); news, stocks and sports (noise, feeds and keys); commute (keys and
+  personal addresses); account calendars, fitness and cloud smart home (accounts and
+  privacy); quotes (licensing and novelty clutter); PC battery and stats (not useful
+  ambiently); pollen (Open-Meteo coverage is Europe only); ticking seconds (OLED
+  wear and constant motion).
+- **Deferred, with tickets:** events from a local
+  calendar file or subscription (#94), rotating local photos (#95), Now Playing
+  (#96), several instances of one widget (#97), reminder dots on the calendar (#98)
+  and per-second re-fit cost (#99).
 
 ## Ambient appearance and recurring exposure
 

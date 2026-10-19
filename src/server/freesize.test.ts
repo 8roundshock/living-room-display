@@ -16,7 +16,7 @@ import {
 import { createApplication } from './app.ts';
 import { forecastFixture } from './fixtures.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
-import { persistableSettings } from './persistence.ts';
+import { PREVIOUS_RELEASE, persistableSettings } from './persistence.ts';
 import { assertPreviousReaderAccepts, assertPreviousReaderRejects } from './compat/previous-reader.ts';
 import { getVisual } from '../client/model.ts';
 
@@ -256,7 +256,7 @@ test('custom spans compose with the #74 Rain merge and the #93 reflection fallba
 });
 
 test('containment: deleting every span keeps a valid layout that the previous release reads', () => {
-  const next = random(73); let withSpans = 0;
+  const next = random(73); let withSpans = 0, withNewWidgets = 0;
   for (let iteration = 0; iteration < 60; iteration++) {
     const settings = defaultSettings(), density = (['spacious', 'balanced', 'fine'] as GridDensity[])[Math.floor(next() * 3)]!;
     for (const id of ACTIVE_WIDGET_IDS) settings.widgets[id] = id === 'reminders' || next() < 0.6;
@@ -272,6 +272,15 @@ test('containment: deleting every span keeps a valid layout that the previous re
     const stripped = stripSpans(parsed);
     assert.equal(gridProblem(stripped.widgetGrid, stripped.widgets), null, `iteration ${iteration} settings`);
     assert.equal(gridProblem(stripped.savedPresets[0]!.visual.widgetGrid, stripped.widgets), null, `iteration ${iteration} saved style`);
+    // An enabled widget the previous release does not know (Calendar, Countdown, Note since #78) is its own
+    // documented exception; turning it off in the settings and the saved style is the recovery step.
+    const unknown = ACTIVE_WIDGET_IDS.filter(id => stripped.widgets[id] && !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id));
+    if (unknown.length) {
+      withNewWidgets++;
+      assertPreviousReaderRejects('data', { version: 1, settings: persistableSettings(stripped), reminders: [], photoAsset: null }, `iteration ${iteration} stripped with ${unknown.join(', ')} on`);
+      for (const visual of [stripped, stripped.savedPresets[0]!.visual]) for (const id of unknown) visual.widgets[id] = false;
+      assert.equal(gridProblem(stripped.widgetGrid, stripped.widgets), null, `iteration ${iteration} settings without ${unknown.join(', ')}`);
+    }
     assertPreviousReaderAccepts('data', { version: 1, settings: persistableSettings(stripped), reminders: [], photoAsset: null }, `iteration ${iteration} stripped`);
     if (hasSpan(parsed)) {
       withSpans++;
@@ -279,6 +288,8 @@ test('containment: deleting every span keeps a valid layout that the previous re
     }
   }
   assert.ok(withSpans >= 20, `enough generated boards keep a custom span (${withSpans})`);
+  const shipped = ACTIVE_WIDGET_IDS.some(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id));
+  assert.ok(!shipped || withNewWidgets >= 10, `enough generated boards place a span beside the #78 widgets (${withNewWidgets})`);
 });
 
 async function application() {

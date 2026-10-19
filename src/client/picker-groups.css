@@ -1,0 +1,28 @@
+/* Grouped widget catalog (#78): Time, Weather & sky, Personal, Pictures, in WIDGET_CATEGORIES
+   order. Each group is a labelled set of the same catalog buttons; groups without an active
+   widget are not rendered. */
+.catalog-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+.catalog-group-label {
+  grid-column: 1 / -1;
+  margin: 0 2px;
+  color: #9e99ac;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+/* Desktop rail: one narrow column, each label above its buttons. */
+@media (min-width: 701px) {
+  .catalog-group { display: flex; flex-direction: column; gap: 5px; }
+  .catalog-group-label { margin: 0; padding: 2px 1px 0; font-size: 9.5px; line-height: 1.2; text-align: center; }
+}
+/* Narrow screens: three buttons per row under each label. */
+@media (max-width: 700px) {
+  .catalog-group { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
