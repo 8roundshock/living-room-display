@@ -11,11 +11,31 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
-import { ACTIVE_WIDGET_IDS, WIDGET_IDS, widgetRevealOrder, widgetSizes } from '../../src/shared/widgets.ts';
+import { ACTIVE_WIDGET_IDS, WIDGET_IDS, normalizePlacement, widgetRevealOrder, widgetSizes } from '../../src/shared/widgets.ts';
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
 
 const ALLOWED_PROPERTIES = new Set(['transform', 'translate', 'rotate', 'scale', 'opacity']);
 const LEVELS = ['off', 'subtle', 'lively'];
+const HOUR = 3_600_000;
+/** Every active widget on one Balanced 12 x 8 board (as in palette-browser.mjs); a newly activated widget must be added here. */
+const FULL_BOARD = {
+  clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
+  sunMoon: { column: 0, row: 2, size: 'large' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
+  reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
+  note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
+};
+/** One widget alone at the board's top-left corner. */
+const only = (id, placement) => state => {
+  state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id]));
+  if (id === 'preview') state.settings.preview.enabled = true;
+  state.settings.widgetGrid.density = 'balanced';
+  state.settings.widgetGrid.placements[id] = typeof placement === 'string' ? { column: 0, row: 0, size: placement } : placement;
+};
+const fullBoard = state => {
+  state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD]));
+  state.settings.preview.enabled = true; state.settings.widgetGrid.density = 'balanced';
+  Object.assign(state.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+};
 
 export async function runMotionQa({ playwright, edge, performance = true } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -80,6 +100,15 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
     throw new Error(`Timed out waiting for ${label}`);
   }
   const loops = list => list.filter(animation => animation.iterations === Infinity && !(animation.plane && animation.name === 'grid-plane-drift'));
+  /** Widget motion in the plane (the Soft motion drift excluded): animation names or transition:<property>. */
+  const planeMotion = async page => (await inventory(page)).filter(item => !(item.plane && item.name === 'grid-plane-drift')).map(item => item.name);
+  /** Animation names or transition:<property> running on the elements matching `selector`. */
+  const motionIn = (page, selector) => page.evaluate(query => [...document.querySelectorAll(query)].flatMap(element => element.getAnimations().map(animation => animation.animationName ?? `transition:${animation.transitionProperty}`)), selector);
+  /** Steps the page clock until the next arrangement's entrance starts. */
+  async function untilRevealing(page) {
+    for (let step = 0; step < 120; step++) { if (await page.locator('.widget-grid-plane.revealing').count()) return; await page.clock.runFor(100); }
+    throw new Error('Timed out waiting for the next reveal');
+  }
 
   try {
     // (1) The root reports the effective level; reduced motion reports Off and still relocates.
@@ -247,26 +276,38 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
         assert.ok(first.right <= second.left + 0.5 || second.right <= first.left + 0.5 || first.bottom <= second.top + 0.5 || second.bottom <= first.top + 0.5, `${label}: ${sample.middle[a].id} and ${sample.middle[b].id} overlap`);
       }
     }
+    // Coverage of the merged catalog: every active widget has a widget-checks module (its prepare
+    // hook gives it content above) and the full board lists every active widget.
+    for (const id of ACTIVE_WIDGET_IDS) assert.ok(WIDGET_CHECKS[id], `${id} needs a tests/ui/widget-checks module`);
+    assert.deepEqual(Object.keys(FULL_BOARD).sort(), [...ACTIVE_WIDGET_IDS].sort(), 'FULL_BOARD lists every active widget');
+    const expectedFamilies = ACTIVE_WIDGET_IDS.reduce((sum, id) => sum + widgetSizes(id).length, 0);
+    // A free-size Reminders span (#73) from the top edge to the bottom edge.
+    const tallReminders = normalizePlacement('reminders', { column: 0, row: 0, size: 'small', span: { columns: 4, rows: 8 } });
     let families = 0;
     for (const viewport of [{ width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       for (const animation of ['subtle', 'lively']) {
         const view = await displayPage({ state: scenario(level(animation)), viewport });
         await midReveal(view.page, `${animation} default board ${viewport.width}`, true);
         await view.close();
+        const board = await displayPage({ state: scenario(state => { level(animation)(state); fullBoard(state); }), viewport });
+        assert.equal(await board.page.locator('.ambient-widget').count(), ACTIVE_WIDGET_IDS.length, 'the full board shows every widget');
+        await midReveal(board.page, `${animation} full board ${viewport.width}`, true);
+        await board.close();
       }
       for (const id of ACTIVE_WIDGET_IDS) for (const size of widgetSizes(id)) {
-        const view = await displayPage({ viewport, state: scenario(state => {
-          level('lively')(state); state.settings.widgetGrid.density = 'balanced';
-          state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id]));
-          if (id === 'preview') state.settings.preview.enabled = true;
-          state.settings.widgetGrid.placements[id] = { column: 0, row: 0, size };
-        }) });
+        const view = await displayPage({ viewport, state: scenario(state => { level('lively')(state); only(id, size)(state); }) });
         await midReveal(view.page, `${id}/${size} ${viewport.width}`, false);
         families++;
         await view.close();
       }
+      const tall = await displayPage({ viewport, state: scenario(state => { level('lively')(state); only('reminders', tallReminders)(state); }) });
+      assert.equal(await tall.page.locator('.ambient-reminders').getAttribute('data-widget-span'), '4x8');
+      assert.equal(await tall.page.locator('.ambient-reminders').getAttribute('data-full-height'), '');
+      await midReveal(tall.page, `reminders 4x8 ${viewport.width}`, false);
+      await tall.close();
     }
-    checks.push(`paused at 50% of the Lively/Subtle entrance: ${families / 2} active families plus the default board at 1080p and 4K stay inside their rectangles, disjoint, with an unchanged fit scale`);
+    assert.equal(families / 2, expectedFamilies, 'every family of every active widget');
+    checks.push(`paused at 50% of the Lively/Subtle entrance: all ${families / 2} families of the ${ACTIVE_WIDGET_IDS.length} active widgets (each with a widget-checks module), a full-height 4 × 8 free-size Reminders span, the default board and a full board of every widget at 1080p and 4K stay inside their rectangles, disjoint, with an unchanged fit scale`);
 
     // (6) Clock: only changed characters remount; at-rest geometry identical at every level.
     {
@@ -338,6 +379,141 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
       await view.close();
     }
     checks.push('a weather value change from 14 to 15 remounts .value-transition, fades it in and never shows another numeral');
+
+    // (12) Adaptive Weather (#74): the hero glyph at its CSS size (#128); a calm → elevated change
+    // fades the new bars in to at most their resting opacity and crossfades the rain copy; the next
+    // Lively entrance grows the bars from their baseline. Off and reduced motion stay still.
+    {
+      const calmWeather = state => { for (const hour of state.weather.hourly) Object.assign(hour, { precipitationProbability: 0, precipitationAmount: 0, rainAmount: 0 }); };
+      for (const [animation, reducedMotion] of [['subtle', 'no-preference'], ['lively', 'no-preference'], ['off', 'no-preference'], ['lively', 'reduce']]) {
+        const label = `${animation}${reducedMotion === 'reduce' ? ' (reduced motion)' : ''}`;
+        const still = animation === 'off' || reducedMotion === 'reduce';
+        const view = await displayPage({ reducedMotion, state: scenario(state => { level(animation)(state); only('weather', 'large')(state); calmWeather(state); }) });
+        const { page } = view;
+        await page.clock.runFor(2_500);
+        assert.equal(await page.locator('.weather-body').getAttribute('data-weather-mode'), 'calm', `${label}: calm`);
+        const glyph = await page.locator('.weather-symbol[data-glyph-hero]').evaluate(element => ({ width: element.getBoundingClientRect().width, inline: element.style.width }));
+        assert.ok(glyph.width >= 48 && glyph.inline === '', `${label}: the hero glyph takes its CSS size (${JSON.stringify(glyph)})`);
+        view.served.state.weather.hourly = structuredClone(source.weather.hourly);
+        await page.clock.runFor(30_000);
+        await until(page, () => document.querySelector('.weather-body')?.dataset.weatherMode === 'elevated', 'elevated Weather');
+        const bars = await motionIn(page, '.rain-bar'), copy = await motionIn(page, ':is(.rain-timing, .rain-detail, .rain-hours) .value-transition');
+        if (still) assert.deepEqual(await planeMotion(page), [], `${label}: a mode change moves nothing`);
+        else {
+          assert.ok(bars.length > 0 && bars.every(name => name === 'transition:opacity'), `${label}: the new bars fade in (${bars})`);
+          assert.ok(copy.length > 0 && copy.every(name => name === 'transition:opacity'), `${label}: the rain copy crossfades (${copy})`);
+          const opacities = await page.locator('.rain-bar').evaluateAll(elements => elements.map(element => ({ opacity: Number(getComputedStyle(element).opacity), spell: element.classList.contains('rain-bar-spell') })));
+          for (const bar of opacities) assert.ok(bar.opacity <= (bar.spell ? 0.65 : 0.35) + 0.001, `${label}: a fading bar stays at or below its resting opacity (${JSON.stringify(bar)})`);
+        }
+        if (animation === 'lively' && !still) {
+          await page.clock.runFor(140_000);
+          await untilRevealing(page);
+          const grow = await motionIn(page, '.rain-bars > .rain-bar');
+          assert.ok(grow.includes('lrd-bar-grow'), `the Lively entrance grows the rain bars (${grow})`);
+        }
+        await view.close();
+      }
+    }
+    checks.push('adaptive Weather: the hero glyph takes its CSS size (no inline size); calm → elevated fades the new rain bars in (never above their 0.35/0.65 resting opacity) and crossfades the rain timing, detail and hours at Subtle and Lively; the Lively entrance grows the bars; Off and reduced motion run nothing');
+
+    // (13) Reminders (#73's measured list): only a newly pending reminder fades, by opacity alone; a
+    // re-sorted row (#172), a row that stops overflowing and a remeasurement replay nothing. The
+    // measured rows and the exact "+N more" are identical at every level; Off stays still.
+    {
+      const id = index => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+      const pendingList = count => Array.from({ length: count }, (_, index) => ({ id: id(index), text: `Synthetic reminder ${index + 1}`, completed: false, dueAt: null, createdAt: new Date(now - (index + 1) * 60_000).toISOString(), updatedAt: new Date(now - (index + 1) * 60_000).toISOString() }));
+      const rows = page => page.evaluate(() => [...document.querySelectorAll('.ambient-reminder-list > li')].map(row => ({
+        title: row.querySelector('.ambient-reminder-title').textContent, overflow: row.classList.contains('reminder-overflow'), fresh: row.hasAttribute('data-new'),
+        space: row.getClientRects().length, motion: row.getAnimations().map(animation => animation.animationName ?? `transition:${animation.transitionProperty}`),
+      })));
+      const more = page => page.locator('.reminder-more').textContent();
+      const settle = page => page.waitForTimeout(600); // real-time CSS transitions (#165)
+      const shown = {};
+      for (const animation of LEVELS) {
+        const view = await displayPage({ state: scenario(state => { level(animation)(state); only('reminders', 'medium')(state); state.reminders = pendingList(12); }) });
+        const { page, served } = view;
+        await page.clock.runFor(2_500);
+        const first = await rows(page), visible = first.filter(row => !row.overflow);
+        shown[animation] = visible.map(row => row.title);
+        assert.ok(visible.length >= 2 && visible.length < 12, `${animation}: ${visible.length} rows fit`);
+        assert.equal(await more(page), `+${12 - visible.length} more`, `${animation}: exact +N more`);
+        assert.ok(first.filter(row => row.overflow).every(row => row.space === 0), `${animation}: overflow rows take no space`);
+        // A new reminder due soon sorts first.
+        served.state.reminders = [{ id: id(99), text: 'Synthetic new reminder', completed: false, dueAt: new Date(now + HOUR).toISOString(), createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString() }, ...pendingList(12)];
+        await page.clock.runFor(30_000);
+        await until(page, () => document.querySelector('.ambient-reminder-title')?.textContent === 'Synthetic new reminder', 'the new reminder');
+        const added = await rows(page);
+        assert.ok(added[0].fresh && added.slice(1).every(row => !row.fresh), `${animation}: only the new reminder is marked new`);
+        if (animation === 'off') assert.deepEqual(await planeMotion(page), [], 'Off: a new reminder appears without motion');
+        else {
+          assert.deepEqual(added[0].motion, ['transition:opacity'], `${animation}: the new reminder fades in`);
+          assert.deepEqual(added.slice(1).flatMap(row => row.motion), [], `${animation}: other rows stay still`);
+        }
+        await settle(page);
+        // A due-time edit moves an existing row (React re-inserts it): no entrance replays (#172).
+        served.state.reminders = structuredClone(served.state.reminders);
+        Object.assign(served.state.reminders.find(reminder => reminder.id === id(1)), { dueAt: new Date(now + 30 * 60_000).toISOString(), updatedAt: new Date(now + 1_000).toISOString() });
+        await page.clock.runFor(30_000);
+        await until(page, () => document.querySelector('.ambient-reminder-title')?.textContent === 'Synthetic reminder 2', 'the re-sorted reminder');
+        const resorted = await rows(page);
+        assert.ok(resorted.every(row => !row.fresh), `${animation}: a re-sorted row is not new`);
+        assert.deepEqual(resorted.flatMap(row => row.motion), [], `${animation}: re-sorting replays no entrance`);
+        await settle(page);
+        // Completing the top reminder removes it at once; the row that stops overflowing does not fade.
+        served.state.reminders = structuredClone(served.state.reminders);
+        served.state.reminders.find(reminder => reminder.id === id(1)).completed = true;
+        await page.clock.runFor(30_000);
+        await until(page, () => document.querySelector('.ambient-reminder-title')?.textContent === 'Synthetic new reminder', 'the completed reminder leaves');
+        const completed = await rows(page);
+        assert.deepEqual(completed.flatMap(row => row.motion), [], `${animation}: completion and the newly visible row stay still`);
+        assert.equal(await more(page), `+${completed.length - completed.filter(row => !row.overflow).length} more`, `${animation}: exact +N more after completion`);
+        await settle(page);
+        // A remeasurement that keeps the count (an edited title) replays nothing, "+N more" included.
+        const countBefore = await more(page);
+        served.state.reminders = structuredClone(served.state.reminders);
+        served.state.reminders.find(reminder => reminder.id === id(0)).text = 'Synthetic edited reminder';
+        await page.clock.runFor(30_000);
+        await until(page, () => [...document.querySelectorAll('.ambient-reminder-title')].some(title => title.textContent === 'Synthetic edited reminder'), 'the edited title');
+        assert.equal(await more(page), countBefore);
+        assert.deepEqual(await planeMotion(page), [], `${animation}: a remeasurement replays nothing`);
+        if (animation === 'lively') {
+          await page.clock.runFor(60_000);
+          await untilRevealing(page);
+          const entrance = await motionIn(page, '.ambient-reminder-list > li:not(.reminder-overflow)');
+          assert.ok(entrance.length > 0 && entrance.every(name => name === 'lrd-fade-in'), `Lively reminder rows fade without moving (${entrance})`);
+        }
+        await view.close();
+      }
+      assert.deepEqual(shown.subtle, shown.off, 'Subtle measures the same rows as Off');
+      assert.deepEqual(shown.lively, shown.off, 'Lively measures the same rows as Off');
+    }
+    checks.push('reminders: identical measured rows and an exact "+N more" at Off/Subtle/Lively with overflow rows taking no space; only a newly pending reminder (data-new) fades, by opacity; a due-time re-sort (#172), a completion with a row that stops overflowing, and a remeasurement that keeps the count replay nothing; the Lively entrance fades rows without moving them; Off runs nothing');
+
+    // (14) The #78 widgets' values crossfade through TransitionText at Subtle and stay still at Off.
+    {
+      const CHANGES = [
+        ['airQuality', 'medium', { mutate: state => { state.airQuality.current.aqi = 87; } }],
+        ['note', 'medium', { mutate: state => { state.settings.widgetData.note = { text: 'A changed synthetic note' }; } }],
+        ['countdown', 'medium', { mutate: state => { state.settings.widgetData.countdowns = state.settings.widgetData.countdowns.filter(item => item.title !== 'Synthetic today'); } }],
+        ['sunMoon', 'medium', { mutate: state => { state.weather.location = { ...state.weather.location, latitude: state.weather.location.latitude + 10 }; } }],
+        ['worldClocks', 'medium', { advance: 60_000 }],
+        ['calendar', 'medium', { time: Date.parse('2026-10-19T03:59:20Z'), advance: 45_000 }],
+      ];
+      for (const [widget, size, change] of CHANGES) for (const animation of ['subtle', 'off']) {
+        const view = await displayPage({ time: change.time ?? now, state: scenario(state => { level(animation)(state); only(widget, size)(state); }) });
+        const { page, served } = view;
+        await page.clock.runFor(2_500);
+        await page.evaluate(() => { for (const value of document.querySelectorAll('.ambient-widget .value-transition')) value.__kept = true; });
+        if (change.mutate) { served.state = structuredClone(served.state); change.mutate(served.state); await page.clock.runFor(30_000); }
+        if (change.advance) await page.clock.runFor(change.advance);
+        await until(page, () => [...document.querySelectorAll('.ambient-widget .value-transition')].some(value => !value.__kept), `${widget}: a TransitionText value remounts`);
+        const values = await page.evaluate(() => [...document.querySelectorAll('.ambient-widget .value-transition')].filter(value => !value.__kept).map(value => ({ text: value.textContent, motion: value.getAnimations().map(animation => animation.transitionProperty) })));
+        if (animation === 'off') assert.deepEqual(await planeMotion(page), [], `${widget} Off: nothing moves`);
+        else assert.ok(values.every(value => value.motion.length === 1 && value.motion[0] === 'opacity'), `${widget}: each new value fades in (${JSON.stringify(values)})`);
+        await view.close();
+      }
+    }
+    checks.push('Air quality (AQI and category), Note, Countdown, Sun & moon, World clocks and Calendar: a changed value remounts its TransitionText and fades in by opacity at Subtle; Off runs nothing');
 
     // (9)–(10) Editor: samples are still; the Animation control follows the draft contract.
     async function editorPage({ reducedMotion = 'no-preference', viewport = { width: 1280, height: 720 } } = {}) {
@@ -487,22 +663,27 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
 
     // (11) Performance on a TV-like surface without page.clock: Lively costs no layout and little main-thread time.
     if (performance) {
-      for (const animation of ['off', 'lively']) {
-        const view = await displayPage({ clock: false, viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3, state: scenario(state => { level(animation)(state); state.weather.current.weatherCode = 61; state.weather.current.isDay = true; }) });
-        const session = await view.context.newCDPSession(view.page);
-        await session.send('Performance.enable');
-        await view.page.waitForTimeout(3_000);
-        const read = async () => Object.fromEntries((await session.send('Performance.getMetrics')).metrics.map(metric => [metric.name, metric.value]));
-        const start = await read();
-        await view.page.waitForTimeout(15_000);
-        const end = await read();
-        metrics[animation] = { LayoutCount: end.LayoutCount - start.LayoutCount, RecalcStyleCount: end.RecalcStyleCount - start.RecalcStyleCount, TaskDuration: Number((end.TaskDuration - start.TaskDuration).toFixed(4)), ScriptDuration: Number((end.ScriptDuration - start.ScriptDuration).toFixed(4)), loops: loops(await inventory(view.page)).length };
-        await view.close();
+      // The default board and a full board of every merged widget (#162), each Off against Lively.
+      for (const [board, arrange] of [['default', () => undefined], ['full', fullBoard]]) {
+        const result = metrics[board] = {};
+        for (const animation of ['off', 'lively']) {
+          const view = await displayPage({ clock: false, viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3, state: scenario(state => { level(animation)(state); arrange(state); state.weather.current.weatherCode = 61; state.weather.current.isDay = true; }) });
+          const session = await view.context.newCDPSession(view.page);
+          await session.send('Performance.enable');
+          await view.page.waitForTimeout(3_000);
+          const read = async () => Object.fromEntries((await session.send('Performance.getMetrics')).metrics.map(metric => [metric.name, metric.value]));
+          const start = await read();
+          await view.page.waitForTimeout(15_000);
+          const end = await read();
+          result[animation] = { widgets: await view.page.locator('.ambient-widget').count(), LayoutCount: end.LayoutCount - start.LayoutCount, RecalcStyleCount: end.RecalcStyleCount - start.RecalcStyleCount, TaskDuration: Number((end.TaskDuration - start.TaskDuration).toFixed(4)), ScriptDuration: Number((end.ScriptDuration - start.ScriptDuration).toFixed(4)), loops: loops(await inventory(view.page)).length };
+          await view.close();
+        }
+        assert.ok(Math.abs(result.lively.LayoutCount - result.off.LayoutCount) <= 3, `${board} LayoutCount ${JSON.stringify(result)}`);
+        assert.ok(result.lively.TaskDuration - result.off.TaskDuration <= 0.15, `${board} TaskDuration ${JSON.stringify(result)}`);
+        assert.equal(result.lively.loops, 3, `${board}: rain at Lively runs its three drop loops`);
+        if (board === 'full') assert.ok(result.off.widgets === ACTIVE_WIDGET_IDS.length && result.lively.widgets === ACTIVE_WIDGET_IDS.length, 'the full board shows every widget');
+        checks.push(`performance over 15 s at 1280×720 ×3, ${board} board: Off ${JSON.stringify(result.off)}; Lively ${JSON.stringify(result.lively)}`);
       }
-      assert.ok(Math.abs(metrics.lively.LayoutCount - metrics.off.LayoutCount) <= 3, `LayoutCount ${JSON.stringify(metrics)}`);
-      assert.ok(metrics.lively.TaskDuration - metrics.off.TaskDuration <= 0.15, `TaskDuration ${JSON.stringify(metrics)}`);
-      assert.equal(metrics.lively.loops, 3, 'rain at Lively runs its three drop loops');
-      checks.push(`performance over 15 s at 1280×720 ×3: Off ${JSON.stringify(metrics.off)}; Lively ${JSON.stringify(metrics.lively)}`);
     }
     assert.deepEqual(errors, []);
     return { checks, metrics, images: 'none written; all state stays in RAM' };
