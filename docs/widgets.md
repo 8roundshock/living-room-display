@@ -192,13 +192,15 @@ composition stay identical.
   February 28 in common years) and Note (up to 200 characters and 4 lines). An empty
   Countdown or Note is hidden on the display and shows a placeholder in the editor.
   World clocks, Sun & moon and Air quality are the parallel unit of the same ticket.
+  The three use fixed families and sit beside a free-size Reminders span; fuller
+  boards keep relocating through the #93 reflection fallback described below.
 - **Rejected, with reasons:** timers and alarms (they need audio and on-screen
   interaction); news, stocks and sports (noise, feeds and keys); commute (keys and
   personal addresses); account calendars, fitness and cloud smart home (accounts and
   privacy); quotes (licensing and novelty clutter); PC battery and stats (not useful
   ambiently); pollen (Open-Meteo coverage is Europe only); ticking seconds (OLED
   wear and constant motion).
-- **Deferred, with tickets:** relocation on dense boards (#93), events from a local
+- **Deferred, with tickets:** events from a local
   calendar file or subscription (#94), rotating local photos (#95), Now Playing
   (#96), several instances of one widget (#97), reminder dots on the calendar (#98)
   and per-second re-fit cost (#99).

@@ -121,8 +121,10 @@ changes (trailing spaces trimmed on blur do not count), Cancel restores the save
 and built-in or saved styles never change the week start, countdowns or note (styles
 do reset which widgets are shown). Countdowns and the note are private content stored
 on this device and included in exports. `tests/ui/catalog-time-browser.mjs` checks the
-picker groups and keyboard, each panel, Save/Cancel, reload, styles, display hiding,
-320/390 px reflow, Save-bar clearance and the compact picker viewports.
+picker groups and keyboard (Weather listed, no Rain; the free-size caption only for
+Reminders), each panel, Save/Cancel, reload, styles, display hiding, a dense board where
+the three sit beside a full-height Reminders column and keep relocating, 320/390 px
+reflow, Save-bar clearance and the compact picker viewports.
 
 ## Weather and location
 
