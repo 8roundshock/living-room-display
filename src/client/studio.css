@@ -575,13 +575,18 @@ html.studio-editor {
 .inspector-group {
   margin: 28px 0 14px;
 }
+/* #137: every accent control keeps a 44 x 44 hit area. Seven fit one line in the 1280 x 720
+   inspector (Native, five colours and a kept custom colour; the picker sits on the heading line).
+   Narrower panels wrap instead of shrinking targets. */
 .studio .swatches {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 7px;
+  gap: 6px 1px;
   margin: 10px -5px 0;
 }
 .studio .swatch {
+  flex: none;
   width: 44px;
   height: 44px;
   border: 0;
@@ -620,8 +625,19 @@ html.studio-editor {
 .studio .swatch-native > span > svg {
   position: relative;
 }
-/* The current accent rides on the heading line, so naming it adds no height. */
+/* #151: a kept custom colour; its check mark switches to light on a dark colour. */
+.studio .swatch-custom > span {
+  color: var(--swatch-mark, #24222d);
+}
+/* The current accent and the custom colour picker ride on the heading line, so they add no height. */
 .studio .accent-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.studio .accent-heading h3 {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -641,6 +657,15 @@ html.studio-editor {
   flex: none;
   color: #c1b9d0;
   border-radius: 50%;
+}
+/* A 44 px target whose margin box is no taller than the heading text; it reaches up into the
+   group's top margin and stops short of the swatch row below. */
+.studio .accent-heading .custom-color {
+  margin: -16px -5px -10px 0;
+}
+.studio .accent-heading .custom-color:hover {
+  color: #ece7f6;
+  background: #ffffff0a;
 }
 .custom-color input {
   position: absolute;
@@ -771,6 +796,50 @@ html.studio-editor {
 .studio .reset-appearance {
   display: flex;
   margin-top: 10px;
+}
+/* Style → Data & recovery (#234). */
+.studio .data-hint {
+  margin: 0 0 12px;
+}
+.studio .data-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.studio .data-confirm {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #ffffff14;
+  border-radius: 13px;
+  background: #ffffff05;
+  color: #d9d6e0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.studio .data-confirm p {
+  margin: 0 0 8px;
+}
+.studio .data-confirm .hint {
+  margin: 0 0 10px;
+}
+.studio .data-confirm-title {
+  font-weight: 550;
+}
+.studio .data-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* The status line stays in the accessibility tree (a live region) and takes no room while empty. */
+.studio .inline-message.data-status {
+  min-height: 0;
+  margin: 8px 0 0;
+}
+.studio .inline-message.data-status:empty {
+  margin: 0;
+}
+.studio .inline-message.data-status.error {
+  color: #e2b4a8;
 }
 .widget-list {
   margin: 0 -9px;
@@ -1307,9 +1376,6 @@ html.studio-editor {
   .studio-savebar {
     bottom: max(12px, env(safe-area-inset-bottom));
   }
-  .studio .swatches {
-    gap: 12px;
-  }
 }
 @media (max-width: 480px) {
   .studio {
@@ -1386,9 +1452,6 @@ html.studio-editor {
   .tab-count {
     display: none;
   }
-  .studio .swatches {
-    gap: 5px;
-  }
   .studio-savebar {
     max-width: none;
     min-width: 0;
@@ -1435,9 +1498,6 @@ html.studio-editor {
   }
   .canvas-toolbar > span {
     display: none;
-  }
-  .studio .swatches {
-    flex-wrap: wrap;
   }
   .studio .input-row {
     grid-template-columns: 1fr;
@@ -1605,11 +1665,12 @@ html.studio-editor {
   .canvas-heading h1 { font-size: 20px; }
   .canvas-heading-actions { gap: 5px; }
   .studio .canvas-add { width: 36px; min-width: 36px; height: 36px; }
-  .studio .swatches { gap: 2px; }
   .inspector-tabs button { font-size: 11px; }
 }
 @media (max-width: 700px) {
   .studio-workspace { grid-template-columns: minmax(0, 1fr); }
+  /* Seven 44 px accent targets still share one line at 390 px; 320 px wraps. */
+  .studio .swatches { gap: 6px 3px; }
   .canvas-heading-actions { display: flex; gap: 8px; align-items: center; }
   .canvas-column { position: static; }
   .canvas-toolbar { flex-wrap: wrap; }

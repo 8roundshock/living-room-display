@@ -12,12 +12,16 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_IDS, widgetSizes } from '../../src/shared/widgets.ts';
-import { NATIVE_PALETTE, STATUS_TONES, WEATHER_GLYPH_TONE } from '../../src/shared/palette.ts';
+import { ACCENT_SWATCHES, NATIVE_PALETTE, STATUS_TONES, WEATHER_GLYPH_TONE } from '../../src/shared/palette.ts';
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
 import { MODES } from './weather-browser.mjs';
 
 const rgb = (hex) => `rgb(${[1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16)).join(', ')})`;
-const SAND = '#b8a17a';
+/** The current Sand swatch (#224) and the retired value older data may still store. */
+const SAND = ACCENT_SWATCHES.find((swatch) => swatch.name === 'Sand').value;
+const LEGACY_SAND = '#b8a17a';
+/** Weather's rain visuals, the only elements that may paint the --weather-rain hook (#213). */
+const RAIN_SELECTOR = '.weather-hint, .rain-detail, .rain-hours, .rain-bar, .rain-bar-unknown';
 /** The first accent-coloured element of a widget: its label, else a caption, context line or unit. */
 const ACCENT_SELECTOR = '.ambient-label, .preview-caption, .weather-context, .metric-label, .countdown-unit';
 /** Widgets whose display face is primary content only (Note's text), so nothing in them is tinted; their section still resolves the tone. */
@@ -45,12 +49,12 @@ function sections(root) {
 /**
  * Every colour a widget paints on screen: text, backgrounds, SVG fill and stroke, visible borders and
  * text strokes. Each must be the element's own resolved accent (--ambient-accent, or #74's
- * --weather-rain), the text colour, a status tone or black, so no widget hard-codes a hue (for
- * example AQI category colours) and Native redirects only the accent group. Images are skipped.
- * Returns the offending paints and the distinct accents in use.
+ * --weather-rain inside Weather's rain visuals only, #213), the text colour, a status tone or black,
+ * so no widget hard-codes a hue (for example AQI category colours) and Native redirects only the
+ * accent group. Images are skipped. Returns the offending paints and the distinct accents in use.
  */
 function paints(locator) {
-  return locator.evaluate((section, status) => {
+  return locator.evaluate((section, [status, rainSelector]) => {
     const probe = document.createElement('i'); document.body.append(probe);
     const resolve = (value) => { probe.style.color = ''; probe.style.color = value; return getComputedStyle(probe).color; };
     const channels = (color) => { const parts = color.match(/[\d.]+/g); return parts && parts.length >= 3 ? { rgb: parts.slice(0, 3).map(Number).join(','), alpha: parts.length > 3 ? Number(parts[3]) : 1 } : null; };
@@ -59,7 +63,8 @@ function paints(locator) {
     for (const el of [section, ...section.querySelectorAll('*')]) {
       if (el.closest('img, image, defs, filter, mask, clipPath') || !el.checkVisibility({ visibilityProperty: true })) continue;
       const style = getComputedStyle(el);
-      const accent = style.getPropertyValue('--ambient-accent').trim(), rain = style.getPropertyValue('--weather-rain').trim();
+      // --weather-rain is inherited by all of Weather; only the rain visuals may use it.
+      const accent = style.getPropertyValue('--ambient-accent').trim(), rain = el.closest(rainSelector) ? style.getPropertyValue('--weather-rain').trim() : '';
       const own = [accent, rain].filter(Boolean).map(resolve);
       for (const value of own) accents.add(value);
       const allowed = new Set([...own, resolve(style.getPropertyValue('--ambient-text').trim())].map((value) => channels(value).rgb).concat(fixed));
@@ -75,7 +80,7 @@ function paints(locator) {
     }
     probe.remove();
     return { bad: [...new Set(bad)], accents: [...accents].sort() };
-  }, Object.values(STATUS_TONES));
+  }, [Object.values(STATUS_TONES), RAIN_SELECTOR]);
 }
 
 /** One widget section: its resolved tone, its accent element (or that it is text-only), and no stray colour. */
@@ -120,7 +125,11 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     source.settings.widgetData.countdowns = countdowns.filter((event) => !['2026-10-18', '2026-10-19'].includes(event.date));
     source.preview = { available: true, capturedAt: at, width: 320, height: 200 };
     source.photo = { available: true, id: 'synthetic-photo', width: 320, height: 200, updatedAt: at };
-    const image = photoFixture(320, 200, Buffer.alloc((320 * 4 + 1) * 200, 90));
+    // #217: a valid mid-grey PNG (filter type 0 on every scanline, opaque), so Photo and Last screen
+    // actually paint; the paint audit skips images, and the photo check below reads its pixels.
+    const pixels = Buffer.alloc((320 * 4 + 1) * 200, 90);
+    for (let row = 0; row < 200; row++) { pixels[row * (320 * 4 + 1)] = 0; for (let x = 0; x < 320; x++) pixels[row * (320 * 4 + 1) + 1 + x * 4 + 3] = 255; }
+    const image = photoFixture(320, 200, pixels);
     let current = structuredClone(source), stateStatus = 200, photoMissing = false;
     const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
     await context.route('**/api/state', (route) => route.fulfill(stateStatus === 200 ? { contentType: 'application/json', body: JSON.stringify(current) } : { status: stateStatus, contentType: 'application/json', body: '{"error":"Synthetic outage"}' }));
@@ -216,6 +225,18 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
         assert.equal(await page.locator('.weather-body').getAttribute('data-weather-mode'), 'hint');
         assert.equal(await colorOf('.weather-hint'), expected(mode, 'water'), `${mode} ${size} rain hint`);
       }
+      // #213: outside its rain visuals Weather paints its sky tone. The audit only accepts the rain
+      // hook there, so painting Weather's unit and metric labels with it (the review mutation) fails.
+      current = weatherWith(mode, 'large', 'calm'); await open();
+      assert.ok(await page.locator('.ambient-weather .metric-label').count() > 0, 'calm large Weather shows metric labels');
+      assert.deepEqual((await paints(page.locator('[data-widget-id="weather"]'))).bad, [], `${mode} calm Weather paints no rain tone`);
+      if (mode === 'native') {
+        const mutation = await page.addStyleTag({ content: '.grid-ambient .ambient-weather .weather-unit, .grid-ambient .ambient-weather .metric-label { color: var(--weather-rain) !important; }' });
+        const mutated = (await paints(page.locator('[data-widget-id="weather"]'))).bad;
+        assert.ok(mutated.some((entry) => entry.includes('weather-unit')) && mutated.some((entry) => entry.includes('metric-label')), `the audit catches the rain tone on Weather's unit and metric labels: ${JSON.stringify(mutated)}`);
+        await mutation.evaluate((element) => element.remove());
+        assert.deepEqual((await paints(page.locator('[data-widget-id="weather"]'))).bad, [], 'removing the mutation restores a clean audit');
+      }
       // Sun & moon (#78): Gold label, arc and sun dot; the moon subtree is Lilac; the moon name is primary text.
       current = state({ mode, only: 'sunMoon', size: 'large' }); await open();
       assert.equal(await colorOf('.ambient-sunMoon .ambient-label'), expected(mode, 'sun'));
@@ -261,7 +282,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       assert.equal(await colorOf('.ambient-reminder-date'), expected(mode, 'personal'));
       assert.equal(await colorOf('.ambient-reminder-overdue'), rgb(STATUS_TONES.caution), `${mode} Overdue stays amber`);
     }
-    checks.push("Merged renderers in both modes: Weather's --weather-rain hook, rain bars, unknown hours, detail, hours and hints in Sea glass with primary timing; Sun & moon Gold with a Lilac moon subtree; World clocks day/night icons Gold/Lilac; Air quality Mist bars with no category colour; Calendar weekday label, heads and today ring Lilac with a primary date; Countdown unit Rose and a primary Today word; Note text primary; Reminders dots and dates Rose with an amber Overdue");
+    checks.push("Merged renderers in both modes: Weather's --weather-rain hook, rain bars, unknown hours, detail, hours and hints in Sea glass with primary timing, and only there (#213: a rain-hook mutation on Weather's unit and metric labels fails the audit); Sun & moon Gold with a Lilac moon subtree; World clocks day/night icons Gold/Lilac; Air quality Mist bars with no category colour; Calendar weekday label, heads and today ring Lilac with a primary date; Countdown unit Rose and a primary Today word; Note text primary; Reminders dots and dates Rose with an amber Overdue");
 
     await page.setViewportSize({ width: 1920, height: 1080 });
     for (const mode of ['native', 'color']) {
@@ -269,6 +290,21 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       const photo = await page.locator('.ambient-photo-image').evaluate((el) => ({ filter: getComputedStyle(el).filter, opacity: getComputedStyle(el).opacity }));
       assert.deepEqual(photo, { filter: 'saturate(0.3) brightness(0.45)', opacity: '0.45' }, `${mode} photo is never tinted`);
     }
+    // #217: the synthetic photo and snapshot decode and paint their grey, so the image checks see a real image.
+    const decoded = (selector) => page.locator(selector).first().evaluate(async (img) => {
+      await img.decode();
+      const canvas = document.createElement('canvas'); canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const context = canvas.getContext('2d'); context.drawImage(img, 0, 0);
+      return { width: img.naturalWidth, height: img.naturalHeight, pixel: [...context.getImageData(160, 100, 1, 1).data] };
+    });
+    current = state({ mode: 'native', only: 'photo' }); await open(); await page.locator('.ambient-photo-image').waitFor();
+    assert.deepEqual(await decoded('.ambient-photo-image'), { width: 320, height: 200, pixel: [90, 90, 90, 255] }, 'the synthetic photo paints');
+    current = state({ mode: 'native', only: 'preview' }); await open(); await page.locator('.preview-image').waitFor();
+    assert.deepEqual(await decoded('.preview-image'), { width: 320, height: 200, pixel: [90, 90, 90, 255] }, 'the synthetic last screen paints');
+    // #224: data that stores the retired Sand renders the retuned Sand everywhere, root included.
+    current = state({ mode: 'color' }); current.settings.appearance.accentColor = LEGACY_SAND; current.settings.widgets.photo = false; await open();
+    assert.equal(await page.locator('.ambient').first().evaluate((el) => getComputedStyle(el).getPropertyValue('--ambient-accent').trim().toLowerCase()), SAND, 'the ambient root renders the retuned Sand');
+    for (const section of await sections(page)) await assertSection(section, 'color', 'stored retired Sand', page.locator(`[data-widget-id="${section.id}"]`));
     const glyphs = [[0, true, 'sun', 'sun'], [0, false, 'moon', 'time'], [3, true, 'cloud', 'stone'], [63, true, 'rain', 'water'], [73, true, 'snow', 'sky'], [95, true, 'storm', 'water']];
     for (const mode of ['native', 'color']) {
       for (const [code, isDay, glyph, role] of glyphs) {
@@ -292,7 +328,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       stateStatus = 503; await page.clock.runFor(30001); await page.locator('.weather-age').filter({ hasText: 'Offline' }).waitFor(); stateStatus = 200;
       assert.equal(await colorOf('.weather-age.stale'), rgb(STATUS_TONES.caution), `${mode} offline age keeps the status tone`);
     }
-    checks.push('Weather glyphs by code (clear day Gold, clear night Lilac, cloud Stone, rain/storm Sea glass, snow Mist) in Weather and Forecast; stale and offline ages stay amber; photos are never tinted; color mode keeps the single accent everywhere');
+    checks.push('Weather glyphs by code (clear day Gold, clear night Lilac, cloud Stone, rain/storm Sea glass, snow Mist) in Weather and Forecast; stale and offline ages stay amber; photos are never tinted and the synthetic photo and snapshot actually paint (#217); color mode keeps the single accent everywhere, and a stored retired Sand renders the retuned Sand (#224)');
 
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       await page.setViewportSize(viewport);
@@ -355,6 +391,29 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     await save(p); assert.equal(appearance().accentMode, 'color'); assert.equal(appearance().accentColor, '#123456');
     checks.push('Cancel restores Native; a swatch after Native selects color with that swatch; the custom colour input switches to color');
 
+    // #151: the kept custom colour is a pressed swatch. After Native, one activation (no colour input,
+    // so nothing relies on fill() of an unchanged value) restores it; the Save bar follows the saved state.
+    const custom = () => swatch(p, 'Custom colour');
+    assert.equal(await pressed(p, 'Custom colour'), true, 'the saved custom colour shows as a pressed swatch');
+    assert.equal(await custom().getAttribute('title'), 'Custom colour #123456');
+    await nativeSwatch.click(); await saveBar(p).waitFor();
+    assert.equal(await pressed(p, 'Custom colour'), false); assert.equal(await heading(p), 'Native');
+    await custom().click();
+    assert.equal(await pressed(p, 'Custom colour'), true); assert.equal(await heading(p), 'Custom'); assert.equal(await canvasMode(p), 'color');
+    await saveBar(p).waitFor({ state: 'detached' });
+    await nativeSwatch.click(); await save(p);
+    assert.deepEqual([appearance().accentMode, appearance().accentColor], ['native', '#123456'], 'Native keeps the custom colour');
+    await p.reload(); await p.getByRole('tab', { name: 'Style', exact: true }).click();
+    assert.equal(await pressed(p, 'Custom colour'), false); assert.equal(await pressed(p, 'Native colours'), true);
+    await custom().click(); await saveBar(p).waitFor();
+    assert.equal(await p.locator('.preview-surface .ambient-clock .ambient-label').evaluate((el) => getComputedStyle(el).color), rgb('#123456'), 'the canvas shows the restored custom colour');
+    await save(p); assert.deepEqual([appearance().accentMode, appearance().accentColor], ['color', '#123456']);
+    // A swatch replaces the colour in the draft; the saved custom colour stays one activation away until another colour is saved.
+    await swatch(p, 'Mist').click(); await saveBar(p).waitFor();
+    assert.equal(await pressed(p, 'Custom colour'), false, 'the saved custom colour is still offered');
+    await custom().click(); await saveBar(p).waitFor({ state: 'detached' });
+    checks.push('#151 a kept custom colour is a named, pressed swatch; from Native (also after reload) one activation restores it, the Save bar appears only while the restored state differs, and it stays offered while a swatch is only a draft');
+
     for (const preset of ['Phone', 'Room', 'Night']) {
       await p.getByRole('button', { name: preset, exact: true }).click();
       assert.equal(await pressed(p, 'Native colours'), true, `${preset} applies Native`); assert.equal(await canvasMode(p), 'native');
@@ -363,6 +422,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     }
     await save(p);
     assert.deepEqual({ preset: appearance().preset, accentMode: appearance().accentMode, brightness: appearance().brightness, accentColor: appearance().accentColor }, { preset: 'night', accentMode: 'native', brightness: 0.28, accentColor: '#9990b7' });
+    assert.equal(await swatch(p, 'Custom colour').count(), 0, "a built-in style's own single colour is not offered as a custom colour (#151)");
     checks.push('Phone, Room and Night apply Native with their own brightness and accent colour; miniatures show Lilac, Mist and Rose bars');
 
     await p.getByText('Saved styles', { exact: true }).click();
@@ -384,35 +444,69 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     await save(p);
     assert.equal(appearance().accentMode, 'native'); assert.equal(appearance().brightness, 0.4);
     checks.push('A polling rebase keeps a local Native choice while the saved brightness changes');
-    // Default contents: a fresh editor with every disclosure closed.
-    await studio.close(); ({ studio, page: p } = await editor());
+    // #224: data that stores the retired Sand reads as Sand and renders the retuned value. Returning to
+    // Sand from Native or another swatch is not an edit, and the stored value is never rewritten.
+    await studio.close();
+    await app.store.update((data) => { data.settings.appearance.accentMode = 'color'; data.settings.appearance.accentColor = LEGACY_SAND; });
+    ({ studio, page: p } = await editor());
+    assert.equal(await pressed(p, 'Sand'), true); assert.equal(await heading(p), 'Sand');
+    assert.equal(await swatch(p, 'Custom colour').count(), 0, 'the retired Sand is not a custom colour');
+    assert.equal(await saveBar(p).count(), 0, 'reading it is not an edit');
+    assert.equal(await p.locator('.preview-surface .ambient-clock .ambient-label').evaluate((el) => getComputedStyle(el).color), rgb(SAND), 'the canvas renders the retuned Sand');
+    await swatch(p, 'Native colours').click(); await saveBar(p).waitFor();
+    await swatch(p, 'Sand').click(); await saveBar(p).waitFor({ state: 'detached' });
+    await swatch(p, 'Mist').click(); await saveBar(p).waitFor();
+    await swatch(p, 'Sand').click(); await saveBar(p).waitFor({ state: 'detached' });
+    assert.equal(appearance().accentColor, LEGACY_SAND, 'the stored value is unchanged');
+    await studio.close();
+    checks.push('#224 a stored retired Sand is selected as Sand (no custom swatch) and renders the retuned value; Native or Mist and back to Sand is not an edit; the stored value is unchanged');
 
+    // #137: every accent control (Native, the five colours, a kept custom colour and the picker on the
+    // heading line) keeps a 44 x 44 hit area with no overlap. At 1280 x 720 the row stays one line and
+    // the Style tab's default contents still fit; nothing overflows at 760, 390 or 320 px.
     const fits = () => p.evaluate(() => {
       const panel = document.querySelector('.inspector-panel'), panelBox = panel.getBoundingClientRect(), group = document.querySelector('.swatches').closest('.inspector-group').getBoundingClientRect();
       return { overflow: panel.scrollHeight - panel.clientHeight, scrolled: panel.scrollTop, accentInside: group.top >= panelBox.top && group.bottom <= panelBox.bottom, pageOverflow: document.documentElement.scrollWidth - innerWidth };
     });
-    const atDesktop = await fits();
-    assert.ok(atDesktop.overflow <= 1 && atDesktop.accentInside && atDesktop.pageOverflow <= 0, `Style tab fits at 1280x720: ${JSON.stringify(atDesktop)}`);
-    await keep('style-tab-1280x720-native', await p.screenshot());
-    await p.setViewportSize({ width: 1280, height: 600 });
-    const atShort = await fits();
-    assert.ok(atShort.scrolled === 0 && atShort.accentInside && atShort.pageOverflow <= 0, `Accent row visible without scrolling at 1280x600: ${JSON.stringify(atShort)}`);
-    await studio.close();
-    checks.push('Style tab fits without scrolling at 1280x720; at 1280x600 presets through the Accent row are visible without scrolling');
-
-    for (const width of [390, 320]) {
-      ({ studio, page: p } = await editor({ width, height: 844 }));
-      const row = await p.locator('.swatches').evaluate((el) => {
-        const box = el.getBoundingClientRect();
-        return { overflow: el.scrollWidth - el.clientWidth, outside: [...el.children].filter((child) => { const r = child.getBoundingClientRect(); return r.left < box.left - 1 || r.right > box.right + 1; }).length, rows: new Set([...el.children].map((child) => Math.round(child.getBoundingClientRect().top))).size, pageOverflow: document.documentElement.scrollWidth - innerWidth, smallest: Math.min(...[...el.children].map((child) => child.getBoundingClientRect().width)) };
-      });
-      assert.ok(row.overflow <= 0 && row.outside === 0 && row.pageOverflow <= 0 && row.smallest >= 36, `${width}px swatch row: ${JSON.stringify(row)}`);
-      if (width === 320) assert.ok(row.rows >= 2, `320px swatch row wraps: ${JSON.stringify(row)}`);
-      await keep(`style-tab-${width}`, await p.locator('.inspector-group').filter({ has: p.locator('.swatches') }).screenshot());
-      await studio.close();
+    const accentTargets = () => p.evaluate(() => {
+      const row = document.querySelector('.swatches'), rowBox = row.getBoundingClientRect();
+      const controls = [...row.children, document.querySelector('.accent-heading .custom-color')];
+      const boxes = controls.map((el) => { const r = el.getBoundingClientRect(); return { name: el.getAttribute('aria-label') ?? el.querySelector('input')?.getAttribute('aria-label'), left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; });
+      const overlaps = [];
+      for (const [index, a] of boxes.entries()) for (const b of boxes.slice(index + 1)) if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) overlaps.push(a.name + ' / ' + b.name);
+      return { boxes, overlaps, rows: new Set([...row.children].map((child) => Math.round(child.getBoundingClientRect().top))).size, overflow: row.scrollWidth - row.clientWidth,
+        outside: [...row.children].filter((child) => { const r = child.getBoundingClientRect(); return r.left < rowBox.left - 1 || r.right > rowBox.right + 1; }).length, pageOverflow: document.documentElement.scrollWidth - innerWidth };
+    });
+    for (const kept of [false, true]) {
+      await reset();
+      if (kept) await app.store.update((data) => { data.settings.appearance.accentMode = 'native'; data.settings.appearance.accentColor = '#123456'; });
+      for (const viewport of [{ width: 1280, height: 720 }, { width: 760, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 844 }]) {
+        ({ studio, page: p } = await editor(viewport));
+        const label = viewport.width + 'x' + viewport.height + (kept ? ' with a kept custom colour' : '');
+        const targets = await accentTargets();
+        assert.deepEqual(targets.boxes.map((box) => box.name), ['Native colours', ...ACCENT_SWATCHES.map((item) => item.name), ...(kept ? ['Custom colour'] : []), 'Custom accent color'], label);
+        for (const box of targets.boxes) assert.ok(box.width >= 43.99 && box.height >= 43.99, label + ': ' + box.name + ' hit area ' + box.width + 'x' + box.height);
+        assert.deepEqual(targets.overlaps, [], label + ': hit areas do not overlap');
+        assert.ok(targets.overflow <= 0 && targets.outside === 0 && targets.pageOverflow <= 0, label + ': ' + JSON.stringify(targets));
+        if (viewport.width === 1280) {
+          assert.equal(targets.rows, 1, label + ': one line of accent targets');
+          const atDesktop = await fits();
+          assert.ok(atDesktop.overflow <= 1 && atDesktop.accentInside && atDesktop.pageOverflow <= 0, label + ': the Style tab fits ' + JSON.stringify(atDesktop));
+          await keep('style-tab-1280x720' + (kept ? '-custom' : ''), await p.screenshot());
+          await p.setViewportSize({ width: 1280, height: 600 });
+          const atShort = await fits();
+          assert.ok(atShort.scrolled === 0 && atShort.accentInside && atShort.pageOverflow <= 0, 'Accent row visible without scrolling at 1280x600: ' + JSON.stringify(atShort));
+        }
+        if (viewport.width === 390) assert.equal(targets.rows, 1, label + ': one line at 390 px');
+        if (viewport.width === 320) assert.ok(targets.rows >= 2, label + ': the row wraps at 320 px');
+        if (viewport.width <= 390) await keep('style-tab-' + viewport.width + (kept ? '-custom' : ''), await p.locator('.inspector-group').filter({ has: p.locator('.swatches') }).screenshot());
+        await studio.close();
+      }
     }
-    checks.push('The swatch row stays inside the panel without horizontal overflow at 390px and wraps at 320px');
+    checks.push('#137 every accent control (Native, five colours, a kept custom colour, the heading-line picker) has a 44x44 hit area without overlap at 1280x720, 760x900, 390 and 320 px; one line at 1280x720 and 390 px, wrapping at 320 px, no horizontal overflow; the Style tab still fits at 1280x720 and shows the Accent row at 1280x600');
 
+    // Picker samples start from a saved Native draft.
+    await reset(); await app.store.update((data) => { data.settings.appearance.accentMode = 'native'; });
     ({ studio, page: p } = await editor({ width: 1280, height: 720 }));
     const sampleExpected = (mode, role) => rgb(mode === 'native' ? NATIVE_PALETTE[role].hex : SAND);
     await p.getByRole('button', { name: 'Add widget to display' }).click();

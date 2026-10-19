@@ -1,14 +1,42 @@
-import type { CSSProperties } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { widgetContentLimits } from '../../shared/widgets.ts';
-import { ageLabel, forecastDay, temperature } from '../format.ts';
+import { ageLabel, civilDate, forecastDay, temperature, upcomingDays, weatherTimeZone } from '../format.ts';
 import { Icon } from '../icons.tsx';
 import { TransitionText } from './TransitionText.tsx';
 import { WeatherGlyph } from './WeatherGlyph.tsx';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
 
+/**
+ * The next days from the weather city's civil today: days before it never fill the strip, however
+ * old the saved forecast (#243). Labels read Today, then weekdays (#256); assistive text and the
+ * hover title keep “Tomorrow, 2026-10-20”. Day labels are memoized per civil date (#99).
+ */
 function Forecast({ state: { weather }, size, now, disconnected }: WidgetContentProps) {
   const count = widgetContentLimits(size).forecastDays;
-  return <div className="widget-body forecast-body"><div className="forecast-heading"><div className="ambient-label">{count === 7 ? 'The week' : `Next ${count} days`}</div><div className="weather-context">{weather.location.name} · {weather.units.temperature}</div></div>{weather.daily.length ? <div className="forecast-strip" style={{ '--forecast-days': Math.min(count, weather.daily.length) } as CSSProperties}>{weather.daily.slice(0, count).map(day => <div className="forecast-day" key={day.date}><span className="forecast-day-label" aria-label={`${forecastDay(day.date, weather.location.timezone, now)}, ${day.date}`} title={`${forecastDay(day.date, weather.location.timezone, now)}, ${day.date}`}>{forecastDay(day.date, weather.location.timezone, now, true)}</span>{day.weatherCode === null ? <span className="forecast-unknown" aria-label="Conditions unavailable">—</span> : <WeatherGlyph code={day.weatherCode} size={null} />}<div className="forecast-temperatures"><TransitionText value={temperature(day.temperatureMax)} /><TransitionText className="forecast-low" value={temperature(day.temperatureMin)} /></div><span className="forecast-rain"><Icon name="rain" size={null} /><TransitionText value={day.precipitationProbability === null ? '—' : `${day.precipitationProbability}%`} /></span></div>)}</div> : <div className="ambient-title">Forecast unavailable</div>}<div className="forecast-attribution">{disconnected ? 'Offline · ' : weather.status === 'stale' ? 'Saved forecast · ' : ''}{weather.source} · {ageLabel(weather.updatedAt, now.getTime())}</div></div>;
+  // The city's zone, or this computer's while a device location is still `auto` (no forecast yet).
+  const timeZone = useMemo(() => weatherTimeZone(weather.location.timezone), [weather.location.timezone]);
+  const minute = Math.floor(now.getTime() / 60_000) * 60_000;
+  const today = useMemo(() => civilDate(minute, timeZone), [minute, timeZone]);
+  // Recomputed when the civil date, the saved days or the family change, not every tick; `minute`
+  // is always an instant on `today` when this runs.
+  const days = useMemo(() => upcomingDays(weather.daily, today).slice(0, count).map(day => ({
+    day, label: forecastDay(day.date, timeZone, minute, true), full: `${forecastDay(day.date, timeZone, minute)}, ${day.date}`,
+  })), [weather.daily, today, timeZone, count]);
+  // The heading counts the days actually shown: a saved forecast with four days left reads “Next 4 days”.
+  const shown = days.length || count;
+  const heading = shown === 7 ? 'The week' : shown === 1 ? 'Today' : `Next ${shown} days`;
+  const status = disconnected ? 'Offline' : weather.status === 'stale' ? 'Saved forecast' : null;
+  return <div className="widget-body forecast-body">
+    <div className="forecast-heading"><div className="ambient-label">{heading}</div><div className="weather-context">{weather.location.name} · {weather.units.temperature}</div></div>
+    {days.length ? <div className="forecast-strip" style={{ '--forecast-days': days.length } as CSSProperties}>{days.map(({ day, label, full }) => <div className="forecast-day" key={day.date}>
+      <span className="forecast-day-label" aria-label={full} title={full}>{label}</span>
+      {day.weatherCode === null ? <span className="forecast-unknown" aria-label="Conditions unavailable">—</span> : <WeatherGlyph code={day.weatherCode} size={null} />}
+      <div className="forecast-temperatures"><TransitionText value={temperature(day.temperatureMax)} /><TransitionText className="forecast-low" value={temperature(day.temperatureMin)} /></div>
+      <span className="forecast-rain"><Icon name="rain" size={null} /><TransitionText value={day.precipitationProbability === null ? '—' : `${day.precipitationProbability}%`} /></span>
+    </div>)}</div> : <div className="ambient-title">Forecast unavailable</div>}
+    {/* The status prefix uses the shared status tone at full opacity (#223); small sets it on its own line (#221). */}
+    <div className="forecast-attribution">{status && <><span className="forecast-status status-caution">{status}</span><span className="forecast-separator"> · </span></>}<span className="forecast-source">{weather.source} · <span className="forecast-age">{ageLabel(weather.updatedAt, now.getTime())}</span></span></div>
+  </div>;
 }
 
 export const ForecastWidget: WidgetModule = { Renderer: Forecast };

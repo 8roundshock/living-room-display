@@ -21,6 +21,12 @@ function reminders(count, now) {
   }));
 }
 
+/** The #254 example: six pending reminders, one with a title that needs three or four lines in a narrow column. */
+const LONG_TITLE = 'Renew passport — photos first, then the online form';
+function longList(now) {
+  return reminders(6, now).map((reminder, index) => index === 2 ? { ...reminder, text: LONG_TITLE } : reminder);
+}
+
 /** 2×2, 4×2, 4×4, Column, 4 × full height, max width × 2 and 3×5 in one density. */
 function shapes(density) {
   const { rows } = GRID_DENSITIES[density], max = freeSpanLimits('reminders', density).max;
@@ -56,6 +62,11 @@ async function inspect(widget) {
       moreInside: more ? inside(more) : true,
       labelInside: inside(label),
       horizontal: visible.filter(row => { const title = row.querySelector('.ambient-reminder-title'); return title.scrollWidth > title.clientWidth + 1; }).length,
+      titles: visible.map(row => {
+        const title = row.querySelector('.ambient-reminder-title'), style = getComputedStyle(title);
+        return { text: title.textContent, size: parseFloat(style.fontSize), clamp: Number(style.webkitLineClamp), lines: Math.round(title.offsetHeight / (parseFloat(style.fontSize) * 1.2)), cut: (() => { const clamped = title.offsetHeight; title.style.webkitLineClamp = 'none'; const full = title.offsetHeight; title.style.webkitLineClamp = ''; return full > clamped + 1; })() };
+      }),
+      displayHeight: element.closest('.ambient').getBoundingClientRect().height,
       top: shown[0].getBoundingClientRect().top - box.top,
       bottom: box.bottom - Math.max(...shown.map(child => child.getBoundingClientRect().bottom)),
       justify: getComputedStyle(body).justifyContent,
@@ -110,6 +121,33 @@ export async function sweep({ page, viewport, state, base, now }) {
     // The #73 request: a tall box lists more reminders, never one item plus "+29 more".
     assert.ok(counts['column/30'] > counts['2x2/30'] && counts['column/30'] >= 4, `${density}/${viewport.width}p: a Column shows more rows ${JSON.stringify(counts)}`);
     assert.ok(counts['4xfull/30'] > counts['4x2/30'], `${density}/${viewport.width}p: 4 × full height shows more rows than 4×2 ${JSON.stringify(counts)}`);
+  }
+
+  // #254: when every pending reminder fits a tall column, a long title shows in full (up to four lines)
+  // instead of being cut while the column stays half empty, and titles may grow toward the 3.2% cap.
+  // 2 × and 3 × full height in every density (2×8 and 3×8 in Balanced), also at 1280×720 from 1080p.
+  for (const view of fourK ? [viewport] : [{ width: 1280, height: 720 }, viewport]) {
+    if (view !== viewport) await page.setViewportSize(view);
+    for (const density of Object.keys(GRID_DENSITIES)) for (const columns of [2, 3]) {
+      const span = { columns, rows: GRID_DENSITIES[density].rows };
+      single(state, density, span); state.reminders = longList(now);
+      await reopen(page);
+      const label = `long title ${columns}x${span.rows}/${density}/${view.width}p`;
+      const result = await inspect(widget);
+      assertMeasured(result, longList(now).length, label);
+      assert.equal(result.scale, 1, `${label}: no zoom-out`);
+      assertAnchor(result, false, label);
+      assert.equal(result.more, null, `${label}: every reminder fits the column ${JSON.stringify(result)}`);
+      const long = result.titles.find(title => title.text === LONG_TITLE);
+      assert.ok(long, `${label}: the long title is listed`);
+      assert.equal(long.cut, false, `${label}: the long title shows in full ${JSON.stringify(long)}`);
+      assert.ok(long.lines <= 4 && long.clamp >= long.lines, `${label}: up to four lines ${JSON.stringify(long)}`);
+      // A two-cell column is too narrow for the title in two lines, so only the relaxed clamp shows it.
+      if (columns === 2) assert.ok(long.lines > 2 && long.clamp > 2, `${label}: the relaxed clamp shows the title in full ${JSON.stringify(long)}`);
+      assert.ok(result.titles.every(title => !title.cut), `${label}: no title is cut`);
+      for (const title of result.titles) assert.ok(title.size <= result.displayHeight * 0.032 + 0.5, `${label}: ${title.size}px stays within the display cap`);
+    }
+    if (view !== viewport) await page.setViewportSize(viewport);
   }
 
   // Timed compositions on the display: a lone full-height column moves sideways and alternates its anchor.
@@ -172,5 +210,5 @@ export async function sweep({ page, viewport, state, base, now }) {
     assert.equal(getWidgetRect(board, 'reminders').height, 100);
     await page.goto(`${base}/display`); await page.locator('.display-page').waitFor();
   }
-  return 'Free-size Reminders: 2×2, 4×2, 4×4, Column, 4 × full, max width × 2 and 3×5 × 3 densities × 1080p/4K × 1, 5 and 30 pending keep the measured list; a full-height column relocates sideways, alternates top/bottom anchoring without clipping or changing "+N more", and editor arrangements 1–4 stay disjoint';
+  return 'Free-size Reminders: 2×2, 4×2, 4×4, Column, 4 × full, max width × 2 and 3×5 × 3 densities × 1080p/4K × 1, 5 and 30 pending keep the measured list; 2 × and 3 × full-height columns at 720p/1080p/4K show a long title in full when every reminder fits (#254); a full-height column relocates sideways, alternates top/bottom anchoring without clipping or changing "+N more", and editor arrangements 1–4 stay disjoint';
 }

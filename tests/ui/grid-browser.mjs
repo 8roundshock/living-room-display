@@ -664,7 +664,12 @@ export async function runGridQa({ playwright, edge } = {}) {
         assert.ok(
           labels.some(
             (label) =>
-              label.text === 'Tom.' && label.full.startsWith('Tomorrow, '),
+              // Compact labels name tomorrow by its weekday (#256); assistive text keeps Tomorrow.
+              label.full.startsWith('Tomorrow, ') &&
+              label.text ===
+                new Intl.DateTimeFormat('en', { weekday: 'short', timeZone: 'UTC' }).format(
+                  new Date(`${label.full.slice(-10)}T12:00:00Z`),
+                ),
           ),
         );
         for (const label of labels) {

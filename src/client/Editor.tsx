@@ -14,15 +14,31 @@ import type {
   WidgetId,
 } from '../shared/contracts';
 import { defaultSettings } from '../shared/defaults';
-import { ACCENT_SWATCHES, NATIVE_PALETTE } from '../shared/palette';
+import { ACCENT_SWATCHES, NATIVE_PALETTE, accentSwatch } from '../shared/palette';
 import { api } from './api';
+import {
+  BACKUP_MAX_BYTES,
+  BackupError,
+  backupContents,
+  backupDate,
+  parseBackup,
+  type BackupFile,
+} from './backup';
 import { AmbientDisplay } from './Display';
 import {
   ageLabel,
   nextComposition,
 } from './format';
 import { Icon } from './icons';
-import { applyBuiltinPreset, getVisual, reminderPresentation } from './model';
+import {
+  BUILTIN_PRESETS,
+  applyBuiltinPreset,
+  builtinLook,
+  getVisual,
+  matchingBuiltinPreset,
+  reminderPresentation,
+  resetAppearance,
+} from './model';
 import { browserLocationPlatform, getDeviceLocation } from './location';
 import {
   rebaseSettings,
@@ -64,6 +80,14 @@ import {
   type RoomRequest,
 } from './make-room';
 const sections = ['Style', 'Widgets', 'Weather', 'Reminders'] as const;
+/** A check mark colour that stays visible on any custom accent swatch. */
+function readableMark(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((index) => {
+    const value = parseInt(hex.slice(index, index + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b! > 0.18 ? '#24222d' : '#ece8f4';
+}
 type Section = (typeof sections)[number];
 
 function Toggle({
@@ -173,6 +197,13 @@ export function Editor({
     photoId = useRef(state.photo?.id ?? null);
   const [presetName, setPresetName] = useState(''),
     [presetId, setPresetId] = useState('');
+  // Style → Data & recovery (#234): a checked backup awaiting confirmation, the section's status
+  // line, an import in flight and the inline Reset appearance question.
+  const [backup, setBackup] = useState<BackupFile | null>(null),
+    [dataMessage, setDataMessage] = useState<{ text: string; error?: boolean } | null>(null),
+    [restoring, setRestoring] = useState(false),
+    [confirmReset, setConfirmReset] = useState(false);
+  const backupInput = useRef<HTMLInputElement>(null);
   const [locationQuery, setLocationQuery] = useState(''),
     [locationMessage, setLocationMessage] = useState('');
   const [locationBusy, setLocationBusy] = useState(false);
@@ -615,7 +646,103 @@ export function Editor({
     }));
     setPresetId(id);
   }
+  // Data & recovery questions belong to the Style tab; leaving it drops them.
+  useEffect(() => {
+    if (section === 'Style') return;
+    setBackup(null);
+    setConfirmReset(false);
+    setDataMessage(null);
+  }, [section]);
+  const unsavedBeforeRestore = 'Save or cancel your changes before restoring a backup.';
+  /** Restore from backup (#234): refused while edits are unsaved, which a restore would otherwise mix in. */
+  function chooseBackup() {
+    setConfirmReset(false);
+    setBackup(null);
+    if (dirty || saving) {
+      setDataMessage({ text: unsavedBeforeRestore, error: true });
+      return;
+    }
+    setDataMessage(null);
+    backupInput.current?.click();
+  }
+  async function readBackup(file: File) {
+    try {
+      if (file.size > BACKUP_MAX_BYTES)
+        throw new BackupError(
+          'That file is too large to be a backup. Choose one made with Export saved data.',
+        );
+      const parsed = parseBackup(await file.text());
+      if (!mounted.current) return;
+      setBackup(parsed);
+      setDataMessage(null);
+    } catch (caught) {
+      if (!mounted.current) return;
+      setBackup(null);
+      setDataMessage({
+        text: caught instanceof BackupError ? caught.message : 'Could not read that file.',
+        error: true,
+      });
+    }
+  }
+  async function restoreBackup() {
+    const chosen = backup;
+    if (!chosen || restoring) return;
+    if (dirty || saving) {
+      setDataMessage({ text: unsavedBeforeRestore, error: true });
+      return;
+    }
+    setRestoring(true);
+    setDataMessage({ text: 'Restoring…' });
+    try {
+      // The server validates it again and keeps the replaced state as state.backup.json.
+      await api('/api/import', { method: 'POST', body: JSON.stringify(chosen) });
+      if (!mounted.current) return;
+      setBackup(null);
+      // The draft is clean, so the refreshed state replaces it; local photo, grid and style form state go too.
+      cancelChanges();
+      setDataMessage({ text: `Backup restored: ${backupContents(chosen)}.` });
+      await reload();
+    } catch (caught) {
+      if (mounted.current)
+        setDataMessage({
+          text: `Could not restore the backup. ${caught instanceof Error ? caught.message : ''}`.trim(),
+          error: true,
+        });
+    } finally {
+      if (mounted.current) setRestoring(false);
+    }
+  }
+  function confirmResetAppearance() {
+    const after = resetAppearance(draftRef.current);
+    setConfirmReset(false);
+    setPresetId('');
+    change(() => after);
+    setDataMessage({
+      text: sameEffectiveSettings(savedRef.current, after)
+        ? 'Appearance is back to the defaults.'
+        : 'Appearance reset. Save changes to keep it.',
+    });
+  }
   const pendingCount = state.reminders.filter((item) => !item.completed).length;
+  // The built-in style whose look is showing (#153): pressed whenever applying it changes nothing.
+  const lookPreset = matchingBuiltinPreset(draft.appearance);
+  // #151: the kept custom colour (the draft's, else the saved one), selectable again after Native.
+  // A built-in style's own single colour is not one the user chose, so it is offered only while it
+  // is the accent (for example older data that applied Night before Native colours).
+  const customAccent =
+    draft.appearance.accentMode === 'color' && !accentSwatch(draft.appearance.accentColor)
+      ? draft.appearance.accentColor
+      : ([draft.appearance.accentColor, saved.appearance.accentColor].find(
+          (color) =>
+            !accentSwatch(color) &&
+            !BUILTIN_PRESETS.some(
+              (preset) => builtinLook(preset).accentColor === color.toLowerCase(),
+            ),
+        ) ?? null);
+  const customActive =
+    customAccent !== null &&
+    draft.appearance.accentMode === 'color' &&
+    draft.appearance.accentColor.toLowerCase() === customAccent.toLowerCase();
   const weatherPending =
     !same(draft.location, state.settings.location) ||
     draft.locationSource !== state.settings.locationSource ||
@@ -870,11 +997,12 @@ export function Editor({
               <>
                 <h2>Make it yours</h2>
                 <div className="preset-list">
-                  {(['phone', 'room', 'night'] as const).map((preset) => (
+                  {BUILTIN_PRESETS.map((preset) => (
                     <button
                       key={preset}
-                      className={`preset-button ${draft.appearance.preset === preset ? 'active' : ''}`}
-                      aria-pressed={draft.appearance.preset === preset}
+                      className={`preset-button ${lookPreset === preset ? 'active' : ''}`}
+                      aria-pressed={lookPreset === preset}
+                      title="Sets brightness, colours and typeface; widgets, Text size and motion stay"
                       onClick={() => {
                         change((previous) =>
                           applyBuiltinPreset(previous, preset),
@@ -898,7 +1026,7 @@ export function Editor({
                       </span>
                       <span className="preset-label">
                         {preset[0].toUpperCase() + preset.slice(1)}
-                        {draft.appearance.preset === preset && (
+                        {lookPreset === preset && (
                           <Icon name="check" size={13} />
                         )}
                       </span>
@@ -922,18 +1050,38 @@ export function Editor({
                   onChange={(value) => appearance('fontScale', value / 100)}
                 />
                 <div className="inspector-group">
-                  <h3 className="accent-heading">
-                    Accent{' '}
-                    <span className="accent-current">
-                      {draft.appearance.accentMode === 'native'
-                        ? 'Native'
-                        : (ACCENT_SWATCHES.find(
-                            (swatch) =>
-                              swatch.value ===
-                              draft.appearance.accentColor.toLowerCase(),
-                          )?.name ?? 'Custom')}
-                    </span>
-                  </h3>
+                  {/* #137: the custom colour picker rides on the heading line, so the row keeps
+                      44 px targets on one line at 1280×720 even with a kept custom colour. */}
+                  <div className="accent-heading">
+                    <h3>
+                      Accent{' '}
+                      <span className="accent-current">
+                        {draft.appearance.accentMode === 'native'
+                          ? 'Native'
+                          : (accentSwatch(draft.appearance.accentColor)?.name ?? 'Custom')}
+                      </span>
+                    </h3>
+                    <label className="custom-color" title="Choose a custom colour">
+                      <input
+                        type="color"
+                        aria-label="Custom accent color"
+                        value={draft.appearance.accentColor}
+                        onChange={(event) => {
+                          const accentColor = event.target.value;
+                          change((previous) => ({
+                            ...previous,
+                            appearance: {
+                              ...previous.appearance,
+                              accentMode: 'color',
+                              accentColor,
+                              preset: 'custom',
+                            },
+                          }));
+                        }}
+                      />
+                      <Icon name="plus" size={15} />
+                    </label>
+                  </div>
                   <div className="swatches">
                     <button
                       className={`swatch swatch-native ${draft.appearance.accentMode === 'native' ? 'active' : ''}`}
@@ -966,7 +1114,7 @@ export function Editor({
                     {ACCENT_SWATCHES.map((color) => {
                       const active =
                         draft.appearance.accentMode !== 'native' &&
-                        draft.appearance.accentColor.toLowerCase() ===
+                        accentSwatch(draft.appearance.accentColor)?.value ===
                           color.value;
                       return (
                         <button
@@ -984,7 +1132,16 @@ export function Editor({
                               appearance: {
                                 ...previous.appearance,
                                 accentMode: 'color',
-                                accentColor: color.value,
+                                // A kept value of this swatch, including a retired one (#224),
+                                // stays as stored, so returning to it is not an edit.
+                                accentColor:
+                                  [
+                                    previous.appearance.accentColor,
+                                    savedRef.current.appearance.accentColor,
+                                  ].find(
+                                    (value) =>
+                                      accentSwatch(value)?.value === color.value,
+                                  ) ?? color.value,
                                 preset: 'custom',
                               },
                             }));
@@ -996,27 +1153,37 @@ export function Editor({
                         </button>
                       );
                     })}
-                    <label className="custom-color" title="Custom accent">
-                      <span className="sr-only">Custom accent color</span>
-                      <input
-                        type="color"
-                        aria-label="Custom accent color"
-                        value={draft.appearance.accentColor}
-                        onChange={(event) => {
-                          const accentColor = event.target.value;
+                    {customAccent && (
+                      // #151: a kept custom colour is one activation away, also after Native.
+                      <button
+                        className={`swatch swatch-custom ${customActive ? 'active' : ''}`}
+                        style={
+                          {
+                            '--swatch': customAccent,
+                            '--swatch-mark': readableMark(customAccent),
+                          } as React.CSSProperties
+                        }
+                        aria-label="Custom colour"
+                        title={`Custom colour ${customAccent}`}
+                        aria-pressed={customActive}
+                        onClick={() => {
+                          if (customActive) return;
                           change((previous) => ({
                             ...previous,
                             appearance: {
                               ...previous.appearance,
                               accentMode: 'color',
-                              accentColor,
+                              accentColor: customAccent,
                               preset: 'custom',
                             },
                           }));
                         }}
-                      />
-                      <Icon name="plus" size={15} />
-                    </label>
+                      >
+                        <span>
+                          {customActive && <Icon name="check" size={14} />}
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
                 <details className="disclosure motion-disclosure">
@@ -1061,13 +1228,14 @@ export function Editor({
                         </p>
                       )}
                     </div>
+                    {/* #240: plain names for motionEnabled and motionIntervalSeconds. */}
                     <Toggle
-                      label="Soft motion"
+                      label="Drift and fade between moves"
                       checked={draft.appearance.motionEnabled}
                       onChange={(value) => appearance('motionEnabled', value)}
                     />
                     <Range
-                      label="New arrangement"
+                      label="Move widgets every"
                       min={30}
                       max={1800}
                       step={30}
@@ -1089,9 +1257,11 @@ export function Editor({
                       display={`${draft.appearance.fadeSeconds}s`}
                       onChange={(value) => appearance('fadeSeconds', value)}
                     />
-                    <p className="hint">
-                      Reduced motion removes drift. Widgets still change places
-                      through black.
+                    <p className="hint motion-hint">
+                      Widgets always move to a new place through black. With
+                      Drift and fade off, or with Animation effects off in
+                      Windows Settings › Accessibility › Visual effects on the
+                      display PC, they appear without a fade and nothing drifts.
                     </p>
                   </div>
                 </details>
@@ -1217,31 +1387,132 @@ export function Editor({
                     </div>
                   </div>
                 </details>
-                <details className="disclosure">
+                <details className="disclosure data-disclosure">
                   <summary>Data & recovery</summary>
                   <div className="disclosure-body">
-                    <a
-                      className="button small"
-                      href="/api/export"
-                      download="still-backup.json"
+                    <p className="hint data-hint">
+                      A backup holds your saved settings, styles and reminders.
+                      Your photo isn't included.
+                    </p>
+                    <div className="data-actions">
+                      <a
+                        className="button small"
+                        href="/api/export"
+                        download="still-backup.json"
+                      >
+                        <Icon name="download" size={15} />
+                        Export saved data
+                      </a>
+                      <button
+                        className="button small restore-backup"
+                        disabled={restoring}
+                        onClick={chooseBackup}
+                      >
+                        <Icon name="undo" size={15} />
+                        Restore from backup…
+                      </button>
+                      <input
+                        ref={backupInput}
+                        className="backup-file"
+                        type="file"
+                        accept="application/json,.json"
+                        aria-label="Backup file"
+                        tabIndex={-1}
+                        hidden
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          // Clear it, so choosing the same file again is a new choice.
+                          event.target.value = '';
+                          if (file) void readBackup(file);
+                        }}
+                      />
+                    </div>
+                    {backup && (
+                      <div
+                        className="data-confirm restore-confirm"
+                        role="group"
+                        aria-label="Restore backup"
+                      >
+                        <p className="data-confirm-title">
+                          Restore the backup from{' '}
+                          {backupDate(backup, draft.clockFormat)}?
+                        </p>
+                        <p>
+                          It replaces your saved settings, styles and reminders
+                          with the backup's: {backupContents(backup)}. Your
+                          photo stays as it is.
+                        </p>
+                        <p className="hint">
+                          What's saved now is kept as this computer's recovery
+                          backup until your next save. To keep it longer,
+                          export it first.
+                        </p>
+                        <div className="data-confirm-actions">
+                          <button
+                            className="button small primary"
+                            disabled={restoring}
+                            onClick={() => {
+                              void restoreBackup();
+                            }}
+                          >
+                            {restoring ? 'Restoring…' : 'Restore'}
+                          </button>
+                          <button
+                            className="button small"
+                            disabled={restoring}
+                            onClick={() => {
+                              setBackup(null);
+                              setDataMessage({ text: 'Nothing was restored.' });
+                            }}
+                          >
+                            Don't restore
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {confirmReset ? (
+                      <div
+                        className="data-confirm reset-confirm"
+                        role="group"
+                        aria-label="Reset appearance"
+                      >
+                        <p>
+                          Reset brightness, colours, typeface, Text size and
+                          motion to the defaults? Widgets, their layout, the
+                          clock style and saved styles stay.
+                        </p>
+                        <div className="data-confirm-actions">
+                          <button
+                            className="button small primary"
+                            onClick={confirmResetAppearance}
+                          >
+                            Reset
+                          </button>
+                          <button
+                            className="button small"
+                            onClick={() => setConfirmReset(false)}
+                          >
+                            Keep my appearance
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="text-button reset-appearance"
+                        onClick={() => {
+                          setBackup(null);
+                          setDataMessage(null);
+                          setConfirmReset(true);
+                        }}
+                      >
+                        Reset appearance…
+                      </button>
+                    )}
+                    <p
+                      className={`inline-message data-status ${dataMessage?.error ? 'error' : ''}`}
+                      role="status"
                     >
-                      <Icon name="download" size={15} />
-                      Export saved data
-                    </a>
-                    <button
-                      className="text-button reset-appearance"
-                      onClick={() => {
-                        change((previous) =>
-                          applyBuiltinPreset(previous, 'room'),
-                        );
-                        setPresetId('');
-                      }}
-                    >
-                      Reset appearance
-                    </button>
-                    <p className="hint">
-                      Includes saved settings and reminders. Windows idle
-                      activation is managed by the installed helper.
+                      {dataMessage?.text ?? ''}
                     </p>
                   </div>
                 </details>

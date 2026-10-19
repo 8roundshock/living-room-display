@@ -1,1 +1,4 @@
 * text=auto eol=lf
+# Frozen byte-for-byte copies of installed releases (#84, #219): rollback.test.ts proves their blob ids,
+# so their upstream whitespace must stay as it is and must not fail `git diff --check`.
+src/server/compat/*/** -whitespace

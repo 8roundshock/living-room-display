@@ -7,10 +7,9 @@ import { defaultSettings } from '../shared/defaults.ts';
 import { persistableData } from './persistence.ts';
 
 /**
- * Today's defaults with a colour accent: default data as an existing user has it. A fresh data
- * folder starts Native (#75), its own documented rollback exception, so a test proving that another
- * feature keeps default data readable by the previous release (or that only that feature's data is
- * rejected) starts from these settings instead.
+ * Today's defaults with a colour accent: default data as an existing (pre-#75) user has it. A fresh
+ * data folder starts Native (#75); tests that need a choice to be a real change in the files, or the
+ * data an upgraded install holds, start from these settings instead.
  */
 export function colorAccentDefaults(): Settings {
   const settings = defaultSettings();

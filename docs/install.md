@@ -383,32 +383,59 @@ No automatic geometry downgrade is provided.
 
 ### Additive data and rollback compatibility (#84)
 
-The previous installed release is `bedca44`. Its reader rejects unknown keys, so
-an additive key written to disk would make `state.json`, and after the next save
-`state.backup.json`, unreadable by it. This build therefore omits additive values
-from files and exports while they equal the value the current reader restores
-(see [API](api.md#persistence-and-recovery)). Data that keeps default choices stays
-readable by `bedca44`, so `app.previous` remains a working rollback for it.
+The previous installed release is `3fee844` (the merge of PR #163). Its reader
+rejects unknown keys, so an additive key written to disk would make `state.json`,
+and after the next save `state.backup.json`, unreadable by it. `3fee844` reads
+everything this build writes, including every choice that was an exception for
+`bedca44` (custom Reminders sizes, Native colours, Animation Off or Lively, and the
+new widgets of #78 with their content), so `app.previous` remains a working rollback
+after the next update. This build still omits additive values from files and exports
+while they equal the value the current reader restores (see
+[API](api.md#persistence-and-recovery)); `3fee844` reads them either way.
 
 `src/server/rollback.test.ts` (part of `npm test`) proves this with a byte-for-byte
-copy of the `bedca44` reader: fresh data (apart from its #75 Native default), previous-release data after unrelated
-saves, saved styles, a photo, a revision-one legacy file and the export all parse.
-Its negative controls show the documented exceptions below are rejected. After each
-coordinated install, the baseline moves to the newly installed revision (#130).
+copy of the `3fee844` reader: fresh Native data, previous-release data after unrelated
+saves, saved styles, a photo, a revision-one legacy file, the export and each former
+`bedca44` exception, in `state.json`, `state.backup.json` and the export, all parse.
+Its negative controls show that an unknown key and invalid values are still rejected.
+After each coordinated install, the baseline moves to the newly installed revision (#130).
 
-A non-default choice in a shipped feature is not readable by `bedca44`. Before
-rolling back after using one, follow the [revision 2 procedure](#widget-geometry-revision-2-update-and-rollback):
+A non-default choice that `3fee844` cannot read would be listed here. Before rolling
+back after using one, follow the [revision 2 procedure](#widget-geometry-revision-2-update-and-rollback):
 keep the newer data directory and restore the matching pre-upgrade data copy.
 
-| Feature | Data the previous release cannot read |
+| Feature | Data the previous release (`3fee844`) cannot read |
 | --- | --- |
-| #73 reminder history | None: history is the completed subset of `reminders[]` and completion time is `updatedAt`, so the previous app reads it. It lists history under Show completed and can edit completed items there, which moves their derived completion time. |
+| Everything up to `3fee844` (#73, #74, #75, #76, #78) | None. |
+
+Because `3fee844` knows the six #78 widget ids, files and exports from this build
+always carry their keys, written as off while unused. `bedca44` does not know them,
+so it cannot read data written by this build even with default choices. A rollback
+two releases back (this build to `3fee844`, then to `bedca44`) needs the pre-upgrade
+data copy, or one ordinary save in `3fee844` first: it omits the unused #78 widgets
+at rest again, and the table below then applies.
+
+#### Rolling back the installed 3fee844 to bedca44
+
+The installed `3fee844` keeps `bedca44` as `app.previous` until the next update, and
+this table stays valid while it does. Data that `3fee844` writes with default choices
+stays readable by `bedca44`. A non-default choice in a feature `bedca44` lacks is not.
+Before rolling back after using one, follow the
+[revision 2 procedure](#widget-geometry-revision-2-update-and-rollback): keep the newer
+data directory and restore the matching pre-upgrade data copy. `bedca44` was the
+previous-release reader until #263; its copy in `src/server/compat/bedca44/` is kept
+unedited only as a legacy-data fixture and no longer checks what this build writes.
+
+| Feature | Data `bedca44` cannot read |
+| --- | --- |
+| #73 reminder history | None: history is the completed subset of `reminders[]` and completion time is `updatedAt`, so `bedca44` reads it. It lists history under Show completed and can edit completed items there, which moves their derived completion time. |
 | #73 custom Reminders sizes | Readable until a custom size (anything other than Small, Medium or Large) is saved in settings or a saved style; from then on `state.json`, later `state.backup.json`, and exports carry `span` keys that `bedca44` rejects. Use the pre-upgrade data copy, or [remove the custom sizes](#removing-custom-reminders-sizes-before-a-downgrade). |
-| #74 Weather and Rain merge | None: no new keys, and `bedca44` reads everything written (`src/server/weather-merge.test.ts`). An enabled Rain merges into Weather in memory; the file changes only at the next ordinary save (any write, including a #73 reminder check-off or history change; a no-op reminder patch writes nothing), which writes `rain: false`, Rain's hidden placement and Weather in the merged cells. After upgrading, boards with the old default Weather and Rain show one large Weather in the same space; Rain-only boards show Weather in Rain's cell (now with conditions); users who had hidden only Rain see rain detail when relevant (no opt-out until #102). Save/Cancel stays hidden because the migrated settings are the saved baseline. After a rollback, `bedca44` shows the calm (old) Weather with Rain hidden; Rain re-added there is merged again after upgrading. The first save writes the already-merged state to `state.backup.json` too, so restoring the separate Rain placement needs a pre-upgrade data copy. |
-| #75 Native colours | `appearance.accentMode: native`, once Native is saved anywhere: settings, a saved style, a built-in Phone/Room/Night style or Reset appearance. A fresh data folder also starts Native. Data that only ever used a colour stays readable. To make data readable again without the pre-upgrade copy, choose a colour, re-save every saved style with a colour, then save once more so `state.backup.json` is clean too; color is omitted at rest. The exception ends when the baseline moves to a release that knows the key (#130). |
+| #74 Weather and Rain merge | None: no new keys, and `bedca44` reads everything written (checked against `bedca44` by `src/server/weather-merge.test.ts` until #263). An enabled Rain merges into Weather in memory; the file changes only at the next ordinary save (any write, including a #73 reminder check-off or history change; a no-op reminder patch writes nothing), which writes `rain: false`, Rain's hidden placement and Weather in the merged cells. After upgrading, boards with the old default Weather and Rain show one large Weather in the same space; Rain-only boards show Weather in Rain's cell (now with conditions); users who had hidden only Rain see rain detail when relevant (no opt-out until #102). Save/Cancel stays hidden because the migrated settings are the saved baseline. After a rollback, `bedca44` shows the calm (old) Weather with Rain hidden; Rain re-added there is merged again after upgrading. The first save writes the already-merged state to `state.backup.json` too, so restoring the separate Rain placement needs a pre-upgrade data copy. |
+| #75 Native colours | `appearance.accentMode: native`, once Native is saved anywhere: settings, a saved style, a built-in Phone/Room/Night style or Reset appearance. A fresh data folder also starts Native. Data that only ever used a colour stays readable. To make data readable again without the pre-upgrade copy, choose a colour, re-save every saved style with a colour, then save once more so `state.backup.json` is clean too; color is omitted at rest. After the next update the rollback target is `3fee844`, which reads it (#263). |
 | #76 Animation level | Animation **Off** or **Lively** saved anywhere (settings or a saved style). Subtle, the default, is omitted at rest and stays readable. A code-only rollback is behaviour-safe; after choosing Off or Lively, restore the pre-upgrade data copy (#130), or set Subtle again (and update or delete saved styles that hold another level) and save twice so the backup is readable too. |
-| #78 Calendar, Countdown and Note | Enabling Calendar, Countdown or Note, entering a countdown or note text, or choosing a Sunday/Monday week start. Turning the widgets off, returning their content to the defaults (no countdowns, empty note, Automatic) and deleting or re-saving any saved style captured while one of them was on makes `state.json` readable again; one further save refreshes `state.backup.json` |
+| #78 Calendar, Countdown and Note | Enabling Calendar, Countdown or Note, entering a countdown or note text, or choosing a Sunday/Monday week start. Turning the widgets off, returning their content to the defaults (no countdowns, empty note, Automatic) and deleting or re-saving any saved style captured while one of them was on makes `state.json` readable again; one further save refreshes `state.backup.json`. |
 | #78 World clocks, Sun & moon and Air quality | Enabling any of the three widgets, adding a world clock city, or choosing the European AQI scale (`widgets.worldClocks/sunMoon/airQuality: true` or non-default `widgetData.worldClocks`/`airQuality`). While all three stay off with no cities and the US scale, files and exports remain readable. |
+| #78 widget transforms ([#135](https://github.com/8roundshock/living-room-display/issues/135)) | A non-identity `widgetOverrides` transform for one of the six #78 ids, in settings or a saved style. Only a crafted API call or import writes one; no editor path does. Set it back to `{"offsetX": 0, "offsetY": 0, "scale": 1}` or use the pre-upgrade data copy. |
 
 #### Removing custom Reminders sizes before a downgrade
 
@@ -419,14 +446,18 @@ the layout stays valid and collision-free (`src/server/freesize.test.ts` proves
 this). Prefer the pre-upgrade data copy; use this only when newer reminders or
 settings must be kept. Run it **after** restoring the older app, with that app
 stopped; it validates with the installed (older) app's own reader before
-preserving the data folder and replacing anything:
+preserving the data folder and replacing anything. If you chose another install
+folder with Setup's `/DIR` (or `-InstallRoot` for a source `Install`), set
+`$installRoot` to that folder in the first line; with a wrong folder the script stops
+before it runs anything:
 
 ```powershell
-$installRoot = Join-Path $env:LOCALAPPDATA 'LivingRoomDisplay'
+$installRoot = Join-Path $env:LOCALAPPDATA 'LivingRoomDisplay' # or your /DIR folder
 $control = Join-Path $installRoot 'app\windows\LivingRoomDisplay.ps1'
+$node = Join-Path $installRoot 'runtime\node.exe'
+if (-not (Test-Path -LiteralPath $control -PathType Leaf) -or -not (Test-Path -LiteralPath $node -PathType Leaf)) { throw ('No installed app under ' + $installRoot + '. Set $installRoot to your install folder.') }
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $control Stop
 $dataDirectory = Join-Path $installRoot 'data'
-$node = Join-Path $installRoot 'runtime\node.exe'
 $validator = Join-Path $installRoot 'app\dist\server\validation.js'
 $source = Join-Path $dataDirectory 'state.json'
 $candidate = Join-Path $installRoot ('strip-spans-' + [Guid]::NewGuid().ToString('N') + '.json')
@@ -459,6 +490,8 @@ must be stripped the same way (delete `settings.widgetGrid.placements.*.span` an
 `settings.savedPresets[].visual.widgetGrid.placements.*.span`) before importing it
 into the older app.
 
+### Runtime updates and installed provenance
+
 `Update` reuses an existing Node24 runtime; `-NodeVersion` selects a version only
 when the runtime is absent. For a deliberate runtime update, stop the app, rename
 `runtime` to `runtime.previous`, then run source `Update -NodeVersion <explicit
@@ -474,6 +507,8 @@ source candidates report `unknown` with no invented revision. Only successful
 app replacement refreshes provenance; failed updates and retained-data uninstall
 preserve it. A dirty revision identifies its base commit, not the uncommitted edits.
 For bug reports prefer an installation from a clean reviewed revision.
+
+### Uninstall and retained data
 
 `Uninstall` retains `data` by default. Add `-RemoveData` to explicitly delete it.
 Run uninstall from the clone so removal does not remove its executing script.
@@ -504,7 +539,8 @@ to overwrite them and the online import endpoint is unavailable. Keep installed
 app/runtime files, stop the app with its control script, and use a valid export.
 The following validates against this installed version's schema before preserving
 the data folder and replacing anything. Set `$installRoot`/`$backupFile` to your
-actual paths. Do not use an export from an incompatible future schema version.
+actual paths (`$installRoot` is your Setup `/DIR` or source `-InstallRoot` folder if
+you chose one). Do not use an export from an incompatible future schema version.
 
 ```powershell
 $installRoot = Join-Path $env:LOCALAPPDATA 'LivingRoomDisplay'
