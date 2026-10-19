@@ -41,10 +41,6 @@ html.studio-editor {
 .current-weather-main {
   gap: 1.3cqw;
 }
-.current-weather-main > .weather-symbol {
-  width: 4cqw;
-  height: 4cqw;
-}
 .weather-condition {
   font-weight: 500;
   font-size: calc(1.55cqw * var(--font-scale));
@@ -67,9 +63,9 @@ html.studio-editor {
 .rain-bars {
   gap: 0.45cqw;
 }
+/* Spell bars 0.65 and other hours 0.35 opacity come from widgets.css (#74). */
 .rain-bar {
   border-radius: 100px 100px 0 0;
-  opacity: 0.75;
   transition: height 700ms cubic-bezier(0.2, 0.7, 0.25, 1);
 }
 .forecast-day-label {
@@ -1116,10 +1112,6 @@ html.studio-editor {
 .studio .form-actions .button {
   min-height: 42px;
   padding-inline: 12px;
-  font-size: 12px;
-}
-.studio .completed-toggle {
-  margin-top: 14px;
   font-size: 12px;
 }
 .studio .muted {

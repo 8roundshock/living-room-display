@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { AppState, Settings, WidgetId } from '../shared/contracts.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset } from '../shared/widgets.ts';
+import { GRID_DENSITIES, WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset, placementSpan } from '../shared/widgets.ts';
 import { toneVariables } from '../shared/palette.ts';
 import { Icon } from './icons.tsx';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
@@ -34,7 +34,7 @@ function Widget({ id, settings, children, index, style }: { id: WidgetId; settin
     const observer = new ResizeObserver(update); if (region.current) observer.observe(region.current); if (content.current) observer.observe(content.current); update();
     return () => observer.disconnect();
   }, [settings.appearance.fontScale, settings.appearance.fontFamily, children]);
-  const size = settings.widgetGrid.placements[id].size;
+  const size = settings.widgetGrid.placements[id].size, span = placementSpan(id, settings.widgetGrid.placements[id]);
   return <section
     ref={region}
     className={[
@@ -47,6 +47,8 @@ function Widget({ id, settings, children, index, style }: { id: WidgetId; settin
     aria-label={widgetLabel(id)}
     data-widget-id={id}
     data-widget-size={size}
+    data-widget-span={`${span.columns}x${span.rows}`}
+    data-full-height={span.rows === GRID_DENSITIES[settings.widgetGrid.density].rows ? '' : undefined}
   >
     <div ref={content} className="widget-content" style={{ width: `${100 / fit}%`, maxWidth: 'none', transform: `scale(${fit})`, transformOrigin: 'left center' }}>{children}</div>
   </section>;

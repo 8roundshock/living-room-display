@@ -12,6 +12,8 @@ test('reading legacy geometry preserves original state bytes and migrates every 
   try {
     const settings = defaultSettings(); delete settings.widgetGrid.revision;
     settings.widgetGrid.placements.clock = { column: 0, row: 0, size: 'large' };
+    // A pre-#74 board: medium Weather and an enabled Rain, which Weather absorbs on read.
+    settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' }; settings.widgets.rain = true;
     settings.widgetGrid.placements.rain = { column: 0, row: 3, size: 'medium' };
     settings.widgetGrid.placements.reminders = { column: 5, row: 3, size: 'small' };
     settings.widgetGrid.placements.preview = { column: 8, row: 3, size: 'medium' };
@@ -21,12 +23,12 @@ test('reading legacy geometry preserves original state bytes and migrates every 
     const store = await DataStore.open(directory), migrated = store.snapshot().settings;
     assert.equal(migrated.widgetGrid.revision, 2);
     assert.equal(gridProblem(migrated.widgetGrid, migrated.widgets), null);
-    assert.deepEqual(migrated.widgets, settings.widgets);
+    assert.deepEqual(migrated.widgets, { ...settings.widgets, rain: false });
     assert.equal(await readFile(join(directory, 'state.json'), 'utf8'), original);
     await store.patchSettings({ clockFormat: '24h' });
     const reopened = (await DataStore.open(directory)).snapshot().settings;
     assert.equal(reopened.widgetGrid.revision, 2);
-    assert.deepEqual(reopened.widgets, settings.widgets);
+    assert.deepEqual(reopened.widgets, { ...settings.widgets, rain: false });
     assert.equal(gridProblem(reopened.widgetGrid, reopened.widgets), null);
     assert.equal(JSON.parse(await readFile(join(directory, 'state.backup.json'), 'utf8')).settings.widgetGrid.revision, 2);
   } finally { await rm(directory, { recursive: true, force: true }); }

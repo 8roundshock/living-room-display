@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Settings, SettingsPatch, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, defaultWidgetGrid, firstPlacement, fitGridDensity, gridProblem, isPlannedWidget, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, absorbRetiredWidgets, absorbableGridProblem, defaultWidgetGrid, firstPlacement, fitGridDensity, isPlannedWidget, normalizePlacement, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
 import { ACCENT_MODES } from '../shared/palette.ts';
 import { ANIMATION_LEVELS } from '../shared/motion.ts';
 import { inspectPhoto, photoAssetSchema } from './photo.ts';
@@ -55,7 +55,9 @@ const transform = z.object({ offsetX: z.number().min(-25).max(25), offsetY: z.nu
 const widgetOverrides = z.preprocess(value => value && typeof value === 'object' && !Array.isArray(value)
   ? { ...Object.fromEntries(WIDGET_IDS.map(id => [id, { offsetX: 0, offsetY: 0, scale: 1 }])), ...value } : value,
 z.object(widgetShape(() => transform)).strict());
-const placement = z.object({ column: z.number().int().min(0).max(15), row: z.number().int().min(0).max(9), size: z.enum(['small', 'medium', 'large']) }).strict();
+// Free-size custom span (#73); gridProblem enforces the widget's own limits.
+const spanSchema = z.object({ columns: z.number().int().min(1).max(16), rows: z.number().int().min(1).max(10) }).strict();
+const placement = z.object({ column: z.number().int().min(0).max(15), row: z.number().int().min(0).max(9), size: z.enum(['small', 'medium', 'large']), span: spanSchema.optional() }).strict();
 const widgetGrid = z.preprocess(value => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const source = value as { revision?: number; density?: string; placements?: Record<string, unknown> };
@@ -67,7 +69,9 @@ const widgetGrid = z.preprocess(value => {
     if (candidate) defaults.placements[id] = candidate;
   }
   return { revision: 1, ...source, placements: { ...defaults.placements, ...source.placements } };
-}, z.object({ revision: z.union([z.literal(1), z.literal(2)]), density: z.enum(['spacious', 'balanced', 'fine']), placements: z.object(widgetShape(() => placement)).strict() }).strict()).default(() => ({ ...defaultWidgetGrid(), revision: 2 as const }));
+}, z.object({ revision: z.union([z.literal(1), z.literal(2)]), density: z.enum(['spacious', 'balanced', 'fine']), placements: z.object(widgetShape(() => placement)).strict() }).strict()
+  // Spans are canonical only when they differ from the contained family's span; size is derived.
+  .transform(grid => ({ ...grid, placements: widgetShape(id => normalizePlacement(id, grid.placements[id])) }))).default(() => ({ ...defaultWidgetGrid(), revision: 2 as const }));
 const reminderBehavior = z.object({ hideWhenEmpty: z.boolean().default(true) }).strict();
 // Additive version-one migration applies to settings and every saved visual preset.
 const widgetBehavior = z.object({ reminders: reminderBehavior.default({ hideWhenEmpty: true }) }).strict()
@@ -111,7 +115,8 @@ const widgetDataPatch = z.object({
   airQuality: z.object({ scale: airQualityScale }).strict().partial().optional(),
 }).strict();
 function checkGrid(value: Pick<Settings, 'widgetGrid' | 'widgets'>, context: z.RefinementCtx) {
-  const problem = gridProblem(value.widgetGrid, value.widgets);
+  // Strict, except that an enabled retired widget may overlap the target absorbing it (#74).
+  const problem = absorbableGridProblem(value.widgetGrid, value.widgets);
   if (problem) context.addIssue({ code: 'custom', path: ['widgetGrid'], message: problem });
 }
 function migrateGrid<T extends Pick<Settings, 'widgetGrid' | 'widgets'>>(value: T): T {
@@ -120,14 +125,14 @@ function migrateGrid<T extends Pick<Settings, 'widgetGrid' | 'widgets'>>(value: 
   if (!fit) throw new Error('This legacy widget layout cannot fit. Preserve the original settings and choose fewer widgets.');
   return { ...value, widgetGrid: fit.grid };
 }
-const visual = z.object(visualShape).strict().superRefine(checkGrid).transform(migrateGrid);
+const visual = z.object(visualShape).strict().superRefine(checkGrid).transform(migrateGrid).transform(absorbRetiredWidgets);
 const savedPresets = z.array(z.object({ id: z.string().min(1).max(80), name: z.string().trim().min(1).max(60), visual }).strict()).max(12)
   .refine(items => new Set(items.map(item => item.id)).size === items.length, 'Preset IDs must be unique');
 export const settingsSchema = z.object({ ...visualShape, version: z.literal(1), location,
   // Missing source means legacy/manual, so upgrades cannot replace an existing city.
   locationSource: z.enum(['device', 'manual', 'fallback']).default('manual'),
   units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets, widgetData,
-}).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(value => {
+}).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(absorbRetiredWidgets).transform(value => {
   if (value.locationSource === 'fallback') return { ...value, location: defaultSettings().location };
   if (value.locationSource === 'device') return { ...value, location: {
     name: 'Device area', latitude: Math.round(value.location.latitude * 10) / 10,
@@ -150,7 +155,7 @@ export const settingsPatchSchema = z.object({
     }
   }).optional(),
   widgetOverrides: z.object(widgetShape(() => transform.partial().optional())).strict().optional(),
-  widgetGrid: z.object({ revision: z.literal(2).optional(), density: z.enum(['spacious', 'balanced', 'fine']).optional(), placements: z.object(widgetShape(() => placement.partial().optional())).strict().partial().optional() }).strict().optional(),
+  widgetGrid: z.object({ revision: z.literal(2).optional(), density: z.enum(['spacious', 'balanced', 'fine']).optional(), placements: z.object(widgetShape(() => placement.partial().extend({ span: spanSchema.nullable().optional() }).optional())).strict().partial().optional() }).strict().optional(),
   photoChange: z.object({ pngBase64: z.string().max(2_796_204).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/) }).strict().superRefine((value, context) => {
     try { inspectPhoto(Buffer.from(value.pngBase64, 'base64')); }
     catch (error) { context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : 'Invalid photo' }); }
@@ -189,7 +194,11 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
     next.widgetOverrides[id] = { ...current.widgetOverrides[id], ...patch.widgetOverrides?.[id] };
   }
   for (const id of Object.keys(patch.widgetGrid?.placements ?? {}) as WidgetId[]) {
-    next.widgetGrid.placements[id] = { ...current.widgetGrid.placements[id], ...patch.widgetGrid?.placements?.[id] };
+    const change = patch.widgetGrid?.placements?.[id] ?? {};
+    const { span, ...placement } = { ...current.widgetGrid.placements[id], ...change };
+    // `span: null` clears a custom size, and so does a family selection (size without span).
+    const cleared = change.span === null || (change.size !== undefined && change.span === undefined);
+    next.widgetGrid.placements[id] = span && !cleared ? { ...placement, span } : placement;
   }
   return settingsSchema.parse(next);
 }

@@ -92,7 +92,7 @@ test('a density draft remains a valid atomic layout through a concurrent placeme
   const base = defaultSettings(), draft = structuredClone(base), incoming = structuredClone(base);
   const compact = switchGridDensity(base.widgetGrid, 'spacious', base.widgets); assert.ok(compact);
   draft.widgetGrid = compact.grid;
-  incoming.widgetGrid.placements.weather.row = 6;
+  incoming.widgetGrid.placements.weather = { column: 8, row: 6, size: 'medium' };
   incoming.widgets.clock = false;
   incoming.appearance.brightness = 0.3;
   incoming.location.name = 'Concurrent city';
