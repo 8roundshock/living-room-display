@@ -76,7 +76,7 @@ and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 | Decision | Current state |
 | --- | --- |
 | Architecture | B: custom local dashboard plus Windows helper. |
-| Initial feature slice | Time, weather/rain, reminders, visual editor/presets, last-state preview. |
+| Initial feature slice | Time, adaptive weather with rain timing inside it (#74), reminders, visual editor/presets, last-state preview. |
 | Language/framework and host | Node 24/TypeScript, React/Vite, native Node HTTP server, Windows helper. |
 | Weather/defaults | Open-Meteo; editable Toronto city default, metric, 12-hour clock. This is a product default, not inferred user location. |
 | Data | Per-user JSON with serialized atomic writes, prior backup, and export/import; no kiosk-storage dependency. |

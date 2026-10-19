@@ -112,17 +112,18 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       current.reminders[0].text = 'A deliberately long synthetic reminder that wraps across the available line length';
       await open(); const longReminderScale = await page.locator('.ambient-reminders .widget-content').evaluate(el => new DOMMatrix(getComputedStyle(el).transform).a); assert.ok(longReminderScale >= 0.65, `${size} long reminders retain their scale: ${longReminderScale}`);
     }
-    current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'rain'])); current.settings.widgetGrid.placements.rain = { column: 0, row: 0, size: 'large' };
+    // Rain timing lives in Weather (#74); see tests/ui/weather-browser.mjs for every mode.
+    current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'weather'])); current.settings.widgetGrid.placements.weather = { column: 0, row: 0, size: 'large' };
     current.weather.hourly[10].precipitationProbability = null; current.weather.hourly[11].rainAmount = null;
-    await open(); assert.equal(await page.locator('.rain-bar-unknown').count(), 1); assert.match(await page.locator('.ambient-rain').innerText(), /Partial data/);
-    if (capture) images.push({ name: 'rain-partial', bytes: await page.locator('.ambient-rain').screenshot() });
+    await open(); assert.equal(await page.locator('.rain-bar-unknown').count(), 1); assert.match(await page.locator('.ambient-weather').innerText(), /Partial data/);
+    if (capture) images.push({ name: 'rain-partial', bytes: await page.locator('.ambient-weather').screenshot() });
     checks.push('Long city/reminder text at125% type, unavailable measurements/condition without an invented icon, partial rain and unknown probability bars');
     for (const style of ['outline', 'digital', 'analog']) {
       current = structuredClone(source); current.settings.appearance.clockStyle = style; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock']));
       await open(); if (capture) images.push({ name: `clock-style-${style}`, bytes: await page.locator('[data-widget-id="clock"]').screenshot() });
     }
     current = structuredClone(source); current.settings.clockFormat = '24h'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'preview'])); await open(); assert.doesNotMatch(await page.locator('.preview-caption').innerText(), /AM|PM/);
-    current = structuredClone(source); current.weather.units.precipitation = 'in'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'rain'])); current.settings.widgetGrid.placements.rain.size = 'small'; current.weather.hourly.forEach(hour => { hour.rainAmount = 0.03; }); await open(); assert.match(await page.locator('.ambient-rain').innerText(), /in rain/);
+    current = structuredClone(source); current.weather.units.precipitation = 'in'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'weather'])); current.settings.widgetGrid.placements.weather.size = 'medium'; current.weather.hourly.forEach(hour => { hour.rainAmount = 0.03; }); await open(); assert.match(await page.locator('.ambient-weather').innerText(), /in rain/);
     current = structuredClone(source); current.settings.appearance.motionEnabled = false; await page.setViewportSize({ width: 1920, height: 1080 }); await open();
     const inset = await page.locator('.widget-grid-plane').evaluate(el => el.getBoundingClientRect().left / innerWidth); assert.ok(Math.abs(inset - 0.04) < 0.002);
     if (capture) images.push({ name: 'default-composition', bytes: await page.screenshot() });
