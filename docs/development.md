@@ -115,8 +115,8 @@ a no-longer-needed allowance fails CI, and every suite that takes under a minute
 the runner. The weekly schedule (Monday 07:23 UTC) and a manual run
 (`workflow_dispatch`) add the **scheduled set**, the slower motion, palette and
 weather suites. A change to Markdown files only skips the workflow. On the first
-runs the pull-request set took about 12 minutes (widgets about 6) and the scheduled
-set about 8; runner minutes on this private repository are limited, so weigh
+CI runs the pull-request set took about 11 minutes of suites (widgets about 6) plus
+about a minute of setup, and the scheduled set about 6; runner minutes on this private repository are limited, so weigh
 adding a slow suite to the pull-request set against that
 ([#384](https://github.com/8roundshock/living-room-display/issues/384)). The runner
 has no GPU, so CI passes `--no-gpu` to the motion suite: its resting glyph pixel

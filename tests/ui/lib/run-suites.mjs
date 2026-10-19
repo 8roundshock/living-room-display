@@ -18,13 +18,20 @@ const directory = fileURLToPath(new URL('..', import.meta.url));
 /** Every suite in tests/ui, by name (`widgets` for widgets-browser.mjs). */
 export const SUITES = readdirSync(directory).filter(file => file.endsWith('-browser.mjs')).map(file => file.slice(0, -'-browser.mjs'.length)).sort();
 /**
- * The CI sets (#323). `pull-request` runs on every pull request and push to main and always includes the
- * widgets suite; `scheduled` adds the rest on the weekly and manual runs. Every suite belongs to exactly
- * one set, so a new suite fails the runner until it is placed in one. See docs/development.md.
+ * The CI sets (#323), chosen from the first CI runs on windows-2025 (seconds per suite in brackets).
+ * `pull-request` runs on every pull request and push to main: the widgets suite, whose allowances must
+ * fail once their fix lands, and every suite under a minute on the runner (about 11 minutes in all).
+ * `scheduled` adds the slower suites on the weekly and manual runs (about 6 minutes). Every suite
+ * belongs to exactly one set, so a new suite fails the runner until it is placed in one. See
+ * docs/development.md and #384 before moving a slow suite into the pull-request set.
  */
 export const SETS = {
-  'pull-request': ['widgets', 'canvas-scope', 'motion', 'preview', 'palette', 'weather', 'grid', 'studio', 'catalog-sky', 'catalog-time', 'freesize', 'reminders', 'workspace', 'display-controls', 'editor-sync', 'first-run'],
-  scheduled: [],
+  'pull-request': [
+    'widgets', // 371
+    'canvas-scope', 'grid', 'studio', 'workspace', 'catalog-sky', 'reminders', 'catalog-time', 'freesize', // 22, 45, 41, 38, 34, 34, 31, 29
+    'preview', 'first-run', 'editor-sync', 'display-controls', // 19, 9, 8, 3
+  ],
+  scheduled: ['motion', 'weather', 'palette'], // 219, 81, 68
 };
 
 export function checkSets() {
