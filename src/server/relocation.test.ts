@@ -9,10 +9,18 @@ import {
   GRID_DENSITIES, WIDGET_IDS, WIDGET_SIZES, composeWidgetGrid, displayPlacement, firstPlacement, freeSpanLimits, gridProblem,
   placementSpan, reflowWidget, resizeWidgetSpan, widgetSizes, type GridDensity,
 } from '../shared/widgets.ts';
-import { PREVIOUS_RELEASE } from './persistence.ts';
 
-/** The ids #78 appended after the previous release's ones, whatever their current status. */
-const CATALOG_78: WidgetId[] = WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id));
+/**
+ * The six ids #78 appended after the foundation ones, whatever their current status. Written out, not
+ * derived from PREVIOUS_RELEASE: since the 3fee844 baseline (#263) it knows them all, and a derived
+ * list would have gone silently empty.
+ */
+const CATALOG_78: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
+
+test('the explicit #78 list names catalog ids', () => {
+  assert.deepEqual(CATALOG_78.filter(id => !WIDGET_IDS.includes(id)), []);
+  assert.deepEqual(WIDGET_IDS.slice(-CATALOG_78.length), CATALOG_78, 'appended after the foundation ids, in order');
+});
 
 type Visibility = Partial<Record<WidgetId, boolean>>;
 function random(seed: number) {

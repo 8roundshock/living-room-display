@@ -209,7 +209,7 @@ test('ambient composition keeps spans, stays disjoint and moves a full-height co
 test('custom spans compose with the #74 Rain merge and the #93 reflection fallback', () => {
   const samePositions = (a: WidgetGrid, b: WidgetGrid, ids: WidgetId[]) => ids.every(id => a.placements[id].column === b.placements[id].column && a.placements[id].row === b.placements[id].row);
   // Visible Weather and Rain stacked beside a Column: Weather takes their union, the span is untouched.
-  // Colour-accent defaults, so the rollback checks below see only the span (Native is the #75 exception).
+  // An existing user's colour-accent defaults (fresh Native data is covered in rollback.test.ts).
   const stacked = colorAccentDefaults();
   stacked.widgets = { ...stacked.widgets, rain: true, preview: false }; stacked.preview.enabled = false;
   Object.assign(stacked.widgetGrid.placements, {
@@ -227,8 +227,8 @@ test('custom spans compose with the #74 Rain merge and the #93 reflection fallba
   }
   // A stale editor re-enabling Rain over the saved Column board merges back to the same settings.
   assert.deepEqual(mergeSettings(merged, { widgets: { rain: true } }), merged);
-  // Rollback: the span is the documented exception; stripping it leaves a board the previous release reads.
-  assertPreviousReaderRejects('data', { version: 1, settings: persistableSettings(merged), reminders: [], photoAsset: null }, 'merged board with a span');
+  // Rollback: the previous release (3fee844) reads the span; stripping it also leaves a board it reads.
+  assertPreviousReaderAccepts('data', { version: 1, settings: persistableSettings(merged), reminders: [], photoAsset: null }, 'merged board with a span');
   const stripped = stripSpans(merged);
   assert.equal(gridProblem(stripped.widgetGrid, stripped.widgets), null);
   assertPreviousReaderAccepts('data', { version: 1, settings: persistableSettings(stripped), reminders: [], photoAsset: null }, 'merged board without spans');
@@ -256,10 +256,16 @@ test('custom spans compose with the #74 Rain merge and the #93 reflection fallba
   }
 });
 
-test('containment: deleting every span keeps a valid layout that the previous release reads', () => {
-  const next = random(73); let withSpans = 0, withNewWidgets = 0;
+/** The six #78 ids, written out so the count below cannot go vacuous when the catalog or PREVIOUS_RELEASE changes. */
+const CATALOG_78: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
+
+test('containment: boards with spans are readable by the previous release, and deleting every span keeps a valid layout it reads', () => {
+  // The previous release (3fee844) knows every active widget and the span (#211): no widget has to be
+  // turned off before reading, so each acceptance below is about the span and the board around it.
+  assert.deepEqual(ACTIVE_WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id)), [], 'the previous release knows every active widget');
+  assert.deepEqual(CATALOG_78.filter(id => !ACTIVE_WIDGET_IDS.includes(id)), [], 'every #78 widget is active and takes part');
+  const next = random(73); let withSpans = 0, besideNewWidgets = 0;
   for (let iteration = 0; iteration < 60; iteration++) {
-    // Colour-accent defaults: Native is the separate #75 exception, so only spans and #78 widgets are tested.
     const settings = colorAccentDefaults(), density = (['spacious', 'balanced', 'fine'] as GridDensity[])[Math.floor(next() * 3)]!;
     for (const id of ACTIVE_WIDGET_IDS) settings.widgets[id] = id === 'reminders' || next() < 0.6;
     settings.preview.enabled = settings.widgets.preview;
@@ -274,29 +280,20 @@ test('containment: deleting every span keeps a valid layout that the previous re
     const stripped = stripSpans(parsed);
     assert.equal(gridProblem(stripped.widgetGrid, stripped.widgets), null, `iteration ${iteration} settings`);
     assert.equal(gridProblem(stripped.savedPresets[0]!.visual.widgetGrid, stripped.widgets), null, `iteration ${iteration} saved style`);
-    // An enabled widget the previous release does not know (Calendar, Countdown, Note since #78) is its own
-    // documented exception; turning it off in the settings and the saved style is the recovery step.
-    const unknown = ACTIVE_WIDGET_IDS.filter(id => stripped.widgets[id] && !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id));
-    if (unknown.length) {
-      withNewWidgets++;
-      assertPreviousReaderRejects('data', { version: 1, settings: persistableSettings(stripped), reminders: [], photoAsset: null }, `iteration ${iteration} stripped with ${unknown.join(', ')} on`);
-      for (const visual of [stripped, stripped.savedPresets[0]!.visual]) for (const id of unknown) visual.widgets[id] = false;
-      assert.equal(gridProblem(stripped.widgetGrid, stripped.widgets), null, `iteration ${iteration} settings without ${unknown.join(', ')}`);
-    }
     assertPreviousReaderAccepts('data', { version: 1, settings: persistableSettings(stripped), reminders: [], photoAsset: null }, `iteration ${iteration} stripped`);
     if (hasSpan(parsed)) {
       withSpans++;
-      assertPreviousReaderRejects('data', { version: 1, settings: persistableSettings(parsed), reminders: [], photoAsset: null }, `iteration ${iteration} with spans`);
+      if (CATALOG_78.some(id => parsed.widgets[id])) besideNewWidgets++;
+      assertPreviousReaderAccepts('data', { version: 1, settings: persistableSettings(parsed), reminders: [], photoAsset: null }, `iteration ${iteration} with spans`);
     }
   }
   assert.ok(withSpans >= 20, `enough generated boards keep a custom span (${withSpans})`);
-  const shipped = ACTIVE_WIDGET_IDS.some(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id));
-  assert.ok(!shipped || withNewWidgets >= 10, `enough generated boards place a span beside the #78 widgets (${withNewWidgets})`);
+  assert.ok(besideNewWidgets >= 10, `enough generated boards keep a span beside the #78 widgets (${besideNewWidgets})`);
 });
 
 async function application() {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-freesize-'));
-  await seedColorAccentData(directory); // colour-accent defaults: Native is the separate #75 exception
+  await seedColorAccentData(directory); // an existing user's colour-accent defaults
   const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const address = app.server.address(); assert.ok(address && typeof address === 'object');
@@ -347,7 +344,8 @@ test('settings PATCH saves, normalizes and clears spans atomically', async () =>
     assert.deepEqual(saved.span, { columns: 2, rows: 8 });
     assert.equal(saved.size, 'small');
     assert.match(await app.raw(), /"span"/);
-    assertPreviousReaderRejects('data', JSON.parse(await app.raw()), 'a saved custom size is the documented exception');
+    assertPreviousReaderAccepts('data', JSON.parse(await app.raw()), 'a saved custom size');
+    assertPreviousReaderAccepts('data', JSON.parse(await readFile(join(app.directory, 'state.backup.json'), 'utf8')), 'the backup of the span-less save');
 
     // A move keeps the span; a size-only patch is a family selection and clears it.
     const moved = await patch({ widgetGrid: { placements: { reminders: { column: saved.column } } } });
@@ -375,11 +373,18 @@ test('settings PATCH saves, normalizes and clears spans atomically', async () =>
     assert.equal((await app.send('POST', '/api/import', exported)).status, 200);
     assert.deepEqual(app.store.snapshot().settings.widgetGrid.placements.reminders.span, { columns: 2, rows: 8 });
     assert.deepEqual(app.store.snapshot().settings.savedPresets[0]!.visual.widgetGrid.placements.reminders.span, { columns: 2, rows: 8 });
-    // A stripped export imports into the previous release.
+    // The export with spans, its files after the import and a stripped export all import into the previous release.
+    assertPreviousReaderAccepts('import', exported, 'export with spans');
+    const imported = JSON.parse(await app.raw());
+    assert.deepEqual(imported.settings.savedPresets[0].visual.widgetGrid.placements.reminders.span, { columns: 2, rows: 8 });
+    assertPreviousReaderAccepts('data', imported, 'state.json with spans in settings and a saved style');
+    assertPreviousReaderAccepts('data', JSON.parse(await readFile(join(app.directory, 'state.backup.json'), 'utf8')), 'state.backup.json with a span in the saved style');
     const strippedExport = structuredClone(exported);
     for (const grid of [strippedExport.settings.widgetGrid, ...strippedExport.settings.savedPresets.map((preset: { visual: Settings }) => preset.visual.widgetGrid)]) for (const id of Object.keys(grid.placements)) delete grid.placements[id].span;
     assertPreviousReaderAccepts('import', strippedExport, 'stripped export');
-    assertPreviousReaderRejects('import', exported, 'export with spans');
+    // Negative control: a span wider than the grid allows is still rejected.
+    const tooWide = structuredClone(exported); tooWide.settings.widgetGrid.placements.reminders.span = { columns: 11, rows: 8 };
+    assertPreviousReaderRejects('import', tooWide, 'export with an over-wide span');
   } finally { await app.close(); }
 });
 
