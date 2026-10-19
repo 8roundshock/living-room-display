@@ -13,6 +13,7 @@ import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_IDS, normalizePlacement, widgetRevealOrder, widgetSizes } from '../../src/shared/widgets.ts';
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
+import { keepPagesLocal } from './lib/local-only.mjs';
 
 const ALLOWED_PROPERTIES = new Set(['transform', 'translate', 'rotate', 'scale', 'opacity']);
 const LEVELS = ['off', 'subtle', 'lively'];
@@ -55,7 +56,9 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
   // #315: each page or console error names its resource URL, page and step, and every failed request
   // is kept for the failure message. A resource that fails only because its page's context is being
   // closed (the request is cancelled) is listed in the result, not counted; any other error fails.
-  const cancelled = [], failedRequests = [];
+  // Requests for anything but this suite's server (a filtering proxy's injected script) get an empty
+  // answer and are listed in `outside` (tests/ui/lib/local-only.mjs).
+  const cancelled = [], failedRequests = [], outside = new Set();
   const step = () => checks.length ? `after check ${checks.length} "${checks.at(-1).slice(0, 70)}…"` : 'before the first check';
   function collectErrors(page, ignore = null) {
     const watch = { closing: false };
@@ -85,6 +88,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
    */
   async function displayPage({ state, time = now, reducedMotion = 'no-preference', viewport = { width: 1280, height: 720 }, clock = true, fixedTime = null, deviceScaleFactor = 1, path = '/display' }) {
     const context = await browser.newContext({ viewport, deviceScaleFactor, timezoneId: 'America/Toronto', reducedMotion }); contexts.add(context);
+    const answered = await keepPagesLocal(context, base);
     const served = { state: structuredClone(state), offline: false };
     await context.route('**/api/state', route => route.fulfill(served.offline ? { status: 503, contentType: 'application/json', body: '{"error":"Synthetic offline"}' } : { status: 200, contentType: 'application/json', body: JSON.stringify(served.state) }));
     await context.route('**/api/photo/image?*', route => route.fulfill({ contentType: 'image/png', body: image }));
@@ -96,7 +100,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     await page.goto(base + path);
     await page.locator(path.startsWith('/display') ? '.display-page' : '.studio').waitFor();
     if (clock) await page.clock.runFor(50);
-    return { page, context, served, async close() { watch.closing = true; contexts.delete(context); await context.close(); } };
+    return { page, context, served, async close() { watch.closing = true; for (const url of answered) outside.add(url); contexts.delete(context); await context.close(); } };
   }
   function scenario(mutate) {
     const state = structuredClone(source);
@@ -580,12 +584,13 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     // (9)–(10) Editor: samples are still; the Animation control follows the draft contract.
     async function editorPage({ reducedMotion = 'no-preference', viewport = { width: 1280, height: 720 } } = {}) {
       const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion }); contexts.add(context);
+      const answered = await keepPagesLocal(context, base);
       const page = await context.newPage();
       const watch = collectErrors(page);
       await page.addInitScript(() => Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'prompt' }) } }));
       await page.goto(base + '/editor');
       await page.getByRole('tab', { name: 'Style', exact: true }).waitFor();
-      return { page, async close() { watch.closing = true; contexts.delete(context); await context.close(); } };
+      return { page, async close() { watch.closing = true; for (const url of answered) outside.add(url); contexts.delete(context); await context.close(); } };
     }
     await app.store.update(data => { data.settings = defaultSettings(); data.reminders = []; });
     {
@@ -780,7 +785,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       checks.push(gpu ? `#248 frame budget at Off with Soft motion on, full board over 10 s: ${JSON.stringify(frames)}` : '#248 frame budget skipped (--no-gpu)');
     }
     assert.deepEqual(errors, [], `page or console errors (failed requests: ${JSON.stringify(failedRequests)}; cancelled by closing: ${JSON.stringify(cancelled)})`);
-    return { checks, metrics, cancelled, images: 'none written; all state stays in RAM' };
+    return { checks, metrics, cancelled, outside: [...outside], images: 'none written; all state stays in RAM' };
   } finally {
     for (const context of contexts) await context.close().catch(() => undefined);
     await browser.close(); await new Promise(done => app.server.close(done)); await rm(directory, { recursive: true, force: true });

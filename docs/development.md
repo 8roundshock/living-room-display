@@ -76,9 +76,11 @@ The widget harness loads every module in that folder and requires one for each
 active catalog id; extra modules such as `reminders-span.mjs` add only a sweep.
 A newly active widget also joins `FULL_BOARD` in `tests/ui/palette-browser.mjs`,
 plus `ACCENT_SELECTOR` (a new kind of accent element) or `TEXT_ONLY` (no accent
-element), so the palette harness checks its colours (#214), and `FULL_BOARD` in
-`tests/ui/canvas-scope-browser.mjs`, which checks that no studio rule reaches it
-on the editor canvas (#313).
+element), so the palette harness checks its colours (#214), and the shared
+`FULL_BOARD` in `tests/ui/lib/boards.mjs`, which the canvas scope harness uses to
+check that no studio rule reaches it on the editor canvas (#313). The motion and
+widgets suites keep their own copies of that board until
+[#388](https://github.com/8roundshock/living-room-display/issues/388).
 
 ## Browser suites
 

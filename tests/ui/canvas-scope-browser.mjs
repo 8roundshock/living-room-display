@@ -20,6 +20,8 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_IDS, widgetSizes } from '../../src/shared/widgets.ts';
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
+import { FULL_BOARD } from './lib/boards.mjs';
+import { keepPagesLocal } from './lib/local-only.mjs';
 
 /**
  * Whole rules (selector lists, whitespace-normalised, `*::before` written `::before` as the build does)
@@ -27,13 +29,6 @@ import { WIDGET_CHECKS } from './widget-checks/index.mjs';
  * studio shares with the ambient root. Any other `.studio`-scoped selector matching a canvas element fails.
  */
 export const ALLOWED_RULES = ['.studio *, .studio ::before, .studio ::after', '.grid-ambient, .studio'];
-/** Every active widget on one Balanced 12 x 8 board (as in palette-browser.mjs); a newly activated widget must be added here. */
-const FULL_BOARD = {
-  clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
-  sunMoon: { column: 0, row: 2, size: 'large' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
-  reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
-  note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
-};
 
 /**
  * Runs in the page: every `.studio`-scoped selector that matches an element inside `.preview-surface`,
@@ -73,7 +68,7 @@ function studioMatches(allowed) {
     const widget = element.closest('[data-widget-id]')?.dataset.widgetId;
     return widget ? `${name} in ${widget}` : name;
   };
-  const found = [], deliberate = [], skipped = [], nested = [];
+  const found = [], deliberate = [], skipped = [], nested = [], foreign = [];
   let rules = 0, selectors = 0;
   const walk = (list, origin) => {
     for (const rule of list) {
@@ -96,8 +91,15 @@ function studioMatches(allowed) {
       else if (rule.cssRules) walk(rule.cssRules, origin);
     }
   };
-  for (const sheet of document.styleSheets) walk(sheet.cssRules, sheet.href ?? 'inline <style>');
-  return { found, deliberate, skipped, nested, rules, selectors, elements: elements.length, widgets: [...surface.querySelectorAll('[data-widget-id]')].map((element) => element.dataset.widgetId) };
+  for (const sheet of document.styleSheets) {
+    let list;
+    try { list = sheet.cssRules; } catch { list = null; }
+    // A sheet from another origin cannot be read (and cannot be the app's: its CSP is default-src 'self').
+    if (list) walk(list, sheet.href ?? 'inline <style>');
+    else if (sheet.href && new URL(sheet.href).origin !== location.origin) foreign.push(sheet.href);
+    else skipped.push(`unreadable stylesheet ${sheet.href}`);
+  }
+  return { found, deliberate, skipped, nested, foreign, rules, selectors, elements: elements.length, widgets: [...surface.querySelectorAll('[data-widget-id]')].map((element) => element.dataset.widgetId) };
 }
 
 export async function runCanvasScopeQa({ playwright, edge } = {}) {
@@ -108,7 +110,7 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const browser = await chromium.launch({ executablePath: edge, headless: true });
-  const checks = [], errors = [];
+  const checks = [], errors = [], outside = new Set();
   try {
     const fresh = await (await fetch(`${base}/api/state`)).json();
     const source = structuredClone(fresh);
@@ -116,7 +118,7 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
     // reminders, a photo and a snapshot) from its tests/ui/widget-checks module.
     for (const id of ACTIVE_WIDGET_IDS) assert.ok(WIDGET_CHECKS[id], `${id} needs a tests/ui/widget-checks module`);
     for (const check of Object.values(WIDGET_CHECKS)) check.prepare?.(source, { now });
-    assert.deepEqual(Object.keys(FULL_BOARD).sort(), [...ACTIVE_WIDGET_IDS].sort(), 'FULL_BOARD places every active widget; add a new one there');
+    assert.deepEqual(Object.keys(FULL_BOARD).sort(), [...ACTIVE_WIDGET_IDS].sort(), 'FULL_BOARD (tests/ui/lib/boards.mjs) places every active widget; add a new one there');
     assert.ok(source.preview.available && source.photo.available, 'the synthetic state has a snapshot and a photo');
     // A valid mid-grey PNG (filter type 0 on every scanline, opaque), so Photo and Last screen paint.
     const pixels = Buffer.alloc((320 * 4 + 1) * 200, 90);
@@ -127,6 +129,7 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
     /** One editor page per viewport and motion preference, its /api/state served from `current` (nothing is saved). */
     async function editor({ viewport = { width: 1280, height: 720 }, reducedMotion = 'no-preference' } = {}) {
       const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion });
+      const answered = await keepPagesLocal(context, base);
       await context.route('**/api/state', (route) => route.request().method() === 'GET'
         ? route.fulfill({ contentType: 'application/json', body: JSON.stringify(current) })
         : route.fulfill({ status: 409, contentType: 'application/json', body: '{"error":"Synthetic read-only state"}' }));
@@ -137,7 +140,7 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
       page.on('console', (message) => { if (message.type() === 'error') errors.push(`${message.text()} at ${message.location().url || 'unknown URL'} (${viewport.width}×${viewport.height})`); });
       await page.addInitScript(() => Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'prompt' }) } }));
       await page.clock.install({ time: new Date(now) });
-      return { page, close: () => context.close() };
+      return { page, close: async () => { for (const url of answered) outside.add(url); await context.close(); } };
     }
     const only = (id, size) => {
       const state = structuredClone(source);
@@ -219,7 +222,7 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
     checks.push(`no element on the editor canvas matches a .studio-scoped rule other than ${ALLOWED_RULES.map((rule) => `"${rule}"`).join(' and ')}: ${scenarios} canvases, ${inspected} elements, ${studioSelectors} studio-scoped selectors`);
     checks.push(`studio selectors written for the canvas through its root (listed, not failed): ${[...deliberate].join('; ') || 'none'}`);
     assert.deepEqual(errors, []);
-    return { checks, images: 'none taken' };
+    return { checks, outside: [...outside], images: 'none taken' };
   } finally {
     await browser.close(); app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close');
     await rm(directory, { recursive: true, force: true });
@@ -229,5 +232,5 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({ options: { playwright: { type: 'string' }, edge: { type: 'string' } } });
   const result = await runCanvasScopeQa(values);
-  console.log(JSON.stringify({ passed: result.checks.length, checks: result.checks, images: result.images }, null, 2));
+  console.log(JSON.stringify({ passed: result.checks.length, checks: result.checks, answeredOutsideTheApp: result.outside, images: result.images }, null, 2));
 }
