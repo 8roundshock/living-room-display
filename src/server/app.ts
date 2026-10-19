@@ -11,7 +11,7 @@ import { persistableSettings } from './persistence.ts';
 import { WeatherService, type FetchLike } from './weather.ts';
 import { AirQualityService, offAirQuality } from './air.ts';
 import { windowsStatus } from './windows.ts';
-import { automaticLocationSchema, importSchema, mergeSettings, reminderInputSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
+import { automaticLocationSchema, importSchema, mergeSettings, reminderCreateSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
 
 // Read once at module load. src/server and the built dist/server both sit two
 // levels below the package.json shipped with the app, so health matches it.
@@ -147,9 +147,10 @@ export async function createApplication(options: ApplicationOptions) {
     }
     if (method === 'GET' && path === '/api/reminders') { json(response, 200, store.snapshot().reminders); return; }
     if (method === 'POST' && path === '/api/reminders') {
-      const input = reminderInputSchema.parse(await jsonBody(request));
+      const input = reminderCreateSchema(now()).parse(await jsonBody(request));
       const timestamp = new Date(now()).toISOString();
-      const reminder: Reminder = { id: randomUUID(), text: input.text, dueAt: input.dueAt ?? null, completed: false, createdAt: timestamp, updatedAt: timestamp };
+      // Undo after a delete passes the original createdAt, so the reminder returns to its sorted place (#237).
+      const reminder: Reminder = { id: randomUUID(), text: input.text, dueAt: input.dueAt ?? null, completed: false, createdAt: input.createdAt ?? timestamp, updatedAt: timestamp };
       await store.update(data => {
         if (data.reminders.length >= REMINDER_LIMIT) {
           // A full store makes way by dropping the oldest completed reminder; pending ones are never dropped.

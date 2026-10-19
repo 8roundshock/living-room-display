@@ -166,6 +166,15 @@ export const settingsPatchSchema = z.object({
 }).strict();
 const dueAt = z.iso.datetime({ offset: true }).nullable();
 export const reminderInputSchema = z.object({ text: z.string().trim().min(1).max(240), dueAt: dueAt.optional() }).strict();
+/**
+ * POST only: Undo after a delete re-creates the reminder with its original `createdAt` (#237), in
+ * the persisted format and never later than the server's `now`. PATCH never accepts it.
+ */
+export function reminderCreateSchema(now: number) {
+  return reminderInputSchema.extend({
+    createdAt: z.iso.datetime().refine(value => Date.parse(value) <= now, 'Use a creation time that is not in the future').optional(),
+  }).strict();
+}
 export const reminderPatchSchema = reminderInputSchema.partial().extend({ completed: z.boolean().optional() }).strict();
 export const reminderSchema = reminderInputSchema.extend({ id: z.uuid(), completed: z.boolean(), dueAt, createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() }).strict();
 export const dataSchema = z.object({ version: z.literal(1), settings: settingsSchema, reminders: z.array(reminderSchema).max(1000), photoAsset: photoAssetSchema.nullable().default(null) }).strict()

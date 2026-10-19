@@ -13,7 +13,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `PATCH /api/settings`          | Validated nested partial settings                                      | Full saved settings.                                                         |
 | `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |
 | `GET /api/reminders`           | None                                                                   | Reminder array.                                                              |
-| `POST /api/reminders`          | `text`, optional ISO `dueAt` or null                                   | Created reminder (201).                                                      |
+| `POST /api/reminders`          | `text`, optional ISO `dueAt` or null, optional past `createdAt`        | Created reminder (201).                                                      |
 | `PATCH /api/reminders/:id`     | Partial `text`, `completed`, `dueAt`                                   | Updated reminder.                                                            |
 | `DELETE /api/reminders/:id`    | None                                                                   | Empty 204.                                                                   |
 | `DELETE /api/reminders/completed` | None                                                                | `{ "deleted": n }`; removes only completed reminders, atomically.            |
@@ -76,6 +76,15 @@ reminder in the same write, or returns 409 “Reminder limit reached” when all
 pending. Exports and imports carry history in `reminders[]` unchanged; an import with
 more than 500 completed reminders is accepted as is and pruned at the next completion.
 
+`POST /api/reminders` also accepts an optional `createdAt` (#237), which the editor's
+Undo after a single delete sends with the deleted reminder's `text` and exact `dueAt`
+string, so the re-created reminder (with a new `id`) returns to its sorted place. It
+uses the persisted UTC format (`2026-10-18T13:00:00.000Z`, the same rule as stored
+`createdAt`) and must not be later than the server's current time; an offset, a date
+without a time or a future time returns 400 and writes nothing. `updatedAt` is the
+re-create time. PATCH never accepts `createdAt`. The persisted reminder shape is
+unchanged, so the previous release reads re-created reminders.
+
 Settings `idle.enabled` is a preference, not proof Windows idle activation is
 installed. Only the Windows host's explicit activation command changes that
 configuration. `/api/windows/status` reads existing settings without changing them.
@@ -99,7 +108,8 @@ Other widgets reject a span (`<Name> does not support custom sizes`); too-small 
 too-wide spans return 400 with a clear message. In a placement PATCH, `span: null`
 clears a custom size, and so does a `size` without `span` (a family choice); a
 move keeps it. The editor sends a changed placement whole, with `span: null` when
-it has none. A saved span is not readable by `bedca44`; see the
+it has none. The previous installed release (`3fee844`) reads a saved span; the older
+`bedca44` does not, so a downgrade that far needs the
 [strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
 Legacy version-one settings acquire the safe default grid while preserving old
 widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
@@ -360,9 +370,11 @@ copy is valid, startup fails without resetting user data. Preserve the folder an
 restore a known-good export. Export/import includes settings and reminders only;
 weather, snapshot pixels, and native tokens are excluded. Store backups privately.
 
-At rest, `state.json`, `state.backup.json` and exports omit additive values that
-the previous installed release cannot parse while they equal the current read
-default: `appearance.accentMode` `color`, `appearance.animation` `subtle`, disabled
-widget ids the previous release does not know (the six #78 ids), and default `widgetData` sections. API responses
+At rest, `state.json`, `state.backup.json` and exports omit additive values while
+they equal the current read default: `appearance.accentMode` `color`,
+`appearance.animation` `subtle`, default `widgetData` sections, and disabled widget
+ids the previous installed release does not know. The previous release (`3fee844`)
+reads every one of these keys and knows every widget id, so all widget ids are
+written. API responses
 (`/api/state`, the `PATCH /api/settings` response and the native session) always
 include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).
