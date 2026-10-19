@@ -38,7 +38,8 @@
 .grid-ambient .clock-date { font-size: calc(max(var(--min-text), min(7cqw, 10cqh)) * var(--font-scale)); margin: 1cqh 0 0; line-height: 1.2; }
 .grid-ambient .clock-time { display: flex; align-items: baseline; font-size: calc(min(31cqw, 48cqh) * var(--font-scale)); font-weight: 400; line-height: 1; letter-spacing: -0.065em; }
 .grid-ambient .clock-period { font-size: max(var(--min-text) * var(--font-scale), 0.2em); margin-left: 0.45em; letter-spacing: 0.01em; }
-.grid-ambient .clock-outline .clock-digits { -webkit-text-fill-color: transparent; -webkit-text-stroke: max(0.8px, 0.35cqw) currentColor; }
+/* The outline never thins below 1.2 px at 720p (12% of the shared 1.4% text floor, so it scales with the display, #222). */
+.grid-ambient .clock-outline .clock-digits { -webkit-text-fill-color: transparent; -webkit-text-stroke: max(var(--min-text, 0px) * 0.12, 0.35cqw) currentColor; }
 .grid-ambient .clock-family-medium { flex-direction: row; align-items: center; justify-content: space-between; gap: 5cqw; }
 .grid-ambient .clock-family-medium .clock-time { font-size: calc(min(23cqw, 57cqh) * var(--font-scale)); }
 .grid-ambient .clock-family-medium .clock-calendar { max-width: 31%; }
@@ -47,10 +48,22 @@
 .grid-ambient .clock-family-large .clock-time { font-size: calc(min(31cqw, 66cqh) * var(--font-scale)); }
 .grid-ambient .clock-family-large .clock-calendar { display: flex; align-items: baseline; gap: 2cqw; }
 .grid-ambient .clock-family-large .clock-calendar .ambient-label, .grid-ambient .clock-family-large .clock-date { font-size: calc(max(var(--min-text), min(4cqw, 9cqh)) * var(--font-scale)); margin: 0; }
-.grid-ambient .analog-clock { display: block; flex: none; width: min(75cqw, 65cqh); height: min(75cqw, 65cqh); fill: none; stroke: var(--ambient-text); stroke-width: 1.4; stroke-linecap: round; }
-.grid-ambient .analog-minute { stroke: var(--ambient-accent); stroke-width: 1; }
-.grid-ambient .clock-family-medium .analog-clock { width: min(55cqw, 92cqh); height: min(55cqw, 92cqh); }
-.grid-ambient .clock-family-large .analog-clock { width: min(80cqw, 76cqh); height: min(80cqw, 76cqh); }
+/* Analog (#222): hands only, no face, bezel or tick ring. Small and medium size the graphic to the cell
+   height with the date beside it (the graphic gives way when the date needs the width); large keeps
+   its centred composition. Hands are HTML bars on full-box wrappers whose rotation composites (#161).
+   Lengths are a share of the drawn box; strokes are a share of it too, never under 3 px (hour) and
+   2 px (minute) at 720p, scaled with the display through the shared 1.4% text floor. Both hands use
+   the text colour; a dim accent pivot dot covers the junction the hands always light. The box clips
+   (the hands stay inside its circle), so rotated wrappers never add overflow to the widget fit. */
+.grid-ambient .analog-clock { position: relative; display: block; flex: none; width: min(80cqw, 76cqh); aspect-ratio: 1; overflow: clip; color: var(--ambient-text); }
+.grid-ambient .clock-style-analog:is(.clock-family-small, .clock-family-medium) { flex-direction: row; align-items: center; justify-content: flex-start; gap: 6cqw; }
+.grid-ambient .clock-style-analog:is(.clock-family-small, .clock-family-medium) .analog-clock { flex: 0 1 auto; width: 90cqh; min-width: 0; }
+.grid-ambient .clock-style-analog:is(.clock-family-small, .clock-family-medium) .clock-calendar { flex: none; max-width: none; white-space: nowrap; }
+.grid-ambient .analog-hand { position: absolute; inset: 0; --hand-tail: calc(var(--hand-stroke) / 2); }
+.grid-ambient .analog-stroke { position: absolute; left: 50%; bottom: calc(50% - var(--hand-tail)); width: var(--hand-stroke); height: calc(var(--hand-reach) + var(--hand-tail)); margin-left: calc(var(--hand-stroke) / -2); border-radius: 999px; background: currentColor; }
+.grid-ambient .analog-hour { --hand-stroke: max(var(--min-text, 0px) * 0.3, 2.4%); --hand-reach: 30%; }
+.grid-ambient .analog-minute { --hand-stroke: max(var(--min-text, 0px) * 0.2, 1.6%); --hand-reach: 45%; }
+.grid-ambient .analog-pivot { position: absolute; left: 50%; top: 50%; width: max(var(--min-text, 0px) * 0.6, 4.8%); aspect-ratio: 1; translate: -50% -50%; border-radius: 50%; background: var(--ambient-accent); }
 
 /* Weather adapts to the rain outlook (#74) without changing its footprint: calm shows conditions,
    a hint line replaces feels-like, and elevated leads with rain timing (large adds the hourly chance
@@ -180,10 +193,15 @@
 
 /* Screens remain complete and faint; deliberate photos have purposeful crops. */
 .snapshot-processing { position: absolute; width: 0; height: 0; pointer-events: none; }
-.grid-ambient .snapshot-body { align-items: center; height: 100cqh; min-height: 0; }
-.grid-ambient .preview-image-shell { width: 100%; min-height: 0; flex: 1; display: flex; align-items: center; justify-content: center; }
-.grid-ambient .preview-image { display: block; width: 100%; height: 100%; max-height: 100%; object-fit: contain; object-position: center; border-radius: 0; }
-.grid-ambient .preview-caption { flex: none; font-size: calc(max(var(--min-text), min(5cqw, 7cqh)) * var(--font-scale)); line-height: 1.2; margin: 3cqh 0 0; align-self: flex-start; }
+/* Last screen (#225): the frame is the largest box of the snapshot's shape (--snapshot-ratio) that fits
+   above one caption line, centred in the cell; the caption sits on the image's left edge, a small
+   display-relative gap below it (under 6 px even at 4K). The line is reserved at 1.35em, not its
+   1.2 line-height, because its text fragments (the font's ascent and descent) count as overflow. */
+.grid-ambient .snapshot-body { align-items: center; height: 100cqh; min-height: 0; --caption-size: calc(max(var(--min-text), min(5cqw, 7cqh)) * var(--font-scale)); --caption-gap: max(1px, var(--min-text, 0px) * 0.18); }
+.grid-ambient .snapshot-frame { display: flex; flex-direction: column; align-items: flex-start; width: min(100%, (100cqh - var(--caption-size) * 1.35 - var(--caption-gap)) * var(--snapshot-ratio, 1.7778)); }
+.grid-ambient .preview-image-shell { width: 100%; }
+.grid-ambient .preview-image { display: block; width: 100%; height: auto; max-height: none; aspect-ratio: var(--snapshot-ratio, 1.7778); object-fit: contain; object-position: center; border-radius: 0; }
+.grid-ambient .preview-caption { flex: none; font-size: var(--caption-size); line-height: 1.2; margin: var(--caption-gap) 0 0; }
 .grid-ambient .photo-image-shell { width: 100%; height: 100cqh; display: flex; align-items: center; justify-content: center; }
 .grid-ambient .ambient-photo-image { display: block; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.3) brightness(0.45); opacity: 0.45; border: 0; border-radius: 0; }
 .grid-ambient .ambient-photo.widget-size-large .ambient-photo-image { object-fit: contain; }

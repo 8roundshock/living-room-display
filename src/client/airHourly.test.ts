@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { AirQualityReading } from '../shared/contracts.ts';
-import { airHourly, upcomingAirHours, uvPeakLabel } from './airHourly.ts';
+import { AIR_CURRENT_MAX_AGE, airAgeSegments, airHourly, airReadingView, currentHourReading, upcomingAirHours, uvPeakLabel } from './airHourly.ts';
 
 const HOUR = 3600_000;
 const ZONE = 'America/Toronto';
@@ -63,4 +63,55 @@ test('fewer than two upcoming hours means no hourly estimate, never a stretched 
   const unknown = airHourly(series().map(reading => ({ ...reading, aqi: null })), FETCHED, 'us', 'US AQI', ZONE, '12h')!;
   assert.equal(unknown.summary, 'US AQI estimate for the next 24 hours: unknown');
   assert.ok(unknown.bars.every(bar => bar.unknown));
+});
+
+// #188: values fetched at 09:05 Toronto with a series from 09:00; current values describe 09:00.
+const CURRENT = { time: new Date(FETCHED).toISOString(), aqi: 42, dominant: 'pm2_5' as const, pm2_5: 12, pm10: 18, uvIndex: 3 };
+const SAVED = { updatedAt: new Date(FETCHED + 5 * 60_000).toISOString(), hourly: series() };
+
+test('saved current values stand for 3 hours after the update', () => {
+  for (const age of [0, 2 * HOUR, AIR_CURRENT_MAX_AGE]) {
+    const view = airReadingView(SAVED, CURRENT, FETCHED + 5 * 60_000 + age, ZONE, '12h');
+    assert.deepEqual(view, { kind: 'current', aqi: 42, uvIndex: 3, showUv: true, showPollutant: true, qualifier: null }, `${age / HOUR} h`);
+  }
+});
+
+test('older values read the saved estimate for the current hour, never daytime UV at night', () => {
+  const night = Date.parse('2026-10-19T02:30:00Z'); // 22:30 Toronto, 13.5 h after the fetch
+  const view = airReadingView(SAVED, CURRENT, night, ZONE, '12h');
+  assert.equal(view.kind, 'estimate'); assert.equal(view.qualifier, 'Saved estimate');
+  assert.equal(view.aqi, 40 + 13 % 6, 'the 22:00 estimate, not the 09:00 value');
+  assert.equal(view.uvIndex, 0, 'the 22:00 UV estimate'); assert.equal(view.showUv, true);
+  assert.equal(view.showPollutant, false, 'the main pollutant has no hourly estimate');
+  // The estimate for the current hour starts at its hour, not at the next one.
+  assert.equal(currentHourReading(SAVED.hourly, Date.parse('2026-10-19T02:00:00Z'))!.time, '2026-10-19T02:00:00.000Z');
+  assert.equal(currentHourReading(SAVED.hourly, FETCHED - 1), null, 'a series that starts later has no current hour');
+});
+
+test('without an estimate for this hour the old AQI is qualified with its time and UV is hidden', () => {
+  // The series ends at 08:00 the next morning; at 10:30 the hour has no estimate.
+  const later = Date.parse('2026-10-19T14:30:00Z');
+  const view = airReadingView(SAVED, CURRENT, later, ZONE, '12h');
+  assert.deepEqual(view, { kind: 'lastKnown', aqi: 42, uvIndex: null, showUv: false, showPollutant: false, qualifier: 'Last known · Sun 9 AM' });
+  assert.equal(airReadingView(SAVED, CURRENT, later, ZONE, '24h').qualifier, 'Last known · Sun 09:00');
+  // The same evening, with the estimate for this hour unknown, no weekday is needed.
+  const evening = Date.parse('2026-10-18T22:30:00Z'); // 18:30 Toronto
+  const gap = { ...SAVED, hourly: SAVED.hourly.map(reading => reading.time === '2026-10-18T22:00:00.000Z' ? { ...reading, aqi: null } : reading) };
+  assert.equal(airReadingView(gap, CURRENT, evening, ZONE, '12h').qualifier, 'Last known · 9 AM');
+  // Nothing is invented: an unknown AQI stays unknown.
+  assert.equal(airReadingView(gap, { ...CURRENT, aqi: null }, evening, ZONE, '12h').aqi, null);
+  // An unreadable update time falls back to the reading's own time, then keeps the values.
+  assert.equal(airReadingView({ ...SAVED, updatedAt: null }, CURRENT, later, ZONE, '12h').kind, 'lastKnown');
+  assert.equal(airReadingView({ ...SAVED, updatedAt: 'invalid' }, { ...CURRENT, time: 'invalid' }, later, ZONE, '12h').kind, 'current');
+});
+
+test('the footer age is short phrases: model estimate, saved, offline, or the age alone', () => {
+  const base = { age: 'Updated 12 min ago', stale: false, reading: true, disconnected: false };
+  assert.deepEqual(airAgeSegments(base), ['Model est.', '12 min ago']);
+  assert.deepEqual(airAgeSegments({ ...base, stale: true, age: 'Updated 2 hr ago' }), ['Saved reading', '2 hr ago']);
+  assert.deepEqual(airAgeSegments({ ...base, disconnected: true }), ['Offline', 'Model est.', '12 min ago']);
+  assert.deepEqual(airAgeSegments({ ...base, age: 'Updated just now' }), ['Model est.', 'just now']);
+  assert.deepEqual(airAgeSegments({ ...base, reading: false, age: 'Not updated yet' }), ['Not updated yet'], 'no estimate label without a reading');
+  assert.deepEqual(airAgeSegments({ ...base, reading: false, age: 'Updated 5 min ago' }), ['Updated 5 min ago']);
+  assert.deepEqual(airAgeSegments({ ...base, reading: false, stale: true, disconnected: true, age: 'Not updated yet' }), ['Offline', 'Not updated yet']);
 });

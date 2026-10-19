@@ -377,7 +377,7 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
     // (7) Analog hands move clockwise across 10:59 → 11:00 and 11:59 → 12:00; Off has no transition.
     for (const [time, label] of [['2026-10-18T14:59:30Z', '10:59 → 11:00'], ['2026-10-18T15:59:30Z', '11:59 → 12:00']]) for (const animation of ['subtle', 'off']) {
       const view = await displayPage({ time: Date.parse(time), state: scenario(state => { level(animation)(state); state.settings.appearance.clockStyle = 'analog'; state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock'])); }) });
-      const angles = () => view.page.evaluate(() => [...document.querySelectorAll('.analog-clock line')].map(line => ({ angle: parseFloat(line.style.rotate), duration: getComputedStyle(line).transitionDuration })));
+      const angles = () => view.page.evaluate(() => [...document.querySelectorAll('.analog-clock .analog-hand')].map(hand => ({ angle: parseFloat(hand.style.rotate), duration: getComputedStyle(hand).transitionDuration })));
       const first = await angles();
       await view.page.clock.runFor(31_000);
       const second = await angles();

@@ -22,9 +22,9 @@
   width: 100%;
   height: 100%;
 }
-/* Hands rotate around the dial centre through CSS, identically at every level. */
-.analog-clock line {
-  transform-box: view-box;
+/* Hands turn their full-box HTML wrappers around the box centre, identically at every level; an
+   HTML element's rotate transition runs on the compositor, unlike one on an SVG line (#161). */
+.analog-hand {
   transform-origin: 50% 50%;
 }
 .clock-char {
@@ -65,7 +65,7 @@
   }
 }
 /* Hands ease clockwise; jumps carry data-hand-snap and move at once. No seconds hand. */
-.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .analog-clock line:not([data-hand-snap]) {
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .analog-hand:not([data-hand-snap]) {
   transition: rotate var(--motion-hand) var(--motion-ease);
 }
 
@@ -166,14 +166,15 @@
   }
 }
 
-/* A newly loaded snapshot or photo fades in; no pan, zoom or loop (#109). Placeholders stay still. */
+/* A new snapshot or photo (#173): its shell holds at opacity 0 while data-image-loading is set (until
+   the image has decoded, or a timeout), then fades to its resting opacity, never above it; no pan,
+   zoom or loop (#109). The image a widget is first shown with and placeholders stay still, and Off
+   and reduced motion show a new image as soon as it is ready. */
 .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.photo-image-shell, .preview-image-shell) {
   transition: opacity 600ms var(--motion-ease);
 }
-@starting-style {
-  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.photo-image-shell, .preview-image-shell) {
-    opacity: 0;
-  }
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.photo-image-shell, .preview-image-shell)[data-image-loading] {
+  opacity: 0;
 }
 
 /* ---- Lively: reveal choreography --------------------------------------------------------- */
