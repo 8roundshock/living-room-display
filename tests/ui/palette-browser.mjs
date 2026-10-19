@@ -514,7 +514,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     for (const mode of ['native', 'color']) {
       if (mode === 'color') { await p.getByRole('button', { name: 'Close widget picker' }).click(); await p.getByRole('tab', { name: 'Style', exact: true }).click(); await swatch(p, 'Sand').click(); await p.getByRole('button', { name: 'Add widget to display' }).click(); }
       for (const id of ACTIVE_WIDGET_IDS) {
-        await p.getByRole('button', { name: `Preview ${WIDGET_CATALOG[id].name}`, exact: true }).click();
+        await p.getByRole('button', { name: new RegExp(`^Preview ${WIDGET_CATALOG[id].name}(, on your display)?$`) }).click();
         for (const size of widgetSizes(id)) {
           await p.getByRole('button', { name: `${WIDGET_CATALOG[id].name} ${size}`, exact: true }).click();
           const sample = p.locator('.picker-sample');

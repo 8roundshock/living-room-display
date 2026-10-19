@@ -326,7 +326,7 @@ async function editorPlaceholder({ page, state }) {
         };
       });
       const label = `editor placeholder ${name}`;
-      assert.equal(result.text, 'Reminders Hidden while empty · Add a reminder', label);
+      assert.equal(result.text, 'Reminders Hidden when empty · Add a reminder', label);
       assert.equal(result.list, 0, `${label}: no list`);
       assert.ok(result.inside, `${label}: the placeholder stays inside its widget ${JSON.stringify(result)}`);
       assert.ok(result.opacity > 0 && result.opacity < 1, `${label}: dim ${result.opacity}`);

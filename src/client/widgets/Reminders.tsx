@@ -137,11 +137,12 @@ function Reminders({ state, settings, now, disconnected, embedded }: WidgetConte
   }, [pendingIds]);
   useEffect(() => { previousIds.current = new Set(pendingIds); }, [pendingIds]);
   // The display hides a confirmed empty list while Hide when empty is on. The editor canvas keeps the
-  // widget at its real span instead, so adding and resizing it stay visible (#233).
+  // widget at its real span instead, so adding and resizing it stay visible (#233). It says "Hidden
+  // when empty", like the Widgets list subtitle and the Hide when empty toggle.
   if (status === 'hidden') return embedded ? <div className="widget-body image-placeholder reminders-placeholder">
     <Icon name="check" size={null} />
     <div className="ambient-label">Reminders</div>
-    <div className="ambient-description"><span className="reminder-segment">Hidden while empty</span> · <span className="reminder-segment">Add a reminder</span></div>
+    <div className="ambient-description"><span className="reminder-segment">Hidden when empty</span> · <span className="reminder-segment">Add a reminder</span></div>
   </div> : null;
   if (rows.length) return <ReminderList rows={rows} total={pending.length} fresh={fresh} offline={disconnected && pending.length > 0} settings={settings} />;
   return <div className="widget-body reminders-body">

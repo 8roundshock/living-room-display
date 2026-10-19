@@ -36,6 +36,7 @@ import {
   builtinLook,
   getVisual,
   matchingBuiltinPreset,
+  reminderPresentation,
   resetAppearance,
 } from './model';
 import { browserLocationPlatform, getDeviceLocation } from './location';
@@ -51,8 +52,8 @@ import {
   GRID_DENSITIES,
   WIDGET_CATALOG,
   WIDGET_IDS,
-  firstPlacement,
   fitWidgetFamily,
+  isFreeSize,
   reflowWidget,
   resizeWidgetSpan as resizeSpanGrid,
   switchGridDensity,
@@ -67,6 +68,17 @@ import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './u
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel } from './RemindersPanel';
+import { FirstRunCard, readFirstRunDismissed, rememberFirstRunDismissed } from './FirstRunCard';
+import {
+  addToGrid,
+  applyRoomFix,
+  fulfilRequest,
+  roomFixResult,
+  roomProblem as diagnoseRoomProblem,
+  type RoomFix,
+  type RoomProblem,
+  type RoomRequest,
+} from './make-room';
 const sections = ['Style', 'Widgets', 'Weather', 'Reminders'] as const;
 /** A check mark colour that stays visible on any custom accent swatch. */
 function readableMark(hex: string): string {
@@ -167,6 +179,15 @@ export function Editor({
   const [gridPreview, setGridPreview] = useState<WidgetGrid | null>(null),
     [gridMessage, setGridMessage] = useState('');
   const [gridEpoch, setGridEpoch] = useState(0);
+  // A resize with no room explains itself beside that widget's size controls (#183).
+  const [roomProblem, setRoomProblem] = useState<RoomProblem | null>(null);
+  // #252: the first-run location card; dismissal lives in this browser only.
+  const [firstRunDismissed, setFirstRunDismissed] = useState(readFirstRunDismissed);
+  const [cityFocus, setCityFocus] = useState(0);
+  useEffect(() => {
+    // "Choose a city" opens the Weather tab with the city field focused.
+    if (cityFocus) document.getElementById('city-search')?.focus();
+  }, [cityFocus]);
   const densityHistory = useRef<GridDensityHistory | undefined>(undefined);
   const [gridGesture, setGridGesture] = useState<{ id: WidgetId; x: number; y: number; width?: number; height?: number } | null>(null);
   const [photoDraft, setPhotoDraft] = useState<PhotoDraft | null | undefined>(),
@@ -335,23 +356,16 @@ export function Editor({
     setGridMessage('');
     change((previous) => ({ ...previous, widgetGrid: grid }));
   }
-  function addWidget(id: WidgetId, size: WidgetSize) {
-    const placement = firstPlacement(
-      draftRef.current.widgetGrid,
-      id,
-      size,
-      draftRef.current.widgets,
-    );
-    const next = placement ? reflowWidget(
-      draftRef.current.widgetGrid,
-      id,
-      placement,
-      draftRef.current.widgets,
-    ) : fitWidgetFamily(draftRef.current.widgetGrid, id, size, draftRef.current.widgets);
-    if (!next) { setGridMessage('No room. Try a smaller size or finer grid.'); return; }
+  /** The no-room explanation for a request on the current draft (#183, #238). */
+  function explainNoRoom(request: RoomRequest): RoomProblem {
+    const grid = draftRef.current.widgetGrid, enabled = draftRef.current.widgets;
+    return diagnoseRoomProblem(grid, request, enabled)
+      ?? { request, grid, enabled: { ...enabled }, blockers: [], fixes: [], message: 'Layout changed. Try again.' };
+  }
+  function finishAdd(id: WidgetId, grid: WidgetGrid, message: string) {
     change((previous) => ({
       ...previous,
-      widgetGrid: next,
+      widgetGrid: grid,
       widgets: { ...previous.widgets, [id]: true },
       preview:
         id === 'preview'
@@ -361,7 +375,40 @@ export function Editor({
     setSelectedWidget(id);
     setPickerOpen(false);
     setLayoutEditing(true);
-    setGridMessage(`${WIDGET_CATALOG[id].name} added`);
+    setRoomProblem(null);
+    setGridMessage(message);
+  }
+  /** Adds a widget as a draft; the picker shows the returned explanation when it has no room. */
+  function addWidget(id: WidgetId, size: WidgetSize): RoomProblem | null {
+    const next = addToGrid(draftRef.current.widgetGrid, id, size, draftRef.current.widgets);
+    if (!next) return explainNoRoom({ kind: 'add', id, size });
+    finishAdd(id, next, `${WIDGET_CATALOG[id].name} added`);
+    return null;
+  }
+  /** Applies a no-room fix and its request as one draft edit; Cancel restores the board. */
+  function applyFix(problem: RoomProblem, fix: RoomFix): RoomProblem | null {
+    const { request } = problem, enabled = draftRef.current.widgets;
+    const grid = draftRef.current.widgetGrid;
+    const fixed = applyRoomFix(grid, request, fix, enabled);
+    // The draft may have changed since the explanation; a request that now fits needs no fix.
+    const next = fixed ?? fulfilRequest(grid, request, enabled);
+    if (!next) {
+      const fresh = explainNoRoom(request);
+      if (request.kind !== 'add') setRoomProblem(fresh);
+      return fresh;
+    }
+    const message = fixed ? roomFixResult(request, fix, next) : `${WIDGET_CATALOG[request.id].name} ${request.kind === 'add' ? 'added' : 'resized'}`;
+    if (request.kind === 'add') finishAdd(request.id, next, message);
+    else {
+      commitGrid(next);
+      setRoomProblem(null);
+      setGridMessage(message);
+    }
+    return null;
+  }
+  function reportNoRoom(request: RoomRequest) {
+    setRoomProblem(explainNoRoom(request));
+    setGridMessage('');
   }
   function removeWidget(id: WidgetId) {
     if (id === 'photo' && !savedRef.current.widgets.photo) {
@@ -386,8 +433,8 @@ export function Editor({
       size,
       draftRef.current.widgets,
     );
-    if (next) commitGrid(next);
-    else setGridMessage('No room for that size');
+    if (next) { commitGrid(next); setRoomProblem(null); }
+    else reportNoRoom({ kind: 'family', id, size });
   }
   function resizeWidgetSpan(id: WidgetId, span: WidgetSpan) {
     const next = resizeSpanGrid(
@@ -396,7 +443,8 @@ export function Editor({
       span,
       draftRef.current.widgets,
     );
-    if (next) commitGrid(next);
+    if (next) { commitGrid(next); setRoomProblem(null); }
+    else if (isFreeSize(id)) reportNoRoom({ kind: 'span', id, span });
     else setGridMessage('No room for that size');
   }
   function moveWidget(id: WidgetId, dx: number, dy: number) {
@@ -874,6 +922,28 @@ export function Editor({
           )}
         </section>
         <aside className="inspector" aria-label="Display settings">
+          {/* Shown with the default Widgets tab only: Style has no spare height at 1280×720, Weather
+              holds the same actions, and the picker is a focused mode. */}
+          {saved.locationSource === 'fallback' && !firstRunDismissed && section === 'Widgets' && !pickerOpen && (
+            <FirstRunCard
+              place={saved.location.name}
+              draft={draft.locationSource === 'fallback' ? null : draft.locationSource === 'device' ? 'Your area' : draft.location.name}
+              busy={locationBusy}
+              saving={saving}
+              message={locationMessage}
+              onUseLocation={() => {
+                void deviceLocation(false);
+              }}
+              onChooseCity={() => {
+                setSection('Weather');
+                setCityFocus((value) => value + 1);
+              }}
+              onDismiss={() => {
+                rememberFirstRunDismissed();
+                setFirstRunDismissed(true);
+              }}
+            />
+          )}
           <div
             className="inspector-tabs"
             role="tablist"
@@ -886,6 +956,8 @@ export function Editor({
                 role="tab"
                 aria-selected={section === name}
                 aria-controls={`panel-${name}`}
+                // The count is named, “Reminders, 8 pending” (#241); the visible count stays compact.
+                aria-label={name === 'Reminders' && pendingCount > 0 ? `Reminders, ${pendingCount} pending` : undefined}
                 tabIndex={section === name ? 0 : -1}
                 onClick={() => setSection(name)}
                 onKeyDown={(event) => {
@@ -908,7 +980,7 @@ export function Editor({
               >
                 {name}
                 {name === 'Reminders' && pendingCount > 0 && (
-                  <span className="tab-count">{pendingCount}</span>
+                  <span className="tab-count" aria-hidden="true">{pendingCount}</span>
                 )}
               </button>
             ))}
@@ -1451,10 +1523,20 @@ export function Editor({
                 message={gridMessage}
                 settings={draft}
                 selected={selectedWidget}
-                onSelect={setSelectedWidget}
+                onSelect={(id) => {
+                  setSelectedWidget(id);
+                  setRoomProblem(null);
+                }}
                 pickerOpen={pickerOpen}
                 onPicker={setPickerOpen}
                 onAdd={addWidget}
+                onFix={applyFix}
+                roomProblem={
+                  roomProblem && same(roomProblem.grid, draft.widgetGrid) && same(roomProblem.enabled, draft.widgets)
+                    ? roomProblem
+                    : null
+                }
+                remindersHidden={reminderPresentation(draft, state.reminders, connectionError !== null) === 'hidden'}
                 onRemove={removeWidget}
                 onResize={resizeWidget}
                 onResizeSpan={resizeWidgetSpan}
@@ -1515,32 +1597,57 @@ export function Editor({
                   <label className="field-label" htmlFor="city-search">
                     City
                   </label>
+                  {/* The visible label is the accessible name (#241); the search hint is a description. */}
                   <CitySearch
                     value={locationQuery}
                     onChange={setLocationQuery}
                     onSelect={selectCity}
                     disabled={saving}
+                    label="City"
+                    description="Type two or more letters to search for a city"
                   />
                 </div>
                 <p className="inline-message" role="status">
                   {locationMessage || '\u00a0'}
                 </p>
-                <label>
-                  <span className="field-label">Units</span>
-                  <select
-                    className="select-input"
-                    value={draft.units}
-                    onChange={(event) =>
-                      change((previous) => ({
-                        ...previous,
-                        units: event.target.value as Settings['units'],
-                      }))
-                    }
-                  >
-                    <option value="metric">Celsius · metric</option>
-                    <option value="imperial">Fahrenheit · imperial</option>
-                  </select>
-                </label>
+                {/* #235: Time format applies to every widget, so it sits beside Units, outside any widget. */}
+                <div className="inspector-group time-units" role="group" aria-labelledby="time-units-heading">
+                  <h3 id="time-units-heading">Time &amp; units</h3>
+                  <div className="input-row">
+                    <label>
+                      <span className="field-label">Units</span>
+                      <select
+                        className="select-input"
+                        value={draft.units}
+                        onChange={(event) =>
+                          change((previous) => ({
+                            ...previous,
+                            units: event.target.value as Settings['units'],
+                          }))
+                        }
+                      >
+                        <option value="metric">°C · metric</option>
+                        <option value="imperial">°F · imperial</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span className="field-label">Time format</span>
+                      <select
+                        className="select-input"
+                        value={draft.clockFormat}
+                        onChange={(event) =>
+                          change((previous) => ({
+                            ...previous,
+                            clockFormat: event.target.value as Settings['clockFormat'],
+                          }))
+                        }
+                      >
+                        <option value="12h">12-hour</option>
+                        <option value="24h">24-hour</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
                 <div className={`weather-status-row ${state.weather.status}`}>
                   <span className="status-dot" />
                   {state.weather.status === 'fresh'

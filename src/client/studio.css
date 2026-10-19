@@ -270,6 +270,72 @@ html.studio-editor {
   font-size: 10px;
   color: #c9c0e1;
 }
+/* First-run location card (#252): above the inspector tabs while no location has been saved. */
+.first-run-card {
+  flex: none;
+  margin: 14px 16px 0;
+  padding: 7px 8px 9px 12px;
+  border: 1px solid #ffffff12;
+  border-radius: 14px;
+  background: #ffffff05;
+}
+.first-run-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.first-run-icon {
+  display: grid;
+  place-items: center;
+  color: #b9b2ed;
+}
+.studio .first-run-card h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: #e6e1ef;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+.studio .icon-button.first-run-dismiss {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  margin: -5px -3px -5px 0;
+  border-radius: 10px;
+}
+.studio .first-run-status {
+  margin: 3px 0 0;
+  color: #b6a6c8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.studio .first-run-status:empty {
+  margin: 0;
+}
+.first-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.studio .first-run-actions .button.small {
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 5px 12px;
+}
+@media (min-width: 701px) {
+  .first-run-card { margin: 10px 10px 0; }
+}
+/* Weather tab "Time & units" (#235): Units and Time format side by side, outside any widget. */
+.studio .time-units {
+  margin: 2px 0 0;
+}
+.studio .time-units h3 {
+  margin-bottom: 10px;
+}
 .inspector-panel {
   padding: 24px;
   min-height: 560px;

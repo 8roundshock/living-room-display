@@ -175,7 +175,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
   }
   async function selectCity(page) {
     await tab(page, 'Weather');
-    const input = page.getByRole('combobox', { name: 'Search for a city' });
+    const input = page.getByRole('combobox', { name: 'City', exact: true });
     await input.fill('Lon');
     await page.clock.runFor(300);
     await page.getByRole('option').first().waitFor();
@@ -251,7 +251,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     );
     assert.equal(
       await page
-        .getByRole('combobox', { name: 'Search for a city' })
+        .getByRole('combobox', { name: 'City', exact: true })
         .inputValue(),
       '',
     );
@@ -267,7 +267,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     );
 
     await tab(page, 'Weather');
-    const input = page.getByRole('combobox', { name: 'Search for a city' });
+    const input = page.getByRole('combobox', { name: 'City', exact: true });
     await input.fill('Lon');
     await page.clock.runFor(300);
     await page.getByRole('option').first().waitFor();
@@ -760,7 +760,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
         viewport: { width, height: 844 },
       }));
       await tab(page, 'Weather');
-      const input = page.getByRole('combobox', { name: 'Search for a city' });
+      const input = page.getByRole('combobox', { name: 'City', exact: true });
       await input.fill('Long');
       await page.clock.runFor(300);
       const options = page.locator('[role="option"]');
