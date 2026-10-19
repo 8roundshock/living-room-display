@@ -4,9 +4,13 @@ import {
   WIDGET_CATALOG,
   WIDGET_IDS,
   isActiveWidget,
+  isFreeSize,
+  placementLabel,
   widgetSizes,
   type WidgetSize,
+  type WidgetSpan,
 } from '../shared/widgets';
+import { FreeSizeControls } from './FreeSizeControls';
 import { Icon } from './icons';
 import { WidgetPicker } from './WidgetPicker';
 import { WIDGET_MODULES } from './widgets/registry';
@@ -20,6 +24,7 @@ export function WidgetInspector({
   onAdd,
   onRemove,
   onResize,
+  onResizeSpan,
   onChange,
   photoAvailable,
   photoBusy,
@@ -37,6 +42,7 @@ export function WidgetInspector({
   onAdd: (id: WidgetId, size: WidgetSize) => void;
   onRemove: (id: WidgetId) => void;
   onResize: (id: WidgetId, size: WidgetSize) => void;
+  onResizeSpan: (id: WidgetId, span: WidgetSpan) => void;
   onMove: (id: WidgetId, dx: number, dy: number) => void;
   onChange: (update: (settings: Settings) => Settings) => void;
   photoAvailable: boolean;
@@ -112,7 +118,7 @@ export function WidgetInspector({
                   <span className="widget-icon">
                     <Icon name={widget.icon} size={18} />
                   </span>
-                  <span className="widget-row-copy"><span>{widget.name}</span><small>{placement.size[0].toUpperCase() + placement.size.slice(1)}</small></span>
+                  <span className="widget-row-copy"><span>{widget.name}</span><small>{placementLabel(id, placement, settings.widgetGrid.density)}</small></span>
                   <span aria-hidden="true" className="row-chevron">
                     ›
                   </span>
@@ -128,7 +134,9 @@ export function WidgetInspector({
               {selected === id && (
                 <div className="widget-inspector">
                   <span className="field-label">Size</span>
-                  <div className="size-options">
+                  {isFreeSize(id) ? (
+                    <FreeSizeControls id={id} settings={settings} onResize={onResize} onResizeSpan={onResizeSpan} />
+                  ) : <div className="size-options">
                     {widgetSizes(id).map((size) => (
                       <button
                         key={size}
@@ -140,7 +148,7 @@ export function WidgetInspector({
                         {size[0].toUpperCase() + size.slice(1)}
                       </button>
                     ))}
-                  </div>
+                  </div>}
                   {id === 'clock' && (
                     <>
                       <span className="field-label">Clock style</span>

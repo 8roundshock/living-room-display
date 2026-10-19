@@ -1,0 +1,35 @@
+/* Calendar (#78): small is this week's strip, medium a big date beside the month, large a full
+   month. Only the weeks the month needs; neighbouring days stay black; today is an outline ring,
+   never a fill; past days are dimmer than days ahead. No frame, fill or divider. */
+.grid-ambient .ambient-calendar .calendar-face { width: 100%; min-height: 100cqh; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.grid-ambient .ambient-calendar .calendar-grid { width: 100%; table-layout: fixed; border-collapse: collapse; border-spacing: 0; font-variant-numeric: tabular-nums; line-height: 1; }
+.grid-ambient .ambient-calendar .calendar-grid th { padding: 0 0 0.45em; font-weight: 500; color: var(--ambient-accent); text-align: center; opacity: 0.85; }
+.grid-ambient .ambient-calendar .calendar-grid td { padding: 0; text-align: center; vertical-align: middle; }
+.grid-ambient .ambient-calendar .calendar-day { display: inline-block; box-sizing: border-box; min-width: 1.75em; padding: 0.2em 0.12em; border: max(1px, 0.07em) solid transparent; border-radius: 999px; line-height: 1.1; background: none; }
+.grid-ambient .ambient-calendar .calendar-past { opacity: 0.45; }
+.grid-ambient .ambient-calendar .calendar-future { opacity: 0.7; }
+.grid-ambient .ambient-calendar .calendar-today { opacity: 1; color: var(--ambient-text); border-color: var(--ambient-accent); background: none; font-weight: 500; }
+
+/* Small: the month, then weekday initials over this week's dates. */
+.grid-ambient .ambient-calendar .calendar-family-small .calendar-month { margin: 0 0 9cqh; font-size: calc(max(var(--min-text), min(13cqw, 18cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-calendar .calendar-strip th { font-size: calc(max(var(--min-text), min(6.5cqw, 9cqh)) * var(--font-scale)); padding-bottom: 0.9em; }
+.grid-ambient .ambient-calendar .calendar-strip td { font-size: calc(max(var(--min-data), min(8.4cqw, 16cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-calendar .calendar-strip .calendar-day { min-width: 1.4em; padding-inline: 0.04em; padding-block: 0.15em; }
+
+/* Medium: weekday, a large date and the month on the left; a compact month grid on the right. */
+.grid-ambient .ambient-calendar .calendar-family-medium { flex-direction: row; align-items: center; justify-content: space-between; gap: 5cqw; }
+.grid-ambient .ambient-calendar .calendar-family-medium > .calendar-hero { flex: 0 1 34%; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.grid-ambient .ambient-calendar .calendar-weekday { margin: 0; font-size: calc(max(var(--min-text), min(5.2cqw, 12cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-calendar .calendar-date-number { display: block; font-size: calc(min(19cqw, 54cqh) * var(--font-scale)); font-weight: 300; line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; margin: 2cqh 0; }
+.grid-ambient .ambient-calendar .calendar-month-name { font-size: calc(max(var(--min-text), min(5.2cqw, 12cqh)) * var(--font-scale)); line-height: 1.2; opacity: 0.8; overflow-wrap: anywhere; }
+.grid-ambient .ambient-calendar .calendar-family-medium > .calendar-grid { flex: 0 1 60%; width: 60%; }
+.grid-ambient .ambient-calendar .calendar-family-medium th { font-size: calc(max(var(--min-text), min(2.9cqw, 7.4cqh)) * var(--font-scale)); padding-bottom: 0.35em; }
+.grid-ambient .ambient-calendar .calendar-family-medium td { font-size: calc(max(var(--min-data), min(3.6cqw, 9.3cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-calendar .calendar-family-medium .calendar-day { padding-block: 0.12em; min-width: 1.7em; }
+
+/* Large: month and year, a weekday header row and a generous grid. */
+.grid-ambient .ambient-calendar .calendar-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 3cqw; margin: 0 0 4cqh; }
+.grid-ambient .ambient-calendar .calendar-family-large .calendar-month { margin: 0; font-size: calc(max(var(--min-text), min(6.4cqw, 7.4cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-calendar .calendar-year { font-size: calc(max(var(--min-text), min(6.4cqw, 7.4cqh)) * var(--font-scale)); line-height: 1.2; opacity: 0.6; }
+.grid-ambient .ambient-calendar .calendar-family-large th { font-size: calc(max(var(--min-text), min(3.6cqw, 4.3cqh)) * var(--font-scale)); padding-bottom: 0.8em; }
+.grid-ambient .ambient-calendar .calendar-family-large td { font-size: calc(max(var(--min-data), min(5.5cqw, 6.6cqh)) * var(--font-scale)); padding-block: 0.16em; }

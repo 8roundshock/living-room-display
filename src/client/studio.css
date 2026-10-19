@@ -40,10 +40,6 @@ html.studio-editor {
 .current-weather-main {
   gap: 1.3cqw;
 }
-.current-weather-main > .weather-symbol {
-  width: 4cqw;
-  height: 4cqw;
-}
 .weather-condition {
   font-weight: 500;
   font-size: calc(1.55cqw * var(--font-scale));
@@ -66,9 +62,9 @@ html.studio-editor {
 .rain-bars {
   gap: 0.45cqw;
 }
+/* Spell bars 0.65 and other hours 0.35 opacity come from widgets.css (#74). */
 .rain-bar {
   border-radius: 100px 100px 0 0;
-  opacity: 0.75;
 }
 .forecast-day-label {
   font-weight: 500;
@@ -415,9 +411,16 @@ html.studio-editor {
 .preset-miniature i {
   height: 3px;
   width: 65%;
-  background: currentColor;
-  opacity: 0.25;
+  background: var(--bar, currentColor);
+  opacity: 0.5;
   border-radius: 5px;
+}
+/* Built-in styles use native colours: Lilac, Mist and Rose bars at each style's own dimness. */
+.miniature-phone i {
+  opacity: 0.7;
+}
+.miniature-night i {
+  opacity: 0.3;
 }
 .miniature-phone {
   color: #a397b9;
@@ -535,6 +538,33 @@ html.studio-editor {
 .studio .swatch.active > span {
   outline: 2px solid #d2c9e8;
   outline-offset: 4px;
+}
+/* Native: a thin ring of the palette tones around the panel colour, so it reads as "several". */
+.studio .swatch-native > span {
+  position: relative;
+  color: #ece8f4;
+}
+.studio .swatch-native > span::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #1e1e22;
+}
+.studio .swatch-native > span > svg {
+  position: relative;
+}
+/* The current accent rides on the heading line, so naming it adds no height. */
+.studio .accent-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.studio .accent-current {
+  color: #aba5b6;
+  font-size: 12px;
+  font-weight: 450;
 }
 .studio .custom-color {
   position: relative;
@@ -1070,10 +1100,6 @@ html.studio-editor {
 .studio .form-actions .button {
   min-height: 42px;
   padding-inline: 12px;
-  font-size: 12px;
-}
-.studio .completed-toggle {
-  margin-top: 14px;
   font-size: 12px;
 }
 .studio .muted {

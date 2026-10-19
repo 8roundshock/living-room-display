@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { AppState, Settings, WidgetId } from '../shared/contracts.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset, widgetRevealOrder } from '../shared/widgets.ts';
+import { GRID_DENSITIES, WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset, placementSpan, widgetRevealOrder } from '../shared/widgets.ts';
 import { DEFAULT_ANIMATION_LEVEL, MAX_REVEAL_STEPS, motionPlan, revealTiming, type EntranceLevel, type MotionSurface } from '../shared/motion.ts';
+import { toneVariables } from '../shared/palette.ts';
 import { Icon } from './icons.tsx';
 import { MotionContext, usePrefersReducedMotion, type MotionState } from './useMotion.ts';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
@@ -39,7 +40,7 @@ function Widget({ id, settings, children, index, revealOrder, style }: { id: Wid
     const observer = new ResizeObserver(update); if (region.current) observer.observe(region.current); if (content.current) observer.observe(content.current); update();
     return () => observer.disconnect();
   }, [settings.appearance.fontScale, settings.appearance.fontFamily, children]);
-  const size = settings.widgetGrid.placements[id].size;
+  const size = settings.widgetGrid.placements[id].size, span = placementSpan(id, settings.widgetGrid.placements[id]);
   return <section
     ref={region}
     className={[
@@ -52,6 +53,8 @@ function Widget({ id, settings, children, index, revealOrder, style }: { id: Wid
     aria-label={widgetLabel(id)}
     data-widget-id={id}
     data-widget-size={size}
+    data-widget-span={`${span.columns}x${span.rows}`}
+    data-full-height={span.rows === GRID_DENSITIES[settings.widgetGrid.density].rows ? '' : undefined}
     data-settled={settled ? 'true' : undefined}
   >
     <div ref={content} className="widget-content" style={{ width: `${100 / fit}%`, maxWidth: 'none', transform: `scale(${fit})`, transformOrigin: 'left center' }}>{children}</div>
@@ -171,6 +174,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   const animation = plan.valueTransitions ? plan.level : 'off';
 
   const ambientStyle = { '--ambient-accent': settings.appearance.accentColor, '--ambient-text': settings.appearance.textColor, '--ambient-brightness': settings.appearance.brightness, '--font-scale': settings.appearance.fontScale,
+    ...toneVariables(settings.appearance),
     '--fade-duration': reducedMotion || !settings.appearance.motionEnabled ? '0s' : `${settings.appearance.fadeSeconds}s`, '--motion-x': `${offset.x}%`, '--motion-y': `${offset.y}%` } as CSSProperties;
   // Editor polish: a released or invalid drag settles into its cell; a newly added widget drops in.
   const editingTransition = `left 180ms ease, top 180ms ease, width 180ms ease, height 180ms ease${plan.editorPolish ? ', transform 160ms var(--motion-ease), translate 240ms var(--motion-ease), opacity 240ms var(--motion-ease)' : ''}`;

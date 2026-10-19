@@ -85,6 +85,49 @@ export function weatherTime(
   }).format(new Date(timestamp));
 }
 
+function clockParts(timestamp: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone,
+  }).formatToParts(new Date(timestamp));
+  const part = (type: string) =>
+    parts.find((value) => value.type === type)?.value ?? '';
+  const minute = part('minute');
+  return {
+    time: minute === '00' ? part('hour') : `${part('hour')}:${minute}`,
+    period: part('dayPeriod'),
+  };
+}
+
+/** A glanceable time: 12-hour times drop “:00” (“3 PM”, “3:30 PM”); 24-hour times stay whole. */
+export function compactWeatherTime(
+  timestamp: string,
+  timeZone: string,
+  format: '12h' | '24h',
+): string {
+  if (format === '24h') return weatherTime(timestamp, timeZone, format);
+  const { time, period } = clockParts(timestamp, timeZone);
+  return `${time} ${period}`;
+}
+
+/** A glanceable range sharing AM/PM when both ends agree: “3–6 PM”, “11 AM–2 PM”, “15:00–18:00”. */
+export function compactWeatherRange(
+  start: string,
+  end: string,
+  timeZone: string,
+  format: '12h' | '24h',
+): string {
+  if (format === '24h')
+    return `${weatherTime(start, timeZone, format)}–${weatherTime(end, timeZone, format)}`;
+  const from = clockParts(start, timeZone);
+  const to = clockParts(end, timeZone);
+  return from.period === to.period
+    ? `${from.time}–${to.time} ${to.period}`
+    : `${from.time} ${from.period}–${to.time} ${to.period}`;
+}
+
 export function nextComposition(current: number): number {
   return (current + 1) % 4;
 }
@@ -95,21 +138,4 @@ export function localInputDate(iso: string | null | undefined): string {
   if (!Number.isFinite(date.getTime())) return '';
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
-}
-
-export function reminderDate(iso: string | null, now = new Date()): string {
-  if (!iso) return 'Anytime';
-  const date = new Date(iso);
-  const sameDay = date.toDateString() === now.toDateString();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const day = sameDay
-    ? 'Today'
-    : date.toDateString() === tomorrow.toDateString()
-      ? 'Tomorrow'
-      : new Intl.DateTimeFormat('en', {
-          month: 'short',
-          day: 'numeric',
-        }).format(date);
-  return `${day} · ${new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit' }).format(date)}`;
 }

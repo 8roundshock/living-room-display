@@ -1,8 +1,12 @@
-import type { GridDensity, WidgetKind, WidgetSize } from './widgets.ts';
+import type { GridDensity, WidgetKind, WidgetSize, WidgetSpan } from './widgets.ts';
 import type { AccentMode } from './palette.ts';
 import type { AnimationLevel } from './motion.ts';
 export type WidgetId = WidgetKind;
-export interface WidgetPlacement { column: number; row: number; size: WidgetSize }
+/**
+ * `span` is a custom whole-cell size, only for free-size widgets (#73) and only when it differs from
+ * the family span; `size` is then always the largest family inside the span.
+ */
+export interface WidgetPlacement { column: number; row: number; size: WidgetSize; span?: WidgetSpan }
 export interface WidgetGrid { revision?: 1 | 2; density: GridDensity; placements: Record<WidgetId, WidgetPlacement> }
 export type Units = 'metric' | 'imperial';
 export interface LocationSettings { name: string; latitude: number; longitude: number; timezone: string }
@@ -55,7 +59,8 @@ export interface SettingsPatch {
   appearance?: Partial<AppearanceSettings>; widgets?: Partial<Record<WidgetId, boolean>>;
   widgetOverrides?: Partial<Record<WidgetId, Partial<WidgetTransform>>>;
   widgetBehavior?: { reminders?: Partial<WidgetBehavior['reminders']> };
-  widgetGrid?: { revision?: 2; density?: GridDensity; placements?: Partial<Record<WidgetId, Partial<WidgetPlacement>>> };
+  /** A placement `span: null` (or a `size` without `span`) clears a custom size. */
+  widgetGrid?: { revision?: 2; density?: GridDensity; placements?: Partial<Record<WidgetId, Partial<Omit<WidgetPlacement, 'span'>> & { span?: WidgetSpan | null }>> };
   /** Request-only local photo mutation; never stored in settings or included in exports. */
   photoChange?: { pngBase64: string } | null;
   preview?: Partial<PreviewSettings>; idle?: Partial<IdleSettings>; savedPresets?: SavedPreset[];
@@ -66,12 +71,17 @@ export interface SettingsPatch {
   };
 }
 export type AutomaticLocationSelection = { source: 'device'; latitude: number; longitude: number; automatic: boolean } | { source: 'fallback'; automatic: boolean };
+/**
+ * While `completed` is true, `updatedAt` is the completion time. Completed reminders are immutable
+ * except restore (`completed: false`, optionally with `text`/`dueAt` in the same patch) and delete.
+ */
 export interface Reminder {
   id: string; text: string; completed: boolean; dueAt: string | null;
   createdAt: string; updatedAt: string;
 }
 export interface ReminderInput { text: string; dueAt?: string | null }
 export interface ReminderPatch { text?: string; completed?: boolean; dueAt?: string | null }
+export interface ClearCompletedResult { deleted: number }
 export interface WeatherCurrent {
   time: string; temperature: number | null; feelsLike: number | null;
   weatherCode: number | null; isDay: boolean; windSpeed: number | null;
@@ -97,7 +107,19 @@ export interface PreviewState {
   available: boolean; capturedAt: string | null; width: number | null; height: number | null;
 }
 export interface PhotoState { available: boolean; id: string | null; width: number | null; height: number | null; updatedAt: string | null }
-export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; photo?: PhotoState; storageWarning?: string | null }
+export type AirPollutant = 'pm2_5' | 'pm10' | 'ozone' | 'nitrogen_dioxide' | 'sulphur_dioxide' | 'carbon_monoxide';
+/** One hourly model value at an instant (not an interval). */
+export interface AirQualityReading { time: string; aqi: number | null; uvIndex: number | null }
+/** CAMS model estimate via Open-Meteo for the saved weather location; `off` means no request was made. */
+export interface AirQualityState {
+  status: 'fresh' | 'stale' | 'unavailable' | 'off'; updatedAt: string | null; error: string | null;
+  source: 'CAMS via Open-Meteo'; sourceUrl: string; location: LocationSettings; scale: 'us' | 'european';
+  /** pm2_5/pm10 in µg/m³; `dominant` is the pollutant with the highest sub-index. */
+  current: { time: string; aqi: number | null; dominant: AirPollutant | null; pm2_5: number | null; pm10: number | null; uvIndex: number | null } | null;
+  /** At most 24 upcoming instants, starting with the current hour. */
+  hourly: AirQualityReading[];
+}
+export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; photo?: PhotoState; airQuality?: AirQualityState; storageWarning?: string | null }
 export interface LocationResult extends LocationSettings { id: number; country: string; admin1: string }
 export interface ApiError { error: string }
 export interface HostSession { token: string; settings: Settings; displayUrl: string }

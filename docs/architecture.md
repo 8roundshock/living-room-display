@@ -76,14 +76,16 @@ and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 | Decision | Current state |
 | --- | --- |
 | Architecture | B: custom local dashboard plus Windows helper. |
-| Initial feature slice | Time, weather/rain, reminders, visual editor/presets, last-state preview. |
+| Initial feature slice | Time, adaptive weather with rain timing inside it (#74), reminders, visual editor/presets, last-state preview. |
 | Language/framework and host | Node 24/TypeScript, React/Vite, native Node HTTP server, Windows helper. |
 | Weather/defaults | Open-Meteo; editable Toronto city default, metric, 12-hour clock. This is a product default, not inferred user location. |
+| Air quality data | Keyless Open-Meteo air-quality API (Copernicus CAMS model, US or European AQI), requested by the local server only while the widget is saved enabled or previewed (#78). Open-Meteo's free tier is for non-commercial use; revisit the provider and terms before any commercial use. Sun & moon is calculated locally and works offline. |
 | Data | Per-user JSON with serialized atomic writes, prior backup, and export/import; no kiosk-storage dependency. |
 | Visual controls | Reviewed Studio/grid, optional modules, outline/digital/analog clocks and presets were installed in the last verified 2026-10-18 baseline; actual 4K preview is accepted, while across-room comfort and compatibility gates remain. |
 | Preview | Last-desktop snapshot in RAM only; live app preview deferred. |
 | Local photo | Explicit selected raster is normalized in-browser, validated and atomically saved with settings in private local state; exports/imports exclude its bytes. Prior recovery backup may retain an older image. |
 | Activation | Manual use first; Windows idle activation remains off until verification and explicit enablement. |
+| Installer | Per-user Inno Setup 6 wrapper (`LivingRoomDisplaySetup-<version>.exe`, no admin) around one checksummed payload of the prebuilt app and pinned Node 24 runtime; the control script's `InstallPackage` owns the transaction (verification, data snapshot, swap, health check, automatic rollback). Rejected: MSIX (virtualized AppData/registry conflict with per-user `.scr` registration), WiX/MSI, a custom bootstrapper and a portable ZIP. See [installation](install.md#install-with-setup-recommended). |
 | Editor access | Loopback only, no LAN/public hosting or account system. |
 
 When a decision is made, replace its pending entry with the choice, source/date,
