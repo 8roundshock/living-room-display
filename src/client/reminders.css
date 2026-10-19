@@ -112,18 +112,85 @@
   font-size: 11px;
   color: #9d92a8;
 }
+/*
+ * The status line, Undo included, stays in view (#228): it sticks to the bottom of the inspector's
+ * scroll area on desktop, and above the Save bar (or the screen edge) when the page scrolls.
+ */
 .studio .reminder-status {
+  position: sticky;
+  bottom: 10px;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 2px 10px;
 }
+.studio .reminder-status.has-message {
+  min-height: 46px;
+  padding: 4px 6px 4px 14px;
+  border: 1px solid #ffffff17;
+  border-radius: 13px;
+  background: #2a2730f7;
+  box-shadow: 0 8px 26px #000a;
+  color: #e2d8ec;
+  font-size: 13px;
+}
 .studio .reminder-undo {
-  min-height: 36px;
-  padding-inline: 6px;
-  font-size: 12px;
+  min-height: 38px;
+  padding-inline: 8px;
+  font-size: 13px;
   font-weight: 600;
+  color: #dccbf2;
   text-decoration: underline;
+}
+@media (min-width: 701px) {
+  /* The bottom fade would hide the pinned status line; focus scrolling keeps rows above it. */
+  .studio .inspector-panel:has(.reminder-status.has-message) {
+    mask-image: none;
+    scroll-padding-block-end: 76px;
+  }
+}
+@media (max-width: 700px) {
+  .studio .reminder-status {
+    bottom: calc(var(--studio-footer-clearance, 24px) - 12px);
+  }
+  html.studio-editor:has(.reminder-status.has-message) {
+    scroll-padding-block-end: calc(var(--studio-footer-clearance, 124px) + 58px);
+  }
+}
+/* The form opens at the top of Up next, or in place of the row it edits (#236). */
+.studio .reminders-panel .reminder-form {
+  margin: 0 0 14px;
+}
+.studio .reminder-list .editor-reminder-row.editing {
+  padding: 6px 0;
+}
+.studio .editor-reminder-row.editing .reminder-form {
+  margin: 0;
+  border-color: #b7a4d166;
+  background: #b7a4d110;
+  box-shadow: inset 3px 0 #b7a4d1aa;
+}
+.studio .reminder-form-title {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6dcf0;
+}
+.studio .reminder-form .text-input[aria-invalid='true'] {
+  border-color: #c58a98;
+}
+.studio .field-problem {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #ecbdc8;
+}
+.studio .reminder-form-hint {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #c9a77e;
 }
 @media (prefers-reduced-motion: reduce) {
   .studio .editor-reminder-row,
