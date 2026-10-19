@@ -162,14 +162,16 @@ content (the sample clock, “Weekend trip”, “Birthday” and “Holiday”,
   the Save bar reads “Countdown needs a title” until it is fixed; the server remains the
   authority; a year outside 1900–2200 shows “Use a date between 1900 and 2200”. Closing
   the panel (removing or collapsing the widget, or changing tab) gives an edited row back
-  the last complete title or date it had (as saved, or as loaded by the editor's refresh)
-  and drops a row that was never complete there, so Save is never blocked by a field that
-  is not on screen and closing never deletes a saved date. Rows are read-only while a Save
-  is running.
+  the last complete title or date it had (as saved, as it was when the panel opened, or as
+  loaded by the editor's refresh) and drops a row that was never complete in any of those,
+  so Save is never blocked by a field that is not on screen and closing never deletes a
+  saved date (#191). Rows are read-only while a Save is running.
   Each row shows its count (“In 12 days · Fri, Oct 30”) or **Passed** for a
   past one-time date, which the display ignores until it is removed. Counts are whole
   days on this computer's calendar. The display shows the widget only while a date is
-  upcoming; the editor canvas shows “Add a date to count down to” otherwise.
+  upcoming; the editor canvas shows “Add a date to count down to” otherwise. The large
+  family lists as many dates as fit its box, soonest first, then an exact “+N more”
+  (#221).
 - **Note** (Personal, default small) is a textarea limited to 200 characters and 4
   lines with a live “37/200” counter and **Clear**. Line breaks are kept. The display
   hides an empty note; the editor canvas shows “Write a note”.
@@ -206,9 +208,16 @@ No background watch or IP lookup exists. `/display` never queries location or
 permission, and its Permissions-Policy disables geolocation.
 
 Preview weather retains its actual city/units while a selection is unsaved or
-refreshing. Forecast dates/intervals use the weather city's timezone; the clock
-and reminder input use the computer timezone. Current conditions show age;
-retained stale data is marked throughout. Missing values stay unavailable.
+refreshing. Forecast dates/intervals use the weather city's timezone, or the computer's
+while a device location's zone is still `auto` before its first forecast (Weather and
+Forecast then read unavailable); the clock and reminder input use the computer timezone. Current conditions show age;
+retained stale data is marked throughout, with Forecast's “Saved forecast” or
+“Offline” prefix in the same amber status tone as Weather's age (#223). Missing values
+stay unavailable. A retained forecast never shows past days, and a reading more than
+3 hours old reads “Last known · 9 AM” (#243, [rule](widgets.md#data-and-image-boundaries)).
+An update time in the future reads “Update time unknown” (#244). City search leaves
+out a result it could not save (no valid timezone or coordinates) and keeps the rest
+(#246).
 Hourly chance covers precipitation including snow; rain estimates use rain plus
 showers and label incomplete/gapped coverage. See [API semantics](api.md#weather-semantics).
 Rain timing lives inside Weather (#74): it stays calm when the next 12 hours are
@@ -216,18 +225,21 @@ complete and dry, adds a hint line when rain is later, precipitation is possible
 the outlook is unknown, and leads with rain timing (large adds hourly chance bars)
 when rain is current or starts within six hours. Wording says “likely” or
 “possible”, never that it is raining; times use the weather city's timezone and the
-12/24-hour setting, and “Forecast estimate”/“Partial forecast” labels stay visible.
+12/24-hour setting, never leave AM/PM or “· 40%” alone on a line (#197), and
+“Forecast estimate”/“Partial forecast” labels stay visible. The headline and the
+detail describe the same spells (#167).
 The footprint never changes, and the separate Rain widget is gone from the picker,
 list and canvas; an enabled Rain from older data is merged into Weather
 ([upgrade](install.md#additive-data-and-rollback-compatibility-84)). There is no opt-out of
 rain detail yet (#102). The [weather harness](../tests/ui/weather-browser.mjs) checks
-every family × mode × density at 1280/1920/3840 widths, CSS glyph boxes (#128) and the
-upgrade of a pre-#74 data folder.
+every family × mode × density at 1280/1920/3840 widths, CSS glyph boxes (#128), the
+upgrade of a pre-#74 data folder, and a device location whose zone is still `auto`
+while the provider is down (editor and display render, then recover).
 Each weather module keeps its actual place and relevant units visible when used
 alone; weather and forecast show the unit beside the place (“Toronto · °C”), and
-elevated Weather keeps the rain amount unit (“0.16 in rain”). Compact forecasts abbreviate Tomorrow as
-“Tom.” while retaining the full relative label and civil date for assistive text
-and hover details. Ambient labels, age, attribution, units and secondary values
+elevated Weather keeps the rain amount unit (“0.16 in rain”). Forecast labels read
+Today and then weekdays, tomorrow included (#256), while assistive text and hover
+details keep the full relative label and civil date (“Tomorrow, 2026-10-19”). Ambient labels, age, attribution, units and secondary values
 have a readability floor of 1.4% of the display height (1.65% for forecast
 chance/temperatures, the Weather rain detail and reminder dates), multiplied by
 **Text size**; very short compact widgets cap it by their own height. A larger
@@ -237,45 +249,69 @@ widget zooms out as a whole (icons and the unavailable dash may still shrink). S
 ## Reminders and last screen
 
 Reminder actions (add, edit, check off, restore, delete, clear history) save
-immediately with a short status line and never join the settings draft. Reminder
-form Cancel abandons that form only. Items are silent, dated or undated and one-time.
+immediately with a short status line and never join the settings draft. Items are
+silent, dated or undated and one-time.
 The Reminders tab has an **Up next (N)** / **History (M)** switch (`aria-pressed`).
 Up next uses the display's order: overdue or due within seven days (soonest first),
 then undated (newest first), then later dates. Each row has a 44 px check circle,
 the title, a due line (`Overdue · Yesterday · 3:00 PM`, `Today · 6:00 PM` or
 `Anytime`) and Edit/Delete. One tap fills the circle and dims the title at once while
-the completion saves; after about 0.9 s the row collapses out of Up next (reduced
-motion keeps the delay without the collapse). The status line offers **Undo** for
-about 8 s; Undo, or tapping the circle again during the settle, restores the item
-(it shows unchecked at once and stays in Up next while the restore saves). Focus
-moves to the next circle (else the previous one, else Add), so keyboard users can
+the completion saves; the circle reports `aria-pressed` until the row leaves or is
+restored. After about 0.9 s the row collapses out of Up next (reduced motion keeps the
+delay without the collapse). The status line offers **Undo** for about 8 s, until the
+next message replaces it; Undo, or tapping the circle again during the settle, restores
+the item (it shows unchecked at once and stays in Up next while the restore saves).
+Deleting a pending reminder from Up next offers the same Undo, which re-creates it with
+its text, exact due instant and creation time, so it returns to its sorted place. A
+shown message sticks to the bottom of the visible panel (above the Save bar on narrow
+screens), and the focused row scrolls clear of it; with no message the empty line stays
+at the end of the list and covers no row. The message, its Undo and any row
+still settling survive switching editor tabs and back.
+Focus moves to the next circle (else the previous one, else Add), so keyboard users can
 tick off several in a row; after Undo, focus moves to the restored reminder's circle.
 A failed save reverts the row: “Could not complete reminder. It is still in Up
-next.” Deleting from Up next reads “Reminder deleted”, also while a row settles.
+next.” Deleting from Up next reads “Reminder deleted”, also while a row settles (a
+checked-off row offers no delete Undo).
+**+** opens a **New reminder** form at the top of Up next; **Edit** turns that row into
+an **Edit reminder** form in place, so the row and its form stay in view. **Discard** or
+Escape closes the form only (unlike the settings Cancel); Discard, Escape and Save
+return focus to that row's Edit button, or to Add after a new reminder. An incomplete
+date or time shows “Enter both a date and a time, or clear the field.” under the field
+(`aria-invalid`, `aria-describedby`), keeps focus there and saves nothing; the
+browser's own bubble is off. The edited row has no circle; if its reminder is checked
+off anyway (for example in another tab), Save waits with “Checked off. Undo or restore
+it to edit.” until it is restored, and the typed edit is kept.
 History groups completed reminders under TODAY, YESTERDAY, `Mon, Oct 12` or
 `Oct 12, 2025` by completion time in the computer timezone, newest first, 50 at a
 time. A row shows `Completed 3:42 PM` (plus ` · was due …` when it was dated), and
 offers Restore (the check or the undo icon, back to its sorted place in Up next) and
 Delete. Completed reminders cannot be edited; an edit saved for a reminder completed
 in another tab reports “This reminder was completed elsewhere. Restore it to edit.”
-**Clear history…** asks inline before deleting every completed reminder. The
-computer keeps the latest 500 completed reminders. Every reminder time follows the
-12/24-hour setting; like the canvas preview, the editor list follows an unsaved
+**Clear history…** asks inline before deleting every completed reminder and focuses
+**Keep**; Keep or Escape returns focus to Clear history…, and Delete all moves it to the
+History switch. The computer keeps the latest 500 completed reminders. Every reminder
+time follows the 12/24-hour setting; like the canvas preview, the editor list follows an unsaved
 change to it, while the display keeps the saved setting until Save.
 The ambient widget shows as many pending reminders as fit its box, soonest first,
-never a partially visible row, then an exact “+N more”. Titles use up to two lines
-(four when only one reminder is pending) and scale with the widget width, capped
-near 3.2% of the display height. If even one row overflows, that row stays and the
-widget zooms out as a whole; any resize remeasures against the widget's fixed box, so
-the count and that state never flip on a remeasure. Dated rows add `Today · 6:00 PM`, `Tomorrow ·
-9:00 AM`, `Oct 24 · 3:00 PM` or `Overdue · Yesterday · 3:00 PM` (the word Overdue in
-the dim caution tone). Completed reminders never appear; the display reflects a
-check-off within its 30 s refresh.
+never a partially visible row, then an exact “+N more”. Rows are measured from layout
+boxes, so an entrance or transition on a row never changes the count (#216). Titles use
+up to two lines (four when only one reminder is pending) and scale with the widget
+width, capped near 3.2% of the display height. When every pending reminder fits with
+room to spare, a cut-off title may use up to four lines, and titles that all show in
+full grow toward that cap while everything still fits (#254), so a tall column shows
+whole titles instead of “…” beside empty space. If even one row overflows, that row
+stays and the widget zooms out as a whole; any resize remeasures against the widget's
+fixed box, so the count and that state never flip on a remeasure. Dated rows add
+`Today · 6:00 PM`, `Tomorrow · 9:00 AM`, `Oct 24 · 3:00 PM` or
+`Overdue · Yesterday · 3:00 PM` (the word Overdue in the dim caution tone). Completed
+reminders never appear; the display reflects a check-off within its 30 s refresh.
 **Widgets → Reminders → Hide when empty** defaults on. A confirmed list with no
-pending reminders (history only) hides the widget, or shows “All clear” when the
-option is off; a missing list or a disconnected display with nothing saved shows
-“Reminders unavailable”, and saved items stay listed with “Saved reminders ·
-offline”. Disabling the widget always hides it.
+pending reminders (history only) hides the widget on the display, or shows “All clear”
+when the option is off; the editor canvas keeps a hidden widget at its real span as a
+dim “Hidden while empty · Add a reminder” placeholder, so adding and resizing it stay
+visible (#233). A missing list or a disconnected display with nothing saved shows
+“Reminders unavailable”, and saved items stay listed with “Saved reminders · offline”
+in the status tone (#223). Disabling the widget always hides it.
 An unchanged due-date input is omitted from an edit, preserving its exact saved
 instant (including repeated daylight-saving hours and imported seconds/offsets)
 and any concurrent date update. Explicitly changing or clearing the date still

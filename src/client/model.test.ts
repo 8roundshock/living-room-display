@@ -4,11 +4,10 @@ import { defaultSettings } from '../shared/defaults.ts';
 import {
   applyBuiltinPreset,
   getVisual,
-  precipitationOutlook,
   reminderPresentation,
-  upcomingRain,
   weatherAttributionWidget,
 } from './model.ts';
+import { precipitationOutlook, rainOutlook, upcomingRain } from './weather-outlook.ts';
 import { pendingReminders } from '../shared/reminders.ts';
 
 test('weather attribution follows the first enabled weather module and can all be removed', () => {
@@ -52,7 +51,7 @@ test('forecast day labels use the actual city calendar date even in a stale list
   assert.equal(forecastDay('2026-10-17', 'America/Toronto', now), 'Sat');
   assert.equal(forecastDay('2026-10-18', 'America/Toronto', now), 'Today');
   assert.equal(forecastDay('2026-10-19', 'America/Toronto', now), 'Tomorrow');
-  assert.equal(forecastDay('2026-10-19', 'America/Toronto', now, true), 'Tom.');
+  assert.equal(forecastDay('2026-10-19', 'America/Toronto', now, true), 'Mon', 'compact labels name tomorrow by its weekday (#256)');
   assert.equal(forecastDay('2026-10-20', 'America/Toronto', now, true), 'Tue');
   assert.equal(forecastDay('2026-10-20', 'America/Toronto', now), 'Tue');
 });
@@ -123,7 +122,7 @@ test('weather age communicates missing and older data', () => {
   const now = Date.parse('2026-10-18T12:00:00Z');
   assert.equal(ageLabel(null, now), 'Not updated yet');
   assert.equal(ageLabel('2026-10-18T11:12:00Z', now), 'Updated 48 min ago');
-  assert.equal(ageLabel('2026-10-17T10:00:00Z', now), 'Updated 1 days ago');
+  assert.equal(ageLabel('2026-10-17T10:00:00Z', now), 'Updated 1 day ago', 'one day is singular (#280)');
 });
 
 test('all four compositions are reachable and cycle', () => {
@@ -155,6 +154,8 @@ test('upcoming hourly intervals include an in-progress interval and exclude past
 });
 
 const forecastNow = Date.parse('2026-10-18T13:00:00Z');
+const units = { temperature: '°C', windSpeed: 'km/h', precipitation: 'mm' } as const;
+const rainTotal = (intervals: { rainAmount: number | null }[]) => intervals.reduce((total, hour) => total + (hour.rainAmount ?? 0), 0);
 function hourly(startHour: number, count = 1, amount = 0) {
   return Array.from({ length: count }, (_, index) => ({
     intervalStart: new Date(
@@ -178,27 +179,14 @@ test('unknown precipitation never becomes a dry or zero-amount forecast', () => 
       rainAmount: null,
     },
   ];
-  const outlook = precipitationOutlook(unknown, 'mm', forecastNow);
+  const outlook = precipitationOutlook(unknown, forecastNow);
   assert.equal(outlook.chance, null);
-  assert.equal(outlook.expected, null);
-  assert.equal(outlook.rainExpected, null);
-  assert.equal(outlook.rainIncomplete, true);
+  assert.equal(outlook.rainDataIncomplete, true);
   assert.equal(outlook.incomplete, true);
-  assert.deepEqual(outlook.wet, []);
-  assert.equal(
-    precipitationOutlook(
-      [
-        {
-          ...unknown[0],
-          precipitationProbability: 75,
-          precipitationAmount: 0.5,
-        },
-      ],
-      'mm',
-      forecastNow,
-    ).expected,
-    0.5,
-  );
+  const classified = rainOutlook({ hourly: unknown, units }, forecastNow);
+  assert.equal(classified.firstSpell, null, 'an unknown amount is no rain spell');
+  assert.equal(classified.kind, 'unknown', 'nor a dry forecast');
+  assert.equal(classified.unknownReason, 'rain-data');
 });
 
 test('snow probability does not invent a rain timing window or rain amount', () => {
@@ -210,25 +198,24 @@ test('snow probability does not invent a rain timing window or rain amount', () 
       rainAmount: 0,
     },
   ];
-  const outlook = precipitationOutlook(snowy, 'mm', forecastNow);
+  const outlook = precipitationOutlook(snowy, forecastNow);
   assert.equal(outlook.chance, 90);
-  assert.equal(outlook.rainExpected, 0);
-  assert.equal(outlook.rainy.length, 0);
-  assert.equal(outlook.wet.length, 1);
+  const classified = rainOutlook({ hourly: snowy, units }, forecastNow);
+  assert.equal(classified.firstSpell, null, 'no rain timing window');
+  assert.equal(classified.kind, 'possible', 'snow is possible precipitation');
 });
 
 test('two known dry hours are a partial forecast with their actual amount period', () => {
-  const outlook = precipitationOutlook(hourly(0, 2), 'mm', forecastNow);
+  const outlook = precipitationOutlook(hourly(0, 2), forecastNow);
   assert.equal(outlook.coverageComplete, false);
   assert.equal(outlook.incomplete, true);
-  assert.equal(outlook.rainIncomplete, true);
   assert.equal(outlook.rainDataIncomplete, false);
   assert.equal(outlook.hasGaps, false);
-  assert.equal(outlook.rainExpected, 0);
+  assert.equal(rainTotal(outlook.intervals), 0);
   assert.equal(
     forecastPeriod(
-      outlook.coverageStart!,
-      outlook.coverageEnd!,
+      outlook.intervals[0]!.intervalStart,
+      outlook.intervals.at(-1)!.intervalEnd,
       'America/Toronto',
       '24h',
       forecastNow,
@@ -239,11 +226,11 @@ test('two known dry hours are a partial forecast with their actual amount period
 
 test('gapped hourly data stays partial even when both ends of the horizon exist', () => {
   const source = hourly(0, 12, 0.5).filter((_, index) => index !== 4);
-  const outlook = precipitationOutlook(source.reverse(), 'mm', forecastNow);
+  const outlook = precipitationOutlook(source.reverse(), forecastNow);
   assert.equal(outlook.hasGaps, true);
   assert.equal(outlook.coverageComplete, false);
   assert.equal(outlook.incomplete, true);
-  assert.equal(outlook.rainExpected, 5.5);
+  assert.equal(rainTotal(outlook.intervals), 5.5);
   assert.equal(
     outlook.intervals[0].intervalStart,
     new Date(forecastNow).toISOString(),
@@ -256,30 +243,26 @@ test('expired and invalid hourly intervals produce no current amount or coverage
     { ...hourly(0)[0], intervalEnd: 'invalid' },
     { ...hourly(0)[0], intervalEnd: new Date(forecastNow).toISOString() },
   ];
-  const outlook = precipitationOutlook(source, 'mm', forecastNow);
+  const outlook = precipitationOutlook(source, forecastNow);
   assert.deepEqual(outlook.intervals, []);
-  assert.equal(outlook.rainExpected, null);
   assert.equal(outlook.chance, null);
-  assert.equal(outlook.coverageStart, null);
-  assert.equal(outlook.coverageEnd, null);
   assert.equal(outlook.coverageComplete, false);
 });
 
 test('complete upcoming coverage includes both intersecting hour buckets and totals only those shown', () => {
   const outlook = precipitationOutlook(
     hourly(0, 24, 0.5),
-    'mm',
     forecastNow + 30 * 60_000,
   );
   assert.equal(outlook.coverageComplete, true);
   assert.equal(outlook.incomplete, false);
   assert.equal(outlook.hasGaps, false);
   assert.equal(outlook.intervals.length, 13);
-  assert.equal(outlook.rainExpected, 6.5);
+  assert.equal(rainTotal(outlook.intervals), 6.5);
   assert.equal(
     forecastPeriod(
-      outlook.coverageStart!,
-      outlook.coverageEnd!,
+      outlook.intervals[0]!.intervalStart,
+      outlook.intervals.at(-1)!.intervalEnd,
       'America/Toronto',
       '24h',
       forecastNow,

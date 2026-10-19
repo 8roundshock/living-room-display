@@ -1,66 +1,84 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CountdownEvent, Settings } from '../../shared/contracts.ts';
 import {
-  addDays, civilFromDate, countdownDate, daysBetween, countdownLabel, countdownPassed, formatCivil, nextOccurrence, parseCivil, todayCivil, upcomingCountdowns,
-  type CivilDate, type UpcomingCountdown,
+  addDays, civilFromDate, countdownDate, countdownLabel, countdownPassed, countdownRows, daysBetween, formatCivil, nextOccurrence, parseCivil, todayCivil,
+  type CivilDate, type CountdownRow,
 } from '../calendar.ts';
 import { Icon } from '../icons.tsx';
+import { atNaturalWidth, fittingCount, layoutExtent, useMeasured } from './measure.ts';
 import { TransitionText } from './TransitionText.tsx';
 import type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
 import './countdown.css';
 
 /** Same limits as the server, which remains the authority. */
 const MAX_COUNTDOWNS = 12, MAX_TITLE = 60, FIRST_YEAR = 1900, LAST_YEAR = 2200;
-const ROWS: Record<WidgetContentProps['size'], number> = { small: 1, medium: 3, large: 5 };
+/** Rows beside the medium hero; large measures how many fit. */
+const MEDIUM_ROWS = 2;
 
-// Visibility runs on every one-second tick; recompute only when the day or the list changes.
-const cache = new WeakMap<readonly CountdownEvent[], { today: string; upcoming: UpcomingCountdown[] }>();
-function upcomingFor(events: readonly CountdownEvent[], today: string): UpcomingCountdown[] {
-  const cached = cache.get(events);
-  if (cached?.today === today) return cached.upcoming;
-  const upcoming = upcomingCountdowns(events, parseCivil(today)!);
-  cache.set(events, { today, upcoming });
-  return upcoming;
-}
-
-function Count({ item, className }: { item: UpcomingCountdown; className: string }) {
-  const label = countdownLabel(item.days);
+function Count({ item, className }: { item: CountdownRow; className: string }) {
+  const { label } = item;
   return <div className={`${className} ${label.unit ? 'countdown-number' : 'countdown-word'}`} aria-label={label.text}>
     <TransitionText className="countdown-value" value={label.value} />
     {label.unit && <span className="countdown-unit">{label.unit}</span>}
   </div>;
 }
 
-function Row({ item, today }: { item: UpcomingCountdown; today: CivilDate }) {
-  const label = countdownLabel(item.days);
-  return <li className="countdown-row">
-    <div className="countdown-row-copy"><p className="countdown-row-title">{item.event.title}</p><p className="countdown-date">{countdownDate(item.date, today)}</p></div>
+function Row({ item, overflow = false }: { item: CountdownRow; overflow?: boolean }) {
+  const { label } = item;
+  return <li className={overflow ? 'countdown-row countdown-overflow' : 'countdown-row'}>
+    <div className="countdown-row-copy"><p className="countdown-row-title">{item.event.title}</p><p className="countdown-date">{item.dateText}</p></div>
     <p className="countdown-row-days" aria-label={label.text}><TransitionText className="countdown-value" value={label.value} />{label.unit && <span className="countdown-unit">{label.unit}</span>}</p>
   </li>;
 }
 
+/**
+ * Large lists as many complete rows as the box holds, then an exact "+N more" (#221), measured like
+ * the Reminders list from layout boxes: the face is fixed at 100cqh, overflow rows take no layout
+ * outside measuring, and measuring always runs top-anchored. 0 means even one row overflows; the face
+ * then shows one row and the shared fit zooms the widget out.
+ */
+function measureLarge(face: HTMLElement, total: number): number | null {
+  const rows = [...face.querySelectorAll<HTMLElement>('.countdown-list > .countdown-row')];
+  if (!rows.length) return null;
+  face.setAttribute('data-measuring', '');
+  try {
+    return atNaturalWidth(face, () => {
+      const more = layoutExtent(face.querySelector('.countdown-more-probe'));
+      return fittingCount(face, rows, count => count < total ? more : 0);
+    });
+  } finally { face.removeAttribute('data-measuring'); }
+}
+
+function LargeCountdown({ upcoming, settings }: { upcoming: CountdownRow[]; settings: Settings }) {
+  const face = useRef<HTMLDivElement>(null);
+  const total = upcoming.length;
+  const key = JSON.stringify([upcoming.map(item => [item.event.id, item.event.title, item.dateText, item.label.text]), settings.appearance.fontScale, settings.appearance.fontFamily]);
+  const fit = useMeasured(face, key, element => measureLarge(element, total), total);
+  const shown = Math.max(1, Math.min(fit, total)), more = total - shown;
+  return <div ref={face} className={['countdown-face', 'countdown-family-large', fit === 0 ? 'countdown-overfull' : ''].filter(Boolean).join(' ')}>
+    <ul className="countdown-list">{upcoming.map((item, index) => <Row key={item.event.id} item={item} overflow={index >= shown} />)}</ul>
+    {more > 0 && <p className="countdown-more">+{more} more</p>}
+    <p className="countdown-more-probe" aria-hidden="true">+{total} more</p>
+  </div>;
+}
+
 function Countdown({ settings, now, size, embedded }: WidgetContentProps) {
-  const today = todayCivil(now), events = settings.widgetData.countdowns;
-  const upcoming = useMemo(() => upcomingFor(events, today), [events, today]);
-  const civil = parseCivil(today)!;
+  // Rows and their strings are built once per list and civil day, not on every tick (#193).
+  const upcoming = countdownRows(settings.widgetData.countdowns, todayCivil(now));
   if (!upcoming.length) return embedded ? <div className="widget-body image-placeholder countdown-placeholder">
     <Icon name="hourglass" /><div className="ambient-label">Countdown</div><div className="ambient-description">Add a date to count down to</div>
   </div> : null;
-  const [next, ...rest] = upcoming as [UpcomingCountdown, ...UpcomingCountdown[]];
+  if (size === 'large') return <LargeCountdown upcoming={upcoming} settings={settings} />;
+  const [next, ...rest] = upcoming as [CountdownRow, ...CountdownRow[]];
   const hero = <div className="countdown-hero">
     <Count item={next} className="countdown-count" />
     <p className="countdown-title">{next.event.title}</p>
-    <p className="countdown-date">{countdownDate(next.date, civil)}</p>
+    <p className="countdown-date">{next.dateText}</p>
   </div>;
   if (size === 'small') return <div className="countdown-face countdown-family-small">{hero}</div>;
-  if (size === 'medium') return <div className="countdown-face countdown-family-medium">
+  return <div className="countdown-face countdown-family-medium">
     {hero}
-    {rest.length > 0 && <ul className="countdown-list">{rest.slice(0, ROWS.medium - 1).map(item => <Row key={item.event.id} item={item} today={civil} />)}</ul>}
-  </div>;
-  const shown = upcoming.slice(0, ROWS.large);
-  return <div className="countdown-face countdown-family-large">
-    <ul className="countdown-list">{shown.map(item => <Row key={item.event.id} item={item} today={civil} />)}</ul>
-    {upcoming.length > shown.length && <p className="countdown-more">+{upcoming.length - shown.length} more</p>}
+    {rest.length > 0 && <ul className="countdown-list">{rest.slice(0, MEDIUM_ROWS).map(item => <Row key={item.event.id} item={item} />)}</ul>}
   </div>;
 }
 
@@ -205,7 +223,7 @@ const SAMPLE: CountdownEvent[] = [
 
 export const CountdownWidget: WidgetModule = {
   Renderer: Countdown,
-  visible: props => props.embedded || upcomingFor(props.settings.widgetData.countdowns, todayCivil(props.now)).length > 0,
+  visible: props => props.embedded || countdownRows(props.settings.widgetData.countdowns, todayCivil(props.now)).length > 0,
   Settings: CountdownSettings,
   draftProblem,
   sample: ({ state, settings }) => {

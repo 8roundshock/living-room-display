@@ -1,15 +1,11 @@
 import { useMemo } from 'react';
 import type { AppState, Settings } from '../../shared/contracts.ts';
-import { addDays, civilDateKey, formatDuration, formatTime, isValidTimeZone, localTimeZone, moonPhase, nextMoonEvent, sunDay, sunIsUp, timeParts, zoneFormatter, type MoonPhase } from '../astronomy.ts';
+import { addDays, civilDateKey, formatDuration, formatTime, moonPhase, nextMoonEvent, sunDay, sunIsUp, timeParts, zoneFormatter, type MoonPhase } from '../astronomy.ts';
+import { weatherTimeZone } from '../format.ts';
 import { Icon } from '../icons.tsx';
 import { TransitionText } from './TransitionText.tsx';
 import type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
 import './sun-moon.css';
-
-/** The weather location's resolved zone; the computer's zone while it is still 'auto' or invalid. */
-export function weatherTimeZone(weather: AppState['weather']): string {
-  return isValidTimeZone(weather.location.timezone) ? weather.location.timezone : localTimeZone();
-}
 
 interface SkyModel {
   timeZone: string;
@@ -52,7 +48,7 @@ function skyModel(minute: number, latitude: number, longitude: number, timeZone:
 function useSky(state: AppState, now: Date): SkyModel {
   const minute = Math.floor(now.getTime() / 60_000);
   const { latitude, longitude } = state.weather.location;
-  const timeZone = weatherTimeZone(state.weather);
+  const timeZone = weatherTimeZone(state.weather.location.timezone);
   return useMemo(() => skyModel(minute, latitude, longitude, timeZone), [minute, latitude, longitude, timeZone]);
 }
 

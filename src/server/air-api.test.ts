@@ -26,7 +26,7 @@ function airPayload(scale: string) {
 
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-air-api-'));
-  // An existing user's colour-accent defaults: a fresh folder is Native, the separate #75 exception.
+  // An existing user's colour-accent defaults (fresh Native data is covered in rollback.test.ts).
   await seedColorAccentData(directory);
   const requests: URL[] = [];
   const app = await createApplication({ dataDirectory: directory, now: () => NOW, fetcher: async input => {
@@ -90,41 +90,55 @@ test('/api/air-quality previews a scale for the editor, validates it and keeps t
 async function readState(directory: string) { return JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')); }
 const city = (label: string) => ({ id: randomUUID(), label, timezone: 'Asia/Tokyo', latitude: 35.68, longitude: 139.69 });
 
-test('rollback: defaults stay readable by the previous release; enabling or filling these widgets is the documented exception', async () => {
+
+const readBackup = async (directory: string) => JSON.parse(await readFile(join(directory, 'state.backup.json'), 'utf8'));
+
+test('rollback: defaults and these widgets in use stay readable by the previous release (3fee844 knows them)', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-air-rollback-'));
   try {
-    // Colour-accent defaults, so only these widgets' data can make the files unreadable (Native is #75's exception).
+    // An existing user's colour-accent defaults, so each choice below is a change the files must carry.
     await seedColorAccentData(directory);
     const store = await DataStore.open(directory);
     // Saves that leave the new widgets off and their data at defaults stay readable.
     await store.patchSettings({ widgets: { worldClocks: false, sunMoon: false, airQuality: false }, widgetData: { worldClocks: [], airQuality: { scale: 'us' } }, units: 'imperial' });
     const defaults = await readState(directory);
     assertPreviousReaderAccepts('data', defaults, 'disabled new widgets with default data');
-    assert.equal('widgetData' in defaults.settings, false); assert.equal('airQuality' in defaults.settings.widgets, false);
+    // Default widgetData is still omitted at rest; the previous release knows the ids, so their keys are written.
+    assert.equal('widgetData' in defaults.settings, false); assert.equal(defaults.settings.widgets.airQuality, false);
   } finally { await rm(directory, { recursive: true, force: true }); }
-  for (const [label, patch] of [
-    ['World clocks enabled', { widgets: { worldClocks: true } }],
-    ['Sun & moon enabled', { widgets: { sunMoon: true } }],
-    ['Air quality enabled', { widgets: { airQuality: true } }],
-    ['a world clock added', { widgetData: { worldClocks: [city('Synthetic city')] } }],
-    ['European scale', { widgetData: { airQuality: { scale: 'european' } } }],
+  for (const [label, patch, written] of [
+    ['World clocks enabled', { widgets: { worldClocks: true } }, (file: any) => file.settings.widgets.worldClocks === true],
+    ['Sun & moon enabled', { widgets: { sunMoon: true } }, (file: any) => file.settings.widgets.sunMoon === true],
+    ['Air quality enabled', { widgets: { airQuality: true } }, (file: any) => file.settings.widgets.airQuality === true],
+    ['a world clock added', { widgetData: { worldClocks: [city('Synthetic city')] } }, (file: any) => file.settings.widgetData?.worldClocks?.length === 1],
+    ['European scale', { widgetData: { airQuality: { scale: 'european' } } }, (file: any) => file.settings.widgetData?.airQuality?.scale === 'european'],
   ] as const) {
     const folder = await mkdtemp(join(tmpdir(), 'lrd-air-rollback-'));
     try {
       await seedColorAccentData(folder);
       const store = await DataStore.open(folder);
       await store.patchSettings(patch);
-      assertPreviousReaderRejects('data', await readState(folder), label);
-      assertPreviousReaderAccepts('data', JSON.parse(await readFile(join(folder, 'state.backup.json'), 'utf8')), `${label}: the backup of the previous save`);
+      const state = await readState(folder);
+      assert.ok(written(state), `${label}: state.json carries the choice`);
+      assertPreviousReaderAccepts('data', state, label);
+      assertPreviousReaderAccepts('data', await readBackup(folder), `${label}: the backup of the previous save`);
+      await store.patchSettings({ units: 'imperial' });
+      const backup = await readBackup(folder);
+      assert.ok(written(backup), `${label}: state.backup.json carries the choice after the next save`);
+      assertPreviousReaderAccepts('data', backup, `${label}: state.backup.json after the next save`);
     } finally { await rm(folder, { recursive: true, force: true }); }
   }
 });
 
-test('rollback: an export with these widgets off imports into the previous release; enabled ones do not', async () => {
+test('rollback: exports with these widgets off or in use import into the previous release', async () => {
   const app = await fixture();
   try {
     assertPreviousReaderAccepts('import', await (await fetch(`${app.url}/api/export`)).json(), 'default export');
     assert.equal((await app.patch({ widgets: { sunMoon: true }, widgetData: { worldClocks: [city('Synthetic city')] } })).status, 200);
-    assertPreviousReaderRejects('import', await (await fetch(`${app.url}/api/export`)).json(), 'export with Sun & moon and a world clock');
+    const exported = await (await fetch(`${app.url}/api/export`)).json();
+    assert.equal(exported.settings.widgets.sunMoon, true); assert.equal(exported.settings.widgetData.worldClocks.length, 1);
+    assertPreviousReaderAccepts('import', exported, 'export with Sun & moon and a world clock');
+    // Negative control: an AQI scale the previous release does not know is still rejected.
+    assertPreviousReaderRejects('import', { ...exported, settings: { ...exported.settings, widgetData: { ...exported.settings.widgetData, airQuality: { scale: 'synthetic' } } } }, 'an unknown AQI scale');
   } finally { await app.close(); }
 });

@@ -17,7 +17,12 @@ import {
 } from '../shared/widgets.ts';
 import type { Settings, WidgetId } from '../shared/contracts.ts';
 
-/** The six #78 ids, appended after the previous release's ones in this order; each unit activates its own (deletes `status`). */
+/**
+ * The foundation ids every release knows (bedca44's catalog), written out rather than read from
+ * PREVIOUS_RELEASE, which moves after each install (#263).
+ */
+const FOUNDATION_IDS = ['clock', 'weather', 'rain', 'forecast', 'reminders', 'preview', 'photo'] as WidgetId[];
+/** The six #78 ids, appended after the foundation ids in this order; each unit activated its own (deleted `status`). */
 const NEW_IDS = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'] as WidgetId[];
 /** Ids still reserved; computed so that activating an entry (deleting its status) needs no edit here. */
 const PLANNED = WIDGET_IDS.filter(isPlannedWidget);
@@ -39,10 +44,12 @@ test('every catalog entry declares a valid category, tone, status and supported 
 });
 
 test('planned entries reserve the #78 ids after the shipped ones and are never active', () => {
-  assert.deepEqual(WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds, ...NEW_IDS]);
-  // Rain is retired into Weather (#74); every other previous-release id stays active, and each #78 id is
+  assert.deepEqual(WIDGET_IDS, [...FOUNDATION_IDS, ...NEW_IDS]);
+  // New ids are appended: the previous installed release's ids (all 13 since 3fee844, #263) stay a prefix.
+  assert.deepEqual(WIDGET_IDS.slice(0, PREVIOUS_RELEASE.widgetIds.length), [...PREVIOUS_RELEASE.widgetIds]);
+  // Rain is retired into Weather (#74); every other foundation id stays active, and each #78 id is
   // active once its unit deletes `status`.
-  assert.deepEqual(ACTIVE_WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds.filter(id => id !== 'rain'), ...NEW_IDS.filter(id => !PLANNED.includes(id))]);
+  assert.deepEqual(ACTIVE_WIDGET_IDS, [...FOUNDATION_IDS.filter(id => id !== 'rain'), ...NEW_IDS.filter(id => !PLANNED.includes(id))]);
   // Both #78 units (#157 Calendar/Countdown/Note, #171 World clocks/Air quality/Sun & moon) have shipped.
   assert.deepEqual(NEW_IDS.filter(id => !isActiveWidget(id)), [], 'every #78 id is active after both catalog units');
   assert.ok(PLANNED.every(id => NEW_IDS.includes(id)), 'only reserved #78 ids are planned');
@@ -138,11 +145,11 @@ test('a PATCH enabling a planned id is rejected with a clear message', async () 
 });
 
 // The same computation recorded on main 88e58b0 before the planned entries were appended; only
-// previous-release ids are compared, so appending must leave every existing layout identical.
+// the foundation ids are compared, so appending must leave every existing layout identical.
 // #74 deliberately changed the default board (large Weather, Rain merged): the pre-#74 board still
 // hashes to 322f8665…, and the value below is recorded after that change.
 function layoutGoldens(boardDefaults: () => Settings = defaultSettings): string {
-  const ids = PREVIOUS_RELEASE.widgetIds;
+  const ids = FOUNDATION_IDS;
   const pick = (grid: ReturnType<typeof defaultWidgetGrid>) => ({ revision: grid.revision, density: grid.density, placements: Object.fromEntries(ids.map(id => [id, grid.placements[id]])) });
   const legacy = JSON.parse(JSON.stringify(defaultSettings())); delete legacy.widgetGrid.revision;
   const positions: Record<string, [number, number]> = { clock: [0, 0], weather: [8, 0], rain: [0, 3], forecast: [2, 6], reminders: [5, 3], preview: [8, 3], photo: [4, 3] };
