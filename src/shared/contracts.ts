@@ -1,8 +1,12 @@
-import type { GridDensity, WidgetKind, WidgetSize } from './widgets.ts';
+import type { GridDensity, WidgetKind, WidgetSize, WidgetSpan } from './widgets.ts';
 import type { AccentMode } from './palette.ts';
 import type { AnimationLevel } from './motion.ts';
 export type WidgetId = WidgetKind;
-export interface WidgetPlacement { column: number; row: number; size: WidgetSize }
+/**
+ * `span` is a custom whole-cell size, only for free-size widgets (#73) and only when it differs from
+ * the family span; `size` is then always the largest family inside the span.
+ */
+export interface WidgetPlacement { column: number; row: number; size: WidgetSize; span?: WidgetSpan }
 export interface WidgetGrid { revision?: 1 | 2; density: GridDensity; placements: Record<WidgetId, WidgetPlacement> }
 export type Units = 'metric' | 'imperial';
 export interface LocationSettings { name: string; latitude: number; longitude: number; timezone: string }
@@ -55,7 +59,8 @@ export interface SettingsPatch {
   appearance?: Partial<AppearanceSettings>; widgets?: Partial<Record<WidgetId, boolean>>;
   widgetOverrides?: Partial<Record<WidgetId, Partial<WidgetTransform>>>;
   widgetBehavior?: { reminders?: Partial<WidgetBehavior['reminders']> };
-  widgetGrid?: { revision?: 2; density?: GridDensity; placements?: Partial<Record<WidgetId, Partial<WidgetPlacement>>> };
+  /** A placement `span: null` (or a `size` without `span`) clears a custom size. */
+  widgetGrid?: { revision?: 2; density?: GridDensity; placements?: Partial<Record<WidgetId, Partial<Omit<WidgetPlacement, 'span'>> & { span?: WidgetSpan | null }>> };
   /** Request-only local photo mutation; never stored in settings or included in exports. */
   photoChange?: { pngBase64: string } | null;
   preview?: Partial<PreviewSettings>; idle?: Partial<IdleSettings>; savedPresets?: SavedPreset[];

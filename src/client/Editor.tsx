@@ -37,10 +37,12 @@ import {
   firstPlacement,
   fitWidgetFamily,
   reflowWidget,
+  resizeWidgetSpan as resizeSpanGrid,
   switchGridDensity,
   type GridDensityHistory,
   type GridDensity,
   type WidgetSize,
+  type WidgetSpan,
 } from '../shared/widgets';
 import { GridEditor } from './GridEditor';
 import { WidgetInspector } from './WidgetInspector';
@@ -356,6 +358,16 @@ export function Editor({
     if (next) commitGrid(next);
     else setGridMessage('No room for that size');
   }
+  function resizeWidgetSpan(id: WidgetId, span: WidgetSpan) {
+    const next = resizeSpanGrid(
+      draftRef.current.widgetGrid,
+      id,
+      span,
+      draftRef.current.widgets,
+    );
+    if (next) commitGrid(next);
+    else setGridMessage('No room for that size');
+  }
   function moveWidget(id: WidgetId, dx: number, dy: number) {
     const original = draftRef.current.widgetGrid.placements[id];
     const next = reflowWidget(
@@ -377,7 +389,8 @@ export function Editor({
     if (next) {
       densityHistory.current = next.history;
       commitGrid(next.grid);
-      if (next.resized.length) setGridMessage(`${next.resized.map(({ id, to }) => `${WIDGET_CATALOG[id].name} ${to}`).join(' · ')} to fit. Switch back to restore.`);
+      // A dropped custom size is named, e.g. "Reminders 2 × 8 → small" (#152).
+      if (next.resized.length) setGridMessage(`${next.resized.map(({ id, to, span }) => `${WIDGET_CATALOG[id].name} ${span ? `${span.columns} × ${span.rows} → ` : ''}${to}`).join(' · ')} to fit. Switch back to restore.`);
     }
     else
       setGridMessage('Not enough room. Keep this grid or use smaller widgets.');
@@ -1066,6 +1079,7 @@ export function Editor({
                 onAdd={addWidget}
                 onRemove={removeWidget}
                 onResize={resizeWidget}
+                onResizeSpan={resizeWidgetSpan}
                 onMove={moveWidget}
                 onChange={change}
                 saving={saving}

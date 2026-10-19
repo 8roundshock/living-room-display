@@ -110,4 +110,5 @@ function Reminders({ state, settings, now, disconnected }: WidgetContentProps) {
 export const RemindersWidget: WidgetModule = {
   Renderer: Reminders,
   visible: props => reminderPresentation(props.settings, props.state.reminders, props.disconnected) !== 'hidden',
+  sizeHint: 'Shows as many reminders as fit · soonest first',
 };

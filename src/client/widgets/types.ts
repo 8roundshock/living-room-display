@@ -23,4 +23,6 @@ export interface WidgetModule {
   draftProblem?: (settings: Settings) => string | null;
   /** Adjusts the picker's synthetic sample; returns new objects and never uses private content. */
   sample?: (base: { state: AppState; settings: Settings }) => { state: AppState; settings: Settings };
+  /** Free-size widgets (#73): one line under the custom size controls saying what a larger box shows. */
+  sizeHint?: string;
 }

@@ -89,6 +89,17 @@ catalog ID: `{column,row,size}` with zero-based cells and a supported family.
 requires `preview.enabled`; the editor keeps both flags coherent when adding or
 removing Last screen. Enabled placements may not intersect or leave the grid.
 PATCH accepts nested placement updates; import/presets validate the same rules.
+A free-size widget (the catalog `freeSize` rule; currently Reminders, #73) may add
+`span: {columns, rows}`: whole cells from its minimum (2×2) up to the full grid
+height and two-thirds of the width (Spacious 5×6, Balanced 8×8, Fine 10×10), in
+revision 2 only. `size` is always the largest family inside the span, and a span
+equal to that family's span is dropped, so spans are stored only when they differ.
+Other widgets reject a span (`<Name> does not support custom sizes`); too-small or
+too-wide spans return 400 with a clear message. In a placement PATCH, `span: null`
+clears a custom size, and so does a `size` without `span` (a family choice); a
+move keeps it. The editor sends a changed placement whole, with `span: null` when
+it has none. A saved span is not readable by `bedca44`; see the
+[strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
 Legacy version-one settings acquire the safe default grid while preserving old
 widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
 and `appearance.layout` remain parseable data but no longer affect rendering;

@@ -6,6 +6,7 @@ import './widgets.css';
 import './studio.css';
 import './reminders.css';
 import './grid-editor.css';
+import './freesize.css';
 import './widget-controls.css';
 
 createRoot(document.getElementById('root')!).render(

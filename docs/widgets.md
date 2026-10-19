@@ -60,10 +60,15 @@ Each widget implements a `WidgetModule` in its own file under `src/client/widget
 optional `Settings` panel rendered in the inspector under the shared Size control,
 optional `draftProblem(settings)` that disables Save and shows its reason, and
 optional `sample({ state, settings })` that adjusts the picker's synthetic sample
-with new objects. Use `WeatherGlyph` for weather symbols and `TransitionText` for
-values that change. Browser QA loads one check module per widget from
+with new objects, and, for free-size widgets, an optional one-line `sizeHint`.
+Use `WeatherGlyph` for weather symbols and `TransitionText` for values that
+change. Browser QA loads one check module per widget from
 [`tests/ui/widget-checks/`](../tests/ui/widget-checks/): `id`, optional
 `prepare(state, { now })`, extra clipping `selectors` and `family(...)` assertions.
+An optional `sweep({ page, viewport, state, base, now })` runs once per viewport
+after the family sweep for checks beyond the families; a module whose `id` is not
+a widget id (such as `reminders-span`, the free-size span check) contributes only
+its sweep.
 
 Start with `WIDGET_CATALOG`, `GRID_DENSITIES` and `widgetSpan`; use
 `reflowWidget`/`fitGridDensity` rather than implementing a second collision or
@@ -129,6 +134,23 @@ restoring the exact prior layout when switched back before another widget edit.
 A visible grid, handles,
 selection borders, labels and picker chrome belong to the editor only.
 
+A free-size widget declares the optional catalog `freeSize` rule instead of its own
+geometry (#73; currently Reminders). Besides its families it accepts any whole-cell
+`span` from `min` (2 × 2) up to the full grid height and `maxColumnsFraction` (two
+thirds) of the width, so even a full-height column leaves at least a third of the
+board for relocation. `size` stays the largest family inside the span, which keeps
+family-based renderers working and guarantees that deleting the span leaves a
+collision-free board. Every helper reads cells through `placementSpan`, so the
+editor, validation, density fitting and ambient composition share one collision
+rule. A density change scales the span before its origin: full height stays full
+height and an axis at its minimum stays at the minimum, so a Column (2 × full
+height) stays a Column in every grid (#152); other extents scale with the grid and
+clamp to the new limits. When the board still cannot fit, the span falls back to a
+family and the editor names what it dropped (“Reminders 2 × 8 → small to fit”).
+A free-size widget's module may add a one-line `sizeHint` under the custom size
+controls; Reminders reads “Shows as many reminders as fit · soonest first”, which
+its measured list delivers in any span.
+
 Every widget is optional. The picker describes available widgets and sizes;
 adding/removing/resizing/repositioning changes the settings draft. Provide direct
 family controls usable by keyboard/touch as an alternative to handle resizing.
@@ -172,6 +194,19 @@ rectangles disjoint at each visible phase; fade the old composition fully to
 black before revealing a new one, so crossfades cannot overlay bright layouts.
 Include a black rest interval and avoid flashes or synchronized bright accents.
 Use the centralized scheduler/wrapper, not a new per-widget motion loop.
+
+Dense boards keep relocating (#93). The bounded composition search may fail to
+find a board where every widget moves; it then reflects the previous composition
+horizontally, vertically or both (`displayPlacement`, span-aware), choosing the
+reflection that moves the most widgets. A reflection is always in bounds and
+collision-free. Only a board that every reflection maps onto itself falls through
+to the search that allows widgets to stay. A full-height span can only travel
+sideways; any span relocates as one whole group through the black rest. Its
+content therefore also alternates vertically: a full-height Reminders column
+(`data-full-height`) anchors its list to the top on even compositions (the authored
+layout included) and to the bottom on odd ones (`composition-1`/`composition-3`).
+Only fitted rows take layout and measurement always runs top-anchored, so the
+bottom-anchored group never clips the label or a row and “+N more” stays exact.
 
 Reduced motion removes travel, zoom and decorative animation while preserving
 periodic spatial relocation through a black interval and an instant reveal (or a

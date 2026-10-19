@@ -27,6 +27,11 @@ export interface WidgetDefinition {
   legacyPlacement?: { column: number; row: number };
   /** Legacy versions coupled this module's visibility to another widget. */
   legacyEnabledFrom?: string;
+  /**
+   * Free-size widgets (#73) also accept any whole-cell span from `min` up to the full grid height and
+   * `maxColumnsFraction` of its width, so a full-height widget always leaves room to relocate.
+   */
+  freeSize?: { min: WidgetSpan; maxColumnsFraction: number };
 }
 const standard = { small: { columns: 2, rows: 2 }, medium: { columns: 4, rows: 2 }, large: { columns: 4, rows: 4 } };
 
@@ -36,7 +41,7 @@ export const WIDGET_CATALOG = {
   weather: { name: 'Weather', description: 'Conditions now, with rain timing when rain is near', icon: 'cloud', category: 'weather', tone: 'sky', sizes: standard, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 8, row: 0 } },
   rain: { name: 'Rain', description: 'Now part of Weather', icon: 'rain', category: 'weather', tone: 'water', status: 'retired', mergedInto: 'weather', sizes: standard, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 8, row: 2 }, legacyPlacement: { column: 0, row: 3 }, legacyEnabledFrom: 'weather' },
   forecast: { name: 'Forecast', description: 'The days ahead', icon: 'calendar', category: 'weather', tone: 'sky', sizes: { ...standard, large: { columns: 8, rows: 2 } }, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 0, row: 6 }, legacyPlacement: { column: 2, row: 6 } },
-  reminders: { name: 'Reminders', description: 'What is coming up', icon: 'check', category: 'personal', tone: 'personal', sizes: standard, defaultSize: 'small', defaultEnabled: true, defaultPlacement: { column: 0, row: 4 }, legacyPlacement: { column: 5, row: 3 } },
+  reminders: { name: 'Reminders', description: 'What is coming up', icon: 'check', category: 'personal', tone: 'personal', sizes: standard, defaultSize: 'small', defaultEnabled: true, defaultPlacement: { column: 0, row: 4 }, legacyPlacement: { column: 5, row: 3 }, freeSize: { min: { columns: 2, rows: 2 }, maxColumnsFraction: 2 / 3 } },
   preview: { name: 'Last screen', description: 'A dim snapshot on activation', icon: 'monitor', category: 'pictures', tone: 'stone', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 4 }, legacyPlacement: { column: 8, row: 3 } },
   photo: { name: 'Photo', description: 'One picture from this device', icon: 'photo', category: 'pictures', tone: 'stone', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 }, legacyPlacement: { column: 4, row: 3 } },
   // Planned (#78): reserved ids, always disabled and never rendered until their unit deletes `status`.
@@ -131,8 +136,74 @@ export function widgetSpan(id: WidgetId, size: WidgetSize, revision: 1 | 2 = 2):
   if (!span) throw new RangeError(`${WIDGET_CATALOG[id].name} does not support ${size}`);
   return span;
 }
+function freeSizeRule(id: WidgetId): WidgetDefinition['freeSize'] { return (WIDGET_CATALOG[id] as WidgetDefinition).freeSize; }
+/** Free-size widgets accept a custom whole-cell `span` in addition to their families (#73). */
+export function isFreeSize(id: WidgetId): boolean { return !!freeSizeRule(id); }
+/** The smallest and largest custom span in a density, or null when the widget has no free size. */
+export function freeSpanLimits(id: WidgetId, density: GridDensity): { min: WidgetSpan; max: WidgetSpan } | null {
+  const rule = freeSizeRule(id); if (!rule) return null;
+  const grid = GRID_DENSITIES[density];
+  // The epsilon keeps an exact product such as 12 × 2/3 from flooring to 7.
+  return { min: { ...rule.min }, max: { columns: Math.max(rule.min.columns, Math.floor(grid.columns * rule.maxColumnsFraction + 1e-9)), rows: grid.rows } };
+}
+/** The largest supported family whose span fits inside `span` (the smallest family when none does). */
+export function familyForSpan(id: WidgetId, span: WidgetSpan): WidgetSize {
+  const sizes = widgetSizes(id);
+  return [...sizes].reverse().find(size => { const family = widgetSpan(id, size); return family.columns <= span.columns && family.rows <= span.rows; }) ?? sizes[0]!;
+}
+/** The cells a placement occupies: its custom span, or its family's span. */
+export function placementSpan(id: WidgetId, placement: WidgetPlacement, revision: 1 | 2 = 2): WidgetSpan {
+  return placement.span ?? widgetSpan(id, placement.size, revision);
+}
+function sameSpan(a: WidgetSpan | undefined, b: WidgetSpan | undefined): boolean {
+  return a === b || (!!a && !!b && a.columns === b.columns && a.rows === b.rows);
+}
+/**
+ * Canonical free-size placement: `size` is the largest family inside the span, and a span equal to
+ * that family's span is dropped. Other widgets are returned unchanged, so validation still rejects a
+ * span they do not support.
+ */
+export function normalizePlacement(id: WidgetId, placement: WidgetPlacement): WidgetPlacement {
+  const { span, ...rest } = placement;
+  if (!span || !isFreeSize(id)) return { ...placement };
+  const size = familyForSpan(id, span);
+  return sameSpan(span, widgetSpan(id, size)) ? { ...rest, size } : { ...rest, size, span: { columns: span.columns, rows: span.rows } };
+}
+/** Free-size counterpart of fitWidgetFamily: keep the requested origin where it fits and reflow neighbours. */
+export function resizeWidgetSpan(grid: WidgetGrid, id: WidgetId, span: WidgetSpan, enabled: Partial<Record<WidgetId, boolean>>): WidgetGrid | null {
+  const limits = freeSpanLimits(id, grid.density); if (!limits || grid.revision === 1) return null;
+  if (!Number.isInteger(span.columns) || !Number.isInteger(span.rows) || span.columns < limits.min.columns || span.rows < limits.min.rows || span.columns > limits.max.columns || span.rows > limits.max.rows) return null;
+  const dimensions = GRID_DENSITIES[grid.density], origin = grid.placements[id];
+  const preferred = normalizePlacement(id, { column: Math.min(origin.column, dimensions.columns - span.columns), row: Math.min(origin.row, dimensions.rows - span.rows), size: familyForSpan(id, span), span });
+  const result = reflowWidget(grid, id, preferred, enabled);
+  if (result || enabled[id]) return result;
+  // Like fitWidgetFamily, a hidden widget's old origin may partition the board; try nearby origins.
+  const requested = { ...grid, placements: { ...grid.placements, [id]: preferred } };
+  for (const candidate of nearbyPlacements(requested, id)) {
+    const next = reflowWidget(grid, id, candidate, enabled);
+    if (next) return next;
+  }
+  return null;
+}
+/** Inspector label: a family name, Column (2 × full height) or `C × R`. */
+export function placementLabel(id: WidgetId, placement: WidgetPlacement, density: GridDensity): string {
+  if (!placement.span || !isFreeSize(id)) return placement.size[0]!.toUpperCase() + placement.size.slice(1);
+  const { columns, rows } = placement.span;
+  return columns === 2 && rows === GRID_DENSITIES[density].rows ? 'Column' : `${columns} × ${rows}`;
+}
+/** Why a custom span is not allowed, or null when the placement has none or it is valid. */
+function spanProblem(grid: WidgetGrid, id: WidgetId, placement: WidgetPlacement): string | null {
+  const span = placement.span; if (!span) return null;
+  const name = WIDGET_CATALOG[id].name, limits = freeSpanLimits(id, grid.density);
+  if (!limits || grid.revision === 1) return `${name} does not support custom sizes`;
+  if (!Number.isInteger(span.columns) || !Number.isInteger(span.rows) || span.columns < limits.min.columns || span.rows < limits.min.rows) return `${name} is smaller than its minimum size`;
+  if (span.columns > limits.max.columns) return `${name} is wider than two-thirds of the grid`;
+  // Rollback containment: deleting the span must leave a family inside the same cells.
+  if (placement.size !== familyForSpan(id, span)) return `${name} does not support this size`;
+  return null;
+}
 export function getWidgetRect(grid: WidgetGrid, id: WidgetId, placement = grid.placements[id]): { left: number; top: number; width: number; height: number } {
-  const limits = GRID_DENSITIES[grid.density]; const span = widgetSpan(id, placement.size, grid.revision);
+  const limits = GRID_DENSITIES[grid.density]; const span = placementSpan(id, placement, grid.revision);
   return { left: placement.column / limits.columns * 100, top: placement.row / limits.rows * 100, width: span.columns / limits.columns * 100, height: span.rows / limits.rows * 100 };
 }
 /** Reminders measure how many rows fit their actual box, so only the forecast has a per-family count. */
@@ -143,15 +214,16 @@ export function intersects(a: WidgetPlacement, aSpan: WidgetSpan, b: WidgetPlace
   return a.column < b.column + bSpan.columns && b.column < a.column + aSpan.columns && a.row < b.row + bSpan.rows && b.row < a.row + aSpan.rows;
 }
 export function placementFits(grid: WidgetGrid, id: WidgetId, placement: WidgetPlacement, enabled: Partial<Record<WidgetId, boolean>>): boolean {
-  if (!widgetSizes(id).includes(placement.size)) return false;
-  const limits = GRID_DENSITIES[grid.density]; const span = widgetSpan(id, placement.size, grid.revision);
+  if (!widgetSizes(id).includes(placement.size) || spanProblem(grid, id, placement)) return false;
+  const limits = GRID_DENSITIES[grid.density]; const span = placementSpan(id, placement, grid.revision);
   if (!Number.isInteger(placement.column) || !Number.isInteger(placement.row) || placement.column < 0 || placement.row < 0 || placement.column + span.columns > limits.columns || placement.row + span.rows > limits.rows) return false;
-  return WIDGET_IDS.every(other => other === id || !enabled[other] || !intersects(placement, span, grid.placements[other], widgetSpan(other, grid.placements[other].size, grid.revision)));
+  return WIDGET_IDS.every(other => other === id || !enabled[other] || !intersects(placement, span, grid.placements[other], placementSpan(other, grid.placements[other], grid.revision)));
 }
 export function gridProblem(grid: WidgetGrid, enabled: Partial<Record<WidgetId, boolean>>): string | null {
   for (const id of WIDGET_IDS) {
     if (!widgetSizes(id).includes(grid.placements[id].size)) return `${WIDGET_CATALOG[id].name} does not support this size`;
-    const placement = grid.placements[id]; const limits = GRID_DENSITIES[grid.density]; const span = widgetSpan(id, placement.size, grid.revision);
+    const placement = grid.placements[id]; const spanIssue = spanProblem(grid, id, placement); if (spanIssue) return spanIssue;
+    const limits = GRID_DENSITIES[grid.density]; const span = placementSpan(id, placement, grid.revision);
     if (placement.column < 0 || placement.row < 0 || placement.column + span.columns > limits.columns || placement.row + span.rows > limits.rows) return `${WIDGET_CATALOG[id].name} is outside the grid`;
     if (enabled[id] && !placementFits(grid, id, placement, enabled)) return `${WIDGET_CATALOG[id].name} overlaps another widget`;
   }
@@ -172,10 +244,10 @@ export function firstPlacement(grid: WidgetGrid, id: WidgetId, size: WidgetSize,
 }
 type Visibility = Partial<Record<WidgetId, boolean>>;
 function area(id: WidgetId, grid: WidgetGrid): number {
-  const span = widgetSpan(id, grid.placements[id].size); return span.columns * span.rows;
+  const span = placementSpan(id, grid.placements[id]); return span.columns * span.rows;
 }
 function nearbyPlacements(grid: WidgetGrid, id: WidgetId): WidgetPlacement[] {
-  const { columns, rows } = GRID_DENSITIES[grid.density], origin = grid.placements[id], span = widgetSpan(id, origin.size);
+  const { columns, rows } = GRID_DENSITIES[grid.density], origin = grid.placements[id], span = placementSpan(id, origin);
   const values: WidgetPlacement[] = [];
   for (let row = 0; row + span.rows <= rows; row++) for (let column = 0; column + span.columns <= columns; column++) values.push({ ...origin, column, row });
   const distance = (p: WidgetPlacement) => (p.column - origin.column) ** 2 + (p.row - origin.row) ** 2;
@@ -213,10 +285,10 @@ function packGrid(grid: WidgetGrid, enabled: Visibility, fixed: WidgetId[] = [])
 export function reflowWidget(grid: WidgetGrid, id: WidgetId, placement: WidgetPlacement, enabled: Visibility): WidgetGrid | null {
   if (!placementFits(grid, id, placement, {})) return null;
   const result = { ...grid, placements: { ...grid.placements, [id]: { ...placement } } };
-  const unaffected = WIDGET_IDS.filter(other => enabled[other] && other !== id && !intersects(placement, widgetSpan(id, placement.size), grid.placements[other], widgetSpan(other, grid.placements[other].size)));
+  const unaffected = WIDGET_IDS.filter(other => enabled[other] && other !== id && !intersects(placement, placementSpan(id, placement), grid.placements[other], placementSpan(other, grid.placements[other])));
   return packGrid(result, { ...enabled, [id]: true }, [id, ...unaffected]) ?? packGrid(result, { ...enabled, [id]: true }, [id]);
 }
-/** Family changes keep their requested origin; additions can seek nearby legal space. */
+/** Family changes keep their requested origin and drop a custom span; additions can seek nearby legal space. */
 export function fitWidgetFamily(grid: WidgetGrid, id: WidgetId, size: WidgetSize, enabled: Visibility): WidgetGrid | null {
   if (!widgetSizes(id).includes(size)) return null;
   const span = widgetSpan(id, size), limits = GRID_DENSITIES[grid.density], origin = grid.placements[id];
@@ -240,23 +312,37 @@ export function repackGrid(grid: WidgetGrid, density: GridDensity, enabled: Visi
   const result = structuredClone(grid); result.density = density;
   const from = GRID_DENSITIES[grid.density], to = GRID_DENSITIES[density];
   for (const id of WIDGET_IDS) {
-    const original = grid.placements[id], span = widgetSpan(id, original.size);
-    result.placements[id] = { ...original,
-      column: Math.round(original.column / Math.max(1, from.columns - span.columns) * Math.max(0, to.columns - span.columns)),
-      row: Math.round(original.row / Math.max(1, from.rows - span.rows) * Math.max(0, to.rows - span.rows)) };
+    const original = grid.placements[id], before = placementSpan(id, original), limits = original.span ? freeSpanLimits(id, density) : null;
+    let placement: WidgetPlacement = { ...original };
+    if (original.span && limits) {
+      // Scale a custom span before its origin, clamped to the new limits. Full height stays full height
+      // and an axis at its minimum stays at the minimum, so a Column stays a Column (#152).
+      const scale = (value: number, ratio: number, min: number, max: number) => value <= min ? min : Math.max(min, Math.min(max, Math.round(value * ratio)));
+      const span = { columns: scale(original.span.columns, to.columns / from.columns, limits.min.columns, limits.max.columns), rows: scale(original.span.rows, to.rows / from.rows, limits.min.rows, limits.max.rows) };
+      placement = normalizePlacement(id, { ...original, size: familyForSpan(id, span), span });
+    }
+    const after = placementSpan(id, placement);
+    result.placements[id] = { ...placement,
+      column: Math.round(original.column / Math.max(1, from.columns - before.columns) * Math.max(0, to.columns - after.columns)),
+      row: Math.round(original.row / Math.max(1, from.rows - before.rows) * Math.max(0, to.rows - after.rows)) };
   }
   return packGrid(result, enabled);
 }
-export interface DensityFit { grid: WidgetGrid; resized: { id: WidgetId; from: WidgetSize; to: WidgetSize }[] }
+/** `span` names a custom size that had to be dropped to fit, so the editor can say what changed. */
+export interface DensityFit { grid: WidgetGrid; resized: { id: WidgetId; from: WidgetSize; to: WidgetSize; span?: WidgetSpan }[] }
 /** Fit all enabled widgets, preferring the fewest family steps and the least lost area. */
 export function fitGridDensity(grid: WidgetGrid, density: GridDensity, enabled: Visibility): DensityFit | null {
   const direct = repackGrid(grid, density, enabled); if (direct) return { grid: direct, resized: [] };
   const ids = WIDGET_IDS.filter(id => enabled[id]), variants: { grid: WidgetGrid; cost: number; loss: number }[] = [];
   function choose(index: number, candidate: WidgetGrid, cost: number, loss: number) {
     if (index === ids.length) { if (cost) variants.push({ grid: candidate, cost, loss }); return; }
-    const id = ids[index]!, sizes = widgetSizes(id), original = sizes.indexOf(grid.placements[id].size);
+    const id = ids[index]!, current = grid.placements[id];
+    // Span-less families, with a custom span as a pseudo-family just above the family it contains.
+    const ladder: WidgetPlacement[] = widgetSizes(id).map(size => ({ column: current.column, row: current.row, size }));
+    let original = ladder.findIndex(placement => placement.size === current.size);
+    if (current.span) ladder.splice(++original, 0, structuredClone(current));
     for (let family = original; family >= 0; family--) {
-      const next = structuredClone(candidate); next.placements[id].size = sizes[family]!;
+      const next = structuredClone(candidate); next.placements[id] = { ...ladder[family]! };
       choose(index + 1, next, cost + (original - family) ** 2, loss + area(id, grid) - area(id, next));
     }
   }
@@ -264,13 +350,17 @@ export function fitGridDensity(grid: WidgetGrid, density: GridDensity, enabled: 
   variants.sort((a, b) => a.cost - b.cost || a.loss - b.loss);
   for (const candidate of variants) {
     const packed = repackGrid(candidate.grid, density, enabled); if (!packed) continue;
-    return { grid: packed, resized: ids.filter(id => packed.placements[id].size !== grid.placements[id].size).map(id => ({ id, from: grid.placements[id].size, to: packed.placements[id].size })) };
+    const dropped = (id: WidgetId) => grid.placements[id].span && !packed.placements[id].span ? grid.placements[id].span : undefined;
+    return { grid: packed, resized: ids.filter(id => packed.placements[id].size !== grid.placements[id].size || dropped(id)).map(id => {
+      const span = dropped(id);
+      return { id, from: grid.placements[id].size, to: packed.placements[id].size, ...(span ? { span: { columns: span.columns, rows: span.rows } } : {}) };
+    }) };
   }
   return null;
 }
 export interface GridDensityHistory { current: WidgetGrid; enabled: Visibility; layouts: Partial<Record<GridDensity, WidgetGrid>> }
 function sameGrid(a: WidgetGrid, b: WidgetGrid): boolean {
-  return a.revision === b.revision && a.density === b.density && WIDGET_IDS.every(id => { const x = a.placements[id], y = b.placements[id]; return x.column === y.column && x.row === y.row && x.size === y.size; });
+  return a.revision === b.revision && a.density === b.density && WIDGET_IDS.every(id => { const x = a.placements[id], y = b.placements[id]; return x.column === y.column && x.row === y.row && x.size === y.size && sameSpan(x.span, y.span); });
 }
 /** Density exploration is reversible until a meaningful widget/visibility edit changes its source. */
 export function switchGridDensity(grid: WidgetGrid, density: GridDensity, enabled: Visibility, history?: GridDensityHistory): (DensityFit & { history: GridDensityHistory }) | null {
@@ -282,7 +372,7 @@ export function switchGridDensity(grid: WidgetGrid, density: GridDensity, enable
 
 /** Reflections plus a non-repeating low-discrepancy offset keep successive cycles varied. */
 export function displayPlacement(grid: WidgetGrid, id: WidgetId, cycle: number): WidgetPlacement {
-  const original = grid.placements[id]; const span = widgetSpan(id, original.size); const limits = GRID_DENSITIES[grid.density];
+  const original = grid.placements[id]; const span = placementSpan(id, original, grid.revision); const limits = GRID_DENSITIES[grid.density];
   return { ...original, column: cycle % 2 ? limits.columns - original.column - span.columns : original.column,
     row: Math.floor(cycle / 2) % 2 ? limits.rows - original.row - span.rows : original.row };
 }
@@ -296,18 +386,44 @@ function hash(value: string): number {
   for (let index = 0; index < value.length; index++) { result ^= value.charCodeAt(index); result = Math.imul(result, 16777619); }
   return result >>> 0;
 }
+/**
+ * #93: when the bounded search cannot move every widget on a dense board, a whole-board reflection of
+ * the previous composition (horizontal, vertical or both) is always collision-free and in bounds.
+ * Returns the reflection that moves the most widgets, or null when every reflection maps the board
+ * onto itself.
+ */
+function reflectedComposition(grid: WidgetGrid, ids: WidgetId[], previous: WidgetGrid): WidgetGrid | null {
+  // A stale previous composition (another density or other spans) cannot be reflected; use the authored board.
+  const compatible = previous.density === grid.density && ids.every(id => sameSpan(placementSpan(id, previous.placements[id]), placementSpan(id, grid.placements[id])));
+  const base = compatible ? previous : grid;
+  let best: { grid: WidgetGrid; moved: number; travel: number } | null = null;
+  for (const variant of [1, 2, 3]) {
+    const result = structuredClone(grid);
+    for (const id of ids) { const point = displayPlacement(base, id, variant); result.placements[id] = { ...grid.placements[id], column: point.column, row: point.row }; }
+    const placed: Partial<Record<WidgetId, boolean>> = Object.fromEntries(ids.map(id => [id, true]));
+    if (!ids.every(id => placementFits(result, id, result.placements[id], placed))) continue;
+    let moved = 0, travel = 0;
+    for (const id of ids) {
+      const from = previous.placements[id], to = result.placements[id];
+      if (from.column !== to.column || from.row !== to.row) moved++;
+      travel += Math.abs(from.column - to.column) + Math.abs(from.row - to.row);
+    }
+    if (moved && (!best || moved > best.moved || (moved === best.moved && travel > best.travel))) best = { grid: result, moved, travel };
+  }
+  return best?.grid ?? null;
+}
 /** Keep the edited layout at rest, then choose distant legal cells during a black interval. */
 export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<WidgetId, boolean>>, cycle: number, previous = grid): WidgetGrid {
   if (cycle === 0) return structuredClone(grid);
   const limits = GRID_DENSITIES[grid.density];
   const ids = WIDGET_IDS.filter(id => enabled[id]).sort((a, b) => {
-    const as = widgetSpan(a, grid.placements[a].size); const bs = widgetSpan(b, grid.placements[b].size);
+    const as = placementSpan(a, grid.placements[a]); const bs = placementSpan(b, grid.placements[b]);
     return bs.columns * bs.rows - as.columns * as.rows || hash(`${cycle}:${a}`) - hash(`${cycle}:${b}`);
   });
   const candidates = Object.fromEntries(ids.map(id => {
-    const size = grid.placements[id].size; const span = widgetSpan(id, size); const origin = previous.placements[id];
+    const span = placementSpan(id, grid.placements[id]); const origin = previous.placements[id];
     const values: WidgetPlacement[] = [];
-    for (let row = 0; row + span.rows <= limits.rows; row++) for (let column = 0; column + span.columns <= limits.columns; column++) values.push({ column, row, size });
+    for (let row = 0; row + span.rows <= limits.rows; row++) for (let column = 0; column + span.columns <= limits.columns; column++) values.push({ ...grid.placements[id], column, row });
     // Alternate the farthest half of legal origins so motion is substantial without a four-position loop.
     const distance = (point: WidgetPlacement) => Math.hypot((point.column - origin.column) / limits.columns, (point.row - origin.row) / limits.rows);
     values.sort((a, b) => {
@@ -334,6 +450,7 @@ export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<Widg
       return false;
     }
     if (search(0)) return result;
+    if (requireMovement) { const reflected = reflectedComposition(grid, ids, previous); if (reflected) return reflected; }
   }
   // An authored valid board is always a safe fallback when bounded search is exhausted.
   return structuredClone(grid);
