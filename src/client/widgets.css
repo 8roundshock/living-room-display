@@ -173,10 +173,15 @@
 
 /* Screens remain complete and faint; deliberate photos have purposeful crops. */
 .snapshot-processing { position: absolute; width: 0; height: 0; pointer-events: none; }
-.grid-ambient .snapshot-body { align-items: center; height: 100cqh; min-height: 0; }
-.grid-ambient .preview-image-shell { width: 100%; min-height: 0; flex: 1; display: flex; align-items: center; justify-content: center; }
-.grid-ambient .preview-image { display: block; width: 100%; height: 100%; max-height: 100%; object-fit: contain; object-position: center; border-radius: 0; }
-.grid-ambient .preview-caption { flex: none; font-size: calc(max(var(--min-text), min(5cqw, 7cqh)) * var(--font-scale)); line-height: 1.2; margin: 3cqh 0 0; align-self: flex-start; }
+/* Last screen (#225): the frame is the largest box of the snapshot's shape (--snapshot-ratio) that fits
+   above one caption line, centred in the cell; the caption sits on the image's left edge, a small
+   display-relative gap below it (under 6 px even at 4K). The line is reserved at 1.35em, not its
+   1.2 line-height, because its text fragments (the font's ascent and descent) count as overflow. */
+.grid-ambient .snapshot-body { align-items: center; height: 100cqh; min-height: 0; --caption-size: calc(max(var(--min-text), min(5cqw, 7cqh)) * var(--font-scale)); --caption-gap: max(1px, var(--min-text, 0px) * 0.18); }
+.grid-ambient .preview-frame { display: flex; flex-direction: column; align-items: flex-start; width: min(100%, (100cqh - var(--caption-size) * 1.35 - var(--caption-gap)) * var(--snapshot-ratio, 1.7778)); }
+.grid-ambient .preview-image-shell { width: 100%; }
+.grid-ambient .preview-image { display: block; width: 100%; height: auto; max-height: none; aspect-ratio: var(--snapshot-ratio, 1.7778); object-fit: contain; object-position: center; border-radius: 0; }
+.grid-ambient .preview-caption { flex: none; font-size: var(--caption-size); line-height: 1.2; margin: var(--caption-gap) 0 0; }
 .grid-ambient .photo-image-shell { width: 100%; height: 100cqh; display: flex; align-items: center; justify-content: center; }
 .grid-ambient .ambient-photo-image { display: block; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.3) brightness(0.45); opacity: 0.45; border: 0; border-radius: 0; }
 .grid-ambient .ambient-photo.widget-size-large .ambient-photo-image { object-fit: contain; }

@@ -166,14 +166,15 @@
   }
 }
 
-/* A newly loaded snapshot or photo fades in; no pan, zoom or loop (#109). Placeholders stay still. */
+/* A new snapshot or photo (#173): its shell holds at opacity 0 while data-image-loading is set (until
+   the image has decoded, or a timeout), then fades to its resting opacity, never above it; no pan,
+   zoom or loop (#109). The image a widget is first shown with and placeholders stay still, and Off
+   and reduced motion show a new image as soon as it is ready. */
 .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.photo-image-shell, .preview-image-shell) {
   transition: opacity 600ms var(--motion-ease);
 }
-@starting-style {
-  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.photo-image-shell, .preview-image-shell) {
-    opacity: 0;
-  }
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.photo-image-shell, .preview-image-shell)[data-image-loading] {
+  opacity: 0;
 }
 
 /* ---- Lively: reveal choreography --------------------------------------------------------- */

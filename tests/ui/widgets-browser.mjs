@@ -147,7 +147,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     imagesUnavailable = false; current = structuredClone(source); current.preview.available = false; current.photo.available = false;
     current.settings.widgets.photo = true;
     await page.goto(base + '/editor'); await page.locator('.preview-surface').waitFor();
-    assert.match(await page.locator('.ambient-photo').innerText(), /Choose a photo/); assert.match(await page.locator('.ambient-preview').innerText(), /Captured on activation/);
+    assert.match(await page.locator('.ambient-photo').innerText(), /Choose a photo/); assert.match(await page.locator('.ambient-preview').innerText(), /Your screen from just before the display starts/);
     assert.notEqual(await cursor(), 'none');
     checks.push('Honest failed image placeholders, editor-only empty photo/snapshot placeholders, normal editor cursor, no source image or capture needed');
     assert.deepEqual(errors, []); return { checks, images, clockFonts };
