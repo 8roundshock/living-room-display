@@ -21,7 +21,11 @@
 .grid-ambient .tone-personal { --ambient-accent: var(--tone-personal); }
 .grid-ambient .tone-stone { --ambient-accent: var(--tone-stone); }
 
-/* Weather glyph sub-tones (WEATHER_GLYPH_TONE), wherever WeatherGlyph or a data-glyph icon appears. */
+/* Weather glyph sub-tones (WEATHER_GLYPH_TONE), wherever WeatherGlyph or a data-glyph icon appears.
+   A glyph is accent content and paints with its own sub-tone rather than the colour it inherits
+   from its label: World clocks' day/night icons and Sun & moon's label icon (#78) sit inside an
+   accent-coloured label, so colour mode is unchanged. */
+.grid-ambient [data-glyph] { color: var(--ambient-accent); }
 .grid-ambient [data-glyph="sun"] { --ambient-accent: var(--tone-sun); }
 .grid-ambient [data-glyph="moon"] { --ambient-accent: var(--tone-time); }
 .grid-ambient [data-glyph="cloud"] { --ambient-accent: var(--tone-stone); }

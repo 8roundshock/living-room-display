@@ -1,9 +1,9 @@
 // Native palette (#75): the declared values, their harmony on true black, and the CSS that applies them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { ACCENT_SWATCHES, CO_OCCURRING_TONES, NATIVE_PALETTE, PALETTE_ROLES, STATUS_TONES, WEATHER_GLYPH_TONE, paletteTones, toneVariables, type PaletteRole, type StatusTone } from './palette.ts';
-import { WIDGET_CATALOG } from './widgets.ts';
+import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG } from './widgets.ts';
 import { defaultSettings } from './defaults.ts';
 
 // sRGB → OKLab (Björn Ottosson, https://bottosson.github.io/posts/oklab/).
@@ -82,6 +82,22 @@ test('catalog tones and weather glyphs all map to palette roles', () => {
   for (const role of Object.values(WEATHER_GLYPH_TONE)) assert.ok((PALETTE_ROLES as readonly string[]).includes(role));
 });
 
+test('the merged catalog keeps its tone decisions, and every literal data-glyph has a sub-tone', () => {
+  // Agreed across the #73/#74/#78 units: World clocks and Calendar are time, Countdown and Note
+  // personal (like Reminders), Air quality sky (like Weather and Forecast), Sun & moon sun.
+  const tones = Object.fromEntries(ACTIVE_WIDGET_IDS.map(id => [id, WIDGET_CATALOG[id].tone]));
+  assert.deepEqual(tones, {
+    clock: 'time', worldClocks: 'time', calendar: 'time',
+    weather: 'sky', forecast: 'sky', airQuality: 'sky', sunMoon: 'sun',
+    reminders: 'personal', countdown: 'personal', note: 'personal',
+    preview: 'stone', photo: 'stone',
+  });
+  // Renderers that hard-code a glyph name (Sun & moon's dot and moon) must use one palette.css maps.
+  for (const file of readdirSync(new URL('../client/widgets/', import.meta.url)).filter(name => name.endsWith('.tsx'))) {
+    for (const [, name] of read(`../client/widgets/${file}`).matchAll(/data-glyph="([a-z]+)"/g)) assert.ok(name! in WEATHER_GLYPH_TONE, `${file} data-glyph="${name}" has a tone`);
+  }
+});
+
 test('paletteTones and toneVariables: one accent for every role in color mode, the palette in native', () => {
   const appearance = defaultSettings().appearance;
   const color = { ...appearance, accentMode: 'color' as const, accentColor: '#b8a17a' };
@@ -102,6 +118,8 @@ test('palette.css applies every role and glyph tone; status tones equal the CSS 
     assert.match(css, new RegExp(`--tone-${role}: var\\(--ambient-accent\\);`), `--tone-${role} fallback`);
   }
   for (const [glyph, role] of Object.entries(WEATHER_GLYPH_TONE)) assert.match(css, new RegExp(`\\[data-glyph="${glyph}"\\] \\{ --ambient-accent: var\\(--tone-${role}\\); \\}`), `${glyph} glyph rule`);
+  // A glyph paints with its own sub-tone, not the colour inherited from an accent label (#78 day/night icons).
+  assert.match(css, /\.grid-ambient \[data-glyph\] \{ color: var\(--ambient-accent\); \}/, 'data-glyph colour rule');
   const styles = read('../client/styles.css');
   assert.equal(styles.match(/--ambient-caution:\s*(#[0-9a-f]{6})/)?.[1], STATUS_TONES.caution);
   assert.equal(styles.match(/--ambient-offline:\s*(#[0-9a-f]{6})/)?.[1], STATUS_TONES.offline);
