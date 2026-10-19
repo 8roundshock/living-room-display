@@ -33,8 +33,9 @@ const titleSize = (rows: readonly HTMLElement[]) => { const title = titleOf(rows
 
 /**
  * Fits as many complete rows as the actual box holds, plus an honest "+N more". Stable by design:
- * the body is fixed at 100cqh (so the shared Widget fit stays at 1 and its per-second refit never
- * changes this box), measurement runs only when the rows or the widget's own box change, and
+ * the body is fixed at 100cqh (so the shared Widget fit stays at 1 and its refit, on a box, content,
+ * class, Text size or typeface change, never changes this box), measurement runs only when the rows
+ * or the widget's own box change, and
  * state changes only when the result does. Overflow rows take no layout outside measuring.
  * `fit` is 0 when even one row overflows; the widget then shows one row and zooms out as a whole.
  * While measuring, the body is back at its fixed 100cqh box even in that overfull state (see

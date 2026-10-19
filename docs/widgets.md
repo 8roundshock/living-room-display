@@ -107,16 +107,27 @@ Icons and the fixed unavailable dash do not follow Text size and can still shrin
 with the fit. The picker sample has no floor. Ambient glyphs pass `size={null}` so
 these container-query sizes apply rather than the Icon's default 20 px (#128).
 
+The shared fit in [`Display.tsx`](../src/client/Display.tsx) does not rerun on every
+render (#99). It reruns when the widget's box or its content box changes size, when
+React changes text or structure inside the content, when a `class` changes anywhere
+inside the content (#314), and when Text size or typeface changes. A change to an
+element's `style` or a `data-*` attribute alone does not rerun it, so a restyle that
+can change the content's overflow must switch a class (or change text or structure).
+The fit itself writes only the content's `style`, so a refit never triggers another.
+With the Classic typeface (Georgia) every number uses lining, tabular figures, so digits
+share one baseline and height; a rule that sets `font-variant-numeric` itself spells out
+`lining-nums tabular-nums` so it does not bring the old-style figures back (#363).
+
 The renderer families have deliberate visual roles:
 
 | Widget | Small | Medium | Large |
 | --- | --- | --- | --- |
-| Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date | Time beside a calendar column; analog sizes its hands to the cell height | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
+| Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”); confidence only when partial | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and twelve hourly chance bars (spell hours brighter, unknown hours dotted) |
 | Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance. Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”) |
 | Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
-| Last screen | Complete, faint captured desktop with its "Last screen · 8:40 AM" caption on the image's left edge just below it (every family) | Wider complete desktop | Larger complete desktop; no crop hides screen context |
+| Last screen | Complete, faint captured desktop with its "Last screen · 8:40 AM" caption on the image's left edge just below it (every family), on one line even under a narrow portrait image, which it may run past within the cell; the time never breaks from its AM/PM (#308) | Wider complete desktop | Larger complete desktop; no crop hides screen context |
 | World clocks | First city's label, time in regular-weight numerals, relation ("Tomorrow · +13 h"), day/night icon and a dim "+N" | Two cities side by side | Up to four rows, label and relation left, time right; hidden on the display with no cities |
 | Calendar | Month name over this week's strip (weekday initials and dates) | Weekday, large date and month beside a compact month grid | Month and year, a weekday header row and a generous month grid; every grid has only the 4–6 weeks the month needs |
 | Countdown | The next date as a large count (“12” over “days”, or Today/Tomorrow), its title and a short date | The next date on the left; the following two as compact rows | As many rows as fit the box (title, date, days right-aligned), measured like Reminders, then an exact “+N more” (#221) |
@@ -269,26 +280,44 @@ anchors. Small jitter inside fixed widget bounds is insufficient. Keep module
 rectangles disjoint at each visible phase; fade the old composition fully to
 black before revealing a new one, so crossfades cannot overlay bright layouts.
 Include a black rest interval and avoid flashes or synchronized bright accents.
-Use the centralized scheduler/wrapper, not a new per-widget motion loop.
+Use the centralized scheduler/wrapper, not a new per-widget motion loop. A change to
+the move interval, the fade length, Drift and fade between moves or the screen's
+reduced-motion preference that arrives during a fade-out or the black rest finishes
+that step (the running fade keeps its length; a fade switched off is already black),
+so the next arrangement appears within one fade plus the 1.1 s rest and the next move
+comes one new interval later (#357). Renderers learn that the arrangement is fully
+black from the motion context's `black` flag (from the end of the fade-out to the
+reveal); the analog clock re-bases its accumulated hand angles only then, so a minute's
+ease that starts just before a fade-out finishes in view (#174).
 
-Dense boards keep relocating (#93). The bounded composition search may fail to
-find a board where every widget moves; it then reflects the previous composition
-horizontally, vertically or both (`displayPlacement`, span-aware), choosing a
-reflection that moves the most widgets. Whenever another reflection also moves
-widgets, consecutive fallbacks apply different reflections (#182): reflections that
-tie rotate with the cycle, and a unique best one (usually both at once, when a widget
-is centred on one axis) alternates on odd cycles with the best of the others, however
-many fewer widgets it moves. A reflection leaves the same widgets in place in every
-reflected arrangement of a board, so this ranking holds from one fallback to the next.
-Reflections commute, so a board with a third reflected arrangement visits three or
-four arrangements instead of returning to the one from two cycles earlier. On 36
-generated dense boards over 200 cycles, consecutive fallbacks that applied the same
-reflection fell from 3,902 of 3,902 pairs to none of 3,868; over 24 cycles,
-compositions that repeat the one from two cycles earlier fell from 470 to 10 of 828.
-Each remaining repeat involves a search step; the search does not look two cycles
-back (#317). Only a board with a single moving reflection, or two that reach the
-same arrangement, still alternates between two arrangements. A reflection is always
-in bounds and collision-free. Only a board that every reflection maps onto itself
+Each composition moves every widget off at least half of its previous cells where it
+can (#338): `composeWidgetGrid` treats a widget that covers more than half of its own
+previous cells again (or more than the least any legal origin of its span allows) as
+staying, and prefers compositions where none stays. The display also passes the
+composition from two cycles back, and a composition that recreates it is used only
+when nothing else qualifies (#317). The bounded search first places widget by widget,
+distant cells first; boards with few or no spare cells, where that rarely completes,
+are then packed cell by cell, which never leaves an unfillable hole.
+
+Dense boards keep relocating (#93). When the search finds no such composition, the
+previous composition is reflected horizontally, vertically or both (`displayPlacement`,
+span-aware). The #182 choice comes first: reflections that tie for the most widgets
+moved rotate with the cycle, and a unique best one (usually both at once, when a widget
+is centred on one axis) alternates on odd cycles with the best of the others.
+Reflections commute, so a board's reflected arrangements are A, hA, vA and hvA (one,
+two or four of them distinct), and a run of reflections on a board with four visits
+all four. A reflection cannot move a widget centred on its axis, and the whole-plane
+offset (`motionOffset`, at most 2% of the plane each way) cannot move a widget by a large
+share of its size, so a widget that a reflection would leave in place trades places
+with a same-size clean region elsewhere (its own cells, or the row or column band it
+sits in, whose widgets all lie inside it), and widgets of the same span may exchange
+cells. These moves keep the reflection's cells or swap whole clean regions, so every
+result stays in bounds and collision-free. Measured on 36 generated dense boards
+(`src/server/relocation.test.ts`): over 200 cycles, moves that left a widget on more
+than half of its cells fell from 1,553 to 72 of 73,600, and compositions that repeat
+the one from two cycles earlier from 85 to none of 7,164; on the suites' full 12-widget
+board no widget keeps more than half of its cells between compositions (Sun & moon
+used to stay put on 38 of 200). Only a board that every reflection maps onto itself
 falls through to the search that allows widgets to stay. A full-height span can only travel
 sideways; any span relocates as one whole group through the black rest. Its
 content therefore also alternates vertically: a full-height Reminders column
@@ -346,6 +375,18 @@ Render content according to available space without changing its meaning. Keep
 forecast estimates, age, stale/unknown states, place and units honest. For a
 hide-when-empty option, distinguish confirmed empty from unavailable or failed.
 Keep management available in the editor when the ambient widget is hidden.
+
+One widget's failure stays inside that widget (#318). The registry wraps every renderer
+in its own error boundary ([`WidgetBoundary.tsx`](../src/client/widgets/WidgetBoundary.tsx)),
+so the ambient display, the editor canvas and the picker samples are all covered. A
+renderer that throws shows "<Widget> unavailable" in the status tone inside its own
+footprint, keeps relocating with the board, and is written to the console once per
+widget and message; the rest of the board and the editor keep working. The boundary
+tries the widget again with new state or settings, another family or the next minute,
+so it recovers once the data that broke it changes. A `visible` rule that throws leaves
+the widget visible (so it shows as unavailable), and a throwing picker `sample` falls
+back to the shared sample. This containment is a safety net, not a substitute for
+honest unavailable states in the renderer itself.
 
 Saved weather keeps no age limit on the server, so the renderers judge its age (#243).
 A forecast strip starts at the weather city's civil today and drops earlier saved days;
