@@ -41,7 +41,7 @@ test('#76 motionPlan matrix: reduced motion is always Off and only Lively loops,
       assert.equal(plan.glyphOneShot, level !== 'off', label);
       assert.equal(plan.glyphLoops, level === 'lively', label);
     }
-    // The entrance needs a non-Off level and either the display with Soft motion and a fade, or a replay.
+    // The entrance needs a non-Off level and either the display with Drift and fade between moves and a fade, or a replay.
     const entranceExpected = level !== 'off' && (surface === 'display' || surface === 'canvas') && (replay || (surface === 'display' && softMotion && fadeSeconds > 0));
     assert.equal(plan.entrance, entranceExpected ? level : 'none', label);
     assert.equal(plan.choreography, plan.entrance === 'lively', label);
