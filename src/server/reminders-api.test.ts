@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { createApplication } from './app.ts';
 import { forecastFixture, seedColorAccentData } from './fixtures.ts';
 import { assertPreviousReaderAccepts } from './compat/previous-reader.ts';
-import { REMINDER_HISTORY_LIMIT, REMINDER_LIMIT } from '../shared/reminders.ts';
+import { REMINDER_HISTORY_LIMIT, REMINDER_LIMIT, pendingReminders } from '../shared/reminders.ts';
 import type { Reminder } from '../shared/contracts.ts';
 
 async function fixture(now?: () => number) {
@@ -172,4 +172,57 @@ test('history travels through export/import unchanged; oversize imported history
     assert.equal(target.store.snapshot().reminders.filter(item => item.completed).length, REMINDER_HISTORY_LIMIT);
     await assertPreviousReads(target, 'after oversize import and prune');
   } finally { await source.close(); await target.close(); }
+});
+
+test('Undo after a delete re-creates a reminder with its exact due string and original createdAt (#237)', async () => {
+  const time = clock(); const app = await fixture(time.now);
+  try {
+    const undated = await create(app, { text: 'Plan the weekend' });
+    time.advance(60_000);
+    await create(app, { text: 'Call a friend' });
+    // An imported due instant with seconds and an offset keeps its exact string.
+    const dated = await create(app, { text: 'Pay the bill', dueAt: '2026-10-19T18:45:39.876+05:45' });
+    time.advance(60_000);
+    const order = () => pendingReminders(app.store.snapshot().reminders, time.now()).map(item => item.text);
+    const before = order();
+    // Undated reminders sort newest first, so a fresh createdAt would move Plan the weekend ahead.
+    assert.deepEqual(before, ['Pay the bill', 'Call a friend', 'Plan the weekend']);
+    for (const deleted of [undated, dated]) {
+      assert.equal((await fetch(`${app.url}/api/reminders/${deleted.id}`, { method: 'DELETE' })).status, 204);
+      time.advance(5000);
+      const restored = await create(app, { text: deleted.text, dueAt: deleted.dueAt, createdAt: deleted.createdAt });
+      assert.notEqual(restored.id, deleted.id, 'a new id');
+      assert.deepEqual({ ...restored, id: deleted.id }, { ...deleted, updatedAt: time.iso() }, 'same text, exact dueAt and createdAt; updatedAt is the re-create time');
+      assert.equal(app.store.snapshot().reminders.find(item => item.id === restored.id)?.createdAt, deleted.createdAt);
+    }
+    assert.deepEqual(order(), before, 'both return to their sorted places');
+    assert.equal(app.store.snapshot().reminders.find(item => item.text === 'Pay the bill')?.dueAt, '2026-10-19T18:45:39.876+05:45');
+    // The boundary: a creation time equal to the server's now is accepted.
+    assert.equal((await create(app, { text: 'Now exactly', createdAt: time.iso() })).createdAt, time.iso());
+    await assertPreviousReads(app, 'after delete Undo');
+  } finally { await app.close(); }
+});
+
+test('POST createdAt must be a persisted-format time that is not in the future; PATCH never accepts it', async () => {
+  const time = clock(); const app = await fixture(time.now);
+  try {
+    const kept = await create(app, { text: 'Keep me' });
+    const before = await files(app);
+    for (const [createdAt, pattern] of [
+      [time.iso(1), /createdAt: Use a creation time that is not in the future/],
+      ['2027-01-01T00:00:00.000Z', /createdAt: Use a creation time that is not in the future/],
+      ['2026-10-18T09:00:00.000-04:00', /createdAt/],
+      ['2026-10-18', /createdAt/],
+      ['yesterday', /createdAt/],
+      [null, /createdAt/],
+    ] as const) {
+      const response = await fetch(`${app.url}/api/reminders`, { method: 'POST', ...body({ text: 'Not created', createdAt }) });
+      assert.equal(response.status, 400, String(createdAt));
+      assert.match((await response.json() as { error: string }).error, pattern);
+    }
+    const patched = await patch(app, kept.id, { createdAt: '2026-01-01T00:00:00.000Z' });
+    assert.equal(patched.status, 400, 'createdAt is not editable');
+    assert.deepEqual(app.store.snapshot().reminders, [kept]);
+    assert.deepEqual(await files(app), before, 'rejected requests write nothing');
+  } finally { await app.close(); }
 });

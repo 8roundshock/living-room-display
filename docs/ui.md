@@ -200,30 +200,48 @@ widget zooms out as a whole (icons and the unavailable dash may still shrink). S
 ## Reminders and last screen
 
 Reminder actions (add, edit, check off, restore, delete, clear history) save
-immediately with a short status line and never join the settings draft. Reminder
-form Cancel abandons that form only. Items are silent, dated or undated and one-time.
+immediately with a short status line and never join the settings draft. Items are
+silent, dated or undated and one-time.
 The Reminders tab has an **Up next (N)** / **History (M)** switch (`aria-pressed`).
 Up next uses the display's order: overdue or due within seven days (soonest first),
 then undated (newest first), then later dates. Each row has a 44 px check circle,
 the title, a due line (`Overdue · Yesterday · 3:00 PM`, `Today · 6:00 PM` or
 `Anytime`) and Edit/Delete. One tap fills the circle and dims the title at once while
-the completion saves; after about 0.9 s the row collapses out of Up next (reduced
-motion keeps the delay without the collapse). The status line offers **Undo** for
-about 8 s; Undo, or tapping the circle again during the settle, restores the item
-(it shows unchecked at once and stays in Up next while the restore saves). Focus
-moves to the next circle (else the previous one, else Add), so keyboard users can
+the completion saves; the circle reports `aria-pressed` until the row leaves or is
+restored. After about 0.9 s the row collapses out of Up next (reduced motion keeps the
+delay without the collapse). The status line offers **Undo** for about 8 s, until the
+next message replaces it; Undo, or tapping the circle again during the settle, restores
+the item (it shows unchecked at once and stays in Up next while the restore saves).
+Deleting a pending reminder from Up next offers the same Undo, which re-creates it with
+its text, exact due instant and creation time, so it returns to its sorted place. A
+shown message sticks to the bottom of the visible panel (above the Save bar on narrow
+screens), and the focused row scrolls clear of it; with no message the empty line stays
+at the end of the list and covers no row. The message, its Undo and any row
+still settling survive switching editor tabs and back.
+Focus moves to the next circle (else the previous one, else Add), so keyboard users can
 tick off several in a row; after Undo, focus moves to the restored reminder's circle.
 A failed save reverts the row: “Could not complete reminder. It is still in Up
-next.” Deleting from Up next reads “Reminder deleted”, also while a row settles.
+next.” Deleting from Up next reads “Reminder deleted”, also while a row settles (a
+checked-off row offers no delete Undo).
+**+** opens a **New reminder** form at the top of Up next; **Edit** turns that row into
+an **Edit reminder** form in place, so the row and its form stay in view. **Discard** or
+Escape closes the form only (unlike the settings Cancel); Discard, Escape and Save
+return focus to that row's Edit button, or to Add after a new reminder. An incomplete
+date or time shows “Enter both a date and a time, or clear the field.” under the field
+(`aria-invalid`, `aria-describedby`), keeps focus there and saves nothing; the
+browser's own bubble is off. The edited row has no circle; if its reminder is checked
+off anyway (for example in another tab), Save waits with “Checked off. Undo or restore
+it to edit.” until it is restored, and the typed edit is kept.
 History groups completed reminders under TODAY, YESTERDAY, `Mon, Oct 12` or
 `Oct 12, 2025` by completion time in the computer timezone, newest first, 50 at a
 time. A row shows `Completed 3:42 PM` (plus ` · was due …` when it was dated), and
 offers Restore (the check or the undo icon, back to its sorted place in Up next) and
 Delete. Completed reminders cannot be edited; an edit saved for a reminder completed
 in another tab reports “This reminder was completed elsewhere. Restore it to edit.”
-**Clear history…** asks inline before deleting every completed reminder. The
-computer keeps the latest 500 completed reminders. Every reminder time follows the
-12/24-hour setting; like the canvas preview, the editor list follows an unsaved
+**Clear history…** asks inline before deleting every completed reminder and focuses
+**Keep**; Keep or Escape returns focus to Clear history…, and Delete all moves it to the
+History switch. The computer keeps the latest 500 completed reminders. Every reminder
+time follows the 12/24-hour setting; like the canvas preview, the editor list follows an unsaved
 change to it, while the display keeps the saved setting until Save.
 The ambient widget shows as many pending reminders as fit its box, soonest first,
 never a partially visible row, then an exact “+N more”. Titles use up to two lines

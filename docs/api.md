@@ -13,7 +13,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `PATCH /api/settings`          | Validated nested partial settings                                      | Full saved settings.                                                         |
 | `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |
 | `GET /api/reminders`           | None                                                                   | Reminder array.                                                              |
-| `POST /api/reminders`          | `text`, optional ISO `dueAt` or null                                   | Created reminder (201).                                                      |
+| `POST /api/reminders`          | `text`, optional ISO `dueAt` or null, optional past `createdAt`        | Created reminder (201).                                                      |
 | `PATCH /api/reminders/:id`     | Partial `text`, `completed`, `dueAt`                                   | Updated reminder.                                                            |
 | `DELETE /api/reminders/:id`    | None                                                                   | Empty 204.                                                                   |
 | `DELETE /api/reminders/completed` | None                                                                | `{ "deleted": n }`; removes only completed reminders, atomically.            |
@@ -75,6 +75,15 @@ rejects more): at the limit, `POST /api/reminders` removes the oldest completed
 reminder in the same write, or returns 409 “Reminder limit reached” when all are
 pending. Exports and imports carry history in `reminders[]` unchanged; an import with
 more than 500 completed reminders is accepted as is and pruned at the next completion.
+
+`POST /api/reminders` also accepts an optional `createdAt` (#237), which the editor's
+Undo after a single delete sends with the deleted reminder's `text` and exact `dueAt`
+string, so the re-created reminder (with a new `id`) returns to its sorted place. It
+uses the persisted UTC format (`2026-10-18T13:00:00.000Z`, the same rule as stored
+`createdAt`) and must not be later than the server's current time; an offset, a date
+without a time or a future time returns 400 and writes nothing. `updatedAt` is the
+re-create time. PATCH never accepts `createdAt`. The persisted reminder shape is
+unchanged, so the previous release reads re-created reminders.
 
 Settings `idle.enabled` is a preference, not proof Windows idle activation is
 installed. Only the Windows host's explicit activation command changes that
