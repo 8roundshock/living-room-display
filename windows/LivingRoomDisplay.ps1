@@ -46,6 +46,12 @@ $script:moveRetryDelayMs = 300
 $script:resumedRollbackNote = 'Setup first put back the version from before an earlier unfinished update.'
 $script:resumedEarlierRollback = $false
 $script:keptCandidate = $null
+# Windows PowerShell 5.1 file APIs stop at MAX_PATH (259 characters plus the
+# terminator). Test-InstallerPayload.ps1 keeps every payload path within this
+# budget, so every install folder up to installFolderLimit (130) characters
+# fits; docs/install.md and docs/windows.md quote that one number (#180).
+$script:packagePathBudget = 115
+$script:installFolderLimit = 259 - '\package.next\'.Length - $script:packagePathBudget
 function Write-PackageLog([string]$Message) {
     if (-not $script:packageLogPath) { return }
     $line = '[' + [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ') + '] ' + $Message + [Environment]::NewLine
@@ -918,9 +924,11 @@ function Install-Package {
     $version = [string]$manifest.version
     Write-PackageLog "Package $version ($packageHash), source $($manifest.sourceRevision) $($manifest.sourceState), Node $($manifest.node.version)."
     # Windows PowerShell 5.1 file APIs stop at MAX_PATH; refuse before writing
-    # anything rather than failing halfway through staging.
+    # anything rather than failing halfway through staging. A built payload
+    # always fits a folder of up to $script:installFolderLimit characters.
     $longest = [int](@($manifest.files) | ForEach-Object { ([string]$_.path).Length } | Measure-Object -Maximum).Maximum
-    if ($InstallRoot.Length + '\package.next\'.Length + $longest -gt 259) { throw "LRD-E21: The install folder path is too long for this package: keep it under $(259 - '\package.next\'.Length - $longest) characters." }
+    $folderLimit = 259 - '\package.next\'.Length - $longest
+    if ($InstallRoot.Length -gt $folderLimit) { throw "LRD-E21: The install folder path is too long for this package ($($InstallRoot.Length) characters): use a folder of at most $folderLimit characters." }
     # The package itself checks out. Finish an earlier unfinished rollback before
     # reading the installed state, which that rollback changes.
     if ($installed -and (Test-Path -LiteralPath $transaction)) {

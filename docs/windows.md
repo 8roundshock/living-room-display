@@ -100,7 +100,7 @@ Constrained Language Mode can still block it; Setup then shows a plain message
 | Windows PowerShell 5.1 | Present on Windows 10 and 11; used only by Setup, the uninstaller and the helper's Start. | CI runs `Test-Windows.ps1` under 5.1 and 7. |
 | Port 4318 | Bound to 127.0.0.1 only, so there's no firewall prompt. A port already in use stops Setup with E11. | The CI smoke asserts a loopback-only listener and the E11 refusal; alternate port: [#121](https://github.com/8roundshock/living-room-display/issues/121). |
 | Windows on Arm | `x64compatible`: the x64 Node runs under emulation; the AnyCPU helper runs natively. | Non-gating CI on windows-11-arm, recorded under [#122](https://github.com/8roundshock/living-room-display/issues/122). |
-| Path length | The deepest payload path is 111 characters. InstallPackage refuses roots longer than about 134 characters before writing anything (E21). | Unit test in `Test-PackageInstall.ps1`. |
+| Path length | Windows PowerShell 5.1 file APIs stop at 259 characters. Every payload path stays within 115 characters, so install folders of up to 130 characters always fit; InstallPackage refuses a folder too long for the payload before writing anything (E21). Both numbers come from `packagePathBudget` in the control script. | `Test-InstallerPayload.ps1` fails a payload over the budget; `Test-InstallerPolicy.ps1` checks that both docs quote the same limit; E21 unit test in `Test-PackageInstall.ps1`. |
 
 ### Inno Setup assumptions
 

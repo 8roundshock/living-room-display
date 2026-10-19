@@ -111,6 +111,10 @@ try {
         Assert-True ([int64]$actual[$path].Length -eq [int64]$entry.size -and (Get-Sha256 $actual[$path].FullName) -eq [string]$entry.sha256) "size or hash mismatch for $path"
     }
     foreach ($path in $actual.Keys) { Assert-True ($listed.Contains($path)) "unlisted payload file $path" }
+    # The deepest path stays within the budget the docs' folder limit comes from (#180).
+    $deepest = @($manifest.files | Sort-Object { ([string]$_.path).Length } -Descending)[0].path
+    Assert-True (([string]$deepest).Length -le $script:packagePathBudget) "the deepest payload path has $(([string]$deepest).Length) characters, over the $($script:packagePathBudget)-character budget: $deepest. Shorten it, or raise packagePathBudget in LivingRoomDisplay.ps1 and the folder limit in docs/install.md and docs/windows.md together."
+    Write-Output "Deepest payload path: $(([string]$deepest).Length) of $($script:packagePathBudget) characters ($deepest); install folders up to $($script:installFolderLimit) characters fit."
     $scriptEntry = @($manifest.files | Where-Object { $_.path -eq 'app/windows/LivingRoomDisplay.ps1' })
     Assert-True ($scriptEntry.Count -eq 1 -and (Get-Sha256 (Join-Path $appDirectory 'windows\LivingRoomDisplay.ps1')) -eq $scriptEntry[0].sha256) 'control script copy differs from its manifest entry'
     $checks++

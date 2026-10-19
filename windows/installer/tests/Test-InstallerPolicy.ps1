@@ -81,6 +81,19 @@ Assert-True ($scriptNote -and $scriptNote -eq $issNote) "the resumed-rollback lo
 Assert-True ($messages -match 'NothingChanged' -and $messages -notmatch 'MsgNothingChanged') 'refusal messages must use NothingChanged, which mentions a resumed rollback'
 $checks++
 
+# One install-folder limit, derived from the payload path budget, in both docs (#180).
+$scriptText = [IO.File]::ReadAllText($controlScript)
+$budget = [int][regex]::Match($scriptText, "(?m)^\`$script:packagePathBudget = (\d+)\s*$").Groups[1].Value
+Assert-True ($budget -gt 0 -and $scriptText.Contains("`$script:installFolderLimit = 259 - '\package.next\'.Length - `$script:packagePathBudget")) 'the control script must define packagePathBudget and installFolderLimit'
+$folderLimit = 259 - '\package.next\'.Length - $budget
+$installDoc = [IO.File]::ReadAllText((Join-Path $repository 'docs\install.md'))
+$windowsDoc = [IO.File]::ReadAllText((Join-Path $repository 'docs\windows.md'))
+Assert-True ($installDoc.Contains("at most $folderLimit characters") -and $windowsDoc.Contains("up to $folderLimit characters") -and $windowsDoc.Contains("$budget characters")) "docs/install.md and docs/windows.md must give the $folderLimit-character folder limit (payload budget $budget)"
+foreach ($doc in @($installDoc, $windowsDoc)) {
+    foreach ($number in @([regex]::Matches($doc, '(?i)(?:about|under|longer than|at most|up to) (\d{3}) characters') | ForEach-Object { [int]$_.Groups[1].Value })) { Assert-True ($number -eq $folderLimit) "a doc quotes a $number-character folder limit instead of $folderLimit" }
+}
+$checks++
+
 # Pins.
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($controlScript, [ref]$tokens, [ref]$errors)
