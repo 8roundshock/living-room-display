@@ -131,6 +131,14 @@ pass: record it on its ticket (or a new one) with the run, the load on the machi
 and the failing step, and keep a suite with a known flake out of the pull-request
 set until it is fixed.
 
+A filtering proxy or ad blocker on the test machine can add its own script to the
+suites' pages. On the owner's PC, AdGuard for Windows loads
+`http://local.adguard.org/?…&type=content-script…` into every page, which slows the
+suites and, under load, has failed one with a console error. The motion and canvas
+scope suites answer every request outside their own server with an empty response
+(`tests/ui/lib/local-only.mjs`) and list it; the other suites do not yet
+([#392](https://github.com/8roundshock/living-room-display/issues/392)).
+
 ## Local checkout and agent startup
 
 On the owner's Windows PC:
