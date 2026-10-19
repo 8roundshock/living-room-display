@@ -118,14 +118,46 @@ widget zooms out as a whole (icons and the unavailable dash may still shrink). S
 
 ## Reminders and last screen
 
-Reminder Add/Edit/Complete/Delete actions save immediately with separate short
-feedback. Reminder form Cancel abandons that form only. Items are silent, dated
-or undated and one-time; families show one, two or four pending items, dated first.
-Ambient items show a date line only when dated; the editor list labels undated
-items Anytime.
-**Widgets → Reminders → Hide when empty** defaults on. Confirmed empty/all-completed
-lists hide the widget; failure cannot masquerade as an empty list. Disabling the
-widget always hides it. Completed items remain editable until deleted.
+Reminder actions (add, edit, check off, restore, delete, clear history) save
+immediately with a short status line and never join the settings draft. Reminder
+form Cancel abandons that form only. Items are silent, dated or undated and one-time.
+The Reminders tab has an **Up next (N)** / **History (M)** switch (`aria-pressed`).
+Up next uses the display's order: overdue or due within seven days (soonest first),
+then undated (newest first), then later dates. Each row has a 44 px check circle,
+the title, a due line (`Overdue · Yesterday · 3:00 PM`, `Today · 6:00 PM` or
+`Anytime`) and Edit/Delete. One tap fills the circle and dims the title at once while
+the completion saves; after about 0.9 s the row collapses out of Up next (reduced
+motion keeps the delay without the collapse). The status line offers **Undo** for
+about 8 s; Undo, or tapping the circle again during the settle, restores the item
+(it shows unchecked at once and stays in Up next while the restore saves). Focus
+moves to the next circle (else the previous one, else Add), so keyboard users can
+tick off several in a row; after Undo, focus moves to the restored reminder's circle.
+A failed save reverts the row: “Could not complete reminder. It is still in Up
+next.” Deleting from Up next reads “Reminder deleted”, also while a row settles.
+History groups completed reminders under TODAY, YESTERDAY, `Mon, Oct 12` or
+`Oct 12, 2025` by completion time in the computer timezone, newest first, 50 at a
+time. A row shows `Completed 3:42 PM` (plus ` · was due …` when it was dated), and
+offers Restore (the check or the undo icon, back to its sorted place in Up next) and
+Delete. Completed reminders cannot be edited; an edit saved for a reminder completed
+in another tab reports “This reminder was completed elsewhere. Restore it to edit.”
+**Clear history…** asks inline before deleting every completed reminder. The
+computer keeps the latest 500 completed reminders. Every reminder time follows the
+12/24-hour setting; like the canvas preview, the editor list follows an unsaved
+change to it, while the display keeps the saved setting until Save.
+The ambient widget shows as many pending reminders as fit its box, soonest first,
+never a partially visible row, then an exact “+N more”. Titles use up to two lines
+(four when only one reminder is pending) and scale with the widget width, capped
+near 3.2% of the display height. If even one row overflows, that row stays and the
+widget zooms out as a whole; any resize remeasures against the widget's fixed box, so
+the count and that state never flip on a remeasure. Dated rows add `Today · 6:00 PM`, `Tomorrow ·
+9:00 AM`, `Oct 24 · 3:00 PM` or `Overdue · Yesterday · 3:00 PM` (the word Overdue in
+the dim caution tone). Completed reminders never appear; the display reflects a
+check-off within its 30 s refresh.
+**Widgets → Reminders → Hide when empty** defaults on. A confirmed list with no
+pending reminders (history only) hides the widget, or shows “All clear” when the
+option is off; a missing list or a disconnected display with nothing saved shows
+“Reminders unavailable”, and saved items stay listed with “Saved reminders ·
+offline”. Disabling the widget always hides it.
 An unchanged due-date input is omitted from an edit, preserving its exact saved
 instant (including repeated daylight-saving hours and imported seconds/offsets)
 and any concurrent date update. Explicitly changing or clearing the date still

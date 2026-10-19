@@ -104,7 +104,7 @@ The renderer families have deliberate visual roles:
 | Clock | Compact time and calendar | Time beside a calendar column | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”); confidence only when partial | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and twelve hourly chance bars (spell hours brighter, unknown hours dotted) |
 | Forecast | Three days | Five days | Seven days; compact weekday labels preserve room for temperatures and chance |
-| Reminders | One pending item | Two pending items | Four pending items; all show an honest remaining count |
+| Reminders | As many pending reminders as fit the actual box, soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete, faint captured desktop | Wider complete desktop | Larger complete desktop; no crop hides screen context |
 | World clocks | Planned (#78), not shipped | | |

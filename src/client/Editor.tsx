@@ -9,7 +9,6 @@ import {
 import type {
   AppState,
   LocationResult,
-  Reminder,
   Settings,
   WidgetGrid,
   WidgetId,
@@ -19,12 +18,10 @@ import { api } from './api';
 import { AmbientDisplay } from './Display';
 import {
   ageLabel,
-  localInputDate,
   nextComposition,
-  reminderDate,
 } from './format';
 import { Icon } from './icons';
-import { applyBuiltinPreset, getVisual, sortReminders } from './model';
+import { applyBuiltinPreset, getVisual } from './model';
 import { browserLocationPlatform, getDeviceLocation } from './location';
 import {
   rebaseSettings,
@@ -49,7 +46,7 @@ import { GridEditor } from './GridEditor';
 import { WidgetInspector } from './WidgetInspector';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
-import { reminderDuePatch } from './reminder';
+import { RemindersPanel } from './RemindersPanel';
 const sections = ['Style', 'Widgets', 'Weather', 'Reminders'] as const;
 type Section = (typeof sections)[number];
 const colors = [
@@ -166,14 +163,6 @@ export function Editor({
     automaticAttempted = useRef(false),
     guardLocation = useRef(false);
   const savebar = useRef<HTMLElement>(null);
-  const [reminderForm, setReminderForm] = useState(false),
-    [editingId, setEditingId] = useState<string | null>(null);
-  const [reminderText, setReminderText] = useState(''),
-    [reminderDue, setReminderDue] = useState('');
-  const [initialReminderDue, setInitialReminderDue] = useState<string | undefined>();
-  const [reminderSaving, setReminderSaving] = useState(false),
-    [reminderMessage, setReminderMessage] = useState('');
-  const [showCompleted, setShowCompleted] = useState(false);
   const photoChanged =
     photoDraft !== undefined &&
     (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
@@ -565,102 +554,7 @@ export function Editor({
     }));
     setPresetId(id);
   }
-  function startReminder(reminder?: Reminder) {
-    const dueInput = localInputDate(reminder?.dueAt);
-    setEditingId(reminder?.id ?? null);
-    setReminderText(reminder?.text ?? '');
-    setReminderDue(dueInput);
-    setInitialReminderDue(reminder ? dueInput : undefined);
-    setReminderForm(true);
-    setError(null);
-    setReminderMessage('');
-  }
-  async function submitReminder(event: React.FormEvent) {
-    event.preventDefault();
-    if (!reminderText.trim()) return;
-    setReminderSaving(true);
-    setError(null);
-    try {
-      const received = await api<Reminder>(
-        editingId ? `/api/reminders/${editingId}` : '/api/reminders',
-        {
-          method: editingId ? 'PATCH' : 'POST',
-          body: JSON.stringify({
-            text: reminderText.trim(),
-            ...reminderDuePatch(reminderDue, initialReminderDue),
-          }),
-        },
-      );
-      setState((previous) =>
-        previous
-          ? {
-              ...previous,
-              reminders: editingId
-                ? previous.reminders.map((item) =>
-                    item.id === received.id ? received : item,
-                  )
-                : [...previous.reminders, received],
-            }
-          : previous,
-      );
-      setReminderForm(false);
-      setReminderMessage('Reminder saved');
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : 'Could not save reminder.',
-      );
-    } finally {
-      setReminderSaving(false);
-    }
-  }
-  async function completeReminder(reminder: Reminder) {
-    try {
-      const received = await api<Reminder>(`/api/reminders/${reminder.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ completed: !reminder.completed }),
-      });
-      setState((previous) =>
-        previous
-          ? {
-              ...previous,
-              reminders: previous.reminders.map((item) =>
-                item.id === received.id ? received : item,
-              ),
-            }
-          : previous,
-      );
-      setReminderMessage(
-        received.completed ? 'Completed' : 'Reminder restored',
-      );
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : 'Could not update reminder.',
-      );
-    }
-  }
-  async function deleteReminder(id: string) {
-    try {
-      await api<void>(`/api/reminders/${id}`, { method: 'DELETE' });
-      setState((previous) =>
-        previous
-          ? {
-              ...previous,
-              reminders: previous.reminders.filter((item) => item.id !== id),
-            }
-          : previous,
-      );
-      setReminderMessage('Reminder deleted');
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : 'Could not delete reminder.',
-      );
-    }
-  }
-  const pendingCount = state.reminders.filter((item) => !item.completed).length,
-    completedCount = state.reminders.length - pendingCount;
-  const listedReminders = sortReminders(state.reminders).filter(
-    (item) => showCompleted || !item.completed,
-  );
+  const pendingCount = state.reminders.filter((item) => !item.completed).length;
   const weatherPending =
     !same(draft.location, state.settings.location) ||
     draft.locationSource !== state.settings.locationSource ||
@@ -1292,148 +1186,13 @@ export function Editor({
               </>
             )}
             {section === 'Reminders' && (
-              <>
-                <div className="panel-heading">
-                  <h2>Reminders</h2>
-                  <button
-                    className="icon-button add-reminder"
-                    aria-label="Add reminder"
-                    onClick={() => startReminder()}
-                  >
-                    <Icon name="plus" size={20} />
-                  </button>
-                </div>
-                <p className="panel-subtitle">
-                  Saved immediately · always silent
-                </p>
-                {listedReminders.length ? (
-                  <ul className="reminder-list">
-                    {listedReminders.map((reminder) => (
-                      <li className="editor-reminder" key={reminder.id}>
-                        <button
-                          className={`complete-button ${reminder.completed ? 'done' : ''}`}
-                          aria-label={`${reminder.completed ? 'Mark incomplete' : 'Complete'}: ${reminder.text}`}
-                          onClick={() => {
-                            void completeReminder(reminder);
-                          }}
-                        >
-                          <span>
-                            {reminder.completed && (
-                              <Icon name="check" size={13} />
-                            )}
-                          </span>
-                        </button>
-                        <div
-                          className={`reminder-copy ${reminder.completed ? 'done' : ''}`}
-                        >
-                          <p>{reminder.text}</p>
-                          <span>
-                            {reminder.completed
-                              ? 'Completed'
-                              : reminderDate(reminder.dueAt)}
-                          </span>
-                        </div>
-                        <div className="reminder-actions">
-                          <button
-                            className="icon-button"
-                            aria-label={`Edit: ${reminder.text}`}
-                            onClick={() => startReminder(reminder)}
-                          >
-                            <Icon name="edit" size={15} />
-                          </button>
-                          <button
-                            className="icon-button"
-                            aria-label={`Delete: ${reminder.text}`}
-                            onClick={() => {
-                              void deleteReminder(reminder.id);
-                            }}
-                          >
-                            <Icon name="trash" size={15} />
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="empty-reminders">
-                    <span>
-                      <Icon name="check" size={24} />
-                    </span>
-                    <h3>
-                      {connectionError ? 'Reminders unavailable' : 'All clear'}
-                    </h3>
-                    <button
-                      className="text-button"
-                      onClick={() => startReminder()}
-                    >
-                      Add a reminder
-                    </button>
-                  </div>
-                )}
-                {completedCount > 0 && (
-                  <button
-                    className="text-button completed-toggle"
-                    onClick={() => setShowCompleted(!showCompleted)}
-                  >
-                    {showCompleted ? 'Hide' : 'Show'} completed (
-                    {completedCount})
-                  </button>
-                )}
-                {reminderForm && (
-                  <form
-                    className="reminder-form"
-                    onSubmit={(event) => {
-                      void submitReminder(event);
-                    }}
-                  >
-                    <label>
-                      <span className="field-label">Reminder</span>
-                      <input
-                        autoFocus
-                        className="text-input"
-                        required
-                        maxLength={240}
-                        value={reminderText}
-                        placeholder="What’s on your mind?"
-                        onChange={(event) =>
-                          setReminderText(event.target.value)
-                        }
-                      />
-                    </label>
-                    <label>
-                      <span className="field-label">
-                        When{' '}
-                        <span className="muted">(optional · local time)</span>
-                      </span>
-                      <input
-                        className="text-input"
-                        type="datetime-local"
-                        value={reminderDue}
-                        onChange={(event) => setReminderDue(event.target.value)}
-                      />
-                    </label>
-                    <div className="form-actions">
-                      <button
-                        type="button"
-                        className="button"
-                        disabled={reminderSaving}
-                        onClick={() => setReminderForm(false)}
-                      >
-                        Cancel reminder
-                      </button>
-                      <button
-                        className="button primary"
-                        disabled={reminderSaving || !reminderText.trim()}
-                      >
-                        {reminderSaving ? 'Saving…' : 'Save reminder'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-                <p className="inline-message" role="status">
-                  {reminderMessage || '\u00a0'}
-                </p>
-              </>
+              <RemindersPanel
+                state={state}
+                setState={setState}
+                connectionError={connectionError}
+                clockFormat={draft.clockFormat}
+                onError={setError}
+              />
             )}
           </div>
         </aside>

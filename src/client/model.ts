@@ -60,18 +60,6 @@ export function applyBuiltinPreset(
   };
 }
 
-export function sortReminders<
-  T extends { completed: boolean; dueAt: string | null; createdAt: string },
->(reminders: T[]): T[] {
-  return [...reminders].sort(
-    (a, b) =>
-      Number(a.completed) - Number(b.completed) ||
-      (a.dueAt ? new Date(a.dueAt).getTime() : Infinity) -
-        (b.dueAt ? new Date(b.dueAt).getTime() : Infinity) ||
-      a.createdAt.localeCompare(b.createdAt),
-  );
-}
-
 export function upcomingRain(
   intervals: RainInterval[],
   now: number,

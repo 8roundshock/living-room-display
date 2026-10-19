@@ -139,20 +139,3 @@ export function localInputDate(iso: string | null | undefined): string {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
 }
-
-export function reminderDate(iso: string | null, now = new Date()): string {
-  if (!iso) return 'Anytime';
-  const date = new Date(iso);
-  const sameDay = date.toDateString() === now.toDateString();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const day = sameDay
-    ? 'Today'
-    : date.toDateString() === tomorrow.toDateString()
-      ? 'Tomorrow'
-      : new Intl.DateTimeFormat('en', {
-          month: 'short',
-          day: 'numeric',
-        }).format(date);
-  return `${day} · ${new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit' }).format(date)}`;
-}
