@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -230,4 +231,38 @@ test('files and exports written after a save stay readable by the previous relea
       assert.deepEqual(persistableSettings(app.store.snapshot().settings), primary.settings, `${label}: the file is the persisted form of the merged settings`);
     } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
   });
+});
+
+test('reminder history routes on a legacy file: a no-op patch leaves its bytes, a check-off saves the merged Weather with history intact (#73, #74)', async () => {
+  const directory = await temporary();
+  const at = (offset: number) => new Date(Date.parse('2026-10-18T13:00:00Z') + offset).toISOString();
+  const pending = { id: randomUUID(), text: 'Synthetic pending', completed: false, dueAt: at(86_400_000), createdAt: at(0), updatedAt: at(0) };
+  const done = { id: randomUUID(), text: 'Synthetic done', completed: true, dueAt: null, createdAt: at(0), updatedAt: at(60_000) };
+  const bytes = JSON.stringify({ version: 1, settings: legacy(), reminders: [pending, done] }, null, 2);
+  await writeFile(join(directory, 'state.json'), bytes);
+  const app = await application(directory);
+  try {
+    assert.equal(app.store.snapshot().settings.widgets.rain, false, 'Rain is merged in memory');
+    assert.deepEqual(await app.send('PATCH', `/api/reminders/${done.id}`, { completed: true, text: done.text, dueAt: null }), done, 'an unchanged patch returns the stored reminder');
+    assert.equal(await readFile(join(directory, 'state.json'), 'utf8'), bytes, 'a no-op reminder patch is not a save, so the legacy bytes stay');
+    const checked = await app.send('PATCH', `/api/reminders/${pending.id}`, { completed: true });
+    assert.equal(checked.completed, true);
+    const primary = await readJson(directory, 'state.json');
+    assert.equal(primary.settings.widgets.rain, false, 'a check-off is an ordinary save and writes the merged settings');
+    assert.deepEqual(primary.settings.widgetGrid.placements.weather, { column: 8, row: 0, size: 'large' });
+    assert.ok(primary.settings.widgetGrid.placements.rain, 'the hidden Rain placement is still written');
+    assert.deepEqual(primary.reminders.find((item: Loose) => item.id === done.id), done, 'earlier history keeps its completion time');
+    assertPreviousReaderAccepts('data', primary, 'state.json after a check-off');
+    assertPreviousReaderAccepts('data', await readJson(directory, 'state.backup.json'), 'state.backup.json after a check-off');
+    const exported = await app.send('GET', '/api/export');
+    assertPreviousReaderAccepts('import', exported, 'export after a check-off');
+    assert.deepEqual(await app.send('DELETE', '/api/reminders/completed'), { deleted: 2 });
+    assertPreviousReaderAccepts('data', await readJson(directory, 'state.json'), 'state.json after clearing history');
+    // A pre-#74 export that carries history: Rain merges and every reminder arrives unchanged.
+    await app.send('POST', '/api/import', { version: 1, exportedAt: at(0), settings: legacy(), reminders: [pending, done] });
+    const imported = app.store.snapshot();
+    assert.equal(imported.settings.widgets.rain, false); assert.deepEqual(imported.settings.widgetGrid.placements.weather, { column: 8, row: 0, size: 'large' });
+    assert.deepEqual(imported.reminders, [pending, done]);
+    assertPreviousReaderAccepts('data', await readJson(directory, 'state.json'), 'state.json after a legacy import with history');
+  } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
 });
