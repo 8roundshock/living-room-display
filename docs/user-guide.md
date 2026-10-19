@@ -6,8 +6,9 @@ details, see [installation](install.md).
 
 Living Room Display turns a screen, such as a TV connected to your PC, into a calm,
 mostly black display with large, dim information: the time, the weather, your
-reminders and a few other things you choose. It makes no sound. It works on your
-PC only: no account, no cloud, and nothing is shared.
+reminders and a few other things you choose. It makes no sound and needs no
+account. Your settings and reminders stay on your PC. It goes online only for the
+weather and air quality where you are, and for city names when you search.
 
 There are two parts:
 
@@ -133,7 +134,7 @@ That setting is **Settings › Accessibility › Visual effects › Animation ef
 on Windows 11, and **Settings › Ease of Access › Display › Show animations in
 Windows** on Windows 10.
 
-## Weather you can trust
+## About the weather
 
 The weather comes from Open-Meteo, a free forecast service. The display always says
 how old it is. If the PC can't reach the service, you see the last saved forecast,
