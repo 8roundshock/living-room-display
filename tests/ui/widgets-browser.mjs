@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
-import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, isPlannedWidget, widgetSizes } from '../../src/shared/widgets.ts';
+import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, isActiveWidget, widgetSizes } from '../../src/shared/widgets.ts';
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
 
 export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
@@ -97,12 +97,16 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     }
     assert.ok(clockFonts.large > clockFonts.medium * 1.4, `Large clock should be visibly larger: ${JSON.stringify(clockFonts)}`);
     checks.push(`All ${familyCount} widget families × 3 densities × 1080p/4K: bounds, useful content, no frames/fills, tone classes, photo crops, whole-screen snapshot`);
-    for (const id of WIDGET_IDS.filter(isPlannedWidget)) {
+    // Every #78 id has shipped (#157, #171), so the inactive ids are retired ones (Rain, #74) plus any
+    // future planned entry; the catalog contract says neither is ever rendered.
+    const inactiveIds = WIDGET_IDS.filter(id => !isActiveWidget(id));
+    assert.ok(inactiveIds.length > 0, 'at least one inactive id to inject');
+    for (const id of inactiveIds) {
       current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id || key === 'clock']));
       await open(); await page.locator('[data-widget-id="clock"]').waitFor();
-      assert.equal(await page.locator(`[data-widget-id="${id}"]`).count(), 0, `planned ${id} never renders even when injected as enabled`);
+      assert.equal(await page.locator(`[data-widget-id="${id}"]`).count(), 0, `inactive ${id} never renders even when injected as enabled`);
     }
-    checks.push('Planned widget ids injected as enabled render nothing');
+    checks.push(`Inactive widget ids (${inactiveIds.join(', ')}) injected as enabled render nothing`);
     await page.setViewportSize({ width: 1920, height: 1080 });
     for (const size of ['small', 'medium', 'large']) {
       current = structuredClone(source); current.settings.appearance.fontScale = 1.25;

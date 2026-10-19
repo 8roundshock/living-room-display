@@ -17,10 +17,10 @@ import {
 } from '../shared/widgets.ts';
 import type { Settings, WidgetId } from '../shared/contracts.ts';
 
-/** The six #78 ids, appended after the previous release's ones in this order. */
-const NEW_IDS = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
+/** The six #78 ids, appended after the previous release's ones in this order; each unit activates its own (deletes `status`). */
+const NEW_IDS = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'] as WidgetId[];
 /** Ids still reserved; computed so that activating an entry (deleting its status) needs no edit here. */
-const PLANNED: string[] = WIDGET_IDS.filter(isPlannedWidget);
+const PLANNED = WIDGET_IDS.filter(isPlannedWidget);
 const definition = (id: WidgetId): WidgetDefinition => WIDGET_CATALOG[id];
 
 test('every catalog entry declares a valid category, tone, status and supported default size', () => {
@@ -43,8 +43,11 @@ test('planned entries reserve the #78 ids after the shipped ones and are never a
   // Rain is retired into Weather (#74); every other previous-release id stays active, and each #78 id is
   // active once its unit deletes `status`.
   assert.deepEqual(ACTIVE_WIDGET_IDS, [...PREVIOUS_RELEASE.widgetIds.filter(id => id !== 'rain'), ...NEW_IDS.filter(id => !PLANNED.includes(id))]);
-  for (const id of NEW_IDS as WidgetId[]) { assert.equal(definition(id).defaultEnabled, false, `${id} is off by default`); assert.equal(definition(id).legacyPlacement, undefined); }
-  for (const id of PLANNED as WidgetId[]) {
+  // Both #78 units (#157 Calendar/Countdown/Note, #171 World clocks/Air quality/Sun & moon) have shipped.
+  assert.deepEqual(NEW_IDS.filter(id => !isActiveWidget(id)), [], 'every #78 id is active after both catalog units');
+  assert.ok(PLANNED.every(id => NEW_IDS.includes(id)), 'only reserved #78 ids are planned');
+  for (const id of NEW_IDS) { assert.equal(definition(id).defaultEnabled, false, `${id} is optional and off by default`); assert.equal(definition(id).legacyPlacement, undefined); }
+  for (const id of PLANNED) {
     assert.equal(isPlannedWidget(id), true); assert.equal(isActiveWidget(id), false, `${id}: widgetVisible starts with isActiveWidget`);
   }
   for (const id of ACTIVE_WIDGET_IDS) { assert.equal(isActiveWidget(id), true); assert.equal(isPlannedWidget(id), false); }
@@ -71,7 +74,12 @@ test('retired entries merge into an active id that supports their families', () 
     assert.deepEqual(retiredProblems(), []);
     const settings = defaultSettings(); settings.widgets.rain = true;
     assert.equal(settingsSchema.parse(settings).widgets.rain, false, 'reading merges an enabled retired id into its target');
-    rain.mergedInto = 'worldClocks'; assert.deepEqual(retiredProblems(), ['rain must merge into an active widget']);
+    // World clocks is active since #171, so reserve it briefly to keep proving an inactive target is refused.
+    const worldClocks = definition('worldClocks'), worldClocksStatus = worldClocks.status;
+    try {
+      worldClocks.status = 'planned';
+      rain.mergedInto = 'worldClocks'; assert.deepEqual(retiredProblems(), ['rain must merge into an active widget']);
+    } finally { if (worldClocksStatus === undefined) delete worldClocks.status; else worldClocks.status = worldClocksStatus; }
     rain.mergedInto = undefined; assert.deepEqual(retiredProblems(), ['rain must merge into an active widget']);
     const clockSizes = definition('clock').sizes;
     try {
@@ -86,36 +94,47 @@ test('retired entries merge into an active id that supports their families', () 
 });
 
 test('settings, saved styles and imports that enable a planned id read it as disabled', () => {
-  const settings = JSON.parse(JSON.stringify(defaultSettings()));
-  for (const id of PLANNED) settings.widgets[id] = true;
-  const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = settings;
-  settings.savedPresets = [{ id: 'style', name: 'Style', visual: { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } }];
-  const read = settingsSchema.parse(settings);
-  const imported = importSchema.parse({ version: 1, exportedAt: new Date().toISOString(), settings, reminders: [] }).settings;
-  for (const value of [read.widgets, read.savedPresets[0]!.visual.widgets, imported.widgets]) {
-    for (const id of PLANNED as WidgetId[]) assert.equal(value[id], false, id);
-    for (const id of ACTIVE_WIDGET_IDS) assert.equal(value[id], settings.widgets[id], id);
-  }
+  // As below: reserve one id while every #78 unit has shipped, so the read path stays covered.
+  const probe = PLANNED[0] ?? 'sunMoon', probeStatus = definition(probe).status;
+  const reserved = PLANNED.length ? PLANNED : [probe];
+  definition(probe).status = 'planned';
+  try {
+    const settings = JSON.parse(JSON.stringify(defaultSettings()));
+    for (const id of reserved) settings.widgets[id] = true;
+    const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = settings;
+    settings.savedPresets = [{ id: 'style', name: 'Style', visual: { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } }];
+    const read = settingsSchema.parse(settings);
+    const imported = importSchema.parse({ version: 1, exportedAt: new Date().toISOString(), settings, reminders: [] }).settings;
+    for (const value of [read.widgets, read.savedPresets[0]!.visual.widgets, imported.widgets]) {
+      for (const id of reserved) assert.equal(value[id], false, id);
+      for (const id of ACTIVE_WIDGET_IDS.filter(id => !reserved.includes(id))) assert.equal(value[id], settings.widgets[id], id);
+    }
+  } finally { if (probeStatus === undefined) delete definition(probe).status; else definition(probe).status = probeStatus; }
 });
 
-test('a PATCH enabling a planned id is rejected with a clear message', async t => {
-  const [first, last] = [PLANNED[0], PLANNED.at(-1)] as [WidgetId | undefined, WidgetId | undefined];
-  if (!first || !last) { t.skip('every #78 id has shipped'); return; }
-  assert.throws(() => settingsPatchSchema.parse({ widgets: { [first]: true } }), new RegExp(`${definition(first).name} is not available yet`));
-  assert.deepEqual(settingsPatchSchema.parse({ widgets: { [first]: false } }), { widgets: { [first]: false } });
-  assert.throws(() => mergeSettings(defaultSettings(), settingsPatchSchema.parse({ widgets: { [last]: true } })), new RegExp(`${definition(last).name} is not available yet`));
-  const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-'));
-  const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()) });
-  app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
-  const address = app.server.address(); assert.ok(address && typeof address === 'object');
+test('a PATCH enabling a planned id is rejected with a clear message', async () => {
+  // Generic over whichever ids are still planned; temporarily reserve one if every unit has shipped
+  // (true since #157 and #171 both merged), so the schema, merge and HTTP paths stay covered.
+  const probe = PLANNED[0] ?? 'sunMoon', probeStatus = definition(probe).status;
+  const reserved = PLANNED.length ? PLANNED : [probe];
+  definition(probe).status = 'planned';
   try {
-    for (const id of PLANNED) {
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ widgets: { [id]: true } }) });
-      assert.equal(response.status, 400);
-      assert.match((await response.json()).error, new RegExp(`${definition(id as WidgetId).name} is not available yet`));
-    }
-    assert.equal(Object.values(app.store.snapshot().settings.widgets).filter(Boolean).length, 5, 'the five default widgets (Rain is part of Weather since #74)');
-  } finally { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }
+    assert.throws(() => settingsPatchSchema.parse({ widgets: { [probe]: true } }), new RegExp(`${definition(probe).name} is not available yet`));
+    assert.deepEqual(settingsPatchSchema.parse({ widgets: { [probe]: false } }), { widgets: { [probe]: false } });
+    assert.throws(() => mergeSettings(defaultSettings(), settingsPatchSchema.parse({ widgets: { [probe]: true } })), new RegExp(`${definition(probe).name} is not available yet`));
+    const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-'));
+    const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()) });
+    app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
+    const address = app.server.address(); assert.ok(address && typeof address === 'object');
+    try {
+      for (const id of reserved) {
+        const response = await fetch(`http://127.0.0.1:${address.port}/api/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ widgets: { [id]: true } }) });
+        assert.equal(response.status, 400);
+        assert.match((await response.json()).error, new RegExp(`${definition(id).name} is not available yet`));
+      }
+      assert.equal(Object.values(app.store.snapshot().settings.widgets).filter(Boolean).length, 5, 'the five default widgets (Rain is part of Weather since #74)');
+    } finally { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }
+  } finally { if (probeStatus === undefined) delete definition(probe).status; else definition(probe).status = probeStatus; }
 });
 
 // The same computation recorded on main 88e58b0 before the planned entries were appended; only

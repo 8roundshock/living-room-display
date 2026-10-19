@@ -359,7 +359,7 @@ keep the newer data directory and restore the matching pre-upgrade data copy.
 | #75 Native colours | Not shipped yet |
 | #76 Animation level | Not shipped yet |
 | #78 Calendar, Countdown and Note | Enabling Calendar, Countdown or Note, entering a countdown or note text, or choosing a Sunday/Monday week start. Turning the widgets off, returning their content to the defaults (no countdowns, empty note, Automatic) and deleting or re-saving any saved style captured while one of them was on makes `state.json` readable again; one further save refreshes `state.backup.json` |
-| #78 World clocks, Sun & moon and Air quality | Not shipped yet |
+| #78 World clocks, Sun & moon and Air quality | Enabling any of the three widgets, adding a world clock city, or choosing the European AQI scale (`widgets.worldClocks/sunMoon/airQuality: true` or non-default `widgetData.worldClocks`/`airQuality`). While all three stay off with no cities and the US scale, files and exports remain readable. |
 
 #### Removing custom Reminders sizes before a downgrade
 

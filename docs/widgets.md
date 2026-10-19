@@ -17,6 +17,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/server/persistence.ts`](../src/server/persistence.ts) | The previous release and the additive defaults omitted at rest so it can still read files and exports. |
 | [`src/server/compat/previous-reader.ts`](../src/server/compat/previous-reader.ts) | Test-only frozen reader of the previous release and its assertion helpers ([rollback compatibility](development.md#rollback-compatibility-check)). |
 | [`src/server/photo.ts`](../src/server/photo.ts) | Strict normalized PNG ingestion and private selected-image validation. |
+| [`src/server/air.ts`](../src/server/air.ts) | Keyless CAMS air quality via Open-Meteo: request, normalization, 30-minute cache and the `off` state; [`src/client/airHourly.ts`](../src/client/airHourly.ts) rebuilds the widget's upcoming-hour bars and UV peak each minute; [`src/client/astronomy.ts`](../src/client/astronomy.ts) holds the local sun, moon and time-zone calculations. |
 | [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
 | [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
@@ -112,12 +113,12 @@ The renderer families have deliberate visual roles:
 | Reminders | As many pending reminders as fit the actual box, soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete, faint captured desktop | Wider complete desktop | Larger complete desktop; no crop hides screen context |
-| World clocks | Planned (#78), not shipped | | |
+| World clocks | First city's label, time in regular-weight numerals, relation ("Tomorrow · +13 h"), day/night icon and a dim "+N" | Two cities side by side | Up to four rows, label and relation left, time right; hidden on the display with no cities |
 | Calendar | Month name over this week's strip (weekday initials and dates) | Weekday, large date and month beside a compact month grid | Month and year, a weekday header row and a generous month grid; every grid has only the 4–6 weeks the month needs |
 | Countdown | The next date as a large count (“12” over “days”, or Today/Tomorrow), its title and a short date | The next date on the left; the following two as compact rows | Up to five rows (title, date, days right-aligned) and an honest “+N more” |
 | Note | The text, set large | The text, wider | The text, generous; long notes step down and an overfull one zooms out through the shared fit |
-| Air quality | Planned (#78), not shipped | | |
-| Sun & moon | Planned (#78), not shipped | | |
+| Air quality | AQI and category word with place and scale; age and CAMS credit always, "Model estimate" with a reading | Adds the main pollutant and UV with its WHO category | Adds AQI bars for the current and up to 23 following hours (unknown hours dotted) and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
+| Sun & moon | Next sunrise or sunset, its time and the place | Sunrise, sunset, daylight length and change from yesterday, moon glyph and phase | Dim dotted day arc with the sun's position, times, daylight, phase with illumination and the next full (or new) moon |
 
 The large clock requires actual vertical room in the central catalog; do not
 recreate a giant option by scaling within the previous short large family.
@@ -191,7 +192,7 @@ composition stay identical.
   with UTC-noon arithmetic so DST cannot shift a count; February 29 falls on
   February 28 in common years) and Note (up to 200 characters and 4 lines). An empty
   Countdown or Note is hidden on the display and shows a placeholder in the editor.
-  World clocks, Sun & moon and Air quality are the parallel unit of the same ticket.
+  World clocks, Sun & moon and Air quality are the parallel unit of the same ticket (#171).
   The three use fixed families and sit beside a free-size Reminders span; fuller
   boards keep relocating through the #93 reflection fallback described below.
 - **Rejected, with reasons:** timers and alarms (they need audio and on-screen

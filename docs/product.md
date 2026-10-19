@@ -26,12 +26,12 @@ busy dashboards. The application must produce no audio.
 | Appearance | User-editable layout, colors, typography, motion, and saved presets. |
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 | Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |
-| World clocks (planned, #78) | Time in up to four other cities. |
+| World clocks | Time in up to four other cities. |
 | Calendar | This month at a glance. |
 | Countdown | Days until dates you choose. |
 | Note | A short message on screen. |
-| Air quality (planned, #78) | Air quality and UV index. |
-| Sun & moon (planned, #78) | Daylight and moon phase. |
+| Air quality | Air quality and UV index. |
+| Sun & moon | Daylight and moon phase. |
 
 Distinguish forecast probability, expected precipitation amount, and estimated
 rain windows. Label times and intervals correctly. Show stale or unavailable

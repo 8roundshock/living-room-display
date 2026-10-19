@@ -239,6 +239,50 @@ device, then Save or Cancel with the rest of the draft. It is dimmed and moves
 as one widget. It never uses the desktop snapshot or a remote feed. The private
 recovery backup may retain an older selected image after replacement or clearing.
 
+## World clocks, Sun & moon and Air quality
+
+All three start disabled and are added from the picker; their panels sit under the
+Size control and join the normal draft (Save/Cancel, no autosave).
+
+- **World clocks:** up to four cities added with the same keyboard city search as
+  the Weather tab (debounced combobox, `GET /api/locations`). Each row has an
+  editable label (1–40 characters, defaulting to the city name), the region (the
+  search result's region in this session, otherwise the time-zone name), the
+  city's current time, and Move up, Move down and Remove buttons; focus stays with
+  the moved city. The add field is disabled at four cities. An empty label blocks
+  Save with "Each world clock needs a label". Hint: "Times follow each city's time
+  zone and daylight saving." Coordinates are used only for the day/night icon. With
+  no cities the widget is hidden on the display and shows "Add a city" on the canvas.
+- **Sun & moon:** no settings. Hint: "Uses your weather location ({name}); times are
+  calculated on this computer." Times use the weather location's resolved timezone,
+  or this computer's while it is still `auto`.
+- **Air quality:** scale US AQI (default) or European AQI. Hint: "Model estimate from
+  Copernicus CAMS via Open-Meteo for your weather location. Canada's AQHI and local
+  sensors are not available." While the draft enables the widget or changes its
+  scale and the saved state has no reading for it, the canvas previews
+  `GET /api/air-quality` (refreshed every 5 minutes). Cancel drops the preview at
+  once; after Save it is kept until the next state poll carries the saved reading.
+
+On the display: World clocks shows the first city (small), two side by side
+(medium) or four rows (large) in regular-weight numerals, with "Tomorrow · +13 h",
+"Today · −1 h" or "Same time", a sun or moon icon for daylight there, and "+N" for
+cities that do not fit. Sun & moon shows the next sunrise or sunset (small), adds
+both times, daylight length, its change from yesterday and the moon phase (medium),
+and a dim dotted day arc with the sun's position, illumination and the next full
+(or new) moon (large); polar days read "Sun up all day" / "Sun stays down today".
+Air quality shows the AQI and its category word (no category colours), adds the
+main pollutant and UV (medium), and up to 24 hourly bars with unknown hours dotted
+and the UV peak (large). Bars, hour labels and the peak use only the current and
+later hours, so a saved reading never shows a past hour or a peak that has already
+happened; with fewer than two upcoming hours the line reads "Hourly estimate
+unavailable". The chart is named for screen readers ("US AQI estimate for the next
+24 hours: 40 to 45"). Its footer always shows the age and "Air quality: CAMS via
+Open-Meteo": "Model estimate · Updated …" with a reading, "Saved reading · Updated …"
+in the caution tone when stale. A failure reads "Air quality unavailable" (age only,
+caution tone), never clean air. Calculations are cached
+per minute; values change on the shared one-second tick without their own animation.
+Browser suite: `tests/ui/catalog-sky-browser.mjs`.
+
 ## Movement and verification
 
 The edited layout is the first composition. Later collision-free compositions
