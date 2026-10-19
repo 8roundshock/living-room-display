@@ -1,4 +1,5 @@
 import type { WeatherState } from '../shared/contracts.ts';
+import { isValidTimeZone, localTimeZone } from './astronomy.ts';
 
 /** No-break space: joins a time to its AM/PM and a “·” to the value after it, so neither wraps alone (#197). */
 export const NBSP = '\u00a0';
@@ -48,6 +49,18 @@ export function ageLabel(
   if (minutes < 24 * 60) return `Updated ${Math.floor(minutes / 60)} hr ago`;
   const days = Math.floor(minutes / 1440);
   return `Updated ${days} ${days === 1 ? 'day' : 'days'} ago`;
+}
+
+/**
+ * The zone weather dates and times are formatted in: the weather city's IANA zone once the provider
+ * resolved it, otherwise this computer's. A saved device location stores `auto` until its first
+ * forecast arrives, and the server reports that `auto` while the forecast is unavailable (PC offline
+ * at start, provider down). Intl throws a RangeError for it, and a render that throws blanks the
+ * display and editor (#318). Sun & moon uses this too; Air quality applies the same rule to its own
+ * location. The fallback constructs a formatter, so renderers memoize the result.
+ */
+export function weatherTimeZone(timeZone: string | null | undefined): string {
+  return isValidTimeZone(timeZone) ? timeZone : localTimeZone();
 }
 
 /** The civil date (YYYY-MM-DD) of an instant in a time zone. */
@@ -100,6 +113,8 @@ export function upcomingDays<Day extends { date: string }>(daily: Day[], today: 
 
 /** Today's saved daily entry in the weather city's calendar, or undefined when the forecast no longer has it. */
 export function todayForecast<Day extends { date: string }>(daily: Day[], timeZone: string, now: Date | number): Day | undefined {
+  // No saved day: nothing to look up, so no date is formatted (the zone may not be resolved yet).
+  if (!daily.length) return undefined;
   const today = civilDate(now, timeZone);
   return daily.find(day => day.date.slice(0, 10) === today);
 }

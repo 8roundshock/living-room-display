@@ -1,6 +1,6 @@
 import { useMemo, type CSSProperties } from 'react';
 import type { RainInterval } from '../../shared/contracts.ts';
-import { compactWeatherTime, lastKnownTime, NBSP, temperature, todayForecast } from '../format.ts';
+import { compactWeatherTime, lastKnownTime, NBSP, temperature, todayForecast, weatherTimeZone } from '../format.ts';
 import { rainChartLabel, rainOutlook, rainOutlookCopy } from '../weather-outlook.ts';
 import { conditionLabel, SourceCredit, WeatherAge } from './common.tsx';
 import { TransitionText } from './TransitionText.tsx';
@@ -16,7 +16,8 @@ import type { WidgetContentProps, WidgetModule } from './types.ts';
  */
 function Weather({ state: { weather }, settings, now, size, disconnected }: WidgetContentProps) {
   const current = weather.current;
-  const timeZone = weather.location.timezone;
+  // The city's zone, or this computer's while a device location is still `auto` (no forecast yet).
+  const timeZone = useMemo(() => weatherTimeZone(weather.location.timezone), [weather.location.timezone]);
   const clockFormat = settings.clockFormat;
   const minute = Math.floor(now.getTime() / 60_000) * 60_000;
   const variant = size === 'small' ? 'compact' : 'full';

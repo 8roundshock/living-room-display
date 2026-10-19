@@ -1,6 +1,6 @@
 import { useMemo, type CSSProperties } from 'react';
 import { widgetContentLimits } from '../../shared/widgets.ts';
-import { ageLabel, civilDate, forecastDay, temperature, upcomingDays } from '../format.ts';
+import { ageLabel, civilDate, forecastDay, temperature, upcomingDays, weatherTimeZone } from '../format.ts';
 import { Icon } from '../icons.tsx';
 import { TransitionText } from './TransitionText.tsx';
 import { WeatherGlyph } from './WeatherGlyph.tsx';
@@ -13,7 +13,8 @@ import type { WidgetContentProps, WidgetModule } from './types.ts';
  */
 function Forecast({ state: { weather }, size, now, disconnected }: WidgetContentProps) {
   const count = widgetContentLimits(size).forecastDays;
-  const timeZone = weather.location.timezone;
+  // The city's zone, or this computer's while a device location is still `auto` (no forecast yet).
+  const timeZone = useMemo(() => weatherTimeZone(weather.location.timezone), [weather.location.timezone]);
   const minute = Math.floor(now.getTime() / 60_000) * 60_000;
   const today = useMemo(() => civilDate(minute, timeZone), [minute, timeZone]);
   // Recomputed when the civil date, the saved days or the family change, not every tick; `minute`

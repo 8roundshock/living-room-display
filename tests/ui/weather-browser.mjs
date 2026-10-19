@@ -1,5 +1,5 @@
 // Adaptive Weather (#74), ambient glyph sizing (#128) and the #264 polish (unbroken times, chart name,
-// past days, last-known readings, formatter caching) in production Edge. Synthetic weather only;
+// past days, last-known readings, formatter caching, an unresolved device zone) in production Edge. Synthetic weather only;
 // screenshots stay in RAM unless --capture names a temporary folder for manual inspection.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -12,6 +12,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings as previousDefaults } from '../../src/server/compat/bedca44/shared/defaults.ts';
+import { defaultSettings } from '../../src/shared/defaults.ts';
 import { GRID_DENSITIES, WIDGET_IDS } from '../../src/shared/widgets.ts';
 
 const HOUR = 3_600_000;
@@ -362,6 +363,9 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
     migration = await migrationCheck({ browser, clientDirectory, errors });
     checks.push(...migration.checks);
     if (capture) shots.push(...migration.shots);
+    const unresolved = await unresolvedZoneCheck({ browser, clientDirectory, errors, capture });
+    checks.push(...unresolved.checks);
+    shots.push(...unresolved.shots);
     assert.deepEqual(errors, []);
     if (capture) await writeMontages(browser, capture, shots);
     return { checks };
@@ -412,6 +416,62 @@ async function migrationCheck({ browser, clientDirectory, errors }) {
     assert.equal(saved.widgets.rain, false); assert.equal(saved.widgets.weather, true); assert.deepEqual(saved.widgetGrid.placements.weather, { column: 8, row: 0, size: 'large' });
     assert.equal(saved.appearance.clockStyle, 'digital');
     return { checks: ['Migration: a pre-#74 state.json (both medium, revision 2) opens as one large Weather in the editor list and canvas with no Rain and no Save/Cancel; the display shows one Weather with rain detail; the file is unchanged until an unrelated Save, which writes rain:false'], shots };
+  } finally { await context.close(); await new Promise(done => app.server.close(done)); await rm(directory, { recursive: true, force: true }); }
+}
+
+/**
+ * A saved device location before its first forecast (independent review of c99af30, #243): the settings
+ * keep timezone 'auto' and, while the provider cannot be reached, the server reports that 'auto' in
+ * weather.location with status unavailable. Formatting a date in 'auto' throws a RangeError, and with no
+ * error boundary (#318) that blanked /display and /editor for good. Both widgets must say unavailable,
+ * nothing may throw, the editor must render, and the display must show the forecast once it resolves.
+ */
+export async function unresolvedZoneCheck({ browser, clientDirectory, errors, capture }) {
+  const directory = await mkdtemp(join(tmpdir(), 'lrd-weather-auto-zone-'));
+  const settings = defaultSettings();
+  settings.locationSource = 'device'; settings.location = { name: 'Device area', latitude: 43.7, longitude: -79.4, timezone: 'auto' };
+  settings.appearance.motionEnabled = false;
+  assert.ok(settings.widgets.weather && settings.widgets.forecast, 'the default board shows Weather and Forecast');
+  await writeFile(join(directory, 'state.json'), JSON.stringify({ version: 1, settings, reminders: [] }, null, 2));
+  let serverNow = NOW, offline = true, requests = 0;
+  const fetcher = async () => { requests++; if (offline) throw new Error('Synthetic provider outage'); return Response.json(forecastFixture()); };
+  const app = await createApplication({ dataDirectory: directory, clientDirectory, now: () => serverNow, fetcher });
+  app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const context = await browser.newContext({ viewport: VIEWPORTS[0], timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+  const shots = [], before = errors.length;
+  try {
+    // The real server state, not an injected one: the failing fetch leaves the device zone unresolved.
+    const served = await (await fetch(`${base}/api/state`)).json();
+    assert.equal(served.weather.status, 'unavailable'); assert.equal(served.weather.location.timezone, 'auto'); assert.ok(requests > 0, 'the server tried the provider');
+    const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
+    // The automatic editor lookup must not prompt or change the draft: geolocation permission stays "prompt".
+    await page.addInitScript(() => Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'prompt' }) } }));
+    await page.clock.install({ time: new Date(NOW) });
+    await page.goto(base + '/editor'); await page.locator('.preview-surface').waitFor(); await page.clock.runFor(300);
+    const canvas = page.locator('.preview-surface');
+    assert.match(await canvas.locator('[data-widget-id="weather"]').innerText(), /Weather unavailable/, 'editor canvas: Weather unavailable');
+    assert.match(await canvas.locator('[data-widget-id="forecast"]').innerText(), /Forecast unavailable/, 'editor canvas: Forecast unavailable');
+    assert.ok(await page.getByRole('tab', { name: 'Widgets', exact: true }).isVisible(), 'the editor controls render');
+    assert.equal(await page.locator('.studio-savebar').count(), 0, 'opening the editor changes nothing');
+    await page.goto(base + '/display'); await page.locator('.display-page').waitFor();
+    const weather = page.locator('[data-widget-id="weather"]'), forecast = page.locator('[data-widget-id="forecast"]');
+    assert.match(await weather.innerText(), /Device area[\s\S]*Weather unavailable[\s\S]*Not updated yet/, 'display: Weather unavailable with its place and age');
+    assert.match(await forecast.innerText(), /Forecast unavailable/, 'display: Forecast unavailable');
+    assert.equal(await forecast.locator('.forecast-day').count(), 0, 'no invented day');
+    if (capture) shots.push({ group: 'states', name: 'device zone unresolved', bytes: await page.screenshot() });
+    assert.deepEqual(errors.slice(before), [], 'nothing throws while the zone is auto');
+    // The provider returns after the one-minute retry back-off; two display polls later the city's zone is resolved.
+    offline = false; serverNow = NOW + 61_000;
+    await page.clock.runFor(61_000);
+    await weather.locator('.current-temperature').waitFor();
+    assert.equal(await forecast.locator('.forecast-day-label').first().textContent(), 'Today', 'the forecast starts at the resolved city\'s today');
+    assert.ok(await forecast.locator('.forecast-day').count() > 0, 'the resolved forecast fills the strip');
+    assert.match(await weather.locator('.weather-age').innerText(), /^Updated just now$/);
+    assert.equal((await (await fetch(`${base}/api/state`)).json()).weather.location.timezone, 'America/Toronto', 'the forecast resolved the zone');
+    if (capture) shots.push({ group: 'states', name: 'device zone resolved', bytes: await page.screenshot() });
+    assert.deepEqual(errors.slice(before), [], 'nothing throws after the zone resolves');
+    return { checks: ['Unresolved device zone: with location.timezone \'auto\' and status unavailable from a real failing provider, the editor canvas and display show Weather unavailable and Forecast unavailable with no page error and a rendered editor (no Save/Cancel); after the provider returns and two polls pass, the display shows the resolved forecast starting at Today (independent review of c99af30, #243)'], shots };
   } finally { await context.close(); await new Promise(done => app.server.close(done)); await rm(directory, { recursive: true, force: true }); }
 }
 

@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { WeatherState } from '../shared/contracts.ts';
-import { ageLabel, civilDate, compactWeatherRange, compactWeatherTime, forecastDay, lastKnownTime, todayForecast, upcomingDays, weatherTime } from './format.ts';
+import { ageLabel, civilDate, compactWeatherRange, compactWeatherTime, forecastDay, lastKnownTime, todayForecast, upcomingDays, weatherTime, weatherTimeZone } from './format.ts';
 import { rainChartLabel, rainOutlook, rainOutlookCopy } from './weather-outlook.ts';
 
 const TORONTO = 'America/Toronto';
@@ -51,6 +51,25 @@ test('a forecast saved one or three days earlier shows no past day and finds tod
   assert.equal(todayForecast(ended, TORONTO, NOW), undefined);
   // Today follows the city's calendar, not the computer's or UTC.
   assert.equal(todayForecast(daily('2026-10-18'), 'Asia/Tokyo', Date.parse('2026-10-18T16:00:00Z'))?.date, '2026-10-19');
+});
+
+test('a device location whose zone is still auto formats nothing in auto (independent review of c99af30, #243)', () => {
+  // A saved device location stores 'auto' until its first forecast; the server reports it while the forecast is unavailable.
+  assert.throws(() => civilDate(NOW, 'auto'), RangeError, 'Intl rejects the placeholder, so renderers must never format in it');
+  assert.doesNotThrow(() => todayForecast([], 'auto', NOW), 'no saved day: nothing is looked up');
+  assert.equal(todayForecast([], 'auto', NOW), undefined);
+  const computer = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+  assert.equal(weatherTimeZone('auto'), computer, 'unresolved: this computer\'s zone, as Sun & moon does');
+  for (const unusable of ['', null, undefined, 'Not/A_Zone']) assert.equal(weatherTimeZone(unusable), computer, `${String(unusable)} falls back`);
+  assert.equal(weatherTimeZone(TORONTO), TORONTO, 'a resolved city zone is used as is');
+  assert.equal(weatherTimeZone('Asia/Tokyo'), 'Asia/Tokyo');
+  // Everything Weather and Forecast compute for an unavailable forecast in that zone.
+  const zone = weatherTimeZone('auto');
+  assert.deepEqual(upcomingDays([], civilDate(NOW, zone)), []);
+  assert.equal(todayForecast([], zone, NOW), undefined);
+  const outlook = rainOutlook({ hourly: [], units: { temperature: '°C', windSpeed: 'km/h', precipitation: 'mm' } }, NOW);
+  assert.equal(rainOutlookCopy(outlook, zone, '12h', NOW, 'full').headline, 'Rain outlook unavailable');
+  assert.equal(lastKnownTime({ status: 'unavailable', updatedAt: null, current: null }, true, zone, '12h', NOW), null);
 });
 
 function weather(status: WeatherState['status'], updatedAt: string | null): Pick<WeatherState, 'current' | 'status' | 'updatedAt'> {
