@@ -134,8 +134,11 @@ and the [UX role guide](roles/ux.md) for verification and future work.
 
 Style → Motion → **Animation** offers Off, Subtle (default) and Lively (#76). It is
 separate from Soft motion, which still controls whole-arrangement fades, drift and
-travel. Relocation through black always continues, at every level and under reduced
-motion. A screen that asks for reduced motion shows Off whatever is saved; on the
+travel. The drift moves the whole arrangement within ±0.5% of the plane in 36
+discrete steps, one about every 2 s (roughly one device pixel across a 4K panel),
+with nothing animating in between, so the display draws a frame only when the plane
+moves instead of every frame (#248). Relocation through black always continues, at
+every level and under reduced motion. A screen that asks for reduced motion shows Off whatever is saved; on the
 TV that is Windows Settings → Accessibility → Visual effects → Animation effects.
 
 - **Off** keeps widgets still: no value, digit, glyph or entrance motion. The editor
@@ -179,6 +182,8 @@ settle, new-widget drop-in, Save bar entrance) last at most 240 ms and never bou
 `tests/ui/motion-browser.mjs` checks the levels, reduced motion, the reveal
 sequence, rectangles and fit at 50% of an entrance for the whole merged catalog,
 the loop inventory, glyph pixel parity, adaptive Weather, the measured Reminders
-list, value changes in every widget unit, and a 15 s CDP budget at 1280×720 ×3 for
-the default board and a full board of every widget. Browser checks do not establish TV
+list, value changes in every widget unit, the discrete drift steps, a 15 s CDP budget
+at 1280×720 ×3 for the default board and a full board of every widget, and a frame
+budget (at most a few drawn frames per second at Off with Soft motion on, at 1280×720
+×3 and 3840×2160 ×1). Browser checks do not establish TV
 smoothness, comfort or long-term OLED behaviour; physical acceptance is #111.
