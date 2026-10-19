@@ -398,13 +398,13 @@ function hash(value: string): number {
 /**
  * #93: when the bounded search cannot move every widget on a dense board, a whole-board reflection of
  * the previous composition (horizontal, vertical or both) is always collision-free and in bounds.
- * Returns a reflection that moves the most widgets, or null when every reflection maps the board onto
- * itself. #182: when several reflections move that many, the choice rotates with the cycle, so
- * consecutive fallbacks never apply the same reflection twice. Reflections commute, so a dense board
- * then visits up to four arrangements (A, hA, vhA, vA) instead of returning to the one from two
- * cycles earlier.
+ * Returns a reflection that moves widgets, or null when every reflection maps the board onto itself.
+ * #182: whenever another reflection also moves widgets, consecutive fallbacks apply different
+ * reflections. Reflections commute, so a board with a third reflected arrangement visits three or four
+ * arrangements (for example A, rA, brA, bA) instead of returning to the one from two cycles earlier.
+ * Exported for the relocation tests; the display reaches it only through composeWidgetGrid.
  */
-function reflectedComposition(grid: WidgetGrid, ids: WidgetId[], previous: WidgetGrid, cycle: number): WidgetGrid | null {
+export function reflectedComposition(grid: WidgetGrid, ids: WidgetId[], previous: WidgetGrid, cycle: number): WidgetGrid | null {
   // A stale previous composition (another density or other spans) cannot be reflected; use the authored board.
   const compatible = previous.density === grid.density && ids.every(id => sameSpan(placementSpan(id, previous.placements[id]), placementSpan(id, grid.placements[id])));
   const base = compatible ? previous : grid;
@@ -417,15 +417,20 @@ function reflectedComposition(grid: WidgetGrid, ids: WidgetId[], previous: Widge
     const moved = ids.filter(id => previous.placements[id].column !== result.placements[id].column || previous.placements[id].row !== result.placements[id].row).length;
     if (moved) options.push({ grid: result, moved });
   }
+  // A reflection leaves the same widgets in place (those centred on its axes) in every reflected
+  // arrangement of a board, so this ranking holds from one fallback to the next.
   const most = Math.max(0, ...options.map(option => option.moved));
   const best = options.filter(option => option.moved === most);
   if (!best.length) return null;
+  // Reflections that tie for the most widgets moved rotate with the cycle.
   if (best.length > 1) return best[cycle % best.length]!.grid;
   // A unique best (typically both reflections at once, when a widget is centred on one axis) alternates
-  // on odd cycles with a reflection that leaves only one more widget in place, so it is never applied
-  // on two consecutive cycles either.
-  const near = options.filter(option => option.moved === most - 1);
-  return near.length && cycle % 2 ? near[Math.floor(cycle / 2) % near.length]!.grid : best[0]!.grid;
+  // on odd cycles with the best of the other moving reflections, however many fewer widgets that one
+  // moves. With a single moving reflection it repeats; that board has only two arrangements.
+  const rest = options.filter(option => option !== best[0]);
+  const fewer = Math.max(0, ...rest.map(option => option.moved));
+  const second = rest.filter(option => option.moved === fewer);
+  return second.length && cycle % 2 ? second[Math.floor(cycle / 2) % second.length]!.grid : best[0]!.grid;
 }
 /** Keep the edited layout at rest, then choose distant legal cells during a black interval. */
 export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<WidgetId, boolean>>, cycle: number, previous = grid): WidgetGrid {
