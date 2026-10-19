@@ -2,6 +2,10 @@
 param(
     [Parameter(Mandatory)][string]$SetupPath,
     [Parameter(Mandatory)][string]$ReleaseJson,
+    # The CI-only rollback-test Setup (Build-Installer.ps1 -RollbackTestOutputDirectory)
+    # and its release.json: same version, but its server fails the health check (#189).
+    [Parameter(Mandatory)][string]$RollbackSetupPath,
+    [Parameter(Mandatory)][string]$RollbackReleaseJson,
     # 'default' (%LOCALAPPDATA%\LivingRoomDisplay) or 'custom' (a RUNNER_TEMP
     # folder whose name has a space and a non-ASCII character).
     [ValidateSet('default','custom')][string]$DirectoryMode = 'default'
@@ -36,6 +40,8 @@ $work = Join-Path $runnerTemp ('lrd-smoke-' + [Guid]::NewGuid().ToString('N').Su
 $null = New-Item -ItemType Directory -Path $work
 $SetupPath = [IO.Path]::GetFullPath($SetupPath)
 $ReleaseJson = [IO.Path]::GetFullPath($ReleaseJson)
+$RollbackSetupPath = [IO.Path]::GetFullPath($RollbackSetupPath)
+$RollbackReleaseJson = [IO.Path]::GetFullPath($RollbackReleaseJson)
 $release = Get-Content -LiteralPath $ReleaseJson -Raw | ConvertFrom-Json
 $expectedVersion = [string]$release.version
 # U+00DC (U with diaeresis) keeps this file ASCII for Windows PowerShell 5.1.
@@ -61,13 +67,13 @@ function Invoke-Program([string]$File, [string]$Arguments, [int]$TimeoutSeconds 
         return $process.ExitCode
     } finally { $process.Dispose() }
 }
-function Invoke-Setup([string]$Name, [string]$Extra) {
+function Invoke-Setup([string]$Name, [string]$Extra, [string]$File = $SetupPath) {
     $log = Join-Path $work "$Name.log"
     # GitHub runners are always elevated with UAC on; Setup refuses that unless told.
     $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLOWELEVATED=1 /LOG="' + $log + '"'
     if ($DirectoryMode -eq 'custom') { $arguments += ' /DIR="' + $installRoot + '"' }
     if ($Extra) { $arguments += ' ' + $Extra }
-    $code = Invoke-Program $SetupPath $arguments
+    $code = Invoke-Program $File $arguments
     Write-Host "Setup ($Name) exit code $code"
     return [pscustomobject]@{Code=$code;Log=$log}
 }
@@ -102,6 +108,10 @@ function Get-StartMenu { return @(Get-ChildItem -LiteralPath $programs -Recurse 
 function Get-Shortcut([string]$Path) {
     $shell = New-Object -ComObject WScript.Shell
     try { $link = $shell.CreateShortcut($Path); return [pscustomobject]@{Target=$link.TargetPath;Arguments=$link.Arguments} } finally { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($shell) }
+}
+function Assert-Healthy([string]$When) {
+    $health = (Get-Http '/api/health').Content | ConvertFrom-Json
+    Assert-True ($health.status -eq 'ok' -and $health.version -eq $expectedVersion) "health $When`: $($health | ConvertTo-Json -Compress)"
 }
 function Invoke-Uninstall([string]$Extra) {
     $uninstaller = Join-Path $installRoot 'uninstall\unins000.exe'
@@ -169,9 +179,29 @@ try {
     $status = ($status -join '') | ConvertFrom-Json
     Assert-True ($status.ServerRunning -and $status.Channel -eq 'package' -and $status.Version -eq $expectedVersion -and $status.RuntimeVersion -eq $release.node.version) "Status: $($status | ConvertTo-Json -Compress)"
 
+    Write-Step 'Automatic rollback on a real install: the new server fails its health check (#189)'
+    # The rollback-test Setup differs only in app/package.json, so its server
+    # reports another version. Setup must stop that real server, wait for it to
+    # exit and rename app back; a Stop that returned early would race the rename.
+    $appTree = Get-TreeState (Join-Path $installRoot 'app')
+    $runtimeTree = Get-TreeState (Join-Path $installRoot 'runtime')
+    $markerBefore = Get-Content -LiteralPath $marker -Raw
+    $result = Invoke-Setup 'rollback' '' $RollbackSetupPath
+    if ($result.Code -ne 7 -or -not (Get-Content -LiteralPath $result.Log -Raw).Contains('Helper exit code: 15')) { Show-Log $result.Log; throw "SMOKE FAILED: the rollback-test Setup exited $($result.Code); expected 7 with helper exit code 15" }
+    Assert-True ((Get-TreeState (Join-Path $installRoot 'app')) -eq $appTree -and (Get-TreeState (Join-Path $installRoot 'runtime')) -eq $runtimeTree) 'the rollback did not put app and runtime back exactly'
+    Assert-True ((Get-FileHash -LiteralPath (Join-Path $installRoot 'app.failed\release.json')).Hash -eq (Get-FileHash -LiteralPath $RollbackReleaseJson).Hash) 'app.failed does not hold the rollback-test candidate'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot 'package-transaction.json')) -and (Get-Content -LiteralPath $marker -Raw) -eq $markerBefore) 'the rollback left its record or did not restore installation.json'
+    Assert-Healthy 'after the rollback'
+    Assert-True ((Get-TreeState $data) -eq $dataHash) 'the rollback changed data'
+    $result = Invoke-Setup 'repair-after-rollback'
+    if ($result.Code -ne 0) { Show-Log $result.Log; throw "SMOKE FAILED: repair after the rollback exit code $($result.Code)" }
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot 'app.failed'))) 'the next Setup run did not remove app.failed'
+    Assert-Healthy 'after the repair that followed the rollback'
+    Assert-True ((Get-TreeState $data) -eq $dataHash) 'the repair after the rollback changed data'
+
     Write-Step 'Silent default uninstall keeps data'
     Invoke-Uninstall ''
-    foreach ($gone in @('app','runtime','run','edge-profile','app.previous','uninstall\unins000.exe')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot $gone))) "uninstall left $gone" }
+    foreach ($gone in @('app','runtime','run','edge-profile','app.previous','app.failed','package-transaction.json','uninstall\unins000.exe')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot $gone))) "uninstall left $gone" }
     Assert-True ((Get-TreeState $data) -eq $dataHash) 'default uninstall changed data'
     Assert-True ((Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).state -eq 'uninstalled') 'marker not kept as uninstalled'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $programs 'Living Room Display.lnk')) -and -not (Test-Path -LiteralPath (Join-Path $programs 'Living Room Display - Show display.lnk'))) 'shortcuts remain'

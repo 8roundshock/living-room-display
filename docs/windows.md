@@ -134,6 +134,17 @@ to `main` and manual dispatch.
   (snapshot, `app.previous`, `Status`), a keep-data uninstall, a reinstall and a
   `/REMOVEDATA=1` uninstall. Two refusal cases must exit 7: a foreign folder and
   a taken port.
+- **Automatic rollback on a real install** ([#189](https://github.com/8roundshock/living-room-display/issues/189)):
+  after the repair, the smoke test runs the rollback-test Setup (see
+  [development](development.md#building-the-windows-installer)), whose real
+  server reports the wrong version. It must exit 7 with `Helper exit code: 15`,
+  leave `app` and `runtime` hash-identical to before, keep the candidate in
+  `app.failed`, leave no `package-transaction.json`, restore
+  `installation.json`, keep data unchanged and leave the previous version
+  answering `/api/health`. A repair with the normal Setup then exits 0 and
+  removes `app.failed`. Setup has to stop the real server and wait for it to
+  exit before it renames `app`; a `Stop` that returned early would race that
+  rename (12 of 20 such renames failed in the review repro on PR #149).
 
 **Evidence (2026-10-18).** Run 39177635973 (PR #149) passed every job: the build (Setup 0.1.0, 27.1 MB, Inno Setup 6.7.1 preinstalled on windows-2025; the payload and both Windows check runs passed) and all six smoke jobs. That covers windows-2022, windows-2025 and windows-11-arm (x64 emulation) × the default folder and the `Living Room Ünicode` folder. The refusal with port 4318 taken left no install folder, which confirms that Setup doesn't create `{app}` before `PrepareToInstall`. Earlier runs on the same PR found the elevated runners, the ISCC version probe and the inherited module path recorded above. After the review fixes (Stop waits for stopped processes, the resumable rollback record, E20 and E21 and the #180 wording), run 39181451761 on 66eeec5 passed the build again (15 Windows check groups under 5.1 and 7, including the real owned-server Stop-then-rename check; the payload checks; Setup 27.1 MB) and all six smoke jobs. The smoke test doesn't exercise a rollback on a real install yet ([#189](https://github.com/8roundshock/living-room-display/issues/189)).
 

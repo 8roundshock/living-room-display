@@ -112,5 +112,8 @@ foreach ($use in [regex]::Matches($workflow, '(?m)uses:\s*(\S+)')) { Assert-True
 Assert-True ($workflow -notmatch 'secrets\.') 'installer workflow must not use secrets'
 $smoke = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Test-InstallerSmoke.ps1'))
 Assert-True ($smoke.Contains("GITHUB_ACTIONS") -and $smoke.Contains('installation.json') -and $smoke.Contains('4318') -and $smoke -notmatch 'Start-Process[^\r\n]*-Wait') 'the smoke script keeps its CI-only guards and avoids Start-Process -Wait'
+# The real-install rollback case (#189) stays wired: CI builds the rollback-test
+# Setup, keeps it for one day only, and the smoke test requires it.
+Assert-True ($workflow.Contains('-RollbackTestOutputDirectory') -and $workflow.Contains('-RollbackSetupPath') -and $workflow -match '(?s)name: living-room-display-rollback-test.*?retention-days: 1\b' -and $smoke -match '\[Parameter\(Mandatory\)\]\[string\]\$RollbackSetupPath' -and $smoke.Contains('Helper exit code: 15')) 'the smoke test must run the rollback-test Setup'
 $checks++
 Write-Output "$checks installer policy check groups passed (static .iss, pin and workflow rules)."

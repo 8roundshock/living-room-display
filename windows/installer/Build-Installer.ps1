@@ -11,6 +11,10 @@ param(
     [switch]$AllowDirty,
     # Optional signing command; {file} is replaced by the quoted file path.
     [string]$SignCommand,
+    # CI smoke test only (#189): also build a Setup whose server reports another
+    # version than release.json, so its health check fails and Setup rolls back.
+    # It is named *-rollback-test, never signed, and must never be distributed.
+    [string]$RollbackTestOutputDirectory,
     [switch]$KeepWork
 )
 # Reproducible build of LivingRoomDisplaySetup-<version>.exe from a clean commit:
@@ -62,6 +66,11 @@ function Get-InnoVersion([string]$Compiler) {
 
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repository '.local\installer' }
 $OutputDirectory = Resolve-UserPath $OutputDirectory
+if ($RollbackTestOutputDirectory) {
+    if ($PayloadOnly) { throw 'The rollback-test Setup needs Inno Setup; it cannot be built with -PayloadOnly.' }
+    $RollbackTestOutputDirectory = Resolve-UserPath $RollbackTestOutputDirectory
+    if ($RollbackTestOutputDirectory.TrimEnd('\') -eq $OutputDirectory.TrimEnd('\')) { throw 'Build the rollback-test Setup into its own folder, apart from the release output.' }
+}
 $runtimePin = (Get-Content -LiteralPath (Join-Path $installerDirectory 'runtime.json') -Raw | ConvertFrom-Json).node
 $innoPin = Get-Content -LiteralPath (Join-Path $installerDirectory 'inno.json') -Raw | ConvertFrom-Json
 if ((Get-ScriptNodeVersion (Join-Path $windowsDirectory 'LivingRoomDisplay.ps1')) -ne $runtimePin.version) { throw 'runtime.json node.version must equal the control script NodeVersion default.' }
@@ -180,46 +189,71 @@ try {
         Invoke-Checked $env:ComSpec @('/d', '/c', $SignCommand.Replace('{file}', '"' + $helper + '"')) 'Helper signing'
     }
 
-    Write-Step 'Writing release.json'
-    $files = New-Object 'Collections.Generic.List[object]'
-    foreach ($item in (Get-ChildItem -LiteralPath $payload -Recurse -Force)) {
-        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "The payload contains a reparse point: $($item.FullName)" }
-        if ($item.PSIsContainer) { continue }
-        $files.Add([ordered]@{path=$item.FullName.Substring($payload.Length + 1).Replace('\', '/');size=[int64]$item.Length;sha256=(Get-Sha256 $item.FullName)})
-    }
-    # Ordinal path order keeps release.json and the zip byte-for-byte repeatable.
-    $ordinal = New-Object 'Collections.Generic.List[object]'
-    $byPath = @{}; foreach ($file in $files) { $byPath[$file.path] = $file }
-    $paths = [string[]]@($files | ForEach-Object { $_.path })
-    [Array]::Sort($paths, [StringComparer]::Ordinal)
-    foreach ($path in $paths) { $ordinal.Add($byPath[$path]) }
-    $manifest = [ordered]@{
-        product='living-room-display'; schema=1; version=$version; sourceRevision=$revision
-        sourceState=$(if ($dirty) { 'dirty' } else { 'clean' }); builtAt=$builtAt
-        node=[ordered]@{version=$runtimePin.version;archive=$runtimePin.archive;sha256=$runtimePin.sha256}
-        inno=[ordered]@{version=$(if ($isccVersion) { $isccVersion.ToString() } else { [string]$innoPin.testedVersion })}
-        files=$ordinal.ToArray()
-    }
-    $releaseJson = Join-Path $work 'release.json'
-    [IO.File]::WriteAllText($releaseJson, (($manifest | ConvertTo-Json -Depth 6) -replace "`r`n", "`n"), (New-Object Text.UTF8Encoding($false)))
+    function New-PayloadArchive([string]$Destination) {
+        # release.json lists every payload file; payload.zip stores it and them.
+        Write-Step "Writing release.json and payload.zip in $Destination"
+        $null = New-Item -ItemType Directory -Path $Destination -Force
+        $files = New-Object 'Collections.Generic.List[object]'
+        foreach ($item in (Get-ChildItem -LiteralPath $payload -Recurse -Force)) {
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "The payload contains a reparse point: $($item.FullName)" }
+            if ($item.PSIsContainer) { continue }
+            $files.Add([ordered]@{path=$item.FullName.Substring($payload.Length + 1).Replace('\', '/');size=[int64]$item.Length;sha256=(Get-Sha256 $item.FullName)})
+        }
+        # Ordinal path order keeps release.json and the zip byte-for-byte repeatable.
+        $ordinal = New-Object 'Collections.Generic.List[object]'
+        $byPath = @{}; foreach ($file in $files) { $byPath[$file.path] = $file }
+        $paths = [string[]]@($files | ForEach-Object { $_.path })
+        [Array]::Sort($paths, [StringComparer]::Ordinal)
+        foreach ($path in $paths) { $ordinal.Add($byPath[$path]) }
+        $manifest = [ordered]@{
+            product='living-room-display'; schema=1; version=$version; sourceRevision=$revision
+            sourceState=$(if ($dirty) { 'dirty' } else { 'clean' }); builtAt=$builtAt
+            node=[ordered]@{version=$runtimePin.version;archive=$runtimePin.archive;sha256=$runtimePin.sha256}
+            inno=[ordered]@{version=$(if ($isccVersion) { $isccVersion.ToString() } else { [string]$innoPin.testedVersion })}
+            files=$ordinal.ToArray()
+        }
+        $releaseJson = Join-Path $Destination 'release.json'
+        [IO.File]::WriteAllText($releaseJson, (($manifest | ConvertTo-Json -Depth 6) -replace "`r`n", "`n"), (New-Object Text.UTF8Encoding($false)))
 
-    Write-Step 'Creating payload.zip (stored, forward-slash entries, fixed timestamps)'
-    $payloadZip = Join-Path $work 'payload.zip'
-    $entries = @(@{Name='release.json';Path=$releaseJson}) + @(foreach ($path in $paths) { @{Name=$path;Path=(Join-Path $payload $path.Replace('/', '\'))} })
-    $stream = [IO.File]::Open($payloadZip, [IO.FileMode]::CreateNew)
-    try {
-        $zip = New-Object IO.Compression.ZipArchive($stream, [IO.Compression.ZipArchiveMode]::Create)
+        # Stored, forward-slash entries, fixed timestamps.
+        $payloadZip = Join-Path $Destination 'payload.zip'
+        $entries = @(@{Name='release.json';Path=$releaseJson}) + @(foreach ($path in $paths) { @{Name=$path;Path=(Join-Path $payload $path.Replace('/', '\'))} })
+        $stream = [IO.File]::Open($payloadZip, [IO.FileMode]::CreateNew)
         try {
-            foreach ($entry in $entries) {
-                $zipEntry = $zip.CreateEntry($entry.Name, [IO.Compression.CompressionLevel]::NoCompression)
-                $zipEntry.LastWriteTime = $commitTime
-                $writer = $zipEntry.Open()
-                $reader = [IO.File]::OpenRead($entry.Path)
-                try { $reader.CopyTo($writer) } finally { $reader.Dispose(); $writer.Dispose() }
-            }
-        } finally { $zip.Dispose() }
-    } finally { $stream.Dispose() }
-    $payloadSha = Get-Sha256 $payloadZip
+            $zip = New-Object IO.Compression.ZipArchive($stream, [IO.Compression.ZipArchiveMode]::Create)
+            try {
+                foreach ($entry in $entries) {
+                    $zipEntry = $zip.CreateEntry($entry.Name, [IO.Compression.CompressionLevel]::NoCompression)
+                    $zipEntry.LastWriteTime = $commitTime
+                    $writer = $zipEntry.Open()
+                    $reader = [IO.File]::OpenRead($entry.Path)
+                    try { $reader.CopyTo($writer) } finally { $reader.Dispose(); $writer.Dispose() }
+                }
+            } finally { $zip.Dispose() }
+        } finally { $stream.Dispose() }
+        $size = [int64]0; foreach ($file in $ordinal) { $size += [int64]$file.size }
+        return [pscustomobject]@{ReleaseJson=$releaseJson;Zip=$payloadZip;Sha256=(Get-Sha256 $payloadZip);Size=$size}
+    }
+    function Invoke-SetupCompile($Archive, [string]$Destination, [string]$BaseName, [bool]$Sign) {
+        $null = New-Item -ItemType Directory -Path $Destination -Force
+        $isccArguments = @('/Qp', "/O$Destination", "/F$BaseName", "/DAppVersion=$version", "/DPayloadZip=$($Archive.Zip)", "/DPayloadSha256=$($Archive.Sha256)",
+            "/DControlScript=$(Join-Path $appWindows 'LivingRoomDisplay.ps1')", "/DSetupIconFile=$($art.Icon)",
+            "/DWizardSmallImages=$($art.WizardSmall -join ',')", "/DWizardImages=$($art.WizardLarge -join ',')", "/DUninstallSize=$($Archive.Size)")
+        if ($Sign -and $SignCommand) { $isccArguments += @('/DSignToolName=lrdsign', ('/Slrdsign=' + $SignCommand.Replace('{file}', '$f'))) }
+        $isccArguments += (Join-Path $source 'windows\installer\LivingRoomDisplay.iss')
+        Invoke-Checked $iscc $isccArguments 'Inno Setup compilation'
+        $setup = Join-Path $Destination "$BaseName.exe"
+        if (-not (Test-Path -LiteralPath $setup)) { throw 'Inno Setup did not produce the expected setup file.' }
+        $setupSha = Get-Sha256 $setup
+        [IO.File]::WriteAllText("$setup.sha256", "$setupSha  $BaseName.exe`n", (New-Object Text.UTF8Encoding($false)))
+        Copy-Item -LiteralPath $Archive.ReleaseJson -Destination $Destination -Force
+        return [pscustomobject]@{Path=$setup;Sha256=$setupSha}
+    }
+
+    $release = New-PayloadArchive $work
+    $releaseJson = $release.ReleaseJson
+    $payloadZip = $release.Zip
+    $payloadSha = $release.Sha256
 
     Write-Step 'Checking the payload'
     & (Join-Path $installerDirectory 'tests\Test-InstallerPayload.ps1') -PayloadDirectory $payload -ArchivePath $payloadZip -ReleaseJson $releaseJson
@@ -235,22 +269,24 @@ try {
     }
 
     Write-Step 'Compiling Setup with Inno Setup'
-    $baseName = "LivingRoomDisplaySetup-$version"
-    $uninstallSize = [int64]0; foreach ($file in $ordinal) { $uninstallSize += [int64]$file.size }
-    $isccArguments = @('/Qp', "/O$OutputDirectory", "/F$baseName", "/DAppVersion=$version", "/DPayloadZip=$payloadZip", "/DPayloadSha256=$payloadSha",
-        "/DControlScript=$(Join-Path $appWindows 'LivingRoomDisplay.ps1')", "/DSetupIconFile=$($art.Icon)",
-        "/DWizardSmallImages=$($art.WizardSmall -join ',')", "/DWizardImages=$($art.WizardLarge -join ',')", "/DUninstallSize=$uninstallSize")
-    if ($SignCommand) { $isccArguments += @('/DSignToolName=lrdsign', ('/Slrdsign=' + $SignCommand.Replace('{file}', '$f'))) }
-    $isccArguments += (Join-Path $source 'windows\installer\LivingRoomDisplay.iss')
-    Invoke-Checked $iscc $isccArguments 'Inno Setup compilation'
-    $setup = Join-Path $OutputDirectory "$baseName.exe"
-    if (-not (Test-Path -LiteralPath $setup)) { throw 'Inno Setup did not produce the expected setup file.' }
-    $setupSha = Get-Sha256 $setup
-    [IO.File]::WriteAllText("$setup.sha256", "$setupSha  $baseName.exe`n", (New-Object Text.UTF8Encoding($false)))
-    $megabytes = [Math]::Round((Get-Item -LiteralPath $setup).Length / 1MB, 1)
-    Write-Step "Setup ready: $setup ($megabytes MB, sha256 $setupSha; payload $payloadSha)"
+    $built = Invoke-SetupCompile $release $OutputDirectory "LivingRoomDisplaySetup-$version" $true
+    $megabytes = [Math]::Round((Get-Item -LiteralPath $built.Path).Length / 1MB, 1)
+    Write-Step "Setup ready: $($built.Path) ($megabytes MB, sha256 $($built.Sha256); payload $payloadSha)"
     if ($megabytes -lt 25 -or $megabytes -gt 50) { Write-Warning "Setup size $megabytes MB is outside the expected 25-50 MB range (0.1.0 was 27.1 MB); review the payload." }
-} finally {
+
+    if ($RollbackTestOutputDirectory) {
+        Write-Step 'Building the rollback-test Setup (CI smoke test only, #189)'
+        # Every file is the release's except app/package.json, whose version the
+        # server reports on /api/health. It no longer matches release.json, so
+        # the new version fails its health check and Setup must roll back.
+        $packageFile = Join-Path $appPayload 'package.json'
+        $packageText = [IO.File]::ReadAllText($packageFile)
+        $patched = ([regex]'"version"\s*:\s*"[^"]*"').Replace($packageText, ('"version": "' + $version + '-rollback-test"'), 1)
+        if ($patched -eq $packageText) { throw 'Could not change the version in app/package.json for the rollback-test Setup.' }
+        [IO.File]::WriteAllText($packageFile, $patched, (New-Object Text.UTF8Encoding($false)))
+        $variant = Invoke-SetupCompile (New-PayloadArchive (Join-Path $work 'rollback-test')) $RollbackTestOutputDirectory "LivingRoomDisplaySetup-$version-rollback-test" $false
+        Write-Step "Rollback-test Setup ready (never distribute it): $($variant.Path)"
+    }} finally {
     $env:PATH = $oldPath
     if ($KeepWork) { Write-Step "Work folder kept: $work" }
     elseif (Test-Path -LiteralPath $work) {

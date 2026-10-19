@@ -73,7 +73,8 @@ jobs:
           exit 0
       - name: Build the installer
         shell: pwsh
-        run: ./windows/installer/Build-Installer.ps1 -OutputDirectory "$env:RUNNER_TEMP/installer" -IsccPath $env:ISCC_PATH
+        # Also builds the CI-only rollback-test Setup for the smoke test (#189).
+        run: ./windows/installer/Build-Installer.ps1 -OutputDirectory "$env:RUNNER_TEMP/installer" -IsccPath $env:ISCC_PATH -RollbackTestOutputDirectory "$env:RUNNER_TEMP/rollback-test"
       - name: Payload checks
         shell: pwsh
         run: ./windows/installer/tests/Test-InstallerPayload.ps1 -ArchivePath "$env:RUNNER_TEMP/installer/payload.zip" -ReleaseJson "$env:RUNNER_TEMP/installer/release.json"
@@ -86,6 +87,16 @@ jobs:
             ${{ runner.temp }}/installer/release.json
           if-no-files-found: error
           retention-days: 14
+      # Never distributed: its server fails the health check on purpose.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: living-room-display-rollback-test
+          path: |
+            ${{ runner.temp }}/rollback-test/LivingRoomDisplaySetup-*-rollback-test.exe
+            ${{ runner.temp }}/rollback-test/LivingRoomDisplaySetup-*-rollback-test.exe.sha256
+            ${{ runner.temp }}/rollback-test/release.json
+          if-no-files-found: error
+          retention-days: 1
   smoke:
     needs: build
     strategy:
@@ -96,17 +107,27 @@ jobs:
     runs-on: ${{ matrix.os }}
     # Windows on Arm (x64 emulation) is recorded under #122 but does not gate.
     continue-on-error: ${{ matrix.os == 'windows-11-arm' }}
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: living-room-display-setup
           path: ${{ runner.temp }}/setup
-      - name: Install, repair and uninstall smoke test
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: living-room-display-rollback-test
+          path: ${{ runner.temp }}/rollback-test
+      - name: Install, repair, rollback and uninstall smoke test
         shell: pwsh
         run: |
-          $setup = Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/setup" -Filter 'LivingRoomDisplaySetup-*.exe' | Select-Object -First 1
-          $expected = (Get-Content -LiteralPath "$($setup.FullName).sha256" -Raw).Split(' ')[0].Trim()
-          if ((Get-FileHash -LiteralPath $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'The setup artifact does not match its .sha256 file.' }
-          ./windows/installer/tests/Test-InstallerSmoke.ps1 -SetupPath $setup.FullName -ReleaseJson "$env:RUNNER_TEMP/setup/release.json" -DirectoryMode ${{ matrix.dir }}
+          function Get-CheckedSetup([string]$Folder, [string]$Filter) {
+            $file = @(Get-ChildItem -LiteralPath $Folder -File | Where-Object { $_.Name -like $Filter })
+            if ($file.Count -ne 1) { throw "Expected one $Filter in $Folder, found $($file.Count)." }
+            $expected = (Get-Content -LiteralPath "$($file[0].FullName).sha256" -Raw).Split(' ')[0].Trim()
+            if ((Get-FileHash -LiteralPath $file[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "$($file[0].Name) does not match its .sha256 file." }
+            return $file[0].FullName
+          }
+          $setup = Get-CheckedSetup "$env:RUNNER_TEMP/setup" 'LivingRoomDisplaySetup-*.exe'
+          $rollback = Get-CheckedSetup "$env:RUNNER_TEMP/rollback-test" 'LivingRoomDisplaySetup-*-rollback-test.exe'
+          ./windows/installer/tests/Test-InstallerSmoke.ps1 -SetupPath $setup -ReleaseJson "$env:RUNNER_TEMP/setup/release.json" -RollbackSetupPath $rollback -RollbackReleaseJson "$env:RUNNER_TEMP/rollback-test/release.json" -DirectoryMode ${{ matrix.dir }}
