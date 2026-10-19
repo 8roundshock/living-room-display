@@ -155,17 +155,19 @@
    width but are capped near 3.2% of the display height, so a tall box never inflates text; picker samples
    (no plane) keep the width-based size. A short box may only shrink them (14cqh), so one long row still fits.
    When every pending reminder fits, the measured --reminder-lines (2, or 4 for one reminder) relaxes to 3–4
-   and --reminder-grow lets the width-based size grow toward the cap (#254). Dates and labels keep the shared
-   floors. The body stays at 100cqh with overflow hidden, so the widget fit stays at 1; it is the rows' offset
-   parent, so their offsets are measured inside it. */
+   and --reminder-grow lets the width-based size grow toward the cap (#254). When they do not all fit (#359),
+   the measured --reminder-rest-lines (1) clamps the rows after the first to one line with an ellipsis and
+   --reminder-step shrinks the title, and with it the label, dates and "+N more" through their raw-title terms
+   (no-ops at step 1). Dates and labels keep the shared floors. The body stays at 100cqh with overflow hidden,
+   so the widget fit stays at 1; it is the rows' offset parent, so their offsets are measured inside it. */
 @property --ambient-reminder-title { syntax: '<length>'; inherits: true; initial-value: 1000px; }
 .grid-ambient > .ambient-content { --ambient-reminder-title: min(3.2cqh, 1.8cqw); }
-.grid-ambient .reminders-body { --reminder-title-size: calc(max(var(--min-data, 0px), min(9cqw * var(--reminder-grow, 1), 14cqh, var(--ambient-reminder-title))) * var(--font-scale)); position: relative; height: 100cqh; min-height: 0; overflow: hidden; justify-content: flex-start; }
+.grid-ambient .reminders-body { --reminder-title-raw: min(9cqw * var(--reminder-grow, 1), 14cqh, var(--ambient-reminder-title)) * var(--reminder-step, 1); --reminder-title-size: calc(max(var(--min-data, 0px), var(--reminder-title-raw)) * var(--font-scale)); position: relative; height: 100cqh; min-height: 0; overflow: hidden; justify-content: flex-start; }
 /* Even one row overflows: release the height so the shared whole-widget zoom-out applies. */
 .grid-ambient .reminders-body.reminders-overfull { height: auto; min-height: 100cqh; overflow: visible; }
 /* Measuring always uses the fixed box: a remeasure while overfull must not count rows against the grown body. */
 .grid-ambient .reminders-body.reminders-overfull[data-measuring] { height: 100cqh; min-height: 0; overflow: hidden; }
-.grid-ambient .reminders-body .ambient-label { font-size: calc(max(var(--min-text), min(6.4cqw, 8cqh, var(--ambient-reminder-title) * 0.72)) * var(--font-scale)); margin-bottom: calc(var(--reminder-title-size) * 0.35); }
+.grid-ambient .reminders-body .ambient-label { font-size: calc(max(var(--min-text), min(6.4cqw, 8cqh, var(--ambient-reminder-title) * 0.72, var(--reminder-title-raw) * 0.72)) * var(--font-scale)); margin-bottom: calc(var(--reminder-title-size) * 0.35); }
 .grid-ambient .reminders-body .ambient-title { font-size: var(--reminder-title-size); }
 /* Row gaps and the dot follow the title size; the dot centers on the title's first line. */
 .grid-ambient .ambient-reminder-list { gap: calc(var(--reminder-title-size) * 0.45); }
@@ -175,10 +177,11 @@
 .grid-ambient .ambient-reminder-copy { flex: 1; min-width: 0; }
 .grid-ambient .ambient-reminder-dot { width: calc(var(--reminder-title-size) * 0.3); height: calc(var(--reminder-title-size) * 0.3); margin-top: calc(var(--reminder-title-size) * 0.45); }
 .grid-ambient .ambient-reminder-title { font-size: var(--reminder-title-size); line-height: 1.2; font-weight: 500; -webkit-line-clamp: var(--reminder-lines, 2); }
-.grid-ambient .ambient-reminder-date { font-size: calc(max(var(--min-data), min(5.8cqw, 8cqh, var(--ambient-reminder-title) * 0.66)) * var(--font-scale)); line-height: 1.3; margin-top: calc(var(--reminder-title-size) * 0.12); overflow-wrap: anywhere; }
+.grid-ambient .ambient-reminder-list > li + li .ambient-reminder-title { -webkit-line-clamp: var(--reminder-rest-lines, var(--reminder-lines, 2)); }
+.grid-ambient .ambient-reminder-date { font-size: calc(max(var(--min-data), min(5.8cqw, 8cqh, var(--ambient-reminder-title) * 0.66, var(--reminder-title-raw) * 0.66)) * var(--font-scale)); line-height: 1.3; margin-top: calc(var(--reminder-title-size) * 0.12); overflow-wrap: anywhere; }
 .grid-ambient .ambient-reminder-overdue { color: var(--ambient-caution); }
 .grid-ambient .reminder-segment { white-space: nowrap; }
-.grid-ambient .reminders-body .ambient-description { font-size: calc(max(var(--min-text), min(6.2cqw, 8cqh, var(--ambient-reminder-title) * 0.66)) * var(--font-scale)); margin-top: calc(var(--reminder-title-size) * 0.4); }
+.grid-ambient .reminders-body .ambient-description { font-size: calc(max(var(--min-text), min(6.2cqw, 8cqh, var(--ambient-reminder-title) * 0.66, var(--reminder-title-raw) * 0.69)) * var(--font-scale)); margin-top: calc(var(--reminder-title-size) * 0.4); }
 .grid-ambient .reminder-more-probe { display: none; }
 /* Out of flow but still rendered while measuring: display: none would replay its entrance and count crossfade (#76). */
 .grid-ambient .reminders-body[data-measuring] .reminder-more { position: absolute; visibility: hidden; }
@@ -186,10 +189,12 @@
 
 /* Free size (#73): a full-height Reminders column can only relocate sideways, so odd compositions
    anchor its list to the bottom of the column and even ones (the authored layout included) to the top.
+   Any span with little vertical travel (the grid's rows minus its rows under a third of the grid, #175)
+   does the same; the renderer marks it with data-alternate-anchor (full height always qualifies).
    Only fitted rows take layout, so the group never clips; `safe` keeps an overfull body top-aligned.
    Measurement always runs top-anchored, so the fitted count and "+N more" are unchanged. */
-.grid-ambient:is(.composition-1, .composition-3) .ambient-reminders[data-full-height] .reminders-body { justify-content: safe flex-end; }
-.grid-ambient:is(.composition-1, .composition-3) .ambient-reminders[data-full-height] .reminders-body[data-measuring] { justify-content: flex-start; }
+.grid-ambient:is(.composition-1, .composition-3) .ambient-reminders .reminders-body[data-alternate-anchor] { justify-content: safe flex-end; }
+.grid-ambient:is(.composition-1, .composition-3) .ambient-reminders .reminders-body[data-alternate-anchor][data-measuring] { justify-content: flex-start; }
 
 /* Screens remain complete and faint; deliberate photos have purposeful crops. */
 .snapshot-processing { position: absolute; width: 0; height: 0; pointer-events: none; }
