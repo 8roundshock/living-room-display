@@ -47,7 +47,9 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], errors = [], metrics = {};
   const contexts = new Set();
-  const image = photoFixture(64, 40, Buffer.alloc((64 * 4 + 1) * 40, 60));
+  // A valid mid-grey PNG: each scanline starts with filter type 0, so the image actually paints.
+  const pixels = Buffer.alloc((64 * 4 + 1) * 40, 120); for (let row = 0; row < 40; row++) pixels[row * (64 * 4 + 1)] = 0;
+  const image = photoFixture(64, 40, pixels);
   const source = await (await fetch(`${base}/api/state`)).json();
   for (const check of Object.values(WIDGET_CHECKS)) check.prepare?.(source, { now });
 
