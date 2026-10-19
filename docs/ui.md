@@ -253,11 +253,24 @@ Saved custom values, including the former 8% default, are preserved. A presentat
 filter lifts midtones while preserving exact black/white endpoints; it changes
 neither the RAM PNG nor its alpha. Grid families determine the usable image size;
 the retained legacy `preview.widthPercent` field no longer shrinks that region.
+The image takes the snapshot's own shape at the largest size that fits above one
+caption line, centred in the cell, and "Last screen · 8:40 AM" starts on the image's
+left edge a few pixels below it in every family and density (#225; under 6 px even at
+4K). A newer snapshot that arrives while the display is shown stays hidden until it has
+loaded and decoded, then fades in at Subtle and Lively; Off and reduced motion show it
+as soon as it is ready (#173). The caption's time is formatted once per capture, not on
+every one-second tick (#99).
 
 Clock styles are Outline (default), Digital and Analog. Analog has hands without
-a fixed face/tick ring. Photo starts disabled; choose a JPEG/PNG/WebP on this
+a fixed face/tick ring (#222): two rounded text-colour hands (the hour hand at 30% of
+the drawn square, the minute hand at 45%, never thinner than 3 px and 2 px at 720p,
+scaled with the display) and a small dim pivot dot. Small and medium size the hands
+to the cell height with the weekday and date beside them; large keeps the centred
+hands over a quiet calendar line. The Outline stroke never thins below 1.2 px at 720p.
+The clock's labels are built once per minute (#99), and the analog minute ease runs on
+the compositor (#161). Photo starts disabled; choose a JPEG/PNG/WebP on this
 device, then Save or Cancel with the rest of the draft. It is dimmed and moves
-as one widget. It never uses the desktop snapshot or a remote feed. The private
+as one widget; a newly chosen photo fades in only after it has loaded (#173). It never uses the desktop snapshot or a remote feed. The private
 recovery backup may retain an older selected image after replacement or clearing.
 
 ## World clocks, Sun & moon and Air quality
@@ -297,11 +310,20 @@ and the UV peak (large). Bars, hour labels and the peak use only the current and
 later hours, so a saved reading never shows a past hour or a peak that has already
 happened; with fewer than two upcoming hours the line reads "Hourly estimate
 unavailable". The chart is named for screen readers ("US AQI estimate for the next
-24 hours: 40 to 45"). Its footer always shows the age and "Air quality: CAMS via
-Open-Meteo": "Model estimate · Updated …" with a reading, "Saved reading · Updated …"
-in the caution tone when stale. A failure reads "Air quality unavailable" (age only,
-caution tone), never clean air. Calculations are cached
-per minute; values change on the shared one-second tick without their own animation.
+24 hours: 40 to 45"). One footer row (#221) always shows the age and the short credit
+"CAMS · Open-Meteo": "Model est. · 12 min ago" with a reading, "Saved reading · 2 hr
+ago" in the caution tone when stale, and "Offline · …" first while the display cannot
+reach the computer. Phrases never break inside, so "12 min ago", "12 µg/m³" and
+"Open-Meteo" stay whole, and small and medium keep fit 1 at Text 100% in every density,
+fresh, stale or offline, at 720p, 1080p and 4K. Saved current values stand for 3 hours
+after the update, like Weather's temperature (#243). After that (#188) the reading
+shows the saved hourly estimate for the current hour, labelled "Saved estimate" in the
+caution tone, with its UV; without an estimate for this hour the old AQI reads "Last
+known · 9 AM" ("Sat 9 AM" when not today) and UV is hidden. The fetch-time main
+pollutant is hidden in both cases. Age and credit always stay. A failure reads "Air
+quality unavailable" (age only, caution tone), never clean air. Calculations are cached
+per minute (no `Intl` formatter is built while the minute holds, #185); values change on
+the shared one-second tick without their own animation.
 Browser suite: `tests/ui/catalog-sky-browser.mjs`.
 
 ## Movement and verification

@@ -17,7 +17,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/server/persistence.ts`](../src/server/persistence.ts) | The previous release and the additive defaults omitted at rest so it can still read files and exports. |
 | [`src/server/compat/previous-reader.ts`](../src/server/compat/previous-reader.ts) | Test-only frozen reader of the previous release and its assertion helpers ([rollback compatibility](development.md#rollback-compatibility-check)). |
 | [`src/server/photo.ts`](../src/server/photo.ts) | Strict normalized PNG ingestion and private selected-image validation. |
-| [`src/server/air.ts`](../src/server/air.ts) | Keyless CAMS air quality via Open-Meteo: request, normalization, 30-minute cache and the `off` state; [`src/client/airHourly.ts`](../src/client/airHourly.ts) rebuilds the widget's upcoming-hour bars and UV peak each minute; [`src/client/astronomy.ts`](../src/client/astronomy.ts) holds the local sun, moon and time-zone calculations. |
+| [`src/server/air.ts`](../src/server/air.ts) | Keyless CAMS air quality via Open-Meteo: request, normalization, 30-minute cache and the `off` state; [`src/client/airHourly.ts`](../src/client/airHourly.ts) rebuilds the widget's upcoming-hour bars and UV peak each minute and decides whether saved current values still stand (3 hours, #188); [`src/client/astronomy.ts`](../src/client/astronomy.ts) holds the local sun, moon and time-zone calculations. |
 | [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
 | [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
@@ -107,17 +107,17 @@ The renderer families have deliberate visual roles:
 
 | Widget | Small | Medium | Large |
 | --- | --- | --- | --- |
-| Clock | Compact time and calendar | Time beside a calendar column | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
+| Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date | Time beside a calendar column; analog sizes its hands to the cell height | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”); confidence only when partial | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and twelve hourly chance bars (spell hours brighter, unknown hours dotted) |
 | Forecast | Three days | Five days | Seven days; compact weekday labels preserve room for temperatures and chance |
 | Reminders | As many pending reminders as fit the actual box, soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
-| Last screen | Complete, faint captured desktop | Wider complete desktop | Larger complete desktop; no crop hides screen context |
+| Last screen | Complete, faint captured desktop with its "Last screen · 8:40 AM" caption on the image's left edge just below it (every family) | Wider complete desktop | Larger complete desktop; no crop hides screen context |
 | World clocks | First city's label, time in regular-weight numerals, relation ("Tomorrow · +13 h"), day/night icon and a dim "+N" | Two cities side by side | Up to four rows, label and relation left, time right; hidden on the display with no cities |
 | Calendar | Month name over this week's strip (weekday initials and dates) | Weekday, large date and month beside a compact month grid | Month and year, a weekday header row and a generous month grid; every grid has only the 4–6 weeks the month needs |
 | Countdown | The next date as a large count (“12” over “days”, or Today/Tomorrow), its title and a short date | The next date on the left; the following two as compact rows | Up to five rows (title, date, days right-aligned) and an honest “+N more” |
 | Note | The text, set large | The text, wider | The text, generous; long notes step down and an overfull one zooms out through the shared fit |
-| Air quality | AQI and category word with place and scale; age and CAMS credit always, "Model estimate" with a reading | Adds the main pollutant and UV with its WHO category | Adds AQI bars for the current and up to 23 following hours (unknown hours dotted) and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
+| Air quality | AQI and category word with place and scale; one footer row with the age ("Model est. · 12 min ago" with a reading) and "CAMS · Open-Meteo"; values over 3 hours old read "Saved estimate" or "Last known · 9 AM" | Adds the main pollutant and UV with its WHO category (both hidden once the values are over 3 hours old, UV then from the saved estimate) | Adds AQI bars for the current and up to 23 following hours (unknown hours dotted) and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
 | Sun & moon | Next sunrise or sunset, its time and the place | Sunrise, sunset, daylight length and change from yesterday, moon glyph and phase | Dim dotted day arc with the sun's position, times, daylight, phase with illumination and the next full (or new) moon |
 
 The large clock requires actual vertical room in the central catalog; do not
@@ -242,6 +242,21 @@ remain subject to the same dimness and movement contract. Do not add a fixed
 analog bezel, tick ring or always-lit colon merely because the hands or digits
 change. Outlines still reuse pixels and must move with their group.
 
+Readable strokes at couch distance (#222) are tied to the display height through the
+shared text floor (`--min-text`, 1.4% of the height), so they scale from the owner's
+1280×720 CSS TV to 1080p and 4K alike. The outline never thins below 1.2 px at 720p
+(otherwise `0.35cqw`). Analog hands are two rounded bars in the text colour: the hour
+hand reaches 30% of the drawn square and the minute hand 45%, with strokes of 2.4% and
+1.6% of the square but never under 3 px and 2 px at 720p. The only other mark is a dim
+accent pivot dot over the junction; it covers pixels the hands always light, so it adds
+no new static area. A 12 o'clock mark was considered and rejected because it would be a
+new always-lit point. Small and medium size the square to the cell height (90%) with the
+date beside it; the square gives way when the date needs the width. Each hand is an
+HTML bar on a full-square wrapper that turns with `rotate` around the centre, so the
+minute ease runs on the compositor (#161), and the square clips so a turned wrapper
+never adds overflow to the widget fit. At rest the geometry is the same at every
+Animation level. The owner's couch check remains the acceptance gate for #222.
+
 Move the complete layout through substantially different valid locations, with
 varying offsets or routes over time instead of forever repeating identical
 anchors. Small jitter inside fixed widget bounds is insufficient. Keep module
@@ -276,7 +291,9 @@ Edit layout stay still. Renderers add no animation code of their own: use
 `TransitionText` for a changing value (the new value fades in; numbers are never
 tweened), `WeatherGlyph` with `hero` for a widget's main condition and `still` for
 stale, offline or unavailable data, and stable React keys (by id or source) so a new
-item or image is a new element. The shared CSS (`motion*.css`) then animates only
+item or image is a new element. A new photo or snapshot holds its shell at opacity 0
+until the image has loaded and decoded (or a 4 s fallback), so its fade never runs on an
+empty box (#173). The shared CSS (`motion*.css`) then animates only
 transform and opacity, never above resting opacity, with offsets from above or the
 left that stay inside the widget rectangle and never change the fit scale. Content
 first shown with its widget never animates; later insertions may transition in.

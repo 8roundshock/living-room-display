@@ -287,8 +287,14 @@ Readings are cached in memory for 30 minutes, keyed by location and scale (at mo
 state is `unavailable`. Failures retry no more often than every 2 minutes.
 
 The widget labels every value as a model estimate with its age, and credits
-"Air quality: CAMS via Open-Meteo". It is not a local sensor reading or an official
-index such as Canada's AQHI. Official alerts are a separate decision (#106).
+"CAMS · Open-Meteo" (the inspector hint names Copernicus CAMS in full). It is not a
+local sensor reading or an official index such as Canada's AQHI. Saved current values
+stand for 3 hours after `updatedAt` (#188, the same rule as Weather's temperature in
+#243); older ones are replaced by the saved hourly estimate for the current hour
+("Saved estimate"), or the AQI is qualified "Last known · <hour>" with UV hidden. The
+server keeps serving a `stale` reading's series unchanged: the widget already drops
+past hours at render time each minute, which a display that has lost the computer
+needs anyway, so trimming on the server would add nothing. Official alerts are a separate decision (#106).
 Open-Meteo's free API is for non-commercial use; see
 [architecture](architecture.md#current-decisions).
 
