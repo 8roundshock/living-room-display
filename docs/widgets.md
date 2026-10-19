@@ -252,8 +252,14 @@ Use the centralized scheduler/wrapper, not a new per-widget motion loop.
 
 Dense boards keep relocating (#93). The bounded composition search may fail to
 find a board where every widget moves; it then reflects the previous composition
-horizontally, vertically or both (`displayPlacement`, span-aware), choosing the
-reflection that moves the most widgets. A reflection is always in bounds and
+horizontally, vertically or both (`displayPlacement`, span-aware), choosing a
+reflection that moves the most widgets. Consecutive fallbacks never apply the same
+reflection twice (#182): reflections that tie rotate with the cycle, and a unique
+best one (usually both at once, when a widget is centred on one axis) alternates on
+odd cycles with a reflection that leaves just one more widget in place. Reflections
+commute, so a dense board visits up to four arrangements instead of returning to the
+one from two cycles earlier; on 36 generated dense boards over 24 cycles such repeats
+fell from 470 to 33 of 864 compositions. A reflection is always in bounds and
 collision-free. Only a board that every reflection maps onto itself falls through
 to the search that allows widgets to stay. A full-height span can only travel
 sideways; any span relocates as one whole group through the black rest. Its

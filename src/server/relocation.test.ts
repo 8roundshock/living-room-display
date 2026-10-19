@@ -86,6 +86,39 @@ test('dense boards in every density keep moving unless no reflected alternative 
   }
 });
 
+/** The board's compositions as position strings, one per cycle (the authored board first). */
+function compositions(grid: WidgetGrid, enabled: Visibility, cycles: number): { keys: string[]; last: WidgetGrid } {
+  const ids = WIDGET_IDS.filter(id => enabled[id]); const key = (board: WidgetGrid) => ids.map(id => `${board.placements[id].column},${board.placements[id].row}`).join('|');
+  const keys = [key(grid)]; let previous = grid;
+  for (let cycle = 1; cycle <= cycles; cycle++) {
+    const next = composeWidgetGrid(grid, enabled, cycle, previous);
+    assert.equal(gridProblem(next, enabled), null, `cycle ${cycle} is collision-free and in bounds`);
+    keys.push(key(next)); previous = next;
+  }
+  return { keys, last: previous };
+}
+
+test('dense boards vary their reflections instead of alternating between two arrangements (#182)', () => {
+  // Measured on 2026-10-19 with these 36 boards × 24 cycles: before #182 the fallback always chose the
+  // reflection moving the most widgets (ties: most travel), and 470 of 864 compositions repeated the one
+  // from two cycles earlier (31 boards; 3 boards showed only two arrangements). Rotating the choice
+  // gives 33 repeats on 9 boards, and every board reaches more than two arrangements.
+  let total = 0, repeats = 0;
+  for (const density of Object.keys(GRID_DENSITIES) as GridDensity[]) {
+    const boards = denseBoards(density, 12);
+    assert.ok(boards.length >= 10, `${density}: generated ${boards.length} boards at 90–100% fill`);
+    for (const [index, { grid, enabled }] of boards.entries()) {
+      const ids = WIDGET_IDS.filter(id => enabled[id]);
+      const { keys, last } = compositions(grid, enabled, 24);
+      for (let cycle = 2; cycle < keys.length; cycle++) { total++; if (keys[cycle] === keys[cycle - 2]) repeats++; }
+      // A third legal arrangement exists when the whole-board reflections of a composition differ.
+      const orbit = new Set([0, 1, 2, 3].map(variant => ids.map(id => { const point = displayPlacement(last, id, variant); return `${point.column},${point.row}`; }).join('|')));
+      if (orbit.size > 2) assert.ok(new Set(keys.slice(1)).size > 2, `${density} board ${index}: more than two arrangements in 24 cycles`);
+    }
+  }
+  assert.ok(repeats <= total * 0.1, `two-cycle repeats ${repeats} of ${total}`);
+});
+
 test('the #93 probe board (default plus a medium Photo) never stalls', () => {
   const settings = defaultSettings(); const enabled: Visibility = { ...settings.widgets, photo: true };
   const placed = reflowWidget(settings.widgetGrid, 'photo', firstPlacement(settings.widgetGrid, 'photo', 'medium', enabled)!, enabled);
