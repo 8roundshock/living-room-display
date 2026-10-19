@@ -41,6 +41,17 @@ function random(seed: number) {
   let state = seed >>> 0;
   return () => { state = (state * 1664525 + 1013904223) >>> 0; return state / 2 ** 32; };
 }
+/**
+ * The default board with Last screen off and a medium Weather (for example a pre-#74 board whose
+ * Rain was hidden). The post-#74 default large Weather leaves no room for a 2 × 8 column beside the
+ * large Clock and Forecast (#183), so column fixtures start from this board.
+ */
+function roomyDefaults(): Settings {
+  const settings = defaultSettings();
+  settings.widgets.preview = false; settings.preview.enabled = false;
+  settings.widgetGrid.placements.weather = { ...settings.widgetGrid.placements.weather, size: 'medium' };
+  return settings;
+}
 
 test('catalog limits, families and labels for free-size widgets', () => {
   assert.equal(isFreeSize('reminders'), true);
@@ -87,7 +98,7 @@ test('placementFits and gridProblem validate custom spans with the shared rule',
 });
 
 test('reflow and resize move neighbours for a full-height column or keep the board when impossible', () => {
-  const settings = defaultSettings(), enabled = { ...settings.widgets, preview: false };
+  const settings = roomyDefaults(), enabled = { ...settings.widgets };
   const column = { column: 0, row: 0, size: 'small' as const, span: { columns: 2, rows: 8 } };
   const reflowed = reflowWidget(settings.widgetGrid, 'reminders', column, enabled); assert.ok(reflowed);
   assert.equal(gridProblem(reflowed, enabled), null); disjoint(reflowed, enabled);
@@ -103,10 +114,13 @@ test('reflow and resize move neighbours for a full-height column or keep the boa
   assert.equal(back.placements.reminders.size, 'small');
 
   // Every default widget plus a 5 × 8 Reminders cannot fit in Balanced: no partial board.
-  assert.equal(resizeWidgetSpan(settings.widgetGrid, 'reminders', { columns: 8, rows: 8 }, settings.widgets), null);
-  assert.equal(resizeWidgetSpan(settings.widgetGrid, 'reminders', { columns: 9, rows: 2 }, settings.widgets), null, 'beyond the width limit');
-  assert.equal(resizeWidgetSpan(settings.widgetGrid, 'reminders', { columns: 1, rows: 2 }, settings.widgets), null, 'below the minimum');
-  assert.equal(resizeWidgetSpan(settings.widgetGrid, 'weather', { columns: 3, rows: 3 }, settings.widgets), null, 'not free-size');
+  const defaults = defaultSettings();
+  assert.equal(resizeWidgetSpan(defaults.widgetGrid, 'reminders', { columns: 8, rows: 8 }, defaults.widgets), null);
+  // After #74 the default large Weather leaves no room for a column even without Last screen (#183).
+  assert.equal(resizeWidgetSpan(defaults.widgetGrid, 'reminders', { columns: 2, rows: 8 }, { ...defaults.widgets, preview: false }), null);
+  assert.equal(resizeWidgetSpan(defaults.widgetGrid, 'reminders', { columns: 9, rows: 2 }, defaults.widgets), null, 'beyond the width limit');
+  assert.equal(resizeWidgetSpan(defaults.widgetGrid, 'reminders', { columns: 1, rows: 2 }, defaults.widgets), null, 'below the minimum');
+  assert.equal(resizeWidgetSpan(defaults.widgetGrid, 'weather', { columns: 3, rows: 3 }, defaults.widgets), null, 'not free-size');
 
   const family = fitWidgetFamily(resized, 'reminders', 'medium', enabled); assert.ok(family);
   assert.equal(Object.hasOwn(family.placements.reminders, 'span'), false, 'choosing a family drops the span');
@@ -172,7 +186,7 @@ test('a minimum-width Column stays a Column in every density where it fits (#152
 });
 
 test('ambient composition keeps spans, stays disjoint and moves a full-height column sideways', () => {
-  const settings = defaultSettings(), enabled = { ...settings.widgets, preview: false };
+  const settings = roomyDefaults(), enabled = { ...settings.widgets };
   const grid = resizeWidgetSpan(settings.widgetGrid, 'reminders', { columns: 2, rows: 8 }, enabled); assert.ok(grid);
   let previous = grid; const columns = new Set<number>();
   for (let cycle = 1; cycle <= 12; cycle++) {
@@ -260,8 +274,9 @@ test('settings PATCH saves, normalizes and clears spans atomically', async () =>
       assert.deepEqual(app.store.snapshot().settings, before, 'a rejected span changes nothing');
     }
 
+    // A medium Weather makes room for the column beside the large Clock and Forecast (#74, #183).
     const free = { ...before.widgets, preview: false, rain: false };
-    const settings = mergeSettings(before, { widgets: free });
+    const settings = mergeSettings(before, { widgets: free, widgetGrid: { placements: { weather: { size: 'medium' } } } });
     const column = resizeWidgetSpan(settings.widgetGrid, 'reminders', { columns: 2, rows: 8 }, free); assert.ok(column);
     response = await patch({ widgets: free, widgetGrid: { placements: column.placements } });
     assert.equal(response.status, 200, await response.clone().text());

@@ -135,14 +135,18 @@ export async function sweep({ page, viewport, state, base, now }) {
     assert.equal(new Set(seen).size, 1, `display column × ${count}: anchoring never changes the fitted count (${seen.join(', ')})`);
   }
 
-  // compositionOverride 0–3 through the editor's arrangement preview, beside the default widgets.
+  // compositionOverride 0–3 through the editor's arrangement preview, beside the default widgets. Rain is
+  // part of Weather since #74; a medium Weather and a Photo in Rain's old cells keep the earlier geometry,
+  // because the default large Weather leaves no room for a column beside Clock and Forecast (#183).
   if (!fourK) {
     state.settings.appearance.motionEnabled = false; state.reminders = reminders(30, now);
     state.settings.widgetGrid = structuredClone(authored);
-    state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, ['clock', 'weather', 'rain', 'forecast', 'reminders'].includes(key)]));
+    state.settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' };
+    state.settings.widgetGrid.placements.photo = { column: 8, row: 2, size: 'medium' };
+    state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, ['clock', 'weather', 'photo', 'forecast', 'reminders'].includes(key)]));
     const enabled = { ...state.settings.widgets, preview: state.settings.widgets.preview && state.settings.preview.enabled };
     const board = resizeWidgetSpan(state.settings.widgetGrid, 'reminders', { columns: 2, rows: 8 }, enabled);
-    assert.ok(board, 'the default board makes room for a 2 × 8 column');
+    assert.ok(board, 'the board makes room for a 2 × 8 column');
     state.settings.widgetGrid = board;
     await page.goto(`${base}/editor`); await page.locator('.preview-surface').waitFor(); await page.clock.runFor(300);
     await page.getByRole('button', { name: 'Preview movement', exact: true }).click();

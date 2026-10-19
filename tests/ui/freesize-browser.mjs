@@ -22,13 +22,25 @@ function roomy() {
   settings.widgetGrid.placements.rain = { column: 8, row: 6, size: 'small' };
   return settings;
 }
-/** Reminders in the top-right corner, with Rain directly below it: a column must displace Rain. */
+/**
+ * Reminders in the top-right corner, with a medium Weather directly below it: a column must displace
+ * Weather. (Rain is retired into Weather by #74; this is the merged form of the earlier Rain fixture.)
+ */
 function crowded() {
   const settings = defaultSettings();
   settings.widgets.preview = false; settings.preview.enabled = false;
-  settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'small' };
+  settings.widgetGrid.placements.weather = { column: 8, row: 2, size: 'medium' };
   settings.widgetGrid.placements.reminders = { column: 10, row: 0, size: 'small' };
-  settings.widgetGrid.placements.rain = { column: 8, row: 2, size: 'medium' };
+  return settings;
+}
+/**
+ * The default board with Last screen off and a medium Weather: the post-#74 default large Weather
+ * leaves no room for a 2 × 8 column beside the large Clock and Forecast (#183).
+ */
+function columnReady() {
+  const settings = defaultSettings();
+  settings.widgets.preview = false; settings.preview.enabled = false;
+  settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' };
   return settings;
 }
 
@@ -100,19 +112,19 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
   try {
     // Pointer: snapping, live reflow, Escape and commit.
     await open(crowded()); await layout(); await clean();
-    const rainBefore = await frameStyle('rain');
+    const weatherBefore = await frameStyle('weather');
     await resizeBy(0, 3.4, { finish: 'escape' });
     await clean();
     assert.equal(await frameSpan('reminders'), '2x2', 'Escape abandons the resize');
     await resizeBy(0.3, 6.35, {
       during: async () => {
-        assert.notEqual(await frameStyle('rain'), rainBefore, 'neighbours reflow live while resizing');
+        assert.notEqual(await frameStyle('weather'), weatherBefore, 'neighbours reflow live while resizing');
         assert.equal(await page.locator('.grid-drop-placeholder').count(), 1);
       },
     });
     await dirty();
     assert.equal(await frameSpan('reminders'), '2x8', 'a fractional pointer position snaps to whole cells');
-    assert.notEqual(await frameStyle('rain'), rainBefore, 'Rain moved aside for the column');
+    assert.notEqual(await frameStyle('weather'), weatherBefore, 'Weather moved aside for the column');
     assert.equal(await ambient().getAttribute('data-widget-span'), '2x8');
     assert.equal(await ambient().getAttribute('data-full-height'), '');
     assert.equal(await status().textContent(), 'Reminders resized to 2 × 8');
@@ -144,8 +156,11 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     checks.push('pointer resize snaps to whole cells and reflows neighbours live; Escape abandons; Save persists the span; reload, Cancel and a density round trip restore it');
 
     // #152: a Column stays a Column in a finer grid, and a custom size dropped to fit is named.
-    const columnBoard = defaultSettings(); columnBoard.widgets.preview = false; columnBoard.preview.enabled = false;
+    // A medium Photo in Rain's pre-#74 cells keeps the earlier geometry, so Spacious must drop the column.
+    const columnBoard = columnReady(); columnBoard.widgets.photo = true;
+    columnBoard.widgetGrid.placements.photo = { column: 8, row: 2, size: 'medium' };
     columnBoard.widgetGrid = resizeWidgetSpan(columnBoard.widgetGrid, 'reminders', { columns: 2, rows: 8 }, columnBoard.widgets);
+    assert.ok(columnBoard.widgetGrid, 'the column fits beside a medium Weather and Photo');
     await open(columnBoard); await layout(); await clean();
     const densityControl = () => page.getByRole('combobox', { name: 'Grid density' });
     await densityControl().selectOption('spacious'); await dirty();

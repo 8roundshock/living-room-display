@@ -10,6 +10,8 @@ import { rebaseSettings, sameEffectiveSettings, settingsChanges } from './draft.
 function withColumn() {
   const base = defaultSettings();
   base.widgets.preview = false; base.preview.enabled = false;
+  // The post-#74 large Weather leaves no room for a 2 × 8 column beside Clock and Forecast (#183).
+  base.widgetGrid.placements.weather = { ...base.widgetGrid.placements.weather, size: 'medium' };
   const grid = resizeWidgetSpan(base.widgetGrid, 'reminders', { columns: 2, rows: 8 }, base.widgets);
   assert.ok(grid);
   return { base, grid };
