@@ -1,21 +1,63 @@
-import type { WeatherState } from '../shared/contracts.ts';
-import { compactWeatherRange, compactWeatherTime, forecastDay, precipitation } from './format.ts';
-import { precipitationOutlook } from './model.ts';
+import type { RainInterval, WeatherState } from '../shared/contracts.ts';
+import { civilDate, compactWeatherRange, compactWeatherTime, forecastDay, NBSP, precipitation } from './format.ts';
 
 /**
  * The adaptive Weather outlook (#74): one classification of the next hours of the saved hourly
  * forecast, so Weather stays calm when the 12-hour forecast is complete and dry and adds rain
- * detail when rain is near. Every value is a forecast estimate, never an observation.
+ * detail when rain is near. Every value is a forecast estimate, never an observation. The window
+ * and thresholds below are the only definition (#147); every outlook function reads them.
  */
-/** The outlook window; precipitationOutlook in model.ts uses the same 12 hours. */
+/** The outlook window: intervals overlapping the next 12 hours, and the coverage that counts as complete. */
 export const RAIN_OUTLOOK_HOURS = 12;
 /** A spell starting within this lead (inclusive) elevates Weather's composition. */
 export const RAIN_ELEVATED_LEAD_HOURS = 6;
-/** A spell's peak hourly chance at or above this reads “likely”; below, “possible”. */
+/** The peak hourly chance of the spells at or above this reads “likely”; below, “possible”. */
 export const RAIN_LIKELY_CHANCE = 60;
 /** Any hour at or above this chance, without a rain spell, reads “Precipitation possible”. */
 export const PRECIPITATION_POSSIBLE_CHANCE = 30;
+/** An hour whose rain plus showers reach this amount is a rain hour (0.1 mm or 0.004 in). */
+export function rainThreshold(unit: 'mm' | 'in'): number {
+  return unit === 'in' ? 0.004 : 0.1;
+}
 const HOUR = 3_600_000;
+const WINDOW = RAIN_OUTLOOK_HOURS * HOUR;
+
+/** Valid intervals overlapping the outlook window after `now`, in time order; expired ones are ignored. */
+export function upcomingRain(intervals: RainInterval[], now: number): RainInterval[] {
+  return intervals
+    .filter((interval) => {
+      const start = Date.parse(interval.intervalStart);
+      const end = Date.parse(interval.intervalEnd);
+      return Number.isFinite(start) && Number.isFinite(end) && end > start && end > now && start < now + WINDOW;
+    })
+    .sort((a, b) => Date.parse(a.intervalStart) - Date.parse(b.intervalStart));
+}
+
+/** Coverage and data completeness of the window: what the outlook needs, and nothing it does not use. */
+export function precipitationOutlook(source: RainInterval[], now: number) {
+  const intervals = upcomingRain(source, now);
+  let coveredUntil = now;
+  let hasGaps = false;
+  for (const interval of intervals) {
+    const start = Date.parse(interval.intervalStart);
+    const end = Date.parse(interval.intervalEnd);
+    if (start > coveredUntil) hasGaps = true;
+    coveredUntil = Math.max(coveredUntil, end);
+  }
+  const coverageComplete = intervals.length > 0 && !hasGaps && coveredUntil >= now + WINDOW;
+  const knownChances = intervals.map((hour) => hour.precipitationProbability).filter((value) => value !== null);
+  const knownAmounts = intervals.filter((hour) => hour.precipitationAmount !== null).length;
+  const knownRain = intervals.filter((hour) => hour.rainAmount !== null).length;
+  return {
+    intervals,
+    coverageComplete,
+    hasGaps,
+    /** Highest known hourly chance in the window, or null. */
+    chance: knownChances.length ? Math.max(...knownChances) : null,
+    rainDataIncomplete: knownRain !== intervals.length,
+    incomplete: !coverageComplete || knownChances.length !== intervals.length || knownAmounts !== intervals.length,
+  };
+}
 
 export type RainOutlookKind = 'calm' | 'now' | 'soon' | 'later' | 'possible' | 'unknown';
 export type RainEmphasis = 'calm' | 'hint' | 'elevated';
@@ -46,6 +88,7 @@ export interface RainOutlookHour {
 export interface RainOutlook {
   kind: RainOutlookKind;
   emphasis: RainEmphasis;
+  /** From the highest known peak of every spell in the window, the same spells the detail covers (#167). */
   qualifier: 'likely' | 'possible';
   firstSpell: RainSpell | null;
   laterSpells: RainSpell[];
@@ -65,12 +108,18 @@ export interface RainOutlookCopy { headline: string; detail: string; confidence:
 
 const EMPHASIS: Record<RainOutlookKind, RainEmphasis> = { calm: 'calm', now: 'elevated', soon: 'elevated', later: 'hint', possible: 'hint', unknown: 'hint' };
 
+/** The highest known peak chance of some spells, or null when none is known. */
+function spellsPeak(spells: RainSpell[]): number | null {
+  const chances = spells.map(item => item.peakChance).filter(value => value !== null);
+  return chances.length ? Math.max(...chances) : null;
+}
+
 /** Classifies the saved hourly intervals at `now`; expired intervals are ignored. */
 export function rainOutlook(weather: Pick<WeatherState, 'hourly' | 'units'>, now: Date | number): RainOutlook {
   const time = typeof now === 'number' ? now : now.getTime();
   const unit = weather.units.precipitation;
-  const base = precipitationOutlook(weather.hourly, unit, time);
-  const threshold = unit === 'in' ? 0.004 : 0.1;
+  const base = precipitationOutlook(weather.hourly, time);
+  const threshold = rainThreshold(unit);
   const intervals = base.intervals;
   const groups: (typeof intervals)[] = [];
   intervals.forEach((interval, index) => {
@@ -103,10 +152,11 @@ export function rainOutlook(weather: Pick<WeatherState, 'hourly' | 'units'>, now
   else if (intervals.some(hour => (hour.precipitationProbability ?? -1) >= PRECIPITATION_POSSIBLE_CHANCE || (hour.precipitationAmount ?? 0) >= threshold)) kind = 'possible';
   else if (base.incomplete || base.hasGaps) { kind = 'unknown'; unknownReason = 'partial'; }
   else kind = 'calm';
+  const peak = spellsPeak(spells);
   return {
     kind,
     emphasis: EMPHASIS[kind],
-    qualifier: firstSpell?.peakChance !== null && firstSpell?.peakChance !== undefined && firstSpell.peakChance >= RAIN_LIKELY_CHANCE ? 'likely' : 'possible',
+    qualifier: peak !== null && peak >= RAIN_LIKELY_CHANCE ? 'likely' : 'possible',
     firstSpell,
     laterSpells: spells.slice(1),
     unknownReason,
@@ -121,40 +171,57 @@ export function rainOutlook(weather: Pick<WeatherState, 'hourly' | 'units'>, now
   };
 }
 
-function civilDate(timestamp: string | number, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(timestamp));
-}
-
 /**
  * Wording in the weather city's timezone and the 12/24-hour setting. `compact` is the one-line
  * small family; `full` the medium/large wording. Calm returns no headline: saying nothing about
  * rain means the 12-hour forecast is complete and dry. Never claims it is or will be raining.
+ * The headline, its qualifier, the detail's peak and the amount cover the same spells: every spell
+ * in the window (#167). A headline that names one end never implies the window is dry after it.
  */
 export function rainOutlookCopy(outlook: RainOutlook, timeZone: string, clockFormat: '12h' | '24h', now: Date | number, variant: 'compact' | 'full'): RainOutlookCopy {
   const time = (iso: string) => compactWeatherTime(iso, timeZone, clockFormat);
   const spell = outlook.firstSpell, rain = `Rain ${outlook.qualifier}`;
+  const several = outlook.laterSpells.length > 0, last = outlook.laterSpells.at(-1) ?? spell;
   let headline = '';
-  if (outlook.kind === 'now' && spell) headline = spell.openEnded ? variant === 'compact' ? `${rain} now` : `${rain} beyond ${time(spell.end)}` : `${rain} until ${time(spell.end)}`;
-  else if (outlook.kind === 'soon' && spell) {
-    const several = outlook.laterSpells.length > 0;
+  if (outlook.kind === 'now' && spell) {
+    if (variant === 'compact') headline = spell.openEnded || several ? `${rain} now` : `${rain} until ${time(spell.end)}`;
+    else if (several) headline = `${rain} on and off ${last!.openEnded ? 'beyond' : 'until'} ${time(last!.end)}`;
+    else headline = `${rain} ${spell.openEnded ? 'beyond' : 'until'} ${time(spell.end)}`;
+  } else if (outlook.kind === 'soon' && spell) {
     headline = !several && !spell.openEnded ? `${rain} ${compactWeatherRange(spell.start, spell.end, timeZone, clockFormat)}`
       : several && variant === 'full' ? `${rain} on and off from ${time(spell.start)}` : `${rain} from ${time(spell.start)}`;
   } else if (outlook.kind === 'later' && spell) {
-    const date = civilDate(spell.start, timeZone);
-    const day = variant === 'full' && date !== civilDate(typeof now === 'number' ? now : now.getTime(), timeZone) ? `${forecastDay(date, timeZone, now)} ` : '';
+    const date = civilDate(new Date(spell.start), timeZone);
+    const day = variant === 'full' && date !== civilDate(now, timeZone) ? `${forecastDay(date, timeZone, now)} ` : '';
     headline = `${rain} from ${day}${time(spell.start)}`;
-  } else if (outlook.kind === 'possible') headline = outlook.peakChance === null ? 'Precipitation possible' : `Precipitation possible · ${outlook.peakChance}%`;
+  } else if (outlook.kind === 'possible') headline = outlook.peakChance === null ? 'Precipitation possible' : `Precipitation possible${NBSP}·${NBSP}${outlook.peakChance}%`;
   else if (outlook.kind === 'unknown') headline = outlook.unknownReason === 'rain-data' ? 'Rain timing unavailable' : outlook.unknownReason === 'partial' ? 'Rain outlook partial' : 'Rain outlook unavailable';
   let detail = '';
   if (spell) {
     // The detail covers every spell in the window, so “on and off” rain is not under-reported.
     const spells = [spell, ...outlook.laterSpells];
-    const chances = spells.map(item => item.peakChance).filter(value => value !== null);
+    const peak = spellsPeak(spells);
     const amount = spells.reduce((total, item) => total + item.amount, 0);
-    const peak = chances.length ? `Peak ${Math.max(...chances)}%` : 'Chance unavailable';
-    detail = `${peak} · ${spell.knownAmountOnly ? `Known rain ${precipitation(amount, outlook.unit)}` : `${precipitation(amount, outlook.unit)} rain`}`;
+    detail = `${peak === null ? 'Chance unavailable' : `Peak ${peak}%`} · ${spell.knownAmountOnly ? `Known rain ${precipitation(amount, outlook.unit)}` : `${precipitation(amount, outlook.unit)} rain`}`;
   }
   const confidence = !outlook.hours.length ? ''
     : `${!outlook.coverageComplete ? 'Partial forecast' : outlook.dataIncomplete ? 'Partial data' : 'Forecast estimate'}${outlook.hasGaps ? ' · coverage gaps' : ''}`;
   return { headline, detail, confidence };
+}
+
+/**
+ * The accessible name of the large family's hourly chance bars (#166): their span, the peak and
+ * how many hours are unknown, e.g. “Hourly precipitation chance, 9 AM to 9 PM: peak 60% at 10 AM,
+ * 1 hour unknown”. The headline and detail carry the same outlook in words.
+ */
+export function rainChartLabel(outlook: RainOutlook, timeZone: string, clockFormat: '12h' | '24h'): string {
+  const hours = outlook.hours;
+  if (!hours.length) return 'Hourly precipitation chance unavailable';
+  const time = (iso: string) => compactWeatherTime(iso, timeZone, clockFormat);
+  const known = hours.filter(hour => hour.chance !== null);
+  const unknown = hours.length - known.length;
+  const peakHour = known.reduce<RainOutlookHour | null>((best, hour) => best === null || hour.chance! > best.chance! ? hour : best, null);
+  const parts = [peakHour ? `peak ${peakHour.chance}% at ${time(peakHour.start)}` : 'chance unknown'];
+  if (peakHour && unknown) parts.push(`${unknown} ${unknown === 1 ? 'hour' : 'hours'} unknown`);
+  return `Hourly precipitation chance, ${time(hours[0]!.start)} to ${time(hours.at(-1)!.end)}: ${parts.join(', ')}`;
 }

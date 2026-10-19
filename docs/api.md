@@ -217,7 +217,7 @@ coverage gap ends it. In precedence order:
 | Kind | When | Weather mode | Example |
 | --- | --- | --- | --- |
 | `unknown` | No future intervals | hint | “Rain outlook unavailable” |
-| `now` | A spell includes now | elevated | “Rain likely until 6 PM”; open end “Rain likely beyond 1 AM” (small: “Rain likely now”) |
+| `now` | A spell includes now | elevated | “Rain likely until 6 PM”; open end “Rain likely beyond 1 AM”; later spells too “on and off until 4 PM” (small: “Rain likely now” for an open end or later spells) |
 | `soon` | A spell starts within 6 hours (inclusive) | elevated | “Rain likely 3–6 PM”; open end or several spells “from 3 PM” (medium/large: “on and off from 3 PM”) |
 | `later` | A spell starts in 6–12 hours | hint | “Rain likely from 9 PM” (medium/large add the day when it differs: “from Tomorrow 7 AM”) |
 | `unknown` | No spell, but some rain amounts are missing | hint | “Rain timing unavailable” |
@@ -225,21 +225,34 @@ coverage gap ends it. In precedence order:
 | `unknown` | Partial, gapped or null coverage | hint | “Rain outlook partial” |
 | `calm` | Otherwise: the 12-hour forecast is complete and dry | calm | nothing about rain |
 
-“Likely” means the spell's peak hourly chance is at least 60%; otherwise, or when the
-chance is unknown, “possible”. Probability covers all precipitation, so the wording
-never says it is or will be raining. The elevated detail covers every spell in the
-window: “Peak 60% · 4 mm rain” (imperial “0.16 in rain”), “Known rain 4 mm” when some
-rain amounts are missing, and “Chance unavailable” without a chance. The confidence
-label is “Forecast estimate”, “Partial forecast” (coverage under 12 hours) or
-“Partial data” (missing values), plus “ · coverage gaps”. Times use the weather
-city's timezone and the 12/24-hour setting; compact 12-hour times drop “:00” and
-share AM/PM (“3–6 PM”, “11 AM–2 PM”, “15:00–18:00”), keeping non-zero minutes in
-half-hour zones. Hours are real instants, so a DST change shows wall-clock times.
+The headline, its qualifier, the detail's peak and the amount all cover the same spells:
+every spell in the window (#167). “Likely” means the highest known peak hourly chance
+of those spells is at least 60%; otherwise, or when no chance is known, “possible”. So
+a 40% spell followed by an 80% one reads “Rain likely on and off from 10 AM” beside
+“Peak 80%”. A headline names an end only when no spell follows it (“until 11 AM”);
+with later spells it reads “on and off until 2 PM” (medium/large) or names no end
+(small). Probability covers all precipitation, so the wording never says it is or
+will be raining. The elevated detail reads “Peak 60% · 4 mm rain” (imperial “0.16 in
+rain”), “Known rain 4 mm” when some rain amounts are missing, and “Chance unavailable”
+without a chance. The confidence label is “Forecast estimate”, “Partial forecast”
+(coverage under 12 hours) or “Partial data” (missing values), plus “ · coverage
+gaps”. Times use the weather city's timezone and the 12/24-hour setting; compact
+12-hour times drop “:00” and share AM/PM (“3–6 PM”, “11 AM–2 PM”, “15:00–18:00”),
+keeping non-zero minutes in half-hour zones. A no-break space joins each time to its
+AM/PM and a word joiner follows the range dash, so a line never starts with AM/PM
+or the second end of a range; “Precipitation possible · 40%” keeps “· 40%” with its
+words (#197). Hours are real instants, so a DST change shows wall-clock times.
+The large family's hourly chance bars are one image whose accessible name summarises
+them: “Hourly precipitation chance, 9 AM to 9 PM: peak 60% at 10 AM, 1 hour unknown”
+(#166). The window and thresholds are defined once, in `weather-outlook.ts` (#147).
 
 ### Forecast normalization and caching
 
 The server requests Open-Meteo epoch timestamps and the configured timezone.
-It normalizes seven daily forecasts and 24 upcoming hourly intervals. Hourly
+It normalizes seven daily forecasts and 24 hourly intervals from the current hour.
+The current hour is the earlier of the provider's current time and this computer's,
+so a fast clock at arrival never discards hours that are actually upcoming (#244);
+the browser ignores expired intervals again when it renders. Hourly
 precipitation amount and probability apply to the **preceding hour**; each result
 therefore includes both `intervalStart` and `intervalEnd`. Probability covers all
 precipitation, including snow. `rainAmount` separately sums rain and showers;
@@ -253,9 +266,20 @@ offset boundaries; hourly epoch instants retain unambiguous timing across DST.
 Successful forecasts are cached for 15 minutes in memory. Failed refreshes retain
 the last successful timestamp/data and mark them stale; without prior data the
 state is unavailable. Failed requests retry no more often than once per minute.
+These intervals count by whichever of the monotonic and wall clocks says more time
+has passed (#244): a clock set back (for example a fast hardware clock corrected
+after boot) neither stalls a retry nor keeps old data fresh, and a sleep still ages
+it. A saved `updatedAt` more than 2 minutes in the future is refreshed at once, and
+the display calls such a time “Update time unknown” rather than “just now”. The
+retained data has no age limit; the display drops past days and qualifies an
+hours-old reading ([widget contract](widgets.md#data-and-image-boundaries)).
 Switching location/units never reuses a mismatched forecast. City search uses the
 [Open-Meteo geocoding API](https://open-meteo.com/en/docs/geocoding-api), with an
-hour-long in-memory query cache. No IP/address auto-location is used.
+hour-long in-memory query cache. Each result is checked on its own (#246): one
+without a valid IANA timezone (the same check as saved settings), with out-of-range
+coordinates or without a name is left out rather than failing the search, and names
+are trimmed to the 100-character settings limit, so every offered city can be saved.
+No IP/address auto-location is used.
 
 ## Air quality
 
@@ -276,15 +300,18 @@ timeout and `redirect: 'error'`.
 
 Normalization keeps the current AQI, the dominant pollutant (the highest known
 sub-index, or null), PM2.5/PM10 in µg/m³ and the UV index. Hourly values are
-instantaneous readings stored as instants (`time`): the current hour and up to 23
-following ones. A missing, non-numeric or misaligned value stays `null` or makes
-the reading `unavailable`; nothing is filled in. The widget applies the same
+instantaneous readings stored as instants (`time`): the current hour (the earlier of
+the provider's and this computer's, as for the forecast) and up to 23 following ones.
+A missing, non-numeric or misaligned value stays `null` or makes the reading
+`unavailable`; nothing is filled in. The widget applies the same
 current-hour rule again at render time (instants after now − 1 hour, recomputed each
 minute), because a cached or `stale` reading keeps the series it was fetched with.
 
 Readings are cached in memory for 30 minutes, keyed by location and scale (at most
 8 entries). A failed refresh keeps the last good reading as `stale`; without one the
-state is `unavailable`. Failures retry no more often than every 2 minutes.
+state is `unavailable`. Failures retry no more often than every 2 minutes. Both
+intervals use the forecast's monotonic-and-wall timing, and a future `updatedAt` is
+refreshed at once (#244).
 
 The widget labels every value as a model estimate with its age, and credits
 "Air quality: CAMS via Open-Meteo". It is not a local sensor reading or an official
