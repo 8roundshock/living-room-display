@@ -311,29 +311,82 @@ test('the editor and display share one pending order: soon dated, undated, later
   assert.equal(reminderPresentation(settings, values.filter((value) => value.completed), true), 'unavailable');
 });
 
-test('appearance presets reset visuals while preserving personal data and named presets', () => {
+import { BUILTIN_PRESETS, builtinLook, matchingBuiltinPreset, resetAppearance } from './model.ts';
+
+/** Someone's own board and preferences: an added Note, Last screen removed, motion and clock choices, Text size. */
+function personalised() {
   const source = defaultSettings();
   source.location.name = 'Example city';
   source.units = 'imperial';
-  source.savedPresets = [
-    { id: 'example', name: 'Example', visual: getVisual(source) },
-  ];
+  source.widgets.note = true;
+  source.widgets.preview = false;
+  source.preview.enabled = false;
+  source.preview.opacity = 0.4;
+  source.widgetGrid.placements.note = { column: 10, row: 6, size: 'small' };
+  source.widgetGrid.density = 'balanced';
   source.widgetOverrides.clock.offsetX = 25;
   source.widgetBehavior.reminders.hideWhenEmpty = false;
-  const night = applyBuiltinPreset(source, 'night');
-  assert.equal(night.location.name, 'Example city');
-  assert.equal(night.units, 'imperial');
-  assert.equal(night.savedPresets.length, 1);
-  assert.equal(night.widgetOverrides.clock.offsetX, 0);
-  assert.equal(night.appearance.brightness, 0.28);
-  assert.equal(night.widgetBehavior.reminders.hideWhenEmpty, true);
-  assert.equal(source.savedPresets[0].visual.widgetBehavior.reminders.hideWhenEmpty, true);
-  const visual = getVisual(source);
-  assert.equal(visual.widgetBehavior.reminders.hideWhenEmpty, false);
-  visual.widgetBehavior.reminders.hideWhenEmpty = true;
-  assert.equal(source.widgetBehavior.reminders.hideWhenEmpty, false, 'visual snapshot is independent');
-  night.widgets.clock = false;
-  assert.equal(source.widgets.clock, true);
+  Object.assign(source.appearance, { motionEnabled: false, motionIntervalSeconds: 600, fadeSeconds: 5, animation: 'lively', clockStyle: 'analog', fontScale: 1.25 });
+  source.widgetData.note.text = 'Synthetic note';
+  source.savedPresets = [{ id: 'example', name: 'Example', visual: getVisual(source) }];
+  return source;
+}
+
+test('built-in styles are looks only: each keeps widgets, layout, widget options, motion, clock style and Text size (#153, #110, #226)', () => {
+  for (const preset of BUILTIN_PRESETS) {
+    const source = personalised(), before = structuredClone(source);
+    const styled = applyBuiltinPreset(source, preset);
+    const look = builtinLook(preset);
+    // The look: brightness, accent, text colour, typeface and the retained legacy layout.
+    for (const key of ['brightness', 'accentMode', 'accentColor', 'textColor', 'fontFamily', 'layout'] as const) assert.equal(styled.appearance[key], look[key], `${preset} sets ${key}`);
+    assert.equal(styled.appearance.preset, preset);
+    assert.equal(styled.appearance.accentMode, 'native', `${preset} uses native colours`);
+    // Everything else stays exactly as it was.
+    const { appearance: styledAppearance, ...styledRest } = styled;
+    const { appearance: beforeAppearance, ...beforeRest } = before;
+    assert.deepEqual(styledRest, beforeRest, `${preset} keeps widgets, widgetGrid, widgetBehavior, preview, widgetOverrides, widgetData, saved styles and location`);
+    for (const key of ['motionEnabled', 'motionIntervalSeconds', 'fadeSeconds', 'animation', 'clockStyle', 'fontScale'] as const) assert.equal(styledAppearance[key], beforeAppearance[key], `${preset} keeps ${key}`);
+    assert.deepEqual(source, before, `${preset} does not mutate its input`);
+    styled.widgets.clock = false;
+    assert.equal(source.widgets.clock, true, `${preset} returns an independent copy`);
+  }
+  // Phone no longer sets its own 2-minute arrangement interval, and nothing lowers Text size.
+  assert.equal(applyBuiltinPreset(defaultSettings(), 'phone').appearance.motionIntervalSeconds, 180);
+  for (const preset of BUILTIN_PRESETS) assert.equal(applyBuiltinPreset(defaultSettings(), preset).appearance.fontScale, 1, `${preset} keeps 100%`);
+  assert.deepEqual(builtinLook('night'), { brightness: 0.28, accentMode: 'native', accentColor: '#9990b7', textColor: '#a7a3bb', fontFamily: 'sans', layout: 'minimal' });
+  assert.deepEqual(builtinLook('phone'), { brightness: 0.7, accentMode: 'native', accentColor: '#a89ec8', textColor: '#b8c1ca', fontFamily: 'sans', layout: 'balanced' });
+  const { brightness, accentMode, accentColor, textColor, fontFamily, layout } = defaultSettings().appearance;
+  assert.deepEqual(builtinLook('room'), { brightness, accentMode, accentColor, textColor, fontFamily, layout }, 'Room is the default look');
+});
+
+test('a built-in style card reads as chosen whenever its look is showing, whatever else changed (#153)', () => {
+  assert.equal(matchingBuiltinPreset(defaultSettings().appearance), 'room', 'new installs show Room');
+  for (const preset of BUILTIN_PRESETS) {
+    const styled = applyBuiltinPreset(personalised(), preset);
+    assert.equal(matchingBuiltinPreset(styled.appearance), preset);
+    // Labelled Custom by an edit that was reverted, it still matches.
+    const nudged = { ...styled.appearance, preset: 'custom' as const, brightness: styled.appearance.brightness + 0.01 };
+    assert.equal(matchingBuiltinPreset(nudged), null, `${preset}: a different brightness is no built-in look`);
+    assert.equal(matchingBuiltinPreset({ ...nudged, brightness: styled.appearance.brightness }), preset, `${preset}: brightness back, card pressed again`);
+    assert.equal(matchingBuiltinPreset({ ...styled.appearance, layout: 'weather-first' }), preset, 'the legacy layout is not rendered, so it does not count');
+    assert.equal(matchingBuiltinPreset({ ...styled.appearance, textColor: styled.appearance.textColor.toUpperCase() }), preset, 'colour case does not matter');
+  }
+  const room = applyBuiltinPreset(defaultSettings(), 'room').appearance;
+  assert.equal(matchingBuiltinPreset({ ...room, accentMode: 'color' }), null, 'a single colour is not a built-in look');
+  assert.equal(matchingBuiltinPreset({ ...room, accentColor: '#123456' }), null, 'a kept custom colour differs from Room, so applying Room is an effective change');
+  assert.equal(matchingBuiltinPreset({ ...room, fontFamily: 'serif' }), null);
+});
+
+test('Reset appearance returns every Style tab value to its default and keeps the board, clock style and saved styles (#234)', () => {
+  const source = personalised();
+  source.appearance = { ...source.appearance, ...builtinLook('night'), accentMode: 'color', accentColor: '#123456', fontFamily: 'mono', preset: 'custom' };
+  const reset = resetAppearance(source);
+  assert.deepEqual(reset.appearance, { ...defaultSettings().appearance, clockStyle: 'analog' });
+  const { appearance: _reset, ...rest } = reset;
+  const { appearance: _source, ...before } = source;
+  assert.deepEqual(rest, before, 'widgets, layout, widget options, location, saved styles and widget content stay');
+  assert.equal(matchingBuiltinPreset(reset.appearance), 'room');
+  assert.notEqual(reset.widgets, source.widgets, 'an independent copy');
 });
 
 const pendingReminder = { id: 'qa', text: 'Synthetic reminder', completed: false,
