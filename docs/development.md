@@ -71,8 +71,9 @@ it in the [install rollback table](install.md#additive-data-and-rollback-compati
 Never edit the vendored copy; the coordinator replaces it after each install (#130).
 
 Browser widget checks live in `tests/ui/widget-checks/`, one module per widget
-(`id`, optional `prepare`, `selectors` and `family`). The widget harness loads every
-module in that folder and requires one for each active catalog id.
+(`id`, optional `prepare`, `selectors`, `family` and a once-per-viewport `sweep`).
+The widget harness loads every module in that folder and requires one for each
+active catalog id; extra modules such as `reminders-span.mjs` add only a sweep.
 
 ## Local checkout and agent startup
 

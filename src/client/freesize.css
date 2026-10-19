@@ -1,0 +1,66 @@
+/* Free-size widget controls (#73): presets, whole-cell steppers and the picker caption. Editor only. */
+.free-size-controls {
+  margin-bottom: 22px;
+}
+.widget-inspector .size-options.free-size-presets {
+  margin-bottom: 16px;
+}
+.studio .free-size-heading {
+  margin-bottom: 6px;
+}
+.free-size-steppers {
+  display: grid;
+  gap: 6px;
+}
+.free-size-stepper {
+  display: grid;
+  grid-template-columns: minmax(48px, auto) 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid #ffffff0c;
+  border-radius: 12px;
+  background: #ffffff03;
+}
+.free-size-axis {
+  padding-left: 10px;
+  color: #cfc8d7;
+  font-size: 12px;
+}
+.free-size-stepper output {
+  min-width: 0;
+  text-align: center;
+  color: #ecebf2;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.studio .free-size-step {
+  border-radius: 10px;
+  font-size: 20px;
+  line-height: 1;
+  color: #d7d1e6;
+}
+.studio .free-size-step:hover {
+  background: #ffffff08;
+}
+.studio .free-size-step[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.35;
+  background: transparent;
+}
+.studio .free-size-hint {
+  margin-top: 10px;
+}
+.picker-free-size {
+  flex: none;
+  margin: 8px 2px 0;
+  text-align: center;
+  color: #9e99ac;
+  font-size: 11px;
+  line-height: 1.35;
+}
+@media (max-width: 380px) {
+  .free-size-stepper { grid-template-columns: minmax(44px, auto) 40px minmax(0, 1fr) 40px; }
+  .studio .free-size-step { width: 40px; min-width: 40px; height: 40px; }
+}

@@ -3,9 +3,15 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';
 import './widgets.css';
+import './palette.css';
 import './studio.css';
+import './reminders.css';
 import './grid-editor.css';
+import './freesize.css';
 import './widget-controls.css';
+import './motion.css';
+import './motion-widgets.css';
+import './motion-editor.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -1,4 +1,215 @@
-import type { WidgetModule } from './types.ts';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CountdownEvent, Settings } from '../../shared/contracts.ts';
+import {
+  addDays, civilFromDate, countdownDate, daysBetween, countdownLabel, countdownPassed, formatCivil, nextOccurrence, parseCivil, todayCivil, upcomingCountdowns,
+  type CivilDate, type UpcomingCountdown,
+} from '../calendar.ts';
+import { Icon } from '../icons.tsx';
+import { TransitionText } from './TransitionText.tsx';
+import type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
+import './countdown.css';
 
-// Planned (#78): the Countdown unit replaces this stub with its renderer, settings and sample.
-export const CountdownWidget: WidgetModule = { Renderer: () => null, visible: () => false };
+/** Same limits as the server, which remains the authority. */
+const MAX_COUNTDOWNS = 12, MAX_TITLE = 60, FIRST_YEAR = 1900, LAST_YEAR = 2200;
+const ROWS: Record<WidgetContentProps['size'], number> = { small: 1, medium: 3, large: 5 };
+
+// Visibility runs on every one-second tick; recompute only when the day or the list changes.
+const cache = new WeakMap<readonly CountdownEvent[], { today: string; upcoming: UpcomingCountdown[] }>();
+function upcomingFor(events: readonly CountdownEvent[], today: string): UpcomingCountdown[] {
+  const cached = cache.get(events);
+  if (cached?.today === today) return cached.upcoming;
+  const upcoming = upcomingCountdowns(events, parseCivil(today)!);
+  cache.set(events, { today, upcoming });
+  return upcoming;
+}
+
+function Count({ item, className }: { item: UpcomingCountdown; className: string }) {
+  const label = countdownLabel(item.days);
+  return <div className={`${className} ${label.unit ? 'countdown-number' : 'countdown-word'}`} aria-label={label.text}>
+    <TransitionText className="countdown-value" value={label.value} />
+    {label.unit && <span className="countdown-unit">{label.unit}</span>}
+  </div>;
+}
+
+function Row({ item, today }: { item: UpcomingCountdown; today: CivilDate }) {
+  const label = countdownLabel(item.days);
+  return <li className="countdown-row">
+    <div className="countdown-row-copy"><p className="countdown-row-title">{item.event.title}</p><p className="countdown-date">{countdownDate(item.date, today)}</p></div>
+    <p className="countdown-row-days" aria-label={label.text}><TransitionText className="countdown-value" value={label.value} />{label.unit && <span className="countdown-unit">{label.unit}</span>}</p>
+  </li>;
+}
+
+function Countdown({ settings, now, size, embedded }: WidgetContentProps) {
+  const today = todayCivil(now), events = settings.widgetData.countdowns;
+  const upcoming = useMemo(() => upcomingFor(events, today), [events, today]);
+  const civil = parseCivil(today)!;
+  if (!upcoming.length) return embedded ? <div className="widget-body image-placeholder countdown-placeholder">
+    <Icon name="hourglass" /><div className="ambient-label">Countdown</div><div className="ambient-description">Add a date to count down to</div>
+  </div> : null;
+  const [next, ...rest] = upcoming as [UpcomingCountdown, ...UpcomingCountdown[]];
+  const hero = <div className="countdown-hero">
+    <Count item={next} className="countdown-count" />
+    <p className="countdown-title">{next.event.title}</p>
+    <p className="countdown-date">{countdownDate(next.date, civil)}</p>
+  </div>;
+  if (size === 'small') return <div className="countdown-face countdown-family-small">{hero}</div>;
+  if (size === 'medium') return <div className="countdown-face countdown-family-medium">
+    {hero}
+    {rest.length > 0 && <ul className="countdown-list">{rest.slice(0, ROWS.medium - 1).map(item => <Row key={item.event.id} item={item} today={civil} />)}</ul>}
+  </div>;
+  const shown = upcoming.slice(0, ROWS.large);
+  return <div className="countdown-face countdown-family-large">
+    <ul className="countdown-list">{shown.map(item => <Row key={item.event.id} item={item} today={civil} />)}</ul>
+    {upcoming.length > shown.length && <p className="countdown-more">+{upcoming.length - shown.length} more</p>}
+  </div>;
+}
+
+function dateProblem(value: string): boolean {
+  const date = parseCivil(value);
+  return !date || date.year < FIRST_YEAR || date.year > LAST_YEAR;
+}
+
+function dateMessage(value: string): string | null {
+  if (!parseCivil(value)) return 'Countdown needs a date';
+  return dateProblem(value) ? `Use a date between ${FIRST_YEAR} and ${LAST_YEAR}` : null;
+}
+const complete = (event: CountdownEvent) => Boolean(event.title.trim()) && !dateProblem(event.date);
+
+function draftProblem(settings: Settings): string | null {
+  const events = settings.widgetData.countdowns;
+  if (events.some(event => !event.title.trim())) return 'Countdown needs a title';
+  for (const event of events) { const message = dateMessage(event.date); if (message) return message; }
+  return null;
+}
+
+function status(event: CountdownEvent, today: CivilDate): string {
+  if (countdownPassed(event, today)) return 'Passed';
+  const date = nextOccurrence(event, today)!, label = countdownLabel(daysBetween(today, date));
+  return `${label.unit ? `In ${label.text}` : label.text} · ${countdownDate(date, today)}`;
+}
+
+function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) {
+  const events = settings.widgetData.countdowns, today = civilFromDate(new Date());
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const latest = useRef({ settings, onChange });
+  latest.current = { settings, onChange };
+  // Incomplete rows can only be fixed in this panel. When it closes (the widget is removed or
+  // collapsed, or the tab changes), an edited row gets back the last complete title or date this
+  // panel received for it and a row it never received complete is dropped, so Save is never
+  // blocked by a field nobody can see and closing the panel never deletes a saved date.
+  // `known` holds the latest complete version of each row that arrived from outside this panel:
+  // at opening, after Save (the editor rebases onto the server response), Cancel or a poll (which
+  // also carries unsaved complete edits). Rows are read-only while a Save is running, so the
+  // rebase after Save always records what the server stored.
+  const own = useRef(new WeakSet<readonly CountdownEvent[]>());
+  const known = useRef(new Map<string, CountdownEvent>());
+  const seen = useRef<readonly CountdownEvent[] | null>(null);
+  if (events !== seen.current) {
+    if (!own.current.has(events)) for (const event of events) if (complete(event)) known.current.set(event.id, event);
+    seen.current = events;
+  }
+  useEffect(() => () => {
+    const { settings: last, onChange: change } = latest.current;
+    if (last.widgetData.countdowns.every(complete)) return;
+    change((previous: Settings) => {
+      const events = previous.widgetData.countdowns;
+      if (events.every(complete)) return previous;
+      const repaired = events.flatMap(event => {
+        if (complete(event)) return [event];
+        const before = known.current.get(event.id);
+        if (!before) return [];
+        const restored = { ...event, title: event.title.trim() ? event.title : before.title, date: dateProblem(event.date) ? before.date : event.date };
+        return complete(restored) ? [restored] : [];
+      });
+      return { ...previous, widgetData: { ...previous.widgetData, countdowns: repaired } };
+    });
+  }, []);
+  useEffect(() => {
+    if (!focusId) return;
+    list.current?.querySelector<HTMLInputElement>(`[data-countdown-title="${focusId}"]`)?.focus();
+    setFocusId(null);
+  }, [focusId]);
+  const update = (next: (events: CountdownEvent[]) => CountdownEvent[]) => onChange((previous: Settings) => {
+    const countdowns = next(previous.widgetData.countdowns);
+    own.current.add(countdowns);
+    return { ...previous, widgetData: { ...previous.widgetData, countdowns } };
+  });
+  const edit = (id: string, change: Partial<CountdownEvent>) => update(events => events.map(event => event.id === id ? { ...event, ...change } : event));
+  return <div className="countdown-settings" ref={list}>
+    <span className="field-label">Dates</span>
+    {events.length === 0 && <p className="countdown-settings-empty">No dates yet.</p>}
+    {events.map((event, index) => {
+      const number = index + 1, titleMissing = !event.title.trim(), passed = !dateProblem(event.date) && countdownPassed(event, today);
+      const errorId = `countdown-${event.id}-error`, dateError = dateMessage(event.date), dateErrorId = `countdown-${event.id}-date-error`;
+      return <fieldset key={event.id} className={`countdown-editor-row ${passed ? 'passed' : ''}`}>
+        <legend className="sr-only">Countdown {number}</legend>
+        <input
+          className="text-input"
+          aria-label={`Countdown ${number} title`}
+          data-countdown-title={event.id}
+          disabled={saving}
+          placeholder="Title"
+          maxLength={MAX_TITLE}
+          value={event.title}
+          aria-invalid={titleMissing}
+          aria-describedby={titleMissing ? errorId : undefined}
+          onChange={change => edit(event.id, { title: change.target.value })}
+          onBlur={change => { const trimmed = change.target.value.trim(); if (trimmed !== event.title) edit(event.id, { title: trimmed }); }}
+        />
+        {titleMissing && <p className="countdown-error" id={errorId}>Countdown needs a title</p>}
+        <div className="countdown-editor-controls">
+          <input
+            className="text-input countdown-date-input"
+            type="date"
+            disabled={saving}
+            aria-label={`Countdown ${number} date`}
+            min={`${FIRST_YEAR}-01-01`}
+            max={`${LAST_YEAR}-12-31`}
+            value={event.date}
+            aria-invalid={dateError !== null}
+            aria-describedby={dateError ? dateErrorId : undefined}
+            onChange={change => edit(event.id, { date: change.target.value })}
+          />
+          <label className="toggle-row countdown-yearly">
+            <span>Every year</span>
+            <input className="toggle" type="checkbox" disabled={saving} aria-label={`Countdown ${number} every year`} checked={event.repeatsYearly} onChange={change => edit(event.id, { repeatsYearly: change.target.checked })} />
+          </label>
+          <button type="button" className="icon-button countdown-remove" disabled={saving} aria-label={`Remove countdown ${number}`} title="Remove" onClick={() => update(events => events.filter(item => item.id !== event.id))}>
+            <Icon name="trash" size={16} />
+          </button>
+        </div>
+        {dateError ? <p className="countdown-error" id={dateErrorId}>{dateError}</p> : <p className={`countdown-editor-status ${passed ? 'passed' : ''}`}>{status(event, today)}</p>}
+      </fieldset>;
+    })}
+    <button
+      type="button"
+      className="button small countdown-add"
+      disabled={saving || events.length >= MAX_COUNTDOWNS}
+      onClick={() => {
+        const id = crypto.randomUUID();
+        update(events => [...events, { id, title: '', date: formatCivil(addDays(civilFromDate(new Date()), 7)), repeatsYearly: false }]);
+        setFocusId(id);
+      }}
+    ><Icon name="plus" size={15} />Add date</button>
+    <p className="hint">{events.length >= MAX_COUNTDOWNS ? `Up to ${MAX_COUNTDOWNS} dates. ` : ''}Counts whole days on this computer's calendar.</p>
+  </div>;
+}
+
+// Synthetic sample only; private titles never reach the picker.
+const SAMPLE: CountdownEvent[] = [
+  { id: '7a1c0d4e-0000-4000-8000-000000000001', title: 'Weekend trip', date: '2026-10-30', repeatsYearly: false },
+  { id: '7a1c0d4e-0000-4000-8000-000000000002', title: 'Birthday', date: '1990-11-03', repeatsYearly: true },
+  { id: '7a1c0d4e-0000-4000-8000-000000000003', title: 'Holiday', date: '2026-12-24', repeatsYearly: false },
+];
+
+export const CountdownWidget: WidgetModule = {
+  Renderer: Countdown,
+  visible: props => props.embedded || upcomingFor(props.settings.widgetData.countdowns, todayCivil(props.now)).length > 0,
+  Settings: CountdownSettings,
+  draftProblem,
+  sample: ({ state, settings }) => {
+    const next = { ...settings, widgetData: { ...settings.widgetData, countdowns: SAMPLE } };
+    return { state: { ...state, settings: next }, settings: next };
+  },
+};

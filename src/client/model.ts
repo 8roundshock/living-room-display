@@ -11,8 +11,9 @@ export function getVisual(settings: Settings): VisualSettings {
   return structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview });
 }
 
-export function weatherAttributionWidget(settings: Settings): 'forecast' | 'weather' | 'rain' | null {
-  return settings.widgets.forecast ? 'forecast' : settings.widgets.weather ? 'weather' : settings.widgets.rain ? 'rain' : null;
+/** Rain is retired into Weather (#74), so it never carries the credit. */
+export function weatherAttributionWidget(settings: Settings): 'forecast' | 'weather' | null {
+  return settings.widgets.forecast ? 'forecast' : settings.widgets.weather ? 'weather' : null;
 }
 
 export function reminderPresentation(
@@ -39,6 +40,9 @@ export function applyBuiltinPreset(
     appearance: {
       ...defaults.appearance,
       preset,
+      // The Animation level is a motion preference, not part of a look (#76). Soft motion and
+      // clock style still reset until #110 decides.
+      animation: settings.appearance.animation,
       ...(preset === 'night'
         ? {
             brightness: 0.28,
@@ -57,18 +61,6 @@ export function applyBuiltinPreset(
           : {}),
     },
   };
-}
-
-export function sortReminders<
-  T extends { completed: boolean; dueAt: string | null; createdAt: string },
->(reminders: T[]): T[] {
-  return [...reminders].sort(
-    (a, b) =>
-      Number(a.completed) - Number(b.completed) ||
-      (a.dueAt ? new Date(a.dueAt).getTime() : Infinity) -
-        (b.dueAt ? new Date(b.dueAt).getTime() : Infinity) ||
-      a.createdAt.localeCompare(b.createdAt),
-  );
 }
 
 export function upcomingRain(

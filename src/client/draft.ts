@@ -153,6 +153,15 @@ export function settingsChanges(
       delete patch.widgetGrid.placements;
     if (!Object.keys(patch.widgetGrid).length) delete patch.widgetGrid;
   }
+  if (patch.widgetGrid?.placements) {
+    // A per-key difference cannot express a removed custom span, which would
+    // leave Save permanently dirty: send the whole placement, `span: null` clearing it.
+    const placements = patch.widgetGrid.placements as Record<string, unknown>;
+    for (const id of Object.keys(placements) as (keyof Settings['widgets'])[]) {
+      const { span, ...placement } = draft.widgetGrid.placements[id];
+      placements[id] = { ...structuredClone(placement), span: span ? { ...span } : null };
+    }
+  }
   if (patch.location || patch.locationSource) {
     // A location and its source are one selection, not independently rebasable.
     patch.location = structuredClone(draft.location);
