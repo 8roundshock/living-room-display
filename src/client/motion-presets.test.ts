@@ -9,6 +9,7 @@ import type { Settings } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import { DataStore } from '../server/store.ts';
 import { assertPreviousReaderAccepts, assertPreviousReaderRejects } from '../server/compat/previous-reader.ts';
+import { colorAccentDefaults, seedColorAccentData } from '../server/fixtures.ts';
 import { rebaseSettings, sameEffectiveSettings, settingsChanges } from './draft.ts';
 import { applyBuiltinPreset, getVisual } from './model.ts';
 
@@ -62,6 +63,8 @@ test('#76 a local level survives a poll that changed something else, and a saved
 async function stateAfter(patch: Parameters<DataStore['patchSettings']>[0]): Promise<{ state: unknown; backup: unknown }> {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-motion-rollback-'));
   try {
+    // An existing user's colour-accent data (#75: a fresh folder starts Native, its own exception).
+    await seedColorAccentData(directory);
     const store = await DataStore.open(directory);
     await store.patchSettings({ appearance: { brightness: 0.5 } });
     await store.patchSettings(patch);
@@ -74,13 +77,13 @@ test('#76 rollback: default Subtle data stays readable by the previous release; 
   const subtle = await stateAfter({ appearance: { animation: 'subtle' } });
   assertPreviousReaderAccepts('data', subtle.state, 'Subtle state.json');
   assert.equal('animation' in ((subtle.state as { settings: { appearance: object } }).settings.appearance), false, 'Subtle is omitted at rest');
-  const savedStyle = await stateAfter({ savedPresets: [{ id: 'style', name: 'Style', visual: getVisual(defaultSettings()) }] });
+  const savedStyle = await stateAfter({ savedPresets: [{ id: 'style', name: 'Style', visual: getVisual(colorAccentDefaults()) }] });
   assertPreviousReaderAccepts('data', savedStyle.state, 'saved style at the default level');
   for (const level of ['off', 'lively'] as const) {
     const chosen = await stateAfter({ appearance: { animation: level } });
     assertPreviousReaderRejects('data', chosen.state, `${level} state.json (documented exception: restore the pre-upgrade data copy)`);
     assertPreviousReaderAccepts('data', chosen.backup, `${level}: the backup of the previous save stays readable`);
-    const style = await stateAfter({ savedPresets: [{ id: 'style', name: 'Style', visual: getVisual(chooseLevel(defaultSettings(), level)) }] });
+    const style = await stateAfter({ savedPresets: [{ id: 'style', name: 'Style', visual: getVisual(chooseLevel(colorAccentDefaults(), level)) }] });
     assertPreviousReaderRejects('data', style.state, `${level} inside a saved style`);
   }
 });
