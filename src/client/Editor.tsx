@@ -15,7 +15,7 @@ import type {
 } from '../shared/contracts';
 import { defaultSettings } from '../shared/defaults';
 import { ACCENT_SWATCHES, NATIVE_PALETTE } from '../shared/palette';
-import { api } from './api';
+import { NETWORK_ERROR_MESSAGE, api, isNetworkError } from './api';
 import { AmbientDisplay } from './Display';
 import {
   ageLabel,
@@ -38,6 +38,7 @@ import {
   WIDGET_IDS,
   firstPlacement,
   fitWidgetFamily,
+  isActiveWidget,
   reflowWidget,
   resizeWidgetSpan as resizeSpanGrid,
   switchGridDensity,
@@ -54,6 +55,40 @@ import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel } from './RemindersPanel';
 const sections = ['Style', 'Widgets', 'Weather', 'Reminders'] as const;
 type Section = (typeof sections)[number];
+/** Feedback for one action (Save, a photo, a reminder): the next successful action clears it. */
+interface ActionError {
+  text: string;
+  /** Caused by a lost connection: a later successful state request clears it (#232). */
+  network: boolean;
+  /** `performance.now()` when it failed, compared with `serverReachedAt`. */
+  at: number;
+}
+interface StudioAlert {
+  key: string;
+  text: string;
+  kind: 'action' | 'connection' | 'storage';
+}
+
+const ACTIVE_TAB = '.inspector-tabs [role="tab"][aria-selected="true"]';
+
+/** Focus the first selector that matches a connected, enabled, rendered element. */
+function focusFirst(candidates: (string | HTMLElement | null | undefined)[]): boolean {
+  for (const candidate of candidates) {
+    const element =
+      typeof candidate === 'string'
+        ? document.querySelector<HTMLElement>(candidate)
+        : candidate;
+    if (
+      element?.isConnected &&
+      !element.matches(':disabled') &&
+      element.getClientRects().length
+    ) {
+      element.focus();
+      return true;
+    }
+  }
+  return false;
+}
 
 function Toggle({
   label,
@@ -122,11 +157,14 @@ export function Editor({
   state,
   setState,
   connectionError,
+  serverReachedAt,
   reload,
 }: {
   state: AppState;
   setState: Dispatch<SetStateAction<AppState | null>>;
   connectionError: string | null;
+  /** `performance.now()` when the latest state request that reached the server was sent. */
+  serverReachedAt: number;
   reload: () => Promise<void>;
 }) {
   const [saved, setSaved] = useState(() => structuredClone(state.settings));
@@ -135,7 +173,21 @@ export function Editor({
     draftRef = useRef(draft);
   const [section, setSection] = useState<Section>('Widgets');
   const [saving, setSaving] = useState(false),
-    [error, setError] = useState<string | null>(null);
+    [error, setErrorState] = useState<ActionError | null>(null);
+  const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
+  // #229: an always-mounted live region reports Save/Cancel after the Save bar unmounts.
+  const [announcement, setAnnouncement] = useState('');
+  const lastEdited = useRef<HTMLElement | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{
+    candidates: (string | HTMLElement | null)[];
+    /** Only move focus when it was lost (to the page) or is still in the Save bar. */
+    onlyIfLost: boolean;
+  } | null>(null);
+  function setError(message: string | null, network = message === NETWORK_ERROR_MESSAGE) {
+    setErrorState(
+      message === null ? null : { text: message, network, at: performance.now() },
+    );
+  }
   const [composition, setComposition] = useState<number | undefined>(0);
   const [movementPreview, setMovementPreview] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<WidgetId | null>(null);
@@ -182,6 +234,59 @@ export function Editor({
   function change(update: (settings: Settings) => Settings) {
     updateDraft(update(draftRef.current));
     setError(null);
+    setAnnouncement('');
+    // Save and Cancel return focus here (#229) while it is still on screen.
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      active.closest('.studio-workspace')
+    )
+      lastEdited.current = active;
+  }
+  // Save/Cancel/Remove unmount the control that had focus; move it after the DOM commits.
+  useEffect(() => {
+    if (!focusRequest) return;
+    setFocusRequest(null);
+    const active = document.activeElement;
+    if (
+      focusRequest.onlyIfLost &&
+      active &&
+      active !== document.body &&
+      active.isConnected &&
+      !savebar.current?.contains(active)
+    )
+      return;
+    focusFirst(focusRequest.candidates);
+  }, [focusRequest]);
+  // A failure caused by a lost connection clears once a later state request reaches the server.
+  useEffect(() => {
+    setErrorState((current) =>
+      current?.network && serverReachedAt > current.at ? null : current,
+    );
+  }, [serverReachedAt]);
+  // A lost connection's Retry offer replaces a network failure saying the same thing.
+  const alerts: StudioAlert[] = [];
+  if (error && !(error.network && connectionError))
+    alerts.push({ key: `action:${error.text}`, text: error.text, kind: 'action' });
+  if (connectionError)
+    alerts.push({ key: `connection:${connectionError}`, text: connectionError, kind: 'connection' });
+  if (state.storageWarning)
+    alerts.push({ key: `storage:${state.storageWarning}`, text: state.storageWarning, kind: 'storage' });
+  const alertKeys = alerts.map((item) => item.key).join('\n');
+  // A dismissed connection or storage alert shows again once it has gone away and come back.
+  useEffect(() => {
+    const present = alertKeys.split('\n');
+    setDismissedAlerts((keys) =>
+      keys.every((key) => present.includes(key))
+        ? keys
+        : keys.filter((key) => present.includes(key)),
+    );
+  }, [alertKeys]);
+  const alert = alerts.find((item) => !dismissedAlerts.includes(item.key));
+  function dismissAlert(item: StudioAlert) {
+    if (item.kind === 'action') setError(null);
+    else setDismissedAlerts((keys) => [...keys, item.key]);
   }
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -267,6 +372,17 @@ export function Editor({
     setPresetId('');
     setPresetName('');
     setError(null);
+    setAnnouncement(
+      announcement === 'Changes discarded' ? 'Changes discarded ' : 'Changes discarded',
+    );
+    restoreFocusAfterSaveBar();
+  }
+  /** After Save or Cancel: the last edited control while it is still shown, else the active tab. */
+  function restoreFocusAfterSaveBar() {
+    setFocusRequest({
+      candidates: [lastEdited.current, ACTIVE_TAB],
+      onlyIfLost: true,
+    });
   }
   function updatePhoto(value: PhotoDraft | null | undefined) {
     photoDraftRef.current = value;
@@ -334,6 +450,23 @@ export function Editor({
     setGridMessage(`${WIDGET_CATALOG[id].name} added`);
   }
   function removeWidget(id: WidgetId) {
+    // #229: the removed row's buttons unmount; keyboard focus moves to the next row (else the
+    // previous one), or to Add widget when none remains. Rows follow the inspector's list order.
+    const rows = WIDGET_IDS.filter(
+      (item) => isActiveWidget(item) && draftRef.current.widgets[item],
+    );
+    const index = rows.indexOf(id);
+    const neighbour = index < 0 ? undefined : (rows[index + 1] ?? rows[index - 1]);
+    setFocusRequest({
+      candidates: [
+        neighbour
+          ? `.widget-list .widget-select[aria-label="${CSS.escape(WIDGET_CATALOG[neighbour].name)}"]`
+          : null,
+        '.panel-heading .add-widget',
+        ACTIVE_TAB,
+      ],
+      onlyIfLost: true,
+    });
     if (id === 'photo' && !savedRef.current.widgets.photo) {
       cancelPhoto();
       updatePhoto(undefined);
@@ -347,7 +480,7 @@ export function Editor({
           : previous.preview,
     }));
     setSelectedWidget(null);
-    setGridMessage('');
+    setGridMessage(`${WIDGET_CATALOG[id].name} removed`);
   }
   function resizeWidget(id: WidgetId, size: WidgetSize) {
     const next = fitWidgetFamily(
@@ -533,14 +666,25 @@ export function Editor({
       }
       guardLocation.current = false;
       setLocationMessage('');
+      setAnnouncement(
+        announcement === 'Changes saved' ? 'Changes saved ' : 'Changes saved',
+      );
+      restoreFocusAfterSaveBar();
       void reload();
     } catch (caught) {
-      if (mounted.current)
+      if (mounted.current) {
         setError(
           caught instanceof Error
             ? caught.message
             : 'Could not save. Try again.',
+          isNetworkError(caught),
         );
+        // The Save button was disabled while saving; give focus back to it for a retry.
+        setFocusRequest({
+          candidates: ['.studio-savebar .button.primary', lastEdited.current, ACTIVE_TAB],
+          onlyIfLost: true,
+        });
+      }
     } finally {
       if (mounted.current) setSaving(false);
     }
@@ -615,6 +759,7 @@ export function Editor({
                 setGridGesture(null);
                 setMovementPreview(false);
                 setGridMessage('');
+                setError(null);
                 if (!layoutEditing) setSection('Widgets');
               }}
             >
@@ -622,10 +767,11 @@ export function Editor({
               {layoutEditing ? 'Done' : 'Edit layout'}
             </button>
             <button className="icon-button canvas-add" aria-label="Add widget to display" title="Add widget" onClick={() => {
-              setSection('Widgets'); setPickerOpen(true); setLayoutEditing(true); setMovementPreview(false);
+              setSection('Widgets'); setPickerOpen(true); setLayoutEditing(true); setMovementPreview(false); setError(null);
             }}><Icon name="plus" size={20} /></button>
             </div>
           </div>
+          <div className="canvas-stage">
           <div className="preview-frame">
             <div className="preview-screen">
               <AmbientDisplay
@@ -663,6 +809,7 @@ export function Editor({
               )}
             </div>
           </div>
+          </div>
           <div className="canvas-toolbar">
             <span>{layoutEditing ? 'Drag to move · pull corner to resize' : 'Your saved arrangement'}</span>
             {layoutEditing ? (
@@ -685,7 +832,7 @@ export function Editor({
               </label>
             ) : (
               <>
-                <button className={`button small movement-preview ${movementPreview ? 'active' : ''}`} aria-pressed={movementPreview} onClick={() => setMovementPreview(value => !value)}>
+                <button className={`button small movement-preview ${movementPreview ? 'active' : ''}`} aria-pressed={movementPreview} onClick={() => { setMovementPreview(value => !value); setError(null); }}>
                   <Icon name={movementPreview ? 'check' : 'refresh'} size={15} />{movementPreview ? 'Back to layout' : 'Preview movement'}
                 </button>
                 {movementPreview && <>
@@ -728,23 +875,54 @@ export function Editor({
               </>
             )}
           </div>
-          <p
-            className="grid-status"
-            role={section === 'Widgets' ? undefined : 'status'}
-          >
-            {gridMessage}
-          </p>
-          {weatherPending && (
-            <p className="canvas-note" role="status">
-              Weather updates after Save · preview still shows{' '}
-              {state.weather.location.name}
+          {/* One reserved line for layout messages and the weather note (#231). */}
+          <div className="canvas-messages">
+            <p
+              className="grid-status"
+              role={section === 'Widgets' ? undefined : 'status'}
+            >
+              {gridMessage}
             </p>
-          )}
-          {!weatherPending && weatherRefreshing && (
+            {/* Always mounted, so a screen reader announces the note when it appears. */}
             <p className="canvas-note" role="status">
-              Updating weather · preview still shows{' '}
-              {state.weather.location.name}
+              {weatherPending
+                ? `Weather updates after Save · preview still shows ${state.weather.location.name}`
+                : weatherRefreshing
+                  ? `Updating weather · preview still shows ${state.weather.location.name}`
+                  : ''}
             </p>
+          </div>
+          {/* #227: the alert has its own row below the canvas actions and never covers them. */}
+          {alert && (
+            <div className={`studio-error studio-error-${alert.kind}`}>
+              <p role="alert">{alert.text}</p>
+              <div className="studio-error-actions">
+                {alert.kind === 'connection' && (
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      void reload();
+                    }}
+                  >
+                    Retry
+                  </button>
+                )}
+                <button
+                  className="icon-button studio-error-dismiss"
+                  aria-label="Dismiss message"
+                  title="Dismiss"
+                  onClick={() => {
+                    dismissAlert(alert);
+                    setFocusRequest({
+                      candidates: ['.studio-error-dismiss', '.canvas-toolbar button', ACTIVE_TAB],
+                      onlyIfLost: true,
+                    });
+                  }}
+                >
+                  <Icon name="close" size={16} />
+                </button>
+              </div>
+            </div>
           )}
         </section>
         <aside className="inspector" aria-label="Display settings">
@@ -1318,22 +1496,10 @@ export function Editor({
             )}
           </div>
         </aside>
-        {(error || connectionError || state.storageWarning) && (
-          <div className="studio-error" role="alert">
-            {error || connectionError || state.storageWarning}
-            {connectionError && (
-              <button
-                className="text-button"
-                onClick={() => {
-                  void reload();
-                }}
-              >
-                Retry
-              </button>
-            )}
-          </div>
-        )}
       </main>
+      <p className="sr-only save-announcer" role="status">
+        {announcement}
+      </p>
       {dirty && (
         <footer
           ref={savebar}

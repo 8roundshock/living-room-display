@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react';
 import type { AppState, ClearCompletedResult, Reminder, Settings } from '../shared/contracts';
-import { REMINDER_HISTORY_LIMIT, RESTORE_BEFORE_EDITING, historyReminders, pendingReminders, reminderCompletedAt } from '../shared/reminders';
-import { api } from './api';
+import { REMINDER_HISTORY_LIMIT, historyReminders, pendingReminders, reminderCompletedAt } from '../shared/reminders';
+import { ApiError, api } from './api';
 import { localInputDate } from './format';
 import { Icon } from './icons';
 import { historyDayHeading, historyDayKey, reminderCompletedLabel, reminderDueLabel, reminderDuePatch } from './reminder';
@@ -153,7 +153,7 @@ export function RemindersPanel({
       setFormOpen(false);
       announce({ text: 'Reminder saved' });
     } catch (caught) {
-      if (caught instanceof Error && caught.message === RESTORE_BEFORE_EDITING) {
+      if (editingId && caught instanceof ApiError && caught.status === 409) {
         onError('This reminder was completed elsewhere. Restore it to edit.');
         void refreshReminders();
       } else onError(caught instanceof Error ? caught.message : 'Could not save reminder.');

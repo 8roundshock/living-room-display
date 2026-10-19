@@ -1105,17 +1105,64 @@ html.studio-editor {
 .studio .muted {
   color: #a89bb4;
 }
+/* #227: the alert is its own row in the canvas column, below the canvas actions. */
 .studio-error {
-  grid-column: 1/-1;
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 8px;
+  margin-top: 8px;
   border: 1px solid #90616b66;
   background: #5a29312e;
   color: #edbcc8;
   font-size: 13px;
   border-radius: 14px;
-  padding: 14px 18px;
+  padding: 4px 4px 4px 16px;
+}
+.studio-error > p {
+  flex: 1;
+  min-width: 0;
+  padding-block: 8px;
+  overflow-wrap: anywhere;
+}
+.studio-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.studio .studio-error .text-button {
+  color: #f3d3db;
+  padding-inline: 8px;
+  text-decoration: underline;
+}
+.studio .studio-error .studio-error-dismiss {
+  color: #edbcc8;
+  border-radius: 11px;
+}
+.studio .studio-error .studio-error-dismiss:hover {
+  color: #fff0f3;
+  background: #ffffff10;
+}
+/* Layout messages and the weather note share one reserved line under the canvas actions. */
+.canvas-messages {
+  min-height: 18px;
+}
+.studio .canvas-messages .grid-status {
+  min-height: 0;
+}
+/* The editor's loading page explains a failure as well as offering Try again (#232). */
+.fallback-message {
+  display: grid;
+  gap: 8px;
+  max-width: min(460px, calc(100vw - 48px));
+}
+.fallback-message .fallback-title {
+  color: #d3cee0;
+  font-size: 17px;
+}
+.fallback-message .fallback-hint {
+  font-size: 13px;
+  line-height: 1.5;
 }
 .studio-savebar {
   position: fixed;
@@ -1355,7 +1402,7 @@ html.studio-editor {
     gap: 8px;
   }
   .studio-error {
-    padding: 13px;
+    padding-left: 13px;
   }
 }
 @media (max-width: 330px) {
@@ -1422,8 +1469,21 @@ html.studio-editor {
   .canvas-heading { flex: none; margin-bottom: 16px; min-height: 40px; }
   .canvas-heading h1 { font-size: 25px; letter-spacing: -0.7px; }
   .canvas-heading-actions { display: flex; gap: 8px; align-items: center; }
+  /*
+   * The canvas takes the height left after its heading, actions, message line and any alert, so
+   * none of them overflows into the Save bar's reserved space (#227, #231). The stage starts at
+   * the width-limited canvas height and only shrinks.
+   */
+  .canvas-column { container-type: inline-size; }
+  .canvas-stage {
+    flex: 0 1 auto;
+    min-height: 0;
+    height: calc((100cqw - 2px) * 9 / 16 + 2px);
+    container-type: size;
+  }
   .studio .preview-frame {
-    width: min(100%, calc((100dvh - 284px) * 16 / 9));
+    width: min(100%, calc((100dvh - 294px) * 16 / 9));
+    width: min(100cqw, calc((100cqh - 2px) * 16 / 9 + 2px));
     margin-inline: auto;
     border-radius: 16px;
     flex: none;
@@ -1438,6 +1498,12 @@ html.studio-editor {
   }
   .canvas-toolbar > span { display: none; }
   .canvas-note, .grid-status { flex: none; font-size: 11px; }
+  .canvas-messages { flex: none; }
+  /*
+   * A Save bar taller than the reserved bottom padding (82px, plus the 24px the clearance adds)
+   * lifts the column; 1px of slack keeps sub-pixel bar heights from moving the canvas.
+   */
+  .canvas-column { padding-bottom: max(0px, var(--studio-footer-clearance, 24px) - 107px); }
   .inspector {
     height: 100%;
     min-height: 0;
@@ -1487,7 +1553,10 @@ html.studio-editor {
     white-space: nowrap;
   }
   .studio-savebar { bottom: 16px; }
-  .studio-error { max-height: 70px; overflow: auto; }
+  .studio-error { flex: none; max-height: 70px; overflow: auto; margin-top: 4px; }
+  .studio .studio-error .text-button { min-height: 36px; }
+  .studio .studio-error .studio-error-dismiss { width: 36px; min-width: 36px; height: 36px; }
+  .studio-error > p { padding-block: 6px; }
 }
 /* Fade the inspector's bottom edge while more settings remain below. */
 @property --inspector-fade {
@@ -1518,15 +1587,14 @@ html.studio-editor {
 }
 /* Wide layouts: the Save bar sits under the canvas, so settings use the full height. */
 @media (min-width: 1051px) {
-  /* An alert adds a grid row below; the inspector then keeps its own track. */
-  .studio-workspace:not(:has(> .studio-error)) > .inspector { height: calc(100% + 64px); }
+  /* Alerts sit in the canvas column, so the inspector always uses the full height. */
+  .studio-workspace > .inspector { height: calc(100% + 64px); }
   .studio-savebar { left: calc(50% - 187px); }
 }
 @media (min-width: 701px) and (max-width: 1050px) {
   .studio-header { padding-inline: 18px; }
   .studio-workspace { padding: 14px 18px 82px; gap: 18px; grid-template-columns: minmax(0, 1fr) 320px; }
   .inspector-panel { padding-inline: 16px; }
-  .studio .preview-frame { width: min(100%, calc((100dvh - 296px) * 16 / 9)); }
   .canvas-heading h1 { font-size: 22px; }
   .studio .edit-layout { padding-inline: 11px; font-size: 12px; }
   .canvas-toolbar { font-size: 12px; }
