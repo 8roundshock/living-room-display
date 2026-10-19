@@ -117,6 +117,13 @@ function Assert-Healthy([string]$When) {
     $health = (Get-Http '/api/health').Content | ConvertFrom-Json
     Assert-True ($health.status -eq 'ok' -and $health.version -eq $expectedVersion) "health $When`: $($health | ConvertTo-Json -Compress)"
 }
+function Assert-SetupMessage([string]$Log, [string]$Pattern, [string]$When) {
+    # The message Setup showed the user (Inno logs it as "PrepareToInstall failed:"),
+    # so the wording Setup chose from the helper log is checked too.
+    $message = [regex]::Match((Get-Content -LiteralPath $Log -Raw), 'PrepareToInstall failed: ([^\r\n]+)').Groups[1].Value
+    Write-Host "Setup message ($When): $message"
+    if ($message -notmatch $Pattern) { Show-Log $Log; throw "SMOKE FAILED: Setup's message $When does not match '$Pattern': $message" }
+}
 function Get-RemovalFolders { return @(Get-ChildItem -LiteralPath $installRoot -Directory -Force | Where-Object { $_.Name -match '^removing(-\d{1,2})?$' }) }
 function Get-InstallState {
     # What a refusal must leave exactly as it was: every program folder, the data,
@@ -208,6 +215,7 @@ try {
     $markerBefore = Get-Content -LiteralPath $marker -Raw
     $result = Invoke-Setup 'rollback' '' $RollbackSetupPath
     if ($result.Code -ne 7 -or -not (Get-Content -LiteralPath $result.Log -Raw).Contains('Helper exit code: 15')) { Show-Log $result.Log; throw "SMOKE FAILED: the rollback-test Setup exited $($result.Code); expected 7 with helper exit code 15" }
+    Assert-SetupMessage $result.Log "^The new version didn't start, so Setup put the previous version back\. Your data was not changed\." 'after the rollback'
     Assert-True ((Get-TreeState (Join-Path $installRoot 'app')) -eq $appTree -and (Get-TreeState (Join-Path $installRoot 'runtime')) -eq $runtimeTree) 'the rollback did not put app and runtime back exactly'
     Assert-True ((Get-FileHash -LiteralPath (Join-Path $installRoot 'app.failed\release.json')).Hash -eq (Get-FileHash -LiteralPath $RollbackReleaseJson).Hash) 'app.failed does not hold the rollback-test candidate'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot 'package-transaction.json')) -and (Get-Content -LiteralPath $marker -Raw) -eq $markerBefore) 'the rollback left its record or did not restore installation.json'
@@ -228,12 +236,24 @@ try {
     try { $result = Invoke-Setup 'held-app-previous' } finally { $held.Dispose() }
     $setupLog = Get-Content -LiteralPath $result.Log -Raw
     if ($result.Code -ne 7 -or -not $setupLog.Contains('Helper exit code: 22') -or $setupLog -notmatch 'LRD-E22: A file in [^\r\n]*app\.previous is in use') { Show-Log $result.Log; throw "SMOKE FAILED: an update with a held file in app.previous exited $($result.Code); expected 7 with helper exit code 22 naming app.previous" }
+    Assert-SetupMessage $result.Log '^A file in [^\r\n]*\\app\.previous, which an earlier update left, is in use, .* Nothing was changed\.$' 'for E22 (app.previous)'
     Assert-SameInstall $installBefore 'the E22 refusal'
     Assert-Healthy 'after the E22 refusal (the server was never stopped)'
+    # Stale staging held the same way: Setup's message names that folder, as the helper did.
+    $staleStage = Join-Path $installRoot 'package.next\app'
+    $null = New-Item -ItemType Directory -Path $staleStage -Force
+    [IO.File]::WriteAllText((Join-Path $staleStage 'stale.txt'), 'synthetic stale staging')
+    $installBefore = Get-InstallState
+    $held = [IO.File]::Open((Join-Path $staleStage 'stale.txt'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    try { $result = Invoke-Setup 'held-package-next' } finally { $held.Dispose() }
+    if ($result.Code -ne 7 -or -not (Get-Content -LiteralPath $result.Log -Raw).Contains('Helper exit code: 22')) { Show-Log $result.Log; throw "SMOKE FAILED: an update with held stale staging exited $($result.Code); expected 7 with helper exit code 22" }
+    Assert-SetupMessage $result.Log '^A file in [^\r\n]*\\package\.next, which an earlier update left, is in use, .* Nothing was changed\.$' 'for E22 (package.next)'
+    Assert-SameInstall $installBefore 'the E22 refusal for stale staging'
+    Assert-True (Test-Path -LiteralPath $staleStage) 'the E22 refusal removed the stale staging'
     $result = Invoke-Setup 'after-held-app-previous'
     if ($result.Code -ne 0) { Show-Log $result.Log; throw "SMOKE FAILED: the update after releasing app.previous exited $($result.Code)" }
     Assert-Healthy 'after releasing app.previous'
-    Assert-True ((Get-TreeState $data) -eq $dataHash -and @(Get-RemovalFolders).Count -eq 0) 'the update after releasing app.previous changed data or left a removal folder'
+    Assert-True ((Get-TreeState $data) -eq $dataHash -and @(Get-RemovalFolders).Count -eq 0 -and -not (Test-Path -LiteralPath (Join-Path $installRoot 'package.next'))) 'the update after releasing app.previous changed data, or left a removal folder or the stale staging'
 
     Write-Step 'A Setup record held open moves nothing (E20), then a committed one is only removed (#204)'
     # The record a healthy update could not remove, held by another program
@@ -249,6 +269,7 @@ try {
     try { $result = Invoke-Setup 'held-record' } finally { $held.Dispose() }
     $setupLog = Get-Content -LiteralPath $result.Log -Raw
     if ($result.Code -ne 7 -or -not $setupLog.Contains('Helper exit code: 20') -or -not $setupLog.Contains('is in use by another program')) { Show-Log $result.Log; throw "SMOKE FAILED: an update with a held record exited $($result.Code); expected 7 with helper exit code 20 (record in use)" }
+    Assert-SetupMessage $result.Log "^Setup couldn't read its record of an earlier unfinished update \(package-transaction\.json\) because another program is using it, so it didn't move anything\." 'for a held record'
     Assert-SameInstall $installBefore 'the held-record refusal'
     Assert-True (Test-Path -LiteralPath $record) 'the held-record refusal removed the record'
     Assert-Healthy 'after the held-record refusal'
