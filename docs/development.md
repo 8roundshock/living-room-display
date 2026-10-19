@@ -207,6 +207,12 @@ The Setup build is reproducible from a clean commit
 - Run the ISCC compile and the install/uninstall smoke test only in CI
   (`.github/workflows/installer.yml`). It runs on installer-related pull
   requests, pushes to `main` and manual dispatch, and uploads a 14-day artifact.
+  CI also passes `-RollbackTestOutputDirectory`, which builds a second Setup,
+  `LivingRoomDisplaySetup-<version>-rollback-test.exe`, from the same files
+  except `app/package.json`, whose version no longer matches `release.json`.
+  Its server fails the health check, so the smoke test can watch a real
+  automatic rollback ([#189](https://github.com/8roundshock/living-room-display/issues/189)).
+  It is unsigned, kept as a one-day artifact, and must never be distributed.
   `windows/installer/tests/Test-InstallerSmoke.ps1` refuses to run outside
   GitHub Actions or on any PC with an install, a 4318 listener or the Setup
   registration.

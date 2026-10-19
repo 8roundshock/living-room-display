@@ -96,8 +96,15 @@ only after following the rollback steps below.
 The runtime is replaced only when the packaged Node 24 is newer and any
 `runtime.previous` was made by Setup; a runtime that isn't Node 24 stops
 the update untouched (E18).
-A later source `Update` on a Setup install works, but Apps & Features keeps
-showing the Setup version and `Status` then reports `Channel` `source`.
+A later source `Update` on a Setup install works. It records
+`"channel": "source"` and keeps what is still true of the Setup install
+([#159](https://github.com/8roundshock/living-room-display/issues/159)):
+`runtimeVersion`, the ownership of a Setup-made `runtime.previous`
+(`runtimePreviousOwner`, so uninstall still removes it and a later Setup may
+still replace it) and `lastPackageVersion`, the newest version Setup installed
+there. A Setup older than `lastPackageVersion` is still refused (E12).
+`Status` reports `Channel` `source`, and Apps & Features keeps showing the
+Setup version until the next Setup run.
 
 **Uninstalling.** From **Settings > Apps** or the Start menu, confirm **Remove
 Living Room Display from this PC?** Then choose **Keep my data** (the default)
@@ -107,8 +114,9 @@ reinstall. Either way, uninstall does the following:
 - restores your previous screen saver, but only if this app is the selected one
   and a saved backup exists;
 - stops the display and server;
-- removes `app`, `app.previous`, `app.failed`, `runtime` (and a Setup-made
-  `runtime.previous`), `run`, `edge-profile`, leftover staging folders, the
+- removes `app`, `app.previous`, `app.failed` (and numbered copies such as
+  `app.failed-2`), `runtime` (and a Setup-made `runtime.previous`), `run`,
+  `edge-profile`, leftover staging folders, the
   record of an unfinished rollback (`package-transaction.json`), the shortcuts
   and the Apps & Features entry.
 
@@ -116,7 +124,9 @@ reinstall. Either way, uninstall does the following:
 data** removes `data` and `backups` as well, then removes the folder once only
 the marker is left. If something can't be stopped or removed, uninstall stops
 with "Living Room Display couldn't stop or remove some files: ...". Your data is
-not deleted in that case: run Setup again to repair, then uninstall. The CLI
+not deleted in that case, and the Apps & Features entry stays: run Setup again
+to repair, then uninstall (CI checks this path,
+[#158](https://github.com/8roundshock/living-room-display/issues/158)). The CLI
 `Uninstall` command on a Setup install hands over to the same uninstaller.
 
 **Silent use (agents and administrators).**
@@ -124,7 +134,7 @@ not deleted in that case: run Setup again to repair, then uninstall. The CLI
 | Command | Result |
 | --- | --- |
 | `LivingRoomDisplaySetup-<version>.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="<file>"` | Install or update. Exit 0 = success, 7 = refused by the checks below (nothing registered). The editor is not opened. |
-| add `/DIR="<dedicated folder>"` | Install elsewhere: a new empty folder, or an existing Living Room Display folder. Keep the path under about 130 characters. |
+| add `/DIR="<dedicated folder>"` | Install elsewhere: a new empty folder, or an existing Living Room Display folder. Keep the path at most 130 characters (E21 otherwise). |
 | add `/ALLOWDOWNGRADE=1` | Allow installing an older version over a newer Setup install. |
 | add `/ALLOWELEVATED=1` | Build agents only (for example GitHub's runners, which are always elevated with UAC on). Setup otherwise refuses an elevated launch, because the server it starts would run elevated. |
 | `"%LOCALAPPDATA%\LivingRoomDisplay\uninstall\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART` | Uninstall and keep data. The first process can exit early; wait until the Apps & Features entry is gone. |
@@ -136,19 +146,22 @@ Installed `Status` also reports `Channel` (`package` or `source`), `Version`,
 
 **When Setup stops.** Every refusal (E10 to E14, E17 to E19 and E21) happens
 before anything is replaced; your previous version and data stay as they were.
-E15, E16 and E20 come after the new version was put in place and failed to
-start, or after a replacement step failed; data is never touched. Setup exits
-with code 7 in every case.
+The one exception is a run that first finished an earlier unfinished rollback
+(see **Rollback**): its refusal ends with "Setup first put back the version
+from before an earlier unfinished update. Nothing else was changed." instead of
+"Nothing was changed." E15, E16 and E20 come after the new version was put in
+place and failed to start, or after a replacement step failed; data is never
+touched. Setup exits with code 7 in every case.
 
 | Code | Message |
 | --- | --- |
 | E10 | Setup can't use the folder `<path>` because it contains other files. Nothing was changed. |
 | E11 | Another program is already using the connection Living Room Display needs (local port 4318). Close any other copy of Living Room Display, then run Setup again. Nothing was changed. |
-| E12 | A newer version of Living Room Display (`<v>`) is already installed. Nothing was changed. After a keep-data uninstall: The settings kept in this folder are from a newer version of Living Room Display (`<v>`). Install that version or a newer one to use them. Nothing was changed. |
+| E12 | A newer version of Living Room Display (`<v>`) is already installed. Nothing was changed. After a keep-data uninstall: The settings kept in this folder are from a newer version of Living Room Display (`<v>`). Install that version or a newer one to use them. Nothing was changed. After a source `Update` on a Setup install: Living Room Display in this folder was installed by a newer Setup (`<v>`) and updated from source since. Use Setup `<v>` or newer. Nothing was changed. |
 | E13 | The setup files look damaged or incomplete. Download Setup again. Nothing was changed. |
 | E14 | Living Room Display is busy with another update or uninstall. Wait a moment and try again. |
 | E15 | The new version didn't start, so Setup put the previous version back. Your data was not changed. Details are in the setup log. |
-| E16 | As E15, plus: Neither version could start; your data was not changed. With no previous version (a first install, or one after a keep-data uninstall): Living Room Display didn't start on this PC, so Setup couldn't finish installing it. Your data was not changed. (Plus the log path.) |
+| E16 | As E15, plus: Neither version could start; your data was not changed. On a first install: Living Room Display didn't start on this PC, so Setup couldn't finish installing it and removed everything it had added. Run Setup again to try again. (If something is left: ...and removed the program files it had added. Run Setup again to try again. If you don't want to, you can delete the folder `<path>`.) On a reinstall after a keep-data uninstall: ...couldn't finish installing it. The settings, reminders and photo you kept were not changed. Run Setup again to try again. (Plus the log path.) |
 | E17 | There isn't enough free disk space (about 500 MB needed). |
 | E18 | An unexpected runtime is in the app folder; Setup left it untouched. |
 | E19 | Setup couldn't make a safe backup of your data, so nothing was changed. |
@@ -160,6 +173,21 @@ with code 7 in every case.
 
 Missing Edge or .NET Framework 4 shows a warning but doesn't stop Setup.
 
+**A first install that fails or is interrupted.** Setup writes
+`installation.json` (state `installing`) before it unpacks anything. If the app
+then doesn't start (E16), Setup removes what it added: the app and the runtime,
+and, when nothing else is left, `installation.json` and the folder it created.
+If the app had already written its default settings to `data`, that folder and
+`installation.json` stay. If Setup is killed or the PC loses power part-way,
+`installation.json` and `package.next` stay. In every case, running Setup again
+cleans up and installs; its Ready page then says that an earlier installation
+didn't finish. To give up instead, delete the install folder
+(`%LOCALAPPDATA%\LivingRoomDisplay` unless you chose another one with `/DIR`):
+an install that never started holds none of your settings or reminders. A
+failed reinstall after a keep-data uninstall is different: it leaves your kept
+`data`, `backups` and `installation.json` as they were, so don't delete that
+folder unless you want to remove your data.
+
 **Rollback.** If the new version fails its health check, Setup restores it
 automatically: `app.previous` goes back to `app` (and `runtime.previous` if
 this run swapped the runtime). The candidate is kept as `app.failed` and the
@@ -168,16 +196,37 @@ renamed, `Stop` waits (up to 10 seconds per process) until the display, its
 Edge processes and the server have exited, because a process that is still
 ending keeps its folders open. Each rename is retried for a few seconds, and
 every step is a whole-folder rename, so a step either happens or leaves its
-folders as they were.
+folders as they were. The rollback never deletes a folder part-way: if an
+older `app.failed` is still in use (for example while a virus scanner reads
+it), the candidate goes to the next free name, such as `app.failed-2`. The next
+Setup run removes earlier `app.failed` copies it can, and uninstall removes
+them all.
 
 While a swap or its rollback is under way, `package-transaction.json` in the
-install folder records which renames are done. If the rollback can't finish
-(E20), or Setup is killed or the PC loses power part-way, that record stays.
-The next Setup run then finishes putting the previous version back before it
-does anything else, so `app.previous` is never mistaken for an older copy and
-deleted. A source `Update` refuses to run while the record exists. If E20
-repeats, follow the manual steps below, then delete `package-transaction.json`.
-To roll back by hand:
+install folder records which renames are done. Each change to it is flushed to
+the disk and swapped in whole, so a crash leaves either the old or the new
+record. If the rollback can't finish (E20), or Setup is killed or the PC loses
+power part-way, that record stays. The next Setup run then finishes putting the
+previous version back before it does anything else, so `app.previous` is never
+mistaken for an older copy and deleted; a refusal later in that run says so
+(see **When Setup stops**). A source `Update` refuses to run while the record
+exists. Two rare cases:
+
+- **A record left after a healthy install.** Once the new version passes its
+  health check, `installation.json` names the swap as committed
+  (`committedTransaction`) before the record is removed. If the record still
+  can't be removed, the next Setup run or source `Update` deletes it and never
+  rolls that install back.
+- **A damaged record.** Setup logs its text and works the steps out from the
+  folders. While a record exists, `app.previous` can only be the app that swap
+  moved (the run removed any older one first), so it goes back to `app`; an
+  `app` beside it is the candidate and is kept as `app.failed`; a missing
+  `runtime` comes back from `runtime.previous`. If the folders don't make it
+  clear (`app`, `app.previous` and a staged `package.next\app` all present),
+  Setup moves nothing and stops with E20.
+
+If E20 repeats, follow the manual steps below, then delete
+`package-transaction.json`. To roll back by hand:
 
 1. Run the installed control script's `Stop`.
 2. Rename `app` to `app.failed` and `app.previous` to `app`.

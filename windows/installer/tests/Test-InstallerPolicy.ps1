@@ -73,6 +73,25 @@ $codes = @([regex]::Matches([IO.File]::ReadAllText($controlScript), 'LRD-E(\d\d)
 $messages = [regex]::Match($iss, '(?s)function HelperFailureMessage\(.*?\r?\nend;').Value
 Assert-True ($codes.Count -ge 12 -and $messages) 'the control script codes and HelperFailureMessage were not found'
 foreach ($code in $codes) { Assert-True ($messages -match "(?m)^\s*$code\s*:") "LRD-E$code has no message in HelperFailureMessage" }
+# Setup words a refusal after a resumed rollback by finding the helper's exact
+# log line, so both files must carry the same text (#190).
+$scriptNote = [regex]::Match([IO.File]::ReadAllText($controlScript), "(?m)^\`$script:resumedRollbackNote = '([^']+)'").Groups[1].Value
+$issNote = [regex]::Match($iss, "(?m)^\s*ResumedNote = '([^']+)';").Groups[1].Value
+Assert-True ($scriptNote -and $scriptNote -eq $issNote) "the resumed-rollback log line differs between the control script ('$scriptNote') and Setup ('$issNote')"
+Assert-True ($messages -match 'NothingChanged' -and $messages -notmatch 'MsgNothingChanged') 'refusal messages must use NothingChanged, which mentions a resumed rollback'
+$checks++
+
+# One install-folder limit, derived from the payload path budget, in both docs (#180).
+$scriptText = [IO.File]::ReadAllText($controlScript)
+$budget = [int][regex]::Match($scriptText, "(?m)^\`$script:packagePathBudget = (\d+)\s*$").Groups[1].Value
+Assert-True ($budget -gt 0 -and $scriptText.Contains("`$script:installFolderLimit = 259 - '\package.next\'.Length - `$script:packagePathBudget")) 'the control script must define packagePathBudget and installFolderLimit'
+$folderLimit = 259 - '\package.next\'.Length - $budget
+$installDoc = [IO.File]::ReadAllText((Join-Path $repository 'docs\install.md'))
+$windowsDoc = [IO.File]::ReadAllText((Join-Path $repository 'docs\windows.md'))
+Assert-True ($installDoc.Contains("at most $folderLimit characters") -and $windowsDoc.Contains("up to $folderLimit characters") -and $windowsDoc.Contains("$budget characters")) "docs/install.md and docs/windows.md must give the $folderLimit-character folder limit (payload budget $budget)"
+foreach ($doc in @($installDoc, $windowsDoc)) {
+    foreach ($number in @([regex]::Matches($doc, '(?i)(?:about|under|longer than|at most|up to) (\d{3}) characters') | ForEach-Object { [int]$_.Groups[1].Value })) { Assert-True ($number -eq $folderLimit) "a doc quotes a $number-character folder limit instead of $folderLimit" }
+}
 $checks++
 
 # Pins.
@@ -93,5 +112,8 @@ foreach ($use in [regex]::Matches($workflow, '(?m)uses:\s*(\S+)')) { Assert-True
 Assert-True ($workflow -notmatch 'secrets\.') 'installer workflow must not use secrets'
 $smoke = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Test-InstallerSmoke.ps1'))
 Assert-True ($smoke.Contains("GITHUB_ACTIONS") -and $smoke.Contains('installation.json') -and $smoke.Contains('4318') -and $smoke -notmatch 'Start-Process[^\r\n]*-Wait') 'the smoke script keeps its CI-only guards and avoids Start-Process -Wait'
+# The real-install rollback case (#189) stays wired: CI builds the rollback-test
+# Setup, keeps it for one day only, and the smoke test requires it.
+Assert-True ($workflow.Contains('-RollbackTestOutputDirectory') -and $workflow.Contains('-RollbackSetupPath') -and $workflow -match '(?s)name: living-room-display-rollback-test.*?retention-days: 1\b' -and $smoke -match '\[Parameter\(Mandatory\)\]\[string\]\$RollbackSetupPath' -and $smoke.Contains('Helper exit code: 15')) 'the smoke test must run the rollback-test Setup'
 $checks++
 Write-Output "$checks installer policy check groups passed (static .iss, pin and workflow rules)."

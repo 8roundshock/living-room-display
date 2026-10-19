@@ -34,14 +34,18 @@ try {
         $script:starts = 0; $script:stops = 0; $script:portBusy = $false; $script:portBusyAfterStop = $false
         $script:runtimeVersion = 'v24.19.0'; $script:freeBytes = [int64]100GB
         $script:healthResults = New-Object 'Collections.Generic.Queue[bool]'; $script:serverRunning = $false
-        $script:restartHealthy = $true; $script:faults = @{}; $script:snapshotCalls = 0
+        $script:restartHealthy = $true; $script:faults = @{}; $script:snapshotCalls = 0; $script:startWritesData = $false
         $script:operationLockTimeoutMs = 300
         $script:moveRetryDelayMs = 10
         $script:controlScriptPath = $controlScript
         $script:PackageArchive = $null; $script:PackageSha256 = $null; $script:AllowDowngrade = $false; $script:RemoveData = $false
         if (Test-Path -LiteralPath $logFile) { Remove-Item -LiteralPath $logFile -Force }
     }
-    function Start-App { $script:starts++; $script:serverRunning = $true }
+    function Start-App {
+        $script:starts++; $script:serverRunning = $true
+        # A server that writes its default settings before it fails its health check.
+        if ($script:startWritesData) { $null = New-Item -ItemType Directory -Path $data -Force; [IO.File]::WriteAllText((Join-Path $data 'state.json'), '{"syntheticDefaults":true}') }
+    }
     function Stop-App { $script:stops++; $script:serverRunning = $false; if ($script:portBusyAfterStop) { $script:portBusy = $true } }
     function Set-Idle { param($Enable) }
     function Get-OwnedServer { if ($script:serverRunning) { return [pscustomobject]@{Id=1} }; return $null }
@@ -53,6 +57,18 @@ try {
     function Invoke-PackageFaultPoint { param($Name) if ($script:faults.ContainsKey($Name)) { & $script:faults[$Name] } }
     $realSaveDataSnapshot = ${function:Save-DataSnapshot}
     function Save-DataSnapshot { param($InstalledVersion) $script:snapshotCalls++; & $realSaveDataSnapshot $InstalledVersion }
+    # A source Install/Update (Install-App): no download, build or browser.
+    $NoBrowser = $true
+    $script:sourceVersion = '0.2.5'
+    function Install-Runtime { }
+    function Get-SourceProvenance { param($Source, $HostDirectory) return [pscustomobject]@{sourceRevision=('e' * 40);sourceState='clean'} }
+    function Build-InstallCandidate {
+        param($Source, $Next)
+        $null = New-Item -ItemType Directory -Path (Join-Path $Next 'dist\server'),(Join-Path $Next 'dist\client') -Force
+        [IO.File]::WriteAllText((Join-Path $Next 'dist\server\index.js'), 'source server')
+        [IO.File]::WriteAllText((Join-Path $Next 'dist\client\index.html'), 'source client')
+        [IO.File]::WriteAllText((Join-Path $Next 'package.json'), ('{"version":"' + $script:sourceVersion + '"}'))
+    }
 
     # ---- fixture helpers ---------------------------------------------------
     function Get-TreeState([string]$Path) {
@@ -357,12 +373,55 @@ try {
         Assert-True ($script:starts -eq 2) 'The previous version was not restarted after the failed health check.'
         Assert-True (-not (Test-Path -LiteralPath $transaction) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.next')) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.previous'))) 'A completed rollback left its record or a set-aside runtime.'
     }
+    Complete-Check 'health rollback'
+
+    # ---- a failed or interrupted first install needs no manual cleanup (#179) --
+    # A first install that can't start removes everything it added; the next
+    # Setup run is a plain fresh install.
     Reset-Root; Reset-Mocks
     $script:healthResults.Enqueue($false)
     $code = Invoke-Package (New-TestPackage)
-    Assert-True ($code -eq 16 -and (Test-Path -LiteralPath (Join-Path $InstallRoot 'app.failed')) -and -not (Test-Path -LiteralPath $app)) "A fresh install that cannot start returned $code or left app in place."
-    Assert-True ((Get-Marker).state -eq 'installing' -and -not (Test-Path -LiteralPath $transaction)) 'A failed first install reads as installed, or kept its rollback record.'
-    Complete-Check 'health rollback'
+    Assert-True ($code -eq 16 -and -not (Test-Path -LiteralPath $testRoot)) "A fresh install that cannot start returned $code or left $testRoot behind."
+    Assert-True ((Get-Content -Raw $logFile) -match 'Removed everything the failed first install added') 'The helper log does not say the failed first install was removed.'
+    Reset-Mocks
+    Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and (Get-Marker).state -eq 'installed') 'A retry after a failed first install did not install.'
+    # If the app wrote data before failing, only that data and the marker that
+    # makes the folder ours stay; the retry keeps the data.
+    Reset-Root; Reset-Mocks
+    $script:healthResults.Enqueue($false); $script:startWritesData = $true
+    $code = Invoke-Package (New-TestPackage)
+    $left = @(Get-ChildItem -LiteralPath $testRoot -Force | ForEach-Object Name | Sort-Object)
+    Assert-True ($code -eq 16 -and ($left -join ',') -eq 'data,installation.json' -and (Get-Marker).state -eq 'installing' -and -not (Test-Path -LiteralPath $transaction)) "A failed first install that wrote data returned $code or left: $($left -join ', ')"
+    $dataBefore = Get-TreeState $data
+    Reset-Mocks
+    Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and (Get-Marker).state -eq 'installed' -and (Get-TreeState $data) -eq $dataBefore) 'A retry after a failed first install with data did not install or changed the data.'
+    # A first install interrupted while staging (Setup killed, power cut) leaves
+    # its marker and package.next; the older Setup also left runtime and
+    # app.failed after a failed first install. The next run cleans up and installs.
+    Reset-Root; Reset-Mocks
+    $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot 'package.next\app\dist'),(Join-Path $InstallRoot 'app.failed\dist'),$runtime -Force
+    [IO.File]::WriteAllText((Join-Path $runtime 'node.exe'), 'synthetic node 24.19.0')
+    Write-Json $marker ([ordered]@{product='living-room-display';state='installing';createdFolder=$true})
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 0 -and (Get-Marker).state -eq 'installed' -and @(Get-AsideDirectories $script:asideNames).Count -eq 0 -and (Get-Content -Raw $logFile) -match 'earlier first install did not finish') "Setup after an interrupted first install returned $code or left set-aside folders. Log: $(Get-Content -Raw $logFile)"
+    Assert-NoStaging
+    # A staging failure on a first install leaves nothing behind.
+    Reset-Root; Reset-Mocks
+    $script:faults['extracted'] = { throw 'synthetic staging failure' }
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 13 -and -not (Test-Path -LiteralPath $testRoot)) "A failed first staging returned $code or left $testRoot behind."
+    # A reinstall after "Keep my data" that can't start: the kept data, backups
+    # and uninstalled marker stay exactly as they were; nothing else is left.
+    Reset-Root; Reset-Mocks
+    $null = New-Item -ItemType Directory -Path (Join-Path $data 'photos') -Force
+    [IO.File]::WriteAllText((Join-Path $data 'state.json'), '{"syntheticSettings":"kept"}')
+    Write-Json $marker ([ordered]@{product='living-room-display';state='uninstalled';version='0.1.0';channel='package';uninstalledAt='2026-10-02T00:00:00.0000000Z'})
+    $dataBefore = Get-TreeState $data; $markerBefore = Get-Sha256 $marker
+    $script:healthResults.Enqueue($false)
+    $code = Invoke-Package (New-TestPackage)
+    $left = @(Get-ChildItem -LiteralPath $testRoot -Force | ForEach-Object Name | Sort-Object)
+    Assert-True ($code -eq 16 -and (Get-TreeState $data) -eq $dataBefore -and (Get-Sha256 $marker) -eq $markerBefore -and ($left -join ',') -eq 'backups,data,installation.json') "A failed kept-data reinstall returned $code, changed the kept data or left: $($left -join ', ')"
+    Complete-Check 'failed and interrupted first install'
 
     # ---- an undo that fails is reported honestly and finished by the next run --
     # Review finding: a rename during rollback can fail (a dying process still
@@ -410,6 +469,129 @@ try {
     Assert-True ([IO.File]::ReadAllText((Join-Path $InstallRoot 'runtime.previous\node.exe')) -eq 'previous node' -and (Get-Content -Raw (Join-Path $app 'release.json') | ConvertFrom-Json).version -eq '0.2.0') 'The resumed install did not swap in the new app and runtime.'
     Assert-True ((Get-Content -Raw $logFile) -match 'did not finish') 'The helper log does not record the resumed rollback.'
     Complete-Check 'unfinished rollback'
+
+    # ---- an old app.failed that can't be deleted never stops a rollback (#196) --
+    # A scanner, an indexer or an open file can hold a file in an app.failed left
+    # by an earlier failed update. The rollback only renames: the candidate gets
+    # the next free name, so the result is E15 (never E20), on a health failure
+    # and on a resumed rollback alike.
+    function New-HeldFailedApp([string]$Name = 'app.failed') {
+        $folder = Join-Path $InstallRoot $Name
+        $null = New-Item -ItemType Directory -Path $folder -Force
+        [IO.File]::WriteAllText((Join-Path $folder 'release.json'), '{"version":"0.0.9"}')
+        return [IO.File]::Open((Join-Path $folder 'release.json'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    }
+    function Get-FolderVersion([string]$Name) { return [string](Get-Content -Raw (Join-Path $InstallRoot "$Name\release.json") | ConvertFrom-Json).version }
+    $held = $null
+    try {
+        Reset-Root; Reset-Mocks
+        New-SourceInstall '0.1.0'
+        $script:serverRunning = $true; $script:runtimeVersion = 'v24.10.0'
+        $script:healthResults.Enqueue($false)
+        $held = New-HeldFailedApp
+        $appBefore = Get-TreeState $app; $runtimeBefore = Get-TreeState $runtime; $dataBefore = Get-TreeState $data; $markerBefore = Get-Sha256 $marker
+        $code = Invoke-Package (New-TestPackage)
+        $log = Get-Content -Raw $logFile
+        Assert-True ($code -eq 15) "A held app.failed turned a health-failure rollback into $code instead of 15. Log: $log"
+        Assert-True ((Get-TreeState $app) -eq $appBefore -and (Get-TreeState $runtime) -eq $runtimeBefore -and (Get-TreeState $data) -eq $dataBefore -and (Get-Sha256 $marker) -eq $markerBefore) 'The rollback next to a held app.failed did not restore app, runtime and marker, or changed data.'
+        Assert-True ((Get-FolderVersion 'app.failed-2') -eq '0.2.0' -and -not (Test-Path -LiteralPath $transaction) -and $script:starts -eq 2) 'The candidate was not kept under the next free name, the record remained, or the previous version did not restart.'
+        Assert-True ($log -match 'Could not remove .*app\.failed yet') 'The helper log does not say the old app.failed could not be removed yet.'
+        Assert-NoStaging
+        $held.Dispose(); $held = $null
+        Assert-True ((Get-FolderVersion 'app.failed') -eq '0.0.9') 'The rollback deleted or replaced the old app.failed.'
+        # The next Setup run removes both copies once nothing holds them.
+        Reset-Mocks
+        Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and @(Get-AsideDirectories $script:asideNames).Count -eq 0) 'The next Setup did not remove the old set-aside copies.'
+
+        # A resumed rollback (crash or power cut mid-swap) next to a held app.failed.
+        Reset-Root; Reset-Mocks
+        New-SourceInstall '0.1.0'
+        $appBefore = Get-TreeState $app; $dataBefore = Get-TreeState $data; $oldMarker = [IO.File]::ReadAllText($marker)
+        Move-Item -LiteralPath $app -Destination (Join-Path $InstallRoot 'app.previous')
+        $null = New-Item -ItemType Directory -Path (Join-Path $app 'dist\server') -Force
+        [IO.File]::WriteAllText((Join-Path $app 'release.json'), '{"version":"0.2.0"}')
+        Write-Json $transaction ([ordered]@{product='living-room-display';schema=1;version='0.2.0';originalMarker=$oldMarker;appMoved=$true;newApp=$true;runtimeMoved=$false;newRuntime=$false})
+        $held = New-HeldFailedApp
+        $code = Invoke-Package (New-TestPackage)
+        Assert-True ($code -eq 0) "A resumed rollback next to a held app.failed returned $code. Log: $(Get-Content -Raw $logFile)"
+        Assert-True ((Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $appBefore -and (Get-TreeState $data) -eq $dataBefore -and -not (Test-Path -LiteralPath $transaction)) 'The resumed rollback lost the last working app, changed data or kept its record.'
+        Assert-True ((Get-FolderVersion 'app.failed-2') -eq '0.2.0') 'The resumed rollback did not keep the interrupted candidate under the next free name.'
+    } finally { if ($held) { $held.Dispose() } }
+    Complete-Check 'held app.failed during rollback'
+
+    # ---- rare cases of the rollback record (#190) ----------------------------
+    # The state an interrupted swap leaves: the old app in app.previous, the
+    # candidate in app, and (optionally) the old runtime in runtime.previous.
+    function New-InterruptedSwap([string]$Record, [switch]$RuntimeMoved) {
+        New-SourceInstall '0.1.0'
+        $before = [pscustomobject]@{App=(Get-TreeState $app);Data=(Get-TreeState $data);Marker=[IO.File]::ReadAllText($marker)}
+        Move-Item -LiteralPath $app -Destination (Join-Path $InstallRoot 'app.previous')
+        if ($RuntimeMoved) { Move-Item -LiteralPath $runtime -Destination (Join-Path $InstallRoot 'runtime.previous') }
+        $null = New-Item -ItemType Directory -Path (Join-Path $app 'dist\server') -Force
+        [IO.File]::WriteAllText((Join-Path $app 'release.json'), '{"version":"0.2.0"}')
+        if (-not $PSBoundParameters.ContainsKey('Record')) { Write-Json $transaction ([ordered]@{product='living-room-display';schema=1;id=('1' * 32);version='0.2.0';originalMarker=$before.Marker;appMoved=$true;newApp=$true;runtimeMoved=[bool]$RuntimeMoved;newRuntime=$false}) }
+        else { [IO.File]::WriteAllText($transaction, $Record) }
+        return $before
+    }
+    # 1. A record left after a healthy install: removing it failed, but
+    # installation.json names it as committed, so it is never rolled back.
+    $realClear = ${function:Clear-PackageTransaction}
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    function Clear-PackageTransaction { Write-PackageLog 'Warning: synthetic failure to remove the record.' }
+    try { $code = Invoke-Package (New-TestPackage) } finally { ${function:Clear-PackageTransaction} = $realClear }
+    $journal = Read-PackageTransaction
+    Assert-True ($code -eq 0 -and $journal -and $journal.id -match '^[0-9a-f]{32}$') "The synthetic leftover record was not left ($code)."
+    Assert-True ((Get-Marker).committedTransaction -eq $journal.id -and (Test-PackageTransactionCommitted $journal) -and -not (Test-Path -LiteralPath ($transaction + '.tmp'))) 'installation.json does not name the leftover record as committed, or a record write left its temporary file.'
+    Reset-Mocks
+    $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+    $log = Get-Content -Raw $logFile
+    Assert-True ($code -eq 0 -and $log -match 'left behind' -and -not $log.Contains($script:resumedRollbackNote)) "A committed leftover record was rolled back or refused ($code). Log: $log"
+    Assert-True ((Get-FolderVersion 'app.previous') -eq '0.2.0' -and (Get-FolderVersion 'app') -eq '0.3.0' -and -not (Test-Path -LiteralPath $transaction)) 'A committed leftover record rolled the healthy install back.'
+    # The same leftover does not block a source Update, while an uncommitted one does.
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    function Clear-PackageTransaction { }
+    try { $code = Invoke-Package (New-TestPackage) } finally { ${function:Clear-PackageTransaction} = $realClear }
+    Install-App | Out-Null
+    Assert-True (-not (Test-Path -LiteralPath $transaction) -and (Get-FolderVersion 'app.previous') -eq '0.2.0' -and [string](Get-Content -Raw (Join-Path $app 'package.json') | ConvertFrom-Json).version -eq $script:sourceVersion) 'A committed leftover record blocked a source Update.'
+
+    # 2. A refusal after a resumed rollback says what was done: the helper logs
+    # the line Setup looks for, and the previous version is back in place.
+    Reset-Root; Reset-Mocks
+    $before = New-InterruptedSwap
+    $script:portBusy = $true
+    $code = Invoke-Package (New-TestPackage)
+    $log = Get-Content -Raw $logFile
+    Assert-True ($code -eq 11 -and $log.Contains($script:resumedRollbackNote)) "A refusal after a resumed rollback returned $code or did not log the resumed rollback. Log: $log"
+    Assert-True ((Get-TreeState $app) -eq $before.App -and (Get-TreeState $data) -eq $before.Data -and [IO.File]::ReadAllText($marker) -eq $before.Marker -and -not (Test-Path -LiteralPath $transaction) -and (Get-FolderVersion 'app.failed') -eq '0.2.0') 'The resumed rollback before the refusal did not put the previous version back.'
+
+    # 3. A damaged record: the steps are worked out from the folders.
+    # A torn write with the candidate placed and the runtime moved.
+    Reset-Root; Reset-Mocks
+    $before = New-InterruptedSwap -Record ([string][char]0 * 6) -RuntimeMoved
+    $script:runtimeVersion = 'v24.10.0'
+    $code = Invoke-Package (New-TestPackage)
+    $log = Get-Content -Raw $logFile
+    Assert-True ($code -eq 0 -and $log -match 'record is unreadable' -and $log -match 'previous app to put back: True; candidate in app: True; runtime to put back: True') "A damaged record with a placed candidate returned $code. Log: $log"
+    Assert-True ((Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $before.App -and (Get-TreeState $data) -eq $before.Data -and [IO.File]::ReadAllText((Join-Path $InstallRoot 'runtime.previous\node.exe')) -eq 'previous node') 'A damaged record lost the last working app or runtime.'
+    Assert-True ((Get-FolderVersion 'app.failed') -eq '0.2.0' -and -not (Test-Path -LiteralPath $transaction)) 'A damaged record did not keep the candidate or was not removed.'
+    # An empty record from before the first rename: nothing to put back.
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    $appBefore = Get-TreeState $app
+    $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot 'package.next\app\dist') -Force
+    [IO.File]::WriteAllText($transaction, '')
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 0 -and (Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $appBefore -and @(Get-AsideDirectories $script:asideNames).Count -eq 0) "An empty record before the first rename returned $code or moved the wrong app."
+    # Unclear folders (app.previous, app and a staged app all present): untouched, E20.
+    Reset-Root; Reset-Mocks
+    $null = New-InterruptedSwap -Record '{"product":'
+    $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot 'package.next\app\dist') -Force
+    $before = Get-TreeState $InstallRoot
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 20 -and (Get-TreeState $InstallRoot) -eq $before -and (Get-Content -Raw $logFile) -match "folders don't show which app") "An unclear damaged record returned $code or moved folders."
+    Complete-Check 'rollback record edge cases'
 
     # ---- a run that stopped mid-swap (crash or power cut) is undone first ----
     foreach ($candidatePlaced in @($true,$false)) {
@@ -493,14 +675,14 @@ try {
     Reset-Root; Reset-Mocks
     Assert-True ((Invoke-Package (New-TestPackage)) -eq 0) 'Install before uninstall failed.'
     $owner = Get-Marker; $owner.runtimePreviousOwner = 'package'; Write-Json $marker $owner
-    foreach ($leftover in @('app.previous','app.failed','app.next','package.next','runtime.next','run','edge-profile','runtime.previous','backups\data-before-0.1.0-20260101T000000000Z')) { $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot $leftover) -Force }
+    foreach ($leftover in @('app.previous','app.failed','app.failed-2','app.next','app.next-3','package.next','runtime.next','runtime.next-2','run','edge-profile','runtime.previous','backups\data-before-0.1.0-20260101T000000000Z')) { $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot $leftover) -Force }
     [IO.File]::WriteAllText($transaction, '{"product":"living-room-display","schema":1}')
     $null = New-Item -ItemType Directory -Path $data -Force
     [IO.File]::WriteAllText((Join-Path $data 'state.json'), '{"synthetic":true}')
     $dataBefore = Get-TreeState $data
     $FromInstaller = $true
     Uninstall-App | Out-Null
-    foreach ($gone in @('app','app.previous','app.failed','app.next','package.next','runtime.next','runtime','run','edge-profile','runtime.previous','package-transaction.json')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $gone))) "Uninstall left $gone." }
+    foreach ($gone in @('app','app.previous','app.failed','app.failed-2','app.next','app.next-3','package.next','runtime.next','runtime.next-2','runtime','run','edge-profile','runtime.previous','package-transaction.json')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $gone))) "Uninstall left $gone." }
     Assert-True ((Get-TreeState $data) -eq $dataBefore -and (Test-Path -LiteralPath (Join-Path $InstallRoot 'backups\data-before-0.1.0-20260101T000000000Z'))) 'Default uninstall removed data or backups.'
     Assert-True ((Get-Marker).state -eq 'uninstalled' -and (Get-Marker).channel -eq 'package') 'Uninstall did not retain the marker.'
     # The runtime.previous above was package-owned; a user-made one is kept.
@@ -568,23 +750,56 @@ try {
     Assert-True ((Invoke-Package (New-TestPackage)) -eq 0) 'Install before old-reader check failed.'
     $oldScript = Join-Path $PSScriptRoot 'fixtures\LivingRoomDisplay-bedca44.ps1'
     Assert-True ((Get-Sha256 $oldScript) -eq 'b00bc5d716962643052d63fa8d7eb05c948e8043e469c05db2e44d99ee8d8542') 'The bedca44 control script fixture was edited.'
-    $launch = New-Object Diagnostics.ProcessStartInfo
-    $launch.FileName = $shell
-    $launch.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { $r = & ''' + $oldScript + ''' Status -InstallRoot ''' + $testRoot + '''; if ($r.InstallRoot -ne ''' + $testRoot + ''' -or $r.SourceRevision -ne ''' + ('a' * 40) + ''' -or $r.SourceState -ne ''clean'') { exit 3 }; . ''' + $oldScript + ''' -InstallRoot ''' + $testRoot + ''' -FunctionsOnly; Assert-Installed; exit 0 }"'
-    $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true; $launch.RedirectStandardError = $true; $launch.RedirectStandardOutput = $true
-    $process = [Diagnostics.Process]::Start($launch)
-    try {
-        $stderr = $process.StandardError.ReadToEndAsync(); $null = $process.StandardOutput.ReadToEndAsync()
-        Assert-True ($process.WaitForExit(60000)) 'Old reader check timed out.'
-        $process.WaitForExit()
-        Assert-True ($process.ExitCode -eq 0) "The previous script could not read the new marker: exit $($process.ExitCode) $($stderr.Result)"
-    } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+    function Assert-OldReaderReads([string]$Revision) {
+        $launch = New-Object Diagnostics.ProcessStartInfo
+        $launch.FileName = $shell
+        $launch.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { $r = & ''' + $oldScript + ''' Status -InstallRoot ''' + $testRoot + '''; if ($r.InstallRoot -ne ''' + $testRoot + ''' -or $r.SourceRevision -ne ''' + $Revision + ''' -or $r.SourceState -ne ''clean'') { exit 3 }; . ''' + $oldScript + ''' -InstallRoot ''' + $testRoot + ''' -FunctionsOnly; Assert-Installed; exit 0 }"'
+        $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true; $launch.RedirectStandardError = $true; $launch.RedirectStandardOutput = $true
+        $process = [Diagnostics.Process]::Start($launch)
+        try {
+            $stderr = $process.StandardError.ReadToEndAsync(); $null = $process.StandardOutput.ReadToEndAsync()
+            Assert-True ($process.WaitForExit(60000)) 'Old reader check timed out.'
+            $process.WaitForExit()
+            Assert-True ($process.ExitCode -eq 0) "The previous script could not read the new marker: exit $($process.ExitCode) $($stderr.Result)"
+        } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+    }
+    Assert-OldReaderReads ('a' * 40)
     $status = Get-InstallStatus
     Assert-True ($status.Channel -eq 'package' -and $status.Version -eq '0.2.0' -and $status.RuntimeVersion -eq '24.19.0' -and $status.PackageSha256 -match '^[0-9a-f]{64}$' -and $status.ServerRunning) 'Status did not report the package fields.'
     Write-Json $marker @{product='living-room-display';state='installed'}
     $status = Get-InstallStatus
     Assert-True ($status.Channel -eq 'source' -and $null -eq $status.Version) 'A marker without channel is not reported as source.'
     Complete-Check 'previous reader and status'
+
+    # ---- a source Update keeps the Setup install's ownership facts (#159) -----
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    $script:runtimeVersion = 'v24.10.0'
+    Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and (Get-Marker).runtimePreviousOwner -eq 'package') 'The Setup install with a runtime swap failed.'
+    $script:runtimeVersion = 'v24.19.0'
+    Install-App | Out-Null
+    $installed = Get-Marker
+    Assert-True ($installed.channel -eq 'source' -and $installed.lastPackageVersion -eq '0.2.0' -and $installed.runtimePreviousOwner -eq 'package' -and $installed.runtimeVersion -eq '24.19.0' -and $installed.version -eq $script:sourceVersion -and -not $installed.PSObject.Properties['packageSha256']) "A source Update dropped or kept the wrong Setup facts: $($installed | ConvertTo-Json -Compress)"
+    Assert-True ((Get-InstallStatus).Channel -eq 'source') 'Status does not report the source channel after a source Update.'
+    Assert-OldReaderReads ('e' * 40)
+    # An older Setup is still refused against the last Setup version (E12).
+    Reset-Mocks
+    $before = Get-TreeState $InstallRoot
+    $code = Invoke-Package (New-TestPackage -Version '0.1.5')
+    Assert-True ($code -eq 12 -and (Get-TreeState $InstallRoot) -eq $before -and (Get-Content -Raw $logFile) -match '\(0\.2\.0\) was installed here by Setup before a source update') "An older Setup after a source Update returned $code or changed files."
+    # A second source Update keeps the facts; a later Setup may then replace the
+    # Setup-made runtime.previous, and uninstall removes it.
+    Install-App | Out-Null
+    Assert-True ((Get-Marker).lastPackageVersion -eq '0.2.0' -and (Get-Marker).runtimePreviousOwner -eq 'package') 'A second source Update lost the Setup facts.'
+    Reset-Mocks
+    $script:runtimeVersion = 'v24.18.0'
+    Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and [IO.File]::ReadAllText((Join-Path $InstallRoot 'runtime.previous\node.exe')) -eq 'synthetic node 24.19.0' -and (Get-Marker).channel -eq 'package') 'A later Setup did not replace the Setup-made runtime.previous after a source Update.'
+    $script:runtimeVersion = 'v24.19.0'
+    Install-App | Out-Null
+    $FromInstaller = $true
+    Uninstall-App | Out-Null
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.previous')) -and (Get-Marker).state -eq 'uninstalled') 'Uninstall kept a Setup-made runtime.previous after a source Update.'
+    Complete-Check 'source update keeps Setup ownership'
 
     # ---- CLI Uninstall delegates to the Setup uninstaller without the lock --
     if (Test-Path -LiteralPath $script:UninstallKeyPath) {

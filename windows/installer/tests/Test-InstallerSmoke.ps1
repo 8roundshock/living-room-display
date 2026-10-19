@@ -2,6 +2,10 @@
 param(
     [Parameter(Mandatory)][string]$SetupPath,
     [Parameter(Mandatory)][string]$ReleaseJson,
+    # The CI-only rollback-test Setup (Build-Installer.ps1 -RollbackTestOutputDirectory)
+    # and its release.json: same version, but its server fails the health check (#189).
+    [Parameter(Mandatory)][string]$RollbackSetupPath,
+    [Parameter(Mandatory)][string]$RollbackReleaseJson,
     # 'default' (%LOCALAPPDATA%\LivingRoomDisplay) or 'custom' (a RUNNER_TEMP
     # folder whose name has a space and a non-ASCII character).
     [ValidateSet('default','custom')][string]$DirectoryMode = 'default'
@@ -36,6 +40,8 @@ $work = Join-Path $runnerTemp ('lrd-smoke-' + [Guid]::NewGuid().ToString('N').Su
 $null = New-Item -ItemType Directory -Path $work
 $SetupPath = [IO.Path]::GetFullPath($SetupPath)
 $ReleaseJson = [IO.Path]::GetFullPath($ReleaseJson)
+$RollbackSetupPath = [IO.Path]::GetFullPath($RollbackSetupPath)
+$RollbackReleaseJson = [IO.Path]::GetFullPath($RollbackReleaseJson)
 $release = Get-Content -LiteralPath $ReleaseJson -Raw | ConvertFrom-Json
 $expectedVersion = [string]$release.version
 # U+00DC (U with diaeresis) keeps this file ASCII for Windows PowerShell 5.1.
@@ -61,13 +67,13 @@ function Invoke-Program([string]$File, [string]$Arguments, [int]$TimeoutSeconds 
         return $process.ExitCode
     } finally { $process.Dispose() }
 }
-function Invoke-Setup([string]$Name, [string]$Extra) {
+function Invoke-Setup([string]$Name, [string]$Extra, [string]$File = $SetupPath) {
     $log = Join-Path $work "$Name.log"
     # GitHub runners are always elevated with UAC on; Setup refuses that unless told.
     $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLOWELEVATED=1 /LOG="' + $log + '"'
     if ($DirectoryMode -eq 'custom') { $arguments += ' /DIR="' + $installRoot + '"' }
     if ($Extra) { $arguments += ' ' + $Extra }
-    $code = Invoke-Program $SetupPath $arguments
+    $code = Invoke-Program $File $arguments
     Write-Host "Setup ($Name) exit code $code"
     return [pscustomobject]@{Code=$code;Log=$log}
 }
@@ -102,6 +108,14 @@ function Get-StartMenu { return @(Get-ChildItem -LiteralPath $programs -Recurse 
 function Get-Shortcut([string]$Path) {
     $shell = New-Object -ComObject WScript.Shell
     try { $link = $shell.CreateShortcut($Path); return [pscustomobject]@{Target=$link.TargetPath;Arguments=$link.Arguments} } finally { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($shell) }
+}
+function Stop-UninstallerPhases {
+    # The uninstaller's second phase runs as %TEMP%\_iu*.tmp; end any left behind.
+    foreach ($phase in @(Get-CimInstance Win32_Process | Where-Object { $_.Name -like '_iu*.tmp' })) { Stop-Process -Id $phase.ProcessId -Force -ErrorAction SilentlyContinue }
+}
+function Assert-Healthy([string]$When) {
+    $health = (Get-Http '/api/health').Content | ConvertFrom-Json
+    Assert-True ($health.status -eq 'ok' -and $health.version -eq $expectedVersion) "health $When`: $($health | ConvertTo-Json -Compress)"
 }
 function Invoke-Uninstall([string]$Extra) {
     $uninstaller = Join-Path $installRoot 'uninstall\unins000.exe'
@@ -169,9 +183,51 @@ try {
     $status = ($status -join '') | ConvertFrom-Json
     Assert-True ($status.ServerRunning -and $status.Channel -eq 'package' -and $status.Version -eq $expectedVersion -and $status.RuntimeVersion -eq $release.node.version) "Status: $($status | ConvertTo-Json -Compress)"
 
+    Write-Step 'Automatic rollback on a real install: the new server fails its health check (#189)'
+    # The rollback-test Setup differs only in app/package.json, so its server
+    # reports another version. Setup must stop that real server, wait for it to
+    # exit and rename app back; a Stop that returned early would race the rename.
+    $appTree = Get-TreeState (Join-Path $installRoot 'app')
+    $runtimeTree = Get-TreeState (Join-Path $installRoot 'runtime')
+    $markerBefore = Get-Content -LiteralPath $marker -Raw
+    $result = Invoke-Setup 'rollback' '' $RollbackSetupPath
+    if ($result.Code -ne 7 -or -not (Get-Content -LiteralPath $result.Log -Raw).Contains('Helper exit code: 15')) { Show-Log $result.Log; throw "SMOKE FAILED: the rollback-test Setup exited $($result.Code); expected 7 with helper exit code 15" }
+    Assert-True ((Get-TreeState (Join-Path $installRoot 'app')) -eq $appTree -and (Get-TreeState (Join-Path $installRoot 'runtime')) -eq $runtimeTree) 'the rollback did not put app and runtime back exactly'
+    Assert-True ((Get-FileHash -LiteralPath (Join-Path $installRoot 'app.failed\release.json')).Hash -eq (Get-FileHash -LiteralPath $RollbackReleaseJson).Hash) 'app.failed does not hold the rollback-test candidate'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot 'package-transaction.json')) -and (Get-Content -LiteralPath $marker -Raw) -eq $markerBefore) 'the rollback left its record or did not restore installation.json'
+    Assert-Healthy 'after the rollback'
+    Assert-True ((Get-TreeState $data) -eq $dataHash) 'the rollback changed data'
+    $result = Invoke-Setup 'repair-after-rollback'
+    if ($result.Code -ne 0) { Show-Log $result.Log; throw "SMOKE FAILED: repair after the rollback exit code $($result.Code)" }
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot 'app.failed'))) 'the next Setup run did not remove app.failed'
+    Assert-Healthy 'after the repair that followed the rollback'
+    Assert-True ((Get-TreeState $data) -eq $dataHash) 'the repair after the rollback changed data'
+
+    Write-Step 'A failed uninstall keeps the registration, and a repair then works (#158)'
+    # Hold one app file open without sharing: Uninstall stops the server, then
+    # can't remove app, so the uninstaller must abort with the registration kept.
+    $uninstaller = Join-Path $installRoot 'uninstall\unins000.exe'
+    $uninstallLog = Join-Path $work 'uninstall-failure.log'
+    $held = [IO.File]::Open((Join-Path $installRoot 'app\package.json'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    try {
+        # /SUPPRESSMSGBOXES suppresses the error box (Inno's ShowExceptionMsg is
+        # suppressible); the timeout and phase cleanup keep a hang from blocking CI.
+        try { $code = Invoke-Program $uninstaller ('/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="' + $uninstallLog + '"') 300 }
+        catch { Stop-UninstallerPhases; Show-Log $uninstallLog; throw "SMOKE FAILED: the failing uninstaller did not finish: $($_.Exception.Message)" }
+    } finally { $held.Dispose() }
+    Write-Host "Uninstaller exit code after the forced removal failure: $code"
+    $uninstallText = if (Test-Path -LiteralPath $uninstallLog) { Get-Content -LiteralPath $uninstallLog -Raw } else { '' }
+    if ($code -eq 0 -or -not (Test-Path -LiteralPath $appIdKey) -or -not (Test-Path -LiteralPath $uninstaller)) { Show-Log $uninstallLog; throw "SMOKE FAILED: a failed uninstall exited $code or removed the registration or the uninstaller" }
+    Assert-True ((Get-TreeState $data) -eq $dataHash -and (Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).state -eq 'installed') 'a failed uninstall changed data or the marker'
+    if ($uninstallText -notmatch 'Failed: [^\r\n]{10,}' -or -not $uninstallText.Contains('couldn''t stop or remove some files')) { Show-Log $uninstallLog; throw 'SMOKE FAILED: the helper''s Failed: reason or the abort message is missing from the uninstall log' }
+    $result = Invoke-Setup 'repair-after-failed-uninstall'
+    if ($result.Code -ne 0) { Show-Log $result.Log; throw "SMOKE FAILED: repair after a failed uninstall exit code $($result.Code)" }
+    Assert-Healthy 'after the repair that followed the failed uninstall'
+    Assert-True ((Get-TreeState $data) -eq $dataHash) 'the repair after a failed uninstall changed data'
+
     Write-Step 'Silent default uninstall keeps data'
     Invoke-Uninstall ''
-    foreach ($gone in @('app','runtime','run','edge-profile','app.previous','uninstall\unins000.exe')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot $gone))) "uninstall left $gone" }
+    foreach ($gone in @('app','runtime','run','edge-profile','app.previous','app.failed','package-transaction.json','uninstall\unins000.exe')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot $gone))) "uninstall left $gone" }
     Assert-True ((Get-TreeState $data) -eq $dataHash) 'default uninstall changed data'
     Assert-True ((Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).state -eq 'uninstalled') 'marker not kept as uninstalled'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $programs 'Living Room Display.lnk')) -and -not (Test-Path -LiteralPath (Join-Path $programs 'Living Room Display - Show display.lnk'))) 'shortcuts remain'
@@ -208,6 +264,7 @@ try {
     Write-Host 'Installer smoke test passed.'
 } finally {
     if ($listener) { $listener.Stop() }
+    Stop-UninstallerPhases
     foreach ($process in (Get-OwnedProcesses)) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }
     if (([IO.Path]::GetFullPath($work)).StartsWith($runnerTemp + '\', [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $work)) {
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
