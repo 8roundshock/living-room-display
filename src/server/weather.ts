@@ -79,8 +79,9 @@ export function normalizeForecast(payload: unknown, settings: Settings, now: num
   }
   const current = data.current;
   state.status = 'fresh'; state.updatedAt = new Date(now).toISOString();
-  // Drop only hours that both this computer and the provider consider over: a fast clock at arrival must
-  // not discard the hours that are actually upcoming (#244). The display filters expired hours again.
+  // Drop only hours that both this computer and the provider consider over, and keep 24 beyond this
+  // computer's clock: a fast clock at arrival must not discard the hours that are actually upcoming, nor
+  // a provider hour this clock already passed shorten the window (#244). The display filters expired hours again.
   const reference = Math.min(now, current.time * 1000);
   state.current = { time: new Date(current.time * 1000).toISOString(), temperature: current.temperature_2m,
     feelsLike: current.apparent_temperature, weatherCode: current.weather_code, isDay: current.is_day === 1, windSpeed: current.wind_speed_10m };
@@ -101,7 +102,8 @@ export function normalizeForecast(payload: unknown, settings: Settings, now: num
       precipitationAmount: data.hourly.precipitation[index] ?? null,
       rainAmount: rain != null && showers != null ? rain + showers : null,
     };
-  }).filter(interval => Date.parse(interval.intervalEnd) > reference).slice(0, 24);
+  }).filter(interval => Date.parse(interval.intervalEnd) > reference);
+  state.hourly = state.hourly.slice(0, 24 + state.hourly.filter(interval => Date.parse(interval.intervalEnd) <= now).length);
   return state;
 }
 

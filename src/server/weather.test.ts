@@ -159,3 +159,15 @@ test('city search keeps the usable results and leaves out each unusable one (#24
   assert.deepEqual(await new WeatherService(async () => Response.json({ results: [results[1]] })).locations('Springfield MO'), []);
   await assert.rejects(new WeatherService(async () => Response.json({ results: 'nope' })).locations('x'));
 });
+
+test('hours are kept from the earlier of the provider\'s and this computer\'s current time, with 24 beyond this computer\'s (#244)', () => {
+  const fixture = forecastFixture(); // provider current time 2026-10-18T06:00Z
+  const behind = normalizeForecast(fixture, defaultSettings(), Date.parse('2026-10-18T13:00:00Z'));
+  assert.equal(behind.hourly[0]?.intervalStart, '2026-10-18T06:00:00.000Z', 'the provider\'s current hour is kept');
+  assert.equal(behind.hourly.filter(hour => Date.parse(hour.intervalEnd) > Date.parse('2026-10-18T13:00:00Z')).length, 24, 'and 24 hours beyond this computer\'s clock');
+  const fast = normalizeForecast(fixture, defaultSettings(), Date.parse('2026-10-18T10:00:00Z'));
+  assert.equal(fast.hourly[0]?.intervalStart, '2026-10-18T06:00:00.000Z');
+  const slow = normalizeForecast(fixture, defaultSettings(), Date.parse('2026-10-18T05:30:00Z'));
+  assert.equal(slow.hourly[0]?.intervalStart, '2026-10-18T05:00:00.000Z', 'a slow clock keeps the hour it considers current');
+  assert.equal(slow.hourly.length, 24);
+});

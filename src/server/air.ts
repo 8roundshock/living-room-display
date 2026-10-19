@@ -56,8 +56,9 @@ export function normalizeAirQuality(payload: unknown, settings: Settings, scale:
   let dominant: AirPollutant | null = null, highest = -Infinity;
   for (const { pollutant, index } of subIndices) if (index !== null && index > highest) { highest = index; dominant = pollutant; }
   state.status = 'fresh'; state.updatedAt = new Date(now).toISOString();
-  // Keep the hour that both this computer and the provider consider current: a fast clock at arrival
-  // must not discard the upcoming hours (#244). The widget filters past hours again each minute.
+  // Keep the hour that both this computer and the provider consider current, and 24 from this computer's
+  // current hour: a fast clock at arrival must not discard the upcoming hours (#244). The widget filters
+  // past hours again each minute.
   const reference = Math.min(now, data.current.time * 1000);
   state.current = {
     time: new Date(data.current.time * 1000).toISOString(), aqi: read(data.current, `${scale}_aqi`), dominant,
@@ -65,7 +66,8 @@ export function normalizeAirQuality(payload: unknown, settings: Settings, scale:
   };
   // Hourly values are instantaneous: keep the current hour and the upcoming ones.
   state.hourly = data.hourly.time.map((time, index) => ({ time: new Date(time * 1000).toISOString(), aqi: aqiSeries[index]!, uvIndex: uvSeries[index]! }))
-    .filter(reading => Date.parse(reading.time) > reference - 3600_000).slice(0, 24);
+    .filter(reading => Date.parse(reading.time) > reference - 3600_000);
+  state.hourly = state.hourly.slice(0, 24 + state.hourly.filter(reading => Date.parse(reading.time) <= now - 3600_000).length);
   return state;
 }
 

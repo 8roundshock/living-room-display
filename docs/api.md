@@ -249,10 +249,11 @@ them: “Hourly precipitation chance, 9 AM to 9 PM: peak 60% at 10 AM, 1 hour un
 ### Forecast normalization and caching
 
 The server requests Open-Meteo epoch timestamps and the configured timezone.
-It normalizes seven daily forecasts and 24 hourly intervals from the current hour.
-The current hour is the earlier of the provider's current time and this computer's,
-so a fast clock at arrival never discards hours that are actually upcoming (#244);
-the browser ignores expired intervals again when it renders. Hourly
+It normalizes seven daily forecasts and the hourly intervals from the current hour,
+the earlier of the provider's current time and this computer's, through 24 hours past
+this computer's clock. A fast clock at arrival therefore never discards hours that are
+actually upcoming, and a slow one never shortens the window (#244); the browser ignores
+expired intervals again when it renders. Hourly
 precipitation amount and probability apply to the **preceding hour**; each result
 therefore includes both `intervalStart` and `intervalEnd`. Probability covers all
 precipitation, including snow. `rainAmount` separately sums rain and showers;
@@ -300,8 +301,9 @@ timeout and `redirect: 'error'`.
 
 Normalization keeps the current AQI, the dominant pollutant (the highest known
 sub-index, or null), PM2.5/PM10 in µg/m³ and the UV index. Hourly values are
-instantaneous readings stored as instants (`time`): the current hour (the earlier of
-the provider's and this computer's, as for the forecast) and up to 23 following ones.
+instantaneous readings stored as instants (`time`): from the current hour (the earlier of
+the provider's and this computer's, as for the forecast) through 23 hours past this
+computer's current hour.
 A missing, non-numeric or misaligned value stays `null` or makes the reading
 `unavailable`; nothing is filled in. The widget applies the same
 current-hour rule again at render time (instants after now − 1 hour, recomputed each
