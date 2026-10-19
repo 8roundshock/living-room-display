@@ -16,6 +16,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `POST /api/reminders`          | `text`, optional ISO `dueAt` or null                                   | Created reminder (201).                                                      |
 | `PATCH /api/reminders/:id`     | Partial `text`, `completed`, `dueAt`                                   | Updated reminder.                                                            |
 | `DELETE /api/reminders/:id`    | None                                                                   | Empty 204.                                                                   |
+| `DELETE /api/reminders/completed` | None                                                                | `{ "deleted": n }`; removes only completed reminders, atomically.            |
 | `GET /api/weather`             | None                                                                   | Cached normalized forecast.                                                  |
 | `GET /api/locations?q=Toronto` | City query, 2–100 characters                                           | Up to eight city results with coordinates/timezone.                          |
 | `GET /api/export`              | None                                                                   | Downloadable settings/reminders JSON backup.                                 |
@@ -58,6 +59,21 @@ All dates representing instants are ISO timestamps with an offset or `Z`.
 Reminder `dueAt` is one-time, nullable, and displayed in the editor's explicit
 local time context. Recurrence is not implemented. Daily forecast dates are civil
 `YYYY-MM-DD` labels; they are not instants to reinterpret in the server timezone.
+
+Reminder history (#73) adds no field: while `completed` is true, `updatedAt` is the
+completion time, and history is the completed subset of `reminders[]`. A completed
+reminder is immutable except restore (`completed: false`, optionally with `text`
+and/or `dueAt` in the same patch) and delete: a PATCH that changes its `text` or
+`dueAt` without `completed: false` returns 409 “Restore this reminder before editing
+it.” A PATCH whose every supplied field equals the stored value returns 200 with the
+stored reminder and writes nothing, so a retried or double-tapped completion keeps its
+original time. Completing a reminder keeps the newest 500 completed reminders and
+removes older completed ones in the same atomic write; pending reminders are never
+removed. The store still holds at most 1000 reminders in total (the previous release
+rejects more): at the limit, `POST /api/reminders` removes the oldest completed
+reminder in the same write, or returns 409 “Reminder limit reached” when all are
+pending. Exports and imports carry history in `reminders[]` unchanged; an import with
+more than 500 completed reminders is accepted as is and pruned at the next completion.
 
 Settings `idle.enabled` is a preference, not proof Windows idle activation is
 installed. Only the Windows host's explicit activation command changes that

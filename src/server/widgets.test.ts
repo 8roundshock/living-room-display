@@ -11,8 +11,8 @@ test('all optional widgets and their family metadata have a valid independent de
   assert.equal(settings.appearance.clockStyle, 'outline');
   assert.equal(settings.widgets.rain, true); assert.equal(settings.widgets.photo, false);
   for (const id of WIDGET_IDS) assert.ok(widgetSizes(id).includes(WIDGET_CATALOG[id].defaultSize));
-  assert.deepEqual(widgetContentLimits('small'), { forecastDays: 3, reminders: 1 });
-  assert.deepEqual(widgetContentLimits('large'), { forecastDays: 7, reminders: 4 });
+  assert.deepEqual(widgetContentLimits('small'), { forecastDays: 3 });
+  assert.deepEqual(widgetContentLimits('large'), { forecastDays: 7 });
   const empty = mergeSettings(settings, { widgets: Object.fromEntries(WIDGET_IDS.map(id => [id, false])) });
   assert.equal(Object.values(empty.widgets).some(Boolean), false, 'even time and current weather are optional');
 });

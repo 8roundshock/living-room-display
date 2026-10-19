@@ -470,12 +470,12 @@ export async function runStudioQa({ playwright, edge } = {}) {
       .click();
     await page.locator('.ambient-reminders').waitFor({ state: 'detached' });
     await page
-      .getByRole('button', { name: 'Show completed (1)', exact: true })
+      .getByRole('button', { name: 'History (1)', exact: true })
       .click();
     await page
       .getByRole('button', { name: 'Delete: Synthetic changed', exact: true })
       .click();
-    await page.getByText('Reminder deleted', { exact: true }).waitFor();
+    await page.getByText('Deleted from history', { exact: true }).waitFor();
     assert.equal(app.store.snapshot().reminders.length, 0);
     checks.push(
       'independent reminder add/edit/complete/delete; confirmed-empty widget hides',

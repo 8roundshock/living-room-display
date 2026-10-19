@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
-import type { AppState, PreviewState, Reminder } from '../shared/contracts.ts';
+import type { AppState, ClearCompletedResult, PreviewState, Reminder } from '../shared/contracts.ts';
+import { REMINDER_HISTORY_LIMIT, REMINDER_LIMIT, RESTORE_BEFORE_EDITING, historyReminders, pruneHistory } from '../shared/reminders.ts';
 import { DataStore } from './store.ts';
 import { persistableSettings } from './persistence.ts';
 import { WeatherService, type FetchLike } from './weather.ts';
@@ -18,6 +19,11 @@ const APP_VERSION = String((JSON.parse(readFileSync(new URL('../../package.json'
 class HttpError extends Error {
   status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
+}
+/** Aborts a serialized reminder update whose patch matches the stored values, so nothing is written. */
+class UnchangedReminder extends Error {
+  reminder: Reminder;
+  constructor(reminder: Reminder) { super('Reminder unchanged'); this.reminder = reminder; }
 }
 export interface ApplicationOptions { dataDirectory: string; clientDirectory?: string; fetcher?: FetchLike; now?: () => number; development?: boolean }
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
@@ -134,19 +140,48 @@ export async function createApplication(options: ApplicationOptions) {
       const input = reminderInputSchema.parse(await jsonBody(request));
       const timestamp = new Date(now()).toISOString();
       const reminder: Reminder = { id: randomUUID(), text: input.text, dueAt: input.dueAt ?? null, completed: false, createdAt: timestamp, updatedAt: timestamp };
-      await store.update(data => { if (data.reminders.length >= 1000) throw new HttpError(409, 'Reminder limit reached'); data.reminders.push(reminder); });
+      await store.update(data => {
+        if (data.reminders.length >= REMINDER_LIMIT) {
+          // A full store makes way by dropping the oldest completed reminder; pending ones are never dropped.
+          const oldest = historyReminders(data.reminders).at(-1);
+          if (!oldest) throw new HttpError(409, 'Reminder limit reached');
+          data.reminders = data.reminders.filter(item => item !== oldest);
+        }
+        data.reminders.push(reminder);
+      });
       json(response, 201, reminder); return;
+    }
+    if (method === 'DELETE' && path === '/api/reminders/completed') {
+      let deleted = 0;
+      await store.update(data => {
+        const pending = data.reminders.filter(item => !item.completed);
+        deleted = data.reminders.length - pending.length;
+        data.reminders = pending;
+      });
+      json(response, 200, { deleted } satisfies ClearCompletedResult); return;
     }
     const reminderMatch = /^\/api\/reminders\/([0-9a-f-]{36})$/i.exec(path);
     if (reminderMatch && (method === 'PATCH' || method === 'DELETE')) {
       const patch = method === 'PATCH' ? reminderPatchSchema.parse(await jsonBody(request)) : null;
       let changed: Reminder | undefined;
-      await store.update(data => {
-        const index = data.reminders.findIndex(item => item.id === reminderMatch[1]);
-        if (index < 0) throw new HttpError(404, 'Reminder not found');
-        if (patch) { changed = { ...data.reminders[index]!, ...patch, updatedAt: new Date(now()).toISOString() }; data.reminders[index] = changed; }
-        else data.reminders.splice(index, 1);
-      });
+      try {
+        await store.update(data => {
+          const index = data.reminders.findIndex(item => item.id === reminderMatch[1]);
+          if (index < 0) throw new HttpError(404, 'Reminder not found');
+          const stored = data.reminders[index]!;
+          if (!patch) { data.reminders.splice(index, 1); return; }
+          const differs = (key: keyof typeof patch) => patch[key] !== undefined && patch[key] !== stored[key];
+          // Retries and double taps write nothing, so a completion keeps its original time.
+          if (!differs('text') && !differs('completed') && !differs('dueAt')) throw new UnchangedReminder(stored);
+          if (stored.completed && patch.completed !== false && (differs('text') || differs('dueAt'))) throw new HttpError(409, RESTORE_BEFORE_EDITING);
+          changed = { ...stored, ...patch, updatedAt: new Date(now()).toISOString() };
+          data.reminders[index] = changed;
+          if (changed.completed && !stored.completed) data.reminders = pruneHistory(data.reminders, REMINDER_HISTORY_LIMIT);
+        });
+      } catch (error) {
+        if (!(error instanceof UnchangedReminder)) throw error;
+        changed = error.reminder;
+      }
       json(response, patch ? 200 : 204, changed); return;
     }
     if (method === 'GET' && path === '/api/export') {
