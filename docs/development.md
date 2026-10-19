@@ -21,7 +21,9 @@ The production app serves the editor at `http://127.0.0.1:4318/editor` and ambie
 view at `http://127.0.0.1:4318/display`; `/api/health` verifies server readiness.
 It stores data in the per-user directory documented in [API](api.md), not Git or
 browser storage. Set `LRD_DATA_DIR` to an isolated test folder before integration
-experiments. `LRD_PORT` can choose another unprivileged local port. Ctrl+C stops it.
+experiments: a source run without it uses the installed app's data folder (on Windows
+`%LOCALAPPDATA%\LivingRoomDisplay\data`), its live private data. `LRD_PORT` can choose
+another unprivileged local port. Ctrl+C stops it.
 
 Build before `npm start` on a fresh clone: `npm run build` typechecks and builds
 both server and browser assets. `build:server` alone does not produce the UI.

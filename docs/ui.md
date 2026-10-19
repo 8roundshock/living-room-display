@@ -36,8 +36,18 @@ visible above it, including narrow screens and compact keyboard-height windows.
   on both keeps each side's changed fields (this editor wins only on a field both
   changed; a saved style's look counts as one field), and an item removed elsewhere
   but edited here stays. This editor's order wins only when it moved items; otherwise
-  the saved order stays and its own additions follow. The merge happens at each
-  30-second poll; a Save sent before the next poll still replaces those lists whole (#287).
+  the saved order stays and its own additions follow. A layout edit keeps its whole
+  arrangement, but widgets merge too (#350): one removed elsewhere and untouched here is
+  removed, and one added elsewhere joins at its saved place when that is free on this
+  board; otherwise it stays off and the layout message says “Note was added in another
+  window; there is no room for it in this layout”. The merge happens at each 30-second
+  poll, and when a Save sent before the next poll is refused as stale (#287): the editor
+  sends the [settings revision](api.md#settings-revision) it last saw, merges what the
+  other window saved and saves again by itself when that keeps all of it; otherwise it
+  keeps the merged draft and says “Settings changed in another window. Review and save
+  again.” A merged list over its limit blocks Save with the reason in the Save bar, for
+  example “Up to 12 dates · remove one to save” (#288). Save keeps keyboard focus while it
+  runs: it is `aria-disabled` and ignores a second activation (#289).
 - After **Save** or **Cancel** keyboard focus returns to the last edited control while
   it is still shown, else to the active tab, and an always-mounted status region
   announces “Changes saved” or “Changes discarded” (#229). Removing a widget announces
