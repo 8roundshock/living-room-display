@@ -52,7 +52,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     options: {
       playwright: { type: 'string' }, edge: { type: 'string' }, sharp: { type: 'string' },
       set: { type: 'string' }, repeat: { type: 'string', default: '1' }, list: { type: 'boolean' },
-      'skip-frame-budget': { type: 'boolean' },
+      'no-gpu': { type: 'boolean' },
     },
   });
   const problems = checkSets();
@@ -71,7 +71,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const actions = Boolean(process.env.GITHUB_ACTIONS);
   const results = [];
   for (let round = 1; round <= repeat; round++) for (const suite of chosen) {
-    const args = [...common, ...(suite === 'preview' && values.sharp ? ['--sharp', values.sharp] : []), ...(suite === 'motion' && values['skip-frame-budget'] ? ['--skip-frame-budget'] : [])];
+    const args = [...common, ...(suite === 'preview' && values.sharp ? ['--sharp', values.sharp] : []), ...(suite === 'motion' && values['no-gpu'] ? ['--no-gpu'] : [])];
     const label = repeat > 1 ? `${suite} (run ${round} of ${repeat})` : suite;
     console.log(actions ? `::group::${label}` : `\n=== ${label}`);
     const result = await run(suite, args);

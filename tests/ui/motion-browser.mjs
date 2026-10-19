@@ -37,7 +37,12 @@ const fullBoard = state => {
   Object.assign(state.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
 };
 
-export async function runMotionQa({ playwright, edge, performance = true, frameBudget = true } = {}) {
+/**
+ * `gpu: false` (--no-gpu) leaves out the checks whose result depends on GPU rasterising: the resting glyph
+ * pixel parity and the #248 frame budget. Without a GPU (Edge's software compositing, as on GitHub's
+ * runners, #323) the stacked glyph's antialiasing differs from a single SVG's although nothing is wrong.
+ */
+export async function runMotionQa({ playwright, edge, performance = true, gpu = true } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const directory = await mkdtemp(join(tmpdir(), 'lrd-motion-'));
   const now = Date.parse('2026-10-18T13:00:00Z'); // 9:00 in America/Toronto
@@ -170,7 +175,7 @@ export async function runMotionQa({ playwright, edge, performance = true, frameB
           document.body.append(stage);
         });
         const single = await page.locator('#single').screenshot(), stacked = await page.locator('#stacked').screenshot();
-        assert.ok(single.equals(stacked), `${glyph}: stacked glyph pixels match a single SVG`);
+        if (gpu) assert.ok(single.equals(stacked), `${glyph}: stacked glyph pixels match a single SVG`);
         await page.evaluate(() => document.getElementById('parity').remove());
       }
       await page.clock.runFor(2_500);
@@ -193,7 +198,7 @@ export async function runMotionQa({ playwright, edge, performance = true, frameB
       }
       await view.close();
     }
-    checks.push('getAnimations inventory: Off/Subtle zero loops; Lively ≤3 hero-glyph loops ≥1.2 s (bolt ≥8 s) that pause on black; only transform/opacity keyframes, opacity ≤1; stacked glyph pixels equal one SVG at rest');
+    checks.push('getAnimations inventory: Off/Subtle zero loops; Lively ≤3 hero-glyph loops ≥1.2 s (bolt ≥8 s) that pause on black; only transform/opacity keyframes, opacity ≤1; ' + (gpu ? 'stacked glyph pixels equal one SVG at rest' : 'glyph pixel parity skipped (--no-gpu)'));
 
     // (2b) #248: the Soft motion drift moves the whole plane in discrete steps of 1/36 of ±0.5% about every
     // 2 s, with no animation or transition in between; Soft motion off and reduced motion keep it still.
@@ -750,10 +755,9 @@ export async function runMotionQa({ playwright, edge, performance = true, frameB
       // #248 frame budget: at Off with Soft motion on (the default), the display draws only when the plane
       // steps or a value changes, a few frames per second at most (a continuous drift drew about 120 per
       // second). Whole-browser CPU (all Edge processes, % of one core) is recorded alongside. Both depend
-      // on the GPU, so `frameBudget: false` (--skip-frame-budget) leaves them out, for example on a
-      // CI runner without one (#323).
+      // on the GPU, so `gpu: false` leaves them out.
       const frames = metrics.frames = {};
-      for (const [label, viewport, deviceScaleFactor] of frameBudget ? [['1280×720 ×3', { width: 1280, height: 720 }, 3], ['3840×2160 ×1', { width: 3840, height: 2160 }, 1]] : []) {
+      for (const [label, viewport, deviceScaleFactor] of gpu ? [['1280×720 ×3', { width: 1280, height: 720 }, 3], ['3840×2160 ×1', { width: 3840, height: 2160 }, 1]] : []) {
         const view = await displayPage({ clock: false, fixedTime: now, viewport, deviceScaleFactor, state: scenario(state => { level('off')(state); fullBoard(state); }) });
         assert.equal(await view.page.locator('.grid-ambient:not(.static)').count(), 1, 'Soft motion is on');
         await view.page.waitForTimeout(3_000);
@@ -770,7 +774,7 @@ export async function runMotionQa({ playwright, edge, performance = true, frameB
         await view.close();
         assert.ok(frames[label].drawFramesPerSecond <= 4, `${label}: at most a few frames per second at rest ${JSON.stringify(frames[label])}`);
       }
-      checks.push(frameBudget ? `#248 frame budget at Off with Soft motion on, full board over 10 s: ${JSON.stringify(frames)}` : '#248 frame budget skipped (--skip-frame-budget)');
+      checks.push(gpu ? `#248 frame budget at Off with Soft motion on, full board over 10 s: ${JSON.stringify(frames)}` : '#248 frame budget skipped (--no-gpu)');
     }
     assert.deepEqual(errors, [], `page or console errors (failed requests: ${JSON.stringify(failedRequests)}; cancelled by closing: ${JSON.stringify(cancelled)})`);
     return { checks, metrics, cancelled, images: 'none written; all state stays in RAM' };
@@ -781,7 +785,7 @@ export async function runMotionQa({ playwright, edge, performance = true, frameB
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { values } = parseArgs({ options: { playwright: { type: 'string' }, edge: { type: 'string' }, 'skip-performance': { type: 'boolean' }, 'skip-frame-budget': { type: 'boolean' } } });
-  const result = await runMotionQa({ playwright: values.playwright, edge: values.edge, performance: !values['skip-performance'], frameBudget: !values['skip-frame-budget'] });
+  const { values } = parseArgs({ options: { playwright: { type: 'string' }, edge: { type: 'string' }, 'skip-performance': { type: 'boolean' }, 'no-gpu': { type: 'boolean' } } });
+  const result = await runMotionQa({ playwright: values.playwright, edge: values.edge, performance: !values['skip-performance'], gpu: !values['no-gpu'] });
   console.log(JSON.stringify(result, null, 2));
 }
