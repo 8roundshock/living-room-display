@@ -36,6 +36,7 @@ import { CitySearch } from './CitySearch';
 import {
   GRID_DENSITIES,
   WIDGET_CATALOG,
+  WIDGET_IDS,
   firstPlacement,
   fitWidgetFamily,
   reflowWidget,
@@ -46,6 +47,7 @@ import {
 } from '../shared/widgets';
 import { GridEditor } from './GridEditor';
 import { WidgetInspector } from './WidgetInspector';
+import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { reminderDuePatch } from './reminder';
 const sections = ['Style', 'Widgets', 'Weather', 'Reminders'] as const;
@@ -176,6 +178,11 @@ export function Editor({
     photoDraft !== undefined &&
     (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
   const dirty = !sameEffectiveSettings(saved, draft) || photoChanged;
+  // A widget module can block Save with a reason shown in the save bar.
+  const draftProblem =
+    WIDGET_IDS.map((id) => WIDGET_MODULES[id].draftProblem?.(draft) ?? null).find(
+      (problem) => problem !== null,
+    ) ?? null;
   function updateDraft(next: Settings) {
     draftRef.current = next;
     setDraft(next);
@@ -1451,7 +1458,9 @@ export function Editor({
           className={`studio-savebar ${dirty ? 'has-changes' : ''}`}
         >
           <span className="save-status" role="status">
-            {saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'Saved'}
+            {saving
+              ? 'Saving…'
+              : (draftProblem ?? (dirty ? 'Unsaved changes' : 'Saved'))}
           </span>
           <div>
             <button
@@ -1463,7 +1472,9 @@ export function Editor({
             </button>
             <button
               className="button primary"
-              disabled={!dirty || saving || locationBusy || photoBusy}
+              disabled={
+                !dirty || saving || locationBusy || photoBusy || !!draftProblem
+              }
               onClick={() => {
                 void saveSettings();
               }}

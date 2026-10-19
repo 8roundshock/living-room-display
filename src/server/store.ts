@@ -6,6 +6,7 @@ import { defaultSettings } from '../shared/defaults.ts';
 import type { Reminder, Settings, SettingsPatch } from '../shared/contracts.ts';
 import { dataSchema, mergeSettings } from './validation.ts';
 import { createPhotoAsset, type PhotoAsset } from './photo.ts';
+import { persistableData } from './persistence.ts';
 
 export interface PersistedData { version: 1; settings: Settings; reminders: Reminder[]; photoAsset: PhotoAsset | null }
 
@@ -49,7 +50,7 @@ export class DataStore {
       try { recovered = dataSchema.parse(JSON.parse(backup)); }
       catch { throw new Error('Settings data and its backup could not be read. Preserve the data folder and restore a valid export before restarting.'); }
       if (primary !== null) await writeFile(join(directory, 'state.corrupt.json'), primary, { mode: 0o600 });
-      await atomicWrite(path, JSON.stringify(recovered, null, 2));
+      await atomicWrite(path, JSON.stringify(persistableData(recovered), null, 2));
       const store = new DataStore(directory, recovered);
       store.warning = primary === null ? 'Recovered the previous saved state from backup because state.json was missing.'
         : 'Recovered the previous saved state from backup. The unreadable file is preserved as state.corrupt.json.';
@@ -57,7 +58,7 @@ export class DataStore {
     }
     if (primary !== null) throw new Error('Settings data could not be read and no backup exists. Preserve the data folder and restore a valid export before restarting.');
     const store = new DataStore(directory, { version: 1, settings: defaultSettings(), reminders: [], photoAsset: null });
-    await atomicWrite(path, JSON.stringify(store.#data, null, 2));
+    await atomicWrite(path, JSON.stringify(persistableData(store.#data), null, 2));
     return store;
   }
 
@@ -68,8 +69,9 @@ export class DataStore {
       const next = this.snapshot();
       mutator(next);
       const validated = dataSchema.parse(next);
-      await atomicWrite(join(this.directory, 'state.backup.json'), JSON.stringify(this.#data, null, 2));
-      await atomicWrite(join(this.directory, 'state.json'), JSON.stringify(validated, null, 2));
+      // Files omit additive defaults so the previous release can still read them (#84).
+      await atomicWrite(join(this.directory, 'state.backup.json'), JSON.stringify(persistableData(this.#data), null, 2));
+      await atomicWrite(join(this.directory, 'state.json'), JSON.stringify(persistableData(validated), null, 2));
       this.#data = validated;
       return this.snapshot();
     });

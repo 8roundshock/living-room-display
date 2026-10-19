@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../dist/server/app.js';
 import { defaultSettings } from '../../dist/shared/defaults.js';
-import { WIDGET_IDS, widgetSizes } from '../../dist/shared/widgets.js';
+import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, widgetSizes } from '../../dist/shared/widgets.js';
 
 export async function runWorkspaceQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -38,6 +38,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     assert.ok(box && box.x >= -1 && box.y >= -1 && box.x + box.width <= viewport.width + 1 && box.y + box.height <= viewport.height + 1, `${label} must fit the viewport: ${JSON.stringify(box)}`);
   }
   const frame = () => page.locator('.preview-frame').boundingBox();
+  const familyActions = ACTIVE_WIDGET_IDS.reduce((total, id) => total + widgetSizes(id).length, 0);
   try {
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1280, height: 600 }, { width: 1024, height: 600 }, { width: 760, height: 600 }]) {
       await open(viewport);
@@ -62,8 +63,8 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       await button('Add widget').click();
       const panel = await page.locator('.inspector-panel').evaluate(element => [element.clientHeight, element.scrollHeight]);
       assert.ok(panel[1] <= panel[0] + 1, 'catalog and Add must fit the contained panel');
-      for (const id of WIDGET_IDS) {
-        const name = { clock: 'Clock', weather: 'Weather', rain: 'Rain', forecast: 'Forecast', reminders: 'Reminders', preview: 'Last screen', photo: 'Photo' }[id];
+      for (const id of ACTIVE_WIDGET_IDS) {
+        const name = WIDGET_CATALOG[id].name;
         await button(`Preview ${name}`).focus(); await page.keyboard.press('Enter');
         await inView(button(`Add ${name}`), `${name} Add`);
         for (const size of widgetSizes(id)) { await button(`${name} ${size}`).click(); await inView(button(`Add ${name}`), `${name}/${size} Add`); }
@@ -83,7 +84,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
         assert.ok(aside.y + aside.height <= alertBox.y + 1, `inspector must end above an alert row: ${JSON.stringify({ aside, alertBox })}`);
         await page.unroute('**/api/state');
       }
-      checks.push(`${viewport.width}x${viewport.height}: bounded tabs/canvas/actions, stable dirty geometry, all 21 family catalog actions, keyboard close/focus return and Save clearance${viewport.width > 1050 ? ', wide Save bar beside the inspector and alert row clear of it' : ''}`);
+      checks.push(`${viewport.width}x${viewport.height}: bounded tabs/canvas/actions, stable dirty geometry, all ${familyActions} family catalog actions, keyboard close/focus return and Save clearance${viewport.width > 1050 ? ', wide Save bar beside the inspector and alert row clear of it' : ''}`);
     }
     for (const viewport of [{ width: 390, height: 700 }, { width: 390, height: 480 }, { width: 640, height: 300 }]) {
       await open(viewport);

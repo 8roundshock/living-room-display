@@ -160,26 +160,24 @@ review/installation limits are recorded in [STATUS](../STATUS.md).
 
 The [workspace harness](../tests/ui/workspace-browser.mjs) checks bounded desktop
 tabs/canvas/actions, unchanged canvas bounds when Save appears, selected/focused
-resize handles, all 21 family picker actions, Escape/focus return, private-data
+resize handles, every active family picker action, Escape/focus return, private-data
 separation, successful large Photo Add, explicit icon dimensions and focus clear
 of Save. Verified logical viewports are 1280×720, 1280×600, 1024×600, 760×600,
 390×700, 390×480 and 640×300 (the CSS viewport equivalent of 1280×600 at 200% zoom).
 The actual browser-chrome zoom setting was not changed. Final-source compact
 picker screenshots were inspected in RAM at 1280×600, 760×600 and 390×480.
-The [widget harness](../tests/ui/widgets-browser.mjs) checks all 21 families at
+The [widget harness](../tests/ui/widgets-browser.mjs) checks every active family at
 three densities and 1080p/4K, meaningful descendant bounds, readable fitting,
 unknown/partial/stale/image failures, browser F/cursor behavior and native-only
 document styling. Physical TV brightness/comfort remains a separate gate.
 
-After `npm ci` and `npm run build`, use an existing Playwright/browser installation:
+After `npm ci` and `npm run build`, use an existing Playwright/browser installation
+and run every `tests/ui/*-browser.mjs` suite as
+`node tests/ui/<name>-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'`;
+the preview suite also takes `--sharp '<Sharp module path>'`. The cursor check runs
+separately against an isolated production server:
 
 ```powershell
-node tests/ui/studio-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
-node tests/ui/grid-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
-node tests/ui/workspace-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
-node tests/ui/widgets-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
-node tests/ui/display-controls-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'
-node tests/ui/preview-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>' --sharp '<Sharp module path>'
 node windows/tests/Test-CursorBrowser.mjs --base-url 'http://127.0.0.1:<isolated QA port>' --playwright '<Playwright module path>' --edge '<browser executable>'
 ```
 

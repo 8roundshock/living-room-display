@@ -227,6 +227,9 @@ button {
   --ambient-text: #b8bfce;
   --ambient-brightness: 0.55;
   --font-scale: 1;
+  /* Status tones: stale or saved weather, and a disconnected display. */
+  --ambient-caution: #b0926b;
+  --ambient-offline: #977e88;
   position: relative;
   width: 100%;
   height: 100%;
@@ -437,7 +440,7 @@ button {
   opacity: 0.75;
 }
 .weather-age.stale {
-  color: #b0926b;
+  color: var(--ambient-caution);
 }
 .ambient-title {
   font-size: calc(2.1cqw * var(--font-scale));
@@ -606,7 +609,7 @@ button {
   bottom: 3cqh;
   left: 5.5cqw;
   font-size: 1cqw;
-  color: #977e88;
+  color: var(--ambient-offline);
   filter: brightness(var(--ambient-brightness));
   animation: widget-drift 71s ease-in-out infinite alternate;
 }

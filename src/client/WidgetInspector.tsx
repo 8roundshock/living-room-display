@@ -3,11 +3,13 @@ import { useEffect, useRef } from 'react';
 import {
   WIDGET_CATALOG,
   WIDGET_IDS,
+  isActiveWidget,
   widgetSizes,
   type WidgetSize,
 } from '../shared/widgets';
 import { Icon } from './icons';
 import { WidgetPicker } from './WidgetPicker';
+import { WIDGET_MODULES } from './widgets/registry';
 
 export function WidgetInspector({
   settings,
@@ -74,7 +76,7 @@ export function WidgetInspector({
           <Icon name="plus" size={20} />
         </button>
       </div>
-      {!WIDGET_IDS.some((id) => settings.widgets[id]) && (
+      {!WIDGET_IDS.some((id) => isActiveWidget(id) && settings.widgets[id]) && (
         <div className="empty-reminders">
           <span>
             <Icon name="plus" size={24} />
@@ -91,9 +93,10 @@ export function WidgetInspector({
             {message}
           </p>
         )}
-        {WIDGET_IDS.filter((id) => settings.widgets[id]).map((id) => {
+        {WIDGET_IDS.filter((id) => isActiveWidget(id) && settings.widgets[id]).map((id) => {
           const widget = WIDGET_CATALOG[id],
-            placement = settings.widgetGrid.placements[id];
+            placement = settings.widgetGrid.placements[id],
+            ModuleSettings = WIDGET_MODULES[id].Settings;
           return (
             <div
               key={id}
@@ -294,6 +297,14 @@ export function WidgetInspector({
                         Stored on this device. Excluded from exports.
                       </p>
                     </div>
+                  )}
+                  {ModuleSettings && (
+                    <ModuleSettings
+                      id={id}
+                      settings={settings}
+                      onChange={onChange}
+                      saving={saving}
+                    />
                   )}
                 </div>
               )}

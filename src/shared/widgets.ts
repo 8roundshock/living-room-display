@@ -1,10 +1,26 @@
 import type { WidgetGrid, WidgetPlacement, WidgetId } from './contracts.ts';
+import type { PaletteRole } from './palette.ts';
 
 export type WidgetSize = 'small' | 'medium' | 'large';
 export type GridDensity = 'spacious' | 'balanced' | 'fine';
 export interface WidgetSpan { columns: number; rows: number }
+export type WidgetCategory = 'time' | 'weather' | 'personal' | 'pictures';
+export const WIDGET_CATEGORIES: Record<WidgetCategory, string> = { time: 'Time', weather: 'Weather & sky', personal: 'Personal', pictures: 'Pictures' };
+export type WidgetStatus = 'active' | 'planned' | 'retired';
 export interface WidgetDefinition {
-  name: string; description: string; icon: 'clock' | 'cloud' | 'rain' | 'calendar' | 'check' | 'monitor' | 'photo';
+  name: string; description: string;
+  icon: 'clock' | 'cloud' | 'rain' | 'calendar' | 'check' | 'monitor' | 'photo' | 'globe' | 'hourglass' | 'note' | 'air' | 'sunrise' | 'forecast';
+  category: WidgetCategory;
+  /** Palette role used by native accent colours (#75). */
+  tone: PaletteRole;
+  /**
+   * Omitted means active. `planned` reserves an id whose renderer has not shipped; `retired` is kept
+   * only so the previous release can read data. Both are hidden from the picker and inspector and
+   * never rendered.
+   */
+  status?: WidgetStatus;
+  /** Retired only: the active id that absorbs an enabled retired placement (migrated by the retiring change). */
+  mergedInto?: string;
   sizes: Partial<Record<WidgetSize, WidgetSpan>>; defaultSize: WidgetSize;
   defaultEnabled: boolean; defaultPlacement: { column: number; row: number };
   /** Revision-one backfill must use the geometry that originally accepted it. */
@@ -16,16 +32,30 @@ const standard = { small: { columns: 2, rows: 2 }, medium: { columns: 4, rows: 2
 
 /** The authority for picker labels, supported families, validation and rendering. */
 export const WIDGET_CATALOG = {
-  clock: { name: 'Clock', description: 'Time and date', icon: 'clock', sizes: { ...standard, large: { columns: 8, rows: 4 } }, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 0, row: 0 } },
-  weather: { name: 'Weather', description: 'Current conditions', icon: 'cloud', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 0 } },
-  rain: { name: 'Rain', description: 'Rain timing and probability', icon: 'rain', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 2 }, legacyPlacement: { column: 0, row: 3 }, legacyEnabledFrom: 'weather' },
-  forecast: { name: 'Forecast', description: 'The days ahead', icon: 'calendar', sizes: { ...standard, large: { columns: 8, rows: 2 } }, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 0, row: 6 }, legacyPlacement: { column: 2, row: 6 } },
-  reminders: { name: 'Reminders', description: 'What is coming up', icon: 'check', sizes: standard, defaultSize: 'small', defaultEnabled: true, defaultPlacement: { column: 0, row: 4 }, legacyPlacement: { column: 5, row: 3 } },
-  preview: { name: 'Last screen', description: 'A dim snapshot on activation', icon: 'monitor', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 4 }, legacyPlacement: { column: 8, row: 3 } },
-  photo: { name: 'Photo', description: 'One picture from this device', icon: 'photo', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 }, legacyPlacement: { column: 4, row: 3 } },
+  clock: { name: 'Clock', description: 'Time and date', icon: 'clock', category: 'time', tone: 'time', sizes: { ...standard, large: { columns: 8, rows: 4 } }, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 0, row: 0 } },
+  weather: { name: 'Weather', description: 'Current conditions', icon: 'cloud', category: 'weather', tone: 'sky', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 0 } },
+  rain: { name: 'Rain', description: 'Rain timing and probability', icon: 'rain', category: 'weather', tone: 'water', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 2 }, legacyPlacement: { column: 0, row: 3 }, legacyEnabledFrom: 'weather' },
+  forecast: { name: 'Forecast', description: 'The days ahead', icon: 'calendar', category: 'weather', tone: 'sky', sizes: { ...standard, large: { columns: 8, rows: 2 } }, defaultSize: 'large', defaultEnabled: true, defaultPlacement: { column: 0, row: 6 }, legacyPlacement: { column: 2, row: 6 } },
+  reminders: { name: 'Reminders', description: 'What is coming up', icon: 'check', category: 'personal', tone: 'personal', sizes: standard, defaultSize: 'small', defaultEnabled: true, defaultPlacement: { column: 0, row: 4 }, legacyPlacement: { column: 5, row: 3 } },
+  preview: { name: 'Last screen', description: 'A dim snapshot on activation', icon: 'monitor', category: 'pictures', tone: 'stone', sizes: standard, defaultSize: 'medium', defaultEnabled: true, defaultPlacement: { column: 8, row: 4 }, legacyPlacement: { column: 8, row: 3 } },
+  photo: { name: 'Photo', description: 'One picture from this device', icon: 'photo', category: 'pictures', tone: 'stone', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 }, legacyPlacement: { column: 4, row: 3 } },
+  // Planned (#78): reserved ids, always disabled and never rendered until their unit deletes `status`.
+  worldClocks: { name: 'World clocks', description: 'Time in other cities', icon: 'globe', category: 'time', tone: 'time', status: 'planned', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 4, row: 4 } },
+  calendar: { name: 'Calendar', description: 'This month at a glance', icon: 'calendar', category: 'time', tone: 'time', status: 'planned', sizes: standard, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 8, row: 6 } },
+  countdown: { name: 'Countdown', description: 'Days until dates you choose', icon: 'hourglass', category: 'personal', tone: 'personal', status: 'planned', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 6, row: 4 } },
+  note: { name: 'Note', description: 'A short message on screen', icon: 'note', category: 'personal', tone: 'personal', status: 'planned', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 } },
+  airQuality: { name: 'Air quality', description: 'Air quality and UV index', icon: 'air', category: 'weather', tone: 'sky', status: 'planned', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 10, row: 6 } },
+  sunMoon: { name: 'Sun & moon', description: 'Daylight and moon phase', icon: 'sunrise', category: 'weather', tone: 'sun', status: 'planned', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 8, row: 6 } },
 } satisfies Record<string, WidgetDefinition>;
 export type WidgetKind = keyof typeof WIDGET_CATALOG;
+/** Every id, including planned and retired ones: schemas and geometry need them all. */
 export const WIDGET_IDS = Object.keys(WIDGET_CATALOG) as WidgetId[];
+function widgetStatus(id: WidgetId): WidgetStatus { return (WIDGET_CATALOG[id] as WidgetDefinition).status ?? 'active'; }
+/** Reads the catalog live; use in validation and rendering. */
+export function isActiveWidget(id: WidgetId): boolean { return widgetStatus(id) === 'active'; }
+export function isPlannedWidget(id: WidgetId): boolean { return widgetStatus(id) === 'planned'; }
+/** Load-time constant of shipped ids, for UI lists and test iteration. */
+export const ACTIVE_WIDGET_IDS: WidgetId[] = WIDGET_IDS.filter(isActiveWidget);
 export const WIDGET_SIZES: WidgetSize[] = ['small', 'medium', 'large'];
 export const GRID_DENSITIES = {
   spacious: { name: 'Spacious · 8 × 6', columns: 8, rows: 6 },

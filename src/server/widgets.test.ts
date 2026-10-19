@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, composeWidgetGrid, firstPlacement, fitGridDensity, fitWidgetFamily, gridProblem, motionOffset, placeWidget, reflowWidget, repackGrid, switchGridDensity, widgetContentLimits, widgetSizes } from '../shared/widgets.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
+import { PREVIOUS_RELEASE } from './persistence.ts';
 
 test('all optional widgets and their family metadata have a valid independent default', () => {
   const settings = defaultSettings();
@@ -112,7 +113,7 @@ test('direct manipulation pins the requested widget, displaces neighbors, and le
 test('legacy family geometry is validated before migration while current invalid layouts remain errors', () => {
   const legacy = JSON.parse(JSON.stringify(defaultSettings())); delete legacy.widgetGrid.revision;
   const positions = { clock: [0, 0], weather: [8, 0], rain: [0, 3], forecast: [2, 6], reminders: [5, 3], preview: [8, 3], photo: [4, 3] };
-  for (const id of WIDGET_IDS) { const [column, row] = positions[id]; legacy.widgetGrid.placements[id] = { ...legacy.widgetGrid.placements[id], column, row }; }
+  for (const id of PREVIOUS_RELEASE.widgetIds) { const [column, row] = positions[id]; legacy.widgetGrid.placements[id] = { ...legacy.widgetGrid.placements[id], column, row }; }
   const { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } = legacy;
   legacy.savedPresets = [{ id: 'legacy', name: 'Legacy layout', visual: { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview } }];
   const migrated = settingsSchema.parse(legacy);

@@ -1,17 +1,23 @@
 import { z } from 'zod';
 import type { Settings, SettingsPatch, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, defaultWidgetGrid, firstPlacement, fitGridDensity, gridProblem, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, defaultWidgetGrid, firstPlacement, fitGridDensity, gridProblem, isPlannedWidget, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
+import { ACCENT_MODES } from '../shared/palette.ts';
+import { ANIMATION_LEVELS } from '../shared/motion.ts';
 import { inspectPhoto, photoAssetSchema } from './photo.ts';
+import { AT_REST } from './persistence.ts';
 
 const widgetShape = <T>(factory: (id: WidgetId) => T) => Object.fromEntries(WIDGET_IDS.map(id => [id, factory(id)])) as Record<WidgetId, T>;
 function legacyWidgets(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const source = value as Record<string, unknown>;
-  return { ...Object.fromEntries(WIDGET_IDS.map(id => {
+  const merged: Record<string, unknown> = { ...Object.fromEntries(WIDGET_IDS.map(id => {
     const definition: WidgetDefinition = WIDGET_CATALOG[id];
     return [id, definition.legacyEnabledFrom && Object.hasOwn(source, definition.legacyEnabledFrom) ? source[definition.legacyEnabledFrom] : definition.defaultEnabled];
   })), ...source };
+  // Planned ids have no renderer yet: they always read as disabled (retired ids are untouched).
+  for (const id of WIDGET_IDS) if (isPlannedWidget(id)) merged[id] = false;
+  return merged;
 }
 
 const timezone = z.string().max(100).refine(value => {
@@ -22,14 +28,27 @@ const location = z.object({
   longitude: z.number().min(-180).max(180), timezone: z.union([timezone, z.literal('auto')]),
 }).strict();
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex color');
-const appearance = z.object({
+// Field schemas carry no defaults: zod applies .default() inside .partial(), which made a
+// brightness-only PATCH reset a saved clock style (#83). Only the persisted reader fills defaults.
+const appearanceFields = {
   preset: z.enum(['phone', 'room', 'night', 'custom']), accentColor: color, textColor: color,
   brightness: z.number().min(0.1).max(1), fontScale: z.number().min(0.7).max(1.5),
   fontFamily: z.enum(['sans', 'serif', 'mono']), layout: z.enum(['balanced', 'minimal', 'weather-first']),
   motionEnabled: z.boolean(), motionIntervalSeconds: z.number().int().min(30).max(1800),
   fadeSeconds: z.number().min(0).max(10),
-  clockStyle: z.enum(['outline', 'digital', 'analog']).default('outline'),
+  clockStyle: z.enum(['outline', 'digital', 'analog']),
+  accentMode: z.enum(ACCENT_MODES),
+  animation: z.enum(ANIMATION_LEVELS),
+};
+/** Persisted settings, saved styles and imports: additive fields read as their defaults. */
+const appearance = z.object({
+  ...appearanceFields,
+  clockStyle: appearanceFields.clockStyle.default('outline'),
+  accentMode: appearanceFields.accentMode.default(AT_REST.appearance.accentMode),
+  animation: appearanceFields.animation.default(AT_REST.appearance.animation),
 }).strict();
+/** PATCH: exactly the supplied keys, never a default. */
+const appearancePatch = z.object(appearanceFields).strict().partial();
 const widgetsObject = z.object(widgetShape(() => z.boolean())).strict();
 const widgets = z.preprocess(legacyWidgets, widgetsObject);
 const transform = z.object({ offsetX: z.number().min(-25).max(25), offsetY: z.number().min(-25).max(25), scale: z.number().min(0.5).max(2) }).strict();
@@ -56,6 +75,41 @@ const widgetBehavior = z.object({ reminders: reminderBehavior.default({ hideWhen
 const preview = z.object({ enabled: z.boolean(), opacity: z.number().min(0.02).max(0.3), widthPercent: z.number().min(12).max(35) }).strict();
 const idle = z.object({ enabled: z.boolean(), idleMinutes: z.number().int().min(1).max(120) }).strict();
 const visualShape = { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview };
+
+// #78 widget content. Field schemas carry no defaults; only the persisted reader fills them.
+const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a YYYY-MM-DD date').refine(value => {
+  const [year, month, day] = value.split('-').map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return year >= 1900 && year <= 2200 && date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}, 'Use a real calendar date between 1900 and 2200');
+const worldClock = z.object({
+  id: z.uuid(), label: z.string().trim().min(1).max(40), timezone,
+  latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180),
+}).strict();
+const countdown = z.object({ id: z.uuid(), title: z.string().trim().min(1).max(60), date: civilDate, repeatsYearly: z.boolean() }).strict();
+const noteText = z.string().transform(value => value.replace(/\r\n?/g, '\n').trim())
+  .pipe(z.string().max(200, 'Use at most 200 characters').refine(value => value.split('\n').length <= 4, 'Use at most 4 lines'));
+const uniqueIds = (items: { id: string }[]) => new Set(items.map(item => item.id)).size === items.length;
+const worldClocks = z.array(worldClock).max(4).refine(uniqueIds, 'World clock IDs must be unique');
+const countdowns = z.array(countdown).max(12).refine(uniqueIds, 'Countdown IDs must be unique');
+const weekStart = z.enum(['locale', 'sunday', 'monday']);
+const airQualityScale = z.enum(['us', 'european']);
+/** Persisted settings and imports only: never part of visualShape, so saved styles never contain it. */
+const widgetData = z.object({
+  worldClocks: worldClocks.default(() => []),
+  calendar: z.object({ weekStart: weekStart.default('locale') }).strict().default(() => ({ weekStart: 'locale' as const })),
+  countdowns: countdowns.default(() => []),
+  note: z.object({ text: noteText.default('') }).strict().default(() => ({ text: '' })),
+  airQuality: z.object({ scale: airQualityScale.default('us') }).strict().default(() => ({ scale: 'us' as const })),
+}).strict().default(() => defaultSettings().widgetData);
+/** PATCH: exactly the supplied keys, never a default; arrays replace whole. */
+const widgetDataPatch = z.object({
+  worldClocks: worldClocks.optional(),
+  calendar: z.object({ weekStart }).strict().partial().optional(),
+  countdowns: countdowns.optional(),
+  note: z.object({ text: noteText }).strict().partial().optional(),
+  airQuality: z.object({ scale: airQualityScale }).strict().partial().optional(),
+}).strict();
 function checkGrid(value: Pick<Settings, 'widgetGrid' | 'widgets'>, context: z.RefinementCtx) {
   const problem = gridProblem(value.widgetGrid, value.widgets);
   if (problem) context.addIssue({ code: 'custom', path: ['widgetGrid'], message: problem });
@@ -72,7 +126,7 @@ const savedPresets = z.array(z.object({ id: z.string().min(1).max(80), name: z.s
 export const settingsSchema = z.object({ ...visualShape, version: z.literal(1), location,
   // Missing source means legacy/manual, so upgrades cannot replace an existing city.
   locationSource: z.enum(['device', 'manual', 'fallback']).default('manual'),
-  units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets,
+  units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets, widgetData,
 }).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(value => {
   if (value.locationSource === 'fallback') return { ...value, location: defaultSettings().location };
   if (value.locationSource === 'device') return { ...value, location: {
@@ -89,7 +143,12 @@ export const settingsPatchSchema = z.object({
   automaticLocation: z.boolean().optional(),
   location: location.partial().optional(), units: z.enum(['metric', 'imperial']).optional(), clockFormat: z.enum(['12h', '24h']).optional(),
   locationSource: z.enum(['device', 'manual', 'fallback']).optional(),
-  appearance: appearance.partial().optional(), widgets: widgetsObject.partial().optional(),
+  appearance: appearancePatch.optional(),
+  widgets: widgetsObject.partial().superRefine((value, context) => {
+    for (const id of WIDGET_IDS) {
+      if (value[id] === true && isPlannedWidget(id)) context.addIssue({ code: 'custom', path: [id], message: `${WIDGET_CATALOG[id].name} is not available yet` });
+    }
+  }).optional(),
   widgetOverrides: z.object(widgetShape(() => transform.partial().optional())).strict().optional(),
   widgetGrid: z.object({ revision: z.literal(2).optional(), density: z.enum(['spacious', 'balanced', 'fine']).optional(), placements: z.object(widgetShape(() => placement.partial().optional())).strict().partial().optional() }).strict().optional(),
   photoChange: z.object({ pngBase64: z.string().max(2_796_204).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/) }).strict().superRefine((value, context) => {
@@ -98,6 +157,7 @@ export const settingsPatchSchema = z.object({
   }).nullable().optional(),
   widgetBehavior: z.object({ reminders: z.object({ hideWhenEmpty: z.boolean().optional() }).strict().optional() }).strict().optional(),
   preview: preview.partial().optional(), idle: idle.partial().optional(), savedPresets: savedPresets.optional(),
+  widgetData: widgetDataPatch.optional(),
 }).strict();
 const dueAt = z.iso.datetime({ offset: true }).nullable();
 export const reminderInputSchema = z.object({ text: z.string().trim().min(1).max(240), dueAt: dueAt.optional() }).strict();
@@ -117,6 +177,11 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
     widgetOverrides: { ...current.widgetOverrides },
     widgetGrid: { ...current.widgetGrid, ...patch.widgetGrid, placements: { ...current.widgetGrid.placements } },
     widgetBehavior: { reminders: { ...current.widgetBehavior.reminders, ...patch.widgetBehavior?.reminders } },
+    // Arrays replace whole (the editor sends whole lists); nested objects merge.
+    widgetData: { ...current.widgetData, ...patch.widgetData,
+      calendar: { ...current.widgetData.calendar, ...patch.widgetData?.calendar },
+      note: { ...current.widgetData.note, ...patch.widgetData?.note },
+      airQuality: { ...current.widgetData.airQuality, ...patch.widgetData?.airQuality } },
   };
   // Existing API callers that explicitly edit a city are manual overrides too.
   if (changes.location && changes.locationSource === undefined) next.locationSource = 'manual';

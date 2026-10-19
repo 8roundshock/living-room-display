@@ -161,6 +161,36 @@ and restore the matching pre-upgrade app **and** private data copy. Validate wit
 that older app before starting it. Never overwrite or discard newer reminders,
 settings or photo data with an old backup; retain both for deliberate recovery.
 No automatic geometry downgrade is provided.
+
+### Additive data and rollback compatibility (#84)
+
+The previous installed release is `bedca44`. Its reader rejects unknown keys, so
+an additive key written to disk would make `state.json`, and after the next save
+`state.backup.json`, unreadable by it. This build therefore omits additive values
+from files and exports while they equal the value the current reader restores
+(see [API](api.md#persistence-and-recovery)). Data that keeps default choices stays
+readable by `bedca44`, so `app.previous` remains a working rollback for it.
+
+`src/server/rollback.test.ts` (part of `npm test`) proves this with a byte-for-byte
+copy of the `bedca44` reader: fresh data, previous-release data after unrelated
+saves, saved styles, a photo, a revision-one legacy file and the export all parse.
+Its negative controls show the documented exceptions below are rejected. After each
+coordinated install, the baseline moves to the newly installed revision (#130).
+
+A non-default choice in a shipped feature is not readable by `bedca44`. Before
+rolling back after using one, follow the [revision 2 procedure](#widget-geometry-revision-2-update-and-rollback):
+keep the newer data directory and restore the matching pre-upgrade data copy.
+
+| Feature | Data the previous release cannot read |
+| --- | --- |
+| #73 reminder history | Not shipped yet |
+| #73 custom Reminders sizes | Not shipped yet |
+| #74 Weather and Rain merge | Not shipped yet |
+| #75 Native colours | Not shipped yet |
+| #76 Animation level | Not shipped yet |
+| #78 Calendar, Countdown and Note | Not shipped yet |
+| #78 World clocks, Sun & moon and Air quality | Not shipped yet |
+
 `Update` reuses an existing Node24 runtime; `-NodeVersion` selects a version only
 when the runtime is absent. For a deliberate runtime update, stop the app, rename
 `runtime` to `runtime.previous`, then run source `Update -NodeVersion <explicit
