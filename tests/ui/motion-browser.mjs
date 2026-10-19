@@ -37,7 +37,7 @@ const fullBoard = state => {
   Object.assign(state.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
 };
 
-export async function runMotionQa({ playwright, edge, performance = true } = {}) {
+export async function runMotionQa({ playwright, edge, performance = true, frameBudget = true } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const directory = await mkdtemp(join(tmpdir(), 'lrd-motion-'));
   const now = Date.parse('2026-10-18T13:00:00Z'); // 9:00 in America/Toronto
@@ -47,6 +47,26 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], errors = [], metrics = {};
   const contexts = new Set();
+  // #315: each page or console error names its resource URL, page and step, and every failed request
+  // is kept for the failure message. A resource that fails only because its page's context is being
+  // closed (the request is cancelled) is listed in the result, not counted; any other error fails.
+  const cancelled = [], failedRequests = [];
+  const step = () => checks.length ? `after check ${checks.length} "${checks.at(-1).slice(0, 70)}…"` : 'before the first check';
+  function collectErrors(page, ignore = null) {
+    const watch = { closing: false };
+    page.on('pageerror', error => errors.push(`${error.message} [page ${page.url()}; ${step()}]`));
+    page.on('console', message => {
+      if (message.type() !== 'error' || ignore?.test(message.text())) return;
+      const entry = `${message.text()} [resource ${message.location().url || 'unknown'}; page ${page.url()}; ${step()}]`;
+      if (watch.closing && /^Failed to load resource: net::ERR_/.test(message.text())) cancelled.push(`${entry} while its context closed`);
+      else errors.push(entry);
+    });
+    page.on('requestfailed', request => {
+      const failure = `${request.failure()?.errorText ?? 'failed'} ${request.method()} ${request.url()} [page ${page.url()}; ${step()}]`;
+      (watch.closing ? cancelled : failedRequests).push(watch.closing ? `${failure} while its context closed` : failure);
+    });
+    return watch;
+  }
   // A valid mid-grey PNG: each scanline starts with filter type 0, so the image actually paints.
   const pixels = Buffer.alloc((64 * 4 + 1) * 40, 120); for (let row = 0; row < 40; row++) pixels[row * (64 * 4 + 1)] = 0;
   const image = photoFixture(64, 40, pixels);
@@ -54,20 +74,21 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
   for (const check of Object.values(WIDGET_CHECKS)) check.prepare?.(source, { now });
 
   /** A display page whose /api/state is the synthetic `served.state` (or a 503 while offline). */
-  async function displayPage({ state, time = now, reducedMotion = 'no-preference', viewport = { width: 1280, height: 720 }, clock = true, deviceScaleFactor = 1, path = '/display' }) {
+  /** `clock: false` keeps the browser's own timers; `fixedTime` then pins only the date the page reads (#298). */
+  async function displayPage({ state, time = now, reducedMotion = 'no-preference', viewport = { width: 1280, height: 720 }, clock = true, fixedTime = null, deviceScaleFactor = 1, path = '/display' }) {
     const context = await browser.newContext({ viewport, deviceScaleFactor, timezoneId: 'America/Toronto', reducedMotion }); contexts.add(context);
     const served = { state: structuredClone(state), offline: false };
     await context.route('**/api/state', route => route.fulfill(served.offline ? { status: 503, contentType: 'application/json', body: '{"error":"Synthetic offline"}' } : { status: 200, contentType: 'application/json', body: JSON.stringify(served.state) }));
     await context.route('**/api/photo/image?*', route => route.fulfill({ contentType: 'image/png', body: image }));
     await context.route('**/api/preview/image?*', route => route.fulfill({ contentType: 'image/png', body: image }));
     const page = await context.newPage();
-    page.on('pageerror', error => errors.push(error.message));
-    page.on('console', message => { if (message.type() === 'error' && !/503|Synthetic offline/.test(message.text())) errors.push(message.text()); });
+    const watch = collectErrors(page, /503|Synthetic offline/);
     if (clock) await page.clock.install({ time: new Date(time) });
+    else if (fixedTime !== null) await page.clock.setFixedTime(new Date(fixedTime));
     await page.goto(base + path);
     await page.locator(path.startsWith('/display') ? '.display-page' : '.studio').waitFor();
     if (clock) await page.clock.runFor(50);
-    return { page, context, served, async close() { contexts.delete(context); await context.close(); } };
+    return { page, context, served, async close() { watch.closing = true; contexts.delete(context); await context.close(); } };
   }
   function scenario(mutate) {
     const state = structuredClone(source);
@@ -552,12 +573,11 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
     async function editorPage({ reducedMotion = 'no-preference', viewport = { width: 1280, height: 720 } } = {}) {
       const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion }); contexts.add(context);
       const page = await context.newPage();
-      page.on('pageerror', error => errors.push(error.message));
-      page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+      const watch = collectErrors(page);
       await page.addInitScript(() => Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'prompt' }) } }));
       await page.goto(base + '/editor');
       await page.getByRole('tab', { name: 'Style', exact: true }).waitFor();
-      return { page, async close() { contexts.delete(context); await context.close(); } };
+      return { page, async close() { watch.closing = true; contexts.delete(context); await context.close(); } };
     }
     await app.store.update(data => { data.settings = defaultSettings(); data.reminders = []; });
     {
@@ -694,24 +714,30 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
     }
     checks.push('editor: pressed state, dirty-only Save on change and revert, Save persists and survives reload, Cancel restores, Room/Night and saved styles keep the level, reduced-motion hint and .studio[data-animation=off], canvas shows the draft level outside Edit layout only, Style tab fits at 1280×720');
 
-    // (11) Performance on a TV-like surface without page.clock: Lively costs no layout and little main-thread time.
+    // (11) Performance on a TV-like surface with the browser's own timers: Lively costs no layout and little
+    // main-thread time. The page reads the fixture's date (#298): the synthetic forecast ends 24 hours after
+    // `now`, so on the real date a day later the large Weather would lose its hours, overflow its box and
+    // refit on every tick. The date never changes inside the window, so no minute change (clock digits,
+    // world clocks) lands in only one level's window, and every widget must fit its box at fit 1.
+    const fits = page => page.locator('.ambient-widget').evaluateAll(sections => sections.map(section => {
+      const content = section.querySelector('.widget-content');
+      return { id: section.dataset.widgetId, fit: content ? new DOMMatrix(getComputedStyle(content).transform).a : 1 };
+    }).filter(item => item.fit < 1));
     if (performance) {
       // The default board and a full board of every merged widget (#162), each Off against Lively.
       for (const [board, arrange] of [['default', () => undefined], ['full', fullBoard]]) {
         const result = metrics[board] = {};
         for (const animation of ['off', 'lively']) {
-          const view = await displayPage({ clock: false, viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3, state: scenario(state => { level(animation)(state); arrange(state); state.weather.current.weatherCode = 61; state.weather.current.isDay = true; }) });
+          const view = await displayPage({ clock: false, fixedTime: now, viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3, state: scenario(state => { level(animation)(state); arrange(state); state.weather.current.weatherCode = 61; state.weather.current.isDay = true; }) });
           const session = await view.context.newCDPSession(view.page);
           await session.send('Performance.enable');
           await view.page.waitForTimeout(3_000);
-          // Keep the 15 s window inside one wall-clock minute, so a minute change (clock digits,
-          // world clocks) never lands in only one level's window.
-          const second = Date.now() % 60_000 / 1000;
-          if (second > 42) await view.page.waitForTimeout((61 - second) * 1000);
+          assert.deepEqual(await fits(view.page), [], `${board} ${animation}: no widget below fit 1 before the performance window`);
           const read = async () => Object.fromEntries((await session.send('Performance.getMetrics')).metrics.map(metric => [metric.name, metric.value]));
           const start = await read();
           await view.page.waitForTimeout(15_000);
           const end = await read();
+          assert.deepEqual(await fits(view.page), [], `${board} ${animation}: no widget below fit 1 after the performance window`);
           result[animation] = { widgets: await view.page.locator('.ambient-widget').count(), LayoutCount: end.LayoutCount - start.LayoutCount, RecalcStyleCount: end.RecalcStyleCount - start.RecalcStyleCount, TaskDuration: Number((end.TaskDuration - start.TaskDuration).toFixed(4)), ScriptDuration: Number((end.ScriptDuration - start.ScriptDuration).toFixed(4)), loops: loops(await inventory(view.page)).length };
           await view.close();
         }
@@ -723,10 +749,12 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
       }
       // #248 frame budget: at Off with Soft motion on (the default), the display draws only when the plane
       // steps or a value changes, a few frames per second at most (a continuous drift drew about 120 per
-      // second). Whole-browser CPU (all Edge processes, % of one core) is recorded alongside.
+      // second). Whole-browser CPU (all Edge processes, % of one core) is recorded alongside. Both depend
+      // on the GPU, so `frameBudget: false` (--skip-frame-budget) leaves them out, for example on a
+      // CI runner without one (#323).
       const frames = metrics.frames = {};
-      for (const [label, viewport, deviceScaleFactor] of [['1280×720 ×3', { width: 1280, height: 720 }, 3], ['3840×2160 ×1', { width: 3840, height: 2160 }, 1]]) {
-        const view = await displayPage({ clock: false, viewport, deviceScaleFactor, state: scenario(state => { level('off')(state); fullBoard(state); }) });
+      for (const [label, viewport, deviceScaleFactor] of frameBudget ? [['1280×720 ×3', { width: 1280, height: 720 }, 3], ['3840×2160 ×1', { width: 3840, height: 2160 }, 1]] : []) {
+        const view = await displayPage({ clock: false, fixedTime: now, viewport, deviceScaleFactor, state: scenario(state => { level('off')(state); fullBoard(state); }) });
         assert.equal(await view.page.locator('.grid-ambient:not(.static)').count(), 1, 'Soft motion is on');
         await view.page.waitForTimeout(3_000);
         const session = await view.context.newCDPSession(view.page); const browserSession = await browser.newBrowserCDPSession();
@@ -742,10 +770,10 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
         await view.close();
         assert.ok(frames[label].drawFramesPerSecond <= 4, `${label}: at most a few frames per second at rest ${JSON.stringify(frames[label])}`);
       }
-      checks.push(`#248 frame budget at Off with Soft motion on, full board over 10 s: ${JSON.stringify(frames)}`);
+      checks.push(frameBudget ? `#248 frame budget at Off with Soft motion on, full board over 10 s: ${JSON.stringify(frames)}` : '#248 frame budget skipped (--skip-frame-budget)');
     }
-    assert.deepEqual(errors, []);
-    return { checks, metrics, images: 'none written; all state stays in RAM' };
+    assert.deepEqual(errors, [], `page or console errors (failed requests: ${JSON.stringify(failedRequests)}; cancelled by closing: ${JSON.stringify(cancelled)})`);
+    return { checks, metrics, cancelled, images: 'none written; all state stays in RAM' };
   } finally {
     for (const context of contexts) await context.close().catch(() => undefined);
     await browser.close(); await new Promise(done => app.server.close(done)); await rm(directory, { recursive: true, force: true });
@@ -753,7 +781,7 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { values } = parseArgs({ options: { playwright: { type: 'string' }, edge: { type: 'string' }, 'skip-performance': { type: 'boolean' } } });
-  const result = await runMotionQa({ playwright: values.playwright, edge: values.edge, performance: !values['skip-performance'] });
+  const { values } = parseArgs({ options: { playwright: { type: 'string' }, edge: { type: 'string' }, 'skip-performance': { type: 'boolean' }, 'skip-frame-budget': { type: 'boolean' } } });
+  const result = await runMotionQa({ playwright: values.playwright, edge: values.edge, performance: !values['skip-performance'], frameBudget: !values['skip-frame-budget'] });
   console.log(JSON.stringify(result, null, 2));
 }
