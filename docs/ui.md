@@ -354,8 +354,8 @@ reminders never appear; the display reflects a check-off within its 30 s refresh
 **Widgets → Reminders → Hide when empty** defaults on. A confirmed list with no
 pending reminders (history only) hides the widget on the display, or shows “All clear”
 when the option is off; the editor canvas keeps a hidden widget at its real span as a
-dim “Hidden while empty · Add a reminder” placeholder, so adding and resizing it stay
-visible (#233). A missing list or a disconnected display with nothing saved shows
+dim “Hidden when empty · Add a reminder” placeholder, so adding and resizing it stay
+visible (#233); the Widgets list subtitle uses the same phrase. A missing list or a disconnected display with nothing saved shows
 “Reminders unavailable”, and saved items stay listed with “Saved reminders · offline”
 in the status tone (#223). Disabling the widget always hides it.
 An unchanged due-date input is omitted from an edit, preserving its exact saved
