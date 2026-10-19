@@ -323,7 +323,16 @@ Windows data defaults to `%LOCALAPPDATA%\LivingRoomDisplay\data`; `LRD_DATA_DIR`
 can select an isolated test location. Other systems use their per-user application
 data folder. No creator path/account is required. Writes are serialized, validated,
 flushed to a temporary file, and renamed into `state.json`. The previous valid
-state is atomically retained as `state.backup.json`.
+state is atomically retained as `state.backup.json`, written first, so a save that
+fails leaves both files holding the last successful save. While another process
+(a backup or scanning tool) holds a file, the rename is retried for about a second
+on `EPERM`, `EACCES` or `EBUSY` before the request fails with 500 and nothing new
+saved. A failed write deletes its temporary copy of the private state, and startup
+removes `state.json.*.tmp` and `state.backup.json.*.tmp` left by an interrupted
+save (#247). The selected photo is inspected when it changes (upload, startup and
+recovery); ordinary saves keep the already checked photo and parse only its shape,
+so a reminder save with a 2 MB photo costs about the time of writing both files
+rather than a fresh inflate, CRC and hash of the image (#245).
 
 An invalid/missing primary recovers a valid backup with a visible health/state
 warning. An unreadable primary is preserved as `state.corrupt.json`. If neither

@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rename, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { DataStore } from './store.ts';
+import { basename, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { DataStore, RENAME_RETRY_DELAYS_MS } from './store.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import { gridProblem } from '../shared/widgets.ts';
 
@@ -121,5 +122,69 @@ test('legacy settings and saved presets acquire hide-empty defaults without enab
     assert.equal(reopened.widgetBehavior.reminders.hideWhenEmpty, false, 'empty nested patch preserves override through restart');
     assert.equal(reopened.savedPresets[0].visual.widgetBehavior.reminders.hideWhenEmpty, true);
     assert.equal(reopened.widgets.reminders, false);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+/** A rename that fails with `code` for the first `failures` calls onto state.json, then renames normally. */
+function heldStateFile(code: string, failures: number) {
+  const calls: string[] = [];
+  return {
+    calls,
+    async rename(from: string, to: string) {
+      if (basename(to) === 'state.json') { calls.push(code); if (calls.length <= failures) throw Object.assign(new Error(`${code}: synthetic held state.json`), { code }); }
+      await rename(from, to);
+    },
+  };
+}
+const temporaryFiles = async (directory: string) => (await readdir(directory)).filter(name => name.endsWith('.tmp'));
+
+test('a save retries while another process briefly holds state.json (#247)', async () => {
+  for (const code of ['EPERM', 'EACCES', 'EBUSY']) {
+    const directory = await mkdtemp(join(tmpdir(), 'lrd-held-state-'));
+    try {
+      await DataStore.open(directory);
+      const held = heldStateFile(code, 3); const store = await DataStore.open(directory, held);
+      await store.patchSettings({ units: 'imperial' });
+      assert.equal(held.calls.length, 4, `${code}: three failed renames, then success`);
+      assert.equal((await DataStore.open(directory)).snapshot().settings.units, 'imperial', `${code}: the retried save is on disk`);
+      assert.deepEqual(await temporaryFiles(directory), []);
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  }
+});
+
+test('a save that still fails after about a second leaves no temporary copy and keeps the last save (#247)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'lrd-held-state-'));
+  try {
+    const first = await DataStore.open(directory); await first.patchSettings({ clockFormat: '24h' });
+    const before = await readFile(join(directory, 'state.json'), 'utf8');
+    const held = heldStateFile('EBUSY', Infinity); const store = await DataStore.open(directory, held);
+    const started = performance.now();
+    await assert.rejects(store.patchSettings({ units: 'imperial' }), /EBUSY/);
+    const elapsed = performance.now() - started;
+    assert.equal(held.calls.length, RENAME_RETRY_DELAYS_MS.length + 1, 'every retry was attempted');
+    assert.ok(elapsed >= 900 && elapsed < 5_000, `retries last about a second: ${Math.round(elapsed)} ms`);
+    assert.deepEqual(await temporaryFiles(directory), [], 'the private state is not left behind in a .tmp file');
+    assert.equal(await readFile(join(directory, 'state.json'), 'utf8'), before, 'state.json keeps the last successful save');
+    assert.equal(JSON.parse(await readFile(join(directory, 'state.backup.json'), 'utf8')).settings.clockFormat, '24h', 'the backup holds that same save');
+    assert.equal(store.snapshot().settings.units, 'metric', 'memory is unchanged by the failed save');
+    // A different error is not retried.
+    const denied = { calls: 0, async rename() { denied.calls++; throw Object.assign(new Error('EXDEV: synthetic'), { code: 'EXDEV' }); } };
+    const other = await DataStore.open(directory, denied);
+    await assert.rejects(other.patchSettings({ units: 'imperial' }), /EXDEV/);
+    assert.equal(denied.calls, 1); assert.deepEqual(await temporaryFiles(directory), []);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('startup removes temporary files left by an interrupted save, and nothing else (#247)', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'lrd-stale-temp-'));
+  try {
+    await DataStore.open(directory);
+    const stale = [`state.json.${randomUUID()}.tmp`, `state.backup.json.${randomUUID()}.tmp`];
+    const kept = ['state.json.tmp', 'notes.tmp', `other.json.${randomUUID()}.tmp`];
+    for (const name of [...stale, ...kept]) await writeFile(join(directory, name), '{"private":"synthetic"}');
+    await DataStore.open(directory);
+    const names = await readdir(directory);
+    for (const name of stale) assert.equal(names.includes(name), false, `${name} is removed`);
+    for (const name of kept) assert.equal(names.includes(name), true, `${name} is not ours and stays`);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
