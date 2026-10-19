@@ -24,6 +24,11 @@ export interface AirHourly {
   uvPeak: string;
 }
 
+/** "1 PM", or "13:00" with the 24-hour setting: model readings fall on the hour. */
+function hourFormatter(timeZone: string, clockFormat: Settings['clockFormat']): Intl.DateTimeFormat {
+  return zoneFormatter(timeZone, clockFormat === '12h' ? { hour: 'numeric', hour12: true } : { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+}
+
 /**
  * Today's UV peak (or tomorrow's once today's daylight has passed) from upcoming readings only.
  * A maximum on the series' final hour may still be rising beyond what the forecast covers, so it
@@ -34,7 +39,7 @@ export function uvPeakLabel(upcoming: readonly AirQualityReading[], now: number,
   if (!known.length) return 'UV forecast unavailable';
   const today = civilDateKey(new Date(now), timeZone);
   const last = upcoming[upcoming.length - 1];
-  const hour = zoneFormatter(timeZone, clockFormat === '12h' ? { hour: 'numeric', hour12: true } : { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const hour = hourFormatter(timeZone, clockFormat);
   const days = known.map(reading => ({ reading, today: civilDateKey(new Date(reading.time), timeZone) === today }));
   for (const tomorrow of [false, true]) {
     const peak = days.filter(day => day.today !== tomorrow).reduce<AirQualityReading | null>((best, { reading }) => !best || reading.uvIndex! > best.uvIndex! ? reading : best, null);
@@ -65,4 +70,74 @@ export function airHourly(hourly: readonly AirQualityReading[], now: number, sca
   const range = !known.length ? 'unknown' : low === high ? String(low) : `${low} to ${high}`;
   const summary = `${scaleLabel} estimate for the next ${upcoming.length} hours: ${range}${known.length && unknown ? `, ${unknown} unknown` : ''}`;
   return { bars, start: time(upcoming[0]!.time), end: time(upcoming[upcoming.length - 1]!.time), summary, uvPeak: uvPeakLabel(upcoming, now, timeZone, clockFormat) };
+}
+
+/**
+ * Saved current values older than this stop reading as current (#188). Weather qualifies an old
+ * temperature after the same 3 hours (#243), so both widgets age alike.
+ */
+export const AIR_CURRENT_MAX_AGE = 3 * HOUR;
+
+type AirCurrent = NonNullable<AirQualityState['current']>;
+export interface AirReadingView {
+  /**
+   * `current`: the values as fetched. `estimate`: the reading is over 3 hours old, so the AQI and UV
+   * come from its saved hourly estimate for the current hour. `lastKnown`: no such estimate, so the
+   * old AQI stays, qualified with its time.
+   */
+  kind: 'current' | 'estimate' | 'lastKnown';
+  aqi: number | null;
+  /** Null while hidden (`lastKnown`) as well as when unknown; see `showUv`. */
+  uvIndex: number | null;
+  showUv: boolean;
+  /** The main pollutant exists only for the fetch-time values, which are not shown once old. */
+  showPollutant: boolean;
+  /** "Saved estimate" or "Last known · 9 AM" (with the weekday when not today), in the status tone. */
+  qualifier: string | null;
+}
+
+function instant(value: string | null | undefined): number | null {
+  const parsed = value ? Date.parse(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** The hourly reading whose hour contains `now`, if the saved series has one. */
+export function currentHourReading(hourly: readonly AirQualityReading[], now: number): AirQualityReading | null {
+  let match: AirQualityReading | null = null, start = -Infinity;
+  for (const reading of hourly) {
+    const time = instant(reading.time);
+    if (time !== null && time <= now && time > now - HOUR && time > start) { match = reading; start = time; }
+  }
+  return match;
+}
+
+/**
+ * What the reading row shows (#188). Within 3 hours of the update the fetched values stand. Older
+ * values never read as current: the saved hourly estimate for this hour replaces the AQI and UV
+ * ("Saved estimate"), or, without one, the old AQI reads "Last known · <time>" and UV is hidden; the
+ * time is the hour the AQI describes ("9 AM", or "Sat 9 AM" when not today).
+ * Nothing is invented; an age that cannot be read keeps the fetched values (the footer then says
+ * the update time is unknown).
+ */
+export function airReadingView(air: Pick<AirQualityState, 'updatedAt' | 'hourly'>, current: AirCurrent, now: number, timeZone: string, clockFormat: Settings['clockFormat']): AirReadingView {
+  const updated = instant(air.updatedAt) ?? instant(current.time);
+  if (updated === null || now - updated <= AIR_CURRENT_MAX_AGE) return { kind: 'current', aqi: current.aqi, uvIndex: current.uvIndex, showUv: true, showPollutant: true, qualifier: null };
+  const hour = currentHourReading(air.hourly, now);
+  if (hour && hour.aqi !== null) return { kind: 'estimate', aqi: hour.aqi, uvIndex: hour.uvIndex, showUv: true, showPollutant: false, qualifier: 'Saved estimate' };
+  const at = new Date(instant(current.time) ?? updated);
+  const day = civilDateKey(at, timeZone) === civilDateKey(new Date(now), timeZone) ? '' : `${zoneFormatter(timeZone, { weekday: 'short' }).format(at)} `;
+  // Model hours fall on the local hour: "9 AM" rather than "9:00 AM" (the 24-hour "09:00" stays).
+  const time = formatTime(at, timeZone, clockFormat).replace(/:00(?= )/, '');
+  return { kind: 'lastKnown', aqi: current.aqi, uvIndex: null, showUv: false, showPollutant: false, qualifier: `Last known · ${day}${time}` };
+}
+
+/**
+ * The footer's age as short phrases that never break inside (#221): "Model est." with a reading,
+ * "Saved reading" when stale, "Offline" first while the display cannot reach the computer, then the
+ * age without "Updated" ("12 min ago"). Without a reading only the age shows ("Not updated yet").
+ */
+export function airAgeSegments({ age, stale, reading, disconnected }: { age: string; stale: boolean; reading: boolean; disconnected: boolean }): string[] {
+  const kind = stale && reading ? 'Saved reading' : reading ? 'Model est.' : null;
+  const when = kind && age.startsWith('Updated ') ? age.slice('Updated '.length) : age;
+  return [...(disconnected ? ['Offline'] : []), ...(kind ? [kind] : []), when];
 }

@@ -165,7 +165,7 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     await addWidget(page, 'Air quality');
     await canvas(page, 'airQuality').getByText('42', { exact: true }).waitFor();
     assert.deepEqual(previews, ['us']);
-    assert.match(await canvas(page, 'airQuality').innerText(), /US AQI[\s\S]*Good[\s\S]*Model estimate[\s\S]*Air quality: CAMS via Open-Meteo/);
+    assert.match(await canvas(page, 'airQuality').innerText(), /US AQI[\s\S]*Good[\s\S]*Model est\.[\s\S]*CAMS · Open-Meteo/);
     assert.match(await page.locator('.widget-inspector').innerText(), /Model estimate from Copernicus CAMS via Open-Meteo for your weather location\. Canada's AQHI and local sensors are not available\./);
     await page.getByRole('combobox', { name: 'Air quality scale' }).selectOption('european');
     await canvas(page, 'airQuality').getByText('European AQI').waitFor();
