@@ -1,8 +1,9 @@
 # Living Room Display
 
 A silent, customizable ambient display for a Windows 10 leisure PC connected to
-a Samsung S90F OLED TV: large time and date, weather, a seven-day outlook, rain
-estimates, optional reminders, and an optional dim screen preview.
+a Samsung S90F OLED TV: large time and date, weather with rain estimates when rain
+is near, a seven-day outlook, reminders, world clocks, a calendar, countdowns, a
+short note, air quality, sun and moon times, and an optional dim screen preview.
 All modules are optional. Drag and resize widgets on a snapping grid, choose
 adaptive sizes and outline/digital/analog clocks, or add a dim local photo.
 
@@ -15,9 +16,9 @@ uses the [recorded HIG-inspired design choices](docs/design.md). The display stu
 puts one focused Style, Widgets, Weather or Reminders inspector beside its live
 preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
-This redesigned source still needs an installed refresh and native acceptance.
-Wider release
-compatibility checks remain; see [STATUS.md](STATUS.md).
+The owner's PC runs the installed feature wave (`3fee844`); later polish on `main`
+waits for the next coordinated install, and native screensaver acceptance and wider
+release compatibility checks remain. See [STATUS.md](STATUS.md).
 
 This is the independent private
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)

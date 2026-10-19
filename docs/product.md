@@ -78,8 +78,9 @@ Move whole widget groups through substantially different screen areas. Allow
 periodic recomposition and gentle fades so content does not remain anchored to
 one location. Motion inside an otherwise fixed widget is insufficient. Motion
 style and cadence remain user-editable choices. Recompose collision-free layouts
-with varied legal origins and offsets, fully black between compositions. Soft
-motion and reduced-motion settings remove travel/effects while protective discrete
+with varied legal origins and offsets, fully black between compositions. Turning
+off Drift and fade between moves (called Soft motion before #240), or a
+reduced-motion preference, removes travel/effects while protective discrete
 relocation continues. No fixed decorative frame, footer or source credit remains.
 
 Keep transitions calm, avoid flashes, and provide a reduced-motion option in the
