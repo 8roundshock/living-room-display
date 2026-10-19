@@ -114,7 +114,7 @@ function ReminderList({ rows, total, fresh, offline, settings }: { rows: Row[]; 
     {more > 0 && <div className="ambient-description reminder-more">+<TransitionText value={String(more)} /> more</div>}
     <div className="ambient-description reminder-more-probe" aria-hidden="true">+{total} more</div>
     {/* Saved items shown while the display cannot reach the app keep the shared status tone (#223). */}
-    {offline && <div className="ambient-description reminder-offline ambient-status">Saved reminders · offline</div>}
+    {offline && <div className="ambient-description reminder-offline status-caution">Saved reminders · offline</div>}
   </div>;
 }
 
