@@ -78,8 +78,11 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
   const source = await (await fetch(`${base}/api/state`)).json();
   for (const check of Object.values(WIDGET_CHECKS)) check.prepare?.(source, { now });
 
-  /** A display page whose /api/state is the synthetic `served.state` (or a 503 while offline). */
-  /** `clock: false` keeps the browser's own timers; `fixedTime` then pins only the date the page reads (#298). */
+  /**
+   * A display page whose /api/state is the synthetic `served.state` (or a 503 while offline). `clock: false`
+   * leaves time to the browser; with `fixedTime`, Playwright's clock pins the date the page reads while its
+   * timers keep running in real time (#298).
+   */
   async function displayPage({ state, time = now, reducedMotion = 'no-preference', viewport = { width: 1280, height: 720 }, clock = true, fixedTime = null, deviceScaleFactor = 1, path = '/display' }) {
     const context = await browser.newContext({ viewport, deviceScaleFactor, timezoneId: 'America/Toronto', reducedMotion }); contexts.add(context);
     const served = { state: structuredClone(state), offline: false };
@@ -719,7 +722,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     }
     checks.push('editor: pressed state, dirty-only Save on change and revert, Save persists and survives reload, Cancel restores, Room/Night and saved styles keep the level, reduced-motion hint and .studio[data-animation=off], canvas shows the draft level outside Edit layout only, Style tab fits at 1280×720');
 
-    // (11) Performance on a TV-like surface with the browser's own timers: Lively costs no layout and little
+    // (11) Performance on a TV-like surface with timers running in real time: Lively costs no layout and little
     // main-thread time. The page reads the fixture's date (#298): the synthetic forecast ends 24 hours after
     // `now`, so on the real date a day later the large Weather would lose its hours, overflow its box and
     // refit on every tick. The date never changes inside the window, so no minute change (clock digits,
