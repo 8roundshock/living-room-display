@@ -121,7 +121,7 @@ Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
 fills defaults.
 
 Planned catalog ids (entries with `status: 'planned'` in `src/shared/widgets.ts`;
-#78 units activate theirs as they ship) appear in `widgets`, `widgetOverrides` and `widgetGrid.placements` but
+none since #157 and #171 activated all six #78 ids) appear in `widgets`, `widgetOverrides` and `widgetGrid.placements` but
 always read as disabled. A PATCH that enables one returns 400 (`<Name> is not
 available yet`).
 
@@ -325,6 +325,6 @@ weather, snapshot pixels, and native tokens are excluded. Store backups privatel
 At rest, `state.json`, `state.backup.json` and exports omit additive values that
 the previous installed release cannot parse while they equal the current read
 default: `appearance.accentMode` `color`, `appearance.animation` `subtle`, disabled
-planned or retired widget ids, and default `widgetData` sections. API responses
+widget ids the previous release does not know (the six #78 ids), and default `widgetData` sections. API responses
 (`/api/state`, the `PATCH /api/settings` response and the native session) always
 include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).

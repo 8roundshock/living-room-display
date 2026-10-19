@@ -192,7 +192,7 @@ composition stay identical.
   with UTC-noon arithmetic so DST cannot shift a count; February 29 falls on
   February 28 in common years) and Note (up to 200 characters and 4 lines). An empty
   Countdown or Note is hidden on the display and shows a placeholder in the editor.
-  World clocks, Sun & moon and Air quality are the parallel unit of the same ticket.
+  World clocks, Sun & moon and Air quality are the parallel unit of the same ticket (#171).
   The three use fixed families and sit beside a free-size Reminders span; fuller
   boards keep relocating through the #93 reflection fallback described below.
 - **Rejected, with reasons:** timers and alarms (they need audio and on-screen
