@@ -421,7 +421,8 @@ button {
 .ambient-reminder-dot {
   width: 0.4cqw;
   height: 0.4cqw;
-  border: 1px solid var(--ambient-accent);
+  /* The ring scales with the display's text floor (#336): 2 px at 1080p and 4 px at 4K, never under 1 px. */
+  border: max(1px, var(--min-text, 0px) * 0.15) solid var(--ambient-accent);
   border-radius: 50%;
   margin-top: 1.3cqh;
   flex: none;

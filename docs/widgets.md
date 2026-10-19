@@ -101,6 +101,13 @@ display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold). It
 and low share a row when they fit, and its “Saved forecast”/“Offline” prefix takes its
 own short line, so fresh, stale and offline small forecasts render at fit 1 at Text
 100% in every density at 720p, 1080p and 4K, with “5 hr ago” kept together (#221).
+Small Weather caps its floors the same way at 8.5% (text) and 10% (data) of its content
+height, which binds only below about 16.5% of the display (the Fine grid: about 9 px
+instead of 10.1 px at 720p), and keeps its footer to one row of short phrases (#283).
+Every Weather family renders at fit 1 at Text 100% in fresh, hint, elevated, stale,
+offline, last-known and unavailable states, with long place names and sub-zero values,
+in every density at 720p, 1080p and 4K (#283); so do small and medium Air quality for a
+three-digit or long-category AQI with either qualifier (#309).
 Overfull content is laid out proportionally wider before the fit scale shrinks it,
 so a larger Text size never renders text-size-scaled labels or values smaller.
 Icons and the fixed unavailable dash do not follow Text size and can still shrink
@@ -112,8 +119,8 @@ The renderer families have deliberate visual roles:
 | Widget | Small | Medium | Large |
 | --- | --- | --- | --- |
 | Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date | Time beside a calendar column; analog sizes its hands to the cell height | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
-| Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”); confidence only when partial | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and twelve hourly chance bars (spell hours brighter, unknown hours dotted) |
-| Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance. Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”) |
+| Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”, “Rain possible now, likely later”); confidence only when partial. One footer row of short phrases, wrapping only between them: “Saved forecast · 5 hr ago · Open-Meteo” (#283) | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and an hourly chance bar for each hour overlapping the next 12 (12 on the hour, 13 otherwise; spell hours brighter, unknown hours a dotted baseline) over “Now” and the window's end (#261). Unavailable in every family: a dim, still cloud, a dim “—°” and one status-tone line at the label size, “Weather unavailable · retrying” (“· offline” while the display cannot reach the computer), with the age only when known and no credit (#362) |
+| Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362) |
 | Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete, faint captured desktop with its "Last screen · 8:40 AM" caption on the image's left edge just below it (every family) | Wider complete desktop | Larger complete desktop; no crop hides screen context |
@@ -121,7 +128,7 @@ The renderer families have deliberate visual roles:
 | Calendar | Month name over this week's strip (weekday initials and dates) | Weekday, large date and month beside a compact month grid | Month and year, a weekday header row and a generous month grid; every grid has only the 4–6 weeks the month needs |
 | Countdown | The next date as a large count (“12” over “days”, or Today/Tomorrow), its title and a short date | The next date on the left; the following two as compact rows | As many rows as fit the box (title, date, days right-aligned), measured like Reminders, then an exact “+N more” (#221) |
 | Note | The text at the largest size that fits the box (measured from its lines and wrapping, #194), up to a family cap | The same, wider | The same, generous; only a note that cannot fit at the text floor zooms out through the shared fit |
-| Air quality | AQI and category word with place and scale; one footer row with the age ("Model est. · 12 min ago" with a reading) and "CAMS · Open-Meteo"; values over 3 hours old read "Saved estimate" or "Last known · 9 AM" | Adds the main pollutant and UV with its WHO category (both hidden once the values are over 3 hours old, UV then from the saved estimate) | Adds AQI bars for the current and up to 23 following hours (unknown hours dotted) and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
+| Air quality | AQI and category word with place and scale; the age ("Model est. · 12 min ago" with a reading) and "CAMS · Open-Meteo" as two short footer rows where the box is narrow; values over 3 hours old read "Saved estimate" or "Last known · 9 AM" on their own line under the reading (#309) | Adds the main pollutant and UV with its WHO category (both hidden once the values are over 3 hours old, UV then from the saved estimate); one footer row | Adds AQI bars for the current and up to 23 following hours (unknown hours a dotted baseline) over "Now" and the last hour's end, as Weather's chart (#261), and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
 | Sun & moon | Next sunrise or sunset, its time and the place | Sunrise, sunset, daylight length and change from yesterday, moon glyph and phase | Dim dotted day arc with the sun's position, times, daylight, phase with illumination and the next full (or new) moon |
 
 The large clock requires actual vertical room in the central catalog; do not
@@ -230,10 +237,16 @@ elements and Native never lights more of the panel. Inside a widget, an icon mar
 `data-glyph` (weather glyphs, World clocks' day/night icons, Sun & moon's sun dot,
 label icon and moon) paints with its own sub-tone (`WEATHER_GLYPH_TONE`), a subtree
 marked `tone-<role>` takes that role (Sun & moon's moon is `tone-time`), and
-Weather's rain visuals use the `--weather-rain` hook (Sea glass). A widget whose
+Weather's rain visuals use the `--weather-rain` hook (Sea glass). A two-tone weather
+symbol paints each part with its own sub-tone: partly cloudy's sun is Gold and its moon
+Lilac while its cloud is Stone (#251). A widget whose
 face is only primary text (a Note, a "Today" countdown) has nothing to tint. Status
-cues never change: stale and offline labels and the Overdue word use the one amber
-status tone, `--ambient-caution` (there is no separate offline colour, #223, #133).
+cues never change: a stale or offline line uses the shared `.status-caution` class
+(`widgets.css`), which paints the one amber status tone, `--ambient-caution`, at full
+opacity, so a dimmed parent never fades the cue (#322; Weather's “Last known”,
+Forecast's “Saved forecast”/“Offline”, Air quality's qualifier, “Saved reminders ·
+offline”). The Overdue word keeps its own rule in the same tone. There is no separate
+offline colour (#223, #133).
 Never hard-code a hue in widget CSS (Air
 quality has no category colours), fill or frame anything new for colour, or tint
 images; a new widget declares an existing palette role and uses `--ambient-accent`.
@@ -324,7 +337,13 @@ timing, detail, hint and hour labels, Forecast's values, Air quality's AQI and
 category, Calendar's date, Countdown's count, Note's text, and the times in Sun &
 moon and World clocks are `TransitionText` (Clock keeps its per-character digits). Chart bars inserted later (Weather's
 `.rain-bar`, Air quality's `.air-bar`) fade in to their resting opacity, and existing
-bars ease to new heights. A list that measures its own rows must keep that geometry
+bars ease to new heights by `translate` alone: each bar is a full-height box moved
+down from the baseline and clipped by its chart, so exactly `clamp(1px, share, 100%)`
+of it shows at rest, as the former height-based bar did, and a change runs on the
+compositor (#161). An unknown hour is a dotted baseline whose stroke scales with the
+display's text floor (`max(1px, --min-text × 0.15)`: 2 px at 1080p and 4 px at 4K), so it
+never reads as a 0% bar (#336). The stale or offline weather label takes the status tone
+at once, with the words it gains (#161). A list that measures its own rows must keep that geometry
 exact. Reminders marks only reminders that were not pending at the previous update
 with `data-new`, and fades them by opacity alone. A re-sorted row, which React moves
 with `insertBefore` and Chromium would otherwise restart from `@starting-style`
@@ -356,8 +375,14 @@ Weather shows “Last known · 9 AM” (with the weekday when not today, “Last
 Thu 9 AM”) in the status tone in place of the condition line (above the rain timing
 where the family shows timing instead), and keeps the glyph still and the age line.
 Three hours matches the hourly model: after that the saved temperature describes a
-different part of the day. Air quality's hours-old current values are decided in #188 with the same
-threshold.
+different part of the day. Air quality applies the same threshold to its current values
+(#188), whatever its status, because its saved hourly estimate can stand in for them.
+Both widgets share one threshold, `LAST_KNOWN_AFTER_MS`, and one time label,
+`lastKnownLabel` (weekday when not today, compact time with no-break spaces), in
+[`format.ts`](../src/client/format.ts), and each keeps its own rule for when it applies
+(#329). An unavailable forecast is never louder than the weather it replaces: a dim,
+still cloud (the widget's icon, not a condition), a dim “—°” and one status-tone line at
+the label size, with no credit while nothing is shown (#362).
 
 A photo widget uses a user-selected local image, remains optional, and follows
 the shared size/brightness/motion rules. Retain its image only in the documented

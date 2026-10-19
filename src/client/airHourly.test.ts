@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { AirQualityReading } from '../shared/contracts.ts';
-import { AIR_CURRENT_MAX_AGE, airAgeSegments, airHourly, airReadingView, currentHourReading, upcomingAirHours, uvPeakLabel } from './airHourly.ts';
+import { airAgeSegments, airHourly, airReadingView, currentHourReading, upcomingAirHours, uvPeakLabel } from './airHourly.ts';
+import { LAST_KNOWN_AFTER_MS, lastKnownLabel } from './format.ts';
 
 const HOUR = 3600_000;
 const ZONE = 'America/Toronto';
@@ -25,8 +26,10 @@ test('a saved reading at night shows no past hour and no past UV peak', () => {
   const now = Date.parse('2026-10-19T02:30:00Z'); // 22:30 Toronto, 13.5 h after the fetch
   const model = airHourly(series(), now, 'us', 'US AQI', ZONE, '12h')!;
   assert.equal(model.bars.length, 11);
-  assert.equal(model.start, '10:00 PM', 'starts at the current hour, not at the fetch hour');
-  assert.equal(model.end, '8:00 AM');
+  assert.equal(model.bars[0]!.time, '2026-10-19T02:00:00.000Z', 'starts at the current hour, not at the fetch hour');
+  // The shared axis (#261): “Now” under the bar covering now, and the end of the last hour.
+  assert.equal(model.start, 'Now');
+  assert.equal(model.end, '9 AM', 'the 08:00 reading draws 8–9 AM');
   assert.ok(model.bars.every(bar => Date.parse(bar.time) > now - HOUR));
   assert.doesNotMatch(model.uvPeak, /11 AM|peaks 5/, 'the morning peak has already happened');
   // The series ends at 08:00 while UV is still rising, so it is not called a peak.
@@ -38,7 +41,8 @@ test('the fresh series keeps today\'s peak, 24-hour labels and the dotted unknow
   const now = FETCHED + 5 * 60_000;
   const model = airHourly(series(), now, 'us', 'US AQI', ZONE, '24h')!;
   assert.equal(model.bars.length, 24);
-  assert.equal(model.start, '09:00'); assert.equal(model.end, '08:00');
+  assert.equal(model.start, 'Now'); assert.equal(model.end, '09:00');
+  assert.equal(model.bars[0]!.title, '09:00: 40', 'bar titles use the same compact hours');
   assert.equal(model.uvPeak, 'UV peaks 5 at 11:00');
   assert.equal(model.bars.filter(bar => bar.unknown).length, 1);
   assert.equal(model.bars[15]!.height, '8%'); assert.match(model.bars[15]!.title, /unknown$/);
@@ -70,7 +74,7 @@ const CURRENT = { time: new Date(FETCHED).toISOString(), aqi: 42, dominant: 'pm2
 const SAVED = { updatedAt: new Date(FETCHED + 5 * 60_000).toISOString(), hourly: series() };
 
 test('saved current values stand for 3 hours after the update', () => {
-  for (const age of [0, 2 * HOUR, AIR_CURRENT_MAX_AGE]) {
+  for (const age of [0, 2 * HOUR, LAST_KNOWN_AFTER_MS]) {
     const view = airReadingView(SAVED, CURRENT, FETCHED + 5 * 60_000 + age, ZONE, '12h');
     assert.deepEqual(view, { kind: 'current', aqi: 42, uvIndex: 3, showUv: true, showPollutant: true, qualifier: null }, `${age / HOUR} h`);
   }
@@ -92,12 +96,14 @@ test('without an estimate for this hour the old AQI is qualified with its time a
   // The series ends at 08:00 the next morning; at 10:30 the hour has no estimate.
   const later = Date.parse('2026-10-19T14:30:00Z');
   const view = airReadingView(SAVED, CURRENT, later, ZONE, '12h');
-  assert.deepEqual(view, { kind: 'lastKnown', aqi: 42, uvIndex: null, showUv: false, showPollutant: false, qualifier: 'Last known · Sun 9 AM' });
-  assert.equal(airReadingView(SAVED, CURRENT, later, ZONE, '24h').qualifier, 'Last known · Sun 09:00');
+  // The time is the shared last-known label (#329): no-break spaces keep “Sun 9 AM” whole.
+  assert.deepEqual(view, { kind: 'lastKnown', aqi: 42, uvIndex: null, showUv: false, showPollutant: false, qualifier: 'Last known · Sun 9 AM' });
+  assert.equal(view.qualifier, `Last known · ${lastKnownLabel(FETCHED, later, ZONE, '12h')}`);
+  assert.equal(airReadingView(SAVED, CURRENT, later, ZONE, '24h').qualifier, 'Last known · Sun 09:00');
   // The same evening, with the estimate for this hour unknown, no weekday is needed.
   const evening = Date.parse('2026-10-18T22:30:00Z'); // 18:30 Toronto
   const gap = { ...SAVED, hourly: SAVED.hourly.map(reading => reading.time === '2026-10-18T22:00:00.000Z' ? { ...reading, aqi: null } : reading) };
-  assert.equal(airReadingView(gap, CURRENT, evening, ZONE, '12h').qualifier, 'Last known · 9 AM');
+  assert.equal(airReadingView(gap, CURRENT, evening, ZONE, '12h').qualifier, 'Last known · 9 AM');
   // Nothing is invented: an unknown AQI stays unknown.
   assert.equal(airReadingView(gap, { ...CURRENT, aqi: null }, evening, ZONE, '12h').aqi, null);
   // An unreadable update time falls back to the reading's own time, then keeps the values.
