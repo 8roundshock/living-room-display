@@ -69,9 +69,85 @@ export function sameEffectiveSettings(a: Settings, b: Settings): boolean {
   return same(comparable(a), comparable(b));
 }
 
+type Identified = Record<string, unknown> & { id: string };
+/** A list of objects with unique string ids: countdowns, world clocks and saved styles. */
+function identifiedList(value: unknown): value is Identified[] {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  return value.every((item) => {
+    if (!object(item) || typeof item.id !== 'string' || ids.has(item.id))
+      return false;
+    ids.add(item.id);
+    return true;
+  });
+}
+/** Whether `list` moved any item it shares with `base` relative to the others. */
+function reordered(base: Identified[], list: Identified[]): boolean {
+  const kept = new Set(list.map((item) => item.id));
+  const before = base.map((item) => item.id).filter((id) => kept.has(id));
+  const shared = new Set(before);
+  const after = list.map((item) => item.id).filter((id) => shared.has(id));
+  return before.some((id, index) => id !== after[index]);
+}
+
+/**
+ * Three-way merge of an id list (#242), so two editor tabs keep each other's countdowns, world
+ * clocks and saved styles. Additions and removals from both sides are kept. An item changed on
+ * one side takes that side's fields; when both changed it, each top-level field merges on its own
+ * and the local edit wins only on a field both changed (a field's value is replaced whole, so a
+ * saved style's look stays one snapshot). An item removed on one side and edited on the other
+ * keeps the edit. The local order wins when this tab moved items, otherwise the server's; the
+ * other side's items go before the item that followed them there, else at the end, so two
+ * appended countdowns end up server's first, then this tab's.
+ */
+function mergeIdentifiedLists(
+  base: Identified[],
+  local: Identified[],
+  server: Identified[],
+): Identified[] {
+  const index = (list: Identified[]) => new Map(list.map((item) => [item.id, item]));
+  const before = index(base), mine = index(local), theirs = index(server);
+  const merged = new Map<string, Identified>();
+  for (const id of new Set([...mine.keys(), ...theirs.keys()])) {
+    const original = before.get(id), ours = mine.get(id), other = theirs.get(id);
+    if (ours && other) {
+      if (!original) merged.set(id, structuredClone(ours));
+      else
+        merged.set(
+          id,
+          Object.fromEntries(
+            [...new Set([...Object.keys(other), ...Object.keys(ours)])].flatMap((key) => {
+              const value = same(original[key], ours[key]) ? other[key] : ours[key];
+              return value === undefined ? [] : [[key, structuredClone(value)]];
+            }),
+          ) as Identified,
+        );
+    } else if (ours) {
+      // Added here, or removed elsewhere while edited here: keep it.
+      if (!original || !same(original, ours)) merged.set(id, structuredClone(ours));
+    } else if (other && !original) merged.set(id, structuredClone(other));
+  }
+  const localFirst = reordered(base, local);
+  const primary = (localFirst ? local : server).map((item) => item.id);
+  const secondary = (localFirst ? server : local).map((item) => item.id);
+  const result = primary.filter((id) => merged.has(id));
+  // The other side's items go before the item that followed them there, else at the end.
+  secondary.forEach((id, position) => {
+    if (!merged.has(id) || result.includes(id)) return;
+    const next = secondary
+      .slice(position + 1)
+      .map((following) => result.indexOf(following))
+      .find((found) => found >= 0);
+    result.splice(next ?? result.length, 0, id);
+  });
+  return result.map((id) => merged.get(id)!);
+}
+
 /** Refresh untouched fields without losing a local edit, including during Save. */
 export function rebaseDraft<T>(base: T, draft: T, incoming: T): T {
   if (same(base, draft)) return structuredClone(incoming);
+  if (identifiedList(base) && identifiedList(draft) && identifiedList(incoming))
+    return mergeIdentifiedLists(base, draft, incoming) as T;
   if (object(base) && object(draft) && object(incoming)) {
     return Object.fromEntries(
       Object.keys(incoming).map((key) => [

@@ -15,12 +15,14 @@ acceptance are recorded separately in [STATUS](../STATUS.md).
 Style, Widgets, Weather and Reminders share one settings draft. Desktop keeps the
 preview beside a height-bounded inspector with fixed tabs and contained scrolling
 above 700 CSS pixels. Canvas actions remain visible at compact desktop heights;
-the 16:9 preview fits the height. Narrow windows stack a normally scrolling
+the 16:9 preview takes the height left after the heading, the canvas actions, one
+reserved message line (layout messages and the weather note) and any alert, so none
+of them reaches the Save bar's reserved space (#231). Narrow windows stack a normally scrolling
 inspector below a nonsticky preview, leaving room for the keyboard.
-Above 1050 CSS pixels the Save bar centers under the canvas, so the inspector uses
-the full height unless an alert row is shown; at 1280×720 each tab's default,
-collapsed contents fit without scrolling, including the Widgets tab with the first-run
-location card ([Weather and location](#weather-and-location)). Whenever settings
+Above 1050 CSS pixels the Save bar centers under the canvas, so the inspector always
+uses the full height; at 1280×720 each tab's default, collapsed contents fit without
+scrolling, including the Widgets tab with the first-run location card
+([Weather and location](#weather-and-location)). Whenever settings
 remain below, the inspector's bottom edge fades (scroll-linked, kept with reduced
 motion). Focus scrolling reserves the measured Save bar height so fields and labels remain
 visible above it, including narrow screens and compact keyboard-height windows.
@@ -28,7 +30,30 @@ visible above it, including narrow screens and compact keyboard-height windows.
 - **Save changes** atomically persists settings, appearance, location, widget
   options, selected local photo and saved styles. The bar exists only while
   effective saved values differ; reverting all edits hides it. Edits made while saving remain unsaved afterward.
-  Failed saves preserve the draft. Untouched fields refresh from server polling.
+  Failed saves preserve the draft and return keyboard focus to Save. Untouched fields refresh from server polling.
+  Countdowns, world clocks and saved styles merge by item when another editor saved
+  them meanwhile (#242): additions and removals from both are kept, an item changed
+  on both keeps each side's changed fields (this editor wins only on a field both
+  changed; a saved style's look counts as one field), and an item removed elsewhere
+  but edited here stays. This editor's order wins only when it moved items; otherwise
+  the saved order stays and its own additions follow. The merge happens at each
+  30-second poll; a Save sent before the next poll still replaces those lists whole (#287).
+- After **Save** or **Cancel** keyboard focus returns to the last edited control while
+  it is still shown, else to the active tab, and an always-mounted status region
+  announces “Changes saved” or “Changes discarded” (#229). Removing a widget announces
+  “Clock removed” and focuses the next row (else the previous one, else Add widget).
+- **Alerts** (a failed action, a lost connection with **Retry**, a storage warning) have
+  their own row under the canvas actions and never cover them; the canvas shrinks while
+  one shows (#227). One shows at a time with a dismiss (×) control. An action's error
+  clears with the next successful action (an edit, Save, Cancel, Edit layout or Done,
+  Preview movement or a reminder action); a dismissed connection or storage alert
+  returns only after it has gone away and comes back. When the server cannot be
+  reached, every message reads “Can't reach the display server on this computer. Your
+  changes are kept — try again.”, never the browser's “Failed to fetch”. Drafts and
+  open reminder forms are kept, and an error caused by the lost connection clears
+  once a later poll or Retry reaches the server; a server's own error message stays
+  until the next action (#232). The loading page explains the same failure beside
+  **Try again**.
 - **Cancel** restores the latest saved settings across every section, resets the
   city query/style form, and invalidates pending device/photo callbacks. It does not
   undo saved reminders. Leaving with settings edits uses the browser's prompt.
@@ -468,7 +493,15 @@ The [workspace harness](../tests/ui/workspace-browser.mjs) checks bounded deskto
 tabs/canvas/actions, unchanged canvas bounds when Save appears, selected/focused
 resize handles, every active family picker action, Escape/focus return, private-data
 separation, successful large Photo Add, explicit icon dimensions and focus clear
-of Save. Verified logical viewports are 1280×720, 1280×600, 1024×600, 760×600,
+of Save. At every viewport a storage warning, a lost connection and a rejected photo
+show in their own row clear of every canvas action (each still the topmost element at
+its centre), and dismiss, recovery and next-action clearing work; at 1280×720/600 the
+weather note is not covered by the Save bar (`elementFromPoint` sampling), and at
+1280×720 keyboard focus after Save, Cancel and Remove widget plus the announcements are
+asserted. The [editor sync harness](../tests/ui/editor-sync-browser.mjs) aborts
+`/api/*` for the loading page, Save, Add reminder and a poll, checks the clear message
+and its clearing after recovery, recognises a reminder 409 by status and ends a
+two-tab countdown edit with both countdowns. Verified logical viewports are 1280×720, 1280×600, 1024×600, 760×600,
 390×700, 390×480 and 640×300 (the CSS viewport equivalent of 1280×600 at 200% zoom).
 The actual browser-chrome zoom setting was not changed. Final-source compact
 picker screenshots were inspected in RAM at 1280×600, 760×600 and 390×480.

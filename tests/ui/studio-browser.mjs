@@ -1051,6 +1051,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     // Restore: the data, the draft and the recovery backup.
     const previousState = await stateFile('state.json');
     await choose(backupText);
+    const announcedBefore = await page.locator('.save-announcer').textContent();
     await confirm.getByRole('button', { name: 'Restore', exact: true }).click();
     await status.filter({ hasText: 'Backup restored: 2 reminders (1 completed) and 1 saved style.' }).waitFor();
     const restored = app.store.snapshot(), exported = JSON.parse(backupText);
@@ -1060,6 +1061,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.deepEqual(await stateFile('state.backup.json'), previousState, 'the replaced state is kept as the recovery backup');
     await page.waitForFunction(() => document.querySelector('input[aria-label="Brightness"]')?.value === '40');
     assert.equal(await page.locator('.studio-savebar').count(), 0, 'the refreshed draft is clean');
+    assert.equal(await page.locator('.save-announcer').textContent(), announcedBefore, 'a restore discards no edits, so the Save announcer says nothing new (#229)');
     assert.match(await page.getByRole('tab', { name: /^Reminders/ }).innerText(), /1/, 'the restored reminders reach the editor');
     // Reset appearance asks first; keeping changes nothing.
     await page.getByRole('button', { name: 'Reset appearance…', exact: true }).click();
