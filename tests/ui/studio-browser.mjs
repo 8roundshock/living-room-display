@@ -236,6 +236,17 @@ export async function runStudioQa({ playwright, edge } = {}) {
   try {
     await reset();
     let { page, context } = await open();
+    // #438: the shared header: the brand goes Home, the Pages nav marks Edit display, and Open
+    // display targets the one still-display window (no rel=noreferrer, which would drop its name).
+    const header = await page.locator('.studio-header').evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      brand: element.querySelector('.brand').getAttribute('href'),
+      pages: [...element.querySelectorAll('nav[aria-label="Pages"] a')].map((link) => [link.textContent.trim(), link.getAttribute('href'), link.getAttribute('aria-current')]),
+      display: [element.querySelector('a.open-display').getAttribute('target'), element.querySelector('a.open-display').getAttribute('rel'), element.querySelector('a.open-display').getAttribute('aria-label')],
+    }));
+    assert.deepEqual(header, { height: 64, brand: '/', pages: [['Home', '/', null], ['Edit display', '/editor', 'page']], display: ['still-display', null, 'Open display'] });
+    assert.equal(await page.title(), 'Still · Edit display');
+    checks.push('#438 header at 1440×1000: 64 px, the brand links Home, Pages nav with Edit display current, Open display targets still-display; title "Still · Edit display"');
     assert.equal(await save(page).count(), 0);
     assert.equal(await cancel(page).count(), 0);
     await tab(page, 'Style');

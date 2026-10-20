@@ -23,15 +23,17 @@ export function firstPickerSelection(widgets: Settings['widgets']): WidgetId {
   return order.find((id) => !widgets[id]) ?? order[0]!;
 }
 
-export function WidgetPicker({ settings, onAdd, onFix, onClose }: {
+export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }: {
   settings: Settings;
+  /** Opens on this widget instead of the first one not on the display (#438, Home's Make room link). */
+  initial?: WidgetId | null;
   /** Adds the widget as a draft; returns the no-room explanation when it does not fit. */
   onAdd: (id: WidgetId, size: WidgetSize) => RoomProblem | null;
   /** Applies a no-room fix and the add together; returns a fresh explanation if it no longer fits. */
   onFix: (problem: RoomProblem, fix: RoomFix) => RoomProblem | null;
   onClose: () => void;
 }) {
-  const [selected, setSelected] = useState<WidgetId>(() => firstPickerSelection(settings.widgets));
+  const [selected, setSelected] = useState<WidgetId>(() => initial ?? firstPickerSelection(settings.widgets));
   const [sizes, setSizes] = useState<Partial<Record<WidgetId, WidgetSize>>>({});
   // The picker owns its "No room" message: one live region, gone when the picker closes (#238).
   const [problem, setProblem] = useState<RoomProblem | null>(null);

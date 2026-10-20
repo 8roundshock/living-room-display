@@ -62,6 +62,7 @@ import {
 import { CitySearch } from './CitySearch';
 import { useAirQualityPreview } from './airPreview';
 import {
+  ACTIVE_WIDGET_IDS,
   GRID_DENSITIES,
   WIDGET_CATALOG,
   WIDGET_IDS,
@@ -84,6 +85,7 @@ import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel } from './RemindersPanel';
 import { FirstRunCard, readFirstRunDismissed, rememberFirstRunDismissed } from './FirstRunCard';
+import { StudioHeader } from './StudioHeader';
 import {
   addToGrid,
   applyRoomFix,
@@ -138,6 +140,21 @@ function forecastMatches(settings: Settings, weather: WeatherState): boolean {
     weather.location.longitude === settings.location.longitude &&
     weather.units.temperature === (settings.units === 'imperial' ? '°F' : '°C')
   );
+}
+
+/**
+ * Home's deep links into Edit display (#438), read once when the editor opens: `?add=<id>` opens the
+ * Widgets tab with Edit layout on and the picker on that widget (with its Make-room fixes), for an active
+ * widget that is off; `?focus=city` opens the Weather tab with City focused.
+ */
+function readDeepLink(widgets: Settings['widgets']): { add: WidgetId | null; focusCity: boolean; present: boolean } {
+  const params = new URLSearchParams(window.location.search);
+  const add = params.get('add') as WidgetId | null;
+  return {
+    add: add && (ACTIVE_WIDGET_IDS as readonly string[]).includes(add) && !widgets[add] ? add : null,
+    focusCity: params.get('focus') === 'city',
+    present: params.has('add') || params.has('focus'),
+  };
 }
 
 /** Focus the first selector that matches a connected, enabled, rendered element. */
@@ -244,7 +261,8 @@ export function Editor({
   const savedRevision = useRef(revisionOf(state.settings));
   // Guards Save against a second activation before the first one's state has rendered (#289).
   const savingNow = useRef(false);
-  const [section, setSection] = useState<Section>('Widgets');
+  const [deepLink] = useState(() => readDeepLink(state.settings.widgets));
+  const [section, setSection] = useState<Section>(deepLink.add ? 'Widgets' : deepLink.focusCity ? 'Weather' : 'Widgets');
   const [saving, setSaving] = useState(false),
     [error, setErrorState] = useState<ActionError | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
@@ -264,8 +282,8 @@ export function Editor({
   const [composition, setComposition] = useState<number | undefined>(0);
   const [movementPreview, setMovementPreview] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<WidgetId | null>(null);
-  const [layoutEditing, setLayoutEditing] = useState(false),
-    [pickerOpen, setPickerOpen] = useState(false);
+  const [layoutEditing, setLayoutEditing] = useState(deepLink.add !== null),
+    [pickerOpen, setPickerOpen] = useState(deepLink.add !== null);
   const [gridPreview, setGridPreview] = useState<WidgetGrid | null>(null),
     [gridMessage, setGridMessage] = useState('');
   const [gridEpoch, setGridEpoch] = useState(0);
@@ -273,7 +291,11 @@ export function Editor({
   const [roomProblem, setRoomProblem] = useState<RoomProblem | null>(null);
   // #252: the first-run location card; dismissal lives in this browser only.
   const [firstRunDismissed, setFirstRunDismissed] = useState(readFirstRunDismissed);
-  const [cityFocus, setCityFocus] = useState(0);
+  const [cityFocus, setCityFocus] = useState(deepLink.focusCity ? 1 : 0);
+  useEffect(() => {
+    // A deep link is read once; the address goes back to /editor so a reload starts plainly.
+    if (deepLink.present) window.history.replaceState(null, '', '/editor');
+  }, [deepLink]);
   useEffect(() => {
     // "Choose a city" opens the Weather tab with the city field focused.
     if (cityFocus) document.getElementById('city-search')?.focus();
@@ -1020,24 +1042,7 @@ export function Editor({
       className="studio"
       data-animation={editorReducedMotion ? 'off' : draft.appearance.animation}
     >
-      <header className="studio-header">
-        <a className="brand" href="/editor" aria-label="Still editor">
-          <span className="brand-symbol">
-            <Icon name="moon" size={20} />
-          </span>
-          still
-        </a>
-        <a
-          className="button open-display"
-          href="/display"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <Icon name="monitor" size={17} />
-          Open display
-          <Icon name="arrow" size={15} />
-        </a>
-      </header>
+      <StudioHeader page="edit" />
       <main className="studio-workspace">
         <section className="canvas-column" aria-label="Display preview">
           <div className="canvas-heading">
@@ -1825,6 +1830,7 @@ export function Editor({
                   setRoomProblem(null);
                 }}
                 pickerOpen={pickerOpen}
+                pickerInitial={deepLink.add}
                 onPicker={setPickerOpen}
                 onAdd={addWidget}
                 onFix={applyFix}
