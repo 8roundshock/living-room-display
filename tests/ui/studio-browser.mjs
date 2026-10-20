@@ -933,14 +933,17 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.getByRole('slider', { name: 'Text size', exact: true }).fill('125');
     await page.locator('summary', { hasText: 'Motion' }).click();
     await page
-      .getByRole('checkbox', { name: 'Drift and fade between moves', exact: true })
+      .getByRole('checkbox', { name: 'Float gently', exact: true })
       .uncheck();
+    await page
+      .getByRole('checkbox', { name: 'Swap places', exact: true })
+      .check();
     await save(page).click();
     await saved(page);
     const board = structuredClone(app.store.snapshot().settings);
     assert.deepEqual(
-      [board.widgets.note, board.appearance.clockStyle, board.appearance.fontScale, board.appearance.motionEnabled],
-      [true, 'analog', 1.25, false],
+      [board.widgets.note, board.appearance.clockStyle, board.appearance.fontScale, board.appearance.motionEnabled, board.appearance.rearrange],
+      [true, 'analog', 1.25, false, true],
     );
     assert.deepEqual(await pressedPreset(), ['Room'], 'the default look shows Room pressed');
     await page.getByRole('button', { name: 'Night', exact: true }).click();
@@ -949,7 +952,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.equal(await page.locator('.preview-frame [data-widget-id="note"]').count(), 1, 'Night keeps the added Note on the canvas');
     assert.equal(await page.locator('.preview-frame .analog-clock').count(), 1, 'Night keeps Analog');
     assert.equal(await page.getByRole('slider', { name: 'Text size', exact: true }).inputValue(), '125', 'Night keeps Text size');
-    assert.equal(await page.getByRole('checkbox', { name: 'Drift and fade between moves', exact: true }).isChecked(), false, 'Night keeps Drift and fade off');
+    assert.equal(await page.getByRole('checkbox', { name: 'Float gently', exact: true }).isChecked(), false, 'Night keeps Float gently off');
+    assert.equal(await page.getByRole('checkbox', { name: 'Swap places', exact: true }).isChecked(), true, 'Night keeps Swap places on (#436)');
     await page.getByRole('button', { name: 'Room', exact: true }).click();
     await saved(page);
     assert.deepEqual(await pressedPreset(), ['Room'], 'back to the saved look: no Save bar');
@@ -978,7 +982,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await tab(page, 'Style');
     assert.deepEqual(await pressedPreset(), ['Phone'], 'the saved look shows Phone pressed after reload');
     checks.push(
-      '#153 #110 #226 built-in styles change only the look: Note, Analog, Text size 125% and Drift and fade off survive Night, Room and Phone; the card pressed follows the look (also after a reverted brightness nudge and reload); Save appears only for effective changes; Phone keeps the 3-minute interval',
+      '#153 #110 #226 built-in styles change only the look: Note, Analog, Text size 125%, Float gently off and Swap places on survive Night, Room and Phone; the card pressed follows the look (also after a reverted brightness nudge and reload); Save appears only for effective changes; Phone keeps the 3-minute interval',
     );
 
     // #240, #436: plain Motion wording, with the stable structure other suites rely on.
