@@ -1,5 +1,5 @@
 // Rollback compatibility (#84): data written by this build must still parse with the frozen reader of
-// the previous installed release (3fee844 since #263). Synthetic data in temporary folders only.
+// the previous installed release (3446400 since #367). Synthetic data in temporary folders only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -9,19 +9,19 @@ import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApplication } from './app.ts';
-import { forecastFixture, photoFixture, seedColorAccentData } from './fixtures.ts';
+import { colorAccentDefaults, forecastFixture, photoFixture, seedColorAccentData } from './fixtures.ts';
 import { DataStore } from './store.ts';
-import { PREVIOUS_RELEASE } from './persistence.ts';
+import { AT_REST, PREVIOUS_RELEASE, persistableData } from './persistence.ts';
 import {
   LEGACY_FIXTURE, LEGACY_FIXTURE_BLOBS, PREVIOUS_READER, VENDORED_BLOBS, assertPreviousReaderAccepts, assertPreviousReaderRejects,
 } from './compat/previous-reader.ts';
-import { defaultSettings as previousDefaults } from './compat/3fee844/shared/defaults.ts';
-import { persistableData as previousPersistableData } from './compat/3fee844/server/persistence.ts';
-import { WIDGET_CATALOG as PREVIOUS_CATALOG } from './compat/3fee844/shared/widgets.ts';
+import { defaultSettings as previousDefaults } from './compat/3446400/shared/defaults.ts';
+import { persistableData as previousPersistableData } from './compat/3446400/server/persistence.ts';
+import { WIDGET_CATALOG as PREVIOUS_CATALOG } from './compat/3446400/shared/widgets.ts';
 import { defaultSettings as legacyDefaults } from './compat/bedca44/shared/defaults.ts';
 import { WIDGET_CATALOG as LEGACY_CATALOG, defaultWidgetGrid as legacyGrid } from './compat/bedca44/shared/widgets.ts';
 import { WIDGET_IDS, fitGridDensity, isPlannedWidget } from '../shared/widgets.ts';
-import { applyBuiltinPreset, getVisual } from '../client/model.ts';
+import { applyBuiltinPreset, getVisual, resetAppearance } from '../client/model.ts';
 import { settingsChanges } from '../client/draft.ts';
 import type { Settings, SettingsPatch } from '../shared/contracts.ts';
 
@@ -60,7 +60,7 @@ async function vendoredFiles(folder: string): Promise<string[]> {
 
 test('the frozen reader is an unedited copy of the previous release and its catalog matches PREVIOUS_RELEASE', async () => {
   const folder = PREVIOUS_READER.revision.slice(0, 7);
-  // 3fee844's validation.ts and its transitive imports, nothing else (#263).
+  // 3446400's validation.ts and its transitive imports, nothing else (#263, #367).
   assert.deepEqual(await vendoredFiles(folder), Object.keys(VENDORED_BLOBS).sort(), 'every vendored file has a blob id, and every blob id a file');
   assert.deepEqual(Object.keys(VENDORED_BLOBS).sort(), ['server/persistence.ts', 'server/photo.ts', 'server/validation.ts', 'shared/contracts.ts', 'shared/defaults.ts', 'shared/motion.ts', 'shared/palette.ts', 'shared/widgets.ts'].map(path => `${folder}/${path}`));
   for (const [path, blob] of Object.entries(VENDORED_BLOBS)) assert.equal(await blobId(path), blob, `${path} must stay byte-for-byte identical to ${folder}`);
@@ -104,6 +104,30 @@ test('negative controls: the previous release still rejects an unknown key and i
   }
 });
 
+test('#272 every value omitted at rest is readable by the previous release when written, so the omission is optional', () => {
+  // Default data with every omitted value present: colour accent, Subtle and the default widgetData sections,
+  // in settings and in a saved style. Decision (#272): keep the omission; nothing on disk changes format here.
+  const settings = colorAccentDefaults();
+  settings.savedPresets = [{ id: 'synthetic-style', name: 'Synthetic style', visual: getVisual(settings) }];
+  const full = { version: 1 as const, settings, reminders: [], photoAsset: null };
+  const atRest = persistableData(full).settings as Loose;
+  // Not vacuous: the at-rest form really leaves these values out.
+  for (const appearance of [atRest.appearance, atRest.savedPresets[0].visual.appearance]) {
+    for (const key of Object.keys(AT_REST.appearance)) assert.equal(key in appearance, false, `${key} is omitted at rest`);
+  }
+  assert.equal('widgetData' in atRest, false, 'default widgetData is omitted at rest');
+  // A future AT_REST key that the previous release does not know fails below: its omission is then
+  // required, not optional, until the baseline knows it.
+  const written = JSON.parse(JSON.stringify(full)) as Loose;
+  for (const appearance of [written.settings.appearance, written.settings.savedPresets[0].visual.appearance]) {
+    for (const [key, value] of Object.entries(AT_REST.appearance)) assert.equal(appearance[key], value, `${key} is written`);
+  }
+  assert.deepEqual(written.settings.widgetData, colorAccentDefaults().widgetData, 'every default widgetData section is written');
+  assertPreviousReaderAccepts('data', written, 'every omitted value written in state.json');
+  const exported = { version: written.version, exportedAt: new Date(0).toISOString(), settings: written.settings, reminders: [] };
+  assertPreviousReaderAccepts('import', exported, 'every omitted value written in an export');
+});
+
 test('(a) a fresh data folder, Native colours (#75) included, is readable by the previous release', async () => {
   const directory = await temporary('lrd-rollback-fresh-');
   const app = await application(directory);
@@ -120,7 +144,7 @@ test('(a) a fresh data folder, Native colours (#75) included, is readable by the
 
 test('(b, c) previous-release data stays readable after unrelated saves, and so does its export', async () => {
   const directory = await temporary('lrd-rollback-saves-');
-  // Exactly what 3fee844 writes for its defaults: its own at-rest form.
+  // Exactly what the previous release (3446400) writes for its defaults: its own at-rest form.
   const previous = previousPersistableData({ version: 1, settings: previousDefaults(), reminders: [], photoAsset: null });
   assertPreviousReaderAccepts('data', previous, 'synthetic previous-release state');
   await writeFile(join(directory, 'state.json'), JSON.stringify(previous, null, 2));
@@ -185,8 +209,8 @@ const styleOf = (file: Loose) => file.settings.savedPresets[0]?.visual as Loose 
 
 /**
  * Every choice the bedca44 reader rejected (the former rollback exceptions in docs/install.md); 3fee844
- * knows each key. `written` proves the file or export actually carries the choice, so an accepted
- * file is never accepted only because the choice was left out.
+ * and 3446400 know each key. `written` proves the file or export actually carries the choice, so an
+ * accepted file is never accepted only because the choice was left out.
  */
 const FORMER_EXCEPTIONS: [string, (settings: Settings) => SettingsPatch, (file: Loose) => boolean][] = [
   ['#73 custom Reminders size', () => ({ widgetGrid: { placements: { reminders: { span: { columns: 3, rows: 2 } } } } }),
@@ -195,7 +219,8 @@ const FORMER_EXCEPTIONS: [string, (settings: Settings) => SettingsPatch, (file: 
     file => styleOf(file)?.widgetGrid.placements.reminders.span?.columns === 3],
   ['#75 Native in settings', () => ({ appearance: { accentMode: 'native', preset: 'custom' } }), file => file.settings.appearance.accentMode === 'native'],
   ['#75 a built-in style', settings => settingsChanges(settings, applyBuiltinPreset(settings, 'night')), file => file.settings.appearance.accentMode === 'native'],
-  ['#75 Reset appearance', settings => settingsChanges(settings, applyBuiltinPreset(settings, 'room')), file => file.settings.appearance.accentMode === 'native'],
+  // The editor's Reset appearance (#234, #321), not the Room style it resembles.
+  ['#75 Reset appearance', settings => settingsChanges(settings, resetAppearance(settings)), file => file.settings.appearance.accentMode === 'native'],
   ['#75 a saved Native style', settings => withStyle(settings, visual => ({ ...visual, appearance: { ...visual.appearance, accentMode: 'native' } })),
     file => styleOf(file)?.appearance.accentMode === 'native'],
   ['#76 Animation Off', () => ({ appearance: { animation: 'off' } }), file => file.settings.appearance.animation === 'off'],

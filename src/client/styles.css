@@ -1,7 +1,9 @@
+/* The document is true black until an editor marks it (html.studio-editor in studio.css), so every
+   display start, native activation and reload begins on black, before React mounts (#334). */
 :root {
   font-family: system-ui, 'Segoe UI', Arial, sans-serif;
   color: #d9dce8;
-  background: #090b12;
+  background: #000;
   font-synthesis: none;
   font-weight: 400;
   text-rendering: optimizeLegibility;
@@ -319,7 +321,7 @@ button {
   font-weight: 320;
   letter-spacing: -0.055em;
   line-height: 0.95;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
 }
 .clock-period {
@@ -492,24 +494,6 @@ button {
   text-align: right;
   color: var(--ambient-accent);
 }
-.preview-image {
-  max-width: 100%;
-  max-height: 15cqh;
-  object-fit: contain;
-  object-position: left center;
-  filter: saturate(0.45);
-  border-radius: 3px;
-}
-.preview-caption {
-  font-size: 1cqw;
-  line-height: 1.5;
-  color: var(--ambient-accent);
-  margin-top: 1cqh;
-}
-.ambient-preview .ambient-description {
-  font-size: 1.1cqw;
-  max-width: 23cqw;
-}
 .display-help {
   position: absolute;
   right: 20px;
@@ -539,18 +523,14 @@ button {
   border-color: #272936;
   font-size: 12px;
 }
+/* Classic: Georgia's default old-style figures bob around the baseline, so numbers use lining,
+   tabular figures (#363). Rules that set font-variant-numeric themselves keep lining-nums too. */
 .font-serif {
   font-family: Georgia, 'Times New Roman', serif;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .font-mono {
   font-family: Consolas, 'Courier New', monospace;
-}
-.layout-minimal .ambient-content {
-  padding: 9cqh 8cqw;
-  gap: 6cqh 5cqw;
-}
-.layout-weather-first .current-temperature {
-  font-size: calc(6.8cqw * var(--font-scale));
 }
 
 @media (max-width: 560px) {

@@ -9,21 +9,21 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | Method/path                    | Request                                                                | Response                                                                     |
 | ------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `GET /api/health`              | None                                                                   | Status, version (read once at startup from the shipped `package.json`), storage recovery warning. |
-| `GET /api/state`               | None                                                                   | Settings, reminders, weather, air quality (`off` unless enabled), preview metadata, storage warning. |
-| `PATCH /api/settings`          | Validated nested partial settings                                      | Full saved settings.                                                         |
+| `GET /api/state`               | None                                                                   | Settings, reminders, weather (refreshed only while a saved widget needs it), air quality (`off` unless enabled), preview metadata, storage warning; the [settings revision](#settings-revision) as `ETag`. |
+| `PATCH /api/settings`          | Validated nested partial settings; optional `If-Match`                 | Full saved settings with the new revision as `ETag`; 409 with the current settings when `If-Match` is stale. |
 | `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |
 | `GET /api/reminders`           | None                                                                   | Reminder array.                                                              |
 | `POST /api/reminders`          | `text`, optional ISO `dueAt` or null, optional past `createdAt`        | Created reminder (201).                                                      |
 | `PATCH /api/reminders/:id`     | Partial `text`, `completed`, `dueAt`                                   | Updated reminder.                                                            |
 | `DELETE /api/reminders/:id`    | None                                                                   | Empty 204.                                                                   |
 | `DELETE /api/reminders/completed` | None                                                                | `{ "deleted": n }`; removes only completed reminders, atomically.            |
-| `GET /api/weather`             | None                                                                   | Cached normalized forecast.                                                  |
+| `GET /api/weather`             | None                                                                   | Normalized forecast for the saved location, refreshed when due (the editor's Weather tab). |
 | `GET /api/air-quality`         | Optional `scale=us\|european` (defaults to the saved scale)            | Editor preview of [air quality](#air-quality) for the saved location, `no-store`. |
 | `GET /api/locations?q=Toronto` | City query, 2–100 characters                                           | Up to eight city results with coordinates/timezone.                          |
 | `GET /api/export`              | None                                                                   | Downloadable settings/reminders JSON backup.                                 |
 | `POST /api/import`             | A validated export                                                     | Atomic replacement of settings/reminders.                                    |
 | `GET /api/preview`             | None                                                                   | Availability, capture timestamp, dimensions.                                 |
-| `GET /api/preview/image`       | None                                                                   | RAM-only PNG, `no-store`, or 404.                                            |
+| `GET`/`HEAD /api/preview/image` | None                                                                  | RAM-only PNG, `no-store`, or 404; HEAD answers the same without a body.      |
 | `GET /api/photo/image?id=hash` | Current photo hash                                                     | Selected local PNG, `no-store`, or 404.                                      |
 | `GET /api/windows/status`      | None                                                                   | Actual screensaver registry state; unavailable on other systems.             |
 
@@ -44,6 +44,24 @@ failed explicit device action; only an explicit successful device selection may
 replace a manual city without this guard.
 `/api/location` remains compatible for existing callers; the studio no longer uses
 its immediate-save behavior.
+
+### Settings revision
+
+`GET /api/state` and every `PATCH /api/settings` reply carry the settings revision as a
+strong `ETag` (#287), for example `"3f9c2a1b7d4e-12"`: a random id of the server process
+and a counter that every write changing the settings advances (a Save, a location result
+or an import; reminder writes do not). It exists only in memory: it is never written to
+`state.json`, the backup or exports, and it starts again after a restart, so the files the
+previous release reads are unchanged. A `PATCH /api/settings` whose `If-Match` names the
+revision its changes were computed from applies only while that revision is current; the
+check runs inside the serialized write, so two patches from one revision cannot both pass.
+Otherwise nothing is written and the reply is 409 with the current `ETag` and
+`{ "error": "Settings changed in another window. Review and save again.", "settings": <current settings>, "revision": "<current revision>" }`.
+Without `If-Match`, or with `*`, a patch applies as before; a tag that is not quoted names
+no revision and is refused. The editor sends `If-Match`. On a 409 it merges the current
+settings into its draft as a poll would (the [list and widget merges](ui.md#editing)) and
+sends the result once more by itself when the merge keeps every change the other window
+saved and nothing blocks Save; otherwise it keeps the merged draft and shows the message.
 
 Visual settings include `widgetBehavior.reminders.hideWhenEmpty` (boolean,
 default `true`). It controls hiding a confirmed list with no pending reminders;
@@ -108,8 +126,8 @@ Other widgets reject a span (`<Name> does not support custom sizes`); too-small 
 too-wide spans return 400 with a clear message. In a placement PATCH, `span: null`
 clears a custom size, and so does a `size` without `span` (a family choice); a
 move keeps it. The editor sends a changed placement whole, with `span: null` when
-it has none. The previous installed release (`3fee844`) reads a saved span; the older
-`bedca44` does not, so a downgrade that far needs the
+it has none. The previous installed release (`3446400`) and the earlier `3fee844`
+read a saved span; `bedca44` does not, so a downgrade that far needs the
 [strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
 Legacy version-one settings acquire the safe default grid while preserving old
 widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
@@ -125,8 +143,10 @@ unchanged until Native is chosen. `color` tints every widget's accent elements w
 [native palette](design.md#native-palette)). `accentColor` is kept in both modes.
 A stored retired swatch value (Sand `#b8a17a`, retuned in #224) renders as that
 swatch's current value and is never rewritten.
-At rest `color` is omitted; `native` is written and is a
-[rollback exception](install.md#additive-data-and-rollback-compatibility-84).
+At rest `color` is omitted and `native` is written. The previous installed release
+(`3446400`) and `3fee844` read `native`
+([rollback compatibility](install.md#additive-data-and-rollback-compatibility-84));
+it is a rollback exception only for [`bedca44`](install.md#earlier-rollback-target-bedca44).
 
 `appearance.animation` is `off`, `subtle` or `lively`; data without it reads as
 `subtle`, and `subtle` is omitted at rest. It governs motion inside widgets and the
@@ -176,8 +196,10 @@ Invalid image/settings reject the entire mutation.
 
 `GET /api/state` adds metadata-only `photo` availability/hash/dimensions/update
 time. Image bytes are served only for the current hash through the local image
-endpoint and are absent from settings, exports and diagnostics. Imports leave
-the existing local photo unchanged. The private atomic store contains selected
+endpoint and are absent from settings, exports and diagnostics. Polls and the other
+routes read a metadata-only view of the store and never copy the photo bytes; the image
+endpoint decodes the current photo once and serves that buffer until the photo changes
+(#353). Imports leave the existing local photo unchanged. The private atomic store contains selected
 photo bytes; its previous-state recovery backup may retain an older photo after
 Replace/Clear. This is not secure deletion. Desktop snapshots remain separate,
 RAM-only and never become a photo or part of that backup.
@@ -286,6 +308,21 @@ labels without converting twice. Daily date labels follow the provider's fixed
 offset boundaries; hourly epoch instants retain unambiguous timing across DST.
 [Open-Meteo parameter definitions](https://open-meteo.com/en/docs).
 
+`GET /api/state` refreshes the forecast only while a saved, enabled widget needs it
+(#352): Weather or Forecast, or Sun & moon or Air quality while the saved location's
+timezone is still `auto`, which only the forecast resolves. Otherwise it returns the
+cached forecast for the saved location and units, or the empty `unavailable` state with
+no error, and contacts no provider. `GET /api/weather` refreshes it whenever it is due; the
+editor requests it while its Weather tab is open, and while the draft shows a widget that
+needs it before Save.
+
+A request waits for a due refresh at most about one second (#351). After that it answers
+with the cached state, while the refresh carries on and a later request sees its result.
+While a refresh is in flight the state carries the API-only `refreshing: true`, which is
+never stored or exported; during the first fetch for a location there is no data and no
+error text yet, rather than a failure. The browser asks again 2 seconds later while
+anything is refreshing, at most five times in a row, then keeps its 30-second poll.
+
 Successful forecasts are cached for 15 minutes in memory. Failed refreshes retain
 the last successful timestamp/data and mark them stale; without prior data the
 state is unavailable. Failed requests retry no more often than once per minute.
@@ -335,7 +372,8 @@ Readings are cached in memory for 30 minutes, keyed by location and scale (at mo
 8 entries). A failed refresh keeps the last good reading as `stale`; without one the
 state is `unavailable`. Failures retry no more often than every 2 minutes. Both
 intervals use the forecast's monotonic-and-wall timing, and a future `updatedAt` is
-refreshed at once (#244).
+refreshed at once (#244). Both routes wait for a due refresh at most about one second
+and say `refreshing` meanwhile, as the forecast does (#351).
 
 The widget labels every value as a model estimate with its age, and credits
 "CAMS · Open-Meteo" (the inspector hint names Copernicus CAMS in full). It is not a
@@ -362,8 +400,10 @@ The host captures before ambient activation and posts PNG bytes to
 and `Content-Type: image/png`. Maximum: 4 MiB, 4096 pixels per side, 4 megapixels.
 The host clears it with `DELETE /api/preview` and the same token on exit.
 Disabling the preview, importing data, server shutdown, or a 12-hour expiry also
-removes availability. Every clear invalidates earlier unfinished uploads, which
-return 409 instead of restoring pixels; re-enabling preview does not revive them.
+removes availability. `HEAD /api/preview/image` answers with the same status and headers
+as `GET` and no body (#124); `GET /api/preview` (`available`) is the simpler clearance
+check. Every clear invalidates earlier unfinished uploads, which return 409 instead of
+restoring pixels; re-enabling preview does not revive them.
 No snapshot, token, capture log, or image cache is written
 by the server. Actual Windows capture is owned and tested by the Windows host.
 
@@ -380,14 +420,21 @@ Windows data defaults to `%LOCALAPPDATA%\LivingRoomDisplay\data`; `LRD_DATA_DIR`
 can select an isolated test location. Other systems use their per-user application
 data folder. No creator path/account is required. Writes are serialized, validated,
 flushed to a temporary file, and renamed into `state.json`. The previous valid
-state is atomically retained as `state.backup.json`, written first, so a save that
-fails leaves both files holding the last successful save. While another process
-(a backup or scanning tool) holds a file, the rename is retried for about a second
-on `EPERM`, `EACCES` or `EBUSY` before the request fails with 500 and nothing new
-saved. A failed write deletes its temporary copy of the private state, and startup
-removes `state.json.*.tmp` and `state.backup.json.*.tmp` left by an interrupted
-save (#247). The selected photo is inspected when it changes (upload, startup and
-recovery); ordinary saves keep the already checked photo and parse only its shape,
+state is atomically retained as `state.backup.json`, written first. While another
+process (a backup or scanning tool) holds a file, the rename is retried for about a
+second on `EPERM`, `EACCES` or `EBUSY` before the request fails with 500 and nothing new
+saved. A save that fails leaves `state.json` holding the last successful save, so nothing
+that was saved is lost. The backup depends on which file was held (#325): when it was
+`state.json`, the backup already holds that same save; when it was `state.backup.json`,
+that write is the one that failed, `state.json` is not attempted and the backup keeps the
+save before. A failed write deletes its temporary copy of the private state. Startup
+removes `state.json.*.tmp` and `state.backup.json.*.tmp` left by an interrupted save once
+their modification time is at least a minute from the current time (#247, #320); a newer
+one may be a save in progress by another server on the same folder, and a later start
+removes it. Two
+servers on one data folder remain unsupported: each keeps its own copy in memory. The
+selected photo is inspected when it changes (upload, startup and recovery); ordinary
+saves keep the already checked photo and parse only its shape,
 so a reminder save with a 2 MB photo costs about the time of writing both files
 rather than a fresh inflate, CRC and hash of the image (#245).
 
@@ -400,8 +447,10 @@ weather, snapshot pixels, and native tokens are excluded. Store backups privatel
 At rest, `state.json`, `state.backup.json` and exports omit additive values while
 they equal the current read default: `appearance.accentMode` `color`,
 `appearance.animation` `subtle`, default `widgetData` sections, and disabled widget
-ids the previous installed release does not know. The previous release (`3fee844`)
+ids the previous installed release does not know. The previous release (`3446400`)
 reads every one of these keys and knows every widget id, so all widget ids are
-written. API responses
-(`/api/state`, the `PATCH /api/settings` response and the native session) always
-include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).
+written and omitting the other values is optional. It is kept unchanged (#272) so a
+reader bump does not change the data format, and it remains the mechanism for a
+future additive key or new widget id that the previous release does not know. API
+responses (`/api/state`, the `PATCH /api/settings` response and the native session)
+always include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).

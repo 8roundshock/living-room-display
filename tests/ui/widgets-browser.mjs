@@ -331,6 +331,93 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       if (!Object.keys(INTL_TICK_ALLOWANCES).length) assert.equal(intlPerTick.fullBoard, 0, 'the full board constructs no Intl formatter per tick within one minute');
     } finally { await intlContext.close(); }
     checks.push(`#99 Intl constructions per tick within one minute: ${JSON.stringify(intlPerTick)}; still allowed: ${Object.entries(INTL_TICK_ALLOWANCES).map(([id, ticket]) => `${id} (${ticket})`).join(', ') || 'none'}`);
+
+    /** Polls from Node (page timers run on page.clock). */
+    const until = async (read, predicate, label) => {
+      for (let attempt = 0; attempt < 150; attempt++) { const value = await read(); if (predicate(value)) return value; await page.waitForTimeout(20); }
+      throw new Error(`Timed out waiting for ${label}: ${JSON.stringify(await read())}`);
+    };
+
+    // #314: the shared fit also reruns on a `class` change inside the content. A class-only restyle that widens a
+    // nowrap phrase changes no box size and no text, yet the widget zooms out to fit it, and back once it is gone.
+    {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      current = structuredClone(source); current.settings.appearance.motionEnabled = false;
+      current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock']));
+      current.settings.widgetGrid.density = 'balanced'; current.settings.widgetGrid.placements.clock = { column: 0, row: 0, size: 'large' };
+      await open();
+      const widget = page.locator('[data-widget-id="clock"]');
+      const fitState = () => widget.evaluate(section => {
+        const body = section.querySelector('.widget-content'), style = getComputedStyle(section), fit = new DOMMatrix(getComputedStyle(body).transform).a;
+        const width = section.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), height = section.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+        return { fit, inside: body.scrollWidth * fit <= width + 1 && body.scrollHeight * fit <= height + 1, timeHeight: section.querySelector('.clock-time').getBoundingClientRect().height / fit };
+      });
+      const rest = await fitState();
+      assert.ok(rest.fit === 1 && rest.inside, `#314: the large clock fits at rest ${JSON.stringify(rest)}`);
+      await page.addStyleTag({ content: '.grid-ambient .clock-time.refit-probe { letter-spacing: 0.6em; }' });
+      await widget.locator('.clock-time').evaluate(element => element.classList.add('refit-probe'));
+      const wide = await until(fitState, value => value.fit < 0.95, 'a refit after a class-only change');
+      assert.ok(wide.inside && Math.abs(wide.timeHeight - rest.timeHeight) < 0.5, `#314: the wider time fits again, with no box or line change ${JSON.stringify({ rest, wide })}`);
+      await widget.locator('.clock-time').evaluate(element => element.classList.remove('refit-probe'));
+      await until(fitState, value => value.fit === 1 && value.inside, 'the refit back to 1');
+      checks.push(`#314 a class-only change that widens the large clock's nowrap time refits it (fit 1 → ${wide.fit.toFixed(3)}, inside its box) and back to 1 when removed`);
+    }
+
+    // #318: one widget's render error stays inside that widget. With the test hook set, Clock throws while rendering:
+    // its section keeps its footprint and keeps relocating, shows "Clock unavailable" in the status tone, the rest of
+    // the full board, the editor canvas and the picker keep working, the error is logged once, and Clock is back on
+    // the next minute after the fault clears.
+    {
+      const consoleErrors = []; const listener = message => { if (message.type() === 'error') consoleErrors.push(message.text()); };
+      page.on('console', listener);
+      await page.setViewportSize({ width: 1280, height: 720 });
+      current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD]));
+      current.settings.preview.enabled = true; current.settings.widgetGrid.density = 'balanced';
+      Object.assign(current.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+      await open();
+      const clock = page.locator('[data-widget-id="clock"]');
+      const footprint = () => clock.evaluate(section => { const r = section.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
+      const composition = async () => Number(await page.locator('.ambient').getAttribute('data-composition'));
+      const before = { footprint: await footprint(), composition: await composition() };
+      await page.evaluate(() => { window.__lrdWidgetFault = 'clock'; });
+      await page.clock.runFor(1_000);
+      await until(() => clock.innerText(), text => text.trim() === 'Clock unavailable', 'Clock unavailable');
+      const failed = await clock.evaluate(section => {
+        const line = section.querySelector('.widget-unavailable .ambient-description'), probe = document.createElement('span');
+        probe.style.color = 'var(--ambient-caution)'; section.append(probe); const caution = getComputedStyle(probe).color; probe.remove();
+        return { color: getComputedStyle(line).color, caution, text: getComputedStyle(section.closest('.ambient')).getPropertyValue('--ambient-text') };
+      });
+      assert.equal(failed.color, failed.caution, `#318: the unavailable line uses the status tone ${JSON.stringify(failed)}`);
+      const after = await footprint();
+      for (const side of ['left', 'top', 'width', 'height']) assert.ok(Math.abs(after[side] - before.footprint[side]) <= 0.5, `#318: the failed widget keeps its footprint (${side})`);
+      const board = await page.locator('.ambient-widget').evaluateAll(sections => sections.map(section => ({ id: section.dataset.widgetId, failed: Boolean(section.querySelector('.widget-unavailable')), content: section.querySelector('.widget-content').innerText.trim().length + section.querySelectorAll('img').length })));
+      assert.equal(board.length, Object.keys(FULL_BOARD).length, '#318: the full board still shows every widget');
+      for (const item of board) if (item.id !== 'clock') assert.ok(!item.failed && item.content > 0, `#318: ${item.id} still renders`);
+      await page.clock.runFor(181_000); await page.clock.runFor(1_500);
+      assert.ok(await composition() > before.composition, '#318: the board keeps relocating');
+      const moved = await footprint();
+      assert.ok(Math.abs(moved.left - before.footprint.left) > 1 || Math.abs(moved.top - before.footprint.top) > 1, '#318: the failed widget relocates with the board');
+      assert.equal((await clock.innerText()).trim(), 'Clock unavailable', '#318: still unavailable while the fault lasts (each new minute retries)');
+      assert.equal(consoleErrors.filter(text => /Synthetic clock fault/.test(text)).length, 1, `#318: logged once ${JSON.stringify(consoleErrors)}`);
+      await page.evaluate(() => { delete window.__lrdWidgetFault; });
+      await page.clock.runFor(60_000);
+      await until(() => clock.locator('.clock-time').count(), count => count === 1, 'Clock back on the next minute');
+      // The editor canvas and the picker sample.
+      await page.goto(base + '/editor'); await page.locator('.preview-surface [data-widget-id="weather"]').waitFor();
+      await page.evaluate(() => { window.__lrdWidgetFault = 'weather'; });
+      await page.clock.runFor(1_000);
+      const canvasWeather = page.locator('.preview-surface [data-widget-id="weather"]');
+      await until(() => canvasWeather.innerText(), text => text.trim() === 'Weather unavailable', 'the editor canvas shows Weather unavailable');
+      assert.ok(await page.locator('.preview-surface [data-widget-id="clock"] .clock-time').count() === 1, '#318: the rest of the editor canvas renders');
+      await page.getByRole('tab', { name: 'Style', exact: true }).click();
+      await page.getByRole('button', { name: 'Add widget to display' }).click();
+      await page.getByRole('button', { name: /^Preview Weather(, on your display)?$/ }).click();
+      await until(() => page.locator('.picker-sample').first().innerText(), text => /Weather unavailable/.test(text), 'the picker sample shows Weather unavailable');
+      await page.keyboard.press('Escape');
+      assert.ok(await page.locator('.studio').count() === 1, '#318: the editor stays mounted and interactive');
+      page.off('console', listener);
+      checks.push('#318 a renderer that throws (test hook) shows "<Widget> unavailable" in the status tone in its own footprint and keeps relocating; the other 11 widgets, the editor canvas and the picker keep rendering; logged once; recovers on the next minute');
+    }
     assert.deepEqual(errors, []); return { checks, images, clockFonts, fitMetrics, intlPerTick };
   } finally { await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 }

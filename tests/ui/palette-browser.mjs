@@ -138,7 +138,22 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     const page = await context.newPage();
     page.on('pageerror', (error) => errors.push(error.message));
     await page.clock.install({ time: new Date(now) });
-    const open = async () => { await page.goto(base + '/display'); await page.locator('.display-page').waitFor(); await page.clock.runFor(200); };
+    /**
+     * Loads the display with `current`. A timeout (#305) names what was loading (widget and family or
+     * board, mode, viewport) and every page error and console message so far, so a slow load can be told
+     * from a page that stopped responding.
+     */
+    const open = async () => {
+      const messages = [], listen = (message) => messages.push(`${message.type()}: ${message.text()}${message.location().url ? ` (${message.location().url})` : ''}`);
+      page.on('console', listen);
+      try { await page.goto(base + '/display'); await page.locator('.display-page').waitFor(); await page.clock.runFor(200); }
+      catch (error) {
+        const shown = Object.entries(current.settings.widgets).filter(([, on]) => on).map(([id]) => `${id} ${current.settings.widgetGrid.placements[id]?.size ?? ''}`.trim());
+        const viewport = page.viewportSize();
+        throw new Error(`open() failed loading /display (${error.message.split('\n')[0]}): ${shown.length === 1 ? `${shown[0]} alone` : `a board of ${shown.join(', ')}`}, ${current.settings.appearance.accentMode} mode, `
+          + `${viewport.width}x${viewport.height}, state ${stateStatus}${photoMissing ? ', photo missing' : ''}. Page errors so far: ${JSON.stringify(errors)}. Console during this load: ${JSON.stringify(messages)}`, { cause: error });
+      } finally { page.off('console', listen); }
+    };
     const state = ({ mode, only, size, brightness, board }) => {
       const next = structuredClone(source);
       Object.assign(next.settings.appearance, { accentMode: mode, accentColor: SAND, motionEnabled: false }, brightness ? { brightness } : {});

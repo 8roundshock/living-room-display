@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
+import { photoFixture } from '../../../src/server/fixtures.ts';
 import { GRID_DENSITIES, WIDGET_IDS, widgetSizes } from '../../../src/shared/widgets.ts';
 import { intlPerTicks } from './clock.mjs';
 import { assertImageHold } from './photo.mjs';
+
+/** A synthetic 9:16 snapshot, as from a portrait primary display (#308). */
+const PORTRAIT = (() => { const pixels = Buffer.alloc((90 * 4 + 1) * 160, 120); for (let row = 0; row < 160; row++) pixels[row * (90 * 4 + 1)] = 0; return photoFixture(90, 160, pixels); })();
+const SMALL_TV = { width: 1280, height: 720 };
 
 export const id = 'preview';
 export const selectors = ['.preview-caption'];
@@ -25,6 +30,18 @@ function anchoring(widget) {
       fit: new DOMMatrix(getComputedStyle(section.querySelector('.widget-content')).transform).a, objectFit: getComputedStyle(image).objectFit,
       left: caption.left - drawn.left, gap: caption.top - (drawn.top + drawn.height),
       fillsWidth: drawn.width >= body.width - 1, fillsHeight: caption.bottom >= body.bottom - slack, inside: drawn.left >= body.left - 0.5 && drawn.left + drawn.width <= body.right + 0.5 && caption.bottom <= body.bottom + 1.5,
+    };
+  });
+}
+
+/** The caption's lines (distinct line boxes of its text), its right edge against the cell's content box, and whether its time phrase broke. */
+function captionLayout(widget) {
+  return widget.evaluate(section => {
+    const lines = element => { const range = document.createRange(); range.selectNodeContents(element); return [...range.getClientRects()].filter(rect => rect.width > 0); };
+    const caption = section.querySelector('.preview-caption'), text = lines(caption), style = getComputedStyle(section);
+    return {
+      lines: new Set(text.map(rect => Math.round(rect.top))).size, timeLines: new Set(lines(section.querySelector('.preview-caption-time')).map(rect => Math.round(rect.top))).size,
+      overflow: Math.max(...text.map(rect => rect.right)) - (section.getBoundingClientRect().right - parseFloat(style.paddingRight)), text: caption.textContent,
     };
   });
 }
@@ -63,8 +80,51 @@ export async function family({ widget, size, density, viewport }) {
   assertAnchored(await anchoring(widget), `last screen ${size}/${density} ${viewport.width}`);
 }
 
+/**
+ * #308: a portrait (9:16) snapshot keeps "Last screen · 12:57 PM" on one line, from the image's left edge and
+ * past its right edge but within the cell, at fit 1 at Text 100% in every family and density; and at any Text
+ * size the time and its period never part. A page route serves the 9:16 image.
+ */
+async function portraitCaption(page, state, now, views) {
+  const setup = (size, density, fontScale, portrait) => {
+    state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'preview'])); state.settings.preview.enabled = true;
+    state.settings.widgetGrid.density = density; state.settings.widgetGrid.placements.preview = { column: 0, row: 0, size };
+    Object.assign(state.settings.appearance, { animation: 'off', motionEnabled: false, fontScale });
+    state.preview = { available: true, capturedAt: new Date(now).toISOString(), width: portrait ? 360 : 320, height: portrait ? 640 : 200 };
+  };
+  let cases = 0;
+  try {
+    for (const view of views) {
+      await page.setViewportSize(view);
+      await page.route('**/api/preview/image?*', route => route.fulfill({ contentType: 'image/png', body: PORTRAIT }));
+      for (const density of Object.keys(GRID_DENSITIES)) for (const size of widgetSizes('preview')) {
+        setup(size, density, 1, true); await reload(page);
+        const widget = page.locator('[data-widget-id="preview"]'), label = `last screen 9:16 ${size}/${density} ${view.width}`;
+        assertAnchored(await anchoring(widget), label);
+        const caption = await captionLayout(widget);
+        assert.ok(caption.lines === 1 && caption.overflow <= 0.5, `${label}: "${caption.text}" on one line inside the cell ${JSON.stringify(caption)}`);
+        cases++;
+      }
+      // The narrowest family (Fine small) at every Text size, portrait and landscape: the time never breaks inside.
+      for (const portrait of [true, false]) {
+        if (!portrait) await page.unroute('**/api/preview/image?*');
+        for (const fontScale of [1, 1.25, 1.5]) {
+          setup('small', 'fine', fontScale, portrait); await reload(page);
+          const caption = await captionLayout(page.locator('[data-widget-id="preview"]'));
+          assert.equal(caption.timeLines, 1, `Fine small ${portrait ? '9:16' : '16:10'} Text ${fontScale * 100}% ${view.width}: the time stays whole ${JSON.stringify(caption)}`);
+          cases++;
+        }
+      }
+    }
+  } finally { await page.unroute('**/api/preview/image?*'); state.settings.appearance.fontScale = 1; }
+  return cases;
+}
+
 export async function sweep({ page, viewport, state, base, now }) {
-  if (viewport.width !== 1920) return;
+  const portraitCases = await portraitCaption(page, state, now, viewport.width === 1920 ? [SMALL_TV, viewport] : [viewport]);
+  await page.setViewportSize(viewport);
+  const portraitSummary = `Last screen 9:16 snapshot: caption on one line from the image's left edge (±1 px, ≤ 6 px below, inside the cell) at fit 1 in every family and density, and "h:mm AM" whole at Text 100–150% (Fine small, 9:16 and 16:10); ${portraitCases} cases at ${viewport.width === 1920 ? '720p and 1080p' : `${viewport.width}×${viewport.height}`} (#308)`;
+  if (viewport.width !== 1920) return portraitSummary;
   const authored = structuredClone(state);
   const only = (target, { size = 'medium', density = 'balanced', animation = 'off' } = {}) => {
     target.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'preview'])); target.settings.preview.enabled = true;
@@ -90,6 +150,24 @@ export async function sweep({ page, viewport, state, base, now }) {
       await assertEditorCanvas(page, base, `editor canvas last screen ${size} ${editorViewport.width}`);
     }
   }
+  // #276: the editor's placeholder (no snapshot yet) uses the widget's width instead of the pre-grid 23cqw clamp
+  // that wrapped it one word per line.
+  const placeholder = [];
+  await page.setViewportSize({ width: 1280, height: 720 });
+  for (const density of Object.keys(GRID_DENSITIES)) for (const size of widgetSizes('preview')) {
+    only(state, { size, density }); state.preview = { available: false, capturedAt: null, width: null, height: null };
+    await page.goto(`${base}/editor`);
+    const widget = page.locator('.preview-screen [data-widget-id="preview"]'); await widget.locator('.ambient-description').waitFor(); await page.clock.runFor(300);
+    const share = await widget.evaluate(section => {
+      const style = getComputedStyle(section), scale = section.getBoundingClientRect().width / section.offsetWidth;
+      const content = (section.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)) * scale;
+      const description = section.querySelector('.ambient-description'), range = document.createRange(); range.selectNodeContents(description);
+      return { text: description.textContent, share: description.getBoundingClientRect().width / content, lines: new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size };
+    });
+    // A sentence that fits on one line (a wide medium cell) needs less than the width.
+    assert.ok(share.share >= 0.6 || share.lines === 1, `last screen placeholder ${size}/${density}: "${share.text}" uses ${(share.share * 100).toFixed(0)}% of the content width on ${share.lines} lines`);
+    placeholder.push(share);
+  }
   await page.goto(`${base}/display`); await page.locator('.display-page').waitFor();
   await page.setViewportSize(viewport);
   only(state); await reload(page);
@@ -99,5 +177,5 @@ export async function sweep({ page, viewport, state, base, now }) {
     setup: (target, animation) => only(target, { animation }),
     swap(target) { const next = new Date(Date.parse(target.preview.capturedAt) + 60_000).toISOString(); target.preview = { ...target.preview, capturedAt: next }; return encodeURIComponent(next); },
   });
-  return `Last screen caption on the drawn image's left edge (±1 px), ≤ 6 px below, image filling the limiting dimension, fit 1, in every family and density at 720p/1080p/4K, and in the editor canvas (authored board and every family) at 1280×720 and 390 px with none of the canvas frame's chrome; no per-tick caption formatter; a 1.5 s delayed new snapshot (${levels.join(', ')}) holds at 0 until loaded at Subtle/Lively and shows at once at Off/reduced motion`;
+  return `Last screen caption on the drawn image's left edge (±1 px), ≤ 6 px below, image filling the limiting dimension, fit 1, in every family and density at 720p/1080p/4K, and in the editor canvas (authored board and every family) at 1280×720 and 390 px with none of the canvas frame's chrome; the editor placeholder uses ≥ 60% of the content width, or one line, in every family and density (${placeholder.map(item => `${Math.round(item.share * 100)}%/${item.lines}`).join(' ')}, #276); no per-tick caption formatter; a 1.5 s delayed new snapshot (${levels.join(', ')}) holds at 0 until loaded at Subtle/Lively and shows at once at Off/reduced motion. ${portraitSummary}`;
 }

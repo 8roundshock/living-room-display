@@ -15,7 +15,7 @@
 .grid-ambient.layout-editing .ambient-content { transform: none; }
 .grid-ambient .ambient-widget { position: absolute; grid-area: auto; padding: min(1.2cqw, 1.8cqh); container-type: size; animation: none; transform: none; }
 .grid-ambient .ambient-widget .widget-content { animation: none; width: 100%; height: auto; }
-/* Soft motion drift (±0.5% of the plane in 36 discrete steps, one about every 2 s) is a timer in Display.tsx
+/* The drift of Drift and fade between moves (±0.5% of the plane in 36 discrete steps, one about every 2 s) is a timer in Display.tsx
    rather than an animation, so the display draws a frame only when the plane moves (#248). */
 .grid-ambient .widget-body { width: 100%; min-height: 100cqh; height: auto; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .grid-ambient .widget-body > * { flex-shrink: 0; }
@@ -40,7 +40,9 @@
 .grid-ambient .clock-period { font-size: max(var(--min-text) * var(--font-scale), 0.2em); margin-left: 0.45em; letter-spacing: 0.01em; }
 /* The outline never thins below 1.2 px at 720p (12% of the shared 1.4% text floor, so it scales with the display, #222). */
 .grid-ambient .clock-outline .clock-digits { -webkit-text-fill-color: transparent; -webkit-text-stroke: max(var(--min-text, 0px) * 0.12, 0.35cqw) currentColor; }
-.grid-ambient .clock-family-medium { flex-direction: row; align-items: center; justify-content: space-between; gap: 5cqw; }
+/* Medium keeps the date beside its own time (#332): nothing frames widgets, so a date pushed to the far edge
+   of the cell would read as part of the neighbouring widget. */
+.grid-ambient .clock-family-medium { flex-direction: row; align-items: center; justify-content: flex-start; gap: 5cqw; }
 .grid-ambient .clock-family-medium .clock-time { font-size: calc(min(23cqw, 57cqh) * var(--font-scale)); }
 .grid-ambient .clock-family-medium .clock-calendar { max-width: 31%; }
 .grid-ambient .clock-family-medium .clock-calendar .ambient-label, .grid-ambient .clock-family-medium .clock-date { font-size: calc(max(var(--min-text), min(5.1cqw, 12cqh)) * var(--font-scale)); }
@@ -222,7 +224,7 @@
 .grid-ambient .ambient-reminder-title { font-size: var(--reminder-title-size); line-height: 1.2; font-weight: 500; -webkit-line-clamp: var(--reminder-lines, 2); }
 .grid-ambient .ambient-reminder-date { font-size: calc(max(var(--min-data), min(5.8cqw, 8cqh, var(--ambient-reminder-title) * 0.66)) * var(--font-scale)); line-height: 1.3; margin-top: calc(var(--reminder-title-size) * 0.12); overflow-wrap: anywhere; }
 .grid-ambient .ambient-reminder-overdue { color: var(--ambient-caution); }
-.grid-ambient .reminder-segment { white-space: nowrap; }
+.grid-ambient .ambient-reminder-segment { white-space: nowrap; }
 .grid-ambient .reminders-body .ambient-description { font-size: calc(max(var(--min-text), min(6.2cqw, 8cqh, var(--ambient-reminder-title) * 0.66)) * var(--font-scale)); margin-top: calc(var(--reminder-title-size) * 0.4); }
 .grid-ambient .reminder-more-probe { display: none; }
 /* Out of flow but still rendered while measuring: display: none would replay its entrance and count crossfade (#76). */
@@ -238,15 +240,19 @@
 
 /* Screens remain complete and faint; deliberate photos have purposeful crops. */
 .snapshot-processing { position: absolute; width: 0; height: 0; pointer-events: none; }
-/* Last screen (#225): the frame is the largest box of the snapshot's shape (--snapshot-ratio) that fits
-   above one caption line, centred in the cell; the caption sits on the image's left edge, a small
-   display-relative gap below it (under 6 px even at 4K). The line is reserved at 1.35em, not its
-   1.2 line-height, because its text fragments (the font's ascent and descent) count as overflow. */
+/* Last screen (#225): the image is the largest box of the snapshot's shape (--snapshot-ratio) that fits
+   above one caption line; the caption sits on the image's left edge, a small display-relative gap below
+   it (under 6 px even at 4K). The line is reserved at 1.35em, not its 1.2 line-height, because its text
+   fragments (the font's ascent and descent) count as overflow. The frame is as wide as the image or the
+   one-line caption, whichever is wider, up to the cell, and is centred: a narrow (portrait) image keeps
+   "Last screen · 12:57 PM" on one line, running past the image's right edge but not the cell's (#308).
+   Only the label and the time may part, on a cell too narrow for both; "12:57 PM" never breaks. */
 .grid-ambient .snapshot-body { align-items: center; height: 100cqh; min-height: 0; --caption-size: calc(max(var(--min-text), min(5cqw, 7cqh)) * var(--font-scale)); --caption-gap: max(1px, var(--min-text, 0px) * 0.18); }
-.grid-ambient .snapshot-frame { display: flex; flex-direction: column; align-items: flex-start; width: min(100%, (100cqh - var(--caption-size) * 1.35 - var(--caption-gap)) * var(--snapshot-ratio, 1.7778)); }
-.grid-ambient .preview-image-shell { width: 100%; }
-.grid-ambient .preview-image { display: block; width: 100%; height: auto; max-height: none; aspect-ratio: var(--snapshot-ratio, 1.7778); object-fit: contain; object-position: center; border-radius: 0; }
-.grid-ambient .preview-caption { flex: none; font-size: var(--caption-size); line-height: 1.2; margin: var(--caption-gap) 0 0; }
+.grid-ambient .snapshot-frame { display: flex; flex-direction: column; align-items: flex-start; width: max-content; max-width: 100%; }
+.grid-ambient .preview-image-shell { width: min(100cqw, (100cqh - var(--caption-size) * 1.35 - var(--caption-gap)) * var(--snapshot-ratio, 1.7778)); }
+.grid-ambient .preview-image { display: block; width: 100%; height: auto; aspect-ratio: var(--snapshot-ratio, 1.7778); object-fit: contain; object-position: center; border-radius: 0; }
+.grid-ambient .preview-caption { flex: none; font-size: var(--caption-size); line-height: 1.2; margin: var(--caption-gap) 0 0; color: var(--ambient-accent); }
+.grid-ambient .preview-caption > span { white-space: nowrap; }
 .grid-ambient .photo-image-shell { width: 100%; height: 100cqh; display: flex; align-items: center; justify-content: center; }
 .grid-ambient .ambient-photo-image { display: block; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.3) brightness(0.45); opacity: 0.45; border: 0; border-radius: 0; }
 .grid-ambient .ambient-photo.widget-size-large .ambient-photo-image { object-fit: contain; }

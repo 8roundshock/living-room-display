@@ -33,8 +33,9 @@ const titleSize = (rows: readonly HTMLElement[]) => { const title = titleOf(rows
 
 /**
  * Fits as many complete rows as the actual box holds, plus an honest "+N more". Stable by design:
- * the body is fixed at 100cqh (so the shared Widget fit stays at 1 and its per-second refit never
- * changes this box), measurement runs only when the rows or the widget's own box change, and
+ * the body is fixed at 100cqh (so the shared Widget fit stays at 1 and its refit, on a box, content,
+ * class, Text size or typeface change, never changes this box), measurement runs only when the rows
+ * or the widget's own box change, and
  * state changes only when the result does. Overflow rows take no layout outside measuring.
  * `fit` is 0 when even one row overflows; the widget then shows one row and zooms out as a whole.
  * While measuring, the body is back at its fixed 100cqh box even in that overfull state (see
@@ -106,7 +107,7 @@ function ReminderList({ rows, total, fresh, offline, settings }: { rows: Row[]; 
           {row.due && <p className="ambient-reminder-date">
             {row.due.overdue && <><span className="ambient-reminder-overdue">Overdue</span> · </>}
             {/* Lines break only between parts, never inside "7:00 AM". */}
-            {row.due.when.split(' · ').map((part, partIndex) => <Fragment key={partIndex}>{partIndex ? ' · ' : ''}<span className="reminder-segment">{part}</span></Fragment>)}
+            {row.due.when.split(' · ').map((part, partIndex) => <Fragment key={partIndex}>{partIndex ? ' · ' : ''}<span className="ambient-reminder-segment">{part}</span></Fragment>)}
           </p>}
         </div>
       </li>)}
@@ -142,7 +143,7 @@ function Reminders({ state, settings, now, disconnected, embedded }: WidgetConte
   if (status === 'hidden') return embedded ? <div className="widget-body image-placeholder reminders-placeholder">
     <Icon name="check" size={null} />
     <div className="ambient-label">Reminders</div>
-    <div className="ambient-description"><span className="reminder-segment">Hidden when empty</span> · <span className="reminder-segment">Add a reminder</span></div>
+    <div className="ambient-description"><span className="ambient-reminder-segment">Hidden when empty</span> · <span className="ambient-reminder-segment">Add a reminder</span></div>
   </div> : null;
   if (rows.length) return <ReminderList rows={rows} total={pending.length} fresh={fresh} offline={disconnected && pending.length > 0} settings={settings} />;
   return <div className="widget-body reminders-body">
