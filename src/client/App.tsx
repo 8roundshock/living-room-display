@@ -7,10 +7,15 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import type { AppState } from '../shared/contracts';
-import { ApiError, apiTagged, rememberRevision } from './api';
+import type { AppState, ChangeMarker } from '../shared/contracts';
+import { ApiError, api, apiTagged, rememberRevision } from './api';
 import { AmbientDisplay } from './Display';
 import { Editor } from './Editor';
+import { Home } from './Home';
+import { PAGE_TITLES, pageForPath } from './route';
+
+/** Home and the display pick up a change made elsewhere within about this long, while visible (#438). */
+const CHANGE_POLL_MS = 5_000;
 
 interface LoadError {
   message: string;
@@ -43,7 +48,8 @@ export function App() {
     },
     [],
   );
-  const display = window.location.pathname.startsWith('/display');
+  const page = pageForPath(window.location.pathname);
+  const display = page === 'display';
   const nativeDisplay = display && window.self === window.top && new URLSearchParams(window.location.search).get('native') === '1';
   useLayoutEffect(() => {
     if (!nativeDisplay) return;
@@ -101,9 +107,34 @@ export function App() {
       poll.timer = undefined;
     };
   }, [reload]);
+  // #438: Home and the display ask whether anything changed every 5 s while visible, and reload the
+  // state only when it has; Edit display keeps its 30 s poll. A lost connection reloads at once, so
+  // Home and the display say they are offline without waiting for the 30 s poll.
   useEffect(() => {
-    document.title = display ? 'Still · Display' : 'Still · Your room';
-  }, [display]);
+    if (page === 'edit') return;
+    let marker: string | null = null, failed = false, busy = false, stopped = false;
+    const check = async () => {
+      if (busy || document.visibilityState === 'hidden') return;
+      busy = true;
+      try {
+        const { change } = await api<ChangeMarker>('/api/changes');
+        // Reload after a change, and once the server answers again after a lost connection.
+        if (!stopped && ((marker !== null && change !== marker) || failed)) void reload();
+        marker = change; failed = false;
+      } catch (caught) {
+        if (!stopped && !failed && caught instanceof ApiError && caught.network) { failed = true; void reload(); }
+      } finally { busy = false; }
+    };
+    void check();
+    const timer = window.setInterval(() => { void check(); }, CHANGE_POLL_MS);
+    const visible = () => { if (document.visibilityState === 'visible') void check(); };
+    document.addEventListener('visibilitychange', visible);
+    return () => { stopped = true; window.clearInterval(timer); document.removeEventListener('visibilitychange', visible); };
+  }, [page, reload]);
+  useEffect(() => {
+    // Home keeps the title current itself once it shows ("Done · Still · Home" while a timer is done).
+    document.title = PAGE_TITLES[page];
+  }, [page]);
 
   if (!state)
     return (
@@ -122,7 +153,9 @@ export function App() {
                   </p>
                   <p className="fallback-hint">
                     {error.network
-                      ? 'The editor needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.'
+                      ? page === 'home'
+                        ? 'Home needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.'
+                        : 'The editor needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.'
                       : 'The display server answered but could not open your settings. Try again in a moment.'}
                   </p>
                 </div>
@@ -142,7 +175,7 @@ export function App() {
           ) : (
             <>
               <div className="loading-orbit" />
-              <p>{display ? 'Opening display…' : 'Opening your room…'}</p>
+              <p>{display ? 'Opening display…' : page === 'home' ? 'Opening Home…' : 'Opening your room…'}</p>
             </>
           )}
         </div>
@@ -150,6 +183,16 @@ export function App() {
     );
   if (display)
     return <AmbientDisplay state={state} disconnected={error !== null} native={nativeDisplay} />;
+  if (page === 'home')
+    return (
+      <Home
+        state={state}
+        setState={updateState}
+        connectionError={error?.message ?? null}
+        disconnected={error !== null && error.network}
+        reload={reload}
+      />
+    );
   return (
     <Editor
       state={state}
