@@ -77,6 +77,9 @@ active catalog id; extra modules such as `reminders-span.mjs` add only a sweep.
 A newly active widget also joins `FULL_BOARD` in `tests/ui/palette-browser.mjs`,
 plus `ACCENT_SELECTOR` (a new kind of accent element) or `TEXT_ONLY` (no accent
 element), so the palette harness checks its colours (#214).
+The widgets suite is the longest: 10–12 minutes on the owner's PC on 2026-10-19 with
+other suites running, and up to 30 minutes when several widgets suites share the
+machine. Its display loads therefore wait up to 90 s for a specific element (#306).
 
 ## Local checkout and agent startup
 
