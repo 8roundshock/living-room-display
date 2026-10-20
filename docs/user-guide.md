@@ -105,6 +105,13 @@ The **Style** tab sets how everything looks:
   colour for everything.
 - **Brightness** and **Text size**: if the text is hard to read from the couch,
   raise Text size before brightness.
+- **Brightness › Follow daylight** makes the display brighter by day and dimmer at
+  night on its own: choose the **Dimmest** and **Brightest** it may be. It is
+  brightest when the sun is highest at your weather location (around midday) and
+  stays at Dimmest from sunset to sunrise, changing slowly enough that you will not
+  see it step. The editor shows the level now and when it peaks. **Fixed** keeps one
+  level all day. A look such as Night changes the colours and the Fixed level, and
+  keeps Follow daylight on.
 - **Saved styles**: keep a combination you like and switch back to it later.
 
 ## Why things move

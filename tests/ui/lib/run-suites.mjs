@@ -31,7 +31,7 @@ export const SETS = {
     'canvas-scope', 'grid', 'studio', 'workspace', 'catalog-sky', 'reminders', 'catalog-time', 'freesize', // 22, 45, 41, 38, 34, 34, 31, 29
     'preview', 'first-run', 'editor-sync', 'display-controls', // 19, 9, 8, 3
   ],
-  scheduled: ['motion', 'weather', 'palette'], // 219, 81, 68
+  scheduled: ['motion', 'weather', 'palette', 'daylight'], // 219, 81, 68; daylight (#439) about 70 locally, not yet timed on the runner
 };
 
 export function checkSets() {

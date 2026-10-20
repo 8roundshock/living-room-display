@@ -115,8 +115,8 @@ changes), runs one set through the runner and uploads nothing. Pull requests and
 pushes to `main` run the **pull-request set**: the widgets suite, so a fix that leaves
 a no-longer-needed allowance fails CI, and every suite that takes under a minute on
 the runner. The weekly schedule (Monday 07:23 UTC) and a manual run
-(`workflow_dispatch`) add the **scheduled set**, the slower motion, palette and
-weather suites. A change to Markdown files only skips the workflow. On the first
+(`workflow_dispatch`) add the **scheduled set**, the slower motion, palette,
+weather and daylight suites. A change to Markdown files only skips the workflow. On the first
 CI runs the pull-request set took about 11 minutes of suites (widgets about 6) plus
 about a minute of setup, and the scheduled set about 6; runner minutes on this private repository are limited, so weigh
 adding a slow suite to the pull-request set against that

@@ -13,6 +13,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
+import { keepPagesLocal } from './lib/local-only.mjs';
 
 const TORONTO = { name: 'Toronto', latitude: 43.6532, longitude: -79.3832, timezone: 'America/Toronto' };
 const TROMSO = { name: 'Tromsø', latitude: 69.6492, longitude: 18.9553, timezone: 'Europe/Oslo' };
@@ -32,7 +33,7 @@ export async function runDaylightQa({ playwright, edge } = {}) {
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const browser = await chromium.launch({ executablePath: edge, headless: true });
-  const checks = [], images = [], errors = [];
+  const checks = [], images = [], errors = [], answeredLists = [];
   let context, page;
   async function reset(update = () => {}) {
     await app.store.update(data => {
@@ -46,6 +47,8 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     current = Date.parse(time);
     await context?.close();
     context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion });
+    // Requests outside the suite's server (a filtering proxy's script, #315) get an empty answer.
+    answeredLists.push(await keepPagesLocal(context, base));
     page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
@@ -152,14 +155,15 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     assert.ok((await brightness()).value >= 0.799, 'polar day noon is Brightest');
     checks.push(`Tromsø: Dimmest at noon in the polar night; ${midnightSun} at the June solar midnight (never down to Dimmest) and Brightest at its solar noon`);
 
-    // 4. 4K render of the noon display for inspection.
+    // 4. 4K render of the morning display for inspection.
     await reset(settings => { settings.appearance.daylightBrightness = RANGE; });
     await open('/display', { time: TIMES.morning, viewport: { width: 3840, height: 2160 } });
     const fourK = await brightness();
-    const fourKPixels = await pixels(await page.screenshot());
+    const fourKShot = await page.screenshot();
+    const fourKPixels = await pixels(fourKShot);
     assert.equal(fourKPixels.nonBlackCorner, 0);
     assert.equal(fourK.value, measured.morning.value, '4K shows the same value');
-    images.push({ name: 'daylight-morning-3840x2160', bytes: await page.screenshot() });
+    images.push({ name: 'daylight-morning-3840x2160', bytes: fourKShot });
     checks.push(`3840×2160 at 10 AM: the same ${fourK.value}, black corners`);
 
     // 5. Style tab: Fixed is the default and keeps the tab's height; Follow daylight is a draft.
@@ -261,7 +265,7 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     checks.push('390 and 320 px: the Brightness mode stays inside the panel in both modes with no horizontal scroll');
 
     assert.deepEqual(errors, []);
-    return { checks, images };
+    return { checks, images, outside: [...new Set(answeredLists.flat())] };
   } finally {
     await context?.close(); await browser.close();
     app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close');
@@ -272,5 +276,5 @@ export async function runDaylightQa({ playwright, edge } = {}) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({ options: { playwright: { type: 'string' }, edge: { type: 'string' } } });
   const result = await runDaylightQa(values);
-  console.log(JSON.stringify({ passed: result.checks.length, checks: result.checks }, null, 2));
+  console.log(JSON.stringify({ passed: result.checks.length, checks: result.checks, outside: result.outside }, null, 2));
 }
