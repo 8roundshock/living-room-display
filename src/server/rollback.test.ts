@@ -21,9 +21,10 @@ import { WIDGET_CATALOG as PREVIOUS_CATALOG } from './compat/3446400/shared/widg
 import { defaultSettings as legacyDefaults } from './compat/bedca44/shared/defaults.ts';
 import { WIDGET_CATALOG as LEGACY_CATALOG, defaultWidgetGrid as legacyGrid } from './compat/bedca44/shared/widgets.ts';
 import { WIDGET_IDS, fitGridDensity, isPlannedWidget } from '../shared/widgets.ts';
-import { applyBuiltinPreset, getVisual, resetAppearance } from '../client/model.ts';
+import { applyBuiltinPreset, getVisual, resetAppearance, resetLayout } from '../client/model.ts';
 import { settingsChanges } from '../client/draft.ts';
 import type { Settings, SettingsPatch } from '../shared/contracts.ts';
+import { defaultSettings } from '../shared/defaults.ts';
 
 type Loose = Record<string, any>;
 
@@ -264,6 +265,39 @@ test('(e) every former bedca44 exception is readable by the previous release in 
       await app.close(); await imported.close();
       await rm(directory, { recursive: true, force: true }); await rm(target, { recursive: true, force: true });
     }
+  }
+});
+
+test('#435 Reset layout to the default board, and a saved style with it, stay readable and read as that board', async () => {
+  const directory = await temporary('lrd-rollback-435-'), target = await temporary('lrd-rollback-435-import-');
+  // An existing user's catalog board, so Reset layout is a real change in the files.
+  await seedColorAccentData(directory); await seedColorAccentData(target);
+  const app = await application(directory), imported = await application(target);
+  try {
+    const before = app.store.snapshot().settings;
+    await app.send('PATCH', '/api/settings', settingsChanges(before, resetLayout(before)));
+    await app.send('PATCH', '/api/settings', withStyle(app.store.snapshot().settings, visual => visual));
+    await app.send('PATCH', '/api/settings', { units: 'imperial' });
+    // Hidden placements are not effective, so the draft does not send them; compare the shown board.
+    const board = defaultSettings(), shown = WIDGET_IDS.filter(id => board.widgets[id]);
+    const shownBoard = (grid: Loose) => ({ revision: grid.revision, density: grid.density, placements: Object.fromEntries(shown.map(id => [id, grid.placements[id]])) });
+    for (const name of ['state.json', 'state.backup.json']) {
+      const file = await readJson(directory, name);
+      assertPreviousReaderAccepts('data', file, `Reset layout ${name}`);
+      const read = PREVIOUS_READER.dataSchema.parse(file) as Loose;
+      for (const visual of [read.settings, read.settings.savedPresets[0].visual]) {
+        assert.deepEqual(visual.widgets, board.widgets, `${name}: the previous release shows the default board's widgets`);
+        assert.deepEqual(shownBoard(visual.widgetGrid), shownBoard(board.widgetGrid), `${name}: in the default board's places and sizes`);
+      }
+    }
+    const exported = await app.send('GET', '/api/export');
+    assertPreviousReaderAccepts('import', exported, 'Reset layout export');
+    await imported.send('POST', '/api/import', exported);
+    await assertFilesAccepted(target, 'Reset layout imported');
+    assert.deepEqual(shownBoard((await readJson(target, 'state.json')).settings.widgetGrid), shownBoard(board.widgetGrid));
+  } finally {
+    await app.close(); await imported.close();
+    await rm(directory, { recursive: true, force: true }); await rm(target, { recursive: true, force: true });
   }
 });
 

@@ -82,6 +82,20 @@ export function matchingBuiltinPreset(
 }
 
 /**
+ * Reset layout (#435): which widgets are shown, where, at what size, and the grid density return to
+ * the default board. Widget options (clock style, Hide when empty, snapshot opacity), widget content
+ * (cities, dates, the note), the appearance, saved styles and personal data stay. Last screen's
+ * `preview.enabled` follows its widget, as when it is added or removed.
+ */
+export function resetLayout(settings: Settings): Settings {
+  const next = structuredClone(settings), defaults = defaultSettings();
+  next.widgets = defaults.widgets;
+  next.widgetGrid = defaults.widgetGrid;
+  next.preview = { ...next.preview, enabled: defaults.widgets.preview };
+  return next;
+}
+
+/**
  * Reset appearance (#234): every Style tab value returns to its default (the Room look, Text size,
  * Animation and the movement settings). Widgets, their layout and options, the clock style (a
  * Clock widget option), saved styles and personal data stay.

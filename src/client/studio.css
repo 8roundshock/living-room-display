@@ -797,6 +797,16 @@ html.studio-editor {
   display: flex;
   margin-top: 10px;
 }
+/* Reset appearance and Reset layout (#435) share one row, wrapping when narrow. */
+.studio .reset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 20px;
+  margin-top: 10px;
+}
+.studio .reset-actions .text-button {
+  margin-top: 0;
+}
 /* Style → Data & recovery (#234). */
 .studio .data-hint {
   margin: 0 0 12px;

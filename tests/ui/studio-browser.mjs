@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
-import { forecastFixture } from '../../src/server/fixtures.ts';
+import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 
 export async function runStudioQa({ playwright, edge } = {}) {
@@ -918,6 +918,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     await page.getByRole('button', { name: 'Preview Note', exact: true }).click();
     await page.getByRole('button', { name: 'Add Note', exact: true }).click();
+    // The #435 default board fills the grid: the small Note goes in with its room fix, one draft edit.
+    await page.getByRole('button', { name: 'Make room: Reminders small', exact: true }).click();
     await page.locator('.widget-picker').waitFor({ state: 'detached' });
     await page.getByRole('button', { name: 'Clock', exact: true }).click();
     await page.getByRole('button', { name: 'Analog', exact: true }).click();
@@ -1080,6 +1082,99 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await context.close();
     checks.push(
       "#234 Restore from backup: refused with unsaved edits (no file picker), an invalid file and a server-rejected file change nothing, the summary names the date and contents, Don't restore changes nothing, Restore replaces data and reminders, refreshes a clean draft and keeps the replaced state.json as state.backup.json; Reset appearance asks inline and Keep changes nothing",
+    );
+
+    // #435: Reset layout puts the default board back as a draft. An existing user's catalog board
+    // with a Note, Analog clock, Reminders shown when empty and a custom snapshot opacity.
+    const defaults = defaultSettings();
+    await app.store.update((data) => {
+      const board = catalogBoardDefaults();
+      board.widgets.note = true; board.widgets.preview = false; board.preview.enabled = false; board.preview.opacity = 0.15;
+      board.widgetGrid.placements.note = { column: 8, row: 4, size: 'small' };
+      board.appearance.clockStyle = 'analog'; board.widgetBehavior.reminders.hideWhenEmpty = false;
+      board.widgetData.note.text = 'Synthetic note';
+      data.settings = board; data.reminders = [];
+    });
+    const layoutBefore = current();
+    ({ page, context } = await open({ viewport: { width: 1280, height: 720 } }));
+    await tab(page, 'Style');
+    await page.locator('summary', { hasText: 'Data & recovery' }).click();
+    const layoutStatus = page.locator('.data-status');
+    const resetLayoutButton = page.getByRole('button', { name: 'Reset layout…', exact: true });
+    const focusedName = () => page.evaluate(() => document.activeElement?.textContent?.trim() ?? '');
+    const canvasBoard = () => page.locator('.preview-surface [data-widget-id]').evaluateAll((sections) => sections.map((section) => [section.getAttribute('data-widget-id'), section.getAttribute('data-widget-span'), section.style.left, section.style.top]).sort());
+    const spans = { calendar: '4x4', clock: '8x4', weather: '4x4', forecast: '8x2', preview: '4x2', reminders: '4x2' };
+    // Last screen has no snapshot to show in this editor, so the canvas shows the other five.
+    const expectedCanvas = Object.keys(spans).filter((id) => id !== 'preview').map((id) => {
+      const placement = defaults.widgetGrid.placements[id];
+      return [id, spans[id], `${placement.column / 12 * 100}%`, `${placement.row / 8 * 100}%`];
+    }).sort();
+    // Keep: nothing changes, focus returns to the button.
+    await resetLayoutButton.click();
+    const reset435 = page.getByRole('group', { name: 'Reset layout' });
+    await reset435.waitFor();
+    assert.equal(await reset435.locator('p').innerText().then((text) => text.replace(/\s+/g, ' ').trim()), 'Reset the layout to Calendar, Clock, Weather, Forecast, Last screen and Reminders on the Balanced grid? Other widgets leave the display. Widget settings, the clock style, appearance and reminders stay.');
+    await page.waitForFunction(() => document.activeElement?.textContent?.trim() === 'Keep my layout');
+    await reset435.getByRole('button', { name: 'Keep my layout', exact: true }).click();
+    await reset435.waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.activeElement?.textContent?.trim() === 'Reset layout…');
+    assert.equal(await page.locator('.studio-savebar').count(), 0, 'Keep changes nothing');
+    // Reset: the default board on the canvas as a draft; Cancel restores the saved board.
+    await resetLayoutButton.click();
+    await reset435.getByRole('button', { name: 'Reset', exact: true }).click();
+    await page.locator('.studio-savebar').waitFor();
+    await layoutStatus.filter({ hasText: 'Layout reset. Save changes to keep it.' }).waitFor();
+    assert.equal(await focusedName(), 'Reset layout…', 'focus returns to Reset layout…');
+    await page.clock.runFor(600);
+    assert.deepEqual(await canvasBoard(), expectedCanvas, 'the canvas shows the default board');
+    assert.equal(await page.locator('.preview-surface [data-widget-id="note"]').count(), 0, 'Note leaves the display');
+    await cancel(page).click();
+    await saved(page);
+    assert.deepEqual(current(), layoutBefore, 'Cancel restores the saved board');
+    assert.equal(await page.locator('.preview-surface [data-widget-id="note"]').count(), 1);
+    const openReset = async () => {
+      if (!(await resetLayoutButton.isVisible())) {
+        await tab(page, 'Style');
+        if (!(await resetLayoutButton.isVisible())) await page.locator('summary', { hasText: 'Data & recovery' }).click();
+      }
+      await resetLayoutButton.click();
+      await reset435.getByRole('button', { name: 'Reset', exact: true }).click();
+    };
+    // Reset and Save: the default board is saved; options and content stay.
+    await openReset();
+    await page.locator('.studio-savebar').waitFor();
+    await save(page).click();
+    await saved(page);
+    const afterLayout = app.store.snapshot().settings;
+    assert.deepEqual(afterLayout.widgets, defaults.widgets, "the default board's widgets are saved");
+    for (const id of Object.keys(spans)) assert.deepEqual(afterLayout.widgetGrid.placements[id], defaults.widgetGrid.placements[id], `${id} is saved in its default place`);
+    assert.equal(afterLayout.widgetGrid.density, 'balanced');
+    assert.equal(afterLayout.preview.enabled, true, 'Last screen is shown again');
+    assert.equal(afterLayout.preview.opacity, 0.15, 'its opacity stays');
+    assert.equal(afterLayout.appearance.clockStyle, 'analog', 'the clock style stays');
+    assert.equal(afterLayout.widgetBehavior.reminders.hideWhenEmpty, false, 'Hide when empty stays');
+    assert.equal(afterLayout.widgetData.note.text, 'Synthetic note', 'widget content stays');
+    // Resetting the default board again changes nothing.
+    await openReset();
+    await layoutStatus.filter({ hasText: 'Layout is back to the default.' }).waitFor();
+    assert.equal(await page.locator('.studio-savebar').count(), 0, 'no Save bar for an unchanged board');
+    // Both reset buttons share one row at 1280 × 720 and wrap without overflow at 390 px.
+    const resetRow = () => page.locator('.reset-actions').evaluate((row) => {
+      const [a, b] = row.querySelectorAll('button'), ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      return { sameRow: Math.abs(ra.top - rb.top) < 2, overflow: document.documentElement.scrollWidth > window.innerWidth, height: Math.min(ra.height, rb.height) };
+    });
+    const wide = await resetRow();
+    assert.equal(wide.sameRow, true, 'one row at 1280 × 720'); assert.equal(wide.overflow, false); assert.ok(wide.height >= 40, `reset buttons keep a ${wide.height} px target`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.clock.runFor(300);
+    assert.equal((await resetRow()).overflow, false, 'no horizontal scroll at 390 px');
+    await resetLayoutButton.click();
+    await reset435.waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, 'the question fits 390 px');
+    await reset435.getByRole('button', { name: 'Keep my layout', exact: true }).click();
+    await context.close();
+    checks.push(
+      '#435 Reset layout… beside Reset appearance asks inline with focus on Keep my layout; Keep changes nothing; Reset shows the default board on the canvas as a draft (Calendar, Clock, Weather, Forecast and Reminders in their default cells, Note gone) that Cancel restores; Save keeps the clock style, Hide when empty, snapshot opacity and the note; an unchanged board says “Layout is back to the default.” with no Save bar; focus returns to Reset layout…; the row fits 1280 × 720 and 390 px',
     );
     assert.deepEqual(errors, []);
     return { checks, images };

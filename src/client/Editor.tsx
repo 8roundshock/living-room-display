@@ -38,6 +38,7 @@ import {
   matchingBuiltinPreset,
   reminderPresentation,
   resetAppearance,
+  resetLayout,
 } from './model';
 import { browserLocationPlatform, getDeviceLocation } from './location';
 import {
@@ -250,11 +251,12 @@ export function Editor({
   const [presetName, setPresetName] = useState(''),
     [presetId, setPresetId] = useState('');
   // Style → Data & recovery (#234): a checked backup awaiting confirmation, the section's status
-  // line, an import in flight and the inline Reset appearance question.
+  // line, an import in flight and the inline Reset appearance and Reset layout (#435) questions.
   const [backup, setBackup] = useState<BackupFile | null>(null),
     [dataMessage, setDataMessage] = useState<{ text: string; error?: boolean } | null>(null),
     [restoring, setRestoring] = useState(false),
-    [confirmReset, setConfirmReset] = useState(false);
+    [confirmReset, setConfirmReset] = useState(false),
+    [confirmLayoutReset, setConfirmLayoutReset] = useState(false);
   const backupInput = useRef<HTMLInputElement>(null);
   const [locationQuery, setLocationQuery] = useState(''),
     [locationMessage, setLocationMessage] = useState('');
@@ -799,12 +801,14 @@ export function Editor({
     if (section === 'Style') return;
     setBackup(null);
     setConfirmReset(false);
+    setConfirmLayoutReset(false);
     setDataMessage(null);
   }, [section]);
   const unsavedBeforeRestore = 'Save or cancel your changes before restoring a backup.';
   /** Restore from backup (#234): refused while edits are unsaved, which a restore would otherwise mix in. */
   function chooseBackup() {
     setConfirmReset(false);
+    setConfirmLayoutReset(false);
     setBackup(null);
     if (dirty || saving) {
       setDataMessage({ text: unsavedBeforeRestore, error: true });
@@ -871,6 +875,27 @@ export function Editor({
         ? 'Appearance is back to the defaults.'
         : 'Appearance reset. Save changes to keep it.',
     });
+  }
+  /** Reset layout (#435): the default board as an ordinary draft change; Save keeps it, Cancel restores the saved board. */
+  function confirmResetLayout() {
+    const after = resetLayout(draftRef.current);
+    setConfirmLayoutReset(false);
+    // As when Photo is removed: a photo chosen in this draft for an unsaved Photo widget is dropped.
+    if (draftRef.current.widgets.photo && !after.widgets.photo && !savedRef.current.widgets.photo) {
+      cancelPhoto();
+      updatePhoto(undefined);
+    }
+    densityHistory.current = undefined;
+    setSelectedWidget(null);
+    setRoomProblem(null);
+    setGridMessage('');
+    change(() => after);
+    setDataMessage({
+      text: sameEffectiveSettings(savedRef.current, after)
+        ? 'Layout is back to the default.'
+        : 'Layout reset. Save changes to keep it.',
+    });
+    setFocusRequest({ candidates: ['.reset-layout', ACTIVE_TAB], onlyIfLost: true });
   }
   const pendingCount = state.reminders.filter((item) => !item.completed).length;
   // The built-in style whose look is showing (#153): pressed whenever applying it changes nothing.
@@ -1679,17 +1704,61 @@ export function Editor({
                           </button>
                         </div>
                       </div>
-                    ) : (
-                      <button
-                        className="text-button reset-appearance"
-                        onClick={() => {
-                          setBackup(null);
-                          setDataMessage(null);
-                          setConfirmReset(true);
-                        }}
+                    ) : confirmLayoutReset ? (
+                      <div
+                        className="data-confirm reset-layout-confirm"
+                        role="group"
+                        aria-label="Reset layout"
                       >
-                        Reset appearance…
-                      </button>
+                        <p>
+                          Reset the layout to Calendar, Clock, Weather,
+                          Forecast, Last screen and Reminders on the Balanced
+                          grid? Other widgets leave the display. Widget
+                          settings, the clock style, appearance and reminders
+                          stay.
+                        </p>
+                        <div className="data-confirm-actions">
+                          <button
+                            className="button small primary"
+                            onClick={confirmResetLayout}
+                          >
+                            Reset
+                          </button>
+                          <button
+                            className="button small reset-layout-keep"
+                            onClick={() => {
+                              setConfirmLayoutReset(false);
+                              setFocusRequest({ candidates: ['.reset-layout', ACTIVE_TAB], onlyIfLost: true });
+                            }}
+                          >
+                            Keep my layout
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="reset-actions">
+                        <button
+                          className="text-button reset-appearance"
+                          onClick={() => {
+                            setBackup(null);
+                            setDataMessage(null);
+                            setConfirmReset(true);
+                          }}
+                        >
+                          Reset appearance…
+                        </button>
+                        <button
+                          className="text-button reset-layout"
+                          onClick={() => {
+                            setBackup(null);
+                            setDataMessage(null);
+                            setConfirmLayoutReset(true);
+                            setFocusRequest({ candidates: ['.reset-layout-keep'], onlyIfLost: true });
+                          }}
+                        >
+                          Reset layout…
+                        </button>
+                      </div>
                     )}
                     <p
                       className={`inline-message data-status ${dataMessage?.error ? 'error' : ''}`}
