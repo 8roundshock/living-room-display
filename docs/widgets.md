@@ -18,10 +18,11 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/server/compat/previous-reader.ts`](../src/server/compat/previous-reader.ts) | Test-only frozen reader of the previous release and its assertion helpers ([rollback compatibility](development.md#rollback-compatibility-check)). |
 | [`src/server/photo.ts`](../src/server/photo.ts) | Strict normalized PNG ingestion and private selected-image validation. |
 | [`src/server/air.ts`](../src/server/air.ts) | Keyless CAMS air quality via Open-Meteo: request, normalization, 30-minute cache and the `off` state; [`src/client/airHourly.ts`](../src/client/airHourly.ts) rebuilds the widget's upcoming-hour bars and UV peak each minute and decides whether saved current values still stand (3 hours, #188); [`src/client/astronomy.ts`](../src/client/astronomy.ts) holds the local sun, moon and time-zone calculations. |
+| [`src/client/dynamic.ts`](../src/client/dynamic.ts) and [`src/server/alerts.ts`](../src/server/alerts.ts) | Dynamic (#437): the pure engine (every Dynamic threshold, score, card, the calm rotation, `rotationSlot` and `chooseDynamic`, exported for Home, #438), and the server-only official alerts from ECCC and the NWS ([API](api.md#official-weather-alerts)). |
 | [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
 | [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
-| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157). |
+| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), and `Dynamic` (#437), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157). |
 | [`src/client/Display.tsx`](../src/client/Display.tsx) | Ambient state and the shared movement/composition boundary. |
 | [`src/client/Editor.tsx`](../src/client/Editor.tsx) | Picker, grid interactions and settings draft integration. |
 
@@ -123,6 +124,7 @@ The renderer families have deliberate visual roles:
 | Note | The text at the largest size that fits the box (measured from its lines and wrapping, #194), up to a family cap | The same, wider | The same, generous; only a note that cannot fit at the text floor zooms out through the shared fit |
 | Air quality | AQI and category word with place and scale; one footer row with the age ("Model est. · 12 min ago" with a reading) and "CAMS · Open-Meteo"; values over 3 hours old read "Saved estimate" or "Last known · 9 AM" | Adds the main pollutant and UV with its WHO category (both hidden once the values are over 3 hours old, UV then from the saved estimate) | Adds AQI bars for the current and up to 23 following hours (unknown hours dotted) and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
 | Sun & moon | Next sunrise or sunset, its time and the place | Sunrise, sunset, daylight length and change from yesterday, moon glyph and phase | Dim dotted day arc with the sun's position, times, daylight, phase with illumination and the next full (or new) moon |
+| Dynamic (#437) | One card: the kicker (source word, or an official level word with the alert icon, "· +2 more" or "· 1 of 2"), the glyph or a value beside a short headline (up to three lines), a one-line detail and one footer phrase | A glyph or value column of about 30% beside the headline (two lines) and detail; one footer run of provenance · age · status · credit | A hero row and the detail, then up to three whole rows (source word, short headline, time right-aligned) measured from layout boxes like the large Countdown, an exact "+N more", and the footer; one card alone is centred with no list |
 
 The large clock requires actual vertical room in the central catalog; do not
 recreate a giant option by scaling within the previous short large family.
@@ -215,6 +217,36 @@ composition stay identical.
   (#96), several instances of one widget (#97), reminder dots on the calendar (#98)
   and per-second re-fit cost (#99).
 
+### Dynamic (#437)
+
+Decided 2026-10-20 on [#437](https://github.com/8roundshock/living-room-display/issues/437)
+(the full spec and the three proposals it was chosen from are on the ticket). Dynamic is
+optional, off by default and appended after Sun & moon in Weather & sky: "What matters now,
+or a calm rotation", standard families, the sparkles icon and the sky tone. It shows one
+card at a time from data the app already has (the forecast, CAMS air and UV, the sun and
+moon calculated locally, reminders and countdowns) plus official alerts from Environment
+and Climate Change Canada and the US National Weather Service, which adopts #106 for
+Canada and the US through Dynamic ([API](api.md#official-weather-alerts)). It stays on
+what matters most (an official warning, a storm or rain starting soon, a reminder due
+within the hour) and otherwise rotates one calm card per wall-clock minute, skipping cards
+another widget on the board already shows. The ranking, thresholds and honest states are
+in [Dynamic signals](api.md#dynamic-signals).
+
+- Its five sources (Weather, Official weather alerts, Air & UV, Sun & moon, Reminders &
+  countdowns) are `widgetData.dynamic`, all on by default and omitted at rest then; at
+  least one stays on. An enabled Dynamic is a documented 3446400 rollback exception
+  ([install](install.md#additive-data-and-rollback-compatibility-84)) until #130.
+- Rotation uses wall-clock slots (`rotationSlot`, `DYNAMIC_ROTATE_MS` = 60 s) with no timer
+  of its own: the display's one-second tick re-renders, and the editor canvas and picker
+  samples hold slot 0. It touches neither `Display.tsx` nor `WidgetContentProps`, so it
+  survives #436 removing black rests.
+- Urgency is carried by words, rank and size, never by added light ([design](design.md#dynamic-emphasis)).
+- News is still deferred, to #450, so the #78 rejection of news stands until then. Also
+  deferred: MeteoAlarm for Europe (#451), hourly severe timing and gusts (#452), Canada's
+  AQHI (#453), a "Change every" setting (#454), an alerts preview before Save (#455), the
+  official line inside Weather (#456), the NWS key risk (#457), public holidays (#458) and
+  "Hide when quiet" (#459). Home (#438) reuses the exported engine.
+
 ## Ambient appearance and recurring exposure
 
 Unused pixels remain true black. Reuse ambient brightness and type tokens; keep
@@ -235,7 +267,11 @@ elements and Native never lights more of the panel. Inside a widget, an icon mar
 label icon and moon) paints with its own sub-tone (`WEATHER_GLYPH_TONE`), a subtree
 marked `tone-<role>` takes that role (Sun & moon's moon is `tone-time`), and
 Weather's rain visuals use the `--weather-rain` hook (Sea glass). A widget whose
-face is only primary text (a Note, a "Today" countdown) has nothing to tint. Status
+face is only primary text (a Note, a "Today" countdown) has nothing to tint. Dynamic's card
+carries its own role (`tone-water` for rain and storms, `sun` for heat, UV and sun moments,
+`time` for the moon, `personal` for reminders and countdowns, `sky` for alerts, snow, cold,
+wind and air), which reaches only its glyph and detail: its kicker, rows and footer keep
+the catalog tone (sky), so the palette harness needs no exception. Status
 cues never change: stale and offline labels and the Overdue word use the one amber
 status tone, `--ambient-caution` (there is no separate offline colour, #223, #133).
 Never hard-code a hue in widget CSS (Air

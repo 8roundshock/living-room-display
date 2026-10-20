@@ -48,7 +48,10 @@ code and tests for actual symbols and commands; the documentation is not a schem
   `WIDGET_MODULES`. Use `Settings`, `draftProblem` and `sample` hooks instead of
   editing the inspector, editor or picker.
 - Use `WeatherGlyph` for weather symbols and `TransitionText` for changing values.
-  Add no per-widget animation loop.
+  Add no per-widget animation loop. Content that rotates (Dynamic, #437) picks its card
+  with `rotationSlot` from `src/client/dynamic.ts` (wall-clock slots; slot 0 on the editor
+  canvas and picker samples) and starts no timer of its own: the display's one-second tick
+  re-renders it.
 - Colour follows the contract's [colour rules](../../../docs/widgets.md#ambient-appearance-and-recurring-exposure)
   (#75, #214): primary content (times, temperatures, titles) uses the text colour;
   labels, units, captions, secondary values, bars and dots use `var(--ambient-accent)`,

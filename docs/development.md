@@ -122,7 +122,9 @@ weather suites. A change to Markdown files only skips the workflow. On the first
 CI runs the pull-request set took about 11 minutes of suites (widgets about 6) plus
 about a minute of setup, and the scheduled set about 6; runner minutes on this private repository are limited, so weigh
 adding a slow suite to the pull-request set against that
-([#384](https://github.com/8roundshock/living-room-display/issues/384)). The runner
+([#384](https://github.com/8roundshock/living-room-display/issues/384)). The Dynamic
+suite (#437) joined the pull-request set at about 50 seconds locally; its runner time is
+not measured yet, because CI could not run while #384 was open. The runner
 has no GPU, so CI passes `--no-gpu` to the motion suite: its resting glyph pixel
 parity and #248 frame budget depend on GPU rasterising and stay local checks. A new
 suite fails the runner until it is placed in one set in

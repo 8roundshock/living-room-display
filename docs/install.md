@@ -412,6 +412,7 @@ keep the newer data directory and restore the matching pre-upgrade data copy.
 | Feature | Data the previous release (`3446400`) cannot read |
 | --- | --- |
 | Everything up to `3446400` (#73, #74, #75, #76, #78 and the polish since) | None. |
+| #437 Dynamic | An enabled Dynamic widget, a saved style made while it was on, or Dynamic sources other than all on. Before rolling back to `3446400`, turn all sources on, remove Dynamic, delete or re-save styles that include it, then Save; or restore the pre-upgrade data copy. The next reader bump (#130) removes this exception. Dynamic off with its sources all on is omitted at rest, and its transform is never written (#135), so that data reads. |
 
 #### Rolling back the installed 3446400
 
