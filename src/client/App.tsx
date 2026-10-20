@@ -8,7 +8,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type { AppState } from '../shared/contracts';
-import { ApiError, api } from './api';
+import { ApiError, apiTagged, rememberRevision } from './api';
 import { AmbientDisplay } from './Display';
 import { useSingleDisplay } from './displayWindow';
 import { Editor } from './Editor';
@@ -18,6 +18,14 @@ interface LoadError {
   /** No answer from the server at all, as opposed to an answer with an error. */
   network: boolean;
 }
+const POLL_MS = 30_000;
+/**
+ * While the server is still fetching the forecast or air quality (it answers after a short wait
+ * rather than with the provider, #351), ask again this soon, at most this many times in a row.
+ * The provider's own 8 s timeout ends a refresh well within that.
+ */
+const REFRESH_POLL_MS = 2_000;
+const REFRESH_POLLS = 5;
 
 export function App() {
   const [state, setState] = useState<AppState | null>(null);
@@ -28,6 +36,7 @@ export function App() {
   const [reachedAt, setReachedAt] = useState(0);
   const revision = useRef(0);
   const request = useRef(0);
+  const refreshPoll = useRef<{ timer: number | undefined; count: number }>({ timer: undefined, count: 0 });
   const updateState = useCallback<Dispatch<SetStateAction<AppState | null>>>(
     (update) => {
       revision.current++;
@@ -40,6 +49,9 @@ export function App() {
   // #436 one display window: a newer browser display retires this one (it closes, or shows a card and
   // stops polling, floating and holding the screen awake). The native screensaver page is single-instance on its own.
   const retired = useSingleDisplay(display && !nativeDisplay && window.self === window.top);
+  // A request still in flight when the display retires must not start the early refresh polls again.
+  const polling = useRef(true);
+  polling.current = !retired;
   useLayoutEffect(() => {
     if (!nativeDisplay) return;
     // Cover loading/error states and descendant controls before paint. The
@@ -53,11 +65,23 @@ export function App() {
     const requestId = ++request.current;
     const sentAt = performance.now();
     try {
-      const received = await api<AppState>('/api/state');
+      const { body: received, etag } = await apiTagged<AppState>('/api/state');
+      // The settings revision travels with these settings, for the editor's If-Match (#287).
+      rememberRevision(received.settings, etag);
       setReachedAt((previous) => Math.max(previous, sentAt));
       if (requestId === request.current && startedAt === revision.current) {
         setState(received);
         setError(null);
+      }
+      // One bounded early poll while a provider refresh is still running (#351).
+      const poll = refreshPoll.current;
+      if (!received.weather.refreshing && !received.airQuality?.refreshing) poll.count = 0;
+      else if (polling.current && poll.timer === undefined && poll.count < REFRESH_POLLS) {
+        poll.count++;
+        poll.timer = window.setTimeout(() => {
+          poll.timer = undefined;
+          void reload();
+        }, REFRESH_POLL_MS);
       }
     } catch (caught) {
       if (caught instanceof ApiError && !caught.network)
@@ -77,8 +101,13 @@ export function App() {
     void reload();
     const timer = window.setInterval(() => {
       void reload();
-    }, 30_000);
-    return () => window.clearInterval(timer);
+    }, POLL_MS);
+    const poll = refreshPoll.current;
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(poll.timer);
+      poll.timer = undefined;
+    };
   }, [reload, retired]);
   useEffect(() => {
     document.title = display ? 'Still · Display' : 'Still · Your room';
