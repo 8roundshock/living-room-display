@@ -1,7 +1,7 @@
 // Keeps a suite's pages to the app under test.
 //
 // A filtering proxy or ad blocker on the test machine can rewrite the app's own HTML to load its script
-// from another host: on the owner's PC, AdGuard for Windows adds http://local.adguard.org/?...
+// from another host: AdGuard for Windows, for example, adds http://local.adguard.org/?...
 // &type=content-script&... to every page Edge loads, including the suites' loopback pages. Under load
 // that request can fail (net::ERR_CONTENT_LENGTH_MISMATCH was seen), and the console error fails a suite
 // that allows none, although the app did nothing wrong (#315). The app itself never loads anything from

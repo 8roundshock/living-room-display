@@ -9,8 +9,8 @@ name: Browser suites
 # Pull requests and pushes to main run the pull-request set of tests/ui/lib/run-suites.mjs, which
 # always includes the widgets suite, so a fix that leaves a no-longer-needed allowance fails here.
 # The weekly schedule and manual runs add the scheduled set, so every suite runs at least weekly.
-# A change to Markdown files only cannot change a suite's result and skips this workflow, to keep the
-# private repository's Actions minutes low. The runner has no GPU, so the motion suite runs with
+# A change to Markdown files only cannot change a suite's result and skips this workflow, to keep
+# Actions time low. The runner has no GPU, so the motion suite runs with
 # --no-gpu: its GPU-dependent pixel parity and frame budget stay local checks (docs/development.md).
 on:
   pull_request:

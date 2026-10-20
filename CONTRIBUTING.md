@@ -7,9 +7,13 @@ local configuration and accounts. No maintainer coordination, usage registration
 or owner credentials are required for a supported local installation.
 
 Check [installation readiness](docs/install.md) and [STATUS.md](STATUS.md) first.
-The repository is currently private; a link alone does not grant access. Do not
-change its visibility or publish a copy to work around missing access. A future
-public release will still need its own reviewed publication step.
+The repository is public (owner decision, 2026-10-20,
+[#441](https://github.com/8roundshock/living-room-display/issues/441)); there is
+no published release yet, and a future release still needs its own reviewed
+publication step. Never commit or post secrets, tokens, anyone's private data
+(state.json, exports, reminder or calendar text, photos, screen captures),
+personal contact details, PC security settings or presence/away details,
+hostnames or network names. Do not change repository visibility.
 
 ## Choose the scope
 
@@ -45,9 +49,9 @@ weather coordinates, screenshots, browser profiles, tokens, or raw logs.
 
 Use your own account and a fork, with the original project as `upstream` and your
 fork as `origin`. The [runbook](docs/agent-runbook.md#fork-and-fix) gives commands.
-Do not use `scripts/gh-personal.ps1`; it is only for the original owner's private
+Do not use `scripts/gh-personal.ps1`; it is only for the original owner's
 maintenance. The owner must continue to verify their exact identity, origin, and
-private visibility as described in [development](docs/development.md).
+repository as described in [development](docs/development.md).
 
 Create or reuse the **upstream primary ticket before creating a PR**. The PR
 title is exactly `#<ticket-number> - <Ticket Name>` using the actual ticket title
@@ -71,6 +75,6 @@ ticket means that part of the workflow is blocked, not the user's local use.
 Keep a focused local branch/patch and sanitized issue/PR draft outside committed
 user data, state what was actually done, and give the user a concrete next step.
 Never claim an issue, PR, review, or merge happened without a verified URL/SHA.
-Private repository forks may be restricted; preserve that boundary and do not
-publish a mirror. Stars and feedback are optional. No telemetry or automatic
+If forking is unavailable, keep the local branch/patch and do not publish a
+mirror. Stars and feedback are optional. No telemetry or automatic
 usage report is part of installation.
