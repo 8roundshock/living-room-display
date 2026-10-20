@@ -16,9 +16,10 @@ uses the [recorded HIG-inspired design choices](docs/design.md). The display stu
 puts one focused Style, Widgets, Weather or Reminders inspector beside its live
 preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
-The owner's PC runs the installed feature wave (`3fee844`); later polish on `main`
-waits for the next coordinated install, and native screensaver acceptance and wider
-release compatibility checks remain. See [STATUS.md](STATUS.md).
+The owner's PC runs a verified install of `main` with the new widgets and the first
+polish wave; later changes on `main` wait for the next coordinated install, and native
+screensaver acceptance and wider release compatibility checks remain.
+[STATUS.md](STATUS.md) records the installed revision and what is still pending.
 
 This is the independent private
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)
