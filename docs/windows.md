@@ -252,10 +252,10 @@ x64 and the same actual 3840x2160 display:
   The precise expiry cause was not isolated from input/browser dismissal.
 - After exit, preview metadata was absent and image GET returned 404; helper and
   app-profile Edge process counts were 0 and the server remained healthy. No
-  capture file was found. New PNG files were only Edge 128x128/448x448 static icons,
-  plus the preexisting npm QR example. Preview flags were unchanged.
-- The original Windows blank saver, 1200-second timeout and security 0 stayed
-  unchanged; this app's automatic idle activation remains off.
+  capture file was found. New PNG files were only Edge 128x128/448x448 static icons.
+  Preview flags were unchanged.
+- The original Windows screensaver settings stayed unchanged; this app's
+  automatic idle activation remains off.
 
 Native `/c` end-to-end cold startup was **not executed**: automatic approval review
 rejected that optional test before action, stating only `blocked by policy`.
@@ -267,11 +267,11 @@ Pending: actual integrated acceptance and a subsequent reviewed update for PR51,
 fresh-account install, movie/game/screensaver inhibition, real lock/resume,
 across-room comfort and multi-monitor behavior. The earlier native smoke test
 does not prove these cases. The coordinator's last direct verification kept app
-idle off with the original blank saver, 1200-second timeout and security 0; the newer marker
+idle off with the original screensaver settings unchanged; the newer marker
 read does not establish current registration or authorize activation.
-The user is away as of the latest 2026-10-18 handoff. Wait for fresh readiness
-before physical tests; do not launch native tests, capture or input, change the
-installed app/data, or alter idle/TV settings during unattended source work.
+Physical tests need the owner's fresh go-ahead. Until then, do not launch native
+tests, capture or input, change the installed app/data, or alter idle/TV settings
+during unattended source work.
 
 Cursor bug [#36](https://github.com/8roundshock/living-room-display/issues/36):
 the user reported a bright white pointer, and native readings confirmed a visible
@@ -289,8 +289,8 @@ and restoration separately. The last hardware preflight on 2026-10-18 aborted
 before launch with immediate error 5 (access denied); the borrowed current Default
 desktop was not receiving input. Minimal/observer x64 structs matched under
 PS5.1/7. Exact lock/secure/switch cause is unproven. All native/current-desktop
-probing stopped. Recheck only after the user returns to the normal interactive
-desktop and cursor observation is available, with a new coordinated preflight/GO;
+probing stopped. Recheck only with the owner's go-ahead, on the normal interactive
+desktop with cursor observation available, with a new coordinated preflight/GO;
 do not open/switch desktops, dismiss security UI or weaken guards. See
 [diagnosis](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6249615459).
 
