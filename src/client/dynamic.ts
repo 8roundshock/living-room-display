@@ -19,7 +19,7 @@ import { rainOutlook, rainOutlookCopy, rainThreshold } from './weather-outlook.t
 export const DYNAMIC_ROTATE_MS = 60_000;
 /** The large family lists at most this many cards after the lead (fewer when they do not fit). */
 export const DYNAMIC_ROWS_MAX = 3;
-const MINUTE = 60_000, HOUR = 60 * MINUTE;
+const MINUTE = 60_000;
 export const DYNAMIC_THRESHOLDS = {
   metric: { HEAT_HIGH: 32, COLD_FEELS: -27, COLD_LOW: -20, WIND_STRONG: 50, WIND_BREEZY: 39 },
   imperial: { HEAT_HIGH: 90, COLD_FEELS: -17, COLD_LOW: -4, WIND_STRONG: 31, WIND_BREEZY: 24 },

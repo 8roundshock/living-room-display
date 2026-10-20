@@ -40,10 +40,12 @@ const fitOf = widget => widget.evaluate(section => new DOMMatrix(getComputedStyl
 
 /**
  * #221 for Dynamic: every family renders at fit 1 at Text 100% in every density, fresh, stale and offline,
- * at this viewport and (once) at 1280×720, the owner's TV in CSS pixels.
+ * at 1280×720, the owner's TV in CSS pixels (once, on the 1080p pass). The harness's floor check covers
+ * 1080p and 4K, and tests/ui/dynamic-browser.mjs checks fit at 4K in its scenarios.
  */
 export async function sweep({ page, viewport, state, now }) {
-  const views = viewport.width === 1920 ? [{ width: 1280, height: 720 }, viewport] : [viewport];
+  if (viewport.width !== 1920) return null;
+  const views = [{ width: 1280, height: 720 }];
   const fresh = structuredClone(state.weather);
   let cases = 0;
   const failures = [];
@@ -73,5 +75,5 @@ export async function sweep({ page, viewport, state, now }) {
   state.weather = fresh;
   await page.setViewportSize(viewport);
   assert.deepEqual(failures, [], 'Dynamic renders at fit 1 at Text 100%');
-  return `Dynamic small/medium/large fit 1 at Text 100% in every density, fresh/stale/offline, at 720p/1080p/4K (${cases} cases at ${viewport.width})`;
+  return `Dynamic small/medium/large fit 1 at Text 100% in every density, fresh/stale/offline, at 1280×720 (${cases} cases)`;
 }
