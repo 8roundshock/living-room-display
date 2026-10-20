@@ -139,6 +139,10 @@ The large clock requires actual vertical room in the central catalog; do not
 recreate a giant option by scaling within the previous short large family.
 All families use the same renderer in ambient view, authored editor canvas and
 synthetic picker preview. Picker fixtures never become user data.
+The editor canvas renders inside `.studio`, so renderer class names must not reuse
+a studio class name (such as `preview-frame` or `hint`; prefer `ambient-…` names):
+`tests/ui/canvas-scope-browser.mjs` fails when a canvas element matches a
+`.studio`-scoped rule (#313).
 
 The selected grid controls snapping and capacity. Dragging and resize handles
 snap to allowed cells and supported families through the shared helpers. Moving

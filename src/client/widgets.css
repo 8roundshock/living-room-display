@@ -179,7 +179,7 @@
 .grid-ambient .ambient-reminder-title { font-size: var(--reminder-title-size); line-height: 1.2; font-weight: 500; -webkit-line-clamp: var(--reminder-lines, 2); }
 .grid-ambient .ambient-reminder-date { font-size: calc(max(var(--min-data), min(5.8cqw, 8cqh, var(--ambient-reminder-title) * 0.66)) * var(--font-scale)); line-height: 1.3; margin-top: calc(var(--reminder-title-size) * 0.12); overflow-wrap: anywhere; }
 .grid-ambient .ambient-reminder-overdue { color: var(--ambient-caution); }
-.grid-ambient .reminder-segment { white-space: nowrap; }
+.grid-ambient .ambient-reminder-segment { white-space: nowrap; }
 .grid-ambient .reminders-body .ambient-description { font-size: calc(max(var(--min-text), min(6.2cqw, 8cqh, var(--ambient-reminder-title) * 0.66)) * var(--font-scale)); margin-top: calc(var(--reminder-title-size) * 0.4); }
 .grid-ambient .reminder-more-probe { display: none; }
 /* Out of flow but still rendered while measuring: display: none would replay its entrance and count crossfade (#76). */

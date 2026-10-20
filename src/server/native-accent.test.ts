@@ -11,7 +11,7 @@ import { forecastFixture } from './fixtures.ts';
 import { DataStore } from './store.ts';
 import { assertPreviousReaderAccepts, assertPreviousReaderRejects } from './compat/previous-reader.ts';
 import { defaultSettings as legacyDefaults } from './compat/bedca44/shared/defaults.ts';
-import { applyBuiltinPreset, getVisual } from '../client/model.ts';
+import { applyBuiltinPreset, getVisual, resetAppearance } from '../client/model.ts';
 import { settingsChanges } from '../client/draft.ts';
 import type { Settings } from '../shared/contracts.ts';
 
@@ -42,7 +42,7 @@ test('a fresh store defaults to native; pre-#75 data reads as color', async () =
       assert.equal((await app.send('GET', '/api/state')).settings.appearance.accentMode, 'native');
       const file = await readJson(fresh, 'state.json');
       assert.equal(file.settings.appearance.accentMode, 'native');
-      // The previous release (3fee844) knows accentMode, so fresh Native data is no longer a rollback exception.
+      // The previous release (3446400) knows accentMode, so fresh Native data is not a rollback exception.
       assertPreviousReaderAccepts('data', file, 'fresh Native state.json');
     } finally { await app.close(); }
     await preNative(legacy);
@@ -93,11 +93,12 @@ test('rollback: a user who never picks Native stays readable by the previous rel
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-test('rollback: Native saved anywhere is readable by the previous release (3fee844 knows accentMode)', async () => {
+test('rollback: Native saved anywhere is readable by the previous release (3446400 knows accentMode)', async () => {
   const scenarios: [string, (settings: Settings) => Settings, (file: any) => unknown][] = [
     ['Native in settings', settings => ({ ...settings, appearance: { ...settings.appearance, accentMode: 'native', preset: 'custom' } }), file => file.settings.appearance.accentMode],
     ['a built-in style', settings => applyBuiltinPreset(settings, 'night'), file => file.settings.appearance.accentMode],
-    ['Reset appearance', settings => applyBuiltinPreset(settings, 'room'), file => file.settings.appearance.accentMode],
+    // The editor's Reset appearance (#234, #321); the built-in style above stays on applyBuiltinPreset.
+    ['Reset appearance', settings => resetAppearance(settings), file => file.settings.appearance.accentMode],
     ['a saved Native style', settings => ({ ...settings, savedPresets: [{ id: 'native-style', name: 'Native style', visual: getVisual({ ...settings, appearance: { ...settings.appearance, accentMode: 'native' } }) }] }),
       file => file.settings.savedPresets[0]?.visual.appearance.accentMode],
   ];

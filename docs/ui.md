@@ -36,8 +36,18 @@ visible above it, including narrow screens and compact keyboard-height windows.
   on both keeps each side's changed fields (this editor wins only on a field both
   changed; a saved style's look counts as one field), and an item removed elsewhere
   but edited here stays. This editor's order wins only when it moved items; otherwise
-  the saved order stays and its own additions follow. The merge happens at each
-  30-second poll; a Save sent before the next poll still replaces those lists whole (#287).
+  the saved order stays and its own additions follow. A layout edit keeps its whole
+  arrangement, but widgets merge too (#350): one removed elsewhere and untouched here is
+  removed, and one added elsewhere joins at its saved place when that is free on this
+  board; otherwise it stays off and the layout message says “Note was added in another
+  window; there is no room for it in this layout”. The merge happens at each 30-second
+  poll, and when a Save sent before the next poll is refused as stale (#287): the editor
+  sends the [settings revision](api.md#settings-revision) it last saw, merges what the
+  other window saved and saves again by itself when that keeps all of it; otherwise it
+  keeps the merged draft and says “Settings changed in another window. Review and save
+  again.” A merged list over its limit blocks Save with the reason in the Save bar, for
+  example “Up to 12 dates · remove one to save” (#288). Save keeps keyboard focus while it
+  runs: it is `aria-disabled` and ignores a second activation (#289).
 - After **Save** or **Cancel** keyboard focus returns to the last edited control while
   it is still shown, else to the active tab, and an always-mounted status region
   announces “Changes saved” or “Changes discarded” (#229). Removing a widget announces
@@ -543,10 +553,18 @@ accent, the text colour or a status tone. It also checks the sub-tones inside th
 merged renderers (Weather's rain hook, Sun & moon's moon, World clocks' day/night
 icons, Air quality bars), picker samples in every family and the editor canvas.
 
-After `npm ci` and `npm run build`, use an existing Playwright/browser installation
-and run every `tests/ui/*-browser.mjs` suite as
-`node tests/ui/<name>-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'`;
-the preview suite also takes `--sharp '<Sharp module path>'`. The cursor check runs
+After `npm ci` and `npm run build`, run every `tests/ui/*-browser.mjs` suite with
+`node tests/ui/lib/run-suites.mjs --playwright '<Playwright module path>' --edge '<browser executable>' --sharp '<Sharp module path>'`,
+or one suite as `node tests/ui/<name>-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'`
+(the preview suite also takes `--sharp`). The pinned Playwright and sharp versions
+and their install are in [browser suites](development.md#browser-suites). CI runs
+the pull-request set on every pull request and push to `main`, and every suite
+weekly and on manual dispatch, headless in the runner's Edge
+(`.github/workflows/browser-suites.yml`, #323). The runner has no GPU, so CI runs
+the motion suite with `--no-gpu`; its resting glyph pixel parity and frame budget
+stay local checks. The
+[canvas scope harness](../tests/ui/canvas-scope-browser.mjs) fails when an element
+on the editor canvas matches a `.studio`-scoped rule (#313). The cursor check runs
 separately against an isolated production server:
 
 ```powershell

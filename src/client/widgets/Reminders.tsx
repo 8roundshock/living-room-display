@@ -107,7 +107,7 @@ function ReminderList({ rows, total, fresh, offline, settings }: { rows: Row[]; 
           {row.due && <p className="ambient-reminder-date">
             {row.due.overdue && <><span className="ambient-reminder-overdue">Overdue</span> · </>}
             {/* Lines break only between parts, never inside "7:00 AM". */}
-            {row.due.when.split(' · ').map((part, partIndex) => <Fragment key={partIndex}>{partIndex ? ' · ' : ''}<span className="reminder-segment">{part}</span></Fragment>)}
+            {row.due.when.split(' · ').map((part, partIndex) => <Fragment key={partIndex}>{partIndex ? ' · ' : ''}<span className="ambient-reminder-segment">{part}</span></Fragment>)}
           </p>}
         </div>
       </li>)}
@@ -143,7 +143,7 @@ function Reminders({ state, settings, now, disconnected, embedded }: WidgetConte
   if (status === 'hidden') return embedded ? <div className="widget-body image-placeholder reminders-placeholder">
     <Icon name="check" size={null} />
     <div className="ambient-label">Reminders</div>
-    <div className="ambient-description"><span className="reminder-segment">Hidden when empty</span> · <span className="reminder-segment">Add a reminder</span></div>
+    <div className="ambient-description"><span className="ambient-reminder-segment">Hidden when empty</span> · <span className="ambient-reminder-segment">Add a reminder</span></div>
   </div> : null;
   if (rows.length) return <ReminderList rows={rows} total={pending.length} fresh={fresh} offline={disconnected && pending.length > 0} settings={settings} />;
   return <div className="widget-body reminders-body">

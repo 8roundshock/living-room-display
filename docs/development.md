@@ -21,7 +21,9 @@ The production app serves the editor at `http://127.0.0.1:4318/editor` and ambie
 view at `http://127.0.0.1:4318/display`; `/api/health` verifies server readiness.
 It stores data in the per-user directory documented in [API](api.md), not Git or
 browser storage. Set `LRD_DATA_DIR` to an isolated test folder before integration
-experiments. `LRD_PORT` can choose another unprivileged local port. Ctrl+C stops it.
+experiments: a source run without it uses the installed app's data folder (on Windows
+`%LOCALAPPDATA%\LivingRoomDisplay\data`), its live private data. `LRD_PORT` can choose
+another unprivileged local port. Ctrl+C stops it.
 
 Build before `npm start` on a fresh clone: `npm run build` typechecks and builds
 both server and browser assets. `build:server` alone does not produce the UI.
@@ -76,7 +78,68 @@ The widget harness loads every module in that folder and requires one for each
 active catalog id; extra modules such as `reminders-span.mjs` add only a sweep.
 A newly active widget also joins `FULL_BOARD` in `tests/ui/palette-browser.mjs`,
 plus `ACCENT_SELECTOR` (a new kind of accent element) or `TEXT_ONLY` (no accent
-element), so the palette harness checks its colours (#214).
+element), so the palette harness checks its colours (#214), and the shared
+`FULL_BOARD` in `tests/ui/lib/boards.mjs`, which the canvas scope harness uses to
+check that no studio rule reaches it on the editor canvas (#313). The motion and
+widgets suites keep their own copies of that board until
+[#388](https://github.com/8roundshock/living-room-display/issues/388).
+
+## Browser suites
+
+The `tests/ui/*-browser.mjs` suites drive the built app in headless Microsoft Edge
+through Playwright. Each starts its own loopback server on an ephemeral port with
+temporary synthetic data, keeps screenshots in RAM and never uses an installed app
+or port 4318. Playwright and sharp (the preview suite measures pixels with it) are
+verification tools, not app dependencies: never add them to `package.json`. CI pins
+Playwright 1.62.1 and sharp 0.35.5; install the same versions outside the checkout
+(installing `playwright` downloads no browser) and run every suite after `npm ci`
+and `npm run build`:
+
+```powershell
+npm install --prefix "$env:TEMP\lrd-browser-tools" --no-save --no-package-lock playwright@1.62.1 sharp@0.35.5
+$tools = "$env:TEMP\lrd-browser-tools\node_modules"
+node tests/ui/lib/run-suites.mjs --playwright "$tools\playwright" --edge "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe" --sharp "$tools\sharp"
+```
+
+`tests/ui/lib/run-suites.mjs` runs the suites one after another, each in its own
+process, and ends with a pass/fail and time summary. Name suites to run only those
+(`... widgets palette`), use `--set pull-request` for CI's set, `--repeat 5` for
+consecutive runs when checking a flake, `--no-gpu` to pass that option to the
+motion suite and `--list` for the sets. A suite also
+runs on its own as `node tests/ui/<name>-browser.mjs --playwright <module> --edge
+<browser>`; the preview suite also takes `--sharp <module>`, and the motion suite
+`--no-gpu` (no GPU-dependent checks) or `--skip-performance`.
+
+CI runs them in `.github/workflows/browser-suites.yml` (#323) on `windows-2025` with
+Node 24 and the runner's Edge, in one job per set. It installs the pinned tools into
+the runner's temporary folder (the step fails if `package.json` or the lockfile
+changes), runs one set through the runner and uploads nothing. Pull requests and
+pushes to `main` run the **pull-request set**: the widgets suite, so a fix that leaves
+a no-longer-needed allowance fails CI, and every suite that takes under a minute on
+the runner. The weekly schedule (Monday 07:23 UTC) and a manual run
+(`workflow_dispatch`) add the **scheduled set**, the slower motion, palette and
+weather suites. A change to Markdown files only skips the workflow. On the first
+CI runs the pull-request set took about 11 minutes of suites (widgets about 6) plus
+about a minute of setup, and the scheduled set about 6; runner minutes on this private repository are limited, so weigh
+adding a slow suite to the pull-request set against that
+([#384](https://github.com/8roundshock/living-room-display/issues/384)). The runner
+has no GPU, so CI passes `--no-gpu` to the motion suite: its resting glyph pixel
+parity and #248 frame budget depend on GPU rasterising and stay local checks. A new
+suite fails the runner until it is placed in one set in
+`tests/ui/lib/run-suites.mjs`.
+
+A suite that fails and then passes on a rerun with no change is a flake, not a
+pass: record it on its ticket (or a new one) with the run, the load on the machine
+and the failing step, and keep a suite with a known flake out of the pull-request
+set until it is fixed.
+
+A filtering proxy or ad blocker on the test machine can add its own script to the
+suites' pages. On the owner's PC, AdGuard for Windows loads
+`http://local.adguard.org/?…&type=content-script…` into every page, which slows the
+suites and, under load, has failed one with a console error. The motion and canvas
+scope suites answer every request outside their own server with an empty response
+(`tests/ui/lib/local-only.mjs`) and list it; the other suites do not yet
+([#392](https://github.com/8roundshock/living-room-display/issues/392)).
 
 ## Local checkout and agent startup
 
@@ -130,6 +193,24 @@ Where ordinary `gh` is already authenticated to `8roundshock`, it may be used
 with the same explicit identity, repository, and privacy verification. Bare `gh`
 authentication has not been established by this scaffold.
 
+`pr create`, `pr view`, `pr comment`, `pr merge`, `issue` commands and `api` work
+with the helper's credential. `gh pr edit` does not: it also queries organisation
+fields over GraphQL, which need the `read:org` scope that this credential lacks
+("Your token has not been granted the required scopes ... `read:org`"). Do not
+broaden the token ([#181](https://github.com/8roundshock/living-room-display/issues/181));
+change a PR's body or title through the REST API instead:
+
+```powershell
+.\scripts\gh-personal.ps1 api -X PATCH repos/8roundshock/living-room-display/pulls/<n> -F 'body=@.local/pr-body.md'
+.\scripts\gh-personal.ps1 api -X PATCH repos/8roundshock/living-room-display/pulls/<n> -f 'title=#<ticket> - <Ticket Name>'
+```
+
+Write the body file as UTF-8 without a byte-order mark: Windows PowerShell 5.1's
+`Set-Content -Encoding UTF8` and `Out-File` add one, and it becomes the first
+character of the PR body. PowerShell 7's `Set-Content -Encoding utf8` and most
+editors write none. From Git Bash, give API endpoints without a leading slash;
+Git Bash rewrites `/repos/...` into a Windows path.
+
 Do not broaden credential scopes or switch a shared work account as a routine
 workaround. If the personal credential or CLI is unavailable, report the exact
 blocker. Credential lookup disables Git terminal prompts and Git Credential
@@ -169,8 +250,22 @@ Get-ExecutionPolicy -List
 (Get-AuthenticodeSignature (Get-Process -Id $PID).Path).SignerCertificate.Subject
 ```
 
+The path decides whether this is the installed PowerShell you intend to use. The
+signature does not: an agent's cached copy (for example under
+`~/.cache/codex-runtimes/`) carries the same valid Microsoft signature as an
+installed `pwsh`, so the signature only confirms the binary is authentic.
+
 From Git Bash, a bare `pwsh` or `powershell.exe` resolves through `PATH`. Run the
-check with `-Command` on the exact executable you intend to use. If the host is
+check with `-Command` on the exact executable you intend to use, and single-quote
+the command: inside double quotes Git Bash expands `$PID` and `$PSVersionTable`
+itself, to empty strings, before PowerShell sees them. With the owner's Store
+`pwsh` (substitute your install path; the path may stay in double quotes):
+
+```bash
+"$LOCALAPPDATA/Microsoft/WindowsApps/pwsh.exe" -NoProfile -Command '(Get-Process -Id $PID).Path; $PSVersionTable.PSVersion; Get-ExecutionPolicy -List'
+```
+
+If the host is
 not an installed PowerShell you intend to use, or the Process scope shows an
 override you did not request, call an installed PowerShell explicitly. Clear the
 inherited `PSExecutionPolicyPreference`, which carries a parent's `-ExecutionPolicy`
@@ -186,13 +281,25 @@ env -u PSModulePath -u PSExecutionPolicyPreference \
   -File scripts/gh-personal.ps1 repo view --json 'nameWithOwner,isPrivate'
 ```
 
-The same variable clearing applies when `powershell.exe` is the intended host. The
-explicit `-ExecutionPolicy Bypass` in the `windows\Test-Windows.ps1` command above
-and in the `LivingRoomDisplay.ps1` commands in [installation](install.md) is a
-deliberate, process-scoped choice for those commands. It is not an inherited
-default. Do not change global execution policy, agent configuration or `PATH` to
-work around an unexpected host; report it. See
-[#81](https://github.com/8roundshock/living-room-display/issues/81).
+The same variable clearing applies when `powershell.exe` is the intended host, but
+Windows PowerShell 5.1 then commonly runs no script at all: on a Windows client
+every scope is usually `Undefined`, so the effective policy is `Restricted`
+(PowerShell 7 from the Store reports LocalMachine `RemoteSigned`). That is why
+every documented 5.1 command carries its own process-scoped
+`-ExecutionPolicy Bypass`; a script documented without one, such as the auth
+helper, runs under PowerShell 7 or needs that explicit option.
+
+Every documented project command that passes `-ExecutionPolicy Bypass` makes a
+deliberate, process-scoped choice for that command; none is an inherited default.
+They are the `windows\Test-Windows.ps1` command above, the `LivingRoomDisplay.ps1`
+commands in [installation](install.md), the installed `Status` command in the
+[agent runbook](agent-runbook.md), Setup's own `powershell.exe` runs of
+`InstallPackage` and `Uninstall` (`windows/installer/LivingRoomDisplay.iss`, see
+[Windows](windows.md)), and the [Windows](windows.md) guidance to use a
+process-scoped Bypass where script policy requires it. Do not change global
+execution policy, agent configuration or `PATH` to work around an unexpected host;
+report it. See [#81](https://github.com/8roundshock/living-room-display/issues/81)
+and [#210](https://github.com/8roundshock/living-room-display/issues/210).
 
 ## Verification now
 
@@ -206,7 +313,8 @@ that process environment variables are restored. Review output for accidental
 credential disclosure. Do not add tests that simply repeat script statements.
 
 CI installs the lockfile, typechecks, runs tests, and builds the full application
-on Windows and Linux with Node 24. Every PR still needs an independent review
+on Windows and Linux with Node 24, and runs the browser suites on Windows
+([browser suites](#browser-suites)). Every PR still needs an independent review
 agent; CI is not that review.
 UI checks
 require actual visual inspection, not only compilation or a successful tool call.

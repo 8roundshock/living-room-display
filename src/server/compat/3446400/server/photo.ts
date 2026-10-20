@@ -1,17 +1,15 @@
 import { createHash } from 'node:crypto';
-import { inflateSync } from 'node:zlib';
+import { crc32, inflateSync } from 'node:zlib';
 import { z } from 'zod';
 
 export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 export interface PhotoAsset { id: string; pngBase64: string; width: number; height: number; updatedAt: string }
 const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-function crc32(bytes: Buffer): number {
-  let crc = 0xffffffff;
-  for (const byte of bytes) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0); }
-  return (crc ^ 0xffffffff) >>> 0;
-}
+/** How many full inspections ran; tests use it to prove an unchanged photo is not checked again (#245). */
+export const photoInspections = { count: 0 };
 /** Accept only bounded canvas-normalized PNG, with no metadata or external references. */
 export function inspectPhoto(content: Buffer): { width: number; height: number } {
+  photoInspections.count++;
   if (content.length > MAX_PHOTO_BYTES || content.length < 57 || !content.subarray(0, 8).equals(signature)) throw new Error('Choose a PNG-normalized photo no larger than 2 MB');
   let offset = 8; let width = 0; let height = 0; let channels = 0; let ended = false; let idatEnded = false; const compressed: Buffer[] = [];
   while (offset < content.length) {
@@ -19,6 +17,7 @@ export function inspectPhoto(content: Buffer): { width: number; height: number }
     const length = content.readUInt32BE(offset); const end = offset + 12 + length;
     if (end > content.length) throw new Error('Invalid photo PNG');
     const type = content.toString('ascii', offset + 4, offset + 8); const data = content.subarray(offset + 8, offset + 8 + length);
+    // Node's native CRC-32 (Node 22.2+); the bitwise loop it replaces took most of a 2 MB check (#245).
     if (crc32(content.subarray(offset + 4, offset + 8 + length)) !== content.readUInt32BE(offset + 8 + length)) throw new Error('Invalid photo checksum');
     if (offset === 8) {
       if (type !== 'IHDR' || length !== 13) throw new Error('Invalid photo header');
@@ -45,11 +44,36 @@ export function inspectPhoto(content: Buffer): { width: number; height: number }
   for (let row = 0; row < height; row++) if (pixels[row * stride]! > 4) throw new Error('Invalid photo pixel filter');
   return { width, height };
 }
-export function createPhotoAsset(pngBase64: string, timestamp: string): PhotoAsset {
+
+interface CheckedPhoto { pngBase64: string; width: number; height: number; id: string }
+/**
+ * The last photo that passed inspection. A photo change is checked once at the PATCH boundary and
+ * again when the store builds its asset; the second check finds the same base64 here instead of
+ * inflating and hashing 2 MB again. Only a successful result is kept, and only for identical text.
+ */
+let lastChecked: CheckedPhoto | null = null;
+function checkPhoto(pngBase64: string): CheckedPhoto {
+  if (lastChecked?.pngBase64 === pngBase64) return lastChecked;
   const content = Buffer.from(pngBase64, 'base64'); const dimensions = inspectPhoto(content);
-  return { ...dimensions, pngBase64: content.toString('base64'), id: createHash('sha256').update(content).digest('hex'), updatedAt: timestamp };
+  const checked = { ...dimensions, pngBase64: content.toString('base64'), id: createHash('sha256').update(content).digest('hex') };
+  // Only canonical text is remembered, so a later lookup can never map other text to these bytes.
+  if (checked.pngBase64 === pngBase64) lastChecked = checked;
+  return checked;
 }
-export const photoAssetSchema = z.object({ id: z.string().regex(/^[a-f0-9]{64}$/), pngBase64: z.string().max(2_796_204), width: z.number().int().positive().max(2048), height: z.number().int().positive().max(2048), updatedAt: z.iso.datetime() }).strict().superRefine((asset, context) => {
+/** Throws the inspection error for an invalid photo upload. */
+export function checkPhotoUpload(pngBase64: string): void { checkPhoto(pngBase64); }
+export function createPhotoAsset(pngBase64: string, timestamp: string): PhotoAsset {
+  const { width, height, id, pngBase64: canonical } = checkPhoto(pngBase64);
+  return { width, height, pngBase64: canonical, id, updatedAt: timestamp };
+}
+/** True when two assets are the same validated photo (same bytes, metadata and time). */
+export function samePhotoAsset(a: PhotoAsset | null, b: PhotoAsset | null): boolean {
+  return a === b || (!!a && !!b && a.id === b.id && a.width === b.width && a.height === b.height && a.updatedAt === b.updatedAt && a.pngBase64 === b.pngBase64);
+}
+/** The stored shape only. The store uses it for a photo it has already checked (#245). */
+export const photoAssetShape = z.object({ id: z.string().regex(/^[a-f0-9]{64}$/), pngBase64: z.string().max(2_796_204), width: z.number().int().positive().max(2048), height: z.number().int().positive().max(2048), updatedAt: z.iso.datetime() }).strict();
+/** Startup load, recovery and any photo the store has not checked: inspect the bytes and their metadata. */
+export const photoAssetSchema = photoAssetShape.superRefine((asset, context) => {
   try {
     const actual = createPhotoAsset(asset.pngBase64, asset.updatedAt);
     if (actual.id !== asset.id || actual.width !== asset.width || actual.height !== asset.height || actual.pngBase64 !== asset.pngBase64) throw new Error('Photo metadata does not match');
