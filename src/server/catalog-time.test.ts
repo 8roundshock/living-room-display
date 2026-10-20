@@ -8,7 +8,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApplication } from './app.ts';
-import { forecastFixture, seedColorAccentData } from './fixtures.ts';
+import { catalogBoardDefaults, forecastFixture, seedColorAccentData } from './fixtures.ts';
 import { DataStore } from './store.ts';
 import { settingsPatchSchema, settingsSchema } from './validation.ts';
 import { assertPreviousReaderAccepts, assertPreviousReaderRejects } from './compat/previous-reader.ts';
@@ -43,20 +43,25 @@ test('Calendar, Countdown and Note are active, optional and grouped with valid d
     assert.ok(ACTIVE_WIDGET_IDS.includes(id), id);
     assert.deepEqual({ category: entry.category, tone: entry.tone, icon: entry.icon, defaultSize: entry.defaultSize }, expected[id], id);
     assert.deepEqual(widgetSizes(id), ['small', 'medium', 'large'], id);
-    assert.equal(entry.defaultEnabled, false, `${id} is optional and off by default`);
+    // The catalog default is the backfill for older data, where a missing id reads as off. The
+    // default board for new installs shows Calendar (#435); Countdown and Note stay off there too.
+    assert.equal(entry.defaultEnabled, false, `${id} is optional and backfills as off`);
     assert.equal(defaultWidgetVisibility()[id], false);
+    assert.equal(defaultSettings().widgets[id], id === 'calendar', `${id} on the default board`);
   }
   assert.equal(WIDGET_CATALOG.forecast.icon, 'forecast', 'the calendar glyph now belongs to Calendar');
   assert.equal(new Set(ACTIVE_WIDGET_IDS.map(id => WIDGET_CATALOG[id].icon)).size, ACTIVE_WIDGET_IDS.length, 'active widgets have distinct icons');
   assert.deepEqual(Object.keys(WIDGET_CATEGORIES), ['time', 'weather', 'personal', 'pictures']);
   for (const category of Object.keys(WIDGET_CATEGORIES)) assert.ok(ACTIVE_WIDGET_IDS.some(id => WIDGET_CATALOG[id].category === category), `${category} has an active widget`);
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   for (const id of IDS) settings.widgets[id] = true;
-  assert.equal(gridProblem(settings.widgetGrid, settings.widgets), null, 'the three default placements fit beside the default board');
+  assert.equal(gridProblem(settings.widgetGrid, settings.widgets), null, 'the three catalog placements fit beside the catalog board');
 });
 
 test('enabling the widgets and editing their content goes through the API with merge semantics', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-'));
+  // An existing user's catalog board has room for the three; the #435 default board is full.
+  await seedColorAccentData(directory);
   const app = await application(directory);
   try {
     for (const id of IDS) assert.deepEqual(settingsPatchSchema.parse({ widgets: { [id]: true } }), { widgets: { [id]: true } }, `${id} may be enabled`);

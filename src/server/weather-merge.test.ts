@@ -12,7 +12,7 @@ import { createApplication } from './app.ts';
 import { assertPreviousReaderAccepts } from './compat/previous-reader.ts';
 import { defaultSettings as legacyDefaults } from './compat/bedca44/shared/defaults.ts'; // the bedca44 legacy-data fixture
 import { defaultWidgetGrid as legacyGrid } from './compat/bedca44/shared/widgets.ts';
-import { colorAccentDefaults, forecastFixture, seedColorAccentData } from './fixtures.ts';
+import { catalogBoardDefaults, colorAccentDefaults, forecastFixture, seedColorAccentData } from './fixtures.ts';
 import { persistableSettings } from './persistence.ts';
 import { DataStore } from './store.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
@@ -52,13 +52,19 @@ const CASES: [string, () => Loose, { weather: WidgetPlacement; weatherVisible: b
 ];
 
 test('new defaults: one large Weather where Weather and Rain were; Rain hidden and inactive', () => {
-  const settings = defaultSettings();
-  assert.equal(settings.widgets.rain, false); assert.equal(settings.widgets.weather, true);
-  assert.deepEqual(settings.widgetGrid.placements.weather, { column: 8, row: 0, size: 'large' });
-  assert.deepEqual(settings.widgetGrid.placements.rain, { column: 8, row: 2, size: 'medium' }, 'the hidden Rain placement may overlap Weather');
-  assert.equal(gridProblem(settings.widgetGrid, settings.widgets), null);
+  // The catalog board (older data backfills from it) and the #435 default board for new installs
+  // both keep the hidden Rain inside a large Weather.
+  for (const [label, settings, weather, rain] of [
+    ['catalog board', catalogBoardDefaults(), { column: 8, row: 0, size: 'large' }, { column: 8, row: 2, size: 'medium' }],
+    ['default board (#435)', defaultSettings(), { column: 0, row: 4, size: 'large' }, { column: 0, row: 6, size: 'medium' }],
+  ] as const) {
+    assert.equal(settings.widgets.rain, false, label); assert.equal(settings.widgets.weather, true, label);
+    assert.deepEqual(settings.widgetGrid.placements.weather, weather, label);
+    assert.deepEqual(settings.widgetGrid.placements.rain, rain, `${label}: the hidden Rain placement lies inside Weather`);
+    assert.equal(gridProblem(settings.widgetGrid, settings.widgets), null, label);
+    assert.deepEqual(parse(settings), settings, `${label}: defaults are already merged`);
+  }
   assert.equal(ACTIVE_WIDGET_IDS.includes('rain'), false);
-  assert.deepEqual(parse(settings), settings, 'defaults are already merged');
 });
 
 test('Weather absorbs an enabled Rain, keeping placement intent', async t => {
@@ -111,9 +117,12 @@ test('only an overlap between Rain and the Weather absorbing it is tolerated bef
 });
 
 test('a stale editor PATCH that enables or moves Rain merges into Weather', () => {
-  const current = defaultSettings();
-  const enabled = mergeSettings(current, { widgets: { rain: true } });
-  assert.equal(enabled.widgets.rain, false); assert.deepEqual(enabled.widgetGrid.placements.weather, current.widgetGrid.placements.weather);
+  for (const board of [defaultSettings(), catalogBoardDefaults()]) {
+    const enabled = mergeSettings(board, { widgets: { rain: true } });
+    assert.equal(enabled.widgets.rain, false); assert.deepEqual(enabled.widgetGrid.placements.weather, board.widgetGrid.placements.weather);
+  }
+  // A pre-#74 editor sends its whole catalog board; Weather and Rain become one large Weather.
+  const current = catalogBoardDefaults();
   const old = legacy();
   const whole = mergeSettings(current, { widgets: old.widgets, widgetGrid: { placements: { weather: old.widgetGrid.placements.weather, rain: old.widgetGrid.placements.rain } } });
   assert.equal(whole.widgets.rain, false); assert.deepEqual(whole.widgetGrid.placements.weather, { column: 8, row: 0, size: 'large' });

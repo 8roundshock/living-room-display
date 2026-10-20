@@ -75,6 +75,38 @@ export function defaultWidgetGrid(revision: 1 | 2 = 2): WidgetGrid {
   })) as Record<WidgetId, WidgetPlacement> };
 }
 export function defaultWidgetVisibility(): Record<WidgetId, boolean> { return Object.fromEntries(WIDGET_IDS.map(id => [id, WIDGET_CATALOG[id].defaultEnabled])) as Record<WidgetId, boolean>; }
+/**
+ * The board a new install starts with and Reset layout returns to (#435): the owner's Balanced
+ * 12 × 8 board, which fills the grid. Only these widgets are shown. The catalog's `defaultEnabled`,
+ * `defaultPlacement` and `defaultSize` stay the backfill for older saved data (validation.ts), so
+ * changing this board never changes how an older file reads. Every other widget is hidden at its
+ * catalog placement, where the picker's add and room guidance start, except the retired Rain: as
+ * in the catalog it sits inside Weather, so a stale editor that still enables it merges into
+ * Weather (#74) instead of overlapping another widget.
+ */
+export const DEFAULT_BOARD = {
+  density: 'balanced',
+  placements: {
+    calendar: { column: 0, row: 0, size: 'large' },
+    clock: { column: 4, row: 0, size: 'large' },
+    weather: { column: 0, row: 4, size: 'large' },
+    forecast: { column: 4, row: 4, size: 'large' },
+    preview: { column: 4, row: 6, size: 'medium' },
+    reminders: { column: 8, row: 6, size: 'medium' },
+  },
+  hidden: { rain: { column: 0, row: 6, size: 'medium' } },
+} as const satisfies { density: GridDensity; placements: Partial<Record<WidgetId, WidgetPlacement>>; hidden: Partial<Record<WidgetId, WidgetPlacement>> };
+/** The grid of DEFAULT_BOARD (geometry revision 2). */
+export function defaultBoardGrid(): WidgetGrid {
+  const grid = defaultWidgetGrid(2);
+  grid.density = DEFAULT_BOARD.density;
+  for (const [id, placement] of Object.entries({ ...DEFAULT_BOARD.hidden, ...DEFAULT_BOARD.placements }) as [WidgetId, WidgetPlacement][]) grid.placements[id] = { ...placement };
+  return grid;
+}
+/** DEFAULT_BOARD's widgets shown, every other widget hidden. */
+export function defaultBoardVisibility(): Record<WidgetId, boolean> {
+  return Object.fromEntries(WIDGET_IDS.map(id => [id, Object.hasOwn(DEFAULT_BOARD.placements, id)])) as Record<WidgetId, boolean>;
+}
 function retiredTarget(id: WidgetId): WidgetId | null {
   const definition: WidgetDefinition = WIDGET_CATALOG[id];
   return definition.status === 'retired' && definition.mergedInto && Object.hasOwn(WIDGET_CATALOG, definition.mergedInto) ? definition.mergedInto as WidgetId : null;

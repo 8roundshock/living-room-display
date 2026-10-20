@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { WidgetGrid, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
+import { catalogBoardDefaults } from './fixtures.ts';
 import {
   GRID_DENSITIES, WIDGET_IDS, WIDGET_SIZES, composeWidgetGrid, displayPlacement, firstPlacement, freeSpanLimits, gridProblem,
   placementSpan, reflectedComposition, reflowWidget, resizeWidgetSpan, widgetSizes, type GridDensity,
@@ -189,8 +190,9 @@ test('the Fine board that settled into a two-arrangement loop keeps varying over
   assert.ok(late >= 4, `${late} arrangements in cycles 101–200`);
 });
 
-test('the #93 probe board (default plus a medium Photo) never stalls', () => {
-  const settings = defaultSettings(); const enabled: Visibility = { ...settings.widgets, photo: true };
+test('the #93 probe board (the catalog board plus a medium Photo) never stalls', () => {
+  // The catalog board, the default when #93 was found (before #435).
+  const settings = catalogBoardDefaults(); const enabled: Visibility = { ...settings.widgets, photo: true };
   const placed = reflowWidget(settings.widgetGrid, 'photo', firstPlacement(settings.widgetGrid, 'photo', 'medium', enabled)!, enabled);
   assert.ok(placed); assert.equal(fill(placed, enabled), 84 / 96);
   const ids = WIDGET_IDS.filter(id => enabled[id]); let previous = placed, stalls = 0;
@@ -201,6 +203,24 @@ test('the #93 probe board (default plus a medium Photo) never stalls', () => {
     previous = next;
   }
   assert.equal(stalls, 0);
+});
+
+test('#435 the full default board relocates as a whole: every widget moves in every cycle', () => {
+  const settings = defaultSettings(), enabled: Visibility = { ...settings.widgets };
+  assert.equal(fill(settings.widgetGrid, enabled), 1, 'the default board uses every Balanced cell');
+  const ids = WIDGET_IDS.filter(id => enabled[id]); let previous = settings.widgetGrid;
+  const origins = Object.fromEntries(ids.map(id => [id, new Set<string>()])) as Record<WidgetId, Set<string>>;
+  for (let cycle = 1; cycle <= 40; cycle++) {
+    const next = composeWidgetGrid(settings.widgetGrid, enabled, cycle, previous);
+    assert.equal(gridProblem(next, enabled), null, `cycle ${cycle}`);
+    for (const id of ids) {
+      assert.deepEqual(placementSpan(id, next.placements[id]), placementSpan(id, settings.widgetGrid.placements[id]), `cycle ${cycle}: ${id} keeps its size`);
+      assert.ok(next.placements[id].column !== previous.placements[id].column || next.placements[id].row !== previous.placements[id].row, `cycle ${cycle}: ${id} moves`);
+      origins[id].add(`${next.placements[id].column},${next.placements[id].row}`);
+    }
+    previous = next;
+  }
+  for (const id of ids) assert.ok(origins[id].size >= 3, `${id} visits ${origins[id].size} places`);
 });
 
 test('a 100% full board relocates, and a two-thirds-wide full-height span always has room to travel', () => {

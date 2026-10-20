@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApplication } from './app.ts';
-import { forecastFixture } from './fixtures.ts';
+import { catalogBoardDefaults, forecastFixture } from './fixtures.ts';
 import { AT_REST, PREVIOUS_RELEASE, persistableData, persistableSettings } from './persistence.ts';
 import { dataSchema, mergeSettings } from './validation.ts';
 import { sameEffectiveSettings } from '../client/draft.ts';
@@ -27,7 +27,8 @@ const visualOf = ({ appearance, widgets, widgetOverrides, widgetBehavior, widget
 function data(settings: Settings) { return { version: 1 as const, settings, reminders: [], photoAsset: null }; }
 function variants(): [string, Settings][] {
   const base = defaultSettings();
-  const chosen = mergeSettings(base, { appearance: { accentMode: 'native', animation: 'lively', clockStyle: 'analog' }, widgets: { rain: false, photo: true }, widgetData: { note: { text: 'Synthetic note' }, calendar: { weekStart: 'monday' } } });
+  // The default board (#435) is full, so the added Photo goes on the catalog board an existing user has.
+  const chosen = mergeSettings(catalogBoardDefaults(), { appearance: { accentMode: 'native', animation: 'lively', clockStyle: 'analog' }, widgets: { rain: false, photo: true }, widgetData: { note: { text: 'Synthetic note' }, calendar: { weekStart: 'monday' } } });
   const styled = defaultSettings(); styled.savedPresets = [{ id: 'style', name: 'Style', visual: visualOf(chosen) }, { id: 'plain', name: 'Plain', visual: visualOf(base) }];
   return [['defaults', base], ['non-default choices', chosen], ['saved styles', mergeSettings(styled, {})]];
 }
@@ -65,7 +66,8 @@ test('keys the previous release knows are always written; only additive defaults
       assert.ok(visual.widgetOverrides[id], `${id} transform is written`);
       assert.ok(visual.widgetGrid.placements[id], `${id} placement is written even when hidden`);
     }
-    for (const id of KNOWN_SINCE_3FEE844) assert.equal(visual.widgets[id], false, `${id} is written while off: the previous release knows it (#263)`);
+    // The default board shows Calendar (#435); the other #78 ids are written while off.
+    for (const id of KNOWN_SINCE_3FEE844) assert.equal(visual.widgets[id], id === 'calendar', `${id} is written ${id === 'calendar' ? 'on' : 'while off'}: the previous release knows it (#263)`);
     assert.equal(visual.widgets.rain, false);
     for (const key of Object.keys(AT_REST.appearance)) assert.equal(key in visual.appearance, false, `${key} omitted while default`);
     assert.equal(visual.appearance.clockStyle, 'outline', 'previous-release appearance keys stay');

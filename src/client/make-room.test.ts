@@ -4,7 +4,8 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { Settings, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
-import { WIDGET_CATALOG, fitWidgetFamily, gridProblem, placementSpan } from '../shared/widgets.ts';
+import { catalogBoardDefaults } from '../server/fixtures.ts';
+import { ACTIVE_WIDGET_IDS, GRID_DENSITIES, WIDGET_CATALOG, fitWidgetFamily, gridProblem, placementSpan, widgetSizes } from '../shared/widgets.ts';
 import {
   addToGrid,
   applyRoomFix,
@@ -20,19 +21,23 @@ import {
 
 const column: RoomRequest = { kind: 'span', id: 'reminders', span: { columns: 2, rows: 8 } };
 
-/** The 2026-10-19 QA board: the default board plus Calendar, World clocks, Sun & moon and Air quality. */
+/**
+ * The 2026-10-19 QA board: the catalog board (the default before #435) plus Calendar, World clocks,
+ * Sun & moon and Air quality. The tests below that name the catalog board keep its geometry; the
+ * #435 default board, which fills the grid, has its own tests at the end.
+ */
 function qaBoard(): Settings {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   for (const id of ['calendar', 'worldClocks', 'sunMoon', 'airQuality'] as WidgetId[]) {
     const grid = addToGrid(settings.widgetGrid, id, WIDGET_CATALOG[id].defaultSize, settings.widgets);
-    assert.ok(grid, `${id} fits the default board`);
+    assert.ok(grid, `${id} fits the catalog board`);
     settings.widgetGrid = grid; settings.widgets[id] = true;
   }
   return settings;
 }
 
-test('a full-height column on the default board names Clock, Weather and Forecast and offers the smallest reduction', () => {
-  const settings = defaultSettings(), before = structuredClone(settings.widgetGrid);
+test('a full-height column on the catalog board names Clock, Weather and Forecast and offers the smallest reduction', () => {
+  const settings = catalogBoardDefaults(), before = structuredClone(settings.widgetGrid);
   const diagnosis = diagnoseRoom(settings.widgetGrid, column, settings.widgets);
   assert.ok(diagnosis);
   assert.deepEqual(diagnosis.blockers, ['clock', 'weather', 'forecast']);
@@ -51,7 +56,7 @@ test('a full-height column on the default board names Clock, Weather and Forecas
 });
 
 test('every single reduction the explanation names actually fits the column', () => {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   for (const id of ['clock', 'weather', 'forecast'] as WidgetId[]) {
     const reduced = fitWidgetFamily(settings.widgetGrid, id, 'medium', settings.widgets);
     assert.ok(reduced);
@@ -64,7 +69,7 @@ test('every single reduction the explanation names actually fits the column', ()
 });
 
 test('requests that already fit need no guidance', () => {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   assert.equal(diagnoseRoom(settings.widgetGrid, { kind: 'family', id: 'reminders', size: 'large' }, settings.widgets), null);
   assert.equal(roomProblem(settings.widgetGrid, { kind: 'family', id: 'reminders', size: 'medium' }, settings.widgets), null);
   const medium = structuredClone(settings);
@@ -115,14 +120,14 @@ test('with no fix the explanation says what to do instead', () => {
 });
 
 test('a fix is recomputed against the current board and refuses stale or self-targeted edits', () => {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   assert.equal(applyRoomFix(settings.widgetGrid, column, { kind: 'shrink', widget: 'reminders', size: 'small' }, settings.widgets), null, 'never shrinks the widget being resized');
   assert.equal(applyRoomFix(settings.widgetGrid, column, { kind: 'shrink', widget: 'photo', size: 'small' }, settings.widgets), null, 'never touches a hidden widget');
   assert.equal(applyRoomFix(settings.widgetGrid, column, { kind: 'density', density: 'fine' }, settings.widgets), null, 'span requests take no density fix');
 });
 
 test('the column outlook qualifies the picker caption', () => {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   assert.deepEqual(columnOutlook(settings.widgetGrid, 'reminders', settings.widgets), { fits: false, blockers: ['clock', 'weather', 'forecast'] });
   const hidden = { ...settings.widgets, reminders: false };
   assert.deepEqual(columnOutlook(settings.widgetGrid, 'reminders', hidden, 'small'), { fits: false, blockers: ['clock', 'weather', 'forecast'] }, 'measured after adding');
@@ -130,4 +135,48 @@ test('the column outlook qualifies the picker caption', () => {
   medium.widgetGrid.placements.weather = { ...medium.widgetGrid.placements.weather, size: 'medium' };
   assert.deepEqual(columnOutlook(medium.widgetGrid, 'reminders', medium.widgets), { fits: true, blockers: [] });
   assert.equal(columnOutlook(settings.widgetGrid, 'clock', settings.widgets), null, 'fixed-family widgets have no outlook');
+});
+
+/** What each family of a hidden widget offers on the full #435 default board, besides Fine. */
+const DEFAULT_BOARD_REDUCTION = { small: 'Make room: Reminders small', medium: 'Make room: Weather medium', large: 'Make room: Clock medium' } as const;
+
+test('#435 the default board fills the grid, and every hidden widget in every family gets Fine and one reduction as valid drafts', () => {
+  const settings = defaultSettings(), before = structuredClone(settings.widgetGrid);
+  const { columns, rows } = GRID_DENSITIES[settings.widgetGrid.density];
+  const used = ACTIVE_WIDGET_IDS.filter((id) => settings.widgets[id]).reduce((sum, id) => { const span = placementSpan(id, settings.widgetGrid.placements[id]); return sum + span.columns * span.rows; }, 0);
+  assert.equal(used, columns * rows, 'no free cell is left');
+  const hidden = ACTIVE_WIDGET_IDS.filter((id) => !settings.widgets[id]);
+  assert.deepEqual(hidden, ['photo', 'worldClocks', 'countdown', 'note', 'airQuality', 'sunMoon']);
+  for (const id of hidden) for (const size of widgetSizes(id)) {
+    const request: RoomRequest = { kind: 'add', id, size };
+    assert.equal(addToGrid(settings.widgetGrid, id, size, settings.widgets), null, `${id} ${size} has no free cell`);
+    const problem = roomProblem(settings.widgetGrid, request, settings.widgets);
+    assert.ok(problem, `${id} ${size} is explained`);
+    assert.equal(problem.message, `No room for ${WIDGET_CATALOG[id].name} at ${size} size.`, 'the lead names the request; the fixes say what to do');
+    assert.deepEqual(problem.fixes.map(roomFixLabel), ['Switch the grid to Fine', DEFAULT_BOARD_REDUCTION[size as keyof typeof DEFAULT_BOARD_REDUCTION]], `${id} ${size}`);
+    for (const fix of problem.fixes) {
+      const grid = applyRoomFix(settings.widgetGrid, request, fix, settings.widgets);
+      assert.ok(grid, `${id} ${size}: ${roomFixLabel(fix)}`);
+      assert.equal(gridProblem(grid, { ...settings.widgets, [id]: true }), null, `${id} ${size}: ${roomFixLabel(fix)} leaves a valid board`);
+      assert.equal(grid.placements[id].size, size, 'the requested family is kept');
+      for (const other of ACTIVE_WIDGET_IDS.filter((other) => settings.widgets[other])) {
+        if (fix.kind === 'density' || other !== fix.widget) assert.equal(grid.placements[other].size, before.placements[other].size, `${roomFixLabel(fix)} keeps ${other}'s family`);
+      }
+    }
+  }
+  assert.deepEqual(settings.widgetGrid, before, 'diagnosis and fixes never change the input board');
+});
+
+test('#435 a full-height Reminders column on the default board names Clock, and Clock medium makes room', () => {
+  const settings = defaultSettings();
+  const problem = roomProblem(settings.widgetGrid, column, settings.widgets);
+  assert.ok(problem);
+  assert.equal(problem.message, 'No room for a full-height Reminders column beside Clock.');
+  assert.deepEqual(problem.fixes, [{ kind: 'shrink', widget: 'clock', size: 'medium' }]);
+  const fixed = applyRoomFix(settings.widgetGrid, column, problem.fixes[0]!, settings.widgets);
+  assert.ok(fixed);
+  assert.equal(gridProblem(fixed, settings.widgets), null);
+  assert.deepEqual(placementSpan('reminders', fixed.placements.reminders), { columns: 2, rows: 8 });
+  assert.equal(roomFixResult(column, problem.fixes[0]!, fixed), 'Clock is now medium. Reminders is now a full-height column.');
+  assert.deepEqual(columnOutlook(settings.widgetGrid, 'reminders', settings.widgets), { fits: false, blockers: ['clock'] }, 'the picker caption names Clock');
 });

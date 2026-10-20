@@ -1,5 +1,5 @@
 import type { Settings, WidgetId, WidgetTransform } from './contracts.ts';
-import { WIDGET_IDS, defaultWidgetGrid, defaultWidgetVisibility } from './widgets.ts';
+import { WIDGET_IDS, defaultBoardGrid, defaultBoardVisibility } from './widgets.ts';
 
 export { WIDGET_IDS } from './widgets.ts';
 export const DEFAULT_SETTINGS: Settings = {
@@ -15,8 +15,9 @@ export const DEFAULT_SETTINGS: Settings = {
     // New installs and built-in styles use native colours (#75); data without the key reads as color.
     accentMode: 'native', animation: 'subtle',
   },
-  widgets: defaultWidgetVisibility(),
-  widgetGrid: defaultWidgetGrid(),
+  // The default board (#435). Older saved data backfills from the catalog instead (validation.ts).
+  widgets: defaultBoardVisibility(),
+  widgetGrid: defaultBoardGrid(),
   widgetBehavior: { reminders: { hideWhenEmpty: true } },
   widgetOverrides: Object.fromEntries(WIDGET_IDS.map(id => [id, { offsetX: 0, offsetY: 0, scale: 1 }])) as Record<WidgetId, WidgetTransform>,
   preview: { enabled: true, opacity: 0.24, widthPercent: 20 },
