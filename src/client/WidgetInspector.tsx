@@ -35,6 +35,11 @@ export interface InspectorReveal {
   page: boolean;
 }
 
+// Reveals already used (#339): each one scrolls at most once, so closing the picker or coming back
+// to the Widgets tab (which remounts this inspector) never replays an old selection's scroll and
+// pushes the focused control out of view. Every request is a new object, so a set of them is enough.
+const handledReveals = new WeakSet<InspectorReveal>();
+
 // Pointers held down in the editor: a canvas press selects at pointerdown, and the inspector waits for
 // the release before it scrolls, so a stacked page never moves under a drag (#339).
 const heldPointers = new Set<number>();
@@ -135,19 +140,34 @@ export function WidgetInspector({
 }) {
   const addButton = useRef<HTMLButtonElement>(null),
     wasOpen = useRef(false),
+    added = useRef<WidgetId | null>(null),
     list = useRef<HTMLDivElement>(null);
+  // Closing the picker moves focus only when focus went with it (Escape, Close, Add or a Make room
+  // add); a canvas widget focused while it was open keeps focus. After an add focus lands on the new
+  // widget's row, which the reveal below keeps in view with its settings; otherwise on Add widget,
+  // and a reveal still waiting is dropped so no scroll pushes that button out of view (#339).
   useEffect(() => {
-    if (wasOpen.current && !pickerOpen) addButton.current?.focus();
+    const closed = wasOpen.current && !pickerOpen, id = added.current;
     wasOpen.current = pickerOpen;
+    added.current = null;
+    if (!closed) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    const row = id && list.current?.querySelector<HTMLElement>(`[data-widget-option="${id}"] .widget-select`);
+    if (row) return row.focus();
+    if (reveal) handledReveals.add(reveal);
+    addButton.current?.focus();
   }, [pickerOpen]);
   // #339: bring the selected widget's settings (or its no-room explanation) into view without moving
   // focus: inside the inspector panel on desktop, the page on stacked layouts. `block: 'nearest'`
   // shows the whole option when it fits and its top when it does not; the root's scroll padding
   // reserves the measured Save bar height. Instant when motion is reduced or animation is Off.
+  // Each reveal is used once; a stacked layout uses up one that may not scroll the page.
   useEffect(() => {
-    if (!reveal || reveal.id !== selected || pickerOpen) return;
-    if (!reveal.page && window.matchMedia('(max-width: 700px)').matches) return;
+    if (!reveal || handledReveals.has(reveal) || reveal.id !== selected || pickerOpen) return;
+    if (!reveal.page && window.matchMedia('(max-width: 700px)').matches) return void handledReveals.add(reveal);
     return afterPointerRelease(() => {
+      handledReveals.add(reveal);
       const option = list.current?.querySelector<HTMLElement>(`[data-widget-option="${reveal.id}"]`);
       const target = reveal.target === 'room' ? option?.querySelector<HTMLElement>('.room-notice:not([data-empty])') : option;
       if (!target?.isConnected) return;
@@ -162,8 +182,16 @@ export function WidgetInspector({
     return (
       <WidgetPicker
         settings={settings}
-        onAdd={onAdd}
-        onFix={onFix}
+        onAdd={(id, size) => {
+          const problem = onAdd(id, size);
+          if (!problem) added.current = id;
+          return problem;
+        }}
+        onFix={(current, fix) => {
+          const problem = onFix(current, fix);
+          if (!problem && current.request.kind === 'add') added.current = current.request.id;
+          return problem;
+        }}
         onClose={() => onPicker(false)}
       />
     );

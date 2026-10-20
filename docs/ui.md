@@ -28,7 +28,11 @@ motion). Focus scrolling reserves the measured Save bar height so fields and lab
 visible above it, including narrow screens and compact keyboard-height windows.
 Selecting a widget on the canvas or in the Widgets list, or adding one, scrolls its settings
 into view (`block: 'nearest'`: the whole settings when they fit, else their top, above the
-Save bar's reserved height) without moving keyboard focus (#339). Desktop scrolls the
+Save bar's reserved height) once: closing the picker or returning to the Widgets tab never
+scrolls to it again (#339). Selecting never moves keyboard focus. Closing the picker moves focus
+only when focus was in it: after an add to the new widget's row, shown with its settings, after
+Escape or Close to **Add widget**; a canvas widget focused while the picker is open keeps focus,
+so focus always stays in view. Desktop scrolls the
 inspector panel. Stacked layouts scroll the page only after a list row click, an add or a
 tap on the canvas, once the pointer is released; a press that drags a widget and a canvas
 widget focused from the keyboard keep the canvas in view. Scrolling is instant with reduced
@@ -585,7 +589,10 @@ On the full 12-widget board at 1280×720, 1024×600 and 390×844 it checks that 
 selection and a list row bring the inspector's first control fully into view (#339), the
 Edit layout how-to and Grid label (#345), the resize handle's 44 × 44 hit area by
 `elementFromPoint` (also at the canvas corner) and Note's 44 px Clear (#349), and at
-1280×720 the grouped list order and removal focus (#365); a coarse pointer gets 44 px size
+1280×720 the grouped list order and removal focus (#365); at the same three viewports, focus
+fully in view (inside the panel and clear of the Save bar) after Escape from the picker with the
+last row selected and after a keyboard add, canvas focus kept while the picker closes, and no
+replayed scroll on returning to the Widgets tab (#339); a coarse pointer gets 44 px size
 families. The [editor sync harness](../tests/ui/editor-sync-browser.mjs) aborts
 `/api/*` for the loading page, Save, Add reminder and a poll, checks the clear message
 and its clearing after recovery, recognises a reminder 409 by status and ends a

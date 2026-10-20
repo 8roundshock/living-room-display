@@ -243,6 +243,63 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     if (await page.locator('.studio-savebar').count()) { await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' }); }
     checks.push(`${label} full board: Edit layout how-to and visible Grid label (#345); each canvas selection brings the inspector's first control into view without moving focus, and a list row too (#339); the how-to gives way to a message; the resize handle keeps its ${handle.visual.join(' × ')} look with a 44 × 44 hit area, also at the canvas corner, and Note Clear is 44 px (#349)${viewport.width === 1280 ? '; the list follows the picker groups and removal focus follows that order (#365)' : ''}`);
   }
+  /**
+   * The focused element is fully visible: inside the viewport, inside the inspector panel's visible
+   * box when it is in the panel (desktop scrolls the panel), and clear of the Save bar. Returns its name.
+   */
+  async function focusVisible(label) {
+    const result = await page.evaluate(() => {
+      const element = document.activeElement;
+      if (!element || element === document.body) return { name: 'BODY', visible: false };
+      const box = element.getBoundingClientRect(), panel = element.closest('.inspector-panel')?.getBoundingClientRect(), bar = document.querySelector('.studio-savebar')?.getBoundingClientRect();
+      const top = Math.max(0, panel?.top ?? 0), bottom = Math.min(innerHeight, panel?.bottom ?? innerHeight);
+      const covered = !!bar && box.top < bar.bottom - 0.5 && bar.top < box.bottom - 0.5 && box.left < bar.right - 0.5 && bar.left < box.right - 0.5;
+      return { name: element.getAttribute('aria-label') || element.textContent.trim(), box: [box.left, box.top, box.right, box.bottom].map(Math.round), area: [Math.round(top), Math.round(bottom)],
+        visible: box.top >= top - 0.5 && box.bottom <= bottom + 0.5 && box.left >= -0.5 && box.right <= innerWidth + 0.5 && !covered };
+    });
+    assert.ok(result.visible, `${label}: the focused ${result.name} must be fully in view: ${JSON.stringify(result)}`);
+    return result.name;
+  }
+  /** #339 review: closing the picker leaves focus fully in view, and an old reveal never scrolls again. */
+  async function pickerFocus(viewport) {
+    const label = `${viewport.width}x${viewport.height}`, picker = () => page.locator('.widget-picker');
+    await open(viewport, 'reduce', fullBoard());
+    await button('Hide location tip').click();
+    // Escape with the last row selected: focus returns to Add widget, which no replayed scroll hides.
+    await button('Photo').click();
+    await button('Add widget').focus(); await page.keyboard.press('Enter'); await picker().waitFor();
+    await page.keyboard.press('Escape'); await picker().waitFor({ state: 'detached' });
+    assert.equal(await focusVisible(`${label} Escape from the picker`), 'Add widget');
+    if (capture) images.push({ name: `picker-escape-${label}`, bytes: await page.screenshot() });
+    // A keyboard add: focus moves to the new widget's row, in view with its settings and clear of the
+    // Save bar (Last screen stays removed, so the draft differs from the saved board).
+    for (const name of ['Last screen', 'Photo']) { await button(`Remove ${name}`).focus(); await page.keyboard.press('Enter'); }
+    await button('Add widget').focus(); await page.keyboard.press('Enter'); await picker().waitFor();
+    await button('Preview Photo').focus(); await page.keyboard.press('Enter');
+    await button('Photo small').focus(); await page.keyboard.press('Enter');
+    await button('Add Photo').focus(); await page.keyboard.press('Enter'); await picker().waitFor({ state: 'detached' });
+    assert.equal(await focusVisible(`${label} keyboard add`), 'Photo');
+    assert.equal(await page.locator('.widget-option.selected').getAttribute('data-widget-option'), 'photo', 'the added widget is selected');
+    const control = await page.locator('.widget-option.selected .widget-inspector').locator('button, input, select, textarea').first().boundingBox();
+    const area = viewport.width <= 700 ? { y: 0, height: viewport.height } : await page.locator('.inspector-panel').boundingBox();
+    assert.ok(control.y >= Math.max(0, area.y) - 0.5 && control.y + control.height <= Math.min(viewport.height, area.y + area.height) + 0.5,
+      `${label}: the added widget's first control is in view too: ${JSON.stringify({ control, area })}`);
+    if (capture) images.push({ name: `picker-add-${label}`, bytes: await page.screenshot() });
+    // A canvas widget focused while the picker is open selects it and closes the picker; focus stays on the canvas.
+    await button('Add widget').focus(); await page.keyboard.press('Enter'); await picker().waitFor();
+    await button('Move Clock').focus(); await picker().waitFor({ state: 'detached' });
+    assert.equal(await focusVisible(`${label} canvas focus with the picker open`), 'Move Clock');
+    // Coming back to the Widgets tab does not scroll to an earlier selection again.
+    await button('Photo').click();
+    const scroll = () => page.evaluate(() => [Math.round(scrollY), Math.round(document.querySelector('.inspector-panel').scrollTop)]);
+    await page.evaluate(() => document.getElementById('tab-Style').click());
+    await page.evaluate(() => { scrollTo(0, 0); document.querySelector('.inspector-panel').scrollTop = 0; });
+    await page.evaluate(() => document.getElementById('tab-Widgets').click());
+    await page.locator('.widget-option.selected[data-widget-option="photo"]').waitFor(); await page.waitForTimeout(100);
+    assert.deepEqual(await scroll(), [0, 0], `${label}: returning to the Widgets tab keeps the page and panel where they were`);
+    await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
+    checks.push(`${label} full board: after Escape from the picker with the last row selected, Add widget has focus fully in view; after a keyboard add the new row has focus fully in view; a canvas widget focused with the picker open keeps focus; returning to the Widgets tab replays no scroll (#339)`);
+  }
   /** #349: on a coarse pointer the size families are 44 px tall. */
   async function coarseTargets() {
     await open({ width: 390, height: 844 }, 'reduce', defaultSettings(), { hasTouch: true });
@@ -286,7 +343,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       }
       assert.doesNotMatch(await page.locator('.widget-picker').innerText(), /Private reminder sentinel|Toronto/);
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
-      await page.keyboard.press('Escape'); assert.equal(await page.locator('.widget-picker').count(), 0); assert.equal(await button('Add widget').evaluate(element => element === document.activeElement), true);
+      await page.keyboard.press('Escape'); assert.equal(await page.locator('.widget-picker').count(), 0); assert.equal(await focusVisible(`${viewport.width}x${viewport.height} Escape from the picker`), 'Add widget');
       await tab('Weather'); const input = page.getByRole('combobox', { name: 'City', exact: true }); await input.focus(); await input.fill('unsaved');
       await tab('Style'); await page.getByRole('slider', { name: 'Brightness', exact: true }).focus(); await page.keyboard.press('ArrowRight'); await tab('Weather'); await input.focus();
       const field = await input.boundingBox(), savebar = await page.locator('.studio-savebar').boundingBox();
@@ -311,7 +368,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       await alertRows(viewport);
       checks.push(`${viewport.width}x${viewport.height}: narrow/200% equivalent reflow, reachable picker/Add, fixed photo icon, focus clear of dirty Save, alerts clear of every canvas action`);
     }
-    for (const viewport of [{ width: 1280, height: 720 }, { width: 1024, height: 600 }, { width: 390, height: 844 }]) await layoutEditing(viewport);
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 1024, height: 600 }, { width: 390, height: 844 }]) { await layoutEditing(viewport); await pickerFocus(viewport); }
     await coarseTargets();
     assert.deepEqual(errors, []); return { checks, images };
   } finally { await context?.close(); await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
