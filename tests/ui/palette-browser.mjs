@@ -138,7 +138,22 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     const page = await context.newPage();
     page.on('pageerror', (error) => errors.push(error.message));
     await page.clock.install({ time: new Date(now) });
-    const open = async () => { await page.goto(base + '/display'); await page.locator('.display-page').waitFor(); await page.clock.runFor(200); };
+    /**
+     * Loads the display with `current`. A timeout (#305) names what was loading (widget and family or
+     * board, mode, viewport) and every page error and console message so far, so a slow load can be told
+     * from a page that stopped responding.
+     */
+    const open = async () => {
+      const messages = [], listen = (message) => messages.push(`${message.type()}: ${message.text()}${message.location().url ? ` (${message.location().url})` : ''}`);
+      page.on('console', listen);
+      try { await page.goto(base + '/display'); await page.locator('.display-page').waitFor(); await page.clock.runFor(200); }
+      catch (error) {
+        const shown = Object.entries(current.settings.widgets).filter(([, on]) => on).map(([id]) => `${id} ${current.settings.widgetGrid.placements[id]?.size ?? ''}`.trim());
+        const viewport = page.viewportSize();
+        throw new Error(`open() failed loading /display (${error.message.split('\n')[0]}): ${shown.length === 1 ? `${shown[0]} alone` : `a board of ${shown.join(', ')}`}, ${current.settings.appearance.accentMode} mode, `
+          + `${viewport.width}x${viewport.height}, state ${stateStatus}${photoMissing ? ', photo missing' : ''}. Page errors so far: ${JSON.stringify(errors)}. Console during this load: ${JSON.stringify(messages)}`, { cause: error });
+      } finally { page.off('console', listen); }
+    };
     const state = ({ mode, only, size, brightness, board }) => {
       const next = structuredClone(source);
       Object.assign(next.settings.appearance, { accentMode: mode, accentColor: SAND, motionEnabled: false }, brightness ? { brightness } : {});
@@ -305,21 +320,31 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     current = state({ mode: 'color' }); current.settings.appearance.accentColor = LEGACY_SAND; current.settings.widgets.photo = false; await open();
     assert.equal(await page.locator('.ambient').first().evaluate((el) => getComputedStyle(el).getPropertyValue('--ambient-accent').trim().toLowerCase()), SAND, 'the ambient root renders the retuned Sand');
     for (const section of await sections(page)) await assertSection(section, 'color', 'stored retired Sand', page.locator(`[data-widget-id="${section.id}"]`));
-    const glyphs = [[0, true, 'sun', 'sun'], [0, false, 'moon', 'time'], [3, true, 'cloud', 'stone'], [63, true, 'rain', 'water'], [73, true, 'snow', 'sky'], [95, true, 'storm', 'water']];
+    // #251: partly cloudy is its cloud's Stone with a Gold sun or Lilac moon part; fog Stone; drizzle Sea glass.
+    const glyphs = [[0, true, 'sun', 'sun'], [0, false, 'moon', 'time'], [1, true, 'suncloud', 'stone'], [2, false, 'mooncloud', 'stone'], [3, true, 'cloud', 'stone'], [45, true, 'fog', 'stone'], [53, true, 'drizzle', 'water'], [63, true, 'rain', 'water'], [73, true, 'snow', 'sky'], [95, true, 'storm', 'water']];
+    const PART_TONES = { suncloud: { core: 'sun', rays: 'sun', cloud: 'stone' }, mooncloud: { moon: 'time', cloud: 'stone' } };
     for (const mode of ['native', 'color']) {
       for (const [code, isDay, glyph, role] of glyphs) {
         current = state({ mode, only: 'weather' }); current.weather.current = { ...current.weather.current, weatherCode: code, isDay };
         await open();
         assert.equal(await page.locator('.weather-symbol').getAttribute('data-glyph'), glyph);
         assert.equal(await colorOf('.weather-symbol'), expected(mode, role), `${mode} weather code ${code} ${isDay ? 'day' : 'night'} glyph`);
+        // Each part paints with its own sub-tone; the strokes follow it.
+        const parts = await page.locator('.weather-symbol > .glyph-part').evaluateAll((els) => els.map((el) => [el.dataset.glyphPart, getComputedStyle(el).color, getComputedStyle(el.querySelector('svg > *')).stroke]));
+        for (const [part, color, stroke] of parts) {
+          const want = expected(mode, PART_TONES[glyph]?.[part] ?? role);
+          assert.equal(color, want, `${mode} code ${code} ${glyph} part ${part}`); assert.equal(stroke, want, `${mode} code ${code} ${glyph} part ${part} stroke`);
+        }
         // The label stays Mist (sky) while the glyph takes its own tone.
         assert.equal(await colorOf('.ambient-weather .ambient-label'), expected(mode, 'sky'));
       }
-      current = state({ mode, only: 'forecast' }); current.weather.daily = current.weather.daily.map((day, index) => ({ ...day, weatherCode: [0, 3, 63, 73, 95, 0, 3][index] }));
+      current = state({ mode, only: 'forecast' }); current.weather.daily = current.weather.daily.map((day, index) => ({ ...day, weatherCode: [0, 1, 45, 53, 63, 73, 95][index] }));
       await open();
-      const forecast = await page.locator('.forecast-day [data-glyph]').evaluateAll((els) => els.map((el) => [el.dataset.glyph, getComputedStyle(el).color]));
+      const forecast = await page.locator('.forecast-day > .weather-glyph').evaluateAll((els) => els.map((el) => [el.dataset.glyph, getComputedStyle(el).color]));
       assert.ok(forecast.length >= 5);
-      for (const [glyph, color] of forecast) assert.equal(color, expected(mode, { sun: 'sun', cloud: 'stone', rain: 'water', snow: 'sky', storm: 'water' }[glyph]), `${mode} forecast ${glyph}`);
+      for (const [glyph, color] of forecast) assert.equal(color, expected(mode, { sun: 'sun', suncloud: 'stone', cloud: 'stone', fog: 'stone', drizzle: 'water', rain: 'water', snow: 'sky', storm: 'water' }[glyph]), `${mode} forecast ${glyph}`);
+      // The chance droplet is Sea glass, like the rest of the precipitation chance.
+      for (const color of await page.locator('.forecast-rain svg').evaluateAll((els) => els.map((el) => getComputedStyle(el).stroke))) assert.equal(color, expected(mode, 'water'), `${mode} forecast chance droplet`);
       current = state({ mode, only: 'weather' }); current.weather.status = 'stale'; current.weather.updatedAt = new Date(now - 3 * 3600000).toISOString();
       await open();
       assert.match(await page.locator('.weather-age').innerText(), /Saved forecast/);
@@ -328,7 +353,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       stateStatus = 503; await page.clock.runFor(30001); await page.locator('.weather-age').filter({ hasText: 'Offline' }).waitFor(); stateStatus = 200;
       assert.equal(await colorOf('.weather-age.stale'), rgb(STATUS_TONES.caution), `${mode} offline age keeps the status tone`);
     }
-    checks.push('Weather glyphs by code (clear day Gold, clear night Lilac, cloud Stone, rain/storm Sea glass, snow Mist) in Weather and Forecast; stale and offline ages stay amber; photos are never tinted and the synthetic photo and snapshot actually paint (#217); color mode keeps the single accent everywhere, and a stored retired Sand renders the retuned Sand (#224)');
+    checks.push('Weather glyphs by code (clear day Gold, clear night Lilac, partly cloudy Stone with a Gold sun or Lilac moon part, cloud and fog Stone, drizzle/rain/storm Sea glass, snow Mist; #251) in Weather and Forecast, with a Sea glass chance droplet; stale and offline ages stay amber; photos are never tinted and the synthetic photo and snapshot actually paint (#217); color mode keeps the single accent everywhere, and a stored retired Sand renders the retuned Sand (#224)');
 
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       await page.setViewportSize(viewport);

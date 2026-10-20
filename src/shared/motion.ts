@@ -33,7 +33,7 @@ export interface MotionPlan {
 export interface MotionInput {
   level: AnimationLevel;
   reducedMotion: boolean;
-  /** Settings → Soft motion: whole-arrangement fades, drift and travel. */
+  /** Style → Drift and fade between moves (`motionEnabled`): whole-arrangement fades, drift and travel. */
   softMotion: boolean;
   fadeSeconds: number;
   surface: MotionSurface;

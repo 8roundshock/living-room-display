@@ -245,7 +245,7 @@ async function offlineStatus({ page, widget, state, now, mode }) {
 
 async function states({ page, widget, state, now }) {
   const display = page.locator('[data-widget-id="reminders"]');
-  // Measurement is stable: the per-second refit and clock ticks never toggle rows or the body.
+  // Measurement is stable: the shared refit (on a box, content, class, Text size or typeface change) and clock ticks never toggle rows or the body.
   state.reminders = reminders(30, now);
   await reopen(page);
   await widget.evaluate(element => {

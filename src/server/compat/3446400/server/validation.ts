@@ -4,7 +4,7 @@ import { defaultSettings } from '../shared/defaults.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, absorbRetiredWidgets, absorbableGridProblem, defaultWidgetGrid, firstPlacement, fitGridDensity, isPlannedWidget, normalizePlacement, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
 import { ACCENT_MODES } from '../shared/palette.ts';
 import { ANIMATION_LEVELS } from '../shared/motion.ts';
-import { inspectPhoto, photoAssetSchema } from './photo.ts';
+import { checkPhotoUpload, photoAssetSchema, photoAssetShape } from './photo.ts';
 import { AT_REST } from './persistence.ts';
 
 const widgetShape = <T>(factory: (id: WidgetId) => T) => Object.fromEntries(WIDGET_IDS.map(id => [id, factory(id)])) as Record<WidgetId, T>;
@@ -20,10 +20,10 @@ function legacyWidgets(value: unknown) {
   return merged;
 }
 
-const timezone = z.string().max(100).refine(value => {
+export const timezone = z.string().max(100).refine(value => {
   try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
 }, 'Use an IANA timezone, for example America/Toronto');
-const location = z.object({
+export const location = z.object({
   name: z.string().trim().min(1).max(100), latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180), timezone: z.union([timezone, z.literal('auto')]),
 }).strict();
@@ -157,7 +157,7 @@ export const settingsPatchSchema = z.object({
   widgetOverrides: z.object(widgetShape(() => transform.partial().optional())).strict().optional(),
   widgetGrid: z.object({ revision: z.literal(2).optional(), density: z.enum(['spacious', 'balanced', 'fine']).optional(), placements: z.object(widgetShape(() => placement.partial().extend({ span: spanSchema.nullable().optional() }).optional())).strict().partial().optional() }).strict().optional(),
   photoChange: z.object({ pngBase64: z.string().max(2_796_204).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/) }).strict().superRefine((value, context) => {
-    try { inspectPhoto(Buffer.from(value.pngBase64, 'base64')); }
+    try { checkPhotoUpload(value.pngBase64); }
     catch (error) { context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : 'Invalid photo' }); }
   }).nullable().optional(),
   widgetBehavior: z.object({ reminders: z.object({ hideWhenEmpty: z.boolean().optional() }).strict().optional() }).strict().optional(),
@@ -166,10 +166,23 @@ export const settingsPatchSchema = z.object({
 }).strict();
 const dueAt = z.iso.datetime({ offset: true }).nullable();
 export const reminderInputSchema = z.object({ text: z.string().trim().min(1).max(240), dueAt: dueAt.optional() }).strict();
+/**
+ * POST only: Undo after a delete re-creates the reminder with its original `createdAt` (#237), in
+ * the persisted format and never later than the server's `now`. PATCH never accepts it.
+ */
+export function reminderCreateSchema(now: number) {
+  return reminderInputSchema.extend({
+    createdAt: z.iso.datetime().refine(value => Date.parse(value) <= now, 'Use a creation time that is not in the future').optional(),
+  }).strict();
+}
 export const reminderPatchSchema = reminderInputSchema.partial().extend({ completed: z.boolean().optional() }).strict();
 export const reminderSchema = reminderInputSchema.extend({ id: z.uuid(), completed: z.boolean(), dueAt, createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() }).strict();
+const uniqueReminders = (data: { reminders: { id: string }[] }) => new Set(data.reminders.map(item => item.id)).size === data.reminders.length;
 export const dataSchema = z.object({ version: z.literal(1), settings: settingsSchema, reminders: z.array(reminderSchema).max(1000), photoAsset: photoAssetSchema.nullable().default(null) }).strict()
-  .refine(data => new Set(data.reminders.map(item => item.id)).size === data.reminders.length, 'Reminder IDs must be unique');
+  .refine(uniqueReminders, 'Reminder IDs must be unique');
+/** Store saves only: the photo is the one already checked (unchanged, or just built from a checked upload), so only its shape is parsed (#245). */
+export const checkedPhotoDataSchema = z.object({ version: z.literal(1), settings: settingsSchema, reminders: z.array(reminderSchema).max(1000), photoAsset: photoAssetShape.nullable().default(null) }).strict()
+  .refine(uniqueReminders, 'Reminder IDs must be unique');
 export const importSchema = z.object({ version: z.literal(1), exportedAt: z.iso.datetime(), settings: settingsSchema, reminders: z.array(reminderSchema).max(1000) }).strict();
 
 export function mergeSettings(current: Settings, patch: SettingsPatch): Settings {

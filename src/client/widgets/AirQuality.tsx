@@ -1,8 +1,7 @@
 import { useMemo, type CSSProperties } from 'react';
 import type { AirPollutant, AirQualityReading, AirQualityState, AppState } from '../../shared/contracts.ts';
 import { airAgeSegments, airHourly, airReadingView } from '../airHourly.ts';
-import { isValidTimeZone, localTimeZone } from '../astronomy.ts';
-import { ageLabel } from '../format.ts';
+import { ageLabel, weatherTimeZone } from '../format.ts';
 import { Icon } from '../icons.tsx';
 import { TransitionText } from './TransitionText.tsx';
 import type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
@@ -48,7 +47,8 @@ function Phrases({ parts }: { parts: string[] }) {
 function AirQuality({ state, settings, size, now, disconnected }: WidgetContentProps) {
   const air = airState(state);
   const zone = air.location.timezone;
-  const timeZone = useMemo(() => isValidTimeZone(zone) ? zone : localTimeZone(), [zone]);
+  // The place's zone, or this computer's while it is still `auto`; memoized, since the fallback builds a formatter.
+  const timeZone = useMemo(() => weatherTimeZone(zone), [zone]);
   const current = air.status === 'fresh' || air.status === 'stale' ? air.current : null;
   const caution = disconnected || air.status === 'stale' || air.status === 'unavailable';
   // Everything that needs a clock or a formatter is rebuilt once per minute (#185): whether the saved
@@ -73,7 +73,8 @@ function AirQuality({ state, settings, size, now, disconnected }: WidgetContentP
       : <>
         <div className="air-reading" data-air-reading={view.kind}>
           <TransitionText className="air-aqi" value={view.aqi === null ? '—' : String(Math.round(view.aqi))} />
-          <div className="air-words"><TransitionText className="air-category" value={category ?? 'AQI unavailable'} />{view.qualifier && <div className="air-qualifier"><Phrases parts={view.qualifier.split(' · ')} /></div>}</div>
+          {/* The qualifier is the shared status cue: .status-caution at full opacity (#322, #329). */}
+          <div className="air-words"><TransitionText className="air-category" value={category ?? 'AQI unavailable'} />{view.qualifier && <div className="air-qualifier status-caution"><Phrases parts={view.qualifier.split(' · ')} /></div>}</div>
         </div>
         {size !== 'small' && (pollutant || uv) && <div className="air-details">
           {pollutant && <div><Phrases parts={pollutant} /></div>}

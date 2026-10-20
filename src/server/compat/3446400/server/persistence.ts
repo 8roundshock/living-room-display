@@ -8,8 +8,8 @@ import { WIDGET_IDS } from '../shared/widgets.ts';
  * Bump it, with src/server/compat/, after each coordinated install (#130).
  */
 export const PREVIOUS_RELEASE = {
-  revision: 'bedca44e18bcdc23f33a4ac887e3f2a57d5d41c8',
-  widgetIds: ['clock', 'weather', 'rain', 'forecast', 'reminders', 'preview', 'photo'],
+  revision: '3fee844743c6fb469231b348a7c4d2178a887459',
+  widgetIds: ['clock', 'weather', 'rain', 'forecast', 'reminders', 'preview', 'photo', 'worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'],
 } as const;
 
 /**

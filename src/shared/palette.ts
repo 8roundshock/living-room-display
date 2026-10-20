@@ -90,8 +90,8 @@ export function toneVariables(appearance: Pick<AppearanceSettings, 'accentMode' 
   return Object.fromEntries(PALETTE_ROLES.map(role => [`--tone-${role}`, tones[role]])) as Record<ToneVariable, string>;
 }
 
-/** Sub-tone of each weather glyph (WeatherGlyph's data-glyph), wherever it appears inside a widget. */
-export const WEATHER_GLYPH_TONE = { sun: 'sun', moon: 'time', cloud: 'stone', rain: 'water', storm: 'water', snow: 'sky' } as const satisfies Record<string, PaletteRole>;
+/** Sub-tone of each weather glyph (WeatherGlyph's data-glyph), wherever it appears inside a widget. Partly cloudy is its cloud's stone; its sun or moon part carries that glyph's own data-glyph (#251). */
+export const WEATHER_GLYPH_TONE = { sun: 'sun', moon: 'time', cloud: 'stone', rain: 'water', storm: 'water', snow: 'sky', suncloud: 'stone', mooncloud: 'stone', fog: 'stone', drizzle: 'water' } as const satisfies Record<string, PaletteRole>;
 export type WeatherGlyphName = keyof typeof WEATHER_GLYPH_TONE;
 
 /**

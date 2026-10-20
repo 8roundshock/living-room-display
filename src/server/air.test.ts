@@ -154,3 +154,28 @@ test('a clock set back neither stalls air-quality refreshes nor keeps a future-d
   fast.wall += 31 * 60_000; fast.mono += 1000;
   await other.get(settings); assert.equal(fetches, 3);
 });
+
+test('a slow provider is waited for only briefly; the reading lands for the next request and the back-off is unchanged (#351)', async () => {
+  let now = NOW, calls = 0, mode: 'slow' | 'failing' = 'slow';
+  const service = new AirQualityService(async () => {
+    calls++; await new Promise(resolve => setTimeout(resolve, mode === 'slow' ? 2000 : 400));
+    if (mode === 'failing') throw new Error('offline');
+    return Response.json(airFixture());
+  }, () => now, undefined, 200);
+  const settings = defaultSettings();
+  const started = performance.now();
+  const [first, second] = await Promise.all([service.get(settings), service.get(settings)]);
+  assert.ok(performance.now() - started < 200 + 250, 'answered within the wait');
+  assert.equal(calls, 1, 'parallel requests share one refresh');
+  assert.equal(first.status, 'unavailable'); assert.equal(first.error, null, 'the first fetch is not a failure'); assert.equal(first.refreshing, true); assert.deepEqual(second, first);
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  const fresh = await service.get(settings);
+  assert.equal(fresh.status, 'fresh'); assert.equal(fresh.refreshing, undefined); assert.equal(calls, 1);
+  mode = 'failing'; now += 31 * 60_000;
+  assert.equal((await service.get(settings)).refreshing, true);
+  await new Promise(resolve => setTimeout(resolve, 450));
+  const stale = await service.get(settings);
+  assert.equal(stale.status, 'stale'); assert.match(stale.error!, /last successful/); assert.equal(calls, 2);
+  now += 60_000; await service.get(settings); assert.equal(calls, 2, 'still no retry within 2 minutes');
+  now += 61_000; await service.get(settings); assert.equal(calls, 3);
+});
