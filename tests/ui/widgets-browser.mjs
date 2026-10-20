@@ -144,7 +144,8 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       await statusPage.setViewportSize(viewport);
       // An offline display has loaded once and then failed its 30 s refresh.
       await statusPage.clock.setSystemTime(new Date(status === 'offline' ? now - 30_000 : now));
-      await statusPage.goto(base + '/display'); await statusPage.locator('.display-page').waitFor(); await statusPage.clock.runFor(100);
+      // #306: on a machine shared with other suites a display load has exceeded the default 30 s here; allow its real cost.
+      await statusPage.goto(base + '/display', { timeout: 90_000 }); await statusPage.locator('.display-page').waitFor({ timeout: 90_000 }); await statusPage.clock.runFor(100);
       const widget = statusPage.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
       if (status === 'offline') {
         mode = 'error'; await statusPage.clock.runFor(30_000);
