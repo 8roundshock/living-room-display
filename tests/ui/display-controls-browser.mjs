@@ -75,8 +75,43 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false }
     await open('/display?native=1'); assert.equal(await controls.count(), 0);
     await move(350, 280); await tabSignal(); await page.clock.runFor(4000);
     assert.equal(await controls.count(), 0); assert.equal(await page.locator('html').evaluate(el => getComputedStyle(el).cursor), 'none');
-    assert.deepEqual(errors, []);
     checks.push('Editor/navigation and explicit native presentation retain their existing control exclusions; no native helper or fullscreen launch');
+
+    // #334: every display start (each native activation, every reload) is true black before React mounts. With the
+    // app's script held, /display?native=1 (the screensaver's page) paints only black at 1280×720 and 4K, with a
+    // black computed document background and theme colour; the editor keeps its navy page once mounted.
+    const premount = [];
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 3840, height: 2160 }]) {
+      const held = await browser.newContext({ viewport });
+      try {
+        let release; const gate = new Promise(resolve => { release = resolve; });
+        await held.route(/\/assets\/[^/?]+\.js(\?.*)?$/, async route => { await gate; await route.continue(); });
+        const heldPage = await held.newPage(); heldPage.on('pageerror', error => errors.push(error.message));
+        await heldPage.goto(base + '/display?native=1', { waitUntil: 'commit' });
+        await heldPage.waitForFunction(() => document.readyState !== 'loading' && [...document.styleSheets].some(sheet => sheet.href?.includes('/assets/')));
+        const document_ = await heldPage.evaluate(() => ({ mounted: document.getElementById('root')?.childElementCount ?? -1, background: getComputedStyle(document.documentElement).backgroundColor, body: getComputedStyle(document.body).backgroundColor, theme: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') }));
+        assert.deepEqual(document_, { mounted: 0, background: 'rgb(0, 0, 0)', body: 'rgba(0, 0, 0, 0)', theme: '#000000' }, `${viewport.width}: before mount the document is black`);
+        // The capture stays in RAM; a blank page decodes it.
+        const shot = await heldPage.screenshot();
+        const decoder = await held.newPage();
+        const pixels = await decoder.evaluate(async encoded => {
+          const image = new Image(); image.src = `data:image/png;base64,${encoded}`; await image.decode();
+          const canvas = new OffscreenCanvas(image.width, image.height), context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
+          const data = context.getImageData(0, 0, image.width, image.height).data; let max = 0, lit = 0;
+          for (let index = 0; index < data.length; index += 4) { const value = Math.max(data[index], data[index + 1], data[index + 2]); if (value) { lit++; max = Math.max(max, value); } }
+          return { width: image.width, height: image.height, lit, max };
+        }, shot.toString('base64'));
+        await decoder.close();
+        assert.deepEqual([pixels.width, pixels.height, pixels.lit], [viewport.width, viewport.height, 0], `${viewport.width}: every pre-mount pixel is black ${JSON.stringify(pixels)}`);
+        premount.push(`${viewport.width}×${viewport.height}: ${pixels.width * pixels.height} black pixels`);
+        release(); await heldPage.locator('.display-page').waitFor();
+        assert.equal(await heldPage.evaluate(() => getComputedStyle(document.documentElement).backgroundColor), 'rgb(0, 0, 0)', 'the mounted display stays black');
+      } finally { await held.close(); }
+    }
+    await open('/editor');
+    assert.equal(await page.locator('html').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(9, 11, 18)', 'the mounted editor keeps its navy page');
+    checks.push(`#334 /display?native=1 with the app script held: ${premount.join('; ')}, document background and theme colour black; the mounted editor keeps rgb(9, 11, 18)`);
+    assert.deepEqual(errors, []);
     return { checks, images };
   } finally { await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 }
