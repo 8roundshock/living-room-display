@@ -1155,14 +1155,23 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await context.close();
     await reset();
     ({ page, context } = await open());
+    // The Weather tab asks /api/weather for the forecast itself (#352), so both replies carry the stale one.
+    const staleWeather = (weather) => ({ ...weather, status: 'stale', updatedAt: new Date(now - 3 * 3600_000).toISOString(), error: 'Weather update failed. Showing the last successful forecast.' });
     await page.route('**/api/state', async (route) => {
       const response = await route.fetch(), body = await response.json();
-      body.weather = { ...body.weather, status: 'stale', updatedAt: new Date(now - 3 * 3600_000).toISOString(), error: 'Weather update failed. Showing the last successful forecast.' };
+      body.weather = staleWeather(body.weather);
       await route.fulfill({ response, json: body });
+    });
+    await page.route('**/api/weather', async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: staleWeather(await response.json()) });
     });
     await page.reload();
     await page.locator('.clock-time').waitFor();
+    const weatherReply = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/weather');
     await tab(page, 'Weather');
+    // The status line is read after the tab's own forecast request, not only from the poll's state.
+    await weatherReply;
     statusRow = page.locator('.weather-status-row');
     await statusRow.locator('.weather-status-error').waitFor();
     const staleLines = (await statusRow.innerText()).split('\n').map((line) => line.trim());
@@ -1174,6 +1183,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.doesNotMatch(await page.locator('.disclosure', { hasText: 'Location & forecast details' }).textContent(), /Weather update failed/);
     images.push({ label: 'Weather tab stale status', bytes: await page.locator('.inspector').screenshot({ type: 'png', animations: 'disabled' }) });
     await page.unroute('**/api/state');
+    await page.unroute('**/api/weather');
     await context.close();
     checks.push('#347 the Weather tab status line shows "Weather is unavailable. Check the connection and location settings." under "Forecast unavailable" for a provider failing from the first load, and "Weather update failed. Showing the last successful forecast." under "Saved forecast · …" for a stale forecast, both in the caution tone; the details disclosure keeps only hints');
 
