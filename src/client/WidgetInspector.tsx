@@ -35,14 +35,27 @@ export interface InspectorReveal {
   page: boolean;
 }
 
-// Pointers held down anywhere: a canvas press selects at pointerdown, and the inspector waits for the
-// release before it scrolls, so a stacked page never moves under a drag (#339).
+// Pointers held down in the editor: a canvas press selects at pointerdown, and the inspector waits for
+// the release before it scrolls, so a stacked page never moves under a drag (#339).
 const heldPointers = new Set<number>();
-if (typeof window !== 'undefined') {
-  window.addEventListener('pointerdown', (event) => heldPointers.add(event.pointerId), true);
-  for (const type of ['pointerup', 'pointercancel'] as const)
-    window.addEventListener(type, (event) => heldPointers.delete(event.pointerId), true);
-  window.addEventListener('blur', () => heldPointers.clear());
+/** Tracks held pointers for as long as the editor is mounted (it mounts before any press it cares about). */
+export function useHeldPointers(): void {
+  useEffect(() => {
+    const press = (event: PointerEvent) => heldPointers.add(event.pointerId);
+    const release = (event: PointerEvent) => heldPointers.delete(event.pointerId);
+    const clear = () => heldPointers.clear();
+    window.addEventListener('pointerdown', press, true);
+    window.addEventListener('pointerup', release, true);
+    window.addEventListener('pointercancel', release, true);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('pointerdown', press, true);
+      window.removeEventListener('pointerup', release, true);
+      window.removeEventListener('pointercancel', release, true);
+      window.removeEventListener('blur', clear);
+      clear();
+    };
+  }, []);
 }
 /** Runs `action` now, or once no pointer is held; returns a cleanup. */
 function afterPointerRelease(action: () => void): () => void {
@@ -58,7 +71,7 @@ function afterPointerRelease(action: () => void): () => void {
   const stop = () => {
     for (const type of ['pointerup', 'pointercancel'] as const) window.removeEventListener(type, release, true);
   };
-  // Registered after the tracker above, so the released pointer is already gone when this runs.
+  // Registered after the editor's tracker (`useHeldPointers`), so the released pointer is already gone when this runs.
   for (const type of ['pointerup', 'pointercancel'] as const) window.addEventListener(type, release, true);
   return stop;
 }

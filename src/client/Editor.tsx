@@ -63,7 +63,7 @@ import {
   type WidgetSpan,
 } from '../shared/widgets';
 import { GridEditor, type LayoutEdit } from './GridEditor';
-import { WidgetInspector, widgetListOrder, type InspectorReveal } from './WidgetInspector';
+import { WidgetInspector, useHeldPointers, widgetListOrder, type InspectorReveal } from './WidgetInspector';
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
@@ -235,6 +235,7 @@ export function Editor({
   const [movementPreview, setMovementPreview] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<WidgetId | null>(null);
   const selectedRef = useRef<WidgetId | null>(null);
+  useHeldPointers();
   // #339: what the Widgets tab scrolls into view after a selection, an add or a no-room explanation.
   const [reveal, setReveal] = useState<InspectorReveal | null>(null);
   const [layoutEditing, setLayoutEditing] = useState(false),
@@ -661,17 +662,17 @@ export function Editor({
     say(`${WIDGET_CATALOG[id].name} removed`, 'list');
   }
   // Inspector resizes: the pressed preset and the steppers' own outputs show the size, so only the
-  // neighbours a step moved are announced (#340).
+  // neighbours a step moved are named, in the canvas line beside the canvas they changed (#340).
   function resizeWidget(id: WidgetId, size: WidgetSize) {
     const next = fitWidgetFamily(resizeBase(id), id, size, draftRef.current.widgets);
-    if (next) say(commitResize(id, next).displaced, 'list');
+    if (next) say(commitResize(id, next).displaced);
     else reportNoRoom({ kind: 'family', id, size });
   }
   function resizeWidgetSpan(id: WidgetId, span: WidgetSpan) {
     const next = resizeSpanGrid(resizeBase(id), id, span, draftRef.current.widgets);
-    if (next) say(commitResize(id, next).displaced, 'list');
+    if (next) say(commitResize(id, next).displaced);
     else if (isFreeSize(id)) reportNoRoom({ kind: 'span', id, span });
-    else say('No room for that size', 'list');
+    else say('No room for that size');
   }
   /** A move or resize committed on the canvas, worded with where it went or what size it became (#341). */
   function canvasEdit(grid: WidgetGrid, edit: LayoutEdit) {

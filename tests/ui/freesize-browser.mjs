@@ -305,12 +305,12 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     // neighbour returns and resizing back is clean; each push and return is named.
     await open(defaultSettings()); await layout(); await clean(); await selectReminders();
     const frames = () => page.locator('.grid-widget-frame').evaluateAll(elements => elements.map(element => `${element.dataset.frameId} ${element.getAttribute('style')}`));
-    const initial = await frames(), listMessage = () => page.locator('.widget-list .inline-message').textContent();
+    const initial = await frames();
     const shorter = () => page.getByRole('group', { name: 'Reminders height' }).getByRole('button', { name: 'Shorter' });
     await taller().click(); await dirty();
-    assert.equal(await listMessage(), 'Forecast moved right to make room');
+    assert.equal(await status().textContent(), 'Forecast moved right to make room');
     await shorter().click(); await clean();
-    assert.equal(await listMessage(), 'Forecast moved back');
+    assert.equal(await status().textContent(), 'Forecast moved back');
     assert.deepEqual(await frames(), initial, 'Taller then Shorter puts Forecast back');
     await preset('large').click(); await dirty();
     await preset('small').click(); await clean();
