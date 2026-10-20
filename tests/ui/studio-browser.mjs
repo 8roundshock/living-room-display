@@ -1107,8 +1107,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
     const canvasBoard = () => page.locator('.preview-surface [data-widget-id]').evaluateAll((sections) => sections.map((section) => [section.getAttribute('data-widget-id'), section.getAttribute('data-widget-span'), section.style.left, section.style.top]).sort())
       .then((rows) => rows.map(([id, span, left, top]) => [id, span, percent(left), percent(top)]));
     const spans = { calendar: '4x4', clock: '8x4', weather: '4x4', forecast: '8x2', preview: '4x2', reminders: '4x2' };
-    // Last screen has no snapshot to show in this editor, so the canvas shows the other five.
-    const expectedCanvas = Object.keys(spans).filter((id) => id !== 'preview').map((id) => {
+    // Every widget of the default board, Last screen as its editor placeholder.
+    const expectedCanvas = Object.keys(spans).map((id) => {
       const placement = defaults.widgetGrid.placements[id];
       return [id, spans[id], percent(placement.column / 12 * 100), percent(placement.row / 8 * 100)];
     }).sort();
@@ -1177,7 +1177,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await reset435.getByRole('button', { name: 'Keep my layout', exact: true }).click();
     await context.close();
     checks.push(
-      '#435 Reset layout… beside Reset appearance asks inline with focus on Keep my layout; Keep changes nothing; Reset shows the default board on the canvas as a draft (Calendar, Clock, Weather, Forecast and Reminders in their default cells, Note gone) that Cancel restores; Save keeps the clock style, Hide when empty, snapshot opacity and the note; an unchanged board says “Layout is back to the default.” with no Save bar; focus returns to Reset layout…; the row fits 1280 × 720 and 390 px',
+      '#435 Reset layout… beside Reset appearance asks inline with focus on Keep my layout; Keep changes nothing; Reset shows the default board on the canvas as a draft (all six widgets in their default cells, Last screen as its placeholder, Note gone) that Cancel restores; Save keeps the clock style, Hide when empty, snapshot opacity and the note; an unchanged board says “Layout is back to the default.” with no Save bar; focus returns to Reset layout…; the row fits 1280 × 720 and 390 px',
     );
     assert.deepEqual(errors, []);
     return { checks, images };
