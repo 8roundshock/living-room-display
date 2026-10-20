@@ -214,12 +214,18 @@ function CountdownSettings({ settings, onChange, saving }: WidgetSettingsProps) 
   </div>;
 }
 
-// Synthetic sample only; private titles never reach the picker.
-const SAMPLE: CountdownEvent[] = [
-  { id: '7a1c0d4e-0000-4000-8000-000000000001', title: 'Weekend trip', date: '2026-10-30', repeatsYearly: false },
-  { id: '7a1c0d4e-0000-4000-8000-000000000002', title: 'Birthday', date: '1990-11-03', repeatsYearly: true },
-  { id: '7a1c0d4e-0000-4000-8000-000000000003', title: 'Holiday', date: '2026-12-24', repeatsYearly: false },
-];
+// Synthetic sample only; private titles never reach the picker. The dates are days after the sample's
+// own time (its weather update time, which the picker sets to now, #361), so the counts stay 12, 16
+// and 67 days on any date.
+function sampleCountdowns(anchor: Date): CountdownEvent[] {
+  const today = civilFromDate(anchor), date = (days: number) => addDays(today, days), birthday = date(16);
+  return [
+    { id: '7a1c0d4e-0000-4000-8000-000000000001', title: 'Weekend trip', date: formatCivil(date(12)), repeatsYearly: false },
+    // A yearly date in 1990 (not a leap year, so 29 February becomes the 28th).
+    { id: '7a1c0d4e-0000-4000-8000-000000000002', title: 'Birthday', date: formatCivil({ ...birthday, year: 1990, day: birthday.month === 2 && birthday.day === 29 ? 28 : birthday.day }), repeatsYearly: true },
+    { id: '7a1c0d4e-0000-4000-8000-000000000003', title: 'Holiday', date: formatCivil(date(67)), repeatsYearly: false },
+  ];
+}
 
 export const CountdownWidget: WidgetModule = {
   Renderer: Countdown,
@@ -227,7 +233,8 @@ export const CountdownWidget: WidgetModule = {
   Settings: CountdownSettings,
   draftProblem,
   sample: ({ state, settings }) => {
-    const next = { ...settings, widgetData: { ...settings.widgetData, countdowns: SAMPLE } };
+    const anchor = new Date(Date.parse(state.weather.updatedAt ?? '') || Date.now());
+    const next = { ...settings, widgetData: { ...settings.widgetData, countdowns: sampleCountdowns(anchor) } };
     return { state: { ...state, settings: next }, settings: next };
   },
 };

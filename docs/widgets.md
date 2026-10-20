@@ -111,7 +111,8 @@ three-digit or long-category AQI with either qualifier (#309).
 Overfull content is laid out proportionally wider before the fit scale shrinks it,
 so a larger Text size never renders text-size-scaled labels or values smaller.
 Icons and the fixed unavailable dash do not follow Text size and can still shrink
-with the fit. The picker sample has no floor. Ambient glyphs pass `size={null}` so
+with the fit. The picker sample uses a fixed 9 px text and 10.5 px data floor (#361)
+with the same zoom-out fit. Ambient glyphs pass `size={null}` so
 these container-query sizes apply rather than the Icon's default 20 px (#128).
 
 The shared fit in [`Display.tsx`](../src/client/Display.tsx) does not rerun on every

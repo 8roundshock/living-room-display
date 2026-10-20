@@ -4,7 +4,16 @@ import { test } from 'node:test';
 import { defaultSettings } from '../shared/defaults.ts';
 import { importSchema } from '../server/validation.ts';
 import { persistableSettings } from '../server/persistence.ts';
-import { BackupError, backupContents, backupDate, parseBackup } from './backup.ts';
+import {
+  BACKUP_REJECTED,
+  BackupError,
+  RESTORE_UNREACHABLE,
+  backupContents,
+  backupDate,
+  parseBackup,
+  restoreFailure,
+} from './backup.ts';
+import { ApiError, NETWORK_ERROR_MESSAGE } from './api.ts';
 
 function exported(overrides: Record<string, unknown> = {}) {
   const settings = defaultSettings();
@@ -53,4 +62,23 @@ test('anything that is not an export is refused with a message, before reaching 
     assert.throws(() => parseBackup(text), (error: unknown) => error instanceof BackupError && error.message === notBackup, label);
   }
   assert.throws(() => parseBackup(JSON.stringify(exported({ version: 2 }))), /newer version of the app/, 'a future export says so');
+});
+
+test('a restore the server refuses or cannot answer reads in plain words, with the server text kept as detail (#302)', () => {
+  // A version-1 file with a key this release does not know (for example from a newer release after a
+  // rollback) passes the client check, so only the server refuses it.
+  const newer = exported(); (newer.settings as Record<string, unknown>).futureSetting = true;
+  assert.doesNotThrow(() => parseBackup(JSON.stringify(newer)), 'the client check lets it through');
+  const validation = (() => { try { importSchema.parse(newer); } catch (error) { return error instanceof Error ? error.message : String(error); } return ''; })();
+  assert.ok(validation, 'the server schema refuses it');
+  const rejected = restoreFailure(new ApiError(400, 'settings: Unrecognized key: "futureSetting"'));
+  assert.equal(rejected.text, BACKUP_REJECTED);
+  assert.equal(rejected.text, "This backup has settings this version can't read. It may come from a newer version of the app, or the file was changed.");
+  assert.equal(rejected.detail, 'settings: Unrecognized key: "futureSetting"', 'the technical text stays available');
+  assert.equal(restoreFailure(new ApiError(413, 'Request body is too large')).text, BACKUP_REJECTED);
+  const unreachable = restoreFailure(new ApiError(0, NETWORK_ERROR_MESSAGE));
+  assert.deepEqual(unreachable, { text: RESTORE_UNREACHABLE, detail: null });
+  assert.doesNotMatch(unreachable.text, /changes are kept/, 'a restore never has unsaved changes to keep');
+  assert.deepEqual(restoreFailure(new ApiError(500, 'Synthetic failure')), { text: 'Could not restore the backup. Nothing was changed.', detail: 'Synthetic failure' });
+  assert.deepEqual(restoreFailure('odd'), { text: 'Could not restore the backup. Nothing was changed.', detail: null });
 });

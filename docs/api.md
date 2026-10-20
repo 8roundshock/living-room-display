@@ -158,6 +158,14 @@ saved. Relocation through black is unaffected, and Drift and fade between moves
 it as an ordinary draft field; built-in styles keep it and saved styles store it.
 Built-in styles are looks (#153, #110, #226): they write only `brightness`,
 `accentMode`, `accentColor`, `textColor`, `fontFamily`, `layout` and `preset`.
+`appearance.preset` (`phone`, `room`, `night` or `custom`) is a label that follows the
+look (#277): every appearance edit in the editor, applying a saved style and Reset
+appearance write the built-in style whose look is showing (`matchingBuiltinPreset()`
+in `src/client/model.ts`; the legacy `layout` does not count), else `custom`. It is not
+part of the effective settings, so the label alone never makes a draft dirty and is never
+sent by itself; data saved before #277 may still carry a stale label until the next
+appearance edit. Rendering must not depend on it: use `matchingBuiltinPreset()` (#150).
+The four values are the ones the previous release requires, so no stored shape changes.
 
 Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
 `accentMode` or `animation` keeps its saved value (#83). Only the persisted reader

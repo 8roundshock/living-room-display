@@ -2,7 +2,8 @@
 .widget-grid-plane { position: absolute; inset: 4%; }
 /* Small text floors are a share of the whole 16:9 display (or scaled editor canvas), not
    of each widget. Registered lengths resolve on the plane, so widgets inherit fixed sizes;
-   text size still scales them. Without the plane (picker samples) they are 0. */
+   text size still scales them. Without the plane they are 0; picker samples set fixed 9 px/10.5 px
+   floors of their own in studio.css (#361). */
 @property --ambient-min-text { syntax: '<length>'; inherits: true; initial-value: 0px; }
 @property --ambient-min-data { syntax: '<length>'; inherits: true; initial-value: 0px; }
 .grid-ambient > .ambient-content { --ambient-min-text: min(1.4cqh, 0.7875cqw); --ambient-min-data: min(1.65cqh, 0.928cqw); }
