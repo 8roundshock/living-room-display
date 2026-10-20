@@ -34,7 +34,9 @@ only when focus was in it: after an add to the new widget's row, shown with its 
 Escape or Close to **Add widget**; a canvas widget focused while the picker is open keeps focus,
 so focus always stays in view. Desktop scrolls the
 inspector panel. Stacked layouts scroll the page only after a list row click, an add or a
-tap on the canvas, once the pointer is released; a press that drags a widget and a canvas
+tap on the canvas, once the pointer is released and the tap's click has gone to the canvas
+(a touch tap's click is aimed where the finger was, so an earlier scroll would send it to the
+list control that moved there); a press that drags a widget and a canvas
 widget focused from the keyboard keep the canvas in view. Scrolling is instant with reduced
 motion or the Off animation level.
 

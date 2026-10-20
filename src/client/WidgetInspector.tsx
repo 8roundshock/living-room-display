@@ -42,44 +42,83 @@ export interface InspectorReveal {
 const handledReveals = new WeakSet<InspectorReveal>();
 
 // Pointers held down in the editor: a canvas press selects at pointerdown, and the inspector waits for
-// the release before it scrolls, so a stacked page never moves under a drag (#339).
+// the release before it scrolls, so a stacked page never moves under a drag (#339). It then also waits
+// for the click that release sends: a touch tap's click is hit-tested where the finger was after the
+// release, so a page scrolled (instantly) before it sends that click to whatever list control moved
+// under the finger: another widget's row, a Remove button or a tab (#339 review).
 const heldPointers = new Set<number>();
-/** Tracks held pointers for as long as the editor is mounted (it mounts before any press it cares about). */
+/** A timer while the last release's click may still come; 0 once it came or cannot come any more. */
+let clickPending = 0;
+/** How long a release's click may take before waiting reveals run anyway (a touch drag or long press sends none). */
+const CLICK_WAIT_MS = 400;
+const waiters = new Set<() => void>();
+function settle(): void {
+  if (heldPointers.size || clickPending) return;
+  for (const waiter of [...waiters]) waiter();
+}
+function endClickWait(): void {
+  window.clearTimeout(clickPending);
+  clickPending = 0;
+}
+/** Tracks held pointers and their clicks for as long as the editor is mounted (it mounts before any press it cares about). */
 export function useHeldPointers(): void {
   useEffect(() => {
-    const press = (event: PointerEvent) => heldPointers.add(event.pointerId);
-    const release = (event: PointerEvent) => heldPointers.delete(event.pointerId);
-    const clear = () => heldPointers.clear();
+    const press = (event: PointerEvent) => {
+      endClickWait();
+      heldPointers.add(event.pointerId);
+    };
+    const release = (event: PointerEvent) => {
+      heldPointers.delete(event.pointerId);
+      if (heldPointers.size) return;
+      endClickWait();
+      clickPending = window.setTimeout(() => {
+        clickPending = 0;
+        settle();
+      }, CLICK_WAIT_MS);
+    };
+    const cancel = (event: PointerEvent) => {
+      heldPointers.delete(event.pointerId);
+      settle();
+    };
+    // The click was hit-tested before it is dispatched, so waiting reveals may scroll now (capture phase).
+    const click = () => {
+      if (!clickPending) return;
+      endClickWait();
+      settle();
+    };
+    const clear = () => {
+      heldPointers.clear();
+      endClickWait();
+      settle();
+    };
     window.addEventListener('pointerdown', press, true);
     window.addEventListener('pointerup', release, true);
-    window.addEventListener('pointercancel', release, true);
+    window.addEventListener('pointercancel', cancel, true);
+    window.addEventListener('click', click, true);
     window.addEventListener('blur', clear);
     return () => {
       window.removeEventListener('pointerdown', press, true);
       window.removeEventListener('pointerup', release, true);
-      window.removeEventListener('pointercancel', release, true);
+      window.removeEventListener('pointercancel', cancel, true);
+      window.removeEventListener('click', click, true);
       window.removeEventListener('blur', clear);
-      clear();
+      heldPointers.clear();
+      endClickWait();
     };
   }, []);
 }
-/** Runs `action` now, or once no pointer is held; returns a cleanup. */
+/** Runs `action` now, or once no pointer is held and the last release's click has been hit-tested; returns a cleanup. */
 function afterPointerRelease(action: () => void): () => void {
-  if (!heldPointers.size) {
+  if (!heldPointers.size && !clickPending) {
     action();
     return () => {};
   }
-  const release = () => {
-    if (heldPointers.size) return;
-    stop();
+  const waiter = () => {
+    waiters.delete(waiter);
     action();
   };
-  const stop = () => {
-    for (const type of ['pointerup', 'pointercancel'] as const) window.removeEventListener(type, release, true);
-  };
-  // Registered after the editor's tracker (`useHeldPointers`), so the released pointer is already gone when this runs.
-  for (const type of ['pointerup', 'pointercancel'] as const) window.addEventListener(type, release, true);
-  return stop;
+  waiters.add(waiter);
+  return () => void waiters.delete(waiter);
 }
 
 export function WidgetInspector({

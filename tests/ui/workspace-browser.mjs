@@ -308,6 +308,50 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     assert.ok(sizes.length === 3 && sizes.every(height => height >= 44), `coarse-pointer size families are 44 px: ${sizes}`);
     checks.push('390x844 with a coarse pointer: size family buttons are 44 px tall (#349)');
   }
+  const WIDGET_ID = Object.fromEntries(ACTIVE_WIDGET_IDS.map(id => [WIDGET_CATALOG[id].name, id]));
+  /**
+   * #339 review: on a stacked touch layout a canvas tap selects the tapped widget and nothing else.
+   * The tap's click is hit-tested where the finger was, after the release, so the page may scroll to
+   * the settings only once that click has gone to the canvas. With an instant scroll (reduced motion
+   * or animation Off) an earlier scroll sent it to whatever list control moved under the finger:
+   * another widget's row, a Remove button or a tab. A mouse click() cannot show this.
+   */
+  async function canvasTaps(viewport, reducedMotion, settings, how) {
+    const label = `${viewport.width}x${viewport.height} ${how}`;
+    await open(viewport, reducedMotion, settings, { hasTouch: true });
+    await button('Hide location tip').tap();
+    await button('Edit layout').tap(); await page.locator('.grid-editor').waitFor();
+    for (const name of GROUPED) {
+      const id = WIDGET_ID[name];
+      // From the top of the page, where the canvas is: the reveal then has to scroll the page.
+      await page.evaluate(() => scrollTo(0, 0));
+      await button(`Move ${name}`).tap();
+      // The page scrolls to the tapped widget's settings once its click has gone to the canvas.
+      const option = `.widget-option[data-widget-option="${id}"]`;
+      await page.waitForFunction(selector => {
+        const control = document.querySelector(`${selector}.selected .widget-inspector`)?.querySelector('button, input, select, textarea');
+        const box = control?.getBoundingClientRect();
+        return !!box && box.top >= -0.5 && box.bottom <= innerHeight + 0.5;
+      }, option, { timeout: 5000 }).catch(() => {});
+      // Let any later click land before looking at what changed.
+      await page.waitForTimeout(250);
+      const state = await page.evaluate(() => ({
+        selected: document.querySelector('.widget-option.selected')?.getAttribute('data-widget-option') ?? null,
+        frame: document.querySelector('.grid-widget-frame.selected')?.getAttribute('data-frame-id') ?? null,
+        tab: document.querySelector('.inspector-tabs [role="tab"][aria-selected="true"]')?.id ?? null,
+        rows: document.querySelectorAll('.widget-list .widget-select').length,
+        savebar: !!document.querySelector('.studio-savebar'),
+        scrollY: Math.round(scrollY),
+      }));
+      const { scrollY, ...result } = state;
+      assert.deepEqual(result, { selected: id, frame: id, tab: 'tab-Widgets', rows: GROUPED.length, savebar: false },
+        `${label}: tapping ${name} on the canvas selects it and changes nothing else (scrollY ${scrollY})`);
+      assert.equal(await focusedName(), `Move ${name}`, `${label}: focus stays on the tapped widget`);
+      const control = await page.locator(`${option} .widget-inspector`).locator('button, input, select, textarea').first().boundingBox();
+      assert.ok(control.y >= -0.5 && control.y + control.height <= viewport.height + 0.5, `${label}: ${name}'s first control comes into view after the tap: ${JSON.stringify({ control, scrollY })}`);
+    }
+    checks.push(`${label} full board with touch: tapping each of the ${GROUPED.length} widgets on the canvas selects that widget, scrolls its first control into view and changes nothing else (no other selection, removal, Save bar or tab switch); focus stays on the tapped widget (#339 review)`);
+  }
   const familyActions = ACTIVE_WIDGET_IDS.reduce((total, id) => total + widgetSizes(id).length, 0);
   try {
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1280, height: 600 }, { width: 1024, height: 600 }, { width: 760, height: 600 }]) {
@@ -370,6 +414,10 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     }
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1024, height: 600 }, { width: 390, height: 844 }]) { await layoutEditing(viewport); await pickerFocus(viewport); }
     await coarseTargets();
+    const animationOff = fullBoard(); animationOff.appearance.animation = 'off';
+    await canvasTaps({ width: 390, height: 844 }, 'reduce', fullBoard(), 'reduced motion');
+    await canvasTaps({ width: 600, height: 900 }, 'reduce', fullBoard(), 'reduced motion');
+    await canvasTaps({ width: 390, height: 844 }, 'no-preference', animationOff, 'animation Off');
     assert.deepEqual(errors, []); return { checks, images };
   } finally { await context?.close(); await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 }
