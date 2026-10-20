@@ -3,6 +3,7 @@ import type { AppState, Settings, WidgetId } from '../shared/contracts.ts';
 import { GRID_DENSITIES, WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset, placementSpan, widgetRevealOrder } from '../shared/widgets.ts';
 import { DEFAULT_ANIMATION_LEVEL, MAX_REVEAL_STEPS, motionPlan, revealTiming, type EntranceLevel, type MotionSurface } from '../shared/motion.ts';
 import { renderedAccent, toneVariables } from '../shared/palette.ts';
+import { DAYLIGHT_TRANSITION_SECONDS, daylightStep, effectiveBrightness } from './daylight.ts';
 import { Icon } from './icons.tsx';
 import { MotionContext, usePrefersReducedMotion, type MotionState } from './useMotion.ts';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
@@ -217,7 +218,14 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   const motion = useMemo<MotionState>(() => ({ plan, revealEpoch: reveal.epoch, revealing: reveal.active, resting: fading }), [plan, reveal.epoch, reveal.active, fading]);
   const animation = plan.valueTransitions ? plan.level : 'off';
 
-  const ambientStyle = { '--ambient-accent': renderedAccent(settings.appearance.accentColor), '--ambient-text': settings.appearance.textColor, '--ambient-brightness': settings.appearance.brightness, '--font-scale': settings.appearance.fontScale,
+  // Follow daylight (#439): one value per minute at the weather location. The ambient page glides to
+  // it (widgets.css); editor canvases follow the draft at once. Fixed renders `brightness` unchanged.
+  const daylight = settings.appearance.daylightBrightness;
+  const brightnessStep = daylightStep(now).getTime();
+  const brightness = useMemo(() => effectiveBrightness(settings.appearance, settings.location, brightnessStep),
+    [settings.appearance.brightness, daylight?.dimmest, daylight?.brightest, settings.location.latitude, settings.location.longitude, brightnessStep]);
+  const ambientStyle = { '--ambient-accent': renderedAccent(settings.appearance.accentColor), '--ambient-text': settings.appearance.textColor, '--ambient-brightness': brightness, '--font-scale': settings.appearance.fontScale,
+    ...(daylight && !embedded ? { '--brightness-transition': `${DAYLIGHT_TRANSITION_SECONDS}s` } : {}),
     ...toneVariables(settings.appearance),
     '--fade-duration': reducedMotion || !settings.appearance.motionEnabled ? '0s' : `${settings.appearance.fadeSeconds}s`, '--motion-x': `${offset.x}%`, '--motion-y': `${offset.y}%` } as CSSProperties;
   // Editor polish: a released or invalid drag settles into its cell; a newly added widget drops in.
@@ -237,6 +245,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       style={ambientStyle}
       data-composition={effectiveCycle}
       data-accent-mode={settings.appearance.accentMode}
+      data-brightness={daylight ? 'daylight' : 'fixed'}
       data-animation={animation}
       data-motion-surface={surface}
     >

@@ -19,8 +19,10 @@ export const PREVIOUS_RELEASE = {
  * included, reads these keys, so for them it is optional: #272 kept it to avoid a data-format change
  * in a reader bump. It stays the mechanism for a future additive key or widget id that the previous
  * release does not know: list the key here, or leave the id out of PREVIOUS_RELEASE.widgetIds.
+ * `daylightBrightness` (#439) is such a key: 3446400 does not know it, so its omission in Fixed
+ * mode (null) is required, and a Follow daylight range is a documented rollback exception.
  */
-export const AT_REST = { appearance: { accentMode: 'color', animation: 'subtle' } } as const;
+export const AT_REST = { appearance: { accentMode: 'color', animation: 'subtle', daylightBrightness: null } } as const;
 
 /** Settings as written to state.json, state.backup.json and exports: additive defaults omitted. */
 export type PersistableSettings = Record<string, unknown>;

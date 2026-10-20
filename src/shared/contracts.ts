@@ -10,6 +10,8 @@ export interface WidgetPlacement { column: number; row: number; size: WidgetSize
 export interface WidgetGrid { revision?: 1 | 2; density: GridDensity; placements: Record<WidgetId, WidgetPlacement> }
 export type Units = 'metric' | 'imperial';
 export interface LocationSettings { name: string; latitude: number; longitude: number; timezone: string }
+/** Follow daylight (#439): the display's brightness range, 0.1–1 like `brightness`, with dimmest ≤ brightest. */
+export interface DaylightBrightness { dimmest: number; brightest: number }
 export interface AppearanceSettings {
   preset: 'phone' | 'room' | 'night' | 'custom';
   accentColor: string; textColor: string; brightness: number; fontScale: number;
@@ -21,6 +23,11 @@ export interface AppearanceSettings {
   accentMode: AccentMode;
   /** Motion inside widgets and the editor; relocation through black is unaffected. Arrives with #76. */
   animation: AnimationLevel;
+  /**
+   * Brightness mode (#439): null is Fixed (`brightness` applies, the default); a range is Follow
+   * daylight, peaking at local solar noon. `brightness` stays the Fixed level in both modes.
+   */
+  daylightBrightness: DaylightBrightness | null;
 }
 export interface WidgetTransform { offsetX: number; offsetY: number; scale: number }
 export interface WidgetBehavior { reminders: { hideWhenEmpty: boolean } }

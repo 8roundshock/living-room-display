@@ -386,32 +386,37 @@ No automatic geometry downgrade is provided.
 The previous installed release is `3446400` (the merge of PR #286). Its reader
 rejects unknown keys, so an additive key written to disk would make `state.json`,
 and after the next save `state.backup.json`, unreadable by it. `3446400` reads
-everything this build writes, including every choice that was an exception for
-`bedca44` (custom Reminders sizes, Native colours, Animation Off or Lively, and the
-new widgets of #78 with their content), so `app.previous` remains a working rollback
-after the next update. This build still omits a few additive values from files and
+everything this build writes with Fixed brightness, including every choice that was
+an exception for `bedca44` (custom Reminders sizes, Native colours, Animation Off or
+Lively, and the new widgets of #78 with their content), so `app.previous` remains a
+working rollback after the next update unless Follow daylight (#439, in the table
+below) was used. This build still omits a few additive values from files and
 exports while they equal the value the current reader restores (see
-[API](api.md#persistence-and-recovery)). `3446400` reads them either way, so the
-omission is optional for those keys. It was kept to avoid a data-format change
-([#272](https://github.com/8roundshock/living-room-display/issues/272)) and remains
-the mechanism for a future additive key or widget id that the previous release does
-not know.
+[API](api.md#persistence-and-recovery)). `3446400` reads `accentMode`, `animation`
+and `widgetData` either way, so their omission is optional. It was kept to avoid a
+data-format change ([#272](https://github.com/8roundshock/living-room-display/issues/272)).
+`3446400` does not know `daylightBrightness`, so omitting its Fixed value (`null`) is
+required: that is what keeps Fixed data readable.
 
 `src/server/rollback.test.ts` (part of `npm test`) proves this with a byte-for-byte
 copy of the `3446400` reader: fresh Native data, previous-release data after unrelated
 saves, saved styles, a photo, a revision-one legacy file, the export, each former
-`bedca44` exception and every value omitted at rest written out in full, in
-`state.json`, `state.backup.json` and the export, all parse. Its negative controls
-show that an unknown key and invalid values are still rejected. After each
+`bedca44` exception and every optional omitted value written out in full, in
+`state.json`, `state.backup.json` and the export, all parse. Fixed brightness is
+omitted at rest and parses; a Follow daylight range in the settings, a saved style or
+the export is rejected until Fixed is saved again or the key is stripped. Its negative
+controls show that an unknown key and invalid values are still rejected. After each
 coordinated install, the baseline moves to the newly installed revision (#130).
 
-A non-default choice that `3446400` cannot read would be listed here. Before rolling
+A non-default choice that `3446400` cannot read is listed here. Before rolling
 back after using one, follow the [revision 2 procedure](#widget-geometry-revision-2-update-and-rollback):
-keep the newer data directory and restore the matching pre-upgrade data copy.
+keep the newer data directory and restore the matching pre-upgrade data copy, or
+remove the choice as its row says.
 
 | Feature | Data the previous release (`3446400`) cannot read |
 | --- | --- |
 | Everything up to `3446400` (#73, #74, #75, #76, #78 and the polish since) | None. |
+| Brightness → Follow daylight (#439) | `appearance.daylightBrightness` in the settings and in saved styles made while it was on. Fixed, the default, writes no key, so Fixed data stays readable. See [removing Follow daylight before a downgrade](#removing-follow-daylight-before-a-downgrade). |
 
 #### Rolling back the installed 3446400
 
@@ -495,6 +500,33 @@ folder keeps the original files; keep it private. An export that contains spans
 must be stripped the same way (delete `settings.widgetGrid.placements.*.span` and
 `settings.savedPresets[].visual.widgetGrid.placements.*.span`) before importing it
 into the older app.
+
+#### Removing Follow daylight before a downgrade
+
+Follow daylight (#439) is stored as `appearance.daylightBrightness`; `brightness`
+beside it keeps the Fixed level. Deleting the key therefore leaves Fixed brightness at
+that level, which `3446400` reads (`src/server/rollback.test.ts` proves this for
+`state.json` and the export). Prefer doing it in the newer app before the rollback:
+choose Style → Brightness → **Fixed** and Save, then save once more (any settings or
+reminder change) so `state.backup.json` no longer holds the range either. A saved
+style made while Follow daylight was on still carries it: apply it, choose Fixed and
+update it, or delete it, and export again afterwards if you want a backup the older
+app can import.
+
+If the older app is already restored, use the procedure above for custom sizes with
+one change: in `$stripCode`, replace the `grids` and `for` lines with
+
+```powershell
+  const looks=[data.settings?.appearance,...(data.settings?.savedPresets??[]).map(preset=>preset?.visual?.appearance)];
+  for(const look of looks) if(look&&typeof look==='object') delete look.daylightBrightness;
+```
+
+and name the candidate `strip-daylight-…` instead of `strip-spans-…`. It validates
+with the older app's own reader before it preserves the data folder and replaces
+anything. An export taken while Follow daylight was on needs the same deletion
+(`settings.appearance.daylightBrightness` and
+`settings.savedPresets[].visual.appearance.daylightBrightness`) before the older app
+imports it.
 
 ### Runtime updates and installed provenance
 

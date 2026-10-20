@@ -78,9 +78,10 @@ saved file keeps the old value until another colour is saved.
 Method. Every tone sits in one OKLCH lightness band (0.72–0.73) with low chroma
 (0.05–0.07; stone ≤ 0.02), so relative luminance stays within 6% of the Mist
 default and no tone is brighter than the brightest single-accent swatch. Each has
-more than 8:1 contrast on true black at full brightness; the saved brightness cap
-then dims every mode alike, and a browser luminance check keeps the native
-composition within 5% of colour mode at Room and Night brightness. Hues are spread
+more than 8:1 contrast on true black at full brightness; the brightness cap (the
+Fixed level, or Follow daylight's value for the minute, #439) then dims every mode
+alike, and a browser luminance check keeps the native composition within 5% of
+colour mode at Room and Night brightness. Hues are spread
 so any two tones that can share a screen, every tone against the status tone, and
 every colour swatch against the status tone, are at least ΔE_ok 0.05 apart. Gold
 was chosen over the old Sand because it sat too close to the stale amber.

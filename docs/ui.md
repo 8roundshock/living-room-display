@@ -71,6 +71,26 @@ visible above it, including narrow screens and compact keyboard-height windows.
   miniatures show Lilac, Mist and Rose bars. New installs use the Room look. Up to
   twelve saved styles include visual/widget/empty-reminder settings, the accent mode
   and the Animation level; applying one restores its whole board.
+- **Brightness** (#439) has two modes, chosen on its label line with **Fixed** and
+  **Follow daylight** (pressed buttons in a group named “Brightness mode”, each with a
+  hit area reaching into the space above the line, never over the slider). **Fixed**,
+  the default, is the single Brightness slider, unchanged. **Follow daylight** replaces
+  it with **Dimmest** and **Brightest** sliders (10–100%; moving one past the other
+  carries the other along), the range on the label line ("25–75%") and a status line,
+  “Now 42% · brightest at 1:02 PM”, with a hint that it peaks at solar noon at your
+  weather location (named) and rests at Dimmest from sunset to sunrise (polar night:
+  “Now 20% · the sun stays down today”; polar day: up all day, never at Dimmest). The
+  time follows the Time format and the location's time zone (a device area uses the
+  forecast's). It starts at Night's 28% and Phone's 70%, widened to include the Fixed
+  level, and returns to the last range chosen in this editor after Fixed. Like Animation,
+  the mode is not part of a look: choosing it keeps the style card, Phone, Room and Night
+  set only the Fixed level, and focus stays on the pressed mode button. The canvas shows
+  the current value at once; the display page glides to each minute's value over 10 s,
+  also with reduced motion or Drift and fade off, since a brightness change is not
+  motion (see [API](api.md#grid-and-widget-contracts) for the curve). In Fixed the
+  mode buttons add no height, so the Style tab still fits at 1280×720; Follow daylight
+  makes it scroll, like an open disclosure. The
+  [daylight harness](../tests/ui/daylight-browser.mjs) covers these flows.
 - The **Accent** row offers Native (a ring of palette tones named "Native colours":
   each widget uses its own colour, see [native palette](design.md#native-palette))
   and five colour swatches; a custom colour picker (**+**) sits on the heading line,
@@ -113,8 +133,8 @@ visible above it, including narrow screens and compact keyboard-height windows.
   with a clean draft. The server keeps the replaced state as `state.backup.json`,
   its previous-state recovery backup, until the next save, so the confirmation
   suggests exporting first to keep it longer. **Reset appearance…** asks inline;
-  **Reset** returns every Style tab value to its default (the Room look, Text size
-  100%, Subtle, Drift and fade on, every 3 minutes, a 2 s fade) as an ordinary draft
+  **Reset** returns every Style tab value to its default (the Room look, Fixed
+  brightness, Text size 100%, Subtle, Drift and fade on, every 3 minutes, a 2 s fade) as an ordinary draft
   change, while widgets, their layout, the clock style and saved styles stay. The
   [studio harness](../tests/ui/studio-browser.mjs) covers these flows.
 - The authored canvas never relocates; outside Edit layout it shows value and glyph
@@ -540,6 +560,11 @@ catalog tone (or the one accent), tint its accent element and paint nothing but 
 accent, the text colour or a status tone. It also checks the sub-tones inside the
 merged renderers (Weather's rain hook, Sun & moon's moon, World clocks' day/night
 icons, Air quality bars), picker samples in every family and the editor canvas.
+The [daylight harness](../tests/ui/daylight-browser.mjs) renders the Follow daylight
+display (#439) at 2 AM, 10 AM and solar noon in Toronto at 1280×720, and 10 AM at
+3840×2160, each against a Fixed render at the same value (equal lit pixels, black
+corners). It checks the once-a-minute step, the 10 s glide (none in Fixed), polar day
+and night at Tromsø, and the Style tab's Brightness mode at 1280×720, 390 and 320 px.
 
 After `npm ci` and `npm run build`, use an existing Playwright/browser installation
 and run every `tests/ui/*-browser.mjs` suite as

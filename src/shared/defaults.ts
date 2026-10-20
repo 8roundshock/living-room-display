@@ -14,6 +14,8 @@ export const DEFAULT_SETTINGS: Settings = {
     clockStyle: 'outline',
     // New installs and built-in styles use native colours (#75); data without the key reads as color.
     accentMode: 'native', animation: 'subtle',
+    // Fixed brightness (#439); Follow daylight stores its range here.
+    daylightBrightness: null,
   },
   widgets: defaultWidgetVisibility(),
   widgetGrid: defaultWidgetGrid(),
