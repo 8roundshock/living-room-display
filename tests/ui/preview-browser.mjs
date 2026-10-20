@@ -311,17 +311,23 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
         });
         await page.clock.setSystemTime(sameMinute);
         await open();
+        // #330: agreement is tracked explicitly. `previous` and `measured` stay two distinct
+        // measurements, so a board that never settles fails here and not at the parity check below.
         let previous = null,
-          measured = null;
+          measured = null,
+          agreed = false;
         for (let attempt = 0; attempt < 6; attempt++) {
           await settledBoard();
+          if (measured) previous = measured;
           measured = await luminance();
-          if (previous && agree(previous, measured)) break;
-          previous = measured;
+          if (previous && agree(previous, measured)) {
+            agreed = true;
+            break;
+          }
         }
         assert.ok(
-          previous && agree(previous, measured),
-          `${accentMode} at ${brightness}: two consecutive settled measurements agree (${JSON.stringify([previous, measured])})`,
+          agreed,
+          `${accentMode} at ${brightness}: two consecutive settled measurements agree within 0.5% (the last two of 6: ${JSON.stringify([previous, measured])})`,
         );
         luminanceLevels[`${accentMode}-${brightness}`] = measured;
       }
