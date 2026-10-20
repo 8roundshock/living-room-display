@@ -268,8 +268,8 @@ NULL-cursor samples, quiet input baseline true, helper exit 0, no forced stop an
 complete empty stdout/stderr. Observation took 10,573ms including startup/cleanup
 around the eight-second helper bound. Foreground restoration/context compatibility
 passed; RAM preview cleared to 404 and owned candidate host/browser counts were
-zero. Separate post-reads confirmed both saved data files, full settings, blank
-saver/active1/1200 seconds/security0 and backup absence unchanged. No screenshots
+zero. Separate post-reads confirmed both saved data files, full settings, the
+original screensaver settings and backup absence unchanged. No screenshots
 or genuine input were used. This old-source result does not relabel the frozen
 binary as the newly merged combined candidate or establish its visual/input
 acceptance; reviewed UI assets must first be served by the canonical backend.

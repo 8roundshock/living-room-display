@@ -20,7 +20,7 @@ reviewed studio and readability web rollouts. The separate rollout session repor
 its runtime and data checks; see [STATUS.md](STATUS.md) for attributed installation
 evidence and current gates. The combined native cursor lifecycle replacement
 remains draft and uninstalled. Actual visual/input acceptance and wider release
-compatibility checks remain; the user-away hold and last verified idle-off state
+compatibility checks remain; the runtime hold and last verified idle-off state
 are recorded in the status document.
 
 This is the independent private

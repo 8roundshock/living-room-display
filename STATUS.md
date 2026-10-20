@@ -195,7 +195,7 @@ fresh current-backend/served-asset proof, and physical-user readiness.
 
 The user earlier confirmed the normal interactive desktop on 2026-10-18, but
 subsequently left the PC. Physical acceptance is on hold until fresh readiness
-on return. Unattended source work must not launch native/screensaver/receiver or
+from the owner. Unattended source work must not launch native/screensaver/receiver or
 fullscreen tests, inventory windows, probe the desktop/cursor/input, capture,
 synthesize input, terminate a renderer, or change the installed backend/assets/data,
 Windows registry/idle settings or TV. No access to the installed HTTP service is
