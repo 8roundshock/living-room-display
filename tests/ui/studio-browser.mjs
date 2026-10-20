@@ -1085,13 +1085,13 @@ export async function runStudioQa({ playwright, edge } = {}) {
     );
 
     // #435: Reset layout puts the default board back as a draft. An existing user's catalog board
-    // with a Note, Analog clock, Reminders shown when empty and a custom snapshot opacity.
+    // with a Note, a Digital clock, Reminders shown when empty and a custom snapshot opacity.
     const defaults = defaultSettings();
     await app.store.update((data) => {
       const board = catalogBoardDefaults();
       board.widgets.note = true; board.widgets.preview = false; board.preview.enabled = false; board.preview.opacity = 0.15;
       board.widgetGrid.placements.note = { column: 8, row: 4, size: 'small' };
-      board.appearance.clockStyle = 'analog'; board.widgetBehavior.reminders.hideWhenEmpty = false;
+      board.appearance.clockStyle = 'digital'; board.widgetBehavior.reminders.hideWhenEmpty = false;
       board.widgetData.note.text = 'Synthetic note';
       data.settings = board; data.reminders = [];
     });
@@ -1151,7 +1151,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.equal(afterLayout.widgetGrid.density, 'balanced');
     assert.equal(afterLayout.preview.enabled, true, 'Last screen is shown again');
     assert.equal(afterLayout.preview.opacity, 0.15, 'its opacity stays');
-    assert.equal(afterLayout.appearance.clockStyle, 'analog', 'the clock style stays');
+    assert.equal(afterLayout.appearance.clockStyle, 'digital', 'the clock style stays');
     assert.equal(afterLayout.widgetBehavior.reminders.hideWhenEmpty, false, 'Hide when empty stays');
     assert.equal(afterLayout.widgetData.note.text, 'Synthetic note', 'widget content stays');
     // Resetting the default board again changes nothing.
