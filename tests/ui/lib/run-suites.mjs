@@ -30,6 +30,7 @@ export const SETS = {
     'widgets', // 371
     'canvas-scope', 'grid', 'studio', 'workspace', 'catalog-sky', 'reminders', 'catalog-time', 'freesize', // 22, 45, 41, 38, 34, 34, 31, 29
     'preview', 'first-run', 'editor-sync', 'display-controls', // 19, 9, 8, 3
+    'screen', // #436, about 40 locally
   ],
   scheduled: ['motion', 'weather', 'palette'], // 219, 81, 68
 };

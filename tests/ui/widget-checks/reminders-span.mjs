@@ -153,7 +153,8 @@ export async function sweep({ page, viewport, state, base, now }) {
   // Timed compositions on the display: a lone full-height column moves sideways and alternates its anchor.
   for (const count of [1, 30]) {
     single(state, 'balanced', { columns: 2, rows: 8 }); state.reminders = reminders(count, now);
-    state.settings.appearance.motionIntervalSeconds = 30;
+    // #436: compositions change only with Swap places on (opt-in).
+    state.settings.appearance.motionIntervalSeconds = 30; state.settings.appearance.rearrange = true;
     await reopen(page);
     const lefts = new Set(), seen = [];
     for (let composition = 0; composition < 4; composition++) {
@@ -165,7 +166,8 @@ export async function sweep({ page, viewport, state, base, now }) {
       assertAnchor(result, composition % 2 === 1, label);
       assert.equal(result.justify, composition % 2 ? 'safe flex-end' : 'flex-start', label);
       if (count === 1 && composition % 2) assert.ok(result.top > 100, `${label}: one reminder visibly sits at the bottom (${result.top}px)`);
-      const rect = await widget.evaluate(element => { const r = element.getBoundingClientRect(), plane = element.closest('.widget-grid-plane').getBoundingClientRect(); return { left: r.left - plane.left, top: r.top - plane.top, height: r.height, plane: plane.height }; });
+      // The cell: the box without the #436 float translation (its content floats inside it).
+      const rect = await widget.evaluate(element => { const r = element.getBoundingClientRect(), plane = element.closest('.widget-grid-plane').getBoundingClientRect(), [x, y] = getComputedStyle(element).translate.split(' ').map(value => parseFloat(value) || 0); return { left: r.left - (x ?? 0) - plane.left, top: r.top - (y ?? 0) - plane.top, height: r.height, plane: plane.height }; });
       assert.ok(Math.abs(rect.top) <= 1 && Math.abs(rect.height - rect.plane) <= 1, `${label}: stays full height`);
       lefts.add(Math.round(rect.left)); seen.push(result.visible);
     }
@@ -178,6 +180,7 @@ export async function sweep({ page, viewport, state, base, now }) {
   // because the default large Weather leaves no room for a column beside Clock and Forecast (#183).
   if (!fourK) {
     state.settings.appearance.motionEnabled = false; state.reminders = reminders(30, now);
+    state.settings.appearance.rearrange = true; // the arrangement buttons show only with Swap places on (#436)
     state.settings.widgetGrid = structuredClone(authored);
     state.settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' };
     state.settings.widgetGrid.placements.photo = { column: 8, row: 2, size: 'medium' };
