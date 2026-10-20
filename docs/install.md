@@ -383,59 +383,64 @@ No automatic geometry downgrade is provided.
 
 ### Additive data and rollback compatibility (#84)
 
-The previous installed release is `3fee844` (the merge of PR #163). Its reader
+The previous installed release is `3446400` (the merge of PR #286). Its reader
 rejects unknown keys, so an additive key written to disk would make `state.json`,
-and after the next save `state.backup.json`, unreadable by it. `3fee844` reads
+and after the next save `state.backup.json`, unreadable by it. `3446400` reads
 everything this build writes, including every choice that was an exception for
 `bedca44` (custom Reminders sizes, Native colours, Animation Off or Lively, and the
 new widgets of #78 with their content), so `app.previous` remains a working rollback
-after the next update. This build still omits additive values from files and exports
-while they equal the value the current reader restores (see
-[API](api.md#persistence-and-recovery)); `3fee844` reads them either way.
+after the next update. This build still omits a few additive values from files and
+exports while they equal the value the current reader restores (see
+[API](api.md#persistence-and-recovery)). `3446400` reads them either way, so the
+omission is optional for those keys. It was kept to avoid a data-format change
+([#272](https://github.com/8roundshock/living-room-display/issues/272)) and remains
+the mechanism for a future additive key or widget id that the previous release does
+not know.
 
 `src/server/rollback.test.ts` (part of `npm test`) proves this with a byte-for-byte
-copy of the `3fee844` reader: fresh Native data, previous-release data after unrelated
-saves, saved styles, a photo, a revision-one legacy file, the export and each former
-`bedca44` exception, in `state.json`, `state.backup.json` and the export, all parse.
-Its negative controls show that an unknown key and invalid values are still rejected.
-After each coordinated install, the baseline moves to the newly installed revision (#130).
+copy of the `3446400` reader: fresh Native data, previous-release data after unrelated
+saves, saved styles, a photo, a revision-one legacy file, the export, each former
+`bedca44` exception and every value omitted at rest written out in full, in
+`state.json`, `state.backup.json` and the export, all parse. Its negative controls
+show that an unknown key and invalid values are still rejected. After each
+coordinated install, the baseline moves to the newly installed revision (#130).
 
-A non-default choice that `3fee844` cannot read would be listed here. Before rolling
+A non-default choice that `3446400` cannot read would be listed here. Before rolling
 back after using one, follow the [revision 2 procedure](#widget-geometry-revision-2-update-and-rollback):
 keep the newer data directory and restore the matching pre-upgrade data copy.
 
-| Feature | Data the previous release (`3fee844`) cannot read |
+| Feature | Data the previous release (`3446400`) cannot read |
 | --- | --- |
-| Everything up to `3fee844` (#73, #74, #75, #76, #78) | None. |
+| Everything up to `3446400` (#73, #74, #75, #76, #78 and the polish since) | None. |
 
-Because `3fee844` knows the six #78 widget ids, files and exports from this build
-always carry their keys, written as off while unused. `bedca44` does not know them,
-so it cannot read data written by this build even with default choices. A rollback
-two releases back (this build to `3fee844`, then to `bedca44`) needs the pre-upgrade
-data copy, or one ordinary save in `3fee844` first: it omits the unused #78 widgets
-at rest again, and the table below then applies.
+#### Rolling back the installed 3446400
 
-#### Rolling back the installed 3fee844 to bedca44
+The installed `3446400` keeps `4cb7dc1` (the merge of PR #327) as `app.previous`
+until the next update, and this table stays valid while it does. `4cb7dc1` was
+installed after `3fee844` and before `3446400`, the same day.
 
-The installed `3fee844` keeps `bedca44` as `app.previous` until the next update, and
-this table stays valid while it does. Data that `3fee844` writes with default choices
-stays readable by `bedca44`. A non-default choice in a feature `bedca44` lacks is not.
-Before rolling back after using one, follow the
-[revision 2 procedure](#widget-geometry-revision-2-update-and-rollback): keep the newer
-data directory and restore the matching pre-upgrade data copy. `bedca44` was the
-previous-release reader until #263; its copy in `src/server/compat/bedca44/` is kept
-unedited only as a legacy-data fixture and no longer checks what this build writes.
-
-| Feature | Data `bedca44` cannot read |
+| Rolling `3446400` back to | Data it cannot read |
 | --- | --- |
-| #73 reminder history | None: history is the completed subset of `reminders[]` and completion time is `updatedAt`, so `bedca44` reads it. It lists history under Show completed and can edit completed items there, which moves their derived completion time. |
-| #73 custom Reminders sizes | Readable until a custom size (anything other than Small, Medium or Large) is saved in settings or a saved style; from then on `state.json`, later `state.backup.json`, and exports carry `span` keys that `bedca44` rejects. Use the pre-upgrade data copy, or [remove the custom sizes](#removing-custom-reminders-sizes-before-a-downgrade). |
-| #74 Weather and Rain merge | None: no new keys, and `bedca44` reads everything written (checked against `bedca44` by `src/server/weather-merge.test.ts` until #263). An enabled Rain merges into Weather in memory; the file changes only at the next ordinary save (any write, including a #73 reminder check-off or history change; a no-op reminder patch writes nothing), which writes `rain: false`, Rain's hidden placement and Weather in the merged cells. After upgrading, boards with the old default Weather and Rain show one large Weather in the same space; Rain-only boards show Weather in Rain's cell (now with conditions); users who had hidden only Rain see rain detail when relevant (no opt-out until #102). Save/Cancel stays hidden because the migrated settings are the saved baseline. After a rollback, `bedca44` shows the calm (old) Weather with Rain hidden; Rain re-added there is merged again after upgrading. The first save writes the already-merged state to `state.backup.json` too, so restoring the separate Rain placement needs a pre-upgrade data copy. |
-| #75 Native colours | `appearance.accentMode: native`, once Native is saved anywhere: settings, a saved style, a built-in Phone/Room/Night style or Reset appearance. A fresh data folder also starts Native. Data that only ever used a colour stays readable. To make data readable again without the pre-upgrade copy, choose a colour, re-save every saved style with a colour, then save once more so `state.backup.json` is clean too; color is omitted at rest. After the next update the rollback target is `3fee844`, which reads it (#263). |
-| #76 Animation level | Animation **Off** or **Lively** saved anywhere (settings or a saved style). Subtle, the default, is omitted at rest and stays readable. A code-only rollback is behaviour-safe; after choosing Off or Lively, restore the pre-upgrade data copy (#130), or set Subtle again (and update or delete saved styles that hold another level) and save twice so the backup is readable too. |
-| #78 Calendar, Countdown and Note | Enabling Calendar, Countdown or Note, entering a countdown or note text, or choosing a Sunday/Monday week start. Turning the widgets off, returning their content to the defaults (no countdowns, empty note, Automatic) and deleting or re-saving any saved style captured while one of them was on makes `state.json` readable again; one further save refreshes `state.backup.json`. |
-| #78 World clocks, Sun & moon and Air quality | Enabling any of the three widgets, adding a world clock city, or choosing the European AQI scale (`widgets.worldClocks/sunMoon/airQuality: true` or non-default `widgetData.worldClocks`/`airQuality`). While all three stay off with no cities and the US scale, files and exports remain readable. |
-| #78 widget transforms ([#135](https://github.com/8roundshock/living-room-display/issues/135)) | A non-identity `widgetOverrides` transform for one of the six #78 ids, in settings or a saved style. Only a crafted API call or import writes one; no editor path does. Set it back to `{"offsetX": 0, "offsetY": 0, "scale": 1}` or use the pre-upgrade data copy. |
+| `4cb7dc1` (`app.previous`) | None: its reader is the same eight files as `3446400`'s, with the same git blob ids. |
+| `3fee844` | None, as proven against the `3fee844` reader by `npm test` at `3446400`. |
+
+<a id="rolling-back-the-installed-3fee844-to-bedca44"></a>
+
+#### Earlier rollback target: bedca44
+
+`bedca44` (PR #70) was `app.previous` while `3fee844` was installed, and the
+previous-release reader until #263. It cannot read custom Reminders sizes (#73),
+Native colours (#75), Animation Off or Lively (#76), or an enabled #78 widget, its
+content or a transform for it. Every file and export written since #263 carries the six #78
+widget keys, so `bedca44` cannot read data from `4cb7dc1`, `3446400` or this build,
+even with default choices. A rollback that far needs the data copy taken before
+`3fee844` was installed, or one ordinary save in `3fee844` first, which omits the
+unused #78 widgets at rest again. The #74 Weather and Rain merge added no keys: an
+enabled Rain merges into Weather in memory, the next ordinary save writes
+`rain: false` with Weather in the merged cells, and only a pre-upgrade data copy
+restores a separate Rain placement. The per-feature table and its workarounds stay
+in [install.md at `3446400`](https://github.com/8roundshock/living-room-display/blob/34464001af41af0e2ea67fb090734b296f72c1c2/docs/install.md#rolling-back-the-installed-3fee844-to-bedca44).
+`src/server/compat/bedca44/` is kept unedited only as a legacy-data fixture.
 
 #### Removing custom Reminders sizes before a downgrade
 
@@ -483,8 +488,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $control Start
 ```
 
 If `state.json` itself is unreadable, point `$source` at `state.backup.json`. Only
-`span` keys are removed; any other newer-only data (the other rows above) still
-needs its own handling, and validation stops with nothing replaced. The preserved
+`span` keys are removed; any other data the older app cannot read (for `bedca44`,
+see the note above) still needs its own handling, and validation stops with nothing
+replaced. The preserved
 folder keeps the original files; keep it private. An export that contains spans
 must be stripped the same way (delete `settings.widgetGrid.placements.*.span` and
 `settings.savedPresets[].visual.widgetGrid.placements.*.span`) before importing it
