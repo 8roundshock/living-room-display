@@ -72,7 +72,8 @@ export function WidgetPicker({ settings, onAdd, onFix, onClose }: {
     </div>
     <div className="picker-body"><div className="widget-catalog" ref={catalog} aria-label="Widget catalog" onKeyDown={event => {
       // Up/Down (and Left/Right, for the narrow three-column layout) move through the whole list
-      // across groups and preview the focused widget; Home/End jump to the ends.
+      // across groups and preview the focused widget; Home/End jump to the ends. The rail is one
+      // roving tab stop (#348), so Tab goes on to the sizes and Add.
       if (!['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
       const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('.catalog-item')];
       const index = items.findIndex(item => item === document.activeElement);
@@ -83,7 +84,8 @@ export function WidgetPicker({ settings, onAdd, onFix, onClose }: {
     }}>
       {groups.map(({ category, ids }) => <div key={category} className="catalog-group" role="group" aria-labelledby={`catalog-group-${category}`}>
         <span className="catalog-group-label" id={`catalog-group-${category}`}>{WIDGET_CATEGORIES[category]}</span>
-        {ids.map(id => <button key={id} className="catalog-item" data-widget-id={id} aria-label={`Preview ${WIDGET_CATALOG[id].name}${settings.widgets[id] ? ', on your display' : ''}`} aria-pressed={selected === id} onClick={() => { setSelected(id); setProblem(null); }}>
+        {/* #348: one tab stop for the rail (the previewed widget); the arrow keys move it. */}
+        {ids.map(id => <button key={id} className="catalog-item" tabIndex={selected === id ? 0 : -1} aria-label={`Preview ${WIDGET_CATALOG[id].name}${settings.widgets[id] ? ', on your display' : ''}`} aria-pressed={selected === id} onClick={() => { setSelected(id); setProblem(null); }}>
           <Icon name={WIDGET_CATALOG[id].icon} size={19} />
           <span>{WIDGET_CATALOG[id].name}</span>
           {settings.widgets[id] && <Icon name="check" size={12} className="catalog-added" />}
@@ -92,7 +94,7 @@ export function WidgetPicker({ settings, onAdd, onFix, onClose }: {
     </div>
     <section className="picker-detail" aria-label={`${widget.name} preview`}>
       <div className="picker-detail-heading"><h3>{widget.name}</h3><p>{widget.description}</p></div>
-      <WidgetSample key={`${selected}-${size}`} id={selected} size={size} appearance={settings.appearance} />
+      <WidgetSample key={`${selected}-${size}`} id={selected} size={size} appearance={settings.appearance} density={settings.widgetGrid.density} />
       <div className="family-previews" aria-label={`${widget.name} size`}>
         {widgetSizes(selected).map(family => <button key={family} aria-label={`${widget.name} ${family}`} aria-pressed={size === family} onClick={() => { setSizes(previous => ({ ...previous, [selected]: family })); setProblem(null); }}>
           {family[0].toUpperCase() + family.slice(1)}
