@@ -566,10 +566,18 @@ display (#439) at 2 AM, 10 AM and solar noon in Toronto at 1280×720, and 10 AM 
 corners). It checks the once-a-minute step, the 10 s glide (none in Fixed), polar day
 and night at Tromsø, and the Style tab's Brightness mode at 1280×720, 390 and 320 px.
 
-After `npm ci` and `npm run build`, use an existing Playwright/browser installation
-and run every `tests/ui/*-browser.mjs` suite as
-`node tests/ui/<name>-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'`;
-the preview suite also takes `--sharp '<Sharp module path>'`. The cursor check runs
+After `npm ci` and `npm run build`, run every `tests/ui/*-browser.mjs` suite with
+`node tests/ui/lib/run-suites.mjs --playwright '<Playwright module path>' --edge '<browser executable>' --sharp '<Sharp module path>'`,
+or one suite as `node tests/ui/<name>-browser.mjs --playwright '<Playwright module path>' --edge '<browser executable>'`
+(the preview suite also takes `--sharp`). The pinned Playwright and sharp versions
+and their install are in [browser suites](development.md#browser-suites). CI runs
+the pull-request set on every pull request and push to `main`, and every suite
+weekly and on manual dispatch, headless in the runner's Edge
+(`.github/workflows/browser-suites.yml`, #323). The runner has no GPU, so CI runs
+the motion suite with `--no-gpu`; its resting glyph pixel parity and frame budget
+stay local checks. The
+[canvas scope harness](../tests/ui/canvas-scope-browser.mjs) fails when an element
+on the editor canvas matches a `.studio`-scoped rule (#313). The cursor check runs
 separately against an isolated production server:
 
 ```powershell
