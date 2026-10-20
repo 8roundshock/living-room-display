@@ -38,20 +38,10 @@ idle/screensaver helper. Implementation is authorized and in progress;
   to work from this repository without the original chat or agent-specific memory.
 - Do not load or copy unrelated personal context just because the checkout is
   under the user's home directory. Do not put app code, app PRs, or project tooling
-  in `vladimir-personal`. The app and other users must not depend on that repository.
+  in the owner's personal repositories. The app and other users must not depend on them.
 - Keep future installation/use portable for other users. The owner's developer
   paths and GitHub helper are not application prerequisites; follow the
   [installation contract](docs/install.md).
-
-Owner-only handoff: during Vladimir's authorized personal work on PC or Mac, if
-`vladimir-personal` is accessible, follow its `AGENTS.md` and PR workflow to maintain
-[Needs personal agent](https://github.com/8roundshock/vladimir-personal/blob/main/PROJECTS.md#needs-personal-agent)
-for actionable decision, access or other-machine blockers. Keep detail in this
-project's issue/status; copy only project, requested action/owner, what waits, date
-and source link, and remove resolved entries. Do not mirror logs/backlogs or copy
-unrelated personal context, secrets or local paths. This owner workflow is no
-prerequisite for other users or the app; a note grants no approval and starts no
-background sync or automation.
 
 ## Product guardrails
 

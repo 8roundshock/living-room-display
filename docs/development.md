@@ -132,8 +132,8 @@ and the failing step, and keep a suite with a known flake out of the pull-reques
 set until it is fixed.
 
 A filtering proxy or ad blocker on the test machine can add its own script to the
-suites' pages. On the owner's PC, AdGuard for Windows loads
-`http://local.adguard.org/?…&type=content-script…` into every page, which slows the
+suites' pages (AdGuard for Windows, for example, loads
+`http://local.adguard.org/?…&type=content-script…` into every page), which slows the
 suites and, under load, has failed one with a console error. The motion and canvas
 scope suites answer every request outside their own server with an empty response
 (`tests/ui/lib/local-only.mjs`) and list it; the other suites do not yet
@@ -141,20 +141,20 @@ scope suites answer every request outside their own server with an empty respons
 
 ## Local checkout and agent startup
 
-On the owner's Windows PC:
+On Windows, from the checkout (replace `<checkout>` with its actual path):
 
 ```powershell
-Set-Location 'C:\Users\8roun\source\repos\living-room-display'
+Set-Location '<checkout>'
 git status --short --branch
 git remote -v
-codex -C 'C:\Users\8roun\source\repos\living-room-display'
+codex -C '<checkout>'
 ```
 
 Checked 2026-10-18: `Get-Command codex` resolves a CLI and `codex --version`
 reports `codex-cli 0.163.0`; its `--help` confirms that `-C` sets the working directory.
 The final command launches an agent, not the display; no interactive launch was
 performed as part of these checks. On another computer, use
-the actual checkout path and installed agent. An agent that does not discover
+the agent actually installed there. An agent that does not discover
 instruction files must be told to read `AGENTS.md` explicitly.
 
 `CLAUDE.md` and `GEMINI.md` import `AGENTS.md`, following the official
@@ -227,7 +227,9 @@ git config --local credential.https://github.com.username
 ```
 
 Expected origin: `https://github.com/8roundshock/living-room-display.git`.
-Expected Git identity: `Vladimir Dolgopolov <vladimir@dolgopolov.ca>`; GitHub login
+Commit with the owner's GitHub noreply email
+(`78567380+8roundshock@users.noreply.github.com`, owner decision on
+[#441](https://github.com/8roundshock/living-room-display/issues/441)); GitHub login
 and credential username: `8roundshock`. Configure identity only in this repo if
 needed. See the [PR workflow](agent-workflow.md).
 
