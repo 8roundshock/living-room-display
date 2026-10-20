@@ -56,9 +56,10 @@ background sync or automation.
 ## Product guardrails
 
 - True black background, sparse dim color, large readable information, no audio.
-- Move whole widget groups between distinct areas; allow periodic recomposition
-  and fades. Small motion within a fixed layout is insufficient. Do not promise
-  prevention of OLED burn-in.
+- Never blank or fade the screen to move (#436, owner decision 2026-10-20). By
+  default keep the user's arrangement and float the whole board and each widget's
+  content slowly and continuously; swapping places is opt-in and glides. Do not
+  promise prevention of OLED burn-in.
 - Every widget is optional. Share the catalog, family geometry and collision
   helpers between the editor, validation and ambient renderer. Keep layout/image
   edits cancellable and show Save/Cancel only for effective unsaved changes.

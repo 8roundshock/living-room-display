@@ -17,7 +17,9 @@ package, administrator installation or always-running idle watcher is required.
 
 The helper observes input to dismiss an active display, not to decide when to
 activate. A 1.2-second launch grace prevents the activation key from dismissing
-it. A per-user mutex prevents simultaneous ambient sessions. Session lock,
+it. A per-user mutex (`Local\LivingRoomDisplay.Ambient`) prevents simultaneous
+ambient sessions: `/s`, `--display` and `--test-display` exit at once when it is
+already held, so the native host never starts a second display (#436). Session lock,
 logoff and disconnect close the display. A named event scoped to the installed
 helper path lets `Stop` ask it to exit normally.
 Session observation starts before cold server startup and handshake. A cancelled
@@ -36,6 +38,39 @@ The standalone `/display` document uses scoped `cursor: none`, including loading
 error and descendant controls. The class is removed on unmount; the editor and
 its embedded preview keep ordinary cursor behavior. No global Windows cursor
 counter, cursor image, registry setting or input hook is changed.
+
+## One display window and keeping the screen on (#436)
+
+Browser displays are kept to one window by the web app, not the host: the editor's
+**Open display** reuses and focuses a window named `still-display`, and a display
+opened any other way announces itself on a BroadcastChannel so older browser displays
+close themselves, or show a card and stop polling (see [UI](ui.md)). The native
+kiosk runs in its own Edge profile and job and takes no part; its mutex already keeps
+it single. On the owner's PC the seven "Still · Display" windows of 2026-10-20 were
+browser tabs: the earlier `target="_blank" rel="noreferrer"` link opened a new tab
+on every click, and Esc turned each into another editor.
+
+**Keep the screen on** (`screen.keepAwake`, on by default) is a Screen Wake Lock
+requested by the display page itself (`useWakeLock.ts`), so the host needs no
+change: it is held while the page is visible and either the native kiosk
+(`native=1`) or full screen, re-requested after the browser releases it (for
+example when the page is hidden) and on full-screen changes, retried at most every
+10 s after a refusal, and released on dismissal, when the page is hidden or when
+the setting is off. Edge implements it as a display-required power request, which
+also blocks the Windows screensaver and display-off, so it is never held in a
+windowed tab, where a forgotten display would keep the screen on. Headless Edge on
+loopback (a secure context) grants it; the native host's own
+`SetThreadExecutionState(ES_DISPLAY_REQUIRED | ES_CONTINUOUS)` hold for the whole
+session is [#442](https://github.com/8roundshock/living-room-display/issues/442).
+A wake lock cannot help when Windows turns the screen off or sleeps before the
+screensaver starts, so `/api/windows/status` adds the active power plan's
+display-off and sleep timeouts, read with `powercfg.exe /query SCHEME_CURRENT
+SUB_VIDEO VIDEOIDLE` and `SUB_SLEEP STANDBYIDLE` (read-only, no administrator
+rights, 2 s timeout; the last two `0x…` values are AC then DC whatever the display
+language) and the plan name from `powercfg /getactivescheme`. The editor shows them
+and warns when either comes before the screensaver wait. Verified read-only on the
+owner's PC on 2026-10-20: High performance, display off Never (AC) and 10 min (DC),
+sleep Never on both; the screensaver wait is 1200 s.
 
 ## Preview and privacy
 

@@ -74,14 +74,26 @@ separately with the Windows host.
 
 ## Movement and OLED considerations
 
-Move whole widget groups through substantially different screen areas. Allow
-periodic recomposition and gentle fades so content does not remain anchored to
-one location. Motion inside an otherwise fixed widget is insufficient. Motion
-style and cadence remain user-editable choices. Recompose collision-free layouts
-with varied legal origins and offsets, fully black between compositions. Turning
-off Drift and fade between moves (called Soft motion before #240), or a
-reduced-motion preference, removes travel/effects while protective discrete
-relocation continues. No fixed decorative frame, footer or source credit remains.
+Owner decision, 2026-10-20 (#436): "i want this to just always be on when the
+computer is in screen saver mode" and "i want the actual widgets to move around
+(like the text kinda float around, in order to avoid burn in), not for the widgets
+to swap spaces". The screen never goes dark or fades out to move. By default the
+user's arrangement stays as placed: the whole board floats slowly and continuously
+(up to ±3.5% of the display on each axis, reaching a new spot every interval) and
+each widget's content floats inside its own box, so edges keep moving across
+nearby pixels. **Swap places** is opt-in: widgets then also trade cells every
+interval, gliding to their new places with a brief dim, never through black.
+**Float gently** off (called Drift and fade between moves from #240 until #436, and
+Soft motion before that), or a reduced-motion preference, moves the board and the
+content in one step each interval instead, without animation. Motion style and
+cadence remain user-editable choices. No fixed decorative frame, footer or source
+credit remains.
+
+Floating in place smears edges across about 270 × 150 device pixels at 4K, but it
+does not even out wear between screen regions the way swapping does: a bright
+widget keeps lighting roughly the same area. Swap places spreads it further for
+those who want it. Keep the screen on (#436) holds the screen awake only while the
+display is full screen or running as the screensaver.
 
 Keep transitions calm, avoid flashes, and provide a reduced-motion option in the
 design. Dim colors, black backgrounds, and movement do not guarantee protection

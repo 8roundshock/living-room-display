@@ -121,13 +121,14 @@ copied Apple assets or platform point sizes.
 
 Inspector content stays stable in the bounded desktop panel; controls transition
 around 180ms and neighboring widgets ease briefly into a legal reflow. The dragged
-widget follows the pointer continuously. Reduced motion removes effects and ambient travel while discrete
-relocation through black continues. Information never
+widget follows the pointer continuously. Reduced motion removes effects and ambient travel while the
+board still moves in one step each interval, never through black (#436). Information never
 depends on animation or tint alone. No audio or haptics are introduced.
 
-The owner's relocation requirement deliberately differs from Apple's stable
-Always On layout advice: varied collision-free compositions remain with a black
-rest between them. The grid editor exposes one layout-editing mode, a catalog
+The owner's movement requirement deliberately differs from Apple's stable
+Always On layout advice: the arrangement stays as placed but floats slowly, and
+each widget's content floats inside its own box; varied collision-free compositions
+(Swap places) are opt-in and glide. The screen never goes dark to move (#436). The grid editor exposes one layout-editing mode, a catalog
 picker with synthetic family content, selected handles and keyboard alternatives.
 Outline clock numerals, minimal analog hands and dim local photos reuse the same
 protected grid/motion boundary. See the [widget contract](widgets.md) for Apple
@@ -144,20 +145,23 @@ and the [UX role guide](roles/ux.md) for verification and future work.
 ## Motion levels
 
 Style → Motion → **Animation** offers Off, Subtle (default) and Lively (#76). It is
-separate from **Drift and fade between moves** (called Soft motion before #240),
-which still controls whole-arrangement fades, drift and travel. The drift moves the
-whole arrangement within ±0.5% of the plane in 36 discrete steps, one about every
-2 s (roughly one device pixel across a 4K panel), with nothing animating in between,
-so the display draws a frame only when the plane moves instead of every frame (#248).
-Relocation through black always continues, at every level and under reduced
-motion. A screen that asks for reduced motion shows Off whatever is saved; on the
-TV that is Windows Settings → Accessibility → Visual effects → Animation effects.
+separate from moving the board (#436): **Float gently** (`motionEnabled`; called Drift
+and fade between moves from #240, and Soft motion before that) floats the whole board
+within ±3.5% of the display and each widget's content inside its own slack, one device
+pixel at a time and at most 30 steps a second, with nothing animating in between, so
+the display draws a frame only when something moves (#248's principle, which replaced
+a continuous drift that drew about 120 frames a second). **Swap places** (opt-in) also
+trades cells every interval with a glide. The screen never fades out or rests on
+black: the board keeps moving at every level and under reduced motion, in one step
+each interval. A screen that asks for reduced motion shows Off whatever is saved; on
+the TV that is Windows Settings → Accessibility → Visual effects → Animation effects.
 
 - **Off** keeps widgets still: no value, digit, glyph or entrance motion. The editor
   keeps its existing brief transitions.
-- **Subtle** moves only when something changes and never loops. After a black rest
-  (Drift and fade on, fade above 0) each widget settles from about 1.5% of the display
-  height above over 700 ms, 70 ms apart in reading order (capped at six steps).
+- **Subtle** moves only when something changes and never loops. When the display first
+  loads (Float gently on, swap glide above 0) each widget settles from about 1.5% of
+  the display height above over 700 ms, 70 ms apart in reading order (capped at six
+  steps).
   Changed clock characters and values fade in (weather and rain timing, forecast,
   Air quality, Calendar, Countdown, Note, Sun & moon and World clocks), as do newly
   pending reminders (by opacity alone, so the measured list keeps its geometry), new
@@ -169,7 +173,7 @@ TV that is Windows Settings → Accessibility → Visual effects → Animation e
   the only loops, all on the current-weather glyph: sun rays
   turn once in 90 s while the core dims to 82% every 8 s, the moon rocks ±4°, clouds
   drift ±2.5%, rain drops fall and fade every 1.8 s, snow turns once in 40 s, and the
-  storm bolt dims once for 1.2 s every 9 s. Loops pause during the black rest.
+  storm bolt dims once for 1.2 s every 9 s. Loops never pause: nothing goes black (#436).
 
 Rules for every level: only transform (translate, rotate, scale) and opacity
 animate; opacity never rises above its resting value, so nothing flashes or
@@ -194,8 +198,9 @@ settle, new-widget drop-in, Save bar entrance) last at most 240 ms and never bou
 `tests/ui/motion-browser.mjs` checks the levels, reduced motion, the reveal
 sequence, rectangles and fit at 50% of an entrance for the whole merged catalog,
 the loop inventory, glyph pixel parity, adaptive Weather, the measured Reminders
-list, value changes in every widget unit, the discrete drift steps, a 15 s CDP budget
-at 1280×720 ×3 for the default board and a full board of every widget, and a frame
-budget (at most a few drawn frames per second at Off with Drift and fade on, at 1280×720
-×3 and 3840×2160 ×1). Browser checks do not establish TV
+list, value changes in every widget unit, the float acceptance (#436: plane at opacity
+1, one device pixel per step, no layout), steps, swaps, analog hands that only turn
+forward, a 15 s CDP budget at 1280×720 ×3 for the default board and a full board of
+every widget, and a frame budget (at Off with Float gently on, at most 30 drawn frames
+a second and only when something steps, at 1280×720 ×3 and 3840×2160 ×1). Browser checks do not establish TV
 smoothness, comfort or long-term OLED behaviour; physical acceptance is #111.
