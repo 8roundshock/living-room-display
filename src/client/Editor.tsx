@@ -250,8 +250,9 @@ export function Editor({
   // A resize with no room explains itself beside that widget's size controls (#183, #285), and a
   // refused grid density in the canvas line (#346). Each belongs to the board it was shown on: any
   // later layout change, density change or Cancel clears it for good, so it never re-shows (#310).
+  // The density fix also belongs to its refusal message: any later layout message replaces both.
   const [roomNotice, setRoomNotice] = useState<{ problem: RoomProblem; board: WidgetGrid; widgets: Settings['widgets'] } | null>(null);
-  const [densityNotice, setDensityNotice] = useState<{ refusal: DensityRefusal; board: WidgetGrid; widgets: Settings['widgets'] } | null>(null);
+  const [densityNotice, setDensityNotice] = useState<{ refusal: DensityRefusal; board: WidgetGrid; widgets: Settings['widgets']; message: number } | null>(null);
   // #340: consecutive resize steps of one widget are one exploration, each computed from the board
   // before it began, so a neighbour pushed aside returns once the widget is smaller again. It ends
   // with any other layout edit: a move, another widget's resize, an add or removal, or a density change.
@@ -498,9 +499,11 @@ export function Editor({
     cancelPhoto();
     updatePhoto(state.photo?.available ? null : undefined);
   }
-  /** Shows a layout message once: in the canvas line, or in the Widgets list for an edit made there. */
-  function say(text: string, where: 'canvas' | 'list' = 'canvas') {
-    setLayoutMessage(text ? { text, id: ++messageId.current, where } : null);
+  /** Shows a layout message once: in the canvas line, or in the Widgets list for an edit made there. Returns its id. */
+  function say(text: string, where: 'canvas' | 'list' = 'canvas'): number {
+    const id = ++messageId.current;
+    setLayoutMessage(text ? { text, id, where } : null);
+    return id;
   }
   /** A canvas-line message (density results, crowded-out widgets after a poll). */
   function setGridMessage(text: string) {
@@ -540,12 +543,16 @@ export function Editor({
   // A notice belongs to the board it was shown on; once the board changes it is gone for good (#310).
   const currentRoomNotice =
     roomNotice && same(roomNotice.board, draft.widgetGrid) && same(roomNotice.widgets, draft.widgets) ? roomNotice : null;
+  // The density fix shows only beside its own refusal: a refused move, a drag's "No room for that
+  // size" or any other later message on the same board ends it too (#346).
   const currentDensityNotice =
-    densityNotice && same(densityNotice.board, draft.widgetGrid) && same(densityNotice.widgets, draft.widgets) ? densityNotice : null;
+    densityNotice && densityNotice.message === layoutMessage?.id && same(densityNotice.board, draft.widgetGrid) && same(densityNotice.widgets, draft.widgets)
+      ? densityNotice
+      : null;
   useEffect(() => {
     if (roomNotice && !currentRoomNotice) setRoomNotice(null);
     if (densityNotice && !currentDensityNotice) setDensityNotice(null);
-  }, [draft.widgetGrid, draft.widgets]);
+  }, [draft.widgetGrid, draft.widgets, layoutMessage]);
   /** The no-room explanation for a request (#183, #238), on the board the request was tried against. */
   function explainNoRoom(request: RoomRequest): RoomProblem {
     const grid = request.kind === 'add' ? draftRef.current.widgetGrid : resizeBase(request.id), enabled = draftRef.current.widgets;
@@ -697,8 +704,7 @@ export function Editor({
     }
     // #346: name the density and what it cannot hold, with a draft fix when hiding one widget helps.
     const refusal = densityRefusal(current.widgetGrid, value, current.widgets);
-    setDensityNotice({ refusal, board: current.widgetGrid, widgets: current.widgets });
-    say(refusal.message);
+    setDensityNotice({ refusal, board: current.widgetGrid, widgets: current.widgets, message: say(refusal.message) });
   }
   /** The refused density with its widget removed, as one draft edit that Cancel restores (#346). */
   function applyDensityFix(refusal: DensityRefusal) {

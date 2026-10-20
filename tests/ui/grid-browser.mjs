@@ -325,6 +325,17 @@ export async function runGridQa({ playwright, edge } = {}) {
     assert.equal(await page.locator('.grid-status .density-fix').textContent(), 'Make room: remove Last screen');
     assert.match(await page.locator('.grid-status').textContent(), /^Spacious \(8 × 6\) can't fit these 11 widgets\./);
     await clean();
+    // The fix belongs to its refusal, not to the board: a later message on the same board (a refused
+    // keyboard move here) replaces both, and the offer never comes back beside unrelated text.
+    await page.getByRole('button', { name: 'Move Clock', exact: true }).focus();
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.locator('.grid-status').textContent(), 'No room above');
+    assert.equal(await page.locator('.density-fix').count(), 0, 'no density fix beside a refused move');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.locator('.density-fix').count(), 0, 'nor beside a repeated refusal');
+    await clean();
+    await densitySelect().selectOption('spacious');
+    assert.equal(await page.locator('.grid-status .density-fix').textContent(), 'Make room: remove Last screen', 'refusing the density again offers the fix again');
     await page.getByRole('button', { name: 'Make room: remove Last screen', exact: true }).focus();
     await page.keyboard.press('Enter');
     await dirty();

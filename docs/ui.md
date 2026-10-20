@@ -156,7 +156,8 @@ motion or the Off animation level.
   already tries every family), so when hiding one widget lets it fit, the smallest such
   widget is offered instead (“Spacious (8 × 6) can't fit these 11 widgets.” with **Make
   room: remove Last screen**), applied with the grid switch as one draft edit that Cancel
-  restores; focus returns to the select. One live region speaks it (#346). On the full
+  restores; focus returns to the select. The offer belongs to that refusal: any later layout
+  message, such as a refused move, replaces it. One live region speaks it (#346). On the full
   12-widget board no single removal helps: the shared packing search gives up on near-full
   boards (#403). Cancel restores the saved arrangement.
 - **Free-size Reminders** (#73): its handle snaps to whole cells from 2 × 2 up to
@@ -564,8 +565,8 @@ adds actual pointer/touch/keyboard moves/resizes, effective dirty-bar reverts,
 density fitting/round-trip restoration, optional modules/styles, local canvas PNG/Cancel/atomic save
 and pairwise rendered bounds, the spoken keyboard results (three moves give three
 announcements naming the column and row, two refusals are both announced, a family resize
-names the family) and a refused density on the full 12-widget board and its removal fix
-(#341, #346). The [free-size harness](../tests/ui/freesize-browser.mjs) covers resize
+names the family) and a refused density on the full 12-widget board and its removal fix,
+which a later refused move replaces (#341, #346). The [free-size harness](../tests/ui/freesize-browser.mjs) covers resize
 explorations (#340), canvas no-room explanations (#285) and focus after a keyboard
 Make room (#310). Images stay in RAM. Current verified counts and
 review/installation limits are recorded in [STATUS](../STATUS.md).
