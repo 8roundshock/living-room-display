@@ -15,17 +15,29 @@ export interface AppearanceSettings {
   accentColor: string; textColor: string; brightness: number; fontScale: number;
   fontFamily: 'sans' | 'serif' | 'mono';
   layout: 'balanced' | 'minimal' | 'weather-first';
-  motionEnabled: boolean; motionIntervalSeconds: number; fadeSeconds: number;
+  /** Float gently (#436): the board and each widget's text drift continuously; off (or reduced motion) steps once each interval. */
+  motionEnabled: boolean;
+  /** How often the board reaches a new spot (and, with `rearrange`, how often widgets swap places). */
+  motionIntervalSeconds: number;
+  /** Times only the Swap places glide (#436); the screen never fades out. */
+  fadeSeconds: number;
   clockStyle: 'outline' | 'digital' | 'analog';
   /** `color` tints every widget's accent group with accentColor; `native` uses each widget's palette tone. Rendering arrives with #75. */
   accentMode: AccentMode;
-  /** Motion inside widgets and the editor; relocation through black is unaffected. Arrives with #76. */
+  /** Motion inside widgets and the editor (#76); movement of the board is set by the keys above. */
   animation: AnimationLevel;
+  /** Swap places (#436): widgets trade cells every interval, gliding without going dark. Off by default; omitted at rest while off. */
+  rearrange: boolean;
 }
 export interface WidgetTransform { offsetX: number; offsetY: number; scale: number }
 export interface WidgetBehavior { reminders: { hideWhenEmpty: boolean } }
 export interface PreviewSettings { enabled: boolean; opacity: number; widthPercent: number }
 export interface IdleSettings { enabled: boolean; idleMinutes: number }
+/** This computer's screen (#436): not part of saved styles; omitted at rest while it equals the default. */
+export interface ScreenSettings {
+  /** Hold a screen wake lock while the display is full screen or the native screensaver shows it. */
+  keepAwake: boolean;
+}
 export interface VisualSettings {
   appearance: AppearanceSettings;
   widgets: Record<WidgetId, boolean>;
@@ -51,6 +63,7 @@ export interface Settings extends VisualSettings {
   version: 1; location: LocationSettings; locationSource: 'device' | 'manual' | 'fallback'; units: Units; clockFormat: '12h' | '24h';
   idle: IdleSettings; savedPresets: SavedPreset[];
   widgetData: WidgetDataSettings;
+  screen: ScreenSettings;
 }
 export interface SettingsPatch {
   /** Request intent only; automatic/failure-fallback selection must preserve a saved manual city. */
@@ -64,6 +77,7 @@ export interface SettingsPatch {
   /** Request-only local photo mutation; never stored in settings or included in exports. */
   photoChange?: { pngBase64: string } | null;
   preview?: Partial<PreviewSettings>; idle?: Partial<IdleSettings>; savedPresets?: SavedPreset[];
+  screen?: Partial<ScreenSettings>;
   /** Arrays replace whole; nested objects merge. */
   widgetData?: {
     worldClocks?: WorldClockCity[]; calendar?: Partial<WidgetDataSettings['calendar']>; countdowns?: CountdownEvent[];
@@ -124,3 +138,20 @@ export interface LocationResult extends LocationSettings { id: number; country: 
 export interface ApiError { error: string }
 export interface HostSession { token: string; settings: Settings; displayUrl: string }
 export interface DataExport { version: 1; exportedAt: string; settings: Settings; reminders: Reminder[] }
+/** Seconds on plugged-in (AC) and battery (DC) power; 0 means Never. */
+export interface PowerTimeouts { ac: number; dc: number }
+/**
+ * The active power plan's display-off and sleep timeouts (#436), read with `powercfg /query`: read-only
+ * and without administrator rights. `available` is false off Windows; a value Windows would not report
+ * is null, with `error` saying so.
+ */
+export interface PowerStatus {
+  available: boolean; scheme: string | null;
+  displayOffSeconds: PowerTimeouts | null; sleepSeconds: PowerTimeouts | null; error?: string;
+}
+/** `GET /api/windows/status`: the screensaver registry values and (#436) the power plan, never changed. */
+export interface WindowsStatus {
+  available: boolean; selectedScreenSaver: string | null; active: boolean | null;
+  timeoutSeconds: number | null; secure: boolean | null; isLivingRoomDisplay: boolean; error?: string;
+  power: PowerStatus;
+}

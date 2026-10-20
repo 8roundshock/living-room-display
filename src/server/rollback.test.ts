@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { createApplication } from './app.ts';
 import { colorAccentDefaults, forecastFixture, photoFixture, seedColorAccentData } from './fixtures.ts';
 import { DataStore } from './store.ts';
-import { AT_REST, PREVIOUS_RELEASE, persistableData } from './persistence.ts';
+import { AT_REST, DEFAULT_SECTIONS_AT_REST, PREVIOUS_RELEASE, persistableData } from './persistence.ts';
 import {
   LEGACY_FIXTURE, LEGACY_FIXTURE_BLOBS, PREVIOUS_READER, VENDORED_BLOBS, assertPreviousReaderAccepts, assertPreviousReaderRejects,
 } from './compat/previous-reader.ts';
@@ -104,7 +104,14 @@ test('negative controls: the previous release still rejects an unknown key and i
   }
 });
 
-test('#272 every value omitted at rest is readable by the previous release when written, so the omission is optional', () => {
+/**
+ * Values omitted at rest that the previous release (3446400) does not know (#436): Swap places'
+ * `rearrange` and the `screen` section. Their omission is required, not optional, until the baseline
+ * knows them; written out, the previous release rejects them (the documented rollback exceptions).
+ */
+const REQUIRED_OMISSIONS = { appearance: ['rearrange'], sections: ['screen'] } as const;
+
+test('#272 every value omitted at rest that the previous release knows is readable when written, so that omission is optional', () => {
   // Default data with every omitted value present: colour accent, Subtle and the default widgetData sections,
   // in settings and in a saved style. Decision (#272): keep the omission; nothing on disk changes format here.
   const settings = colorAccentDefaults();
@@ -116,16 +123,89 @@ test('#272 every value omitted at rest is readable by the previous release when 
     for (const key of Object.keys(AT_REST.appearance)) assert.equal(key in appearance, false, `${key} is omitted at rest`);
   }
   assert.equal('widgetData' in atRest, false, 'default widgetData is omitted at rest');
-  // A future AT_REST key that the previous release does not know fails below: its omission is then
-  // required, not optional, until the baseline knows it.
+  for (const key of DEFAULT_SECTIONS_AT_REST) assert.equal(key in atRest, false, `default ${key} is omitted at rest`);
+  assert.deepEqual([...DEFAULT_SECTIONS_AT_REST], [...REQUIRED_OMISSIONS.sections], 'every omitted section is listed with its reason');
+  // Every omitted value the previous release knows, written out, is still accepted.
   const written = JSON.parse(JSON.stringify(full)) as Loose;
   for (const appearance of [written.settings.appearance, written.settings.savedPresets[0].visual.appearance]) {
-    for (const [key, value] of Object.entries(AT_REST.appearance)) assert.equal(appearance[key], value, `${key} is written`);
+    for (const [key, value] of Object.entries(AT_REST.appearance)) {
+      assert.equal(appearance[key], value, `${key} is written`);
+      if ((REQUIRED_OMISSIONS.appearance as readonly string[]).includes(key)) delete appearance[key];
+    }
   }
+  for (const key of REQUIRED_OMISSIONS.sections) delete written.settings[key];
   assert.deepEqual(written.settings.widgetData, colorAccentDefaults().widgetData, 'every default widgetData section is written');
   assertPreviousReaderAccepts('data', written, 'every omitted value written in state.json');
   const exported = { version: written.version, exportedAt: new Date(0).toISOString(), settings: written.settings, reminders: [] };
   assertPreviousReaderAccepts('import', exported, 'every omitted value written in an export');
+  // #436: the omissions the previous release needs. Written out, even at their defaults, it rejects them.
+  for (const key of REQUIRED_OMISSIONS.appearance) {
+    const data = JSON.parse(JSON.stringify(full)) as Loose;
+    for (const section of DEFAULT_SECTIONS_AT_REST) delete data.settings[section];
+    assertPreviousReaderRejects('data', data, `appearance.${key} written at its default`);
+  }
+  for (const key of REQUIRED_OMISSIONS.sections) {
+    const data = JSON.parse(JSON.stringify(full)) as Loose;
+    for (const appearance of [data.settings.appearance, data.settings.savedPresets[0].visual.appearance]) for (const omitted of REQUIRED_OMISSIONS.appearance) delete appearance[omitted];
+    assertPreviousReaderRejects('data', data, `${key} written at its default`);
+  }
+});
+
+test('#436 default data and exports stay readable: float, no swap and Keep the screen on are omitted at rest', async () => {
+  const directory = await temporary('lrd-rollback-436-');
+  // The owner's data has neither key: after the update it reads as float, no swap, keep awake, the saved interval.
+  await seedColorAccentData(directory);
+  const app = await application(directory);
+  try {
+    const settings = app.store.snapshot().settings;
+    assert.equal(settings.appearance.rearrange, false); assert.deepEqual(settings.screen, { keepAwake: true });
+    assert.equal(settings.appearance.motionEnabled, true);
+    await app.send('PATCH', '/api/settings', { appearance: { motionIntervalSeconds: 30 } });
+    const primary = await readJson(directory, 'state.json');
+    assert.equal('rearrange' in primary.settings.appearance, false, 'Swap places off is omitted');
+    assert.equal('screen' in primary.settings, false, 'Keep the screen on (the default) is omitted');
+    await assertFilesAccepted(directory, '#436 defaults');
+    const exported = await app.send('GET', '/api/export');
+    assert.equal('screen' in exported.settings, false); assert.equal('rearrange' in exported.settings.appearance, false);
+    assertPreviousReaderAccepts('import', exported, '#436 defaults export');
+    // A saved style made now carries no screen section and no rearrange while off.
+    await app.send('PATCH', '/api/settings', { savedPresets: [{ id: 'synthetic-style', name: 'Synthetic style', visual: getVisual(app.store.snapshot().settings) }] });
+    const styled = await readJson(directory, 'state.json');
+    assert.equal('rearrange' in styled.settings.savedPresets[0].visual.appearance, false);
+    assert.equal('screen' in styled.settings.savedPresets[0].visual, false);
+    await assertFilesAccepted(directory, '#436 saved style');
+  } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+/**
+ * #436 documented rollback exceptions (docs/install.md): Swap places on and Keep the screen on off are
+ * written, and the previous release rejects them until the user switches them back and saves.
+ */
+const EXCEPTIONS_436: [string, SettingsPatch, (file: Loose) => boolean, SettingsPatch][] = [
+  ['#436 Swap places on', { appearance: { rearrange: true } }, file => file.settings.appearance.rearrange === true, { appearance: { rearrange: false } }],
+  ['#436 Keep the screen on off', { screen: { keepAwake: false } }, file => file.settings.screen?.keepAwake === false, { screen: { keepAwake: true } }],
+];
+
+test('#436 Swap places on and Keep the screen on off are the documented exceptions; switching back and saving restores readability', async () => {
+  for (const [label, patch, written, undo] of EXCEPTIONS_436) {
+    const directory = await temporary('lrd-rollback-436-exception-');
+    await seedColorAccentData(directory);
+    const app = await application(directory);
+    try {
+      await app.send('PATCH', '/api/settings', patch);
+      const primary = await readJson(directory, 'state.json');
+      assert.ok(written(primary), `${label}: state.json carries the choice`);
+      assertPreviousReaderRejects('data', primary, `${label} state.json`);
+      const exported = await app.send('GET', '/api/export');
+      assert.ok(written(exported), `${label}: the export carries the choice`);
+      assertPreviousReaderRejects('import', exported, `${label} export`);
+      // The documented way back: switch it back, Save, then roll back (the backup holds the prior save).
+      await app.send('PATCH', '/api/settings', undo);
+      assertPreviousReaderAccepts('data', await readJson(directory, 'state.json'), `${label} switched back`);
+      await app.send('PATCH', '/api/settings', { units: 'imperial' });
+      await assertFilesAccepted(directory, `${label} switched back and saved again`);
+    } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
+  }
 });
 
 test('(a) a fresh data folder, Native colours (#75) included, is readable by the previous release', async () => {

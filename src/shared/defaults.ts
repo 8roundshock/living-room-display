@@ -14,6 +14,8 @@ export const DEFAULT_SETTINGS: Settings = {
     clockStyle: 'outline',
     // New installs and built-in styles use native colours (#75); data without the key reads as color.
     accentMode: 'native', animation: 'subtle',
+    // #436: widgets keep their places and float; swapping is opt-in.
+    rearrange: false,
   },
   widgets: defaultWidgetVisibility(),
   widgetGrid: defaultWidgetGrid(),
@@ -22,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   preview: { enabled: true, opacity: 0.24, widthPercent: 20 },
   idle: { enabled: false, idleMinutes: 10 }, savedPresets: [],
   widgetData: { worldClocks: [], calendar: { weekStart: 'locale' }, countdowns: [], note: { text: '' }, airQuality: { scale: 'us' } },
+  screen: { keepAwake: true },
 };
 
 export function defaultSettings(): Settings { return structuredClone(DEFAULT_SETTINGS); }
