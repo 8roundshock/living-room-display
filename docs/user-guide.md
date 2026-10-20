@@ -10,18 +10,46 @@ reminders and a few other things you choose. It makes no sound and needs no
 account. Your settings and reminders stay on your PC. It goes online only for the
 weather and air quality where you are, and for city names when you search.
 
-There are two parts:
+There are three parts, each a page in your web browser except the last one on the TV:
 
-- the **editor**, a page in your web browser where you choose what to show and
-  how it looks;
+- **Home**, for every day: start a timer, add a reminder or put something on a
+  calendar, add a world clock, a countdown or a note, and see what is on the display;
+- **Edit display**, where you choose what to show and how it looks;
 - the **display**, the black full-screen view you leave on the TV.
 
-## Open the editor
+## Home
 
-Open the Start menu and choose **Living Room Display**. The editor opens in your
-browser. Setup also opens it once when it finishes installing.
+Home is the app's main page (`http://127.0.0.1:4318/`). It shows today's date and time,
+six quick actions and a **Today** list, with your saved display on the right and
+**Edit display** one click away.
 
-You can keep the editor open while you change things. Changes to the look, the
+- **Timer**: pick 1, 3, 5, 10, 15 or 30 minutes or 1 hour and it starts at once, or set
+  your own time and an optional name such as "Pasta". The timer counts down silently on
+  the display, in the line under the Clock's time ("Pasta 8 min"), and in Today, where
+  you can pause it, add a minute or cancel it (**Undo** brings it back). When it ends,
+  the display shows **Done** for 10 minutes and Home says so; it never makes a sound. If
+  the Clock is off, Home offers **Show the clock**.
+- **Reminder**: what to remember, and when: anytime, today, tomorrow or a date you pick.
+- **Calendar**: pick a day on the month and add a reminder for it (9:00 AM unless you
+  choose another time). Days with reminders have a dot.
+- **World clock**, **Countdown** and **Note**: add a city, a date to count down to or a
+  short note.
+
+Each one can also put its widget on the display (**Show on my display**). Home only
+uses free space: when the display is full, it offers **Make room in Edit display**,
+which opens the widget picker there. Today lists your timers, what is due today, the
+reminders without a date and what is coming up in the next week; tick the circle when
+something is done. **All reminders** opens the full list. Changes you make on Home
+reach the display within a few seconds.
+
+## Open Edit display
+
+Open the Start menu and choose **Living Room Display**. Edit display opens in your
+browser (`http://127.0.0.1:4318/editor`); Setup also opens it once when it finishes
+installing. Use the **Home** and **Edit display** links at the top to move between the
+two pages.
+
+You can keep Edit display open while you change things. Changes to the look, the
 widgets and the weather settings are a draft: they show at once in the preview on
 the left (**Your display**), and a bar with **Save changes** and **Cancel** appears
 at the bottom. Nothing changes on the display until you click **Save changes**.
@@ -50,16 +78,18 @@ Make sure the TV shows your PC's screen.
 - **From the Start menu:** choose **Living Room Display - Show display**. It fills
   the whole screen straight away. If the PC has more than one screen, it uses the
   main one.
-- **From the editor:** click **Open display** at the top. It opens in a new
-  browser tab. Press **F** to make it full screen.
+- **From Home or Edit display:** click **Open display** at the top. It opens in a new
+  browser tab the first time and reuses that tab after that. Press **F** to make it
+  full screen.
 
 ## Leave the display
 
 - If you started it from the Start menu, move the mouse or press any key. It closes
   and your PC is as you left it.
 - In a browser tab, press **F** again (or **Esc**) to leave full screen. Press
-  **Esc** or **E** to go back to the editor. Moving the mouse also shows two
-  buttons, **Fullscreen · F** and **Editor · Esc**, for a few seconds.
+  **Esc** to go to Home or **E** to go to Edit display. Moving the mouse also shows
+  three buttons, **Fullscreen · F**, **Home · Esc** and **Edit display · E**, for a few
+  seconds.
 
 ## Choose widgets
 
@@ -82,7 +112,7 @@ only and never saved).
 
 ## Reminders
 
-Use the **Reminders** tab:
+Add and tick off reminders on Home, or use the **Reminders** tab in Edit display:
 
 - Click **Add reminder** (**+**), type what you want to remember and, if you like,
   add a date and time. Reminders without a date stay until you tick them off.
@@ -170,4 +200,4 @@ where you left off) or **Delete my data**.
 ## What it doesn't do
 
 It doesn't start with Windows, doesn't change your screen saver, doesn't turn the
-TV on or off and doesn't play sound. Turning the TV off and on stays your choice.
+TV on or off and doesn't play sound, not even when a timer ends. Turning the TV off and on stays your choice.

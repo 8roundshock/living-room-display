@@ -122,7 +122,7 @@ The renderer families have deliberate visual roles:
 
 | Widget | Small | Medium | Large |
 | --- | --- | --- | --- |
-| Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
+| Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date. While a timer is visible, the date line shows it ("8 min", "Done") | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height; a timer shows as in small, Done adds "· 2 min ago" | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition; a timer reads "8 min left · ends 6:51 PM" ([timer slot](#clock-timer-slot)) |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”); confidence only when partial | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and twelve hourly chance bars (spell hours brighter, unknown hours dotted) |
 | Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance. Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”) |
 | Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
@@ -137,6 +137,43 @@ The renderer families have deliberate visual roles:
 
 The large clock requires actual vertical room in the central catalog; do not
 recreate a giant option by scaling within the previous short large family.
+
+### Clock timer slot
+
+Timers started from Home (#438) show on the display in the Clock's date line, so they
+need no new widget id or layout change and work on a full board (the frozen previous
+release rejects a new widget id). `clockTimer` in [`src/client/timer.ts`](../src/client/timer.ts)
+takes the first of `orderTimers(visibleTimers(timers, now, true))` from
+[`src/shared/timers.ts`](../src/shared/timers.ts) (done newest first, then running by end,
+then paused by what is left); with none visible the date returns. It renders in the same
+`.clock-calendar` elements and fonts as the date, so the fit does not change:
+`.ambient-label.clock-timer-label` holds the name in the accent colour (a label, or "5 min
+timer"), on one line ending in an ellipsis and at most 60% of a large clock's width, with a
+dim "+N" for more visible timers; `.clock-date.clock-timer-value` holds the time in the text
+colour, and Done uses the shared status tone (`--ambient-caution`). Both carry
+`data-timer-phase`. Every analog family uses the same slot.
+
+| Phase | Small | Medium | Large |
+| --- | --- | --- | --- |
+| Running, over a minute left | "8 min" or "1 h 5 min" (whole minutes rounded up) | the same | "8 min left · ends 6:51 PM" (24-hour "ends 18:51", another day "ends tomorrow 1:10 AM") |
+| Running, the last minute | "45 s" | "45 s" | "45 s left" |
+| Paused | a pause mark and "8 min" | the same | a pause mark and "8 min left · paused" |
+| Done, for 10 minutes | "Done" | "Done · 2 min ago" | "Done · 2 min ago" |
+| Display offline | keeps counting from the saved end | the same | adds " · offline" |
+
+The name and the minute-rounded value change at most once a minute through
+`TransitionText`; only the last minute counts every second, as plain tabular text, which
+bounds the per-second refit (#99) to that minute. "ends" uses the cached `dateTimeFormat`,
+so a running timer builds no `Intl` formatter on the tick. No sound and no flashing. At
+1280 × 720 on the Balanced grid the large Clock measures 785 × 331 px with date-line text of
+about 27.5 px (measured, #438), so "Pasta 8 min left · ends 6:51 PM" fits on one line; when a
+long name and value do not both fit, the name gives way first (an ellipsis) and the time stays
+whole on the same line. Edit display's canvas and Home's
+preview show the slot live, and the Clock panel says "While a timer runs, the date line
+shows it. Start timers from Home." The widgets suite's Clock sweep checks every phase,
+offline included, in every family, style and density at 720p, 1080p and 4K with a
+40-character name and "+5": fit 1 at Text 100%, nothing clipped, the readability floor
+kept, Done in the status tone, and no `Intl` formatter per tick.
 All families use the same renderer in ambient view, authored editor canvas and
 synthetic picker preview. Picker fixtures never become user data.
 The editor canvas renders inside `.studio`, so renderer class names must not reuse
@@ -215,8 +252,10 @@ composition stay identical.
   ticket (PR #171).
   The three use fixed families and sit beside a free-size Reminders span; fuller
   boards keep relocating through the #93 reflection fallback described below.
-- **Rejected, with reasons:** timers and alarms (they need audio and on-screen
-  interaction); news, stocks and sports (noise, feeds and keys); commute (keys and
+- **Timers (#438):** silent, started from Home and shown in the Clock's date line
+  ([timer slot](#clock-timer-slot)); a Timer widget or a spot the user chooses is #461.
+  Alarms with sound stay rejected.
+- **Rejected, with reasons:** alarms (they need audio); news, stocks and sports (noise, feeds and keys); commute (keys and
   personal addresses); account calendars, fitness and cloud smart home (accounts and
   privacy); quotes (licensing and novelty clutter); PC battery and stats (not useful
   ambiently); pollen (Open-Meteo coverage is Europe only); ticking seconds (OLED
@@ -403,6 +442,12 @@ where the family shows timing instead), and keeps the glyph still and the age li
 Three hours matches the hourly model: after that the saved temperature describes a
 different part of the day. Air quality's hours-old current values are decided in #188 with the same
 threshold.
+
+Timers (#438) are private, short-lived content kept in their own `timers.json` beside the
+settings data, never in `state.json`, `state.backup.json` or exports, so the previous
+release never meets them (see [API](api.md#timers)). Their labels are never logged or put in
+diagnostics. The display counts from absolute instants, so a display that has lost the
+computer keeps counting and says " · offline" in a large Clock.
 
 A photo widget uses a user-selected local image, remains optional, and follows
 the shared size/brightness/motion rules. Retain its image only in the documented
