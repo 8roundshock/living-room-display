@@ -111,8 +111,10 @@ move keeps it. The editor sends a changed placement whole, with `span: null` whe
 it has none. The previous installed release (`3446400`) and the earlier `3fee844`
 read a saved span; `bedca44` does not, so a downgrade that far needs the
 [strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
-Legacy version-one settings acquire the safe default grid while preserving old
-widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
+Legacy version-one settings acquire the safe catalog default grid while preserving old
+widget visibility and manual location. That backfill never uses the default board
+that new installs and Reset layout start with ([#435](widgets.md#default-board-435)),
+and a widget id missing from saved data reads as its catalog default (Calendar off). Legacy `widgetOverrides` offsets/scale
 and `appearance.layout` remain parseable data but no longer affect rendering;
 old manual visual positions are not converted to cells. The same applies to
 legacy presets/imports. `appearance.clockStyle` is `outline` (default), `digital` or `analog`.

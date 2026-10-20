@@ -43,6 +43,10 @@ code and tests for actual symbols and commands; the documentation is not a schem
 - Declare a `category` and an existing palette `tone` on the catalog entry, one
   line per entry, appended after existing ones. Activate a reserved `planned` entry
   by deleting its `status`; do not add a second id for it.
+- A new widget is off in the catalog (`defaultEnabled: false`), which is also how
+  older saved data reads it. The board new installs start with is the separate
+  `DEFAULT_BOARD` (#435), which fills the grid; change it only on an owner decision,
+  never by changing catalog defaults.
 - Implement a `WidgetModule` in its own file under `src/client/widgets/`, with its
   own CSS file imported from that module. Register it on its line in
   `WIDGET_MODULES`. Use `Settings`, `draftProblem` and `sample` hooks instead of

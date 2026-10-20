@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../dist/server/app.js';
 import { defaultSettings } from '../../dist/shared/defaults.js';
+import { defaultWidgetGrid, defaultWidgetVisibility } from '../../dist/shared/widgets.js';
 
 const NETWORK = "Can't reach the display server on this computer. Your changes are kept — try again.";
 
@@ -125,7 +126,8 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     checks.push('reminder edit conflict recognised by 409 status with different wording; a new reminder 409 keeps its own message');
 
     // 5. #242: two tabs add a countdown each; the second keeps both after its poll and saves both.
-    await reset();
+    // The catalog board (the default before #435) has room for Countdown; the #435 default board is full.
+    await reset(data => { data.settings.widgets = defaultWidgetVisibility(); data.settings.widgetGrid = defaultWidgetGrid(); });
     const first = await open();
     await tab(first, 'Widgets'); await button(first, 'Add widget').click(); await button(first, 'Preview Countdown').click(); await button(first, 'Add Countdown').click();
     await button(first, 'Save changes').click(); await first.locator('.studio-savebar').waitFor({ state: 'detached' });

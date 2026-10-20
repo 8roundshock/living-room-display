@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
-import { forecastFixture } from '../../src/server/fixtures.ts';
+import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, fitWidgetFamily } from '../../src/shared/widgets.ts';
 import { addToGrid } from '../../src/client/make-room.ts';
@@ -18,7 +18,7 @@ import { addToGrid } from '../../src/client/make-room.ts';
 const GROUPED = Object.keys(WIDGET_CATEGORIES).flatMap(category => ACTIVE_WIDGET_IDS.filter(id => WIDGET_CATALOG[id].category === category));
 /** A picker item's name carries its added state (#241). */
 const itemName = (id, widgets) => `Preview ${WIDGET_CATALOG[id].name}${widgets[id] ? ', on your display' : ''}`;
-/** The 2026-10-19 QA board (#238): the default board plus Calendar, World clocks, Sun & moon and Air quality. */
+/** The 2026-10-19 QA board (#238): the catalog board (the default before #435) plus Calendar, World clocks, Sun & moon and Air quality. */
 function qaBoard(settings) {
   for (const id of ['calendar', 'worldClocks', 'sunMoon', 'airQuality']) {
     settings.widgetGrid = addToGrid(settings.widgetGrid, id, WIDGET_CATALOG[id].defaultSize, settings.widgets); settings.widgets[id] = true;
@@ -42,8 +42,12 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
   const saveStatus = () => page.locator('.studio-savebar .save-status');
   const canvas = id => page.locator(`.preview-frame [data-widget-id="${id}"]`);
   const snapshot = () => app.store.snapshot().settings;
-  async function reset(update = () => {}) {
-    await app.store.update(data => { data.settings = defaultSettings(); data.reminders = []; update(data.settings); });
+  /**
+   * Most flows here add widgets, so they start from the catalog board, which has free cells. The
+   * #435 default board fills the grid; the picker sections pass `defaultSettings` to check it.
+   */
+  async function reset(update = () => {}, board = catalogBoardDefaults) {
+    await app.store.update(data => { data.settings = board(); data.reminders = []; update(data.settings); });
   }
   async function open({ viewport = { width: 1440, height: 1000 }, route = '/editor' } = {}) {
     await context?.close();
@@ -76,8 +80,9 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     assert.ok(box && box.x >= -1 && box.y >= -1 && box.x + box.width <= viewport.width + 1 && box.y + box.height <= viewport.height + 1, `${label} must fit the viewport: ${JSON.stringify(box)}`);
   }
   try {
-    // 1. Grouped picker: categories in WIDGET_CATEGORIES order, only active widgets, keyboard navigation.
-    await reset(); await open();
+    // 1. Grouped picker on the #435 default board: categories in WIDGET_CATEGORIES order, only active
+    // widgets, keyboard navigation.
+    await reset(() => {}, defaultSettings); await open();
     await tab('Widgets'); await button('Add widget').click();
     const defaults = defaultSettings().widgets;
     const groups = await page.locator('.widget-catalog .catalog-group').evaluateAll(nodes => nodes.map(node => ({
@@ -87,7 +92,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     const expected = Object.entries(WIDGET_CATEGORIES).map(([category, label]) => ({ label, labelled: true, items: ACTIVE_WIDGET_IDS.filter(id => WIDGET_CATALOG[id].category === category).map(id => itemName(id, defaults)) })).filter(group => group.items.length);
     assert.deepEqual(groups, expected);
     assert.deepEqual(groups.map(group => group.label), ['Time', 'Weather & sky', 'Personal', 'Pictures']);
-    for (const name of ['Calendar', 'Countdown', 'Note']) assert.ok(groups.flatMap(group => group.items).includes(`Preview ${name}`), name);
+    for (const id of ['calendar', 'countdown', 'note']) assert.ok(groups.flatMap(group => group.items).includes(itemName(id, defaults)), id);
+    assert.equal(itemName('calendar', defaults), 'Preview Calendar, on your display', 'Calendar is on the default board (#435)');
     // Rain is part of the adaptive Weather since #74, so the group lists Weather and never Rain.
     assert.ok(groups.find(group => group.label === 'Weather & sky').items.includes('Preview Weather, on your display'), 'Weather & sky lists Weather, named as added (#241)');
     assert.equal(groups.flatMap(group => group.items).some(item => item.startsWith('Preview Rain')), false, 'Rain is not offered (#74)');
@@ -119,7 +125,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     const groupBoundary = groups[0].items.length;
     await button(order[groupBoundary - 1]).focus(); await page.keyboard.press('ArrowDown'); assert.equal(await focused(), order[groupBoundary], 'Down crosses into the next group');
     await page.keyboard.press('Tab'); assert.equal(await focused(), order[groupBoundary + 1], 'Tab keeps its normal order: every widget stays a tab stop');
-    await button('Preview Calendar').click(); assert.equal(await button('Calendar medium').getAttribute('aria-pressed'), 'true', 'Calendar defaults to medium');
+    await button(itemName('calendar', defaults)).click(); assert.equal(await button('Calendar medium').getAttribute('aria-pressed'), 'true', 'Calendar is added at medium');
     assert.match(await page.locator('.picker-detail').innerText(), /This month at a glance/);
     await page.locator('.picker-sample [data-widget-id], .picker-sample .ambient-calendar').first().waitFor();
     assert.equal(await page.locator('.picker-sample .calendar-grid td[aria-current="date"]').innerText(), '18', 'the sample uses the sample clock');
@@ -130,12 +136,40 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     // The #73 free-size caption follows the catalog rule: none for these fixed-family widgets, kept for Reminders.
     assert.equal(await page.locator('.picker-free-size').count(), 0, 'fixed-family widgets show no free-size caption');
     await button(itemName('reminders', defaults)).click();
-    // #238/#183: the default board's large Clock, Weather and Forecast leave no room for a full-height column.
-    assert.equal(await page.locator('.picker-free-size').innerText(), 'Resize freely. Full height needs room first: make Clock, Weather or Forecast smaller.', 'Reminders keeps its caption, qualified for this board');
+    // #238/#183: the full default board (#435) has room for a full-height column only once Clock is smaller.
+    assert.equal(await page.locator('.picker-free-size').innerText(), 'Resize freely. Full height needs room first: make Clock smaller.', 'Reminders keeps its caption, qualified for this board');
     assert.match(await page.locator('.picker-footnote').innerText(), /Sample content/);
     if (capture) images.push({ name: 'picker-1440', bytes: await page.screenshot() });
     await page.keyboard.press('Escape');
-    checks.push('Grouped picker: Time / Weather & sky / Personal / Pictures in catalog order with labelled groups, Weather and no Rain (#74), opens on the first unadded widget in that order (#154), item names carry the added state and Add names match their visible text (#241), Up/Down/Home/End (clamped, across groups) preview the focused widget, Tab order kept, synthetic samples for the three widgets, free-size caption only for Reminders, qualified when a column has no room (#73, #238)');
+    checks.push('Grouped picker on the #435 default board: Time / Weather & sky / Personal / Pictures in catalog order with labelled groups, Calendar named as on your display, Weather and no Rain (#74), opens on the first unadded widget in that order (#154), item names carry the added state and Add names match their visible text (#241), Up/Down/Home/End (clamped, across groups) preview the focused widget, Tab order kept, synthetic samples for the three widgets, free-size caption only for Reminders, qualified when a column has no room (“make Clock smaller”, #73, #238)');
+
+    // 1a. The #435 default board fills the grid: an add says so once and offers Fine and one reduction,
+    // each applied as one draft edit that Cancel restores.
+    await reset(() => {}, defaultSettings); await open();
+    await tab('Widgets'); await button('Add widget').click();
+    await button('Preview Countdown').click(); await button('Countdown small').click(); await button('Add Countdown').click(); await page.clock.runFor(100);
+    assert.equal(await page.getByText('No room for Countdown at small size.', { exact: true }).count(), 1, 'the full board is explained once');
+    assert.deepEqual(await page.locator('.widget-picker .room-fix').allInnerTexts(), ['Switch the grid to Fine', 'Make room: Reminders small']);
+    assert.equal(await savebar().count(), 0, 'nothing changes before a fix is chosen');
+    await button('Make room: Reminders small').click(); await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    await savebar().waitFor();
+    assert.equal(await canvas('countdown').getAttribute('data-widget-size'), 'small');
+    assert.equal(await canvas('reminders').getAttribute('data-widget-size'), 'small');
+    assert.equal(await page.locator('.widget-list .inline-message').innerText(), 'Reminders is now small. Countdown added.');
+    await cancel();
+    assert.equal(await canvas('countdown').count(), 0, 'Cancel restores the default board');
+    assert.equal(await canvas('reminders').getAttribute('data-widget-size'), 'medium');
+    await button('Add widget').click();
+    await button('Preview Note').click(); await button('Note large').click(); await button('Add Note').click(); await page.clock.runFor(100);
+    assert.equal(await page.getByText('No room for Note at large size.', { exact: true }).count(), 1);
+    assert.deepEqual(await page.locator('.widget-picker .room-fix').allInnerTexts(), ['Switch the grid to Fine', 'Make room: Clock medium']);
+    await button('Switch the grid to Fine').click(); await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    assert.equal(await page.getByRole('combobox', { name: 'Grid density' }).inputValue(), 'fine');
+    assert.equal(await canvas('note').getAttribute('data-widget-size'), 'large');
+    for (const id of ['calendar', 'clock', 'weather', 'forecast']) assert.equal(await canvas(id).getAttribute('data-widget-size'), 'large', `${id} keeps its family on Fine`);
+    await cancel();
+    assert.equal(await page.getByRole('combobox', { name: 'Grid density' }).inputValue(), 'balanced');
+    checks.push('#435 default board: adding Countdown small says “No room for Countdown at small size.” once with Switch the grid to Fine and Make room: Reminders small; the reduction adds it as one draft (“Reminders is now small. Countdown added.”) that Cancel restores; a large Note offers Fine or Make room: Clock medium, and Fine keeps every large family');
 
     // 1b. "No room" (#238): one live region, cleared on close, and fixes that apply as draft edits.
     await reset(qaBoard); await open();
@@ -435,9 +469,9 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     }
     checks.push('390/320px and 390×480 reflow: no horizontal scroll, countdown controls on screen, focused fields clear of the Save bar');
 
-    // 8. The grouped picker fits the compact viewports.
+    // 8. The grouped picker fits the compact viewports, on the #435 default board a new install shows.
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1280, height: 600 }, { width: 1024, height: 600 }, { width: 760, height: 600 }, { width: 390, height: 700 }, { width: 390, height: 480 }, { width: 640, height: 300 }]) {
-      await reset(); await open({ viewport });
+      await reset(() => {}, defaultSettings); await open({ viewport });
       await tab('Widgets'); await button('Add widget').click();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.width}×${viewport.height} picker has no horizontal scroll`);
       if (viewport.width > 700) {
@@ -462,7 +496,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
         assert.ok(selection.visible, `${viewport.width}×${viewport.height} the initial selection is in view: ${JSON.stringify(selection)}`);
       }
       for (const name of ['Calendar', 'Countdown', 'Note']) {
-        const item = button(`Preview ${name}`); await item.scrollIntoViewIfNeeded(); await item.click();
+        const item = button(itemName(name.toLowerCase(), defaultSettings().widgets)); await item.scrollIntoViewIfNeeded(); await item.click();
         const add = button(`Add ${name}`); await add.scrollIntoViewIfNeeded(); await inView(add, `${viewport.width}×${viewport.height} Add ${name}`);
       }
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
