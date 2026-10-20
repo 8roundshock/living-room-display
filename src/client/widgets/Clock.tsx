@@ -8,14 +8,15 @@ import type { WidgetContentProps, WidgetModule } from './types.ts';
 
 /**
  * Hand angles that accumulate clockwise for small forward steps (59 → 00 and 12 → 1 move
- * forward), snap for jumps, and return to [0, 360) during a black rest.
+ * forward), snap for jumps, and return to [0, 360) only while the display is fully black (#174):
+ * a minute's ease that is still running when the fade-out starts finishes in view.
  */
-function useHands(hours: number, minutes: number, resting: boolean): HandAngles & { key: string } {
+function useHands(hours: number, minutes: number, black: boolean): HandAngles & { key: string } {
   const key = `${hours}:${minutes}`;
   const [hands, setHands] = useState(() => ({ ...advanceClockHands(null, hours, minutes), key }));
   let next = hands;
   if (hands.key !== key) next = { ...advanceClockHands(hands, hours, minutes), key };
-  if (resting && (next.hour >= 360 || next.minute >= 360 || next.animate)) next = { ...rebaseClockHands(next), key };
+  if (black && (next.hour >= 360 || next.minute >= 360 || next.animate)) next = { ...rebaseClockHands(next), key };
   // Adjusting state while rendering (React's "store information from previous renders" pattern).
   if (next !== hands) setHands(next);
   return next;
@@ -65,11 +66,11 @@ function AnalogClock({ hour, minute, snap, label }: { hour: number; minute: numb
 }
 
 function Clock({ settings, now, size }: WidgetContentProps) {
-  const { resting } = useMotion();
+  const { black } = useMotion();
   const minute = Math.floor(now.getTime() / 60_000);
   // `now` is a new Date every second; the labels change only with the minute.
   const labels = useMemo(() => clockLabels(new Date(minute * 60_000), settings.clockFormat, size), [minute, settings.clockFormat, size]);
-  const hands = useHands(now.getHours(), now.getMinutes(), resting);
+  const hands = useHands(now.getHours(), now.getMinutes(), black);
   const style = settings.appearance.clockStyle;
   return <div className={`clock-face clock-family-${size} clock-style-${style}`}>
     <div className="clock-calendar"><div className="ambient-label"><TransitionText value={labels.weekday} /></div><div className="clock-date"><TransitionText value={labels.date} /></div></div>

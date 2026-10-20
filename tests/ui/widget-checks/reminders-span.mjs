@@ -3,8 +3,9 @@ import { GRID_DENSITIES, WIDGET_IDS, familyForSpan, freeSpanLimits, getWidgetRec
 
 // Free-size Reminders (#73). Runs through the `sweep` hook, once per viewport after the family sweep:
 // the measured list holds in every custom span shape (complete rows inside the box, overflow rows
-// taking no layout, an exact "+N more"), and a full-height column alternates top and bottom anchoring
-// while relocating sideways. Synthetic reminders only.
+// taking no layout, an exact "+N more"), a wider span never shows fewer rows than a narrower one (#359),
+// and a full-height column, or a tall span with little vertical travel (#175), alternates top and bottom
+// anchoring while relocating. Synthetic reminders only.
 export const id = 'reminders-span';
 
 const TITLES = ['Read a chapter', 'Water the plants', 'Plan the weekend', 'Call a friend', 'A later reminder'];
@@ -25,6 +26,18 @@ function reminders(count, now) {
 const LONG_TITLE = 'Renew passport — photos first, then the online form';
 function longList(now) {
   return reminders(6, now).map((reminder, index) => index === 2 ? { ...reminder, text: LONG_TITLE } : reminder);
+}
+
+/** #359: eight pending reminders whose second one has the long title from the ticket, or eight short ones. */
+const LONG_SECOND = 'Call Mom about Sunday dinner plans and the cake';
+const SHORT_TITLES = ['Read a chapter', 'Water plants', 'Plan the weekend', 'Call a friend', 'Groceries', 'Library books', 'Recycling', 'Laundry'];
+function widthList(now, long) {
+  return reminders(8, now).map((reminder, index) => ({ ...reminder, text: long ? (index === 1 ? LONG_SECOND : reminder.text) : SHORT_TITLES[index] }));
+}
+/** Widths for the #359 sweep: small, medium and wider, up to the free-size maximum. */
+function widths(density) {
+  const max = freeSpanLimits('reminders', density).max.columns;
+  return [...new Set([2, 3, 4, 6, max])].filter(columns => columns <= max).sort((a, b) => a - b);
 }
 
 /** 2×2, 4×2, 4×4, Column, 4 × full height, max width × 2 and 3×5 in one density. */
@@ -66,6 +79,7 @@ async function inspect(widget) {
         const title = row.querySelector('.ambient-reminder-title'), style = getComputedStyle(title);
         return { text: title.textContent, size: parseFloat(style.fontSize), clamp: Number(style.webkitLineClamp), lines: Math.round(title.offsetHeight / (parseFloat(style.fontSize) * 1.2)), cut: (() => { const clamped = title.offsetHeight; title.style.webkitLineClamp = 'none'; const full = title.offsetHeight; title.style.webkitLineClamp = ''; return full > clamped + 1; })() };
       }),
+      alternate: body.hasAttribute('data-alternate-anchor'),
       displayHeight: element.closest('.ambient').getBoundingClientRect().height,
       top: shown[0].getBoundingClientRect().top - box.top,
       bottom: box.bottom - Math.max(...shown.map(child => child.getBoundingClientRect().bottom)),
@@ -84,6 +98,17 @@ function assertMeasured(result, expectedTotal, label) {
   assert.equal(result.more, hidden > 0 ? `+${hidden} more` : null, `${label}: honest remaining count`);
   assert.ok(result.moreInside && result.labelInside, `${label}: the label and footer stay inside the box`);
   assert.equal(result.horizontal, 0, `${label}: titles never overflow sideways`);
+  // The first title keeps its clamp; the rows after it share it or, when that shows more rows, one line (#359).
+  const [first, ...rest] = result.titles;
+  assert.ok(first.clamp >= 2 && first.lines <= first.clamp, `${label}: the first title keeps its clamp ${JSON.stringify(first)}`);
+  assert.ok(new Set(rest.map(title => title.clamp)).size <= 1 && rest.every(title => (title.clamp === first.clamp || title.clamp === 1) && title.lines <= title.clamp), `${label}: the rows after the first share one clamp ${JSON.stringify(result.titles)}`);
+}
+
+/** Reminders plus Clock, Weather and Calendar (small), for compositions that move the whole board. */
+function board(state, density, span) {
+  single(state, density, span);
+  for (const id of ['clock', 'weather', 'calendar']) state.settings.widgets[id] = true;
+  Object.assign(state.settings.widgetGrid.placements, { clock: { column: 4, row: 0, size: 'small' }, weather: { column: 8, row: 0, size: 'small' }, calendar: { column: 8, row: 4, size: 'small' } });
 }
 
 function assertAnchor(result, bottom, label) {
@@ -150,6 +175,34 @@ export async function sweep({ page, viewport, state, base, now }) {
     if (view !== viewport) await page.setViewportSize(viewport);
   }
 
+  // #359: when not every reminder fits, a wider box never shows fewer than a narrower one at the same height
+  // (so medium shows at least as many as small): with the long title second and with short titles, at 2 and
+  // 4 rows in every density, at 720p and 1080p (the 1080p run) and 4K.
+  const widthCounts = {};
+  for (const view of fourK ? [viewport] : [{ width: 1280, height: 720 }, viewport]) {
+    if (view !== viewport) await page.setViewportSize(view);
+    for (const density of Object.keys(GRID_DENSITIES)) for (const rows of [2, 4]) for (const long of [true, false]) {
+      const counts = [];
+      for (const columns of widths(density)) {
+        const span = { columns, rows };
+        single(state, density, span); state.reminders = widthList(now, long);
+        await reopen(page);
+        const label = `#359 ${long ? 'long' : 'short'} ${columns}x${rows}/${density}/${view.width}p`;
+        const result = await inspect(widget);
+        assertMeasured(result, 8, label);
+        assert.equal(result.scale, 1, `${label}: no zoom-out`);
+        for (const title of result.titles) assert.ok(title.size <= result.displayHeight * 0.032 + 0.5, `${label}: ${title.size}px stays within the display cap`);
+        counts.push([columns, result.visible]);
+      }
+      const name = `${long ? 'long' : 'short'} ×${rows}/${density}/${view.width}p`;
+      widthCounts[name] = counts.map(([columns, visible]) => `${columns}:${visible}`).join(' ');
+      for (let index = 1; index < counts.length; index++) assert.ok(counts[index][1] >= counts[index - 1][1], `${name}: ${counts[index][0]} columns show at least as many rows as ${counts[index - 1][0]} (${widthCounts[name]})`);
+    }
+    if (view !== viewport) await page.setViewportSize(viewport);
+  }
+  // The ticket's evidence: Balanced at 1280×720, one long title no longer halves a medium list.
+  if (!fourK) assert.ok(Number(/4:(\d+)/.exec(widthCounts['long ×2/balanced/1280p'])[1]) >= 2, `medium keeps two rows beside a long title (${widthCounts['long ×2/balanced/1280p']})`);
+
   // Timed compositions on the display: a lone full-height column moves sideways and alternates its anchor.
   for (const count of [1, 30]) {
     single(state, 'balanced', { columns: 2, rows: 8 }); state.reminders = reminders(count, now);
@@ -171,6 +224,37 @@ export async function sweep({ page, viewport, state, base, now }) {
     }
     assert.ok(lefts.size >= 2, `display column × ${count}: moves horizontally (${[...lefts].join(', ')})`);
     assert.equal(new Set(seen).size, 1, `display column × ${count}: anchoring never changes the fitted count (${seen.join(', ')})`);
+  }
+
+  // #175: a tall span that can barely move vertically (the grid's rows minus its rows under a third of the
+  // grid) alternates its anchor too: 2 × 7 in Balanced and 2 × 9 in Fine beside Clock, Weather and Calendar,
+  // through timed compositions 0–3, found by composition-N and data-widget-span. A 2 × 5 in Balanced (three
+  // rows of travel) stays top-anchored.
+  for (const [density, span, alternates] of [['balanced', { columns: 2, rows: 7 }, true], ['fine', { columns: 2, rows: 9 }, true], ['balanced', { columns: 2, rows: 5 }, false]]) {
+    for (const count of alternates ? [1, 30] : [1]) {
+      board(state, density, span); state.reminders = reminders(count, now);
+      state.settings.appearance.motionIntervalSeconds = 30;
+      await reopen(page);
+      const seen = [];
+      for (let composition = 0; composition < 4; composition++) {
+        if (composition) { await page.clock.runFor(30_000); await page.clock.runFor(1_200); }
+        const label = `#175 ${span.columns}x${span.rows}/${density} × ${count} composition ${composition}/${viewport.width}p`;
+        const tall = page.locator(`.ambient.composition-${composition} [data-widget-span="${span.columns}x${span.rows}"]`);
+        await tall.waitFor();
+        const result = await inspect(tall);
+        assert.equal(result.alternate, alternates, `${label}: data-alternate-anchor`);
+        assertMeasured(result, count, label);
+        const bottom = alternates && composition % 2 === 1;
+        assertAnchor(result, bottom, label);
+        assert.equal(result.justify, bottom ? 'safe flex-end' : 'flex-start', label);
+        if (count === 1 && bottom) assert.ok(result.top > 100, `${label}: one reminder visibly sits at the bottom (${result.top}px)`);
+        const rects = await page.locator('.ambient [data-widget-id]').evaluateAll(elements => elements.map(element => { const r = element.getBoundingClientRect(); return { id: element.getAttribute('data-widget-id'), left: r.left, top: r.top, right: r.right, bottom: r.bottom }; }));
+        assert.equal(rects.length, 4, `${label}: every enabled widget renders`);
+        for (const a of rects) for (const b of rects) if (a.id < b.id) assert.ok(a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5, `${label}: ${a.id} and ${b.id} are disjoint`);
+        seen.push(result.visible);
+      }
+      assert.equal(new Set(seen).size, 1, `#175 ${span.columns}x${span.rows}/${density} × ${count}: anchoring never changes the fitted count (${seen.join(', ')})`);
+    }
   }
 
   // compositionOverride 0–3 through the editor's arrangement preview, beside the default widgets. Rain is
@@ -210,5 +294,5 @@ export async function sweep({ page, viewport, state, base, now }) {
     assert.equal(getWidgetRect(board, 'reminders').height, 100);
     await page.goto(`${base}/display`); await page.locator('.display-page').waitFor();
   }
-  return 'Free-size Reminders: 2×2, 4×2, 4×4, Column, 4 × full, max width × 2 and 3×5 × 3 densities × 1080p/4K × 1, 5 and 30 pending keep the measured list; 2 × and 3 × full-height columns at 720p/1080p/4K show a long title in full when every reminder fits (#254); a full-height column relocates sideways, alternates top/bottom anchoring without clipping or changing "+N more", and editor arrangements 1–4 stay disjoint';
+  return 'Free-size Reminders: 2×2, 4×2, 4×4, Column, 4 × full, max width × 2 and 3×5 × 3 densities × 1080p/4K × 1, 5 and 30 pending keep the measured list; 2 × and 3 × full-height columns at 720p/1080p/4K show a long title in full when every reminder fits (#254); with eight pending (a long second title, or all short) a wider span never shows fewer rows than a narrower one at 2 and 4 rows in every density at 720p/1080p/4K, and medium keeps two rows at 720p (#359); a full-height column relocates sideways, alternates top/bottom anchoring without clipping or changing "+N more", 2 × 7 Balanced and 2 × 9 Fine alternate too through compositions 0–3 beside three widgets while a 2 × 5 stays top-anchored (#175), and editor arrangements 1–4 stay disjoint';
 }

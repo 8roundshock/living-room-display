@@ -12,6 +12,7 @@ import {
 import { FreeSizeControls, RoomNotice } from './FreeSizeControls';
 import { Icon } from './icons';
 import type { RoomFix, RoomProblem } from './make-room';
+import { withAppearance } from './model';
 import { WidgetPicker, pickerGroups } from './WidgetPicker';
 import { WIDGET_MODULES } from './widgets/registry';
 
@@ -290,14 +291,9 @@ export function WidgetInspector({
                                 style[0].toUpperCase() + style.slice(1)
                               }
                               onClick={() =>
-                                onChange((previous) => ({
-                                  ...previous,
-                                  appearance: {
-                                    ...previous.appearance,
-                                    clockStyle: style,
-                                    preset: 'custom',
-                                  },
-                                }))
+                                onChange((previous) =>
+                                  withAppearance(previous, { clockStyle: style }),
+                                )
                               }
                             >
                               <span
@@ -365,7 +361,7 @@ export function WidgetInspector({
                     <label className="control-block">
                       <span className="control-label">
                         Snapshot opacity
-                        <output>
+                        <output aria-hidden="true">
                           {Math.round(settings.preview.opacity * 100)}%
                         </output>
                       </span>
@@ -373,6 +369,7 @@ export function WidgetInspector({
                         className="range-input"
                         type="range"
                         aria-label="Snapshot opacity"
+                        aria-valuetext={`${Math.round(settings.preview.opacity * 100)}%`}
                         min={2}
                         max={30}
                         value={Math.round(settings.preview.opacity * 100)}

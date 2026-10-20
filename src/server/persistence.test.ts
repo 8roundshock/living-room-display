@@ -16,11 +16,12 @@ import type { Settings, VisualSettings, WidgetId } from '../shared/contracts.ts'
 const previous: ReadonlySet<string> = new Set(PREVIOUS_RELEASE.widgetIds);
 /**
  * Catalog ids the previous release does not know, written out so the omission checks below cannot go
- * silently vacuous. Empty since the 3fee844 baseline (#263), which knows all 13 ids. A new catalog id
- * belongs here until the baseline knows it: while off and at its defaults it is omitted at rest.
+ * silently vacuous. Empty since the 3fee844 baseline (#263); 3446400 (#367) also knows all 13 ids.
+ * A new catalog id belongs here until the baseline knows it: while off and at its defaults it is
+ * omitted at rest.
  */
 const NOT_IN_PREVIOUS: WidgetId[] = [];
-/** The #78 ids, which bedca44 lacked and 3fee844 knows: their keys are now always written. */
+/** The #78 ids, which bedca44 lacked and every baseline since 3fee844 knows: their keys are always written. */
 const KNOWN_SINCE_3FEE844: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
 const visualOf = ({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview }: Settings): VisualSettings => structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview });
 function data(settings: Settings) { return { version: 1 as const, settings, reminders: [], photoAsset: null }; }

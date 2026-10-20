@@ -1,11 +1,11 @@
 /* Sun & moon: the next sun event leads; wider families add daylight and the moon, the large
    family a thin dotted day arc. No fills except a small sun dot and the dim lit moon fraction. */
 .grid-ambient .ambient-sunMoon .ambient-label svg { stroke-width: 1.5; }
-.grid-ambient .ambient-sunMoon .sun-hero { display: flex; align-items: baseline; font-size: calc(min(26cqw, 34cqh) * var(--font-scale)); font-weight: 400; line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.grid-ambient .ambient-sunMoon .sun-hero { display: flex; align-items: baseline; font-size: calc(min(26cqw, 34cqh) * var(--font-scale)); font-weight: 400; line-height: 1; letter-spacing: -0.04em; font-variant-numeric: lining-nums tabular-nums; }
 .grid-ambient .ambient-sunMoon .sun-period { font-size: max(var(--min-text) * var(--font-scale), 0.3em); margin-left: 0.3em; letter-spacing: 0.01em; }
 .grid-ambient .ambient-sunMoon .sun-place { margin: 4cqh 0 0; opacity: 0.8; }
 .grid-ambient .ambient-sunMoon .sun-polar { font-size: calc(max(var(--min-text), min(9cqw, 12cqh)) * var(--font-scale)); line-height: 1.2; }
-.grid-ambient .ambient-sunMoon .sun-row { display: flex; align-items: baseline; gap: 3cqw; font-size: calc(max(var(--min-data), min(6.5cqw, 13cqh)) * var(--font-scale)); line-height: 1.25; font-variant-numeric: tabular-nums; }
+.grid-ambient .ambient-sunMoon .sun-row { display: flex; align-items: baseline; gap: 3cqw; font-size: calc(max(var(--min-data), min(6.5cqw, 13cqh)) * var(--font-scale)); line-height: 1.25; font-variant-numeric: lining-nums tabular-nums; }
 .grid-ambient .ambient-sunMoon .sun-row .metric-label { margin: 0; min-width: 0; }
 .grid-ambient .ambient-sunMoon .sun-daylight { font-size: calc(max(var(--min-text), min(4.6cqw, 9cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 3cqh; }
 .grid-ambient .ambient-sunMoon .sun-change { opacity: 0.7; white-space: nowrap; }

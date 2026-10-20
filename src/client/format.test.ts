@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { WeatherState } from '../shared/contracts.ts';
-import { ageLabel, civilDate, compactWeatherRange, compactWeatherTime, forecastDay, lastKnownTime, todayForecast, upcomingDays, weatherTime, weatherTimeZone } from './format.ts';
+import { ageLabel, chartAxisLabels, civilDate, compactWeatherRange, compactWeatherTime, dateTimeFormat, forecastDay, LAST_KNOWN_AFTER_MS, lastKnownLabel, lastKnownTime, MINUS, temperature, todayForecast, upcomingDays, weatherTime, weatherTimeZone } from './format.ts';
 import { rainChartLabel, rainOutlook, rainOutlookCopy } from './weather-outlook.ts';
 
 const TORONTO = 'America/Toronto';
@@ -9,6 +9,18 @@ const HOUR = 3_600_000;
 // Sunday 2026-10-18, 9 AM in Toronto (EDT, UTC-4).
 const NOW = Date.parse('2026-10-18T13:00:00Z');
 const readable = (text: string | null) => text?.replace(/[\u00a0\u202f]/g, ' ').replace(/\u2060/g, '') ?? null;
+
+test('temperatures use the true minus sign, and a value rounding to zero prints 0° (#335)', () => {
+  assert.equal(MINUS, '−');
+  assert.equal(temperature(-7), '−7°');
+  assert.equal(temperature(-0.4), '0°', 'rounds to −0, printed as 0°');
+  assert.equal(temperature(-0.5), '0°', 'Math.round(−0.5) is −0');
+  assert.equal(temperature(0), '0°');
+  assert.equal(temperature(3), '3°');
+  assert.equal(temperature(-21.6), '−22°');
+  assert.equal(temperature(null), '—');
+  for (const value of [-30, -7, -0.4, 0, 3, 41]) assert.doesNotMatch(temperature(value), /-/, `${value}: no ASCII hyphen`);
+});
 
 test('ageLabel never calls a future update time “just now” (#244)', () => {
   assert.equal(ageLabel(new Date(NOW + 60_000).toISOString(), NOW), 'Updated just now', 'up to two minutes ahead is ordinary clock skew');
@@ -87,6 +99,34 @@ test('an hours-old saved reading is last known, with the weekday when not today 
   assert.equal(lastKnownTime(weather('fresh', at(5)), false, TORONTO, '12h', NOW), null, 'a fresh, connected reading is never qualified');
   assert.equal(lastKnownTime({ ...weather('stale', at(5)), current: null }, false, TORONTO, '12h', NOW), null, 'nothing to qualify');
   assert.equal(lastKnownTime(weather('stale', new Date(NOW + HOUR).toISOString()), false, TORONTO, '12h', NOW), null, 'a future update time is not hours old');
+});
+
+test('one last-known threshold and label for Weather and Air quality (#329)', () => {
+  assert.equal(LAST_KNOWN_AFTER_MS, 3 * HOUR);
+  // Exact characters: no-break spaces join the weekday, the time and AM/PM (#197).
+  assert.equal(lastKnownLabel(NOW - 5 * HOUR, NOW, TORONTO, '12h'), '4 AM');
+  assert.equal(lastKnownLabel(NOW - 26 * HOUR, NOW, TORONTO, '12h'), 'Sat 7 AM');
+  assert.equal(lastKnownLabel(NOW - 72 * HOUR, NOW, TORONTO, '24h'), 'Thu 09:00');
+  assert.equal(lastKnownLabel(NOW - 3 * HOUR - 30 * 60_000, NOW, TORONTO, '12h'), '5:30 AM', 'minutes stay when not on the hour');
+  // The weekday follows the place's calendar: ten hours before 9 AM Sunday in Toronto is Saturday
+  // night there, but Sunday noon in Tokyo.
+  assert.equal(readable(lastKnownLabel(NOW - 10 * HOUR, NOW, TORONTO, '12h')), 'Sat 11 PM');
+  assert.equal(readable(lastKnownLabel(NOW - 10 * HOUR, NOW, 'Asia/Tokyo', '12h')), '12 PM');
+  // Weather's label is the shared one.
+  assert.equal(lastKnownTime(weather('stale', new Date(NOW - 26 * HOUR).toISOString()), false, TORONTO, '12h', NOW), lastKnownLabel(NOW - 26 * HOUR, NOW, TORONTO, '12h'));
+  // The dateTimeFormat export keeps its shape for other units (#372).
+  assert.equal(dateTimeFormat('en', { timeZone: TORONTO, weekday: 'short' }), dateTimeFormat('en', { timeZone: TORONTO, weekday: 'short' }), 'one cached formatter per locale and options');
+});
+
+test('chart axis labels: compact hours, “Now” for the bar covering now, the last bar\'s end (#261)', () => {
+  const bars = (start: number, count: number) => Array.from({ length: count }, (_, index) => ({ start: new Date(start + index * HOUR).toISOString(), end: new Date(start + (index + 1) * HOUR).toISOString() }));
+  assert.deepEqual(chartAxisLabels(bars(NOW, 12), NOW, TORONTO, '12h'), { start: 'Now', end: '9 PM' });
+  assert.deepEqual(chartAxisLabels(bars(NOW, 13), NOW + 30 * 60_000, TORONTO, '12h'), { start: 'Now', end: '10 PM' }, 'mid-hour: 13 bars, the first still covers now');
+  assert.deepEqual(chartAxisLabels(bars(NOW, 24), NOW + 5 * 60_000, TORONTO, '24h'), { start: 'Now', end: '09:00' });
+  assert.deepEqual(chartAxisLabels(bars(NOW + HOUR, 3), NOW, TORONTO, '12h'), { start: '10 AM', end: '1 PM' }, 'a chart starting later names its first hour');
+  assert.deepEqual(chartAxisLabels(bars(NOW - HOUR, 3), NOW, TORONTO, '12h'), { start: '8 AM', end: '11 AM' }, 'an hour that has ended is not now');
+  assert.equal(chartAxisLabels([], NOW, TORONTO, '12h'), null);
+  assert.deepEqual(chartAxisLabels(bars(Date.parse('2026-10-18T09:00:00Z'), 2), Date.parse('2026-10-18T09:10:00Z'), 'Asia/Kolkata', '12h'), { start: 'Now', end: '4:30 PM' });
 });
 
 test('formatters are cached: a re-render in the same minute constructs no Intl.DateTimeFormat (#99)', () => {

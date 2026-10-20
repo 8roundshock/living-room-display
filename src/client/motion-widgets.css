@@ -22,6 +22,16 @@
   width: 100%;
   height: 100%;
 }
+/* Partly cloudy's sun and moon sit up and left of their cloud (#251), so their parts settle and loop
+   around their own centres (sun 8.8, 8.8; crescent 7.2, 7.1 in the 24-unit box), not the box's. */
+.weather-glyph[data-glyph='suncloud'] > :is(.glyph-part-core, .glyph-part-rays),
+.weather-glyph[data-glyph='suncloud'] > :is(.glyph-part-core, .glyph-part-rays) > .glyph-motion {
+  transform-origin: 36.67% 36.67%;
+}
+.weather-glyph[data-glyph='mooncloud'] > .glyph-part-moon,
+.weather-glyph[data-glyph='mooncloud'] > .glyph-part-moon > .glyph-motion {
+  transform-origin: 30% 29.5%;
+}
 /* Hands turn their full-box HTML wrappers around the box centre, identically at every level; an
    HTML element's rotate transition runs on the compositor, unlike one on an SVG line (#161). */
 .analog-hand {
@@ -69,10 +79,9 @@
   transition: rotate var(--motion-hand) var(--motion-ease);
 }
 
-/* Weather: the stale/offline label changes colour gently; age and attribution never move. */
-.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .weather-age {
-  transition: color 400ms var(--motion-ease);
-}
+/* Weather: age and attribution never move. The stale or offline label takes the status tone at once,
+   with the "Saved forecast" or "Offline" words it gains at the same moment (#161): a colour fade
+   ran on the main thread and only made the cue lag its own words. */
 
 /* The hero glyph settles once on a reveal or condition change (parts remount for both).
    Stale, offline or unavailable weather (data-glyph-still) keeps it still. */
@@ -108,7 +117,7 @@
   .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part-moon {
     rotate: -6deg;
   }
-  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > .glyph-part-cloud {
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .weather-glyph[data-glyph-hero]:not([data-glyph-still]) > :is(.glyph-part-cloud, .glyph-part-mist) {
     opacity: 0;
     translate: -2.5% 0;
   }
@@ -124,16 +133,17 @@
   }
 }
 
-/* Hourly bars in adaptive Weather (#74) and Air quality (#78): existing bars ease to new heights
-   (the existing behaviour, now only above Off). Bars inserted later (a mode change into elevated,
-   the next hour) fade in to their resting opacity, never above it; the rain timing, detail and
-   hour labels crossfade through TransitionText. */
+/* Hourly bars in adaptive Weather (#74) and Air quality (#78): each bar is a full-height box moved
+   down from the baseline by `translate` and clipped by its chart (widgets.css), so existing bars ease
+   to new heights on the compositor (#161; above Off only). Bars inserted later (a mode change into
+   elevated, the next hour) fade in to their resting opacity, never above it; the rain timing, detail
+   and hour labels crossfade through TransitionText. */
 .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) :is(.rain-bar, .air-bar) {
-  transition: height 700ms var(--motion-ease);
+  transition: translate 700ms var(--motion-ease);
 }
 .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] :is(.rain-bar, .air-bar) {
   transition:
-    height 700ms var(--motion-ease),
+    translate 700ms var(--motion-ease),
     opacity var(--motion-value) var(--motion-ease);
 }
 @starting-style {
@@ -184,8 +194,9 @@
   animation: lrd-enter-left 600ms var(--motion-ease) backwards;
   animation-delay: var(--reveal-delay);
 }
+/* Bars rise from below their baseline (the chart clips them), so each grows from the baseline to its
+   resting height without scaling its rounded top (#161). */
 .grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing :is(.rain-bars > .rain-bar, .air-bars > .air-bar) {
-  transform-origin: 50% 100%;
   animation: lrd-bar-grow 600ms var(--motion-ease) backwards;
   animation-delay: var(--reveal-delay);
 }
@@ -220,7 +231,7 @@
 }
 @keyframes lrd-bar-grow {
   from {
-    scale: 1 0;
+    translate: 0 100%;
   }
 }
 
@@ -228,22 +239,28 @@
 .grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='sun'] > .glyph-part-rays > .glyph-motion {
   animation: lrd-glyph-turn 90s linear infinite;
 }
-.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='sun'] > .glyph-part-core > .glyph-motion {
+/* Partly cloudy (#251) keeps its partial rays still, so they never turn into the cloud; its sun only
+   glows and its moon rocks, around their own centres, while the cloud drifts. Fog's mist drifts
+   against its cloud; drizzle's short drops fall like rain. At most three loops per glyph. */
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still]):is([data-glyph='sun'], [data-glyph='suncloud']) > .glyph-part-core > .glyph-motion {
   animation: lrd-glyph-glow 8s ease-in-out infinite;
 }
-.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='moon'] > .glyph-part-moon > .glyph-motion {
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still]):is([data-glyph='moon'], [data-glyph='mooncloud']) > .glyph-part-moon > .glyph-motion {
   animation: lrd-glyph-rock 18s ease-in-out infinite;
 }
-.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still]):is([data-glyph='cloud'], [data-glyph='storm']) > .glyph-part-cloud > .glyph-motion {
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still]):is([data-glyph='cloud'], [data-glyph='storm'], [data-glyph='suncloud'], [data-glyph='mooncloud'], [data-glyph='fog']) > .glyph-part-cloud > .glyph-motion {
   animation: lrd-glyph-drift 11s ease-in-out infinite;
 }
-.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='rain'] > :is(.glyph-part-drop-1, .glyph-part-drop-2, .glyph-part-drop-3) > .glyph-motion {
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='fog'] > .glyph-part-mist > .glyph-motion {
+  animation: lrd-glyph-drift 13s ease-in-out infinite reverse;
+}
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still]):is([data-glyph='rain'], [data-glyph='drizzle']) > :is(.glyph-part-drop-1, .glyph-part-drop-2, .glyph-part-drop-3) > .glyph-motion {
   animation: lrd-glyph-rain 1.8s ease-in infinite;
 }
-.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='rain'] > .glyph-part-drop-2 > .glyph-motion {
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still]):is([data-glyph='rain'], [data-glyph='drizzle']) > .glyph-part-drop-2 > .glyph-motion {
   animation-delay: -0.6s;
 }
-.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='rain'] > .glyph-part-drop-3 > .glyph-motion {
+.grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still]):is([data-glyph='rain'], [data-glyph='drizzle']) > .glyph-part-drop-3 > .glyph-motion {
   animation-delay: -1.2s;
 }
 .grid-ambient[data-animation='lively'] .weather-glyph[data-glyph-hero]:not([data-glyph-still])[data-glyph='snow'] > .glyph-part-flake > .glyph-motion {
