@@ -16,11 +16,11 @@ import { WIDGET_CHECKS } from './widget-checks/index.mjs';
 /** Renderers that read the weather or air-quality status or the connection; the others render the same when stale or offline. */
 const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'offline'], airQuality: ['stale', 'offline'], reminders: ['offline'] };
 /**
- * #221: at Text 100% a family with an element on a readability floor must render at fit 1. These families
- * still zoom out below it; each allowance names the ticket fixing it. An allowance no longer needed fails,
- * so it is removed when that work lands.
+ * #221, #283: at Text 100% every family must render at fit 1 (a zoom-out shrinks its labels and values
+ * whether or not one sits exactly on a floor). These families still zoom out; each allowance names the
+ * ticket fixing it. An allowance no longer needed fails, so it is removed when that work lands.
  */
-const FLOOR_FIT_ALLOWANCES = { 'weather/small': '#283', 'weather/medium': '#283', 'note/small': '#291' };
+const FLOOR_FIT_ALLOWANCES = { 'note/small': '#291' };
 /**
  * #99: widgets that still construct Intl formatters on a one-second tick within the same minute, each with
  * the ticket caching them. An allowance no longer needed fails; with none left the full board must
@@ -144,7 +144,8 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       await statusPage.setViewportSize(viewport);
       // An offline display has loaded once and then failed its 30 s refresh.
       await statusPage.clock.setSystemTime(new Date(status === 'offline' ? now - 30_000 : now));
-      await statusPage.goto(base + '/display'); await statusPage.locator('.display-page').waitFor(); await statusPage.clock.runFor(100);
+      // #306: on a machine shared with other suites a display load has exceeded the default 30 s here; allow its real cost.
+      await statusPage.goto(base + '/display', { timeout: 90_000 }); await statusPage.locator('.display-page').waitFor({ timeout: 90_000 }); await statusPage.clock.runFor(100);
       const widget = statusPage.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
       if (status === 'offline') {
         mode = 'error'; await statusPage.clock.runFor(30_000);
@@ -154,17 +155,22 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       return floorReport(widget);
     }
     const floorFailures = [], allowancesUsed = new Set(), allowedCases = []; let floorCases = 0, flooredCases = 0;
-    /** Fit within half a percent of 1 is the fit search resolving a sub-pixel overflow, not a zoom-out. */
+    /**
+     * Fit within half a percent of 1 is the fit search resolving a sub-pixel overflow, not a zoom-out. Every
+     * zoom-out at Text 100% counts, whether or not an element sits exactly on a floor (#283): a family whose
+     * smallest text is above the floor still shrinks every label and value when it zooms out.
+     */
     const floorCheck = (id, size, density, viewport, status, report) => {
       floorCases++;
-      if (!report.floored.length) return;
-      flooredCases++;
+      if (report.floored.length) flooredCases++;
       if (report.fit >= 0.995) return;
-      const detail = `${id}/${size} ${density} ${viewport.width}×${viewport.height} ${status}: fit ${report.fit.toFixed(3)} with ${report.floored.slice(0, 3).join(', ')} (floors ${report.text.toFixed(2)}/${report.data.toFixed(2)} px)`;
+      const detail = `${id}/${size} ${density} ${viewport.width}×${viewport.height} ${status}: fit ${report.fit.toFixed(3)} with ${report.floored.slice(0, 3).join(', ') || 'no element on a floor'} (floors ${report.text.toFixed(2)}/${report.data.toFixed(2)} px)`;
       if (FLOOR_FIT_ALLOWANCES[`${id}/${size}`]) { allowancesUsed.add(`${id}/${size}`); allowedCases.push(detail); return; }
       floorFailures.push(detail);
     };
-    for (const viewport of [{ width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
+    // The family sweep includes the owner's 1280×720 TV (#283); the per-viewport sweeps below cover 720p from
+    // their 1080p pass, so they run at 1080p and 4K only.
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       await page.setViewportSize(viewport);
       for (const density of Object.keys(GRID_DENSITIES)) for (const id of ACTIVE_WIDGET_IDS) for (const size of widgetSizes(id)) {
         current = familyState(id, size, density);
@@ -188,18 +194,18 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
         for (const status of STATUS_WIDGETS[id] ?? []) floorCheck(id, size, density, viewport, status, await statusReport(id, size, density, viewport, status));
       }
       // Checks beyond the families (tests/ui/widget-checks sweep hooks) run once per viewport.
-      for (const check of Object.values(WIDGET_CHECKS)) if (check.sweep) {
+      if (viewport.width !== 1280) for (const check of Object.values(WIDGET_CHECKS)) if (check.sweep) {
         current = structuredClone(source);
         const summary = await check.sweep({ page, viewport, state: current, base, now });
         if (summary && !checks.includes(summary)) checks.push(summary);
       }
     }
     assert.ok(clockFonts.large > clockFonts.medium * 1.4, `Large clock should be visibly larger: ${JSON.stringify(clockFonts)}`);
-    checks.push(`All ${familyCount} widget families × 3 densities × 1080p/4K: bounds, useful content, no frames/fills, tone classes, photo crops, whole-screen snapshot`);
+    checks.push(`All ${familyCount} widget families × 3 densities × 720p/1080p/4K: bounds, useful content, no frames/fills, tone classes, photo crops, whole-screen snapshot`);
     await statusPage.close();
-    assert.deepEqual(floorFailures, [], '#221: a family with an element on a floor renders at fit 1 at Text 100% (a tracked exception needs its own ticket and an allowance)');
-    assert.deepEqual(Object.entries(FLOOR_FIT_ALLOWANCES).filter(([key]) => !allowancesUsed.has(key)).map(([key, ticket]) => `${key} (${ticket})`), [], 'these families now render at fit 1 whenever an element sits on a floor: remove their allowances');
-    checks.push(`#221 floors at Text 100%: ${floorCases} family × density × 1080p/4K × fresh/stale/offline cases; all ${flooredCases} with an element on a floor render at fit 1, except ${allowedCases.length} tracked cases: ${allowedCases.join('; ')}`);
+    assert.deepEqual(floorFailures, [], '#221, #283: every family renders at fit 1 at Text 100% (a tracked exception needs its own ticket and an allowance)');
+    assert.deepEqual(Object.entries(FLOOR_FIT_ALLOWANCES).filter(([key]) => !allowancesUsed.has(key)).map(([key, ticket]) => `${key} (${ticket})`), [], 'these families now render at fit 1 at Text 100%: remove their allowances');
+    checks.push(`#221/#283 fit at Text 100%: ${floorCases} family × density × 720p/1080p/4K × fresh/stale/offline cases (${flooredCases} with an element on a floor) render at fit 1, except ${allowedCases.length} tracked cases: ${allowedCases.join('; ')}`);
     // Every #78 id has shipped (#157, #171), so the inactive ids are retired ones (Rain, #74) plus any
     // future planned entry; the catalog contract says neither is ever rendered.
     const inactiveIds = WIDGET_IDS.filter(id => !isActiveWidget(id));
@@ -325,6 +331,93 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       if (!Object.keys(INTL_TICK_ALLOWANCES).length) assert.equal(intlPerTick.fullBoard, 0, 'the full board constructs no Intl formatter per tick within one minute');
     } finally { await intlContext.close(); }
     checks.push(`#99 Intl constructions per tick within one minute: ${JSON.stringify(intlPerTick)}; still allowed: ${Object.entries(INTL_TICK_ALLOWANCES).map(([id, ticket]) => `${id} (${ticket})`).join(', ') || 'none'}`);
+
+    /** Polls from Node (page timers run on page.clock). */
+    const until = async (read, predicate, label) => {
+      for (let attempt = 0; attempt < 150; attempt++) { const value = await read(); if (predicate(value)) return value; await page.waitForTimeout(20); }
+      throw new Error(`Timed out waiting for ${label}: ${JSON.stringify(await read())}`);
+    };
+
+    // #314: the shared fit also reruns on a `class` change inside the content. A class-only restyle that widens a
+    // nowrap phrase changes no box size and no text, yet the widget zooms out to fit it, and back once it is gone.
+    {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      current = structuredClone(source); current.settings.appearance.motionEnabled = false;
+      current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock']));
+      current.settings.widgetGrid.density = 'balanced'; current.settings.widgetGrid.placements.clock = { column: 0, row: 0, size: 'large' };
+      await open();
+      const widget = page.locator('[data-widget-id="clock"]');
+      const fitState = () => widget.evaluate(section => {
+        const body = section.querySelector('.widget-content'), style = getComputedStyle(section), fit = new DOMMatrix(getComputedStyle(body).transform).a;
+        const width = section.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), height = section.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+        return { fit, inside: body.scrollWidth * fit <= width + 1 && body.scrollHeight * fit <= height + 1, timeHeight: section.querySelector('.clock-time').getBoundingClientRect().height / fit };
+      });
+      const rest = await fitState();
+      assert.ok(rest.fit === 1 && rest.inside, `#314: the large clock fits at rest ${JSON.stringify(rest)}`);
+      await page.addStyleTag({ content: '.grid-ambient .clock-time.refit-probe { letter-spacing: 0.6em; }' });
+      await widget.locator('.clock-time').evaluate(element => element.classList.add('refit-probe'));
+      const wide = await until(fitState, value => value.fit < 0.95, 'a refit after a class-only change');
+      assert.ok(wide.inside && Math.abs(wide.timeHeight - rest.timeHeight) < 0.5, `#314: the wider time fits again, with no box or line change ${JSON.stringify({ rest, wide })}`);
+      await widget.locator('.clock-time').evaluate(element => element.classList.remove('refit-probe'));
+      await until(fitState, value => value.fit === 1 && value.inside, 'the refit back to 1');
+      checks.push(`#314 a class-only change that widens the large clock's nowrap time refits it (fit 1 → ${wide.fit.toFixed(3)}, inside its box) and back to 1 when removed`);
+    }
+
+    // #318: one widget's render error stays inside that widget. With the test hook set, Clock throws while rendering:
+    // its section keeps its footprint and keeps relocating, shows "Clock unavailable" in the status tone, the rest of
+    // the full board, the editor canvas and the picker keep working, the error is logged once, and Clock is back on
+    // the next minute after the fault clears.
+    {
+      const consoleErrors = []; const listener = message => { if (message.type() === 'error') consoleErrors.push(message.text()); };
+      page.on('console', listener);
+      await page.setViewportSize({ width: 1280, height: 720 });
+      current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD]));
+      current.settings.preview.enabled = true; current.settings.widgetGrid.density = 'balanced';
+      Object.assign(current.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+      await open();
+      const clock = page.locator('[data-widget-id="clock"]');
+      const footprint = () => clock.evaluate(section => { const r = section.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
+      const composition = async () => Number(await page.locator('.ambient').getAttribute('data-composition'));
+      const before = { footprint: await footprint(), composition: await composition() };
+      await page.evaluate(() => { window.__lrdWidgetFault = 'clock'; });
+      await page.clock.runFor(1_000);
+      await until(() => clock.innerText(), text => text.trim() === 'Clock unavailable', 'Clock unavailable');
+      const failed = await clock.evaluate(section => {
+        const line = section.querySelector('.widget-unavailable .ambient-description'), probe = document.createElement('span');
+        probe.style.color = 'var(--ambient-caution)'; section.append(probe); const caution = getComputedStyle(probe).color; probe.remove();
+        return { color: getComputedStyle(line).color, caution, text: getComputedStyle(section.closest('.ambient')).getPropertyValue('--ambient-text') };
+      });
+      assert.equal(failed.color, failed.caution, `#318: the unavailable line uses the status tone ${JSON.stringify(failed)}`);
+      const after = await footprint();
+      for (const side of ['left', 'top', 'width', 'height']) assert.ok(Math.abs(after[side] - before.footprint[side]) <= 0.5, `#318: the failed widget keeps its footprint (${side})`);
+      const board = await page.locator('.ambient-widget').evaluateAll(sections => sections.map(section => ({ id: section.dataset.widgetId, failed: Boolean(section.querySelector('.widget-unavailable')), content: section.querySelector('.widget-content').innerText.trim().length + section.querySelectorAll('img').length })));
+      assert.equal(board.length, Object.keys(FULL_BOARD).length, '#318: the full board still shows every widget');
+      for (const item of board) if (item.id !== 'clock') assert.ok(!item.failed && item.content > 0, `#318: ${item.id} still renders`);
+      await page.clock.runFor(181_000); await page.clock.runFor(1_500);
+      assert.ok(await composition() > before.composition, '#318: the board keeps relocating');
+      const moved = await footprint();
+      assert.ok(Math.abs(moved.left - before.footprint.left) > 1 || Math.abs(moved.top - before.footprint.top) > 1, '#318: the failed widget relocates with the board');
+      assert.equal((await clock.innerText()).trim(), 'Clock unavailable', '#318: still unavailable while the fault lasts (each new minute retries)');
+      assert.equal(consoleErrors.filter(text => /Synthetic clock fault/.test(text)).length, 1, `#318: logged once ${JSON.stringify(consoleErrors)}`);
+      await page.evaluate(() => { delete window.__lrdWidgetFault; });
+      await page.clock.runFor(60_000);
+      await until(() => clock.locator('.clock-time').count(), count => count === 1, 'Clock back on the next minute');
+      // The editor canvas and the picker sample.
+      await page.goto(base + '/editor'); await page.locator('.preview-surface [data-widget-id="weather"]').waitFor();
+      await page.evaluate(() => { window.__lrdWidgetFault = 'weather'; });
+      await page.clock.runFor(1_000);
+      const canvasWeather = page.locator('.preview-surface [data-widget-id="weather"]');
+      await until(() => canvasWeather.innerText(), text => text.trim() === 'Weather unavailable', 'the editor canvas shows Weather unavailable');
+      assert.ok(await page.locator('.preview-surface [data-widget-id="clock"] .clock-time').count() === 1, '#318: the rest of the editor canvas renders');
+      await page.getByRole('tab', { name: 'Style', exact: true }).click();
+      await page.getByRole('button', { name: 'Add widget to display' }).click();
+      await page.getByRole('button', { name: /^Preview Weather(, on your display)?$/ }).click();
+      await until(() => page.locator('.picker-sample').first().innerText(), text => /Weather unavailable/.test(text), 'the picker sample shows Weather unavailable');
+      await page.keyboard.press('Escape');
+      assert.ok(await page.locator('.studio').count() === 1, '#318: the editor stays mounted and interactive');
+      page.off('console', listener);
+      checks.push('#318 a renderer that throws (test hook) shows "<Widget> unavailable" in the status tone in its own footprint and keeps relocating; the other 11 widgets, the editor canvas and the picker keep rendering; logged once; recovers on the next minute');
+    }
     assert.deepEqual(errors, []); return { checks, images, clockFonts, fitMetrics, intlPerTick };
   } finally { await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 }

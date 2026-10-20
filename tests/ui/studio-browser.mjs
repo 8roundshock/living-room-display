@@ -116,7 +116,9 @@ export async function runStudioQa({ playwright, edge } = {}) {
       if (
         message.type() === 'error' &&
         !message.text().includes('500') &&
-        !message.text().includes('503')
+        !message.text().includes('503') &&
+        // A Save from an outdated settings revision is refused with 409, merged and retried (#287).
+        !(message.text().includes('status of 409') && message.location().url.endsWith('/api/settings'))
       )
         errors.push(message.text());
     });

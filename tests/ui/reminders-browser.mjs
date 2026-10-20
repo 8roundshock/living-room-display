@@ -1,5 +1,8 @@
-// Reminders tab check-off, local history (#73) and editor polish (#265). Own ephemeral loopback
-// server and data; synthetic reminders only. Screenshots are RAM buffers and only taken with `capture`.
+// Reminders tab check-off, local history (#73), editor polish (#265) and the #372 polish: compact rows
+// (#366), reminders deleted in another window (#355), forms kept across tab switches with a leave prompt
+// (#274), expiring messages (#295), a future creation time on Undo (#296), focus after an expired Undo
+// (#297) and typing cost (#354). Own ephemeral loopback server and data; synthetic reminders only.
+// Screenshots are RAM buffers and only taken with `capture`.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -62,29 +65,34 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], images = [], errors = [];
   const stored = text => app.store.snapshot().reminders.find(item => item.text === text);
+  /** Pages whose clock is the fake one (all but the real-time typing-cost page). */
+  const clocked = new WeakSet();
   async function reset({ clockFormat = '12h', extra = false } = {}) {
     await app.store.update(data => { data.settings = { ...defaultSettings(), clockFormat }; data.reminders = seed({ extra }); });
   }
-  async function open({ viewport = { width: 1280, height: 720 }, reducedMotion = 'no-preference' } = {}) {
+  async function open({ viewport = { width: 1280, height: 720 }, reducedMotion = 'no-preference', clock = true, init } = {}) {
     const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion });
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
-    page.on('console', message => { if (message.type() === 'error' && !/\b(409|500)\b/.test(message.text())) errors.push(message.text()); });
+    // 404 and 400 replies are expected where a reminder was deleted elsewhere (#355) or a creation time is ahead of the server (#296).
+    page.on('console', message => { if (message.type() === 'error' && !/\b(400|404|409|500)\b/.test(message.text())) errors.push(message.text()); });
     // Location lookups stay pending; this suite never touches device location.
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'prompt' }) } });
       Object.defineProperty(navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: () => undefined } });
     });
-    await page.clock.install({ time: new Date(now) });
+    if (init) await page.addInitScript(init);
+    if (clock) { await page.clock.install({ time: new Date(now) }); clocked.add(page); }
     await page.goto(`${base}/editor`);
     await page.locator('.clock-time').waitFor();
-    await page.clock.runFor(1000);
+    if (clock) await page.clock.runFor(1000);
     await remindersTab(page);
     return { context, page };
   }
   async function remindersTab(page) {
     await page.getByRole('tab', { name: /^Reminders/ }).click();
-    await page.clock.runFor(300);
+    if (clocked.has(page)) await page.clock.runFor(300);
+    else await page.locator('.reminders-panel').waitFor();
   }
   /** A real settings draft, so the Save bar shows. */
   async function dirty(page) {
@@ -652,6 +660,267 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await status(page).getByText('History cleared (1)', { exact: true }).waitFor();
     await context.close();
     checks.push('a delete while settling reads “Reminder deleted” without Undo; one completed reminder reads “Delete 1 completed reminder?”');
+
+    const hasMessage = page => status(page).evaluate(element => element.classList.contains('has-message'));
+    const onTitleField = page => page.evaluate(() => document.activeElement === document.querySelector('.reminders-panel .reminder-form .reminder-text'));
+
+    // #366: compact rows. Edit and Delete sit side by side, a one-line reminder with its due line is about
+    // 60 px and at least five rows are fully visible at 1280×720; row and list controls keep 44 px targets
+    // and the focus order stays circle, Edit, Delete.
+    await reset({ extra: true });
+    ({ page, context } = await open());
+    const compact = await page.evaluate(() => {
+      const area = document.querySelector('.inspector-panel').getBoundingClientRect();
+      const rows = [...document.querySelectorAll('.reminders-panel .reminder-list .editor-reminder')].map(row => {
+        const box = row.getBoundingClientRect(), title = row.querySelector('.reminder-copy p');
+        const [edit, remove] = [...row.querySelectorAll('.reminder-actions button')].map(button => button.getBoundingClientRect());
+        return { text: title.textContent, height: Math.round(box.height * 10) / 10, oneLine: title.getBoundingClientRect().height < parseFloat(getComputedStyle(title).lineHeight) * 1.5, visible: box.top >= area.top - 0.5 && box.bottom <= area.bottom + 0.5, sideBySide: Math.abs(edit.top - remove.top) < 1 && remove.left >= edit.right - 0.5, targets: [edit.width, edit.height, remove.width, remove.height] };
+      });
+      return { rows, switches: [...document.querySelectorAll('.reminders-panel .reminder-view')].map(button => button.getBoundingClientRect().height) };
+    });
+    assert.equal(compact.rows.length, 8);
+    for (const row of compact.rows) {
+      assert.ok(row.sideBySide, `${row.text}: Edit and Delete side by side`);
+      assert.ok(row.targets.every(size => size >= 44), `${row.text}: 44 px Edit and Delete (${row.targets})`);
+      assert.ok(!row.oneLine || (row.height >= 44 && row.height <= 64), `${row.text}: a one-line row is about 60 px (${row.height})`);
+    }
+    assert.ok(compact.rows.filter(row => row.oneLine).length >= 5, 'the sample rows are one-line');
+    assert.ok(compact.rows.filter(row => row.visible).length >= 5, `at least five rows fully visible at 1280×720 ${JSON.stringify(compact.rows.map(row => [row.height, row.visible]))}`);
+    assert.ok(compact.switches.every(height => height >= 44), `Up next / History are at least 44 px tall (${compact.switches})`);
+    if (capture) images.push({ name: 'compact-rows-1280', bytes: await page.screenshot({ animations: 'disabled' }) });
+    await circle(page, 'Pay the bill').focus();
+    for (const expected of ['Edit: Pay the bill', 'Delete: Pay the bill', 'Complete: Water the plants']) {
+      await page.keyboard.press('Tab');
+      assert.equal(await focused(page), expected, 'focus order: circle, Edit, Delete, next circle');
+    }
+    await circle(page, 'Pay the bill').click();
+    const undoBox = await undoButton(page).boundingBox();
+    assert.ok(undoBox.width >= 44 && undoBox.height >= 44, `Undo is at least 44 px (${JSON.stringify(undoBox)})`);
+    await page.getByRole('button', { name: /^History \(/ }).click();
+    const clearBox = await page.getByRole('button', { name: 'Clear history…', exact: true }).boundingBox();
+    assert.ok(clearBox.width >= 44 && clearBox.height >= 44, `Clear history… is at least 44 px (${JSON.stringify(clearBox)})`);
+    const historyTargets = await page.locator('.reminders-panel .history-reminder .reminder-actions button').evaluateAll(buttons => buttons.slice(0, 8).map(button => { const box = button.getBoundingClientRect(); return Math.min(box.width, box.height); }));
+    assert.ok(historyTargets.length === 8 && historyTargets.every(size => size >= 44), `History row actions are 44 px (${historyTargets})`);
+    await context.close();
+    checks.push('compact rows (#366): at 1280×720 Edit and Delete sit side by side, one-line rows are about 60 px (44–64) and at least five are fully visible; Edit, Delete, Undo, Clear history…, History row actions and the Up next/History switch are at least 44 px; Tab goes circle, Edit, Delete, next circle');
+
+    // #355: acting on a reminder another window already deleted. A check-off, a delete, a History restore
+    // and an edit say so instead of a false or raw error, the row goes, and the edit keeps its text and
+    // saves as a new reminder with the untouched due instant. A poll that removes the edited reminder
+    // first shows the same offer before Save.
+    await reset();
+    ({ page, context } = await open());
+    const deleteBehind = async index => assert.equal((await fetch(`${base}/api/reminders/${id(index)}`, { method: 'DELETE' })).status, 204);
+    const deletedAlert = () => page.getByRole('alert').getByText('This reminder was deleted in another window.', { exact: true });
+    await deleteBehind(1);
+    await circle(page, 'Pay the bill').click();
+    await deletedAlert().waitFor();
+    await eventually(() => rowTitles(page).then(titles => titles.includes('Pay the bill')), false, 'a check-off of a deleted reminder removes its row');
+    assert.equal(await page.getByText('Could not complete reminder. It is still in Up next.', { exact: true }).count(), 0, 'no false “still in Up next”');
+    await deleteBehind(4);
+    await page.getByRole('button', { name: 'Delete: Call a friend', exact: true }).click();
+    await eventually(() => rowTitles(page).then(titles => titles.includes('Call a friend')), false, 'a delete of a deleted reminder removes its row');
+    await deletedAlert().waitFor();
+    assert.equal(await undoButton(page).count(), 0, 'nothing to undo');
+    await page.getByRole('button', { name: 'Edit: Water the plants', exact: true }).click();
+    await page.getByLabel('Reminder', { exact: true }).fill('Water the plants and the herbs');
+    await deleteBehind(2);
+    await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
+    await deletedAlert().waitFor();
+    await eventually(() => rowTitles(page).then(titles => titles.includes('Water the plants')), false, 'the edited row goes');
+    assert.equal(await page.getByText('Reminder not found', { exact: false }).count(), 0, 'never the raw server text');
+    assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Water the plants and the herbs', 'the typed edit is kept');
+    await reminderForm(page).getByText('This reminder was deleted in another window.', { exact: true }).waitFor();
+    await focusIs(page, '', 'the moved form keeps focus in its title field');
+    assert.equal(await onTitleField(page), true);
+    await page.getByRole('button', { name: 'Save as a new reminder', exact: true }).click();
+    await status(page).getByText('Saved as a new reminder', { exact: true }).waitFor();
+    const savedNew = stored('Water the plants and the herbs');
+    assert.ok(savedNew && savedNew.id !== id(2) && savedNew.completed === false, 'saved as a new reminder');
+    assert.equal(savedNew.dueAt, '2026-10-18T22:00:00.000Z', 'the untouched date keeps its exact instant');
+    assert.equal(await reminderForm(page).count(), 0);
+    await focusIs(page, 'Edit: Water the plants and the herbs', 'focus moves to the new row’s Edit button');
+    await deleteBehind(11);
+    await page.getByRole('button', { name: /^History \(/ }).click();
+    await page.getByRole('button', { name: 'Restore: Take a walk', exact: true }).click();
+    await deletedAlert().waitFor();
+    await eventually(() => page.getByRole('button', { name: 'Restore: Take a walk', exact: true }).count(), 0, 'a History restore of a deleted reminder removes its row');
+    await page.getByRole('button', { name: /^Up next \(/ }).click();
+    await page.getByRole('button', { name: 'Edit: Plan the weekend', exact: true }).click();
+    await page.getByLabel('Reminder', { exact: true }).fill('Plan the long weekend away');
+    await deleteBehind(3);
+    await page.clock.runFor(30_500);
+    await reminderForm(page).getByText('This reminder was deleted in another window.', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Save as a new reminder', exact: true }).count(), 1, 'offered before Save once a poll removed it');
+    assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Plan the long weekend away');
+    await page.getByRole('button', { name: 'Discard', exact: true }).click();
+    await focusIs(page, 'Add reminder', 'Discard on a deleted reminder’s form focuses Add');
+    await context.close();
+    checks.push('a reminder deleted in another window (#355): check-off, delete and History restore say “This reminder was deleted in another window.” and drop the row (no false “still in Up next”, no Undo); an edit keeps its text, never shows “Reminder not found”, and “Save as a new reminder” POSTs it with the exact due instant; after a poll removes it the form offers the same before Save');
+
+    // #274 and #295: an open form keeps its typed text and date across tab switches, in place for an edit,
+    // with a working Save, without taking focus from the tab; + keeps a form with unsaved typing; leaving
+    // the page with typed text asks first. Plain messages expire after about 8 s and stay gone.
+    await reset();
+    ({ page, context } = await open());
+    const leaving = () => page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; });
+    const dueInput = () => page.locator('.reminder-form input[type="datetime-local"]');
+    assert.equal(await leaving(), false, 'nothing typed: no leave prompt');
+    await page.getByRole('button', { name: 'Add reminder', exact: true }).click();
+    assert.equal(await leaving(), false, 'an empty new form: no leave prompt');
+    await page.getByLabel('Reminder', { exact: true }).fill('Half typed');
+    await dueInput().fill('2026-10-20T09:30');
+    assert.equal(await leaving(), true, 'typed text: the leave prompt');
+    await page.getByRole('tab', { name: 'Style', exact: true }).click();
+    await page.clock.runFor(300);
+    assert.equal(await leaving(), true, 'still asks from another tab');
+    await remindersTab(page);
+    await page.getByRole('heading', { name: 'New reminder', exact: true }).waitFor();
+    assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Half typed', 'the text survives the switch');
+    assert.equal(await dueInput().inputValue(), '2026-10-20T09:30', 'the date survives the switch');
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('role')), 'tab', 'returning keeps focus on the tab');
+    await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
+    await status(page).getByText('Reminder saved', { exact: true }).waitFor();
+    assert.equal(stored('Half typed').dueAt, '2026-10-20T13:30:00.000Z', 'Save works after the switch');
+    assert.equal(await leaving(), false, 'saved: no leave prompt');
+    await page.clock.runFor(8200);
+    await eventually(() => hasMessage(page), false, 'a plain message expires after about 8 s');
+    await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
+    await remindersTab(page);
+    assert.equal(await hasMessage(page), false, 'and does not come back after a tab switch');
+    await page.getByRole('button', { name: 'Edit: Call a friend', exact: true }).click();
+    await page.getByLabel('Reminder', { exact: true }).fill('Call a friend back');
+    await page.getByRole('tab', { name: 'Weather', exact: true }).click();
+    await remindersTab(page);
+    assert.equal(await page.locator('.editor-reminder-row.editing .reminder-form').count(), 1, 'the edit form is back in place');
+    assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Call a friend back');
+    assert.equal(await circle(page, 'Call a friend').count(), 0, 'the edited row still has no circle (#187)');
+    await page.getByRole('button', { name: 'Add reminder', exact: true }).click();
+    await page.getByText('Save or discard this reminder first.', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('heading', { name: 'Edit reminder', exact: true }).count(), 1, '+ keeps a form with unsaved typing');
+    assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Call a friend back');
+    await page.clock.runFor(50);
+    assert.equal(await onTitleField(page), true, 'and focuses its title field');
+    await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
+    await status(page).getByText('Reminder saved', { exact: true }).waitFor();
+    assert.equal(stored('Call a friend back').completed, false);
+    await focusIs(page, 'Edit: Call a friend back', 'Save after a switch returns focus to the row (#230)');
+    await page.getByRole('button', { name: 'Edit: Plan the weekend', exact: true }).click();
+    await page.getByLabel('Reminder', { exact: true }).fill('Changed then escaped');
+    await page.getByRole('tab', { name: 'Style', exact: true }).click();
+    await remindersTab(page);
+    await page.getByLabel('Reminder', { exact: true }).focus();
+    await page.keyboard.press('Escape');
+    await focusIs(page, 'Edit: Plan the weekend', 'Escape after a switch closes only the form and focuses the row');
+    assert.equal(stored('Plan the weekend').text, 'Plan the weekend');
+    assert.equal(await leaving(), false, 'discarded: no leave prompt');
+    // A message that expires while another tab is open is gone on return.
+    await page.getByRole('button', { name: /^History \(/ }).click();
+    await page.getByRole('button', { name: 'Restore: Read a chapter', exact: true }).click();
+    await status(page).getByText('Restored “Read a chapter”', { exact: true }).waitFor();
+    await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
+    await page.clock.runFor(9000);
+    await remindersTab(page);
+    assert.equal(await hasMessage(page), false, 'a plain message that expired elsewhere stays gone');
+    // The real browser prompt: closing the page with typed text asks; dismissing it keeps the page.
+    await page.getByRole('button', { name: /^Up next \(/ }).click();
+    await page.getByRole('button', { name: 'Add reminder', exact: true }).click();
+    await page.getByLabel('Reminder', { exact: true }).fill('Do not lose me');
+    const prompt = new Promise(resolvePrompt => page.once('dialog', async dialog => { const type = dialog.type(); await dialog.dismiss(); resolvePrompt(type); }));
+    await page.close({ runBeforeUnload: true });
+    assert.equal(await prompt, 'beforeunload', 'the browser asks before leaving');
+    assert.equal(page.isClosed(), false, 'dismissing the prompt keeps the page');
+    await context.close();
+    checks.push('open forms survive tab switches (#274): a new form keeps its text and date and saves; an edit comes back in place (still no circle) and saves with focus back on its Edit; returning leaves focus on the tab; + keeps a form with unsaved typing (“Save or discard this reminder first.”); Escape still closes only the form; typed text fires the browser’s leave prompt (also from another tab), saved or discarded forms do not; plain messages expire after ~8 s and stay gone after a tab switch, also when they expire while another tab is open (#295)');
+
+    // #296: Undo after deleting a reminder whose stored creation time is later than the clock. Five minutes
+    // ahead it is left out; just ahead of the server only, the server refuses it and Undo retries without
+    // it. Either way the reminder returns, stamped with the server's time, and no schema text shows.
+    await reset();
+    await app.store.update(data => {
+      data.reminders.find(item => item.id === id(3)).createdAt = new Date(now + 5 * 60_000).toISOString();
+      data.reminders.find(item => item.id === id(4)).createdAt = new Date(now + 500).toISOString();
+    });
+    ({ page, context } = await open());
+    for (const [text, label] of [['Plan the weekend', 'five minutes ahead'], ['Call a friend', 'ahead of the server only']]) {
+      await page.getByRole('button', { name: `Delete: ${text}`, exact: true }).click();
+      await status(page).getByText('Reminder deleted', { exact: true }).waitFor();
+      await undoButton(page).click();
+      await status(page).getByText(`Restored “${text}”`, { exact: true }).waitFor();
+      const back = stored(text);
+      assert.ok(back && back.completed === false, `${label}: Undo re-creates it`);
+      assert.equal(back.createdAt, new Date(now).toISOString(), `${label}: stamped with the server's own time`);
+      assert.equal(await page.getByText(/createdAt|creation time/).count(), 0, `${label}: no schema text`);
+    }
+    await context.close();
+    checks.push('delete Undo with a stored creation time later than the clock (#296): five minutes ahead it is left out, just ahead of the server it is retried without; the reminder returns stamped with the server time and no schema text shows');
+
+    // #297: a focused Undo that expires moves focus to the Up next switch, never <body>; an Undo that
+    // replaces it keeps focus on the button.
+    await reset();
+    ({ page, context } = await open());
+    await circle(page, 'Pay the bill').click();
+    await undoButton(page).focus();
+    await page.clock.runFor(8200);
+    await eventually(() => undoButton(page).count(), 0, 'the check-off Undo expires');
+    await focusIs(page, 'Up next (4)', 'focus moves from an expired check-off Undo to the Up next switch');
+    await page.getByRole('button', { name: 'Delete: Book a check-up', exact: true }).click();
+    await undoButton(page).focus();
+    await page.clock.runFor(8200);
+    await eventually(() => undoButton(page).count(), 0, 'the delete Undo expires');
+    await focusIs(page, 'Up next (3)', 'focus moves from an expired delete Undo to the Up next switch');
+    await circle(page, 'Call a friend').click();
+    await status(page).getByText('Completed “Call a friend”', { exact: true }).waitFor();
+    let releaseReplacement;
+    const replacementHeld = new Promise(resolveHeld => { releaseReplacement = resolveHeld; });
+    await page.route('**/api/reminders/*', async route => { if (route.request().method() === 'PATCH') await replacementHeld; await route.fallback(); });
+    await circle(page, 'Water the plants').click();
+    await page.clock.runFor(50);
+    await undoButton(page).focus();
+    releaseReplacement();
+    await status(page).getByText('Completed “Water the plants”', { exact: true }).waitFor();
+    await focusIs(page, 'Undo', 'a replacing Undo keeps focus');
+    await page.unroute('**/api/reminders/*');
+    await context.close();
+    checks.push('a keyboard-focused Undo that expires (check-off or delete) moves focus to the Up next switch, never <body>; a replacing Undo keeps focus (#297)');
+
+    // #354: typing stays cheap with 500 dated reminders: no Intl formatter is built per keystroke, and React
+    // spends little time per keystroke because the list does not re-render (measured on the real clock).
+    await app.store.update(data => {
+      data.settings = { ...defaultSettings() };
+      data.reminders = Array.from({ length: 500 }, (_, index) => reminder(2000 + index, `Synthetic dated ${index + 1}`, { dueAt: new Date(now + (index - 100) * 3_600_000).toISOString(), createdAt: new Date(now - (index + 1) * 1000).toISOString() }));
+    });
+    const countIntl = () => {
+      window.__intl = 0;
+      const Original = Intl.DateTimeFormat;
+      const Counted = function (...values) { window.__intl++; return new Original(...values); };
+      Counted.prototype = Original.prototype; Counted.supportedLocalesOf = Original.supportedLocalesOf.bind(Original);
+      Intl.DateTimeFormat = Counted;
+    };
+    ({ page, context } = await open({ init: countIntl }));
+    assert.equal(await page.locator('.reminders-panel .reminder-list .complete-button').count(), 500);
+    await page.getByRole('button', { name: 'Add reminder', exact: true }).click();
+    await page.getByLabel('Reminder', { exact: true }).focus();
+    const intlBefore = await page.evaluate(() => window.__intl);
+    await page.keyboard.type('Synthetic typing check');
+    const intlTyped = await page.evaluate(() => window.__intl) - intlBefore;
+    assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Synthetic typing check');
+    assert.equal(intlTyped, 0, `no Intl formatter per keystroke with 500 dated reminders (${intlTyped} for 22 keystrokes)`);
+    await context.close();
+    ({ page, context } = await open({ clock: false }));
+    await page.getByRole('button', { name: 'Add reminder', exact: true }).click();
+    await page.getByLabel('Reminder', { exact: true }).focus();
+    await page.evaluate(() => {
+      window.__typing = [];
+      document.addEventListener('input', () => { const start = performance.now(); setTimeout(() => window.__typing.push(performance.now() - start), 0); }, true);
+    });
+    await page.keyboard.type('Synthetic typing cost', { delay: 25 });
+    await delay(200);
+    const typing = (await page.evaluate(() => window.__typing)).sort((a, b) => a - b);
+    const median = typing[Math.floor(typing.length / 2)];
+    assert.ok(typing.length >= 20 && median < 30, `a keystroke costs little with 500 dated reminders: median ${median?.toFixed(1)} ms ${JSON.stringify(typing.map(value => Math.round(value)))}`);
+    await context.close();
+    checks.push(`typing with 500 dated reminders (#354): no Intl formatter is built per keystroke (0 for 22), and a keystroke's update takes a median ${median.toFixed(1)} ms (bound 30 ms; main before #354 took about 110–140 ms) because the list does not re-render`);
 
     assert.deepEqual(errors, []);
     return { checks, images };

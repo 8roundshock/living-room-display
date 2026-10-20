@@ -220,17 +220,55 @@ test('the qualifier comes from the same spells as the detail peak: a 40% spell t
   const value = outlook(series(NOW, hours(12, { 1: wet(1, 40), 4: wet(1, 80) })));
   assert.equal(value.kind, 'soon'); assert.equal(value.firstSpell?.peakChance, 40); assert.equal(value.laterSpells[0]?.peakChance, 80);
   assert.equal(value.qualifier, 'likely', 'the 80% spell inside the window makes rain likely');
+  assert.deepEqual([value.firstQualifier, value.laterQualifier], ['possible', 'likely']);
   assert.deepEqual(copy(value), { headline: 'Rain likely on and off from 10 AM', detail: 'Peak 80% · 2 mm rain', confidence: 'Forecast estimate' });
-  assert.equal(copy(value, 'compact').headline, 'Rain likely from 10 AM');
+  assert.equal(copy(value, 'compact').headline, 'Rain possible from 10 AM, likely later', 'the compact line names only the first spell (#319)');
   const reversed = outlook(series(NOW, hours(12, { 1: wet(1, 80), 4: wet(1, 40) })));
   assert.equal(reversed.qualifier, 'likely');
   assert.equal(copy(reversed).detail, 'Peak 80% · 2 mm rain');
+  assert.equal(copy(reversed, 'compact').headline, 'Rain likely from 10 AM', 'a likely first spell needs no word about the later one');
   const both = outlook(series(NOW, hours(12, { 1: wet(1, 40), 4: wet(1, 50) })));
   assert.equal(both.qualifier, 'possible');
   assert.deepEqual(copy(both), { headline: 'Rain possible on and off from 10 AM', detail: 'Peak 50% · 2 mm rain', confidence: 'Forecast estimate' });
+  assert.equal(copy(both, 'compact').headline, 'Rain possible from 10 AM');
   // A known peak decides; an unknown chance alone stays “possible”.
   const unknownFirst = outlook(series(NOW, hours(12, { 1: { ...wet(1), precipitationProbability: null }, 4: wet(1, 70) })));
   assert.equal(unknownFirst.qualifier, 'likely'); assert.equal(copy(unknownFirst).detail, 'Peak 70% · 2 mm rain');
+  assert.equal(unknownFirst.firstQualifier, 'possible');
+  assert.equal(copy(unknownFirst, 'compact').headline, 'Rain possible from 10 AM, likely later');
+});
+
+test('a headline that names only the first spell takes that spell\'s qualifier and says a later one is likelier (#319)', () => {
+  // The independent review's cases (Toronto, 9 AM, 12 complete hours): a 40% spell, then an 80% one.
+  const cases: [string, Record<number, Hour>, string, { compact: string; full: string }][] = [
+    ['now', { 0: wet(1, 40), 1: wet(1, 40), 4: wet(1, 80) }, 'Peak 80% · 3 mm rain', { compact: 'Rain possible now, likely later', full: 'Rain likely on and off until 2 PM' }],
+    ['soon', { 1: wet(1, 40), 5: wet(1, 80) }, 'Peak 80% · 2 mm rain', { compact: 'Rain possible from 10 AM, likely later', full: 'Rain likely on and off from 10 AM' }],
+    ['later', { 7: wet(1, 40), 11: wet(1, 80) }, '', { compact: 'Rain possible from 4 PM, likely later', full: 'Rain possible from 4 PM, likely later' }],
+  ];
+  for (const [kind, at, detail, wording] of cases) {
+    const value = outlook(series(NOW, hours(12, at)));
+    assert.equal(value.kind, kind); assert.equal(value.firstSpell?.peakChance, 40); assert.equal(value.laterSpells.at(-1)?.peakChance, 80);
+    for (const variant of ['compact', 'full'] as const) {
+      const text = copy(value, variant);
+      assert.equal(text.headline, wording[variant], `${kind} ${variant}`);
+      // “likely” never describes the 40% spell alone, and nothing says it is or will be raining.
+      assert.doesNotMatch(text.headline, /^Rain likely (now|from|until)/, `${kind} ${variant}: the first spell peaks at 40%`);
+      assert.doesNotMatch(text.headline, /\b(is|will be) rain|raining/i);
+    }
+    // Only “on and off”, which covers every spell, takes the all-spells qualifier beside the all-spells peak.
+    if (kind !== 'later') assert.equal(copy(value).detail, detail);
+  }
+  // A single spell, or a first spell at least as likely as the rest, reads as before.
+  assert.equal(copy(outlook(series(NOW, hours(12, { 0: wet(1, 40), 1: wet(1, 40) }))), 'compact').headline, 'Rain possible until 11 AM');
+  assert.equal(copy(outlook(series(NOW, hours(12, { 0: wet(1, 80), 4: wet(1, 40) }))), 'compact').headline, 'Rain likely now');
+  assert.equal(copy(outlook(series(NOW, hours(12, { 7: wet(1, 70), 11: wet(1, 90) }))), 'full').headline, 'Rain likely from 4 PM');
+  // An unknown first chance stays “possible”, and a likelier later spell is still mentioned.
+  const unknown = outlook(series(NOW, hours(12, { 0: { ...wet(1), precipitationProbability: null }, 4: wet(1, 80) })));
+  assert.equal(copy(unknown, 'compact').headline, 'Rain possible now, likely later');
+  // The suffix never leaves a time or a lone word to start a line (#197).
+  for (const variant of ['compact', 'full'] as const) for (const word of rawCopy(outlook(series(NOW, hours(12, { 1: wet(1, 40), 5: wet(1, 80) }))), variant).headline.split(' ').slice(1)) {
+    assert.doesNotMatch(word, /^(AM|PM|·|\d+%)/);
+  }
 });
 
 test('rain now followed by a later spell reads “on and off” in full and never implies a dry afternoon (#167)', () => {

@@ -10,12 +10,21 @@ import type {
   AppState,
   LocationResult,
   Settings,
+  WeatherState,
   WidgetGrid,
   WidgetId,
 } from '../shared/contracts';
 import { defaultSettings } from '../shared/defaults';
 import { ACCENT_SWATCHES, NATIVE_PALETTE, accentSwatch } from '../shared/palette';
-import { NETWORK_ERROR_MESSAGE, api, isNetworkError } from './api';
+import {
+  NETWORK_ERROR_MESSAGE,
+  api,
+  apiTagged,
+  isNetworkError,
+  rememberRevision,
+  revisionOf,
+  settingsConflict,
+} from './api';
 import {
   BACKUP_MAX_BYTES,
   BackupError,
@@ -48,7 +57,11 @@ import {
 } from './model';
 import { browserLocationPlatform, getDeviceLocation } from './location';
 import {
+  crowdedOutMessage,
+  keepsSavedChanges,
+  listLimitProblem,
   rebaseSettings,
+  rebaseSettingsReport,
   same,
   sameEffectiveSettings,
   settingsChanges,
@@ -62,6 +75,7 @@ import {
   fitWidgetFamily,
   isActiveWidget,
   isFreeSize,
+  needsForecast,
   reflowWidget,
   resizeWidgetSpan as resizeSpanGrid,
   switchGridDensity,
@@ -75,7 +89,7 @@ import { WidgetInspector } from './WidgetInspector';
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
-import { RemindersPanel } from './RemindersPanel';
+import { RemindersPanel, reminderFormPending } from './RemindersPanel';
 import { FirstRunCard, readFirstRunDismissed, rememberFirstRunDismissed } from './FirstRunCard';
 import {
   addToGrid,
@@ -112,6 +126,26 @@ interface StudioAlert {
 }
 
 const ACTIVE_TAB = '.inspector-tabs [role="tab"][aria-selected="true"]';
+
+/** Why these settings cannot be saved: a widget module's reason, else a list over its limit (#288). */
+function saveProblem(settings: Settings): string | null {
+  return (
+    WIDGET_IDS.map((id) => WIDGET_MODULES[id].draftProblem?.(settings) ?? null).find(
+      (problem) => problem !== null,
+    ) ??
+    listLimitProblem(settings) ??
+    null
+  );
+}
+
+/** Whether a forecast reply is for these settings' location and units. */
+function forecastMatches(settings: Settings, weather: WeatherState): boolean {
+  return (
+    weather.location.latitude === settings.location.latitude &&
+    weather.location.longitude === settings.location.longitude &&
+    weather.units.temperature === (settings.units === 'imperial' ? '°F' : '°C')
+  );
+}
 
 /** Focus the first selector that matches a connected, enabled, rendered element. */
 function focusFirst(candidates: (string | HTMLElement | null | undefined)[]): boolean {
@@ -218,6 +252,10 @@ export function Editor({
   const [draft, setDraft] = useState(() => structuredClone(state.settings));
   const savedRef = useRef(saved),
     draftRef = useRef(draft);
+  // The revision of the saved settings this draft is based on, sent as If-Match (#287).
+  const savedRevision = useRef(revisionOf(state.settings));
+  // Guards Save against a second activation before the first one's state has rendered (#289).
+  const savingNow = useRef(false);
   const [section, setSection] = useState<Section>('Widgets');
   const [saving, setSaving] = useState(false),
     [error, setErrorState] = useState<ActionError | null>(null);
@@ -290,11 +328,8 @@ export function Editor({
     (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
   const dirty = !sameEffectiveSettings(saved, draft) || photoChanged;
   const airPreview = useAirQualityPreview(draft, state.airQuality);
-  // A widget module can block Save with a reason shown in the save bar.
-  const draftProblem =
-    WIDGET_IDS.map((id) => WIDGET_MODULES[id].draftProblem?.(draft) ?? null).find(
-      (problem) => problem !== null,
-    ) ?? null;
+  // A widget module, or a merged list over its limit (#288), can block Save with a reason shown in the save bar.
+  const draftProblem = saveProblem(draft);
   function updateDraft(next: Settings) {
     draftRef.current = next;
     setDraft(next);
@@ -445,10 +480,50 @@ export function Editor({
   );
   useEffect(() => {
     const incoming = structuredClone(state.settings);
-    updateDraft(rebaseSettings(savedRef.current, draftRef.current, incoming));
+    const rebased = rebaseSettingsReport(savedRef.current, draftRef.current, incoming);
+    updateDraft(rebased.settings);
     savedRef.current = incoming;
+    savedRevision.current = revisionOf(state.settings);
     setSaved(incoming);
+    // A widget another window added that this layout draft has no room for is named (#350).
+    if (rebased.crowdedOut.length) setGridMessage(crowdedOutMessage(rebased.crowdedOut));
   }, [state.settings]);
+  // #352: /api/state refreshes the forecast only while a saved widget needs it. The Weather tab,
+  // and a draft showing such a widget before it is saved, ask for it themselves.
+  const forecastWanted =
+    section === 'Weather' || (needsForecast(draft) && !needsForecast(saved));
+  useEffect(() => {
+    if (!forecastWanted) return;
+    let active = true,
+      timer: number | undefined,
+      early = 0;
+    const load = async () => {
+      let next = 60_000;
+      try {
+        const weather = await api<WeatherState>('/api/weather');
+        if (!active) return;
+        // A reply for settings that were replaced meanwhile is dropped.
+        setState((previous) =>
+          previous && forecastMatches(previous.settings, weather)
+            ? { ...previous, weather }
+            : previous,
+        );
+        // While the server is still fetching it (#351), ask again soon, a few times at most.
+        if (weather.refreshing && early < 5) {
+          early++;
+          next = 2_000;
+        }
+      } catch {
+        // The canvas keeps the state it has; the next attempt or poll tries again.
+      }
+      if (active) timer = window.setTimeout(() => void load(), next);
+    };
+    void load();
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [forecastWanted, setState]);
   useEffect(() => {
     mounted.current = true;
     // Delay through StrictMode's mount/cleanup probe; only the live mount looks up.
@@ -468,9 +543,9 @@ export function Editor({
     };
   }, []);
   useEffect(() => {
-    if (!dirty) return;
+    // Unsaved settings, or an open reminder form with typed text it has not saved (#274), ask first.
     const leave = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
+      if (dirty || reminderFormPending()) event.preventDefault();
     };
     window.addEventListener('beforeunload', leave);
     return () => window.removeEventListener('beforeunload', leave);
@@ -756,31 +831,67 @@ export function Editor({
     setLocationMessage('City ready to save');
   }
   async function saveSettings() {
-    const submitted = structuredClone(draftRef.current),
-      patch = settingsChanges(
-        savedRef.current,
-        draftRef.current,
-        guardLocation.current,
-      );
+    if (savingNow.current) return;
+    savingNow.current = true;
+    let base = savedRef.current,
+      revision = savedRevision.current,
+      submitted = structuredClone(draftRef.current);
+    const automaticLocation = guardLocation.current;
     const submittedPhoto = photoDraftRef.current,
       submittedPhotoEpoch = photoEpoch.current;
     const includesPhoto =
       submittedPhoto !== undefined &&
       (submittedPhoto?.id ?? null) !== photoId.current;
-    if (includesPhoto)
-      patch.photoChange = submittedPhoto
-        ? { pngBase64: submittedPhoto.pngBase64 }
-        : null;
     setSaving(true);
     setError(null);
     try {
-      const received = await api<Settings>('/api/settings', {
-        method: 'PATCH',
-        body: JSON.stringify(patch),
-      });
+      let received: Settings, etag: string | null;
+      for (let attempt = 0; ; attempt++) {
+        const patch = settingsChanges(base, submitted, automaticLocation);
+        if (includesPhoto)
+          patch.photoChange = submittedPhoto
+            ? { pngBase64: submittedPhoto.pngBase64 }
+            : null;
+        try {
+          ({ body: received, etag } = await apiTagged<Settings>('/api/settings', {
+            method: 'PATCH',
+            body: JSON.stringify(patch),
+            ...(revision ? { headers: { 'If-Match': revision } } : {}),
+          }));
+          break;
+        } catch (caught) {
+          // #287: another window saved settings after this draft's last poll. Merge them as a poll
+          // would, then save once more by itself only when that keeps everything the other window
+          // saved; otherwise keep the merged draft and ask for a review.
+          const conflict = settingsConflict(caught);
+          if (!conflict || !mounted.current) throw caught;
+          const current = conflict.settings;
+          rememberRevision(current, conflict.etag);
+          // An automatic location result yields to a manual city saved elsewhere, as the server would.
+          const merged = rebaseSettingsReport(base, submitted, current, { automaticLocation }),
+            live = rebaseSettingsReport(base, draftRef.current, current, { automaticLocation });
+          updateDraft(live.settings);
+          savedRef.current = current;
+          savedRevision.current = conflict.etag;
+          setSaved(current);
+          setState((previous) => (previous ? { ...previous, settings: current } : previous));
+          if (live.crowdedOut.length) setGridMessage(crowdedOutMessage(live.crowdedOut));
+          const clean =
+            attempt === 0 &&
+            !merged.crowdedOut.length &&
+            keepsSavedChanges(base, current, merged.settings) &&
+            saveProblem(merged.settings) === null;
+          if (!clean) throw caught;
+          base = current;
+          revision = conflict.etag;
+          submitted = merged.settings;
+        }
+      }
       if (!mounted.current) return;
+      rememberRevision(received, etag);
       updateDraft(rebaseSettings(submitted, draftRef.current, received));
       savedRef.current = received;
+      savedRevision.current = etag;
       setSaved(received);
       setState((previous) =>
         previous
@@ -828,13 +939,14 @@ export function Editor({
             : 'Could not save. Try again.',
           isNetworkError(caught),
         );
-        // The Save button was disabled while saving; give focus back to it for a retry.
+        // Save keeps focus while saving (#289); if focus was lost meanwhile, it returns there for a retry.
         setFocusRequest({
           candidates: ['.studio-savebar .button.primary', lastEdited.current, ACTIVE_TAB],
           onlyIfLost: true,
         });
       }
     } finally {
+      savingNow.current = false;
       if (mounted.current) setSaving(false);
     }
   }
@@ -1042,6 +1154,8 @@ export function Editor({
     customAccent !== null &&
     draft.appearance.accentMode === 'color' &&
     draft.appearance.accentColor.toLowerCase() === customAccent.toLowerCase();
+  const saveBlocked =
+    !dirty || saving || locationBusy || photoBusy || !!draftProblem;
   const weatherPending =
     !same(draft.location, state.settings.location) ||
     draft.locationSource !== state.settings.locationSource ||
@@ -2059,13 +2173,12 @@ export function Editor({
             >
               Cancel
             </button>
+            {/* aria-disabled rather than disabled, so keyboard focus stays on Save while saving (#289). */}
             <button
               className="button primary"
-              disabled={
-                !dirty || saving || locationBusy || photoBusy || !!draftProblem
-              }
+              aria-disabled={saveBlocked}
               onClick={() => {
-                void saveSettings();
+                if (!saveBlocked) void saveSettings();
               }}
             >
               {saving ? 'Saving…' : 'Save changes'}

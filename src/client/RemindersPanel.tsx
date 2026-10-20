@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type Dispatch, type FormEvent, type SetStateAction } from 'react';
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type FormEvent, type SetStateAction } from 'react';
 import type { AppState, ClearCompletedResult, Reminder, Settings } from '../shared/contracts';
 import { REMINDER_HISTORY_LIMIT, historyReminders, pendingReminders, reminderCompletedAt } from '../shared/reminders';
 import { ApiError, api } from './api';
@@ -9,8 +9,11 @@ import { historyDayHeading, historyDayKey, reminderCompletedLabel, reminderDueLa
 /** A completed row stays in Up next this long, so the check registers before it leaves. */
 const SETTLE_MS = 900;
 const COLLAPSE_MS = 240;
-const UNDO_MS = 8000;
+/** Every status message, an Undo offer included, lasts about this long or until the next one replaces it (#295). */
+const MESSAGE_MS = 8000;
 const HISTORY_PAGE = 50;
+/** Said when an action finds that another window already deleted the reminder (#355). */
+const DELETED_ELSEWHERE = 'This reminder was deleted in another window.';
 
 type View = 'upnext' | 'history';
 /** Undo puts back a check-off (restore) or a single delete from Up next (re-create, #237). */
@@ -24,15 +27,16 @@ interface Message { text: string; undo?: Undo }
 type Settling = Record<string, 'saving' | 'settled' | 'leaving' | 'restoring'>;
 
 /*
- * The status line with its Undo offer, and every row that is still settling, live in this module
- * rather than in component state. Switching editor tabs remounts the panel (`key={section}` in
- * Editor), so a check-off keeps settling and its Undo stays offered across the remount (#143).
- * Their timers belong here too and are never cancelled by an unmount.
+ * The status line with its Undo offer, every row that is still settling and the open add/edit form
+ * live in this module rather than in component state. Switching editor tabs remounts the panel
+ * (`key={section}` in Editor), so a check-off keeps settling, its Undo stays offered (#143) and an
+ * open form keeps its typed text (#274) across the remount. Their timers belong here too and are
+ * never cancelled by an unmount.
  */
 interface Session { message: Message | null; settling: Settling }
 let session: Session = { message: null, settling: {} };
 const listeners = new Set<() => void>();
-let undoTimer: number | undefined;
+let messageTimer: number | undefined;
 /** Check-off generations: timers from an earlier check-off of the same reminder stand down. */
 const completions = new Map<string, number>();
 /** Delete Undos whose re-create is in flight; another press of the same Undo is ignored. */
@@ -49,17 +53,85 @@ function publish(change: Partial<Session>) {
   session = { ...session, ...change };
   for (const listener of listeners) listener();
 }
+/** The Undo button, when it has keyboard focus. */
+function undoHasFocus(): boolean {
+  return document.activeElement instanceof HTMLElement && document.activeElement.matches('.reminders-panel .reminder-undo');
+}
+/**
+ * A focused Undo that disappears (it expired, or a plain message replaced it) hands focus to the list
+ * switch, else Add, rather than dropping it to the page (#297). An action that moves focus itself
+ * (Undo focuses the restored circle) runs its own frame callback after this one and wins.
+ */
+function keepFocusInPanel() {
+  window.requestAnimationFrame(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body && active.isConnected) return;
+    const root = document.querySelector('.reminders-panel');
+    (root?.querySelector<HTMLElement>('.reminder-view[aria-pressed="true"]') ?? root?.querySelector<HTMLElement>('.add-reminder'))?.focus();
+  });
+}
 function announce(next: Message | null) {
-  window.clearTimeout(undoTimer);
+  window.clearTimeout(messageTimer);
+  const focused = undoHasFocus();
   publish({ message: next });
-  // The Undo offer lasts about eight seconds, or until the next message replaces it.
-  if (next?.undo) undoTimer = window.setTimeout(() => { if (session.message === next) publish({ message: null }); }, UNDO_MS);
+  // Another Undo reuses the same button, which keeps focus; anything else removes it.
+  if (focused && !next?.undo) keepFocusInPanel();
+  // Plain messages expire like the Undo offer, so a stale toast never stays over the list (#295).
+  if (next) messageTimer = window.setTimeout(() => { if (session.message === next) announce(null); }, MESSAGE_MS);
 }
 function setPhase(id: string, phase: Settling[string] | null) {
   const settling = { ...session.settling };
   if (phase) settling[id] = phase; else delete settling[id];
   publish({ settling });
 }
+
+/** The open add or edit form (#274). `id` is the edited reminder, or null for a new one. */
+interface FormDraft {
+  id: string | null;
+  text: string;
+  due: string;
+  /** What the form opened with: unsaved changes are measured against these. */
+  initialText: string;
+  initialDue: string;
+  /** The edited reminder's saved due instant: "Save as a new reminder" keeps it exactly while the date is untouched (#355). */
+  savedDueAt: string | null;
+  dueProblem: boolean;
+  saving: boolean;
+  /** The field to focus when the form next mounts: set when it opens or moves, never for a tab switch. */
+  focus: 'title' | 'due' | null;
+  /** + or another Edit was pressed while this form had unsaved changes; it stays and says so. */
+  kept: boolean;
+}
+let draft: FormDraft | null = null;
+const formListeners = new Set<() => void>();
+function subscribeForm(listener: () => void) {
+  formListeners.add(listener);
+  return () => { formListeners.delete(listener); };
+}
+function currentDraft(): FormDraft | null {
+  return draft;
+}
+/** Which form is open, as a stable primitive: the panel re-renders when it changes, never per keystroke (#354). */
+function currentFormKey(): string | null {
+  return draft ? draft.id ?? '' : null;
+}
+function setDraft(next: FormDraft | null) {
+  draft = next;
+  for (const listener of formListeners) listener();
+}
+function updateDraft(change: Partial<FormDraft>) {
+  if (draft) setDraft({ ...draft, ...change });
+}
+/**
+ * True while an open reminder form holds typed text it has not saved: a new reminder with text, or an
+ * edit whose text or date differs from what it opened with. Leaving the editor then asks first, like
+ * unsaved settings (#274).
+ */
+export function reminderFormPending(): boolean {
+  if (!draft || !draft.text.trim()) return false;
+  return draft.text.trim() !== draft.initialText.trim() || draft.due !== draft.initialDue;
+}
+
 /** Focus moves within the mounted Reminders panel only; after a switch to another tab nothing is taken. */
 function focusRow(selector: string, target: string | undefined, fallback: string) {
   window.requestAnimationFrame(() => {
@@ -76,6 +148,11 @@ function focusAfter(selector: string, ids: string[], index: number, fallback: st
   // Next row, else the previous one, else a stable control, so keyboard users can keep going.
   focusRow(selector, ids[index + 1] ?? ids[index - 1], fallback);
 }
+/** Saving or discarding returns focus to that row's Edit button, or to Add after a new reminder (#230). */
+function closeForm(focusId: string | null) {
+  setDraft(null);
+  focusRow('.edit-reminder', focusId ?? undefined, '.add-reminder');
+}
 
 function reducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -84,6 +161,198 @@ function reducedMotion(): boolean {
 function Segments({ text }: { text: string }) {
   return <>{text.split(' · ').map((part, index) => <Fragment key={index}>{index ? ' · ' : ''}<span className="reminder-segment">{part}</span></Fragment>)}</>;
 }
+
+type SetAppState = Dispatch<SetStateAction<AppState | null>>;
+/** What the panel knows about the edited reminder: still pending, checked off elsewhere (#187) or deleted elsewhere (#355). */
+type Target = 'pending' | 'checkedOff' | 'missing';
+
+/**
+ * The add/edit form. It subscribes to the form store itself, so typing re-renders only the form, never
+ * the Up next list (#354), and its values survive a tab switch (#274).
+ */
+function ReminderForm({ target, setState, onError, refresh }: { target: Target; setState: SetAppState; onError: (message: string | null) => void; refresh: () => void }) {
+  const value = useSyncExternalStore(subscribeForm, currentDraft);
+  const form = useRef<HTMLFormElement>(null), titleField = useRef<HTMLInputElement>(null), dueField = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    // A form that opens (or moves) takes focus; one shown again after a tab switch only comes into view.
+    const field = draft?.focus;
+    if (field) { updateDraft({ focus: null }); (field === 'due' ? dueField : titleField).current?.focus(); }
+    // An incomplete date has no value to keep, so its message cannot outlive a remount either.
+    if (draft?.dueProblem && !dueField.current?.validity.badInput) updateDraft({ dueProblem: false });
+    form.current?.scrollIntoView({ block: 'nearest' });
+  }, []);
+  // A form that moves while being typed in (its reminder left Up next) keeps the focused field (#274).
+  useLayoutEffect(() => () => {
+    const active = document.activeElement;
+    if (active && form.current?.contains(active)) updateDraft({ focus: active === dueField.current ? 'due' : 'title' });
+  }, []);
+  if (!value) return null;
+  const { id, text, due, dueProblem, saving } = value;
+  const checkedOff = target === 'checkedOff', asNew = id !== null && target === 'missing';
+
+  // Cleared while typing, never on blur: removing the message then would move Save away mid-click.
+  function checkDue() {
+    if (draft?.dueProblem && !dueField.current?.validity.badInput) updateDraft({ dueProblem: false });
+  }
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const opened = draft;
+    if (!opened || opened.saving) return;
+    // The browser bubble is off (noValidate); an incomplete date gets the app's message and focus stays in the field (#258).
+    if (dueField.current?.validity.badInput) {
+      updateDraft({ dueProblem: true });
+      dueField.current.focus();
+      return;
+    }
+    const typed = opened.text.trim();
+    if (!typed || checkedOff) return;
+    const editing = opened.id !== null && !asNew;
+    // "Save as a new reminder" keeps the saved due instant while the date is untouched (#355).
+    const dueAt = opened.due === opened.initialDue && opened.savedDueAt ? opened.savedDueAt : opened.due ? new Date(opened.due).toISOString() : null;
+    updateDraft({ saving: true });
+    onError(null);
+    try {
+      const received = await api<Reminder>(editing ? `/api/reminders/${opened.id}` : '/api/reminders', {
+        method: editing ? 'PATCH' : 'POST',
+        body: JSON.stringify(asNew ? { text: typed, dueAt } : { text: typed, ...reminderDuePatch(opened.due, editing ? opened.initialDue : undefined) }),
+      });
+      setState(previous => previous ? {
+        ...previous,
+        reminders: editing ? previous.reminders.map(item => item.id === received.id ? received : item) : [...previous.reminders, received],
+      } : previous);
+      closeForm(opened.id === null ? null : received.id);
+      announce({ text: asNew ? 'Saved as a new reminder' : 'Reminder saved' });
+    } catch (caught) {
+      if (draft?.id === opened.id) updateDraft({ saving: false });
+      if (editing && caught instanceof ApiError && caught.status === 409) {
+        onError('This reminder was completed elsewhere. Restore it to edit.');
+        refresh();
+      } else if (editing && caught instanceof ApiError && caught.status === 404) {
+        // Deleted in another window: the row goes, the typed edit stays (the form moves to the top of Up
+        // next, keeping focus in its title) and can be saved as new (#355).
+        setState(previous => previous ? { ...previous, reminders: previous.reminders.filter(item => item.id !== opened.id) } : previous);
+        onError(DELETED_ELSEWHERE);
+        focusControl('.reminder-form .reminder-text');
+        refresh();
+      } else onError(caught instanceof Error ? caught.message : 'Could not save reminder.');
+    }
+  }
+  const hint = checkedOff ? 'Checked off. Undo or restore it to edit.' : asNew ? DELETED_ELSEWHERE : value.kept ? 'Save or discard this reminder first.' : null;
+
+  return (
+    <form
+      ref={form}
+      className="reminder-form"
+      noValidate
+      aria-labelledby="reminder-form-title"
+      onSubmit={event => { void submit(event); }}
+      onKeyDown={event => {
+        // Escape closes the form only; focus returns to the row's Edit button or to Add.
+        if (event.key === 'Escape' && !saving) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeForm(id);
+        }
+      }}
+    >
+      <h3 className="reminder-form-title" id="reminder-form-title">{id ? 'Edit reminder' : 'New reminder'}</h3>
+      <label>
+        <span className="field-label">Reminder</span>
+        <input
+          ref={titleField}
+          className="text-input reminder-text"
+          required
+          maxLength={240}
+          value={text}
+          placeholder="What’s on your mind?"
+          onChange={event => updateDraft({ text: event.target.value, kept: false })}
+        />
+      </label>
+      <label>
+        <span className="field-label">
+          When <span className="muted">(optional · local time)</span>
+        </span>
+        <input
+          ref={dueField}
+          className="text-input"
+          type="datetime-local"
+          value={due}
+          aria-invalid={dueProblem || undefined}
+          aria-describedby={dueProblem ? 'reminder-due-problem' : undefined}
+          onChange={event => { updateDraft({ due: event.target.value, kept: false }); checkDue(); }}
+          onKeyUp={checkDue}
+        />
+      </label>
+      {dueProblem && (
+        <p className="field-problem" id="reminder-due-problem" role="alert">
+          Enter both a date and a time, or clear the field.
+        </p>
+      )}
+      {hint && <p className="reminder-form-hint" id="reminder-form-hint">{hint}</p>}
+      <div className="form-actions">
+        <button type="button" className="button reminder-discard" disabled={saving} onClick={() => closeForm(id)}>
+          Discard
+        </button>
+        <button className="button primary" disabled={saving || !text.trim() || checkedOff} aria-describedby={hint ? 'reminder-form-hint' : undefined}>
+          {saving ? 'Saving…' : asNew ? 'Save as a new reminder' : 'Save reminder'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+interface RowActions {
+  complete: (id: string) => void;
+  edit: (id: string) => void;
+  remove: (id: string) => void;
+}
+/**
+ * One Up next row. Memoized on the reminder, its label and phase (#354): a keystroke, a settle elsewhere
+ * or a status message never re-renders the other rows.
+ */
+const UpNextRow = memo(function UpNextRow({ reminder, label, phase, actions }: { reminder: Reminder; label: string; phase: Settling[string] | undefined; actions: RowActions }) {
+  // A restore in flight already shows the row unchecked.
+  const done = phase !== undefined && phase !== 'restoring';
+  return (
+    <li className={`editor-reminder-row ${phase === 'leaving' ? 'leaving' : ''}`}>
+      <div className="editor-reminder">
+        <button
+          className={`complete-button ${done ? 'done' : ''}`}
+          data-reminder-id={reminder.id}
+          aria-label={`Complete: ${reminder.text}`}
+          // Pressed while the row settles: pressing again restores it (#186).
+          aria-pressed={done}
+          onClick={() => actions.complete(reminder.id)}
+        >
+          <span>{done && <Icon name="check" size={13} />}</span>
+        </button>
+        <div className={`reminder-copy ${done ? 'done' : ''}`}>
+          <p>{reminder.text}</p>
+          <span className={label.startsWith('Overdue') && !done ? 'overdue' : undefined}><Segments text={label} /></span>
+        </div>
+        <div className="reminder-actions">
+          <button
+            className="icon-button edit-reminder"
+            data-reminder-id={reminder.id}
+            aria-label={`Edit: ${reminder.text}`}
+            disabled={!!phase}
+            onClick={() => actions.edit(reminder.id)}
+          >
+            <Icon name="edit" size={15} />
+          </button>
+          <button
+            className="icon-button"
+            aria-label={`Delete: ${reminder.text}`}
+            disabled={phase === 'saving' || phase === 'restoring'}
+            onClick={() => actions.remove(reminder.id)}
+          >
+            <Icon name="trash" size={15} />
+          </button>
+        </div>
+      </div>
+    </li>
+  );
+});
 
 /**
  * The editor's Reminders tab. Every action saves immediately and independently of the settings
@@ -97,27 +366,19 @@ export function RemindersPanel({
   onError,
 }: {
   state: AppState;
-  setState: Dispatch<SetStateAction<AppState | null>>;
+  setState: SetAppState;
   connectionError: string | null;
   clockFormat: Settings['clockFormat'];
   onError: (message: string | null) => void;
 }) {
   const [view, setView] = useState<View>('upnext');
   const [now, setNow] = useState(() => new Date());
-  const [formOpen, setFormOpen] = useState(false),
-    [editingId, setEditingId] = useState<string | null>(null);
-  const [text, setText] = useState(''),
-    [due, setDue] = useState('');
-  const [initialDue, setInitialDue] = useState<string | undefined>();
-  const [dueProblem, setDueProblem] = useState(false);
-  const [saving, setSaving] = useState(false);
   const { message, settling } = useSyncExternalStore(subscribe, current);
+  const formKey = useSyncExternalStore(subscribeForm, currentFormKey);
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
   const [confirmClear, setConfirmClear] = useState(false),
     [clearing, setClearing] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
-  const form = useRef<HTMLFormElement>(null);
-  const dueField = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -128,10 +389,6 @@ export function RemindersPanel({
     const active = document.activeElement;
     if (message && active instanceof HTMLElement && panel.current?.contains(active) && !active.closest('.reminder-status')) active.scrollIntoView({ block: 'nearest' });
   }, [message]);
-  // An opened form, and the row it edits, scroll fully into view (#236).
-  useEffect(() => {
-    if (formOpen) form.current?.scrollIntoView({ block: 'nearest' });
-  }, [formOpen, editingId]);
   function replace(received: Reminder) {
     setState(previous => previous ? { ...previous, reminders: previous.reminders.map(item => item.id === received.id ? received : item) } : previous);
   }
@@ -144,77 +401,62 @@ export function RemindersPanel({
       setState(previous => previous ? { ...previous, reminders } : previous);
     } catch { /* The regular state refresh retries. */ }
   }
+  /** Another window deleted the reminder (#355): its row goes, and the alert says so instead of a false or raw error. */
+  function deletedElsewhere(id: string) {
+    setPhase(id, null);
+    remove(new Set([id]));
+    onError(DELETED_ELSEWHERE);
+    void refreshReminders();
+  }
 
-  const upNext = pendingReminders(
+  // Order and labels change at most once a minute, and only with the list, the settling rows or the
+  // clock format; typing in the form changes none of them (#354).
+  const minute = Math.floor(now.getTime() / 60_000) * 60_000;
+  const upNext = useMemo(() => pendingReminders(
     state.reminders.map(item => settling[item.id] && item.completed ? { ...item, completed: false } : item),
-    now.getTime(),
-  );
-  const history = historyReminders(state.reminders);
+    minute,
+  ), [state.reminders, settling, minute]);
+  const labels = useMemo(() => new Map(upNext.map(item => [item.id, reminderDueLabel(item, new Date(minute), clockFormat)])), [upNext, minute, clockFormat]);
+  const history = useMemo(() => historyReminders(state.reminders), [state.reminders]);
   const pendingCount = state.reminders.filter(item => !item.completed).length;
   const completedCount = state.reminders.length - pendingCount;
+  const formOpen = formKey !== null, editingId = formKey || null;
+  const editing = editingId === null ? undefined : state.reminders.find(item => item.id === editingId);
   // The edit form takes the place of its row (#236); a new reminder, or an edited one that has left
   // Up next, uses the form at the top of the list instead.
   const inlineEdit = formOpen && editingId !== null && upNext.some(item => item.id === editingId);
   // Rows that show a circle and actions; the row being edited shows its form instead.
   const rowIds = upNext.filter(item => !(inlineEdit && item.id === editingId)).map(item => item.id);
-  // A reminder checked off while its edit is open cannot be saved until it is restored (#187).
-  const checkedOff = formOpen && editingId !== null && state.reminders.some(item => item.id === editingId && item.completed);
+  // A reminder checked off while its edit is open cannot be saved until it is restored (#187); one
+  // deleted in another window can be saved as a new reminder (#355).
+  const target: Target = editingId === null ? 'pending' : !editing ? 'missing' : editing.completed ? 'checkedOff' : 'pending';
 
   function startForm(reminder?: Reminder) {
-    const dueInput = localInputDate(reminder?.dueAt);
-    setEditingId(reminder?.id ?? null);
-    setText(reminder?.text ?? '');
-    setDue(dueInput);
-    setInitialDue(reminder ? dueInput : undefined);
-    setDueProblem(false);
-    setFormOpen(true);
-    // The form always opens in Up next, where it is visible.
     setView('upnext');
     setConfirmClear(false);
     onError(null);
     // An Undo offer outlives opening a form; only a plain status message clears.
     if (!session.message?.undo) announce(null);
-  }
-  /** Saving or discarding returns focus to that row's Edit button, or to Add after a new reminder (#230). */
-  function closeForm() {
-    setFormOpen(false);
-    setDueProblem(false);
-    focusRow('.edit-reminder', editingId ?? undefined, '.add-reminder');
-  }
-  // Cleared while typing, never on blur: removing the message then would move Save away mid-click.
-  function checkDue() {
-    if (dueProblem && !dueField.current?.validity.badInput) setDueProblem(false);
-  }
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    // The browser bubble is off (noValidate); an incomplete date gets the app's message and focus stays in the field (#258).
-    if (dueField.current?.validity.badInput) {
-      setDueProblem(true);
-      dueField.current.focus();
+    // An open form with unsaved typing is never replaced (#274): it stays, comes into view and says so.
+    const same = draft !== null && draft.id === (reminder?.id ?? null);
+    if (draft && (same || reminderFormPending())) {
+      updateDraft({ kept: !same });
+      focusControl('.reminder-form .reminder-text');
       return;
     }
-    if (!text.trim() || checkedOff) return;
-    setSaving(true);
-    onError(null);
-    try {
-      const received = await api<Reminder>(editingId ? `/api/reminders/${editingId}` : '/api/reminders', {
-        method: editingId ? 'PATCH' : 'POST',
-        body: JSON.stringify({ text: text.trim(), ...reminderDuePatch(due, initialDue) }),
-      });
-      setState(previous => previous ? {
-        ...previous,
-        reminders: editingId ? previous.reminders.map(item => item.id === received.id ? received : item) : [...previous.reminders, received],
-      } : previous);
-      closeForm();
-      announce({ text: 'Reminder saved' });
-    } catch (caught) {
-      if (editingId && caught instanceof ApiError && caught.status === 409) {
-        onError('This reminder was completed elsewhere. Restore it to edit.');
-        void refreshReminders();
-      } else onError(caught instanceof Error ? caught.message : 'Could not save reminder.');
-    } finally {
-      setSaving(false);
-    }
+    const dueInput = localInputDate(reminder?.dueAt);
+    setDraft({
+      id: reminder?.id ?? null,
+      text: reminder?.text ?? '',
+      due: dueInput,
+      initialText: reminder?.text ?? '',
+      initialDue: dueInput,
+      savedDueAt: reminder?.dueAt ?? null,
+      dueProblem: false,
+      saving: false,
+      focus: 'title',
+      kept: false,
+    });
   }
   async function complete(reminder: Reminder) {
     const phase = session.settling[reminder.id];
@@ -240,7 +482,8 @@ export function RemindersPanel({
         setPhase(reminder.id, 'leaving');
         window.setTimeout(() => { if (still('leaving')) setPhase(reminder.id, null); }, COLLAPSE_MS);
       }, SETTLE_MS);
-    } catch {
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 404) { deletedElsewhere(reminder.id); return; }
       setPhase(reminder.id, null);
       onError('Could not complete reminder. It is still in Up next.');
     }
@@ -262,6 +505,13 @@ export function RemindersPanel({
       if (focus === 'restored') focusRow('.complete-button', received.id, '.reminder-view[data-view="upnext"]');
       else if (focus) focusAfter('.history-check', focus.ids, focus.index, '.reminder-view[data-view="history"]');
     } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 404) {
+        // Nothing is left to restore, so an Undo offer for it goes too.
+        if (session.message?.undo?.reminder.id === reminder.id) announce(null);
+        else if (focus && focus !== 'restored') focusAfter('.history-check', focus.ids, focus.index, '.reminder-view[data-view="history"]');
+        deletedElsewhere(reminder.id);
+        return;
+      }
       // Still completed, so it leaves Up next; an Undo offer stays (and keeps focus) for a retry.
       setPhase(reminder.id, null);
       onError(caught instanceof Error ? caught.message : 'Could not restore reminder.');
@@ -281,6 +531,12 @@ export function RemindersPanel({
         ? { text: 'Deleted from history' }
         : { text: 'Reminder deleted', undo: reminder.completed ? undefined : { kind: 'delete', reminder } });
     } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 404) {
+        // Already gone: the row leaves as it would have, with the honest reason and no Undo (#355).
+        focusAfter(selector, ids, ids.indexOf(reminder.id), fallback);
+        deletedElsewhere(reminder.id);
+        return;
+      }
       onError(caught instanceof Error ? caught.message : 'Could not delete reminder.');
     }
   }
@@ -290,15 +546,26 @@ export function RemindersPanel({
     recreating.add(target);
     onError(null);
     const { text: deletedText, dueAt, createdAt } = target.reminder;
+    // The exact due string and the original creation time return it to its sorted place. A creation time
+    // later than now (the clock was set back, or the data came from a computer whose clock ran ahead) is
+    // left out, so the server stamps its own and the reminder still returns, perhaps a place away (#296).
+    const recreate = (withCreated: boolean) => api<Reminder>('/api/reminders', { method: 'POST', body: JSON.stringify(withCreated ? { text: deletedText, dueAt, createdAt } : { text: deletedText, dueAt }) });
+    const keepCreated = Date.parse(createdAt) <= Date.now();
     try {
-      // The exact due string and the original creation time return it to its sorted place.
-      const received = await api<Reminder>('/api/reminders', { method: 'POST', body: JSON.stringify({ text: deletedText, dueAt, createdAt }) });
+      let received: Reminder;
+      try {
+        received = await recreate(keepCreated);
+      } catch (caught) {
+        // The server's clock may still be behind this browser's: try once more without it.
+        if (!(keepCreated && caught instanceof ApiError && caught.status === 400)) throw caught;
+        received = await recreate(false);
+      }
       setState(previous => previous ? { ...previous, reminders: [...previous.reminders, received] } : previous);
       announce({ text: `Restored “${received.text}”` });
       focusRow('.complete-button', received.id, '.reminder-view[data-view="upnext"]');
     } catch (caught) {
-      // The Undo offer stays (and keeps focus) for a retry.
-      onError(caught instanceof Error ? caught.message : 'Could not restore reminder.');
+      // The Undo offer stays (and keeps focus) for a retry. A rejected request never shows its schema text.
+      onError(caught instanceof ApiError && caught.status === 400 ? 'Could not restore reminder.' : caught instanceof Error ? caught.message : 'Could not restore reminder.');
     } finally {
       recreating.delete(target);
     }
@@ -328,6 +595,18 @@ export function RemindersPanel({
     }
   }
 
+  // Row callbacks read the latest render through a ref, so the memoized rows keep one stable object.
+  const latest = useRef({ complete, startForm, deleteReminder, state, rowIds });
+  latest.current = { complete, startForm, deleteReminder, state, rowIds };
+  const actions = useMemo<RowActions>(() => {
+    const find = (id: string) => latest.current.state.reminders.find(item => item.id === id);
+    return {
+      complete: id => { const reminder = find(id); if (reminder) void latest.current.complete(reminder); },
+      edit: id => { const reminder = find(id); if (reminder) latest.current.startForm(reminder); },
+      remove: id => { const reminder = find(id); if (reminder) void latest.current.deleteReminder(reminder, 'upnext', latest.current.rowIds); },
+    };
+  }, []);
+
   const shownHistory = history.slice(0, historyLimit);
   const historyIds = shownHistory.map(item => item.id);
   const groups: { key: string; heading: string; items: Reminder[] }[] = [];
@@ -338,66 +617,7 @@ export function RemindersPanel({
     groups.at(-1)!.items.push(item);
   }
 
-  const reminderForm = formOpen && (
-    <form
-      ref={form}
-      className="reminder-form"
-      noValidate
-      aria-labelledby="reminder-form-title"
-      onSubmit={event => { void submit(event); }}
-      onKeyDown={event => {
-        // Escape closes the form only; focus returns to the row's Edit button or to Add.
-        if (event.key === 'Escape' && !saving) {
-          event.preventDefault();
-          event.stopPropagation();
-          closeForm();
-        }
-      }}
-    >
-      <h3 className="reminder-form-title" id="reminder-form-title">{editingId ? 'Edit reminder' : 'New reminder'}</h3>
-      <label>
-        <span className="field-label">Reminder</span>
-        <input
-          autoFocus
-          className="text-input"
-          required
-          maxLength={240}
-          value={text}
-          placeholder="What’s on your mind?"
-          onChange={event => setText(event.target.value)}
-        />
-      </label>
-      <label>
-        <span className="field-label">
-          When <span className="muted">(optional · local time)</span>
-        </span>
-        <input
-          ref={dueField}
-          className="text-input"
-          type="datetime-local"
-          value={due}
-          aria-invalid={dueProblem || undefined}
-          aria-describedby={dueProblem ? 'reminder-due-problem' : undefined}
-          onChange={event => { setDue(event.target.value); checkDue(); }}
-          onKeyUp={checkDue}
-        />
-      </label>
-      {dueProblem && (
-        <p className="field-problem" id="reminder-due-problem" role="alert">
-          Enter both a date and a time, or clear the field.
-        </p>
-      )}
-      {checkedOff && <p className="reminder-form-hint" id="reminder-form-hint">Checked off. Undo or restore it to edit.</p>}
-      <div className="form-actions">
-        <button type="button" className="button reminder-discard" disabled={saving} onClick={closeForm}>
-          Discard
-        </button>
-        <button className="button primary" disabled={saving || !text.trim() || checkedOff} aria-describedby={checkedOff ? 'reminder-form-hint' : undefined}>
-          {saving ? 'Saving…' : 'Save reminder'}
-        </button>
-      </div>
-    </form>
-  );
+  const reminderForm = formOpen && <ReminderForm key={formKey} target={target} setState={setState} onError={onError} refresh={() => { void refreshReminders(); }} />;
 
   return (
     <div className="reminders-panel" ref={panel}>
@@ -424,54 +644,9 @@ export function RemindersPanel({
       {view === 'upnext' && !inlineEdit && reminderForm}
       {view === 'upnext' && (upNext.length ? (
         <ul className="reminder-list">
-          {upNext.map(reminder => {
-            if (inlineEdit && reminder.id === editingId) {
-              return <li key={reminder.id} className="editor-reminder-row editing">{reminderForm}</li>;
-            }
-            const phase = settling[reminder.id];
-            // A restore in flight already shows the row unchecked.
-            const done = phase !== undefined && phase !== 'restoring';
-            const dueLabel = reminderDueLabel(reminder, now, clockFormat);
-            return (
-              <li key={reminder.id} className={`editor-reminder-row ${phase === 'leaving' ? 'leaving' : ''}`}>
-                <div className="editor-reminder">
-                  <button
-                    className={`complete-button ${done ? 'done' : ''}`}
-                    data-reminder-id={reminder.id}
-                    aria-label={`Complete: ${reminder.text}`}
-                    // Pressed while the row settles: pressing again restores it (#186).
-                    aria-pressed={done}
-                    onClick={() => { void complete(state.reminders.find(item => item.id === reminder.id) ?? reminder); }}
-                  >
-                    <span>{done && <Icon name="check" size={13} />}</span>
-                  </button>
-                  <div className={`reminder-copy ${done ? 'done' : ''}`}>
-                    <p>{reminder.text}</p>
-                    <span className={dueLabel.startsWith('Overdue') && !done ? 'overdue' : undefined}><Segments text={dueLabel} /></span>
-                  </div>
-                  <div className="reminder-actions">
-                    <button
-                      className="icon-button edit-reminder"
-                      data-reminder-id={reminder.id}
-                      aria-label={`Edit: ${reminder.text}`}
-                      disabled={!!phase}
-                      onClick={() => startForm(reminder)}
-                    >
-                      <Icon name="edit" size={15} />
-                    </button>
-                    <button
-                      className="icon-button"
-                      aria-label={`Delete: ${reminder.text}`}
-                      disabled={phase === 'saving' || phase === 'restoring'}
-                      onClick={() => { void deleteReminder(state.reminders.find(item => item.id === reminder.id) ?? reminder, 'upnext', rowIds); }}
-                    >
-                      <Icon name="trash" size={15} />
-                    </button>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
+          {upNext.map(reminder => inlineEdit && reminder.id === editingId
+            ? <li key={reminder.id} className="editor-reminder-row editing">{reminderForm}</li>
+            : <UpNextRow key={reminder.id} reminder={reminder} label={labels.get(reminder.id) ?? 'Anytime'} phase={settling[reminder.id]} actions={actions} />)}
         </ul>
       ) : !formOpen && (
         <div className="empty-reminders">

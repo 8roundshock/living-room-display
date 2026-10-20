@@ -23,8 +23,17 @@ export function dateTimeFormat(locale: string, options: Intl.DateTimeFormatOptio
   return formatter;
 }
 
+/** The true minus sign (U+2212): at couch distance the ASCII hyphen is a 6 × 2 px dash beside 10 px digits (#335). */
+export const MINUS = '−';
+
+/**
+ * A rounded temperature: “14°”, “−7°”. Negative values use the true minus sign (#335), and a value
+ * that rounds to zero prints “0°”, never “−0°”. Unknown values are a dash.
+ */
 export function temperature(value: number | null): string {
-  return value === null ? '—' : `${Math.round(value)}°`;
+  if (value === null || !Number.isFinite(value)) return '—';
+  const rounded = Math.round(value);
+  return rounded < 0 ? `${MINUS}${-rounded}°` : `${rounded === 0 ? 0 : rounded}°`;
 }
 
 export function precipitation(value: number, unit: 'mm' | 'in'): string {
@@ -119,14 +128,31 @@ export function todayForecast<Day extends { date: string }>(daily: Day[], timeZo
   return daily.find(day => day.date.slice(0, 10) === today);
 }
 
-/** A saved current reading older than this, while stale or offline, is qualified as last known (#243). */
+/**
+ * The one “last known” rule (#243, #188, #329): saved current values more than this old no longer read
+ * as current. Three hours matches the hourly models: after that a saved temperature or AQI describes
+ * a different part of the day. Weather and Air quality each decide when the rule applies (see
+ * `lastKnownTime` and `airReadingView`); both use this threshold and `lastKnownLabel`.
+ */
 export const LAST_KNOWN_AFTER_MS = 3 * 3_600_000;
+
+/**
+ * When a saved value was last known, in the place's zone: “9 AM”, with the weekday when not today
+ * (“Thu 9 AM”), or “Thu 09:00” on the 24-hour clock. Compact 12-hour times drop “:00”; no-break
+ * spaces keep the weekday, the time and AM/PM together (#197). Widgets show it as “Last known · …”.
+ */
+export function lastKnownLabel(at: number, now: Date | number, timeZone: string, clockFormat: '12h' | '24h'): string {
+  const date = civilDate(at, timeZone);
+  const day = date === civilDate(now, timeZone) ? '' : `${weekday(date)}${NBSP}`;
+  return `${day}${compactWeatherTime(new Date(at).toISOString(), timeZone, clockFormat)}`;
+}
 
 /**
  * When a saved current reading more than three hours old was last known, while the forecast is stale
  * or the display is offline: “9 AM”, with the weekday when not today (“Thu 9 AM”); null otherwise.
  * Weather shows it as “Last known · Thu 9 AM”. The time is the last successful update, the same
- * instant the age line counts from.
+ * instant the age line counts from. A fresh reading on a connected display is never qualified:
+ * the server refreshes it on its own schedule (Air quality differs, see `airReadingView`).
  */
 export function lastKnownTime(
   weather: Pick<WeatherState, 'current' | 'status' | 'updatedAt'>,
@@ -139,9 +165,7 @@ export function lastKnownTime(
   const time = typeof now === 'number' ? now : now.getTime();
   const reading = Date.parse(weather.updatedAt ?? '');
   if (!Number.isFinite(reading) || time - reading <= LAST_KNOWN_AFTER_MS) return null;
-  const date = civilDate(reading, timeZone);
-  const day = date === civilDate(time, timeZone) ? '' : `${weekday(date)}${NBSP}`;
-  return `${day}${compactWeatherTime(new Date(reading).toISOString(), timeZone, clockFormat)}`;
+  return lastKnownLabel(reading, time, timeZone, clockFormat);
 }
 
 export function forecastPeriod(
@@ -202,6 +226,31 @@ export function compactWeatherTime(
   if (format === '24h') return weatherTime(timestamp, timeZone, format);
   const { time, period } = clockParts(timestamp, timeZone);
   return `${time}${NBSP}${period}`;
+}
+
+/** The hour a chart bar draws: an instant interval, as ISO strings. */
+export interface ChartHour { start: string; end: string }
+
+/**
+ * The two axis labels under an hourly bar chart (#261), shared by Weather's rain chart and Air
+ * quality's AQI chart: the left edge is the first bar's start, read “Now” when that bar's hour
+ * contains `now`, and the right edge is the last bar's end. Compact hours in the place's zone, as in
+ * the headlines (“3 PM”, “15:00”). Null without bars.
+ */
+export function chartAxisLabels(
+  hours: readonly ChartHour[],
+  now: Date | number,
+  timeZone: string,
+  format: '12h' | '24h',
+): { start: string; end: string } | null {
+  const first = hours[0], last = hours.at(-1);
+  if (!first || !last) return null;
+  const time = typeof now === 'number' ? now : now.getTime();
+  const current = Date.parse(first.start) <= time && time < Date.parse(first.end);
+  return {
+    start: current ? 'Now' : compactWeatherTime(first.start, timeZone, format),
+    end: compactWeatherTime(last.end, timeZone, format),
+  };
 }
 
 /**

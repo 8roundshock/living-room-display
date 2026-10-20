@@ -1,5 +1,7 @@
 /* A focused editor workspace. The ambient canvas owns its dim, true-black palette. */
 html.studio-editor {
+  /* The editor's navy page; the document stays true black elsewhere, including before mount (#334). */
+  background: #090b12;
   scroll-padding-block: 24px var(--studio-footer-clearance, 124px);
 }
 .studio :is(input, select, button, a, summary, [tabindex]) {
@@ -436,6 +438,13 @@ html.studio-editor {
   cursor: default;
   opacity: 0.4;
   transform: none;
+}
+/* Save keeps focus while unavailable or saving (#289): the disabled look, with a full-strength focus ring. */
+.studio .studio-savebar .button.primary[aria-disabled='true'] {
+  cursor: default;
+  transform: none;
+  background: color-mix(in srgb, var(--studio-accent) 40%, #302a37);
+  color: color-mix(in srgb, #231e35 40%, #302a37);
 }
 .studio .button.small {
   min-height: 40px;
