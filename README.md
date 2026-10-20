@@ -38,6 +38,11 @@ run a newer Setup: your settings, reminders and photo stay, and a backup copy is
 saved first. To remove it, use **Settings > Apps** (or right-click the Start
 entry) and choose whether to keep your data.
 
+Once it's installed, the [user guide](docs/user-guide.md) explains everyday use in
+plain words: choosing your city, showing the display full screen on the TV and
+leaving it, reminders, looks, why things move, animation levels, backups, updating
+and uninstalling.
+
 There's no public download yet: Setup is a private, unsigned prerelease built
 by CI, so Windows SmartScreen will warn before it runs. See
 [installation](docs/install.md#install-with-setup-recommended) for the details,
