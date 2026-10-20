@@ -26,6 +26,13 @@ scrolling, including the Widgets tab with the first-run location card
 remain below, the inspector's bottom edge fades (scroll-linked, kept with reduced
 motion). Focus scrolling reserves the measured Save bar height so fields and labels remain
 visible above it, including narrow screens and compact keyboard-height windows.
+Selecting a widget on the canvas or in the Widgets list, or adding one, scrolls its settings
+into view (`block: 'nearest'`: the whole settings when they fit, else their top, above the
+Save bar's reserved height) without moving keyboard focus (#339). Desktop scrolls the
+inspector panel. Stacked layouts scroll the page only after a list row click, an add or a
+tap on the canvas, once the pointer is released; a press that drags a widget and a canvas
+widget focused from the keyboard keep the canvas in view. Scrolling is instant with reduced
+motion or the Off animation level.
 
 - **Save changes** atomically persists settings, appearance, location, widget
   options, selected local photo and saved styles. The bar exists only while
@@ -40,8 +47,12 @@ visible above it, including narrow screens and compact keyboard-height windows.
   30-second poll; a Save sent before the next poll still replaces those lists whole (#287).
 - After **Save** or **Cancel** keyboard focus returns to the last edited control while
   it is still shown, else to the active tab, and an always-mounted status region
-  announces “Changes saved” or “Changes discarded” (#229). Removing a widget announces
-  “Clock removed” and focuses the next row (else the previous one, else Add widget).
+  announces “Changes saved” or “Changes discarded” (#229). Removing a widget shows “Clock
+  removed” at the top of the Widgets list and focuses the next row in the list's grouped
+  order (else the previous one, else Add widget). Layout messages (moves, resizes, removals,
+  adds, fixes and density changes) are spoken by one always-mounted status region, so the
+  first one is announced, a repeated one (“No room to the left” twice) is announced again and
+  none is announced twice; the list or the canvas line shows each one once (#311, #341).
 - **Alerts** (a failed action, a lost connection with **Retry**, a storage warning) have
   their own row under the canvas actions and never cover them; the canvas shrinks while
   one shows (#227). One shows at a time with a dismiss (×) control. An action's error
@@ -119,15 +130,35 @@ visible above it, including narrow screens and compact keyboard-height windows.
   [studio harness](../tests/ui/studio-browser.mjs) covers these flows.
 - The authored canvas never relocates; outside Edit layout it shows value and glyph
   motion for the draft Animation level, and during Edit layout widgets stay still. **Edit layout** reveals a faint
-  editor-only grid and whole-widget drag targets. Clicking/focusing selects a
-  widget and exposes its resize handle. Arrow keys move the focused widget;
-  Tab reaches its handle, where arrows change family. Family buttons are another
+  editor-only grid and whole-widget drag targets. While no message needs it, the reserved
+  message line under the canvas reads “Drag a widget to move it · drag its corner to resize
+  · arrow keys work too” (the keys part is left out on a touch screen); any layout message
+  replaces it (#345). The density select carries a visible **Grid** label (its accessible
+  name stays “Grid density”). Clicking/focusing selects a
+  widget and exposes its resize handle, whose visible corner (30 × 36 px, 30 × 30 at
+  phone width) has a 44 × 44 hit area that reaches inward at the canvas edges (#349).
+  Arrow keys move the focused widget;
+  Tab reaches its handle, where arrows change family. Results name the place or size,
+  counted from 1 at the top left: “Last screen moved to column 7, row 5”, “Last screen
+  resized to Small”, “Last screen cannot get any smaller”, and refusals name the direction
+  (“No room to the left”, “No room above”). A move or resize that pushes neighbours names
+  them (“Clock moved to column 2, row 1 · Weather moved down to make room”). Each move target
+  and handle is described by its place and size (“Column 9, row 5 · Medium”) (#341). Family
+  buttons are another
   alternative. No technical Position coordinates or four-arrow inspector exists.
   Pointer feedback is continuous while neighbors reflow into legal cells. Escape
   or pointer cancellation abandons the entire drag; impossible drops/resizes keep
   the prior board. Density changes immediately fit every enabled module, reducing
   families only when necessary; a round trip restores exact explored positions
-  and families until another widget edit. Cancel restores the saved arrangement.
+  and families until another widget edit. A density that cannot hold the board is
+  named with the widget count: “Spacious (8 × 6) can't fit these 12 widgets. Make some
+  smaller or remove one, then try again.” Making one widget smaller never helps (the fit
+  already tries every family), so when hiding one widget lets it fit, the smallest such
+  widget is offered instead (“Spacious (8 × 6) can't fit these 11 widgets.” with **Make
+  room: remove Last screen**), applied with the grid switch as one draft edit that Cancel
+  restores; focus returns to the select. One live region speaks it (#346). On the full
+  12-widget board no single removal helps: the shared packing search gives up on near-full
+  boards (#403). Cancel restores the saved arrangement.
 - **Free-size Reminders** (#73): its handle snaps to whole cells from 2 × 2 up to
   the full grid height and two-thirds of the width; neighbours reflow live, and an
   impossible size keeps the board with “No room for that size”. The default board's
@@ -138,16 +169,27 @@ visible above it, including narrow screens and compact keyboard-height windows.
   for a full-height Reminders column beside Clock, Weather and Forecast.” (#183).
   **Make room: Weather medium** applies the smallest single family reduction that
   fits, found with the shared reflow helpers (`src/client/make-room.ts`), together
-  with the requested size as one draft edit; Cancel restores both. Fixed-family
-  size buttons explain a missing room the same way. Pointer and handle resizes on
-  the canvas still say only “No room for that size” (#285). On the focused
+  with the requested size as one draft edit; Cancel restores both. Keyboard focus then
+  moves to the size control that shows the change (the pressed preset or the stepper used),
+  never to the page (#310). Fixed-family
+  size buttons explain a missing room the same way. A pointer drag on the canvas says “No
+  room for that size” while it has none; when a drag or a handle arrow key ends without room,
+  the same explanation and fix appear beside the widget's size controls, worked out once at
+  that moment, and the canvas line hands over to that one live region (#285). An
+  explanation belongs to the board it was shown on: any other layout change, density change
+  or Cancel removes it, so it never comes back (#310). On the focused
   handle Right/Left change width and Down/Up change height by one cell, announced
   as “Reminders resized to 2 × 6”. The inspector offers Small, Medium, Large and
   Column (2 × full height) presets plus Width and Height steppers that stop at
   their limits; the list subtitle reads the family, Column or `C × R` (plus
   “· Hidden when empty” while the display hides an empty Reminders, #233), and a hint
-  reads “Shows as many reminders as fit · soonest first”. Sizes join the draft
-  (resizing back to the saved shape is clean). Density changes scale the span with
+  reads “Shows as many reminders as fit · soonest first”. Sizes join the draft.
+  Consecutive resize steps of one widget (presets, steppers, the handle or a drag) are one
+  exploration computed from the board before it began, so a neighbour pushed aside comes
+  back when the widget shrinks again and resizing back to the saved shape is clean; the
+  steps name it (“Forecast moved right to make room”, “Forecast moved back”). A move, another
+  widget's edit, an add or removal, or a density change ends the exploration (#340).
+  Density changes scale the span with
   full height and minimum width kept, so a Column stays a Column; a span dropped
   to fit is named (“Reminders 2 × 8 → small to fit. Switch back to restore.”). The
   picker still adds a family with a caption noting free resizing, qualified while
@@ -159,7 +201,10 @@ visible above it, including narrow screens and compact keyboard-height windows.
   concurrent poll, preserving its validity while unrelated saved settings refresh.
   Adding a widget can seek nearby legal origins when its previous hidden origin
   cannot accommodate the board; it never silently removes existing content.
-- **Widgets** selects inline size/position and per-widget controls. **Add widget**
+- **Widgets** lists the widgets on the display in the picker's groups (Time, Weather & sky,
+  Personal, Pictures; catalog order inside each, #365) and selects inline size/position and
+  per-widget controls. On a coarse pointer the size families and room fixes are 44 px tall,
+  as are Note's **Clear** everywhere (#349). **Add widget**
   opens a compact category rail and one actual renderer with synthetic family
   content, size choices and a reachable Add action. Every module can be removed, including clock
   and weather separately. Small/medium/large families adapt their content.
@@ -170,7 +215,7 @@ visible above it, including narrow screens and compact keyboard-height windows.
   your display” (#241). An add with no room is reported once, in the picker's own
   live region (“No room for Countdown at medium size.”), and cleared by another size
   or widget or by closing the picker. Up to two fixes apply as one draft edit that
-  Cancel restores: **Try Small** (a smaller family of the same widget), **Switch the
+  Cancel restores: **Try small** (a smaller family of the same widget), **Switch the
   grid to Fine** (a finer grid that changes no family) or **Make room: Weather
   medium** (#238). The Reminders tab is named with its count (“Reminders, 8
   pending”).
@@ -269,14 +314,21 @@ other tabs (Weather holds the same actions; Style has no spare height at 1280×7
 while the picker is open, so every tab's default contents still fit at 1280×720, and it
 is gone for good once a location is saved. **Hide location tip** dismisses it in this
 browser only (`localStorage`); no key joins the saved data, so older releases still
-read it. `tests/ui/first-run-browser.mjs` covers the card.
+read it. Its buttons are 44 px targets, **Hide location tip** 44 × 44 (#349); the card is
+88 px tall and the default Widgets tab still fits beside it at 1280×720 and 1280×600. At
+1024×600 and 760×600 the Widgets tab then scrolls by 58 px (Last screen below the fold,
+cued by the panel's bottom fade) and fits again once the tip is hidden. That is a
+deliberate trade-off (#310): only dropping the 44 px targets or one of the card's two
+actions would make room, and the card is temporary. `tests/ui/first-run-browser.mjs`
+covers the card.
 
 **Time & units** in the Weather tab holds Units (°C · metric or °F · imperial) and
 **Time format** (12-hour or 24-hour) side by side, so the format stays reachable with
 the Clock removed (#235); the Clock panel keeps a mirrored Time format control. The
-format drives the clock, reminder times, World clocks, rain timing, Sun & moon, Air
-quality hours and the Last screen caption; the editor list and canvas follow an unsaved
-change.
+format drives every time shown on the display and in the editor, including the clock,
+reminder times, World clocks, rain timing, Sun & moon, Air quality hours, the Last screen
+caption, Weather's saved or offline “last known” time and the backup date in Style ›
+Data & recovery (#310); the editor list and canvas follow an unsaved change.
 
 Preview weather retains its actual city/units while a selection is unsaved or
 refreshing. Forecast dates/intervals use the weather city's timezone, or the computer's
@@ -510,7 +562,12 @@ cover failed explicit-location fallback races and focused-field clearance at
 390px/320px with 844px/480px heights. The [grid harness](../tests/ui/grid-browser.mjs)
 adds actual pointer/touch/keyboard moves/resizes, effective dirty-bar reverts,
 density fitting/round-trip restoration, optional modules/styles, local canvas PNG/Cancel/atomic save
-and pairwise rendered bounds. Images stay in RAM. Current verified counts and
+and pairwise rendered bounds, the spoken keyboard results (three moves give three
+announcements naming the column and row, two refusals are both announced, a family resize
+names the family) and a refused density on the full 12-widget board and its removal fix
+(#341, #346). The [free-size harness](../tests/ui/freesize-browser.mjs) covers resize
+explorations (#340), canvas no-room explanations (#285) and focus after a keyboard
+Make room (#310). Images stay in RAM. Current verified counts and
 review/installation limits are recorded in [STATUS](../STATUS.md).
 
 The [workspace harness](../tests/ui/workspace-browser.mjs) checks bounded desktop
@@ -522,7 +579,13 @@ show in their own row clear of every canvas action (each still the topmost eleme
 its centre), and dismiss, recovery and next-action clearing work; at 1280×720/600 the
 weather note is not covered by the Save bar (`elementFromPoint` sampling), and at
 1280×720 keyboard focus after Save, Cancel and Remove widget plus the announcements are
-asserted. The [editor sync harness](../tests/ui/editor-sync-browser.mjs) aborts
+asserted, including the layout status region that exists before the first removal (#311).
+On the full 12-widget board at 1280×720, 1024×600 and 390×844 it checks that each canvas
+selection and a list row bring the inspector's first control fully into view (#339), the
+Edit layout how-to and Grid label (#345), the resize handle's 44 × 44 hit area by
+`elementFromPoint` (also at the canvas corner) and Note's 44 px Clear (#349), and at
+1280×720 the grouped list order and removal focus (#365); a coarse pointer gets 44 px size
+families. The [editor sync harness](../tests/ui/editor-sync-browser.mjs) aborts
 `/api/*` for the loading page, Save, Add reminder and a poll, checks the clear message
 and its clearing after recovery, recognises a reminder 409 by status and ends a
 two-tab countdown edit with both countdowns. Verified logical viewports are 1280×720, 1280×600, 1024×600, 760×600,

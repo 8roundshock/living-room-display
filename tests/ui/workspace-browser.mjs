@@ -28,10 +28,10 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   let context, page;
   const button = name => page.getByRole('button', { name, exact: true });
   const tab = name => page.getByRole('tab', { name: name === 'Reminders' ? /^Reminders/ : name, exact: name !== 'Reminders' }).click();
-  async function open(viewport, reducedMotion = 'reduce') {
+  async function open(viewport, reducedMotion = 'reduce', settings = defaultSettings(), options = {}) {
     await context?.close();
-    await app.store.update(data => { data.settings = defaultSettings(); data.reminders = [{ id: '11111111-1111-4111-8111-111111111111', text: 'Private reminder sentinel', completed: false, dueAt: null, createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString() }]; });
-    context = await browser.newContext({ viewport, reducedMotion, timezoneId: 'America/Toronto' });
+    await app.store.update(data => { data.settings = structuredClone(settings); data.reminders = [{ id: '11111111-1111-4111-8111-111111111111', text: 'Private reminder sentinel', completed: false, dueAt: null, createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString() }]; });
+    context = await browser.newContext({ viewport, reducedMotion, timezoneId: 'America/Toronto', ...options });
     page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'prompt' }) } }));
     await page.clock.install({ time: new Date(now) });
@@ -139,7 +139,16 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     await tab('Widgets');
     const rows = async () => page.locator('.widget-list .widget-select').evaluateAll(elements => elements.map(element => element.getAttribute('aria-label')));
     const initial = await rows(); assert.ok(initial.length >= 3, 'the default board lists several widgets');
+    // #311: the layout status region is mounted, empty, before the first removal, which it then announces;
+    // no other live region repeats it, and the visible copy stays in the list.
+    const layoutAnnouncer = page.locator('.layout-announcer');
+    assert.equal(await layoutAnnouncer.getAttribute('role'), 'status');
+    assert.equal(await layoutAnnouncer.textContent(), '', 'mounted and empty before the first removal');
+    assert.equal(initial[0], 'Clock');
     await button(`Remove ${initial[0]}`).focus(); await page.keyboard.press('Enter');
+    assert.equal(await layoutAnnouncer.textContent(), 'Clock removed');
+    assert.equal(await page.locator('[role="status"], [role="alert"], [aria-live]').evaluateAll(nodes => nodes.filter(node => node.textContent.includes('Clock removed')).length), 1, 'no second live region repeats it');
+    assert.equal(await page.locator('.widget-list .inline-message').textContent(), 'Clock removed', 'shown in the list as before');
     assert.equal(await focusedName(), initial[1], 'focus moves to the next row');
     await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
     assert.deepEqual(await rows(), initial.slice(1), 'Enter on the focused row only expands and collapses it');
@@ -148,6 +157,99 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     for (const name of initial.slice(1, -1)) { await button(`Remove ${name}`).focus(); await page.keyboard.press('Enter'); }
     assert.deepEqual(await rows(), []); assert.equal(await focusedName(), 'Add widget', 'with no rows left focus moves to Add widget');
     await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
+  }
+  /** Every active widget on one Balanced board, every cell used (as in the palette and motion suites). */
+  const FULL_BOARD = {
+    clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
+    sunMoon: { column: 0, row: 2, size: 'large' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
+    reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
+    note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
+  };
+  function fullBoard() {
+    const settings = defaultSettings();
+    for (const id of Object.keys(settings.widgets)) settings.widgets[id] = id in FULL_BOARD;
+    settings.preview.enabled = true; Object.assign(settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+    return settings;
+  }
+  // #365: the picker's groups, catalog order inside each.
+  const GROUPED = ['Clock', 'World clocks', 'Calendar', 'Weather', 'Forecast', 'Air quality', 'Sun & moon', 'Reminders', 'Countdown', 'Note', 'Last screen', 'Photo'];
+  const listRows = () => page.locator('.widget-list .widget-select').evaluateAll(elements => elements.map(element => element.getAttribute('aria-label')));
+  /** The box of an element's 44 × 44 hit area: elementFromPoint at its corners and centre must be the element. */
+  async function hitArea(locator, label) {
+    const result = await locator.evaluate(element => {
+      const box = element.getBoundingClientRect(), before = getComputedStyle(element, '::before');
+      // A transparent absolute ::before extends the hit area; its offsets are from the padding box.
+      const hit = before.content === 'none' || before.position !== 'absolute' ? box : {
+        left: box.left + element.clientLeft + parseFloat(before.left), top: box.top + element.clientTop + parseFloat(before.top),
+        width: parseFloat(before.width), height: parseFloat(before.height),
+      };
+      const points = [[1, 1], [hit.width - 1, 1], [1, hit.height - 1], [hit.width - 1, hit.height - 1], [hit.width / 2, hit.height / 2]];
+      const misses = points.map(([x, y]) => [hit.left + x, hit.top + y]).filter(([x, y]) => { const target = document.elementFromPoint(x, y); return !(target === element || element.contains(target)); });
+      return { visual: [Math.round(box.width), Math.round(box.height)], hit: [hit.width, hit.height], misses: misses.map(point => point.map(Math.round)) };
+    });
+    assert.ok(result.hit[0] >= 44 && result.hit[1] >= 44, `${label}: hit area at least 44 × 44: ${JSON.stringify(result)}`);
+    assert.deepEqual(result.misses, [], `${label}: every corner of the hit area reaches it: ${JSON.stringify(result)}`);
+    return result;
+  }
+  /** #339, #345, #349 and #365 on the full board at one viewport. */
+  async function layoutEditing(viewport) {
+    const label = `${viewport.width}x${viewport.height}`, stacked = viewport.width <= 700;
+    await open(viewport, 'reduce', fullBoard());
+    await button('Hide location tip').click();
+    if (viewport.width === 1280) assert.deepEqual(await listRows(), GROUPED, 'the list follows the picker groups (#365)');
+    await button('Edit layout').click();
+    // #345: the how-to fills the reserved message line; the density select has a visible short label.
+    const hint = page.locator('.canvas-hint');
+    await inView(hint, `${label} how-to`);
+    assert.equal(await hint.innerText(), 'Drag a widget to move it · drag its corner to resize · arrow keys work too');
+    await inView(page.locator('.grid-density-label'), `${label} Grid label`);
+    assert.equal(await page.locator('.grid-density-label').innerText(), 'Grid');
+    if (!stacked) assert.equal(await page.evaluate(() => `${document.documentElement.scrollWidth},${document.documentElement.scrollHeight}`), `${viewport.width},${viewport.height}`, `${label}: Edit layout keeps the bounded workspace`);
+    // #339: selecting each widget on the canvas brings its settings' first control fully into view.
+    for (const name of GROUPED) {
+      await button(`Move ${name}`).click();
+      const control = page.locator('.widget-option.selected .widget-inspector').locator('button, input, select, textarea').first();
+      await control.waitFor();
+      const box = await control.boundingBox(), area = stacked ? { x: 0, y: 0, width: viewport.width, height: viewport.height } : await page.locator('.inspector-panel').boundingBox();
+      assert.ok(box.y >= area.y - 0.5 && box.y + box.height <= area.y + area.height + 0.5 && box.y >= 0 && box.y + box.height <= viewport.height,
+        `${label}: ${name}'s first control is fully visible after selecting it on the canvas: ${JSON.stringify({ box, area })}`);
+      assert.equal(await focusedName(), `Move ${name}`, 'selecting never moves focus away from the canvas');
+    }
+    // A list row click does the same.
+    await button(GROUPED[0]).click();
+    const first = page.locator('.widget-option.selected .widget-inspector').locator('button').first();
+    const firstBox = await first.boundingBox();
+    assert.ok(firstBox.y >= 0 && firstBox.y + firstBox.height <= viewport.height, `${label}: a list row's settings come into view`);
+    // #345: a real message replaces the how-to.
+    await button('Move Note').focus(); await page.keyboard.press('ArrowUp');
+    assert.equal(await hint.count(), 0, 'the how-to gives way to a layout message');
+    assert.match(await page.locator('.grid-status').innerText(), /^No room above$|^Note moved to column \d+, row \d+/);
+    // #349: the canvas resize handle keeps its look but takes a 44 × 44 hit area, also at the canvas edge.
+    await button('Move Calendar').focus();
+    const handle = await hitArea(page.getByRole('button', { name: 'Resize Calendar', exact: true }), `${label} resize handle`);
+    assert.deepEqual(handle.visual, viewport.width <= 480 ? [30, 30] : [30, 36], 'the visible handle keeps its size');
+    await button('Move Photo').focus();
+    await hitArea(page.getByRole('button', { name: 'Resize Photo', exact: true }), `${label} resize handle at the canvas corner`);
+    // #349: the Note's Clear keeps a 44 px target.
+    await button('Note').click();
+    const clear = await page.getByRole('button', { name: 'Clear', exact: true }).boundingBox();
+    assert.ok(clear.height >= 44 && clear.width >= 44, `${label}: Note Clear is 44 px: ${JSON.stringify(clear)}`);
+    if (capture) images.push({ name: `layout-${label}`, bytes: await page.screenshot() });
+    // #365: removal focus follows the grouped order: after Calendar comes Weather.
+    if (viewport.width === 1280) {
+      await button('Remove Calendar').focus(); await page.keyboard.press('Enter');
+      assert.equal(await focusedName(), 'Weather', 'removal focus follows the grouped order');
+    }
+    if (await page.locator('.studio-savebar').count()) { await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' }); }
+    checks.push(`${label} full board: Edit layout how-to and visible Grid label (#345); each canvas selection brings the inspector's first control into view without moving focus, and a list row too (#339); the how-to gives way to a message; the resize handle keeps its ${handle.visual.join(' × ')} look with a 44 × 44 hit area, also at the canvas corner, and Note Clear is 44 px (#349)${viewport.width === 1280 ? '; the list follows the picker groups and removal focus follows that order (#365)' : ''}`);
+  }
+  /** #349: on a coarse pointer the size families are 44 px tall. */
+  async function coarseTargets() {
+    await open({ width: 390, height: 844 }, 'reduce', defaultSettings(), { hasTouch: true });
+    await tab('Widgets'); await button('Clock').click();
+    const sizes = await page.locator('.widget-option.selected .size-options .button').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
+    assert.ok(sizes.length === 3 && sizes.every(height => height >= 44), `coarse-pointer size families are 44 px: ${sizes}`);
+    checks.push('390x844 with a coarse pointer: size family buttons are 44 px tall (#349)');
   }
   const familyActions = ACTIVE_WIDGET_IDS.reduce((total, id) => total + widgetSizes(id).length, 0);
   try {
@@ -167,6 +269,8 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       assert.equal(await page.locator('.widget-position-control').count(), 0);
       await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
       await button('Edit layout').click(); await inView(page.getByRole('combobox', { name: 'Grid density' }), 'Density');
+      await inView(page.locator('.canvas-hint'), 'Edit layout how-to (#345)');
+      assert.equal(await page.evaluate(() => `${document.documentElement.scrollWidth},${document.documentElement.scrollHeight}`), `${viewport.width},${viewport.height}`, 'Edit layout stays within the height budget');
       await button('Move Weather').focus();
       assert.equal(await page.getByRole('button', { name: /^Resize / }).count(), 1, 'only the selected/focused widget exposes a resize handle');
       await page.keyboard.press('Tab'); assert.equal(await button('Resize Weather').evaluate(element => element === document.activeElement), true, 'keyboard users can reach the selected resize handle');
@@ -207,6 +311,8 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       await alertRows(viewport);
       checks.push(`${viewport.width}x${viewport.height}: narrow/200% equivalent reflow, reachable picker/Add, fixed photo icon, focus clear of dirty Save, alerts clear of every canvas action`);
     }
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 1024, height: 600 }, { width: 390, height: 844 }]) await layoutEditing(viewport);
+    await coarseTargets();
     assert.deepEqual(errors, []); return { checks, images };
   } finally { await context?.close(); await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 }

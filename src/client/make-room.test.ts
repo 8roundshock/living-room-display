@@ -1,17 +1,26 @@
-// Room guidance (#183, #238): explanations and fixes come from the shared collision helpers, are
-// pure, and only ever produce boards that validation accepts.
+// Room guidance (#183, #238, #346) and layout descriptions (#340, #341): explanations and fixes come
+// from the shared collision helpers, are pure, and only ever produce boards that validation accepts.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { Settings, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
-import { WIDGET_CATALOG, fitWidgetFamily, gridProblem, placementSpan } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, fitGridDensity, fitWidgetFamily, gridProblem, placementSpan, reflowWidget, resizeWidgetSpan } from '../shared/widgets.ts';
 import {
   addToGrid,
   applyRoomFix,
+  cellPosition,
   columnOutlook,
+  densityFixLabel,
+  densityFixResult,
+  densityRefusal,
   describeRoomProblem,
   diagnoseRoom,
+  displacedNeighbours,
   listNames,
+  movedMessage,
+  placementDescription,
+  refusedMove,
+  resizedMessage,
   roomFixLabel,
   roomFixResult,
   roomProblem,
@@ -93,13 +102,13 @@ test('adding to a full board offers a smaller family, a finer grid or a reductio
   assert.equal(roomFixResult(medium, problem.fixes[0]!, applyRoomFix(settings.widgetGrid, medium, problem.fixes[0]!, settings.widgets)!), 'Grid switched to Fine. Countdown added.');
   assert.deepEqual(settings.widgetGrid, before);
 
-  // A board where only the small family fits offers "Try Small" first.
+  // A board where only the small family fits offers "Try small" first.
   const partial = qaBoard();
   partial.widgetGrid = fitWidgetFamily(partial.widgetGrid, 'preview', 'small', partial.widgets)!;
   const tryMedium = roomProblem(partial.widgetGrid, { kind: 'add', id: 'note', size: 'medium' }, partial.widgets);
   assert.ok(tryMedium);
   assert.deepEqual(tryMedium.fixes[0], { kind: 'size', size: 'small' });
-  assert.equal(roomFixLabel(tryMedium.fixes[0]!), 'Try Small');
+  assert.equal(roomFixLabel(tryMedium.fixes[0]!), 'Try small');
   const added = applyRoomFix(partial.widgetGrid, tryMedium.request, tryMedium.fixes[0]!, partial.widgets);
   assert.ok(added);
   assert.equal(added.placements.note.size, 'small');
@@ -112,6 +121,7 @@ test('with no fix the explanation says what to do instead', () => {
   assert.equal(describeRoomProblem({ kind: 'span', id: 'reminders', span: { columns: 3, rows: 6 } }, { blockers: ['clock'], fixes: [] }, 'balanced'), 'No room for a 3 × 6 Reminders beside Clock. Make Clock smaller or remove a widget.');
   assert.equal(describeRoomProblem({ kind: 'add', id: 'note', size: 'small' }, { blockers: [], fixes: [] }, 'fine'), 'No room for Note at small size. Remove a widget or make one smaller first.');
   assert.equal(listNames(['clock', 'weather', 'forecast'], 'or'), 'Clock, Weather or Forecast');
+  assert.equal(describeRoomProblem({ kind: 'span', id: 'reminders', span: { columns: 8, rows: 4 } }, { blockers: ['clock'], fixes: [] }, 'balanced'), 'No room for an 8 × 4 Reminders beside Clock. Make Clock smaller or remove a widget.');
 });
 
 test('a fix is recomputed against the current board and refuses stale or self-targeted edits', () => {
@@ -130,4 +140,75 @@ test('the column outlook qualifies the picker caption', () => {
   medium.widgetGrid.placements.weather = { ...medium.widgetGrid.placements.weather, size: 'medium' };
   assert.deepEqual(columnOutlook(medium.widgetGrid, 'reminders', medium.widgets), { fits: true, blockers: [] });
   assert.equal(columnOutlook(settings.widgetGrid, 'clock', settings.widgets), null, 'fixed-family widgets have no outlook');
+});
+
+/** Every active widget on one Balanced 12 × 8 board, every cell used (as in the palette and motion suites). */
+function fullBoard(): Settings {
+  const placements: Partial<Settings['widgetGrid']['placements']> = {
+    clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
+    sunMoon: { column: 0, row: 2, size: 'large' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
+    reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
+    note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
+  };
+  const settings = defaultSettings();
+  settings.widgets = Object.fromEntries(WIDGET_IDS.map((id) => [id, id in placements])) as Settings['widgets'];
+  Object.assign(settings.widgetGrid.placements, structuredClone(placements));
+  assert.equal(gridProblem(settings.widgetGrid, settings.widgets), null);
+  return settings;
+}
+
+test('fix labels share one capitalisation style (#310)', () => {
+  assert.equal(roomFixLabel({ kind: 'size', size: 'small' }), 'Try small');
+  assert.equal(roomFixLabel({ kind: 'density', density: 'fine' }), 'Switch the grid to Fine');
+  assert.equal(roomFixLabel({ kind: 'shrink', widget: 'weather', size: 'medium' }), 'Make room: Weather medium');
+  assert.equal(densityFixLabel({ density: 'spacious', count: 11, remove: 'photo', message: '' }), 'Make room: remove Photo');
+});
+
+test('a refused density names itself and the widget count, with a removal fix only when one fits (#346)', () => {
+  const settings = fullBoard(), before = structuredClone(settings.widgetGrid);
+  assert.equal(fitGridDensity(settings.widgetGrid, 'spacious', settings.widgets), null, 'Spacious cannot hold the full board');
+  const refusal = densityRefusal(settings.widgetGrid, 'spacious', settings.widgets);
+  assert.deepEqual(refusal, { density: 'spacious', count: 12, remove: null, message: "Spacious (8 × 6) can't fit these 12 widgets. Make some smaller or remove one, then try again." });
+  assert.deepEqual(settings.widgetGrid, before, 'diagnosis never changes the board');
+
+  // Without Photo, hiding the smallest widget that frees enough room is offered, and the fix fits.
+  const enabled = { ...settings.widgets, photo: false };
+  assert.equal(fitGridDensity(settings.widgetGrid, 'spacious', enabled), null);
+  const fixable = densityRefusal(settings.widgetGrid, 'spacious', enabled);
+  assert.equal(fixable.message, "Spacious (8 × 6) can't fit these 11 widgets.");
+  assert.equal(fixable.remove, 'preview');
+  assert.equal(densityFixLabel(fixable), 'Make room: remove Last screen');
+  const without = { ...enabled, preview: false };
+  const fit = fitGridDensity(settings.widgetGrid, 'spacious', without);
+  assert.ok(fit, 'the offered removal makes the density fit');
+  assert.equal(fit.grid.density, 'spacious');
+  assert.equal(gridProblem(fit.grid, without), null, 'the fixed board is valid');
+  assert.match(densityFixResult('preview', 'spacious', fit.resized), /^Last screen removed and the grid switched to Spacious\. .+ to fit\.$/);
+  assert.equal(densityFixResult('photo', 'fine', []), 'Photo removed and the grid switched to Fine.');
+});
+
+test('layout results name the new place or size and the neighbours they moved (#340, #341)', () => {
+  const settings = defaultSettings(), base = settings.widgetGrid, enabled = settings.widgets;
+  assert.equal(cellPosition({ column: 6, row: 4 }), 'column 7, row 5');
+  assert.equal(placementDescription('preview', base.placements.preview), 'Column 9, row 5 · Medium');
+  assert.equal(placementDescription('reminders', base.placements.reminders), 'Column 1, row 5 · 2 × 2');
+  const moved = reflowWidget(base, 'preview', { ...base.placements.preview, column: 7 }, enabled);
+  assert.ok(moved);
+  assert.equal(movedMessage(base, moved, 'preview', enabled), 'Last screen moved to column 8, row 5');
+  const pushed = reflowWidget(base, 'clock', { ...base.placements.clock, column: 1 }, enabled);
+  assert.ok(pushed);
+  assert.match(movedMessage(base, pushed, 'clock', enabled), /^Clock moved to column 2, row 1 · .+ to make room$/);
+  const small = fitWidgetFamily(base, 'preview', 'small', enabled);
+  assert.ok(small);
+  assert.equal(resizedMessage(base, small, 'preview', enabled), 'Last screen resized to Small', 'a family is named as its size button reads');
+  // A taller Reminders pushes Forecast aside; computed from the same base, the shorter step puts it back.
+  const taller = resizeWidgetSpan(base, 'reminders', { columns: 2, rows: 3 }, enabled);
+  assert.ok(taller);
+  assert.equal(resizedMessage(base, taller, 'reminders', enabled, base), 'Reminders resized to 2 × 3 · Forecast moved right to make room');
+  const shorter = resizeWidgetSpan(base, 'reminders', { columns: 2, rows: 2 }, enabled);
+  assert.ok(shorter);
+  assert.deepEqual(shorter, base, 'the shorter step from the base is the base board');
+  assert.equal(displacedNeighbours(taller, shorter, 'reminders', enabled, base), 'Forecast moved back');
+  assert.equal(displacedNeighbours(base, small, 'preview', enabled), '', 'nothing else moved');
+  assert.deepEqual((['left', 'right', 'up', 'down'] as const).map(refusedMove), ['No room to the left', 'No room to the right', 'No room above', 'No room below']);
 });

@@ -1,8 +1,7 @@
-import type { Settings, WidgetId } from '../shared/contracts';
+import type { Settings, WidgetGrid, WidgetId } from '../shared/contracts';
 import { useEffect, useRef } from 'react';
 import {
   WIDGET_CATALOG,
-  WIDGET_IDS,
   isActiveWidget,
   isFreeSize,
   placementLabel,
@@ -13,13 +12,62 @@ import {
 import { FreeSizeControls, RoomNotice } from './FreeSizeControls';
 import { Icon } from './icons';
 import type { RoomFix, RoomProblem } from './make-room';
-import { WidgetPicker } from './WidgetPicker';
+import { WidgetPicker, pickerGroups } from './WidgetPicker';
 import { WIDGET_MODULES } from './widgets/registry';
+
+/**
+ * The Widgets list order (#365): the picker's groups (Time, Weather & sky, Personal, Pictures) with
+ * catalog order inside each, so related widgets sit together. Removal focus follows the same order.
+ */
+export function widgetListOrder(widgets: Partial<Record<WidgetId, boolean>>): WidgetId[] {
+  return pickerGroups().flatMap((group) => group.ids).filter((id) => isActiveWidget(id) && widgets[id]);
+}
+
+/** What the inspector scrolls into view after a selection or a no-room explanation (#339, #285). */
+export interface InspectorReveal {
+  id: WidgetId;
+  /** The selected widget's whole settings, or its no-room explanation. */
+  target: 'option' | 'room';
+  /**
+   * Whether a stacked layout (≤700 px) may scroll the page: after a list row click, an add or a canvas
+   * tap, not for a canvas drag or a canvas widget focused from the keyboard.
+   */
+  page: boolean;
+}
+
+// Pointers held down anywhere: a canvas press selects at pointerdown, and the inspector waits for the
+// release before it scrolls, so a stacked page never moves under a drag (#339).
+const heldPointers = new Set<number>();
+if (typeof window !== 'undefined') {
+  window.addEventListener('pointerdown', (event) => heldPointers.add(event.pointerId), true);
+  for (const type of ['pointerup', 'pointercancel'] as const)
+    window.addEventListener(type, (event) => heldPointers.delete(event.pointerId), true);
+  window.addEventListener('blur', () => heldPointers.clear());
+}
+/** Runs `action` now, or once no pointer is held; returns a cleanup. */
+function afterPointerRelease(action: () => void): () => void {
+  if (!heldPointers.size) {
+    action();
+    return () => {};
+  }
+  const release = () => {
+    if (heldPointers.size) return;
+    stop();
+    action();
+  };
+  const stop = () => {
+    for (const type of ['pointerup', 'pointercancel'] as const) window.removeEventListener(type, release, true);
+  };
+  // Registered after the tracker above, so the released pointer is already gone when this runs.
+  for (const type of ['pointerup', 'pointercancel'] as const) window.addEventListener(type, release, true);
+  return stop;
+}
 
 export function WidgetInspector({
   settings,
   selected,
   onSelect,
+  reveal,
   pickerOpen,
   onPicker,
   onAdd,
@@ -29,6 +77,7 @@ export function WidgetInspector({
   onRemove,
   onResize,
   onResizeSpan,
+  resizeBase,
   onChange,
   photoAvailable,
   photoBusy,
@@ -41,6 +90,8 @@ export function WidgetInspector({
   settings: Settings;
   selected: WidgetId | null;
   onSelect: (id: WidgetId | null) => void;
+  /** Scroll this into view once it renders (a new object per request). */
+  reveal: InspectorReveal | null;
   pickerOpen: boolean;
   onPicker: (open: boolean) => void;
   /** Adds a widget as a draft; returns the no-room explanation when it does not fit. */
@@ -54,7 +105,8 @@ export function WidgetInspector({
   onRemove: (id: WidgetId) => void;
   onResize: (id: WidgetId, size: WidgetSize) => void;
   onResizeSpan: (id: WidgetId, span: WidgetSpan) => void;
-  onMove: (id: WidgetId, dx: number, dy: number) => void;
+  /** The board a resize of this widget starts from (#340). */
+  resizeBase: (id: WidgetId) => WidgetGrid;
   onChange: (update: (settings: Settings) => Settings) => void;
   photoAvailable: boolean;
   photoBusy: boolean;
@@ -62,14 +114,37 @@ export function WidgetInspector({
   onPhotoClear: () => void;
   onPhotoCancel: () => void;
   saving: boolean;
+  /**
+   * A layout message from an edit made in this list ("Clock removed"). Shown here only: the editor's
+   * always-mounted layout announcer speaks it, so this copy is not a live region (#311).
+   */
   message: string;
 }) {
   const addButton = useRef<HTMLButtonElement>(null),
-    wasOpen = useRef(false);
+    wasOpen = useRef(false),
+    list = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (wasOpen.current && !pickerOpen) addButton.current?.focus();
     wasOpen.current = pickerOpen;
   }, [pickerOpen]);
+  // #339: bring the selected widget's settings (or its no-room explanation) into view without moving
+  // focus: inside the inspector panel on desktop, the page on stacked layouts. `block: 'nearest'`
+  // shows the whole option when it fits and its top when it does not; the root's scroll padding
+  // reserves the measured Save bar height. Instant when motion is reduced or animation is Off.
+  useEffect(() => {
+    if (!reveal || reveal.id !== selected || pickerOpen) return;
+    if (!reveal.page && window.matchMedia('(max-width: 700px)').matches) return;
+    return afterPointerRelease(() => {
+      const option = list.current?.querySelector<HTMLElement>(`[data-widget-option="${reveal.id}"]`);
+      const target = reveal.target === 'room' ? option?.querySelector<HTMLElement>('.room-notice:not([data-empty])') : option;
+      if (!target?.isConnected) return;
+      const still =
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+        target.closest('.studio')?.getAttribute('data-animation') === 'off';
+      target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: still ? 'instant' : 'smooth' });
+    });
+  }, [reveal, pickerOpen]);
+  const rows = widgetListOrder(settings.widgets);
   if (pickerOpen)
     return (
       <WidgetPicker
@@ -93,7 +168,7 @@ export function WidgetInspector({
           <Icon name="plus" size={20} />
         </button>
       </div>
-      {!WIDGET_IDS.some((id) => isActiveWidget(id) && settings.widgets[id]) && (
+      {!rows.length && (
         <div className="empty-reminders">
           <span>
             <Icon name="plus" size={24} />
@@ -104,13 +179,9 @@ export function WidgetInspector({
           </button>
         </div>
       )}
-      <div className="widget-list">
-        {message && (
-          <p className="inline-message" role="status">
-            {message}
-          </p>
-        )}
-        {WIDGET_IDS.filter((id) => isActiveWidget(id) && settings.widgets[id]).map((id) => {
+      <div className="widget-list" ref={list}>
+        {message && <p className="inline-message">{message}</p>}
+        {rows.map((id) => {
           const widget = WIDGET_CATALOG[id],
             placement = settings.widgetGrid.placements[id],
             ModuleSettings = WIDGET_MODULES[id].Settings,
@@ -119,6 +190,7 @@ export function WidgetInspector({
             <div
               key={id}
               className={`widget-option ${selected === id ? 'selected' : ''}`}
+              data-widget-option={id}
             >
               <div className="widget-row">
                 <button
@@ -147,7 +219,7 @@ export function WidgetInspector({
                 <div className="widget-inspector">
                   <span className="field-label">Size</span>
                   {isFreeSize(id) ? (
-                    <FreeSizeControls id={id} settings={settings} onResize={onResize} onResizeSpan={onResizeSpan} problem={problem} onFix={onFix} />
+                    <FreeSizeControls id={id} settings={settings} board={resizeBase(id)} onResize={onResize} onResizeSpan={onResizeSpan} problem={problem} onFix={onFix} />
                   ) : <><div className="size-options">
                     {widgetSizes(id).map((size) => (
                       <button

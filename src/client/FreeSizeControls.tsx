@@ -1,5 +1,5 @@
 import { useId, useMemo } from 'react';
-import type { Settings, WidgetId } from '../shared/contracts';
+import type { Settings, WidgetGrid, WidgetId } from '../shared/contracts';
 import {
   GRID_DENSITIES,
   WIDGET_CATALOG,
@@ -42,6 +42,7 @@ export function RoomNotice({ problem, onFix }: { problem: RoomProblem | null; on
 export function FreeSizeControls({
   id,
   settings,
+  board,
   onResize,
   onResizeSpan,
   problem,
@@ -49,6 +50,8 @@ export function FreeSizeControls({
 }: {
   id: WidgetId;
   settings: Settings;
+  /** The board a resize of this widget starts from (#340): the exploration's base, else the draft's. */
+  board: WidgetGrid;
   onResize: (id: WidgetId, size: WidgetSize) => void;
   onResizeSpan: (id: WidgetId, span: WidgetSpan) => void;
   /** The current no-room explanation for this widget, if any. */
@@ -58,10 +61,10 @@ export function FreeSizeControls({
   const reasonId = useId();
   const { density } = settings.widgetGrid,
     limits = freeSpanLimits(id, density);
-  const grid = settings.widgetGrid, enabled = settings.widgets;
+  const grid = board, enabled = settings.widgets;
   const name = WIDGET_CATALOG[id].name,
     hint = WIDGET_MODULES[id].sizeHint,
-    placement = grid.placements[id],
+    placement = settings.widgetGrid.placements[id],
     rows = GRID_DENSITIES[density].rows,
     column = !!placement.span && placement.span.columns === 2 && placement.span.rows === rows;
   const presets: { key: string; label: string; pressed: boolean; request: RoomRequest; choose: () => void }[] = [

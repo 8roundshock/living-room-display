@@ -167,17 +167,17 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await cancel();
     assert.equal(await canvas('countdown').count(), 0, 'Cancel restores the board');
     assert.equal(await page.getByRole('combobox', { name: 'Grid density' }).inputValue(), 'balanced', 'Cancel restores the grid');
-    // "Try Small" when only the small family fits.
+    // "Try small" when only the small family fits.
     await reset(settings => { qaBoard(settings); settings.widgetGrid = fitWidgetFamily(settings.widgetGrid, 'preview', 'small', settings.widgets); });
     await open();
     await tab('Widgets'); await button('Add widget').click();
     await button('Preview Note').click(); await button('Note medium').click(); await button('Add Note').click(); await page.clock.runFor(100);
     assert.equal(await page.getByText('No room for Note at medium size.', { exact: true }).count(), 1);
-    await button('Try Small').click(); await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    await button('Try small').click(); await page.locator('.widget-picker').waitFor({ state: 'detached' });
     assert.equal(await canvas('note').getAttribute('data-widget-size'), 'small');
     await cancel();
     await reset(); await open();
-    checks.push('“No room” (#238): shown once in one live region, cleared by another size or closing the picker; “Switch the grid to Fine” and “Try Small” add the widget as one draft edit that Cancel restores');
+    checks.push('“No room” (#238): shown once in one live region, cleared by another size or closing the picker; “Switch the grid to Fine” and “Try small” add the widget as one draft edit that Cancel restores');
 
     // 2. Calendar: add, week start, Cancel, Save, reload.
     await addFromPicker('Calendar');

@@ -1,11 +1,12 @@
 /**
- * Room guidance for the editor (#183, #238): when an add, a family change or a free-size span has
- * no room, say what takes the space and find the smallest draft edit that makes it fit. Every
- * answer comes from the shared collision helpers (`reflowWidget`, `fitWidgetFamily`,
+ * Room guidance for the editor (#183, #238, #346): when an add, a family change, a free-size span or
+ * a grid density has no room, say what takes the space and find the smallest draft edit that makes it
+ * fit. Every answer comes from the shared collision helpers (`reflowWidget`, `fitWidgetFamily`,
  * `resizeWidgetSpan`, `fitGridDensity`), so guidance can never promise a board that validation
- * would reject. Pure; nothing here changes a board without an explicit user action.
+ * would reject. It also words the result of each layout edit for the editor's status line (#341).
+ * Pure; nothing here changes a board without an explicit user action.
  */
-import type { WidgetGrid, WidgetId } from '../shared/contracts.ts';
+import type { WidgetGrid, WidgetId, WidgetPlacement } from '../shared/contracts.ts';
 import {
   GRID_DENSITIES,
   WIDGET_CATALOG,
@@ -16,10 +17,13 @@ import {
   freeSpanLimits,
   intersects,
   isActiveWidget,
+  isFreeSize,
   placementSpan,
   reflowWidget,
+  repackGrid,
   resizeWidgetSpan,
   widgetSizes,
+  type DensityFit,
   type GridDensity,
   type WidgetSize,
   type WidgetSpan,
@@ -35,7 +39,7 @@ export type RoomRequest =
 
 /** One draft edit that makes a request fit. */
 export type RoomFix =
-  /** Add at a smaller family of the same widget ("Try Small"). */
+  /** Add at a smaller family of the same widget ("Try small"). */
   | { kind: 'size'; size: WidgetSize }
   /** Switch to a finer grid without resizing anything, then retry ("Switch the grid to Fine"). */
   | { kind: 'density'; density: GridDensity }
@@ -141,7 +145,6 @@ export function diagnoseRoom(grid: WidgetGrid, request: RoomRequest, enabled: Vi
   return { blockers: WIDGET_IDS.filter((id) => blockers.includes(id)), fixes };
 }
 
-/** Applies one fix and the request together; null when the board no longer allows it. */
 /** A no-room explanation as the editor shows it: the request, the board it was computed for and its fixes. */
 export interface RoomProblem extends RoomDiagnosis {
   request: RoomRequest;
@@ -154,6 +157,7 @@ export function roomProblem(grid: WidgetGrid, request: RoomRequest, enabled: Vis
   return diagnosis && { ...diagnosis, request, grid, enabled: { ...enabled }, message: describeRoomProblem(request, diagnosis, grid.density) };
 }
 
+/** Applies one fix and the request together; null when the board no longer allows it. */
 export function applyRoomFix(grid: WidgetGrid, request: RoomRequest, fix: RoomFix, enabled: Visibility): WidgetGrid | null {
   if (fix.kind === 'size') return request.kind === 'span' ? null : fulfilRequest(grid, { ...request, size: fix.size }, enabled);
   if (fix.kind === 'density') {
@@ -175,11 +179,14 @@ export function listNames(ids: WidgetId[], conjunction: 'and' | 'or' = 'and'): s
   return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} ${conjunction} ${names.at(-1)}`;
 }
 
-/** "a full-height Reminders column", "a 3 × 8 Reminders", "Large Reminders". */
+/** "a full-height Reminders column", "a 3 × 8 Reminders", "an 8 × 4 Reminders", "Large Reminders". */
 export function requestTarget(request: RoomRequest, density: GridDensity): string {
   const name = WIDGET_CATALOG[request.id].name;
-  if (request.kind === 'span') return isColumnSpan(request.id, request.span, density) ? `a full-height ${name} column` : `a ${request.span.columns} × ${request.span.rows} ${name}`;
-  return `${familyName(request.size)} ${name}`;
+  if (request.kind !== 'span') return `${familyName(request.size)} ${name}`;
+  if (isColumnSpan(request.id, request.span, density)) return `a full-height ${name} column`;
+  // Eight, eleven and eighteen are said with a vowel sound.
+  const article = /^(8|11|18)/.test(String(request.span.columns)) ? 'an' : 'a';
+  return `${article} ${request.span.columns} × ${request.span.rows} ${name}`;
 }
 
 /** The sentence a live region reads for a request with no room. */
@@ -195,9 +202,13 @@ export function describeRoomProblem(request: RoomRequest, diagnosis: RoomDiagnos
   return `${lead} ${diagnosis.blockers.length > 1 ? 'Make one of them smaller' : diagnosis.blockers.length ? `Make ${WIDGET_CATALOG[diagnosis.blockers[0]!].name} smaller` : 'Make another widget smaller'} or remove a widget.`;
 }
 
-/** Button text for a fix. */
+/**
+ * Button text for a fix. Fix labels share one style (#310): sentence case, widget and grid names
+ * capitalised, families in lower case as in the sentences around them ("Try small", "Switch the grid
+ * to Fine", "Make room: Weather medium", "Make room: remove Photo").
+ */
 export function roomFixLabel(fix: RoomFix): string {
-  if (fix.kind === 'size') return `Try ${familyName(fix.size)}`;
+  if (fix.kind === 'size') return `Try ${fix.size}`;
   if (fix.kind === 'density') return `Switch the grid to ${densityName(fix.density)}`;
   return `Make room: ${WIDGET_CATALOG[fix.widget].name} ${fix.size}`;
 }
@@ -231,4 +242,101 @@ export function columnOutlook(grid: WidgetGrid, id: WidgetId, enabled: Visibilit
   if (board.placements[id].span && isColumnSpan(id, board.placements[id].span!, board.density)) return { fits: true, blockers: [] };
   const diagnosis = diagnoseRoom(board, { kind: 'span', id, span }, visible, { size: false, density: false });
   return diagnosis ? { fits: false, blockers: diagnosis.fixes.length ? diagnosis.blockers : [] } : { fits: true, blockers: [] };
+}
+
+/**
+ * Why a grid density cannot hold the board (#346), and one draft fix when the helpers find it. Call
+ * it only after `switchGridDensity` refused the density. Making one widget smaller never helps:
+ * `fitGridDensity` has already tried every family reduction. Hiding one widget can, so the smallest
+ * widget whose removal lets the density fit is offered ("Make room: remove Photo"); Cancel restores
+ * it. Each candidate is first packed with every widget at its smallest family, the cheapest variant
+ * `fitGridDensity` tries: when that packs, the full fit succeeds, so a board with no fix costs one
+ * bounded packing attempt per widget rather than a full density search each.
+ */
+export interface DensityRefusal {
+  density: GridDensity;
+  /** Visible widgets on the refused board. */
+  count: number;
+  /** The widget whose removal lets the density fit, or null when no single removal does. */
+  remove: WidgetId | null;
+  message: string;
+}
+export function densityRefusal(grid: WidgetGrid, density: GridDensity, enabled: Visibility): DensityRefusal {
+  const visible = WIDGET_IDS.filter((id) => enabled[id] && isActiveWidget(id));
+  const smallest: WidgetGrid = { ...grid, placements: { ...grid.placements } };
+  for (const id of visible) {
+    const { span: _span, ...placement } = grid.placements[id];
+    smallest.placements[id] = { ...placement, size: widgetSizes(id)[0]! };
+  }
+  const candidates = [...visible].sort((a, b) => area(placementSpan(a, grid.placements[a])) - area(placementSpan(b, grid.placements[b])) || WIDGET_IDS.indexOf(a) - WIDGET_IDS.indexOf(b));
+  const remove = candidates.find((id) => !!repackGrid(smallest, density, { ...enabled, [id]: false })) ?? null;
+  const { columns, rows } = GRID_DENSITIES[density];
+  const lead = `${densityName(density)} (${columns} × ${rows}) can't fit ${visible.length === 1 ? 'this widget' : `these ${visible.length} widgets`}.`;
+  return { density, count: visible.length, remove, message: remove ? lead : `${lead} Make some smaller or remove one, then try again.` };
+}
+export function densityFixLabel(refusal: DensityRefusal): string {
+  return refusal.remove ? `Make room: remove ${WIDGET_CATALOG[refusal.remove].name}` : '';
+}
+/** "Clock medium · Reminders 2 × 8 → small": the families a density fit reduced (#152). */
+export function densityResized(resized: DensityFit['resized']): string {
+  return resized.map(({ id, to, span }) => `${WIDGET_CATALOG[id].name} ${span ? `${span.columns} × ${span.rows} → ` : ''}${to}`).join(' · ');
+}
+/** What a density fix changed, for the status line. */
+export function densityFixResult(remove: WidgetId, density: GridDensity, resized: DensityFit['resized']): string {
+  const changed = densityResized(resized);
+  return `${WIDGET_CATALOG[remove].name} removed and the grid switched to ${densityName(density)}.${changed ? ` ${changed} to fit.` : ''}`;
+}
+
+/** "column 7, row 5": a widget's top-left cell, counted from 1 (#341). */
+export function cellPosition(placement: Pick<WidgetPlacement, 'column' | 'row'>): string {
+  return `column ${placement.column + 1}, row ${placement.row + 1}`;
+}
+/** The size as the inspector names it: a family ("Small") or a free-size widget's cells ("2 × 3"). */
+export function sizeLabel(id: WidgetId, placement: WidgetPlacement): string {
+  if (!isFreeSize(id)) return familyName(placement.size);
+  const span = placementSpan(id, placement);
+  return `${span.columns} × ${span.rows}`;
+}
+/** A canvas widget's description for assistive technology: "Column 9, row 5 · Medium". */
+export function placementDescription(id: WidgetId, placement: WidgetPlacement): string {
+  const position = cellPosition(placement);
+  return `${position[0]!.toUpperCase()}${position.slice(1)} · ${sizeLabel(id, placement)}`;
+}
+export type MoveDirection = 'left' | 'right' | 'up' | 'down';
+/** A refused keyboard move: "No room to the left", "No room above". */
+export function refusedMove(direction: MoveDirection): string {
+  return direction === 'up' ? 'No room above' : direction === 'down' ? 'No room below' : `No room to the ${direction}`;
+}
+function joinList(items: string[]): string {
+  return items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+}
+function direction(dx: number, dy: number): string {
+  const vertical = dy > 0 ? 'down' : dy < 0 ? 'up' : '', horizontal = dx > 0 ? 'right' : dx < 0 ? 'left' : '';
+  return vertical && horizontal ? `${vertical} and ${horizontal}` : vertical || horizontal;
+}
+/**
+ * The neighbours a layout edit of `id` moved (#340): "Forecast moved right to make room". With the
+ * board a resize exploration started from, a neighbour that returns to its place there reads
+ * "Forecast moved back". Empty when no other visible widget moved.
+ */
+export function displacedNeighbours(before: WidgetGrid, after: WidgetGrid, id: WidgetId, enabled: Visibility, base?: WidgetGrid): string {
+  const pushed: string[] = [], returned: WidgetId[] = [];
+  for (const other of WIDGET_IDS) {
+    if (other === id || !enabled[other] || !isActiveWidget(other)) continue;
+    const from = before.placements[other], to = after.placements[other], home = base?.placements[other];
+    if (from.column === to.column && from.row === to.row) continue;
+    if (home && home.column === to.column && home.row === to.row) returned.push(other);
+    else pushed.push(`${WIDGET_CATALOG[other].name} moved ${direction(to.column - from.column, to.row - from.row)}`);
+  }
+  return [pushed.length ? `${joinList(pushed)} to make room` : '', returned.length ? `${listNames(returned)} moved back` : ''].filter(Boolean).join(' · ');
+}
+/** "Last screen moved to column 7, row 5", plus any neighbour it moved (#341). */
+export function movedMessage(before: WidgetGrid, after: WidgetGrid, id: WidgetId, enabled: Visibility): string {
+  const displaced = displacedNeighbours(before, after, id, enabled);
+  return `${WIDGET_CATALOG[id].name} moved to ${cellPosition(after.placements[id])}${displaced ? ` · ${displaced}` : ''}`;
+}
+/** "Last screen resized to Small" or "Reminders resized to 2 × 3", plus any neighbour it moved (#340, #341). */
+export function resizedMessage(before: WidgetGrid, after: WidgetGrid, id: WidgetId, enabled: Visibility, base?: WidgetGrid): string {
+  const displaced = displacedNeighbours(before, after, id, enabled, base);
+  return `${WIDGET_CATALOG[id].name} resized to ${sizeLabel(id, after.placements[id])}${displaced ? ` · ${displaced}` : ''}`;
 }

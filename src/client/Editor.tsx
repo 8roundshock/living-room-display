@@ -53,9 +53,8 @@ import {
   WIDGET_CATALOG,
   WIDGET_IDS,
   fitWidgetFamily,
-  isActiveWidget,
   isFreeSize,
-  reflowWidget,
+  placementSpan,
   resizeWidgetSpan as resizeSpanGrid,
   switchGridDensity,
   type GridDensityHistory,
@@ -63,8 +62,8 @@ import {
   type WidgetSize,
   type WidgetSpan,
 } from '../shared/widgets';
-import { GridEditor } from './GridEditor';
-import { WidgetInspector } from './WidgetInspector';
+import { GridEditor, type LayoutEdit } from './GridEditor';
+import { WidgetInspector, widgetListOrder, type InspectorReveal } from './WidgetInspector';
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
@@ -73,9 +72,18 @@ import { FirstRunCard, readFirstRunDismissed, rememberFirstRunDismissed } from '
 import {
   addToGrid,
   applyRoomFix,
+  densityFixLabel,
+  densityFixResult,
+  densityRefusal,
+  densityResized,
+  displacedNeighbours,
   fulfilRequest,
+  isColumnSpan,
+  movedMessage,
+  resizedMessage,
   roomFixResult,
   roomProblem as diagnoseRoomProblem,
+  type DensityRefusal,
   type RoomFix,
   type RoomProblem,
   type RoomRequest,
@@ -226,13 +234,27 @@ export function Editor({
   const [composition, setComposition] = useState<number | undefined>(0);
   const [movementPreview, setMovementPreview] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<WidgetId | null>(null);
+  const selectedRef = useRef<WidgetId | null>(null);
+  // #339: what the Widgets tab scrolls into view after a selection, an add or a no-room explanation.
+  const [reveal, setReveal] = useState<InspectorReveal | null>(null);
   const [layoutEditing, setLayoutEditing] = useState(false),
     [pickerOpen, setPickerOpen] = useState(false);
-  const [gridPreview, setGridPreview] = useState<WidgetGrid | null>(null),
-    [gridMessage, setGridMessage] = useState('');
+  const [gridPreview, setGridPreview] = useState<WidgetGrid | null>(null);
+  // Layout messages (#311, #341): one visible copy (the canvas line, or the Widgets list for an edit
+  // made there) and one always-mounted announcer. Each message gets a new id, so the announcer
+  // replaces its node and an identical result ("No room to the left" twice) is announced again.
+  const [layoutMessage, setLayoutMessage] = useState<{ text: string; id: number; where: 'canvas' | 'list' } | null>(null);
+  const messageId = useRef(0);
   const [gridEpoch, setGridEpoch] = useState(0);
-  // A resize with no room explains itself beside that widget's size controls (#183).
-  const [roomProblem, setRoomProblem] = useState<RoomProblem | null>(null);
+  // A resize with no room explains itself beside that widget's size controls (#183, #285), and a
+  // refused grid density in the canvas line (#346). Each belongs to the board it was shown on: any
+  // later layout change, density change or Cancel clears it for good, so it never re-shows (#310).
+  const [roomNotice, setRoomNotice] = useState<{ problem: RoomProblem; board: WidgetGrid; widgets: Settings['widgets'] } | null>(null);
+  const [densityNotice, setDensityNotice] = useState<{ refusal: DensityRefusal; board: WidgetGrid; widgets: Settings['widgets'] } | null>(null);
+  // #340: consecutive resize steps of one widget are one exploration, each computed from the board
+  // before it began, so a neighbour pushed aside returns once the widget is smaller again. It ends
+  // with any other layout edit: a move, another widget's resize, an add or removal, or a density change.
+  const resizeExploration = useRef<{ id: WidgetId; base: WidgetGrid; widgets: Settings['widgets']; result: WidgetGrid } | null>(null);
   // #252: the first-run location card; dismissal lives in this browser only.
   const [firstRunDismissed, setFirstRunDismissed] = useState(readFirstRunDismissed);
   const [cityFocus, setCityFocus] = useState(0);
@@ -414,7 +436,10 @@ export function Editor({
     setGridEpoch(value => value + 1);
     setGridGesture(null);
     densityHistory.current = undefined;
-    setGridMessage('');
+    resizeExploration.current = null;
+    setRoomNotice(null);
+    setDensityNotice(null);
+    say('');
     locationEpoch.current++;
     guardLocation.current = false;
     setLocationBusy(false);
@@ -472,17 +497,62 @@ export function Editor({
     cancelPhoto();
     updatePhoto(state.photo?.available ? null : undefined);
   }
+  /** Shows a layout message once: in the canvas line, or in the Widgets list for an edit made there. */
+  function say(text: string, where: 'canvas' | 'list' = 'canvas') {
+    setLayoutMessage(text ? { text, id: ++messageId.current, where } : null);
+  }
+  /** A canvas-line message (density results, crowded-out widgets after a poll). */
+  function setGridMessage(text: string) {
+    say(text, 'canvas');
+  }
+  /** Selects a widget; `page` lets a stacked layout scroll the page to its settings (#339). */
+  function selectWidget(id: WidgetId | null, page = false) {
+    const changed = id !== selectedRef.current;
+    selectedRef.current = id;
+    setSelectedWidget(id);
+    if (changed && roomNotice && roomNotice.problem.request.id !== id) setRoomNotice(null);
+    if (!id) return;
+    if (changed) setReveal({ id, target: 'option', page });
+    // A canvas press selects at pointerdown; releasing it without a drag (a tap) may then scroll a stacked page.
+    else if (page) setReveal((current) => (current?.id === id && !current.page ? { ...current, page } : current));
+  }
+  /** The board a resize of `id` starts from: its exploration's base while the draft still shows that exploration (#340). */
+  function resizeBase(id: WidgetId): WidgetGrid {
+    const current = draftRef.current, exploration = resizeExploration.current;
+    return exploration && exploration.id === id && same(exploration.result, current.widgetGrid) && same(exploration.widgets, current.widgets)
+      ? exploration.base
+      : current.widgetGrid;
+  }
   function commitGrid(grid: WidgetGrid) {
-    setGridMessage('');
+    resizeExploration.current = null;
+    say('');
     change((previous) => ({ ...previous, widgetGrid: grid }));
   }
-  /** The no-room explanation for a request on the current draft (#183, #238). */
+  /** Commits one resize step (#340): the whole result for the status line and the neighbours it moved. */
+  function commitResize(id: WidgetId, grid: WidgetGrid): { message: string; displaced: string } {
+    const before = draftRef.current.widgetGrid, widgets = draftRef.current.widgets, base = resizeBase(id);
+    commitGrid(grid);
+    resizeExploration.current = { id, base, widgets: { ...widgets }, result: grid };
+    setRoomNotice(null);
+    return { message: resizedMessage(before, grid, id, widgets, base), displaced: displacedNeighbours(before, grid, id, widgets, base) };
+  }
+  // A notice belongs to the board it was shown on; once the board changes it is gone for good (#310).
+  const currentRoomNotice =
+    roomNotice && same(roomNotice.board, draft.widgetGrid) && same(roomNotice.widgets, draft.widgets) ? roomNotice : null;
+  const currentDensityNotice =
+    densityNotice && same(densityNotice.board, draft.widgetGrid) && same(densityNotice.widgets, draft.widgets) ? densityNotice : null;
+  useEffect(() => {
+    if (roomNotice && !currentRoomNotice) setRoomNotice(null);
+    if (densityNotice && !currentDensityNotice) setDensityNotice(null);
+  }, [draft.widgetGrid, draft.widgets]);
+  /** The no-room explanation for a request (#183, #238), on the board the request was tried against. */
   function explainNoRoom(request: RoomRequest): RoomProblem {
-    const grid = draftRef.current.widgetGrid, enabled = draftRef.current.widgets;
+    const grid = request.kind === 'add' ? draftRef.current.widgetGrid : resizeBase(request.id), enabled = draftRef.current.widgets;
     return diagnoseRoomProblem(grid, request, enabled)
       ?? { request, grid, enabled: { ...enabled }, blockers: [], fixes: [], message: 'Layout changed. Try again.' };
   }
   function finishAdd(id: WidgetId, grid: WidgetGrid, message: string) {
+    resizeExploration.current = null;
     change((previous) => ({
       ...previous,
       widgetGrid: grid,
@@ -492,11 +562,12 @@ export function Editor({
           ? { ...previous.preview, enabled: true }
           : previous.preview,
     }));
-    setSelectedWidget(id);
+    selectWidget(id, true);
     setPickerOpen(false);
     setLayoutEditing(true);
-    setRoomProblem(null);
-    setGridMessage(message);
+    setRoomNotice(null);
+    setDensityNotice(null);
+    say(message, 'list');
   }
   /** Adds a widget as a draft; the picker shows the returned explanation when it has no room. */
   function addWidget(id: WidgetId, size: WidgetSize): RoomProblem | null {
@@ -505,37 +576,72 @@ export function Editor({
     finishAdd(id, next, `${WIDGET_CATALOG[id].name} added`);
     return null;
   }
+  /** The inspector's size control that shows a resize request once it applies (#310). */
+  function sizeControl(request: RoomRequest, before: WidgetGrid['placements'][WidgetId]): string[] {
+    const name = CSS.escape(WIDGET_CATALOG[request.id].name), option = `.widget-option[data-widget-option="${request.id}"]`;
+    if (request.kind === 'family') return [`${option} [aria-label="${name} size ${request.size}"]`];
+    const column = `${option} [aria-label="${name} size column"]`;
+    if (request.kind !== 'span' || isColumnSpan(request.id, request.span, draftRef.current.widgetGrid.density)) return [column];
+    const span = placementSpan(request.id, before);
+    const [axis, step] = request.span.rows !== span.rows
+      ? ['height', request.span.rows > span.rows ? 'Taller' : 'Shorter']
+      : ['width', request.span.columns > span.columns ? 'Wider' : 'Narrower'];
+    return [`${option} [role="group"][aria-label="${name} ${axis}"] [aria-label="${step}"]`, column];
+  }
   /** Applies a no-room fix and its request as one draft edit; Cancel restores the board. */
   function applyFix(problem: RoomProblem, fix: RoomFix): RoomProblem | null {
     const { request } = problem, enabled = draftRef.current.widgets;
-    const grid = draftRef.current.widgetGrid;
+    const grid = request.kind === 'add' ? draftRef.current.widgetGrid : resizeBase(request.id);
     const fixed = applyRoomFix(grid, request, fix, enabled);
     // The draft may have changed since the explanation; a request that now fits needs no fix.
     const next = fixed ?? fulfilRequest(grid, request, enabled);
     if (!next) {
       const fresh = explainNoRoom(request);
-      if (request.kind !== 'add') setRoomProblem(fresh);
+      if (request.kind !== 'add') setRoomNotice({ problem: fresh, board: draftRef.current.widgetGrid, widgets: draftRef.current.widgets });
       return fresh;
     }
     const message = fixed ? roomFixResult(request, fix, next) : `${WIDGET_CATALOG[request.id].name} ${request.kind === 'add' ? 'added' : 'resized'}`;
     if (request.kind === 'add') finishAdd(request.id, next, message);
     else {
+      const before = draftRef.current.widgetGrid.placements[request.id];
       commitGrid(next);
-      setRoomProblem(null);
-      setGridMessage(message);
+      setRoomNotice(null);
+      say(message, 'list');
+      // The fix button unmounts with the explanation; focus moves to the size control that now
+      // shows the change (the pressed preset or the stepper used), never to the page (#310).
+      setFocusRequest({ candidates: sizeControl(request, before), onlyIfLost: true });
     }
     return null;
   }
-  function reportNoRoom(request: RoomRequest) {
-    setRoomProblem(explainNoRoom(request));
-    setGridMessage('');
+  /**
+   * Explains a resize with no room beside the widget's size controls, in that one live region
+   * (#183, #285). `page` lets a stacked layout scroll to it; a keyboard resize on the canvas keeps
+   * its focused handle in view instead.
+   */
+  function reportNoRoom(request: RoomRequest, page = true) {
+    setRoomNotice({ problem: explainNoRoom(request), board: draftRef.current.widgetGrid, widgets: draftRef.current.widgets });
+    say('');
+    setReveal({ id: request.id, target: 'room', page });
+  }
+  /** Settings without one widget; Last screen also turns its snapshot off. */
+  function withoutWidget(previous: Settings, id: WidgetId): Settings {
+    return {
+      ...previous,
+      widgets: { ...previous.widgets, [id]: false },
+      preview: id === 'preview' ? { ...previous.preview, enabled: false } : previous.preview,
+    };
+  }
+  /** An unsaved photo goes with its widget. */
+  function forgetUnsavedPhoto(id: WidgetId) {
+    if (id === 'photo' && !savedRef.current.widgets.photo) {
+      cancelPhoto();
+      updatePhoto(undefined);
+    }
   }
   function removeWidget(id: WidgetId) {
     // #229: the removed row's buttons unmount; keyboard focus moves to the next row (else the
-    // previous one), or to Add widget when none remains. Rows follow the inspector's list order.
-    const rows = WIDGET_IDS.filter(
-      (item) => isActiveWidget(item) && draftRef.current.widgets[item],
-    );
+    // previous one), or to Add widget when none remains. Rows follow the list's grouped order (#365).
+    const rows = widgetListOrder(draftRef.current.widgets);
     const index = rows.indexOf(id);
     const neighbour = index < 0 ? undefined : (rows[index + 1] ?? rows[index - 1]);
     setFocusRequest({
@@ -548,68 +654,69 @@ export function Editor({
       ],
       onlyIfLost: true,
     });
-    if (id === 'photo' && !savedRef.current.widgets.photo) {
-      cancelPhoto();
-      updatePhoto(undefined);
-    }
-    change((previous) => ({
-      ...previous,
-      widgets: { ...previous.widgets, [id]: false },
-      preview:
-        id === 'preview'
-          ? { ...previous.preview, enabled: false }
-          : previous.preview,
-    }));
-    setSelectedWidget(null);
-    setGridMessage(`${WIDGET_CATALOG[id].name} removed`);
+    forgetUnsavedPhoto(id);
+    resizeExploration.current = null;
+    change((previous) => withoutWidget(previous, id));
+    selectWidget(null);
+    say(`${WIDGET_CATALOG[id].name} removed`, 'list');
   }
+  // Inspector resizes: the pressed preset and the steppers' own outputs show the size, so only the
+  // neighbours a step moved are announced (#340).
   function resizeWidget(id: WidgetId, size: WidgetSize) {
-    const next = fitWidgetFamily(
-      draftRef.current.widgetGrid,
-      id,
-      size,
-      draftRef.current.widgets,
-    );
-    if (next) { commitGrid(next); setRoomProblem(null); }
+    const next = fitWidgetFamily(resizeBase(id), id, size, draftRef.current.widgets);
+    if (next) say(commitResize(id, next).displaced, 'list');
     else reportNoRoom({ kind: 'family', id, size });
   }
   function resizeWidgetSpan(id: WidgetId, span: WidgetSpan) {
-    const next = resizeSpanGrid(
-      draftRef.current.widgetGrid,
-      id,
-      span,
-      draftRef.current.widgets,
-    );
-    if (next) { commitGrid(next); setRoomProblem(null); }
+    const next = resizeSpanGrid(resizeBase(id), id, span, draftRef.current.widgets);
+    if (next) say(commitResize(id, next).displaced, 'list');
     else if (isFreeSize(id)) reportNoRoom({ kind: 'span', id, span });
-    else setGridMessage('No room for that size');
+    else say('No room for that size', 'list');
   }
-  function moveWidget(id: WidgetId, dx: number, dy: number) {
-    const original = draftRef.current.widgetGrid.placements[id];
-    const next = reflowWidget(
-      draftRef.current.widgetGrid,
-      id,
-      { ...original, column: original.column + dx, row: original.row + dy },
-      draftRef.current.widgets,
-    );
-    if (next) commitGrid(next);
-    else setGridMessage('No room there');
+  /** A move or resize committed on the canvas, worded with where it went or what size it became (#341). */
+  function canvasEdit(grid: WidgetGrid, edit: LayoutEdit) {
+    if (edit.kind === 'resize') {
+      say(commitResize(edit.id, grid).message);
+      return;
+    }
+    const before = draftRef.current.widgetGrid, widgets = draftRef.current.widgets;
+    commitGrid(grid);
+    say(movedMessage(before, grid, edit.id, widgets));
   }
   function density(value: GridDensity) {
-    const next = switchGridDensity(
-      draftRef.current.widgetGrid,
-      value,
-      draftRef.current.widgets,
-      densityHistory.current,
-    );
+    const current = draftRef.current;
+    const next = switchGridDensity(current.widgetGrid, value, current.widgets, densityHistory.current);
     if (next) {
       densityHistory.current = next.history;
       commitGrid(next.grid);
+      setDensityNotice(null);
       // A dropped custom size is named, e.g. "Reminders 2 × 8 → small" (#152).
-      if (next.resized.length) setGridMessage(`${next.resized.map(({ id, to, span }) => `${WIDGET_CATALOG[id].name} ${span ? `${span.columns} × ${span.rows} → ` : ''}${to}`).join(' · ')} to fit. Switch back to restore.`);
+      if (next.resized.length) say(`${densityResized(next.resized)} to fit. Switch back to restore.`);
+      return;
     }
-    else
-      setGridMessage('Not enough room. Keep this grid or use smaller widgets.');
+    // #346: name the density and what it cannot hold, with a draft fix when hiding one widget helps.
+    const refusal = densityRefusal(current.widgetGrid, value, current.widgets);
+    setDensityNotice({ refusal, board: current.widgetGrid, widgets: current.widgets });
+    say(refusal.message);
+  }
+  /** The refused density with its widget removed, as one draft edit that Cancel restores (#346). */
+  function applyDensityFix(refusal: DensityRefusal) {
+    const remove = refusal.remove, current = draftRef.current;
+    if (!remove) return;
+    // The button unmounts with the notice; focus returns to the density control.
+    setFocusRequest({ candidates: ['.grid-density-control select', ACTIVE_TAB], onlyIfLost: true });
+    const next = switchGridDensity(current.widgetGrid, refusal.density, { ...current.widgets, [remove]: false });
+    if (!next) {
+      density(refusal.density);
+      return;
+    }
+    forgetUnsavedPhoto(remove);
+    resizeExploration.current = null;
+    densityHistory.current = next.history;
+    change((previous) => ({ ...withoutWidget(previous, remove), widgetGrid: next.grid }));
+    if (selectedRef.current === remove) selectWidget(null);
+    setDensityNotice(null);
+    say(densityFixResult(remove, refusal.density, next.resized));
   }
   function appearance<K extends keyof Settings['appearance']>(
     key: K,
@@ -901,6 +1008,15 @@ export function Editor({
     saved.location.longitude !== state.weather.location.longitude ||
     (saved.units === 'metric' ? '°C' : '°F') !==
       state.weather.units.temperature;
+  const weatherNote = weatherPending
+    ? `Weather updates after Save · preview still shows ${state.weather.location.name}`
+    : weatherRefreshing
+      ? `Updating weather · preview still shows ${state.weather.location.name}`
+      : '';
+  // A message from an edit in the Widgets list shows there while the list is on screen; every other
+  // layout message shows in the canvas line. The announcer speaks each one once either way (#311).
+  const listShown = section === 'Widgets' && !pickerOpen;
+  const canvasMessage = layoutMessage && (layoutMessage.where === 'canvas' || !listShown) ? layoutMessage.text : '';
   return (
     <div
       className="studio"
@@ -937,7 +1053,8 @@ export function Editor({
                 setGridPreview(null);
                 setGridGesture(null);
                 setMovementPreview(false);
-                setGridMessage('');
+                say('');
+                setDensityNotice(null);
                 setError(null);
                 if (!layoutEditing) setSection('Widgets');
               }}
@@ -976,24 +1093,27 @@ export function Editor({
                   key={gridEpoch}
                   settings={draft}
                   selected={selectedWidget}
-                  onSelect={(id) => {
-                    setSelectedWidget(id);
+                  onSelect={(id, tapped) => {
+                    selectWidget(id, tapped);
                     setSection('Widgets');
                     setPickerOpen(false);
                   }}
                   onPreview={(grid, gesture) => { setGridPreview(grid); setGridGesture(gesture ?? null); }}
-                  onCommit={commitGrid}
+                  onCommit={canvasEdit}
+                  onNoRoom={(request, via) => reportNoRoom(request, via === 'pointer')}
                   onMessage={setGridMessage}
+                  resizeBase={resizeBase}
                 />
               )}
             </div>
           </div>
           </div>
           <div className="canvas-toolbar">
-            <span>{layoutEditing ? 'Drag to move · pull corner to resize' : 'Your saved arrangement'}</span>
+            {!layoutEditing && <span>Your saved arrangement</span>}
             {layoutEditing ? (
               <label className="grid-density-control">
-                <span className="sr-only">Grid density</span>
+                {/* #345: a short visible label; the select keeps its full accessible name. */}
+                <span className="grid-density-label">Grid</span>
                 <select
                   className="select-input"
                   aria-label="Grid density"
@@ -1056,19 +1176,27 @@ export function Editor({
           </div>
           {/* One reserved line for layout messages and the weather note (#231). */}
           <div className="canvas-messages">
-            <p
-              className="grid-status"
-              role={section === 'Widgets' ? undefined : 'status'}
-            >
-              {gridMessage}
+            {/* The one live region for layout messages, mounted before any text arrives (#311, #341). */}
+            <p className="sr-only layout-announcer" role="status">
+              {layoutMessage && <span key={layoutMessage.id}>{layoutMessage.text}</span>}
             </p>
+            <p className="grid-status">
+              {canvasMessage}
+              {canvasMessage && currentDensityNotice?.refusal.remove && (
+                <button type="button" className="text-button density-fix" onClick={() => applyDensityFix(currentDensityNotice.refusal)}>
+                  {densityFixLabel(currentDensityNotice.refusal)}
+                </button>
+              )}
+            </p>
+            {/* #345: how to edit, in the reserved line while nothing else needs it. */}
+            {layoutEditing && !canvasMessage && !weatherNote && (
+              <p className="canvas-hint">
+                Drag a widget to move it · drag its corner to resize<span className="canvas-hint-keys"> · arrow keys work too</span>
+              </p>
+            )}
             {/* Always mounted, so a screen reader announces the note when it appears. */}
             <p className="canvas-note" role="status">
-              {weatherPending
-                ? `Weather updates after Save · preview still shows ${state.weather.location.name}`
-                : weatherRefreshing
-                  ? `Updating weather · preview still shows ${state.weather.location.name}`
-                  : ''}
+              {weatherNote}
             </p>
           </div>
           {/* #227: the alert has its own row below the canvas actions and never covers them. */}
@@ -1703,27 +1831,21 @@ export function Editor({
             )}
             {section === 'Widgets' && (
               <WidgetInspector
-                message={gridMessage}
+                message={layoutMessage?.where === 'list' ? layoutMessage.text : ''}
                 settings={draft}
                 selected={selectedWidget}
-                onSelect={(id) => {
-                  setSelectedWidget(id);
-                  setRoomProblem(null);
-                }}
+                onSelect={(id) => selectWidget(id, true)}
+                reveal={reveal}
                 pickerOpen={pickerOpen}
                 onPicker={setPickerOpen}
                 onAdd={addWidget}
                 onFix={applyFix}
-                roomProblem={
-                  roomProblem && same(roomProblem.grid, draft.widgetGrid) && same(roomProblem.enabled, draft.widgets)
-                    ? roomProblem
-                    : null
-                }
+                roomProblem={currentRoomNotice?.problem ?? null}
                 remindersHidden={reminderPresentation(draft, state.reminders, connectionError !== null) === 'hidden'}
                 onRemove={removeWidget}
                 onResize={resizeWidget}
                 onResizeSpan={resizeWidgetSpan}
-                onMove={moveWidget}
+                resizeBase={resizeBase}
                 onChange={change}
                 saving={saving}
                 photoAvailable={
