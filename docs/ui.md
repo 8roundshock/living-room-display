@@ -313,7 +313,7 @@ The footprint never changes, and the separate Rain widget is gone from the picke
 list and canvas; an enabled Rain from older data is merged into Weather
 ([upgrade](install.md#additive-data-and-rollback-compatibility-84)). There is no opt-out of
 rain detail yet (#102). The [weather harness](../tests/ui/weather-browser.mjs) checks
-every family × mode × density at 1280/1920/3840 widths, CSS glyph boxes (#128), the
+every family × mode × density at 1280/1920/3840 widths at fit 1 (with stale, offline, last-known, long-place, sub-zero and unavailable states, #283, #362), CSS glyph boxes (#128), the
 upgrade of a pre-#74 data folder, and a device location whose zone is still `auto`
 while the provider is down (editor and display render, then recover).
 Each weather module keeps its actual place and relevant units visible when used
@@ -470,12 +470,15 @@ and the UV peak (large). Bars, hour labels and the peak use only the current and
 later hours, so a saved reading never shows a past hour or a peak that has already
 happened; with fewer than two upcoming hours the line reads "Hourly estimate
 unavailable". The chart is named for screen readers ("US AQI estimate for the next
-24 hours: 40 to 45"). One footer row (#221) always shows the age and the short credit
-"CAMS · Open-Meteo": "Model est. · 12 min ago" with a reading, "Saved reading · 2 hr
-ago" in the caution tone when stale, and "Offline · …" first while the display cannot
-reach the computer. Phrases never break inside, so "12 min ago", "12 µg/m³" and
-"Open-Meteo" stay whole, and small and medium keep fit 1 at Text 100% in every density,
-fresh, stale or offline, at 720p, 1080p and 4K. Saved current values stand for 3 hours
+24 hours: 40 to 45"); its axis reads "Now" and the last hour's end, like Weather's (#261).
+The footer (#221) always shows the age and the short credit "CAMS · Open-Meteo", on one
+row in medium and large and on two short rows where small is narrow (#309): "Model est.
+· 12 min ago" with a reading, "Saved reading · 2 hr ago" in the caution tone when stale,
+and "Offline · …" first while the display cannot reach the computer. Phrases never break
+inside, so "12 min ago", "12 µg/m³" and "Open-Meteo" stay whole, and small and medium keep
+fit 1 at Text 100% in every density, fresh, stale or offline, and for a three-digit or
+long-category AQI (US 128, 156, 301, European 105) with either qualifier, which small sets
+on its own line under the reading, at 720p, 1080p and 4K (#309). Saved current values stand for 3 hours
 after the update, like Weather's temperature (#243). After that (#188) the reading
 shows the saved hourly estimate for the current hour, labelled "Saved estimate" in the
 caution tone, with its UV; without an estimate for this hour the old AQI reads "Last
@@ -542,7 +545,7 @@ two-tab countdown edit with both countdowns. Verified logical viewports are 1280
 The actual browser-chrome zoom setting was not changed. Final-source compact
 picker screenshots were inspected in RAM at 1280×600, 760×600 and 390×480.
 The [widget harness](../tests/ui/widgets-browser.mjs) checks every active family at
-three densities and 1080p/4K, meaningful descendant bounds, readable fitting,
+three densities and 720p/1080p/4K, meaningful descendant bounds, fit 1 at Text 100% (#283),
 unknown/partial/stale/image failures, browser F/cursor behavior and native-only
 document styling. Physical TV brightness/comfort remains a separate gate.
 The [palette harness](../tests/ui/palette-browser.mjs) renders every active widget in

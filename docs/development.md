@@ -83,6 +83,9 @@ element), so the palette harness checks its colours (#214), and the shared
 check that no studio rule reaches it on the editor canvas (#313). The motion and
 widgets suites keep their own copies of that board until
 [#388](https://github.com/8roundshock/living-room-display/issues/388).
+The widgets suite is the longest: 10–12 minutes on the owner's PC on 2026-10-19 with
+other suites running, and up to 30 minutes when several widgets suites share the
+machine. Its display loads therefore wait up to 90 s for a specific element (#306).
 
 ## Browser suites
 

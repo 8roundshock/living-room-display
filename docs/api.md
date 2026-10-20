@@ -253,19 +253,23 @@ coverage gap ends it. In precedence order:
 | Kind | When | Weather mode | Example |
 | --- | --- | --- | --- |
 | `unknown` | No future intervals | hint | “Rain outlook unavailable” |
-| `now` | A spell includes now | elevated | “Rain likely until 6 PM”; open end “Rain likely beyond 1 AM”; later spells too “on and off until 4 PM” (small: “Rain likely now” for an open end or later spells) |
-| `soon` | A spell starts within 6 hours (inclusive) | elevated | “Rain likely 3–6 PM”; open end or several spells “from 3 PM” (medium/large: “on and off from 3 PM”) |
-| `later` | A spell starts in 6–12 hours | hint | “Rain likely from 9 PM” (medium/large add the day when it differs: “from Tomorrow 7 AM”) |
+| `now` | A spell includes now | elevated | “Rain likely until 6 PM”; open end “Rain likely beyond 1 AM”; later spells too “on and off until 4 PM” (small: “Rain likely now” for an open end or later spells; “Rain possible now, likely later” when only a later spell is likely) |
+| `soon` | A spell starts within 6 hours (inclusive) | elevated | “Rain likely 3–6 PM”; open end or several spells “from 3 PM” (medium/large: “on and off from 3 PM”; small: “Rain possible from 3 PM, likely later” when only a later spell is likely) |
+| `later` | A spell starts in 6–12 hours | hint | “Rain likely from 9 PM” (medium/large add the day when it differs: “from Tomorrow 7 AM”); “Rain possible from 9 PM, likely later” when only a later spell is likely |
 | `unknown` | No spell, but some rain amounts are missing | hint | “Rain timing unavailable” |
 | `possible` | Some hour has at least 30% chance, or precipitation without rain (for example snow) | hint | “Precipitation possible · 40%” |
 | `unknown` | Partial, gapped or null coverage | hint | “Rain outlook partial” |
 | `calm` | Otherwise: the 12-hour forecast is complete and dry | calm | nothing about rain |
 
-The headline, its qualifier, the detail's peak and the amount all cover the same spells:
-every spell in the window (#167). “Likely” means the highest known peak hourly chance
-of those spells is at least 60%; otherwise, or when no chance is known, “possible”. So
-a 40% spell followed by an 80% one reads “Rain likely on and off from 10 AM” beside
-“Peak 80%”. A headline names an end only when no spell follows it (“until 11 AM”);
+The detail's peak and the amount cover every spell in the window (#167), and so does
+the qualifier of a headline that covers them all: “Likely” means the highest known peak
+hourly chance of those spells is at least 60%; otherwise, or when no chance is known,
+“possible”. So a 40% spell followed by an 80% one reads “Rain likely on and off from
+10 AM” beside “Peak 80%”. A headline that names only the first spell (small's “now” and
+“from 10 AM”, and every `later` headline) takes that spell's own qualifier instead, and
+adds “, likely later” when a later spell is likely and the first is not: “Rain possible
+now, likely later” (#319). So “likely” never describes a spell that peaks below 60%.
+A headline names an end only when no spell follows it (“until 11 AM”);
 with later spells it reads “on and off until 2 PM” (medium/large) or names no end
 (small). Probability covers all precipitation, so the wording never says it is or
 will be raining. The elevated detail reads “Peak 60% · 4 mm rain” (imperial “0.16 in
@@ -280,7 +284,11 @@ or the second end of a range; “Precipitation possible · 40%” keeps “· 40
 words (#197). Hours are real instants, so a DST change shows wall-clock times.
 The large family's hourly chance bars are one image whose accessible name summarises
 them: “Hourly precipitation chance, 9 AM to 9 PM: peak 60% at 10 AM, 1 hour unknown”
-(#166). The window and thresholds are defined once, in `weather-outlook.ts` (#147).
+(#166). There is a bar for each interval overlapping the window: 12 on the hour, 13 when
+the window starts mid-hour. Its axis reads “Now” under the bar covering now and the
+window's end at the right edge, in compact hours (“9 PM”, “21:00”); Air quality's chart
+shares the same `chartAxisLabels` helper (#261). The window and thresholds are defined
+once, in `weather-outlook.ts` (#147).
 
 ### Forecast normalization and caching
 

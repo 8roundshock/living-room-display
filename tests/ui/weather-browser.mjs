@@ -14,6 +14,7 @@ import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings as previousDefaults } from '../../src/server/compat/bedca44/shared/defaults.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { GRID_DENSITIES, WIDGET_IDS } from '../../src/shared/widgets.ts';
+import { airQualityFixture } from './widget-checks/airQuality.mjs';
 
 const HOUR = 3_600_000;
 const NOW = Date.parse('2026-10-18T13:00:00Z'); // 9 AM in Toronto
@@ -35,12 +36,31 @@ export const MODES = {
   'unknown-none': { hourly: [], mode: 'hint', kind: 'unknown', compact: 'Rain outlook unavailable', full: 'Rain outlook unavailable', confidence: '' },
   'unknown-rain-data': { hourly: hours(24, index => index === 4 ? { rainAmount: null } : {}), mode: 'hint', kind: 'unknown', compact: 'Rain timing unavailable', full: 'Rain timing unavailable', confidence: 'Partial data' },
   'partial-with-spell': { hourly: hours(6, index => [2, 3].includes(index) ? WET : {}), mode: 'elevated', kind: 'soon', compact: 'Rain likely 11 AM–1 PM', full: 'Rain likely 11 AM–1 PM', detail: 'Peak 60% · 2 mm rain', confidence: 'Partial forecast', chart: 'Hourly precipitation chance, 9 AM to 3 PM: peak 60% at 11 AM' },
+  // #319: a headline naming only the first spell takes that spell's qualifier and says when a later one is likelier.
+  'now-then-likely': { hourly: hours(24, index => index <= 1 ? { ...WET, precipitationProbability: 40 } : index === 4 ? { ...WET, precipitationProbability: 80 } : {}), mode: 'elevated', kind: 'now', compact: 'Rain possible now, likely later', full: 'Rain likely on and off until 2 PM', detail: 'Peak 80% · 3 mm rain', confidence: 'Forecast estimate', chart: 'Hourly precipitation chance, 9 AM to 9 PM: peak 80% at 1 PM' },
+  'later-then-likely': { hourly: hours(24, index => index === 7 ? { ...WET, precipitationProbability: 40 } : index === 11 ? { ...WET, precipitationProbability: 80 } : {}), mode: 'hint', kind: 'later', compact: 'Rain possible from 4 PM, likely later', full: 'Rain possible from 4 PM, likely later', confidence: 'Forecast estimate' },
 };
 const SIZES = ['small', 'medium', 'large'];
 const VIEWPORTS = [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }];
+/** #283: fit within half a percent of 1 is the fit search resolving a sub-pixel overflow, not a zoom-out (as in widgets-browser.mjs). */
+const FIT_1 = 0.995;
+/** Synthetic states beyond the outlook modes (#283, #335, #362). */
+const STATES = {
+  stale: state => { state.weather.status = 'stale'; state.weather.updatedAt = new Date(NOW - 5 * HOUR).toISOString(); },
+  'offline-last-known': state => { state.weather.updatedAt = new Date(NOW - 5 * HOUR).toISOString(); },
+  'long-place': state => { state.weather.location.name = 'Saint-Jean-sur-Richelieu'; },
+  'long-place-stale': state => { state.weather.location.name = 'San Cristóbal de las Casas'; state.weather.status = 'stale'; state.weather.updatedAt = new Date(NOW - 5 * HOUR).toISOString(); },
+  'sub-zero': state => {
+    Object.assign(state.weather.current, { temperature: -17, feelsLike: -24.4 });
+    state.weather.daily = state.weather.daily.map((day, index) => ({ ...day, temperatureMax: index ? -11 - index : -0.4, temperatureMin: -21 - index }));
+  },
+};
+const OFFLINE_STATES = new Set(['offline-last-known']);
+/** Modes the state sweep crosses with STATES: calm, a hint, two elevated headlines and the longest compact wording. */
+const STATE_MODES = ['calm', 'possible', 'soon-multi', 'partial-with-spell', 'now-then-likely'];
 /** Copy is compared as read: no-break spaces and word joiners keep times together (#197) and are checked separately. */
 const plain = text => text === null || text === undefined ? text : text.replace(/[\u00a0\u202f]/g, ' ').replace(/\u2060/g, '');
-const MEANINGFUL = ['.ambient-label', '.current-temperature', '.weather-condition', '.weather-details', '.weather-hint', '.rain-timing', '.rain-detail', '.rain-bars', '.rain-hours', '.rain-confidence', '.weather-age', '.weather-credit', '.weather-metrics'].join(',');
+const MEANINGFUL = ['.ambient-label', '.current-temperature', '.weather-condition', '.weather-details', '.weather-hint', '.rain-timing', '.rain-detail', '.rain-bars', '.rain-hours', '.rain-confidence', '.weather-age', '.weather-credit', '.weather-metrics', '.weather-last-known', '.weather-unavailable'].join(',');
 /** CSS glyph boxes (#128) as [cqw, cqh] fractions of the widget's content box. */
 function glyphFractions(size, mode) {
   if (size === 'medium') return [0.10, 0.22];
@@ -69,6 +89,18 @@ async function measure(widget, selectors) {
       wind: el.querySelector('.weather-metrics') !== null, highLow: text('.weather-high-low'), srOnly: [...el.querySelectorAll('.sr-only')].map(node => node.textContent),
       chart: el.querySelector('.rain-bars') ? { role: el.querySelector('.rain-bars').getAttribute('role'), label: el.querySelector('.rain-bars').getAttribute('aria-label')?.replace(/[\u00a0\u202f]/g, ' ').replace(/\u2060/g, '') } : null,
       lastKnown: text('.weather-last-known'),
+      // #161: what each bar shows above the chart's baseline (a full-height box moved down by translate).
+      barGeometry: (() => {
+        const chart = el.querySelector('.rain-bars'); if (!chart) return null;
+        const c = chart.getBoundingClientRect();
+        return [...chart.querySelectorAll('.rain-bar')].map(bar => {
+          const b = bar.getBoundingClientRect(), style = getComputedStyle(bar);
+          return { unknown: bar.classList.contains('rain-bar-unknown'), share: parseFloat(bar.style.getPropertyValue('--rain-bar')), chart: c.height, shown: c.bottom - b.top, below: b.bottom - c.bottom, stroke: parseFloat(style.borderBottomWidth), strokeStyle: style.borderBottomStyle };
+        });
+      })(),
+      // #261: the chart's axis labels.
+      axis: [...el.querySelectorAll('.rain-hours .value-transition')].map(node => node.textContent.replace(/[\u00a0\u202f]/g, ' ')),
+      temperatures: [...el.querySelectorAll('.current-temperature, .weather-details, .weather-metrics, .weather-high-low')].map(node => node.textContent),
     };
   }, selectors);
 }
@@ -137,12 +169,13 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
         only(size, mode, density); await open(); await weather().waitFor();
         const label = `${size}/${mode}/${density}/${viewport.width}`, m = await measure(weather(), MEANINGFUL);
         assert.ok(m.rect.x >= 0 && m.rect.y >= 0 && m.rect.right <= viewport.width + 1 && m.rect.bottom <= viewport.height + 1, `${label} stays inside the display`);
-        assert.ok(m.scale >= 0.75, `${label} fits by design, scale=${m.scale}`);
+        assert.ok(m.scale >= FIT_1, `${label} renders at fit 1 at Text 100% (#283), scale=${m.scale}`);
         assert.equal(m.border, '0px', label); assert.equal(m.background, 'rgba(0, 0, 0, 0)', label);
         assert.deepEqual(m.clipped, [], `${label} meaningful descendants stay visible`);
         assert.equal(m.mode, expected.mode, `${label} data-weather-mode`); assert.equal(m.kind, expected.kind, `${label} data-rain-kind`);
         assert.match(m.place, /Toronto · °C/, `${label} place and unit`); assert.ok(m.ageVisible, `${label} age visible`); assert.match(m.age, /Updated/, label);
-        assert.equal(m.credit, 'Forecast by Open-Meteo', `${label} credit on the attribution widget`);
+        // Small's compact footer uses the short credit Forecast's footer uses (#283).
+        assert.equal(m.credit, size === 'small' ? 'Open-Meteo' : 'Forecast by Open-Meteo', `${label} credit on the attribution widget`);
         const headline = size === 'small' ? expected.compact : expected.full;
         if (expected.mode === 'calm') { assert.equal(m.hint, null, label); assert.equal(m.timing, null, label); assert.equal(m.condition, 'Overcast', label); }
         else if (expected.mode === 'hint') { assert.equal(m.hint, headline, `${label} hint`); assert.equal(m.timing, null, label); }
@@ -159,6 +192,14 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
           assert.ok(m.barsHeight >= m.rect.height * 0.1, `${label} bars keep real height: ${m.barsHeight}/${m.rect.height}`);
           assert.equal(m.bars, expected.hourly.length >= 12 ? 12 : expected.hourly.length, `${label} one bar per window hour`);
           assert.equal(m.wind, false, `${label} wind and feels-like give way to rain`); assert.match(m.highLow, /^High 17° · Low 9°$/, label);
+          // #161: at rest each bar shows exactly what the former height-based bar did, clamp(1px, its share, the chart).
+          for (const bar of m.barGeometry) {
+            assert.ok(!bar.unknown, `${label}: every mode here knows its chances`);
+            const want = Math.min(bar.chart, Math.max(1, bar.share / 100 * bar.chart));
+            assert.ok(Math.abs(bar.shown - want) < 0.05, `${label}: a ${bar.share}% bar shows ${bar.shown} px, not ${want} px`);
+          }
+          // #261: “Now” under the bar covering now, and the window's end at the right edge, as the chart's name says.
+          assert.deepEqual(m.axis, ['Now', expected.chart.match(/ to (.+?):/)[1]], `${label} axis labels`);
         }
         if (size === 'large' && expected.mode !== 'elevated') assert.equal(m.wind, true, `${label} keeps wind and high/low`);
         if (size !== 'small' && expected.mode === 'calm') assert.match(m.details, /Feels like 13°/, label);
@@ -170,7 +211,39 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
         if (capture && density === 'balanced') shots.push({ group: `${viewport.width}`, name: `${size} · ${mode}`, bytes: await weather().screenshot() });
       }
     }
-    checks.push(`${renders} renders: 3 families × ${Object.keys(MODES).length} modes × 3 densities × 1280/1920/3840 widths: bounds, fit ≥0.75, no frame/fill, unclipped content, copy, data attributes, place/unit/age, credit, confidence, bars only in large elevated with their accessible summary (#166), CSS glyph boxes (#128)`);
+    checks.push(`${renders} renders: 3 families × ${Object.keys(MODES).length} modes × 3 densities × 1280/1920/3840 widths: bounds, fit 1 at Text 100% (#283), no frame/fill, unclipped content, copy (#319 first-spell qualifiers included), data attributes, place/unit/age, credit, confidence, bars only in large elevated with their accessible summary (#166), resting bar heights (#161) and Now/end axis labels (#261), CSS glyph boxes (#128)`);
+
+    // #283: every family also stays at fit 1 at Text 100% when the reading is hours old (stale, or offline,
+    // with “Last known”), with long place names and with sub-zero values, keeping every honesty cue.
+    let stateRenders = 0;
+    for (const viewport of VIEWPORTS) {
+      await page.setViewportSize(viewport);
+      for (const density of Object.keys(GRID_DENSITIES)) for (const size of SIZES) for (const [name, mutate] of Object.entries(STATES)) for (const mode of STATE_MODES) {
+        only(size, mode, density, state => { mutate(state); });
+        failing = false; await open(); await weather().waitFor();
+        if (OFFLINE_STATES.has(name)) { failing = true; await page.clock.runFor(31_000); await weather().locator('.weather-age.stale').waitFor(); failing = false; }
+        const label = `${size}/${mode}/${density}/${viewport.width} ${name}`, m = await measure(weather(), MEANINGFUL), expected = MODES[mode];
+        assert.ok(m.scale >= FIT_1, `${label} renders at fit 1 at Text 100% (#283), scale=${m.scale}`);
+        assert.deepEqual(m.clipped, [], `${label} meaningful descendants stay visible`);
+        assert.ok(m.ageVisible, `${label} age visible`);
+        if (name.startsWith('long-place')) assert.match(m.place, /^(Saint-Jean-sur-Richelieu|San Cristóbal de las Casas) · °C$/, `${label} the whole place`);
+        if (name === 'stale' || name === 'long-place-stale') assert.match(m.age, size === 'small' ? /^Saved forecast · 5 hr ago/ : /^Saved forecast · Updated 5 hr ago$/, `${label} saved forecast age`);
+        if (OFFLINE_STATES.has(name)) assert.match(m.age, /^Offline · Updated 5 hr ago/, `${label} offline age`);
+        if (name === 'stale' || name === 'long-place-stale' || OFFLINE_STATES.has(name)) assert.equal(m.lastKnown, 'Last known · 4 AM', `${label} the qualifier stays`);
+        const showConfidence = expected.mode !== 'calm' && expected.confidence !== '' && (size !== 'small' || expected.confidence !== 'Forecast estimate');
+        assert.equal(m.confidence, showConfidence ? expected.confidence : null, `${label} confidence`);
+        if (name === 'sub-zero') {
+          // #335: the true minus sign, and a value rounding to zero is 0°.
+          assert.equal(await weather().locator('.current-temperature').textContent(), '−17°', `${label} current temperature`);
+          for (const text of m.temperatures) assert.doesNotMatch(text, /-\d|−0°/, `${label} no hyphen minus or −0: ${text}`);
+          if (size !== 'small' && expected.mode === 'calm') assert.equal(m.details, 'Feels like −24°', label);
+          if (size === 'large' && expected.mode !== 'elevated') assert.match(await weather().locator('.weather-metrics').innerText(), /High \/ low\s+0° \/ −21°/, label);
+          if (size === 'large' && expected.mode === 'elevated') assert.equal(m.highLow, 'High 0° · Low −21°', label);
+        }
+        stateRenders++;
+      }
+    }
+    checks.push(`${stateRenders} state renders: 3 families × ${Object.keys(STATES).length} states (stale and offline “Last known”, two long place names, sub-zero) × ${STATE_MODES.length} modes × 3 densities × 720p/1080p/4K at fit 1 at Text 100% with the age, “Saved forecast”/“Offline”, the qualifier, the confidence label and the whole place kept (#283); true minus signs and 0° for −0.4 (#335)`);
 
     // Rendered line boxes (#197): medium and large at the owner's 1280×720, every density, Text 100% and 125%.
     await page.setViewportSize(VIEWPORTS[0]);
@@ -212,19 +285,61 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
       if (capture) shots.push({ group: 'states', name: `offline ${size}`, bytes: await weather().screenshot() });
       failing = false;
     }
-    only('large', 'calm', 'balanced', state => { state.weather = { ...state.weather, status: 'unavailable', current: null, daily: [], hourly: [], updatedAt: null }; });
-    await open(); m = await measure(weather(), MEANINGFUL);
-    assert.match(await weather().innerText(), /Weather unavailable/); assert.equal(m.hint, null, 'unavailable weather shows no rain line'); assert.equal(m.glyph, null);
     only('large', 'now-open', 'balanced', state => { state.weather.hourly[10].precipitationProbability = null; state.weather.hourly[11].rainAmount = null; });
     await open(); m = await measure(weather(), MEANINGFUL);
     assert.equal(m.unknownBars, 1, 'one dotted unknown hour'); assert.equal(m.confidence, 'Partial data'); assert.equal(m.timing, 'Rain likely until 8 PM');
     assert.equal(await page.getByRole('img', { name: /^Hourly precipitation chance, 9\sAM to 9\sPM: peak 60% at 9\sAM, 1 hour unknown$/ }).count(), 1, 'the chart name counts the unknown hour');
     if (capture) shots.push({ group: 'states', name: 'large partial data', bytes: await weather().screenshot() });
     only('large', 'now-open'); await open('/display', NOW + 30 * 60_000); m = await measure(weather(), MEANINGFUL);
-    assert.equal(m.bars, 13, 'mid-hour, the window overlaps thirteen hourly intervals'); assert.equal(m.timing, 'Rain likely beyond 10 PM'); assert.ok(m.scale >= 0.75);
+    assert.equal(m.bars, 13, 'mid-hour, the window overlaps thirteen hourly intervals'); assert.equal(m.timing, 'Rain likely beyond 10 PM'); assert.ok(m.scale >= FIT_1);
+    assert.deepEqual(m.axis, ['Now', '10 PM'], 'mid-hour: the first bar still covers now and the axis ends with the thirteenth hour (#261)');
     only('medium', 'now-bounded', 'balanced', state => { state.settings.widgets.forecast = true; state.settings.widgetGrid.placements.forecast = { column: 0, row: 6, size: 'large' }; });
     await open(); assert.equal((await measure(weather(), MEANINGFUL)).credit, null, 'Forecast carries the credit when shown');
-    checks.push('125% text (scale ≥0.65), imperial “in rain”, stale saved forecast still classified, offline labels in elevated mode, unavailable weather, one dotted unknown bar with Partial data, credit only on the attribution widget');
+    checks.push('125% text (scale ≥0.65), imperial “in rain”, stale saved forecast still classified, offline labels in elevated mode, one dotted unknown bar with Partial data, 13 bars mid-hour with a Now–10 PM axis, credit only on the attribution widget');
+
+    // #362: unavailable Weather and Forecast in every family and density at 720p/1080p/4K: a dim, still cloud and a
+    // dim “—°”, one status-tone line no larger than the family's label, the age only when an update time is known,
+    // no credit while nothing is shown, and fit 1.
+    let unavailableRenders = 0;
+    for (const viewport of VIEWPORTS) {
+      await page.setViewportSize(viewport);
+      for (const density of Object.keys(GRID_DENSITIES)) for (const size of SIZES) for (const [variant, updatedAt] of [['retrying', null], ['age', new Date(NOW - 2 * HOUR).toISOString()], ['offline', null]]) for (const id of ['weather', 'forecast']) {
+        only(size, 'calm', density, state => {
+          state.weather = { ...state.weather, status: 'unavailable', current: null, daily: [], hourly: [], updatedAt };
+          if (id === 'forecast') { state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'forecast'])); state.settings.widgetGrid.placements.forecast = { column: 0, row: 0, size }; }
+        });
+        failing = false; await open();
+        const section = page.locator(`[data-widget-id="${id}"]`); await section.waitFor();
+        if (variant === 'offline') { failing = true; await page.clock.runFor(31_000); await section.getByText(/unavailable\s·\soffline/).waitFor(); failing = false; }
+        const label = `unavailable ${id} ${size}/${density}/${viewport.width} ${variant}`;
+        const u = await section.evaluate((el, id) => {
+          const probe = document.createElement('span'); probe.style.color = 'var(--ambient-caution)'; el.append(probe); const caution = getComputedStyle(probe).color; probe.remove();
+          const opacity = node => { let value = 1; for (let at = node; at && at !== el.parentElement; at = at.parentElement) value *= Number(getComputedStyle(at).opacity); return value; };
+          const weather = id === 'weather';
+          const line = el.querySelector(weather ? '.weather-unavailable' : '.forecast-unavailable-line'), glyph = el.querySelector(weather ? '.weather-symbol-unavailable' : '.forecast-unavailable-glyph');
+          const placeholder = el.querySelector(weather ? '.weather-placeholder' : '.forecast-placeholder-value'), age = el.querySelector('.weather-age, .forecast-age');
+          return {
+            fit: new DOMMatrix(getComputedStyle(el.querySelector('.widget-content')).transform).a, text: el.innerText, caution,
+            labelSize: parseFloat(getComputedStyle(el.querySelector('.ambient-label')).fontSize),
+            line: line && { text: line.textContent.replace(/ /g, ' '), size: parseFloat(getComputedStyle(line).fontSize), color: getComputedStyle(line).color, opacity: opacity(line) },
+            glyph: glyph && { name: glyph.dataset.glyph, still: glyph.hasAttribute('data-glyph-still'), hero: glyph.hasAttribute('data-glyph-hero'), opacity: opacity(glyph), width: glyph.getBoundingClientRect().width, inline: glyph.getAttribute('style') ?? '' },
+            placeholder: placeholder && { text: placeholder.textContent, opacity: opacity(placeholder) },
+            age: age?.textContent ?? null,
+          };
+        }, id);
+        assert.ok(u.fit >= FIT_1, `${label}: fit 1, scale=${u.fit}`);
+        assert.equal(u.line?.text, `${id === 'weather' ? 'Weather' : 'Forecast'} unavailable · ${variant === 'offline' ? 'offline' : 'retrying'}`, label);
+        assert.equal(u.line.color, u.caution, `${label}: the status tone`); assert.equal(u.line.opacity, 1, `${label}: at full opacity`);
+        assert.ok(u.line.size <= u.labelSize + 0.01, `${label}: no larger than the family's label (${u.line.size} > ${u.labelSize})`);
+        assert.ok(u.glyph && u.glyph.name === 'cloud' && u.glyph.still && !u.glyph.hero && u.glyph.opacity <= 0.5 && u.glyph.width > 0 && !/width/.test(u.glyph.inline), `${label}: a dim, still cloud sized by CSS ${JSON.stringify(u.glyph)}`);
+        assert.ok(u.placeholder?.text === '—°' && u.placeholder.opacity <= 0.5, `${label}: a dim “—°” ${JSON.stringify(u.placeholder)}`);
+        assert.doesNotMatch(u.text, /Open-Meteo|Not updated yet/, `${label}: no credit and no empty age while nothing is shown`);
+        assert.equal(u.age, variant === 'age' ? 'Updated 2 hr ago' : null, `${label}: the age only when an update time is known`);
+        if (capture && viewport.width === 1280 && density === 'balanced' && variant === 'retrying') shots.push({ group: 'states', name: label, bytes: await section.screenshot() });
+        unavailableRenders++;
+      }
+    }
+    checks.push(`${unavailableRenders} unavailable renders (Weather and Forecast × 3 families × 3 densities × 720p/1080p/4K × retrying/with an age/offline, #362): a dim, still cloud and “—°”, one full-opacity status-tone line no larger than the label (“Weather unavailable · retrying”, “· offline”), the age only when known, no credit, fit 1`);
 
     // Retired Rain never renders, even injected as enabled.
     only('medium', 'now-bounded', 'balanced', state => { state.settings.widgets.rain = true; state.settings.widgetGrid.placements.rain = { column: 4, row: 0, size: 'medium' }; });
@@ -341,6 +456,64 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
     }
     checks.push('Glyph boxes match the widget CSS on the display (1280/1920/3840) and in the editor canvas (1280/1920) for Weather and Forecast; no inline 20 px size (#128)');
 
+    // #251: every WMO code draws a symbol that agrees with its condition text (partly cloudy by day or night, fog,
+    // drizzle); a two-tone symbol's sun or moon part carries its own data-glyph for its sub-tone; every symbol keeps
+    // its CSS box (#128). Forecast marks the chance with a small droplet, not a second weather symbol.
+    await page.setViewportSize(VIEWPORTS[0]);
+    const PARTS = { suncloud: [['core', 'sun'], ['rays', 'sun'], ['cloud', null]], mooncloud: [['moon', 'moon'], ['cloud', null]], fog: [['cloud', null], ['mist', null]], drizzle: [['cloud', null], ['drop-1', null], ['drop-2', null], ['drop-3', null]] };
+    const CODES = [[0, true, 'sun', 'Clear skies'], [0, false, 'moon', 'Clear skies'], [1, true, 'suncloud', 'Mostly clear'], [2, true, 'suncloud', 'Partly cloudy'], [1, false, 'mooncloud', 'Mostly clear'], [2, false, 'mooncloud', 'Partly cloudy'],
+      [3, true, 'cloud', 'Overcast'], [45, true, 'fog', 'Fog'], [48, false, 'fog', 'Freezing fog'], [51, true, 'drizzle', 'Light drizzle'], [55, true, 'drizzle', 'Heavy drizzle'], [57, false, 'drizzle', 'Freezing drizzle'],
+      [61, true, 'rain', 'Light rain'], [67, true, 'rain', 'Freezing rain'], [81, false, 'rain', 'Showers'], [73, true, 'snow', 'Snow'], [86, true, 'snow', 'Heavy snow showers'], [95, true, 'storm', 'Thunderstorms'], [99, false, 'storm', 'Thunderstorms with hail'], [42, true, 'cloud', 'Weather conditions']];
+    for (const [code, isDay, glyph, condition] of CODES) {
+      only('medium', 'calm', 'balanced', state => { Object.assign(state.weather.current, { weatherCode: code, isDay }); });
+      await open(); const m = await measure(weather(), MEANINGFUL);
+      const symbol = await weather().locator('.weather-symbol').evaluate(el => ({ glyph: el.dataset.glyph, parts: [...el.querySelectorAll('.glyph-part')].map(part => [part.dataset.glyphPart, part.dataset.glyph ?? null]) }));
+      const label = `code ${code} ${isDay ? 'day' : 'night'}`;
+      assert.equal(symbol.glyph, glyph, label); assert.equal(m.condition, condition, `${label} condition`);
+      if (PARTS[glyph]) assert.deepEqual(symbol.parts, PARTS[glyph], `${label} parts and sub-tones`);
+      const [cw, ch] = glyphFractions('medium', 'calm'), want = Math.min(cw * m.box.width, ch * m.box.height) * m.scale;
+      assert.ok(Math.abs(m.glyph.width - want) <= 1.5 && Math.abs(m.glyph.height - want) <= 1.5, `${label} glyph box ${m.glyph.width}×${m.glyph.height} matches CSS ${want}`);
+    }
+    onlyForecast('large', state => { state.weather.daily = state.weather.daily.map((day, index) => ({ ...day, weatherCode: [0, 1, 2, 45, 53, 63, 73][index] })); return state; });
+    await open();
+    const strip = await page.locator('[data-widget-id="forecast"]').evaluate(el => ({
+      glyphs: [...el.querySelectorAll('.forecast-day > .weather-glyph')].map(node => node.dataset.glyph),
+      chance: [...el.querySelectorAll('.forecast-rain')].map(node => ({ path: node.querySelector('svg path')?.getAttribute('d') ?? null, glyphs: node.querySelectorAll('[data-glyph]').length, width: node.querySelector('svg').getBoundingClientRect().width, font: parseFloat(getComputedStyle(node).fontSize) })),
+    }));
+    assert.deepEqual(strip.glyphs, ['sun', 'suncloud', 'suncloud', 'fog', 'drizzle', 'rain', 'snow'], 'Forecast days draw their own symbols');
+    for (const chance of strip.chance) {
+      assert.match(chance.path, /^M12 3\.5C9/, 'the chance is marked by the droplet'); assert.equal(chance.glyphs, 0, 'not a second weather symbol');
+      assert.ok(Math.abs(chance.width - chance.font * 0.8) < 0.5, `the droplet is 0.8em (${chance.width} at ${chance.font})`);
+    }
+    checks.push(`${CODES.length} WMO codes draw agreeing symbols (partly cloudy by day/night, fog, drizzle, an undocumented code as a cloud) with two-tone parts and CSS boxes; Forecast days use them and mark the chance with a droplet (#251)`);
+
+    // #336: an unknown hour's dotted baseline (Weather and Air quality) and the reminder dot's ring scale with the
+    // display: at least 0.1% of its height at 1080p and 4K at DPR 1, while a known hour stays a solid bar.
+    for (const viewport of [VIEWPORTS[1], VIEWPORTS[2]]) {
+      await page.setViewportSize(viewport);
+      only('large', 'now-open', 'balanced', state => {
+        state.weather.hourly[3].precipitationProbability = null;
+        state.settings.widgets.airQuality = true; state.settings.widgetGrid.placements.airQuality = { column: 4, row: 0, size: 'large' };
+        state.airQuality = airQualityFixture(NOW, state.weather.location);
+        state.settings.widgets.reminders = true; state.settings.widgetGrid.placements.reminders = { column: 8, row: 0, size: 'medium' };
+        state.reminders = [{ id: '00000000-0000-4000-8000-000000000336', text: 'Synthetic reminder', completed: false, dueAt: null, createdAt: new Date(NOW - HOUR).toISOString(), updatedAt: new Date(NOW - HOUR).toISOString() }];
+      });
+      await open(); await page.locator('.air-bar-unknown').waitFor(); await page.locator('.ambient-reminder-dot').waitFor();
+      const strokes = await page.evaluate(() => {
+        const width = (selector, side) => { const style = getComputedStyle(document.querySelector(selector)); return { width: parseFloat(style[`border${side}Width`]), style: style[`border${side}Style`], background: style.backgroundColor }; };
+        return { rain: width('.rain-bar-unknown', 'Bottom'), air: width('.air-bar-unknown', 'Bottom'), dot: width('.ambient-reminder-dot', 'Top'), known: width('.rain-bar:not(.rain-bar-unknown)', 'Bottom') };
+      });
+      const floor = viewport.height * 0.001;
+      for (const [name, stroke] of [['rain unknown hour', strokes.rain], ['air unknown hour', strokes.air]]) {
+        assert.ok(stroke.width >= floor && stroke.style === 'dotted' && stroke.background === 'rgba(0, 0, 0, 0)', `${viewport.width}: ${name} is a ${stroke.width} px dotted baseline (≥ ${floor})`);
+      }
+      assert.ok(strokes.dot.width >= floor && strokes.dot.style === 'solid', `${viewport.width}: reminder dot ring ${strokes.dot.width} px (≥ ${floor})`);
+      assert.ok(strokes.known.style === 'none' && strokes.known.background !== 'rgba(0, 0, 0, 0)', 'a known hour is a solid bar, never a dotted line');
+      const unknown = (await measure(weather(), MEANINGFUL)).barGeometry.find(bar => bar.unknown);
+      assert.ok(Math.abs(unknown.below) < 0.05, `${viewport.width}: the dotted line sits on the baseline`);
+    }
+    checks.push('Unknown-hour baselines (Weather, Air quality) and the reminder dot ring are ≥ 0.1% of the display height at 1080p and 4K (DPR 1), dotted on the baseline and distinct from a known bar (#336)');
+
     // The picker: no Rain entry; the Weather sample shows the elevated family.
     await page.setViewportSize(VIEWPORTS[1]); current = structuredClone(source); await open('/editor');
     await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
@@ -456,8 +629,10 @@ export async function unresolvedZoneCheck({ browser, clientDirectory, errors, ca
     assert.equal(await page.locator('.studio-savebar').count(), 0, 'opening the editor changes nothing');
     await page.goto(base + '/display'); await page.locator('.display-page').waitFor();
     const weather = page.locator('[data-widget-id="weather"]'), forecast = page.locator('[data-widget-id="forecast"]');
-    assert.match(await weather.innerText(), /Device area[\s\S]*Weather unavailable[\s\S]*Not updated yet/, 'display: Weather unavailable with its place and age');
-    assert.match(await forecast.innerText(), /Forecast unavailable/, 'display: Forecast unavailable');
+    // #362: one status line says so, with no age (nothing was ever updated) and no credit.
+    assert.match(await weather.innerText(), /Device area[\s\S]*Weather unavailable\s·\sretrying/, 'display: Weather unavailable with its place');
+    assert.doesNotMatch(await weather.innerText(), /Not updated yet|Open-Meteo/);
+    assert.match(await forecast.innerText(), /Forecast unavailable\s·\sretrying/, 'display: Forecast unavailable');
     assert.equal(await forecast.locator('.forecast-day').count(), 0, 'no invented day');
     if (capture) shots.push({ group: 'states', name: 'device zone unresolved', bytes: await page.screenshot() });
     assert.deepEqual(errors.slice(before), [], 'nothing throws while the zone is auto');

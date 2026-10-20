@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { formatTime, sunDay } from '../../../src/client/astronomy.ts';
+import { intlPerTicks } from './clock.mjs';
 
 export const id = 'sunMoon';
 export const selectors = ['.sun-hero', '.sun-place', '.sun-daylight', '.moon-name', '.moon-next', '.sun-row'];
@@ -47,6 +48,12 @@ export async function family({ page, widget, size, density, viewport, state }) {
     state.weather.location = { name: 'Synthetic polar station', latitude, longitude: 0, timezone: 'UTC' }; await reload(page);
     const shown = await page.locator('.ambient-sunMoon').innerText();
     assert.match(shown, new RegExp(phrase), `${size} polar text`); assert.doesNotMatch(shown, /Sunrise\s+\d|Sunset\s+\d/);
+  }
+  // #324: one-second ticks within a minute construct no Intl formatter, with the zone resolved and while a device
+  // location's zone is still `auto` (its fallback to this computer's zone builds one, so it is memoized).
+  for (const timezone of ['America/Toronto', 'auto']) {
+    state.weather.location = { ...original, timezone }; await reload(page);
+    assert.equal(await intlPerTicks(page), 0, `${size} Sun & moon with the zone ${timezone} builds no Intl formatter per tick`);
   }
   state.weather.location = original; await reload(page);
 }
