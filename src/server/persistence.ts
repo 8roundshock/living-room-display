@@ -8,13 +8,17 @@ import { WIDGET_IDS } from '../shared/widgets.ts';
  * Bump it, with src/server/compat/, after each coordinated install (#130).
  */
 export const PREVIOUS_RELEASE = {
-  revision: '3fee844743c6fb469231b348a7c4d2178a887459',
+  revision: '34464001af41af0e2ea67fb090734b296f72c1c2',
   widgetIds: ['clock', 'weather', 'rain', 'forecast', 'reminders', 'preview', 'photo', 'worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'],
 } as const;
 
 /**
- * Additive fields the previous release cannot parse, omitted at rest while equal to the value the
- * current reader restores. validation.ts reads its defaults from here (single source).
+ * Additive fields omitted at rest while equal to the value the current reader restores, as are
+ * default widgetData sections. validation.ts reads its defaults from here (single source).
+ * The omission began so bedca44 could read the files (#84). Every baseline since 3fee844, 3446400
+ * included, reads these keys, so for them it is optional: #272 kept it to avoid a data-format change
+ * in a reader bump. It stays the mechanism for a future additive key or widget id that the previous
+ * release does not know: list the key here, or leave the id out of PREVIOUS_RELEASE.widgetIds.
  */
 export const AT_REST = { appearance: { accentMode: 'color', animation: 'subtle' } } as const;
 
@@ -39,10 +43,12 @@ function omitVisual(visual: Loose): void {
 }
 
 /**
- * Returns a new object (never mutates its input). Omits only keys the previous release does not
- * know, and only while the current reader restores the same value; every previous-release key
- * (for example rain) is always written. Apply only where data reaches disk or an export: never to
- * snapshots, API responses or in-memory data, which the editor compares key by key.
+ * Returns a new object (never mutates its input). Omits only AT_REST values and default widgetData
+ * sections, and for widget ids the previous release does not know (none since #263) an off
+ * visibility, an identity transform and a hidden placement; every other key (for example rain) is
+ * always written.
+ * Apply only where data reaches disk or an export: never to snapshots, API responses or in-memory
+ * data, which the editor compares key by key.
  */
 export function persistableSettings(settings: Settings): PersistableSettings {
   const result = structuredClone(settings) as unknown as Loose;
