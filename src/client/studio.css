@@ -1,5 +1,7 @@
 /* A focused editor workspace. The ambient canvas owns its dim, true-black palette. */
 html.studio-editor {
+  /* The editor's navy page; the document stays true black elsewhere, including before mount (#334). */
+  background: #090b12;
   scroll-padding-block: 24px var(--studio-footer-clearance, 124px);
 }
 .studio :is(input, select, button, a, summary, [tabindex]) {

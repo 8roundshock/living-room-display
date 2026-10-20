@@ -91,6 +91,43 @@ function assertAnalog(geometry, { size, density, viewport }) {
   assert.ok(share >= 0.89 || (share >= 0.78 && rowFull), `${label}: the graphic uses the cell height (${share.toFixed(3)} of ${geometry.box.height}, row full: ${rowFull})`);
 }
 
+/**
+ * #332: the medium Clock keeps its date beside its own time. Nothing frames widgets, so the date's gap to its
+ * own time (visible text, screen-reader text excluded) must be smaller than its gap to the cell's right edge,
+ * beyond which the next widget begins.
+ */
+async function assertDateGrouped(widget, label) {
+  const result = await widget.evaluate(section => {
+    const ink = root => {
+      const rects = []; const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.textContent.trim() || node.parentElement.closest('.sr-only')) continue;
+        const range = document.createRange(); range.selectNodeContents(node); rects.push(...range.getClientRects());
+      }
+      return { left: Math.min(...rects.map(rect => rect.left)), right: Math.max(...rects.map(rect => rect.right)) };
+    };
+    const time = ink(section.querySelector('.clock-time')), date = ink(section.querySelector('.clock-calendar')), cell = section.getBoundingClientRect();
+    return { fit: new DOMMatrix(getComputedStyle(section.querySelector('.widget-content')).transform).a, toTime: date.left - time.right, toEdge: cell.right - date.right };
+  });
+  assert.equal(result.fit, 1, `${label}: fits without zooming out`);
+  assert.ok(result.toTime > 0 && result.toTime < result.toEdge, `${label}: the date is ${result.toTime.toFixed(1)} px from its time and ${result.toEdge.toFixed(1)} px from the cell's right edge`);
+}
+
+/** Top and bottom ink rows of a RAM screenshot, decoded in the page (data: images are allowed by its CSP). */
+async function inkRows(page, buffer) {
+  return page.evaluate(async encoded => {
+    const image = new Image(); image.src = `data:image/png;base64,${encoded}`; await image.decode();
+    const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+    const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
+    const { data } = context.getImageData(0, 0, image.width, image.height); let top = -1, bottom = -1;
+    for (let y = 0; y < image.height; y++) for (let x = 0; x < image.width; x++) {
+      const index = (y * image.width + x) * 4;
+      if (Math.max(data[index], data[index + 1], data[index + 2]) > 48) { if (top < 0) top = y; bottom = y; break; }
+    }
+    return { top, bottom };
+  }, buffer.toString('base64'));
+}
+
 /** The hand angles the clock's own label implies, in [0, 360). */
 function expectedAngles(label) {
   const [, hours, minutes] = label.match(/^(\d{1,2}):(\d{2})(?:\s*[AP]M)?$/);
@@ -98,6 +135,7 @@ function expectedAngles(label) {
 }
 
 export async function family({ widget, size, density, viewport }) {
+  if (size === 'medium' && await widget.locator('.clock-time').count()) await assertDateGrouped(widget, `${await widget.locator('.clock-time').getAttribute('class')} medium/${density} ${viewport.width}`);
   // The Outline style (the default): its stroke never thins below 1.2 px at 720p, scaled (#222).
   if (!await widget.locator('.clock-outline').count()) return;
   const outline = await widget.locator('.clock-digits').evaluate(element => ({ stroke: parseFloat(getComputedStyle(element).webkitTextStrokeWidth), fit: new DOMMatrix(getComputedStyle(element.closest('.widget-content')).transform).a }));
@@ -117,9 +155,33 @@ export async function sweep({ page, viewport, state }) {
         await family({ widget: page.locator('[data-widget-id="clock"]'), size, density, viewport: view });
       }
     }
+    // #332: Digital medium too (Outline medium is checked by `family`).
+    for (const density of Object.keys(GRID_DENSITIES)) {
+      only(state, { size: 'medium', density, style: 'digital' }); await reload(page);
+      await assertDateGrouped(page.locator('[data-widget-id="clock"]'), `digital medium/${density} ${view.width}`);
+    }
   }
   await page.setViewportSize(viewport);
-  if (viewport.width !== 1920) return 'Analog clock: every family and density at 720p/1080p/4K fits at 1, hands ≥ 3/2 px at 720p (scaled), 30%/45% reach, text-colour HTML hands with an accent pivot, small/medium sized to the cell height with the date beside; Outline stroke ≥ 1.2 px at 720p (scaled) in every family';
+  if (viewport.width !== 1920) return 'Analog clock: every family and density at 720p/1080p/4K fits at 1, hands ≥ 3/2 px at 720p (scaled), 30%/45% reach, text-colour HTML hands with an accent pivot, small/medium sized to the cell height with the date beside; Outline stroke ≥ 1.2 px at 720p (scaled) in every family; medium Outline and Digital keep the date nearer their time than the cell edge (#332)';
+
+  // #363: Classic (Georgia) numerals are lining and tabular: every digit shares one baseline and height. Georgia's
+  // default old-style 9 would descend about a fifth of the size below the 0s.
+  {
+    only(state, { size: 'large', density: 'balanced', style: 'digital' }); state.settings.appearance.fontFamily = 'serif'; await reload(page);
+    assert.equal(await page.locator('.clock-time').evaluate(element => getComputedStyle(element).fontVariantNumeric), 'lining-nums tabular-nums', 'Classic clock numerals');
+    const digits = [];
+    for (const character of await page.locator('.clock-char').all()) {
+      const text = await character.textContent(); if (!/\d/.test(text)) continue;
+      digits.push({ text, ...await inkRows(page, await character.screenshot()) });
+    }
+    // 9:xx: an old-style 9 would descend below the 0s and 1s and a 6 or 8 would rise above them.
+    assert.match(digits.map(digit => digit.text).join(''), /^9\d\d$/);
+    // Round digits overshoot a flat top or baseline by a few percent of their height; old-style figures differ by
+    // about a fifth of it.
+    const tolerance = Math.max(2, 0.05 * (digits[0].bottom - digits[0].top));
+    for (const digit of digits) for (const edge of ['top', 'bottom']) assert.ok(Math.abs(digit[edge] - digits[0][edge]) <= tolerance, `Classic digit ${digit.text} ${edge} ${digit[edge]} vs ${digits[0][edge]} (±${tolerance.toFixed(1)}): ${JSON.stringify(digits)}`);
+    state.settings.appearance.fontFamily = 'sans';
+  }
 
   // At rest the geometry is the same at Off, Subtle and Lively (#161), and each hand points where the
   // label says; a minute change at Subtle eases only `rotate` on the HTML hands, and no Intl formatter
@@ -151,5 +213,5 @@ export async function sweep({ page, viewport, state }) {
     only(state, { size: 'large', density: 'balanced', style: 'outline' }); await reload(page);
     assert.equal(await intlPerTicks(page), 0, 'outline: no Intl formatter per tick');
   } finally { await page.emulateMedia({ reducedMotion: 'reduce' }); }
-  return 'Analog clock at rest: identical box and hand geometry at Off/Subtle/Lively with each hand at its labelled angle; a minute change at Subtle transitions only `rotate` on HTML hand wrappers; zero Intl formatters per tick within a minute';
+  return 'Analog clock at rest: identical box and hand geometry at Off/Subtle/Lively with each hand at its labelled angle; a minute change at Subtle transitions only `rotate` on HTML hand wrappers; zero Intl formatters per tick within a minute; Classic digits are lining (one baseline and height, #363)';
 }

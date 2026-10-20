@@ -581,6 +581,129 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     }
     checks.push('Air quality (AQI and category), Note, Countdown, Sun & moon, World clocks and Calendar: a changed value remounts its TransitionText and fades in by opacity at Subtle; Off runs nothing');
 
+    // (15) #357: a settings or preference change during a fade-out finishes that relocation instead of leaving the
+    // display black until the next interval. The plane is visible again within the fade plus the 1.1 s black rest,
+    // the arrangement still changes only while black, and the next fade-out comes one (new) interval after the change.
+    {
+      const fading = page => page.locator('.widget-grid-plane').evaluate(plane => plane.classList.contains('fading'));
+      const now = page => page.evaluate(() => Date.now());
+      const results = [];
+      for (const [label, mutate, after] of [
+        ['interval 59 → 120 s', state => { state.settings.appearance.motionIntervalSeconds = 120; }, { interval: 120, fade: 2 }],
+        ['fade 2 → 3 s', state => { state.settings.appearance.fadeSeconds = 3; }, { interval: 59, fade: 3 }],
+        ['Drift and fade off', state => { state.settings.appearance.motionEnabled = false; }, { interval: 59, fade: 0 }],
+        ['reduced motion', null, { interval: 59, fade: 0 }],
+      ]) {
+        // A relocation every 59 s with a 2 s fade: the App's 30 s poll at 60 s lands about 1 s into the first fade-out.
+        const view = await displayPage({ state: scenario(state => { level('subtle')(state); Object.assign(state.settings.appearance, { motionIntervalSeconds: 59, fadeSeconds: 2 }); }) });
+        const { page, served } = view;
+        await page.clock.pauseAt(await now(page) + 100);
+        let polls = 0; page.on('response', response => { if (new URL(response.url()).pathname === '/api/state') polls++; });
+        await page.evaluate(() => {
+          window.__relocation = [];
+          const ambient = document.querySelector('.ambient'), plane = document.querySelector('.widget-grid-plane');
+          const record = () => window.__relocation.push({ t: Date.now(), composition: Number(ambient.dataset.composition), fading: plane.classList.contains('fading') });
+          new MutationObserver(record).observe(ambient, { attributes: true, subtree: true, attributeFilter: ['class', 'data-composition'] }); record();
+        });
+        await page.clock.runFor(57_000);
+        for (let step = 0; !(await fading(page)); step++) { assert.ok(step < 40, `${label}: the first fade-out starts`); await page.clock.runFor(100); }
+        const composition = Number(await page.locator('.ambient').getAttribute('data-composition'));
+        if (mutate) {
+          served.state = structuredClone(served.state); mutate(served.state); const before = polls;
+          for (let step = 0; polls === before; step++) { assert.ok(step < 30, `${label}: the 30 s poll`); await page.clock.runFor(100); await page.waitForTimeout(20); }
+        } else { await page.clock.runFor(1_000); await page.emulateMedia({ reducedMotion: 'reduce' }); }
+        await page.waitForTimeout(300); // the new settings render while page time stands still
+        const changed = await now(page);
+        assert.ok(await fading(page), `${label}: the change lands during the fade-out`);
+        assert.equal(Number(await page.locator('.ambient').getAttribute('data-composition')), composition, `${label}: before the arrangement changes`);
+        let visible = changed;
+        while (await fading(page)) { assert.ok(visible - changed <= after.fade * 1000 + 1_100 + 200, `${label}: still black ${visible - changed} ms after the change`); await page.clock.runFor(50); visible = await now(page); }
+        const log = await page.evaluate(() => window.__relocation);
+        assert.equal(Number(await page.locator('.ambient').getAttribute('data-composition')), composition + 1, `${label}: the reveal shows the next arrangement`);
+        for (let index = 1; index < log.length; index++) if (log[index].composition !== log[index - 1].composition) assert.ok(log[index].fading, `${label}: the arrangement changes only while black`);
+        await page.clock.runFor(after.interval * 1_000 - (visible - changed) - 1_500);
+        let next = await now(page);
+        while (!(await fading(page))) { assert.ok(next - changed <= after.interval * 1_000 + 300, `${label}: no fade-out ${next - changed} ms after the change`); await page.clock.runFor(50); next = await now(page); }
+        assert.ok(next - changed >= after.interval * 1_000 - 300, `${label}: the next fade-out ${next - changed} ms after the change, expected ${after.interval} s`);
+        results.push(`${label}: visible ${visible - changed} ms after the change, next fade-out after ${((next - changed) / 1000).toFixed(1)} s`);
+        await view.close();
+      }
+      checks.push(`#357 mid-fade changes: ${results.join('; ')}`);
+    }
+
+    // (16) #174: a minute's ease that starts just before a fade-out finishes in view, and the angles return to
+    // [0, 360) only once the arrangement is black. #161: the hands turn as composited HTML wrappers, so a minute
+    // change animates only rotate and costs no per-frame style recalculation or layout.
+    {
+      const onlyAnalog = state => { state.settings.appearance.clockStyle = 'analog'; state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock'])); };
+      const elevenAm = Date.parse('2026-10-18T15:00:00Z'); // 11:00 in America/Toronto: the minute hand wraps from 354° to 360°
+      const view = await displayPage({ state: scenario(state => { level('subtle')(state); onlyAnalog(state); }) });
+      const { page } = view;
+      await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+      await page.clock.runFor(178_000);
+      for (let step = 0; !(await page.locator('.widget-grid-plane.fading').count()); step++) { assert.ok(step < 200, 'the first fade-out'); await page.clock.runFor(20); }
+      await page.clock.runFor(3_500);
+      // The one-second tick and the relocation interval start together, so the next fade-out comes 176.5 s from
+      // now, on a tick. Put 10:59 → 11:00 between the two ticks before it: the minute eases 1 s before the fade-out.
+      await page.clock.setSystemTime(new Date(elevenAm - 175_000));
+      await page.evaluate(() => {
+        window.__hands = []; window.__handEvents = [];
+        const ambient = document.querySelector('.ambient'), plane = document.querySelector('.widget-grid-plane'), clock = document.querySelector('.analog-clock');
+        const minute = () => clock.querySelector('.analog-minute');
+        const record = () => window.__hands.push({ t: Date.now(), minute: parseFloat(minute().style.rotate), hour: parseFloat(clock.querySelector('.analog-hour').style.rotate), snap: minute().hasAttribute('data-hand-snap'), fading: plane.classList.contains('fading'), composition: Number(ambient.dataset.composition) });
+        new MutationObserver(record).observe(ambient, { attributes: true, subtree: true, attributeFilter: ['class', 'style', 'data-hand-snap', 'data-composition'] });
+        for (const type of ['transitionrun', 'transitionend', 'transitioncancel']) clock.addEventListener(type, event => { if (event.target.classList.contains('analog-minute')) window.__handEvents.push({ type, t: Date.now(), property: event.propertyName }); });
+        record();
+      });
+      await page.clock.runFor(175_600);
+      const eased = await page.evaluate(() => ({ minute: parseFloat(document.querySelector('.analog-minute').style.rotate), snap: document.querySelector('.analog-minute').hasAttribute('data-hand-snap'), motion: [...document.querySelectorAll('.analog-hand')].flatMap(hand => hand.getAnimations().map(animation => ({ name: animation.transitionProperty ?? animation.animationName, html: hand instanceof HTMLElement }))) }));
+      assert.deepEqual([eased.minute, eased.snap], [360, false], `10:59 → 11:00 turns the minute hand on to 360°, easing (${JSON.stringify(eased)})`);
+      assert.ok(eased.motion.length >= 1 && eased.motion.every(item => item.name === 'rotate' && item.html), `#161: only rotate on HTML hand wrappers (${JSON.stringify(eased.motion)})`);
+      assert.ok((await inventory(page)).every(item => item.name === 'transition:rotate'), '#161: the minute change runs nothing else in the plane');
+      await page.clock.runFor(1_000);
+      assert.equal(await page.locator('.widget-grid-plane.fading').count(), 1, 'the fade-out starts one second after the minute change');
+      await page.waitForTimeout(900); // the 600 ms ease runs in real time while page time stands still
+      const during = await page.evaluate(() => ({ minute: parseFloat(document.querySelector('.analog-minute').style.rotate), snap: document.querySelector('.analog-minute').hasAttribute('data-hand-snap'), events: window.__handEvents }));
+      assert.deepEqual([during.minute, during.snap], [360, false], `#174: no re-base while the arrangement is still fading out (${JSON.stringify(during)})`);
+      // The 11:00 ease is the last one to start (fast-forwarded minutes before it replaced each other's eases).
+      const ease = during.events.slice(during.events.findLastIndex(event => event.type === 'transitionrun') + 1);
+      assert.ok(ease.some(event => event.type === 'transitionend' && event.property === 'rotate'), `#174: the minute ease completes (${JSON.stringify(during.events)})`);
+      assert.ok(!ease.some(event => event.type === 'transitioncancel'), `#174: nothing cuts the ease short (${JSON.stringify(during.events)})`);
+      await page.clock.runFor(2_200);
+      const black = await page.evaluate(() => ({ minute: parseFloat(document.querySelector('.analog-minute').style.rotate), snap: document.querySelector('.analog-minute').hasAttribute('data-hand-snap'), log: window.__hands }));
+      assert.deepEqual([black.minute, black.snap], [0, true], `#174: on black the minute hand re-bases to 0° without a transition (${JSON.stringify(black.minute)})`);
+      const wrapped = black.log.findIndex(entry => entry.minute >= 360);
+      assert.ok(wrapped >= 0, 'the minute hand reached 360°');
+      for (const entry of black.log.slice(wrapped)) if (entry.minute < 360) assert.ok(entry.fading && entry.composition > black.log[wrapped].composition, `#174: angles drop into [0, 360) only while black (${JSON.stringify(entry)})`);
+      await page.clock.runFor(1_200);
+      assert.equal(await page.locator('.widget-grid-plane.fading').count(), 0, 'the next arrangement is revealed');
+      await view.close();
+
+      // #161 cost: CDP counts over one minute change at Off, at Subtle (a 600 ms ease) and at Subtle with the ease
+      // stretched to 3 s, each over 3.5 real seconds after it. A main-thread ease would recalculate style on every
+      // frame, about five times as often over 3 s as over 600 ms; a composited one costs the same for both.
+      const cost = {};
+      for (const [label, animation, ease] of [['off', 'off', null], ['subtle', 'subtle', null], ['subtle, 3 s ease', 'subtle', '3000ms']]) {
+        const run = await displayPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3, state: scenario(state => { level(animation)(state); onlyAnalog(state); }) });
+        if (ease) await run.page.addStyleTag({ content: `.grid-ambient { --motion-hand: ${ease} !important; }` });
+        await run.page.clock.pauseAt(await run.page.evaluate(() => Date.now() + 100));
+        await run.page.clock.setSystemTime(new Date(elevenAm - 3_000)); await run.page.clock.runFor(1_000); await run.page.waitForTimeout(300);
+        const session = await run.context.newCDPSession(run.page); await session.send('Performance.enable');
+        const read = async () => Object.fromEntries((await session.send('Performance.getMetrics')).metrics.map(metric => [metric.name, metric.value]));
+        const start = await read();
+        await run.page.clock.runFor(3_000); // a tick after 11:00 changes the minute
+        await run.page.waitForTimeout(3_500);
+        const end = await read();
+        assert.equal(parseFloat(await run.page.locator('.analog-minute').evaluate(hand => hand.style.rotate)) % 360, 0, `${label}: the minute hand reached 12`);
+        cost[label] = { RecalcStyleCount: end.RecalcStyleCount - start.RecalcStyleCount, LayoutCount: end.LayoutCount - start.LayoutCount };
+        await run.close();
+      }
+      assert.ok(Math.abs(cost['subtle, 3 s ease'].RecalcStyleCount - cost.subtle.RecalcStyleCount) <= 4, `#161: style recalculation does not scale with the ease's frames ${JSON.stringify(cost)}`);
+      assert.ok(cost.subtle.RecalcStyleCount - cost.off.RecalcStyleCount <= 12, `#161: an eased minute change recalculates style only a few times ${JSON.stringify(cost)}`);
+      assert.ok(Math.max(cost.subtle.LayoutCount, cost['subtle, 3 s ease'].LayoutCount) - cost.off.LayoutCount <= 2, `#161: and adds no layout ${JSON.stringify(cost)}`);
+      checks.push(`#174/#161 analog hands: 10:59 → 11:00 one second before a fade-out eases to 360° on HTML wrappers (rotate only), completes (transitionend, no cancel) while fading, and re-bases to 0° only once black; one minute change over 3.5 s at 1280×720 ×3: ${JSON.stringify(cost)}`);
+    }
+
     // (9)–(10) Editor: samples are still; the Animation control follows the draft contract.
     async function editorPage({ reducedMotion = 'no-preference', viewport = { width: 1280, height: 720 } } = {}) {
       const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion }); contexts.add(context);
