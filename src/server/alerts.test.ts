@@ -169,6 +169,21 @@ test('every request sends the User-Agent, an 8 s timeout and redirect: error, an
   }
 });
 
+test('a slow check answers within the bounded wait, says it is refreshing, and finishes in the background (#351)', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const service = new AlertsService(async input => {
+    const url = new URL(input);
+    if (!url.pathname.includes('zones')) await gate;
+    return providers()(url, {});
+  }, () => NOW, undefined, 20);
+  const waiting = await service.get(TORONTO);
+  assert.equal(waiting.status, 'unavailable'); assert.equal(waiting.refreshing, true);
+  release(); await new Promise(resolve => setTimeout(resolve, 20));
+  const done = await service.get(TORONTO);
+  assert.equal(done.status, 'fresh'); assert.equal(done.refreshing, undefined); assert.equal(done.alerts.length, 4);
+});
+
 test('cadence: refreshed every 5 minutes, retried 2 minutes after a failure, stale at 15 minutes, unavailable after 2 hours with nothing in effect', async () => {
   let fail = false;
   const clock = harness(url => { if (fail && !url.pathname.includes('zones')) return new Response('down', { status: 500 }); return providers()(url, {}); });
@@ -248,9 +263,10 @@ test('a failed answer whose body is a teed stream (a cloned Response) never hold
   // Cancelling one branch of a teed stream settles only when the other branch is cancelled too, so the
   // service lets go of a failed body without waiting for it.
   const failing = new Response('down', { status: 500 }), huge = new Response('x'.repeat(ALERTS_BODY_LIMIT + 10));
-  const clock = harness(url => url.pathname.includes('zones') ? Response.json(ZONES) : failing.clone());
-  const settled = await Promise.race([clock.service.get(TORONTO).then(state => state.status), new Promise(resolve => setTimeout(() => resolve('hung'), 2000))]);
-  assert.equal(settled, 'unavailable');
-  const big = harness(url => url.pathname.includes('zones') ? Response.json(ZONES) : huge.clone());
-  assert.equal(await Promise.race([big.service.get(TORONTO).then(state => state.status), new Promise(resolve => setTimeout(() => resolve('hung'), 2000))]), 'unavailable');
+  // The bounded wait (#351) would answer anyway after a second, but with `refreshing` set while the check hangs.
+  for (const body of [failing, huge]) {
+    const clock = harness(url => url.pathname.includes('zones') ? Response.json(ZONES) : body.clone());
+    const state = await clock.service.get(TORONTO);
+    assert.equal(state.status, 'unavailable'); assert.equal(state.refreshing, undefined, 'the check finished');
+  }
 });

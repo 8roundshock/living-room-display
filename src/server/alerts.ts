@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import type { AlertsProvider, AlertsSource, AlertsState, Settings, WeatherAlert } from '../shared/contracts.ts';
-import { RefreshClock, type FetchLike, type Stamp } from './weather.ts';
+import { REFRESH_WAIT_MS, RefreshClock, waitAtMost, type FetchLike, type Stamp } from './weather.ts';
 
 /**
  * Official weather alerts for the saved weather location (#437), for the Dynamic widget only.
@@ -226,15 +226,19 @@ export class AlertsService {
   #fetch: FetchLike;
   #clock: RefreshClock;
   #userAgent: string;
+  #waitMs: number;
   #cache = new Map<string, Entry>();
   /** Request times per provider over the last hour, and a Retry-After pause. */
   #requests: Record<AlertsProvider, Stamp[]> = { eccc: [], nws: [] };
   #paused: Record<AlertsProvider, { since: Stamp; ms: number } | null> = { eccc: null, nws: null };
-  constructor(fetcher: FetchLike = fetch, now: () => number = Date.now, monotonic?: () => number, userAgent = ALERTS_USER_AGENT) {
-    this.#fetch = fetcher; this.#clock = new RefreshClock(now, monotonic); this.#userAgent = userAgent;
+  constructor(fetcher: FetchLike = fetch, now: () => number = Date.now, monotonic?: () => number, waitMs = REFRESH_WAIT_MS, userAgent = ALERTS_USER_AGENT) {
+    this.#fetch = fetcher; this.#clock = new RefreshClock(now, monotonic); this.#waitMs = waitMs; this.#userAgent = userAgent;
   }
 
-  /** The alerts for the saved location, checked first when due (the same awaited refresh as air quality). */
+  /**
+   * The alerts for the saved location, checked first when due, waiting for that at most `waitMs` like the
+   * forecast (#351); a check still running carries on and the state says `refreshing` meanwhile.
+   */
   async get(settings: Pick<Settings, 'location'>): Promise<AlertsState> {
     const { latitude, longitude } = roundedPoint(settings);
     const key = `${latitude},${longitude}`;
@@ -247,7 +251,7 @@ export class AlertsService {
     if (this.#due(entry)) {
       const current = entry;
       current.pending ??= this.#refresh(current).finally(() => { delete current.pending; });
-      await current.pending;
+      await waitAtMost(current.pending, this.#waitMs);
     }
     return this.#read(entry);
   }

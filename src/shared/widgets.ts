@@ -479,6 +479,17 @@ export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<Widg
 }
 
 /**
+ * Whether a board needs the forecast (#352): Weather or Forecast, or Sun & moon or Air quality while
+ * the weather location's timezone is still `auto`, which only the forecast resolves. The server
+ * refreshes the forecast for /api/state only then; the editor asks for it itself otherwise. Dynamic
+ * (#437) always needs it: its weather cards, and the place and zone its sun and moon use.
+ */
+export function needsForecast(settings: Pick<VisualSettings, 'widgets'> & { location: { timezone: string } }): boolean {
+  const on = (id: WidgetId) => !!settings.widgets[id] && isActiveWidget(id);
+  return on('weather') || on('forecast') || on('dynamic') || (settings.location.timezone === 'auto' && (on('sunMoon') || on('airQuality')));
+}
+
+/**
  * Whether a board needs air quality (#437): the Air quality widget, or Dynamic with its Air & UV source.
  * The server requests the CAMS reading for /api/state only then; the editor previews it for a draft.
  */

@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { afterEach, test } from 'node:test';
-import { ApiError, NETWORK_ERROR_MESSAGE, api, isNetworkError } from './api.ts';
+import { ApiError, NETWORK_ERROR_MESSAGE, api, apiTagged, isNetworkError, rememberRevision, revisionOf, settingsConflict } from './api.ts';
+import { defaultSettings } from '../shared/defaults.ts';
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -72,4 +73,33 @@ test('successful replies parse JSON and 204 returns nothing', async () => {
   respond(() => new Response('not json', { status: 200 }));
   const unreadable = await api('/api/state').catch((caught: unknown) => caught);
   assert.ok(unreadable instanceof ApiError && !unreadable.network && unreadable.status === 200);
+});
+
+test('a reply carries its entity tag: the settings revision (#287)', async () => {
+  respond(() => Response.json({ ok: true }, { headers: { ETag: '"abc-1"' } }));
+  assert.deepEqual(await apiTagged('/api/state'), { body: { ok: true }, etag: '"abc-1"' });
+  respond(() => Response.json({ ok: true }));
+  assert.deepEqual(await apiTagged('/api/state'), { body: { ok: true }, etag: null });
+  const settings = defaultSettings(), other = defaultSettings();
+  rememberRevision(settings, '"abc-1"'); rememberRevision(other, null);
+  assert.equal(revisionOf(settings), '"abc-1"');
+  assert.equal(revisionOf(structuredClone(settings)), null, 'a revision belongs to the settings object it arrived with');
+  assert.equal(revisionOf(other), null);
+});
+
+test('a stale settings Save is recognised by its 409 reply with the current settings (#287)', async () => {
+  const current = defaultSettings(); current.units = 'imperial';
+  respond(() => Response.json({ error: 'Settings changed in another window. Review and save again.', settings: current, revision: 'abc-2' }, { status: 409, headers: { ETag: '"abc-2"' } }));
+  const error = await api('/api/settings', { method: 'PATCH' }).catch((caught: unknown) => caught);
+  assert.ok(error instanceof ApiError && error.status === 409);
+  assert.equal(error.etag, '"abc-2"');
+  const conflict = settingsConflict(error);
+  assert.ok(conflict);
+  assert.equal(conflict.etag, '"abc-2"'); assert.equal(conflict.settings.units, 'imperial');
+  assert.equal(conflict.message, 'Settings changed in another window. Review and save again.');
+  // Without the header the body's revision is quoted; other 409s are not settings conflicts.
+  assert.equal(settingsConflict(new ApiError(409, 'x', undefined, { body: { settings: current, revision: 'abc-3' } }))?.etag, '"abc-3"');
+  assert.equal(settingsConflict(new ApiError(409, 'Reminder limit reached', undefined, { body: { error: 'Reminder limit reached' } })), null);
+  assert.equal(settingsConflict(new ApiError(500, 'x', undefined, { body: { settings: current, revision: 'abc-3' } })), null);
+  assert.equal(settingsConflict(new Error('x')), null);
 });

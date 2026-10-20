@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApplication } from './app.ts';
 import { forecastFixture, seedColorAccentData } from './fixtures.ts';
-import { needsAirQuality, needsAlerts } from '../shared/widgets.ts';
+import { needsAirQuality, needsAlerts, needsForecast } from '../shared/widgets.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 
 const NOW = Date.parse('2026-10-20T14:00:00Z');
@@ -45,6 +45,22 @@ async function fixture() {
     async close() { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); },
   };
 }
+
+test('Dynamic alone needs the forecast: /api/state refreshes it for a board with only Dynamic (#352)', async () => {
+  const settings = defaultSettings();
+  settings.widgets = Object.fromEntries(Object.keys(settings.widgets).map(id => [id, id === 'dynamic'])) as typeof settings.widgets;
+  assert.equal(needsForecast(settings), true);
+  settings.widgets.dynamic = false; assert.equal(needsForecast(settings), false);
+  const app = await fixture();
+  try {
+    await app.patch({ widgets: Object.fromEntries(Object.keys(defaultSettings().widgets).map(id => [id, false])) });
+    await app.state();
+    assert.equal(app.count('/v1/forecast'), 0, 'no widget needs the forecast: no request');
+    await app.patch({ widgets: { dynamic: true } });
+    assert.equal((await app.state()).weather.status, 'fresh');
+    assert.equal(app.count('/v1/forecast'), 1, 'Dynamic alone asks for it');
+  } finally { await app.close(); }
+});
 
 test('needsAlerts and needsAirQuality follow the saved widgets and Dynamic sources', () => {
   const settings = defaultSettings();

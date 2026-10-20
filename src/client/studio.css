@@ -402,6 +402,13 @@ html.studio-editor {
   opacity: 0.4;
   transform: none;
 }
+/* Save keeps focus while unavailable or saving (#289): the disabled look, with a full-strength focus ring. */
+.studio .studio-savebar .button.primary[aria-disabled='true'] {
+  cursor: default;
+  transform: none;
+  background: color-mix(in srgb, var(--studio-accent) 40%, #302a37);
+  color: color-mix(in srgb, #231e35 40%, #302a37);
+}
 .studio .button.small {
   min-height: 40px;
   padding: 8px 13px;

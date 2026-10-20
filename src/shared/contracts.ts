@@ -106,6 +106,8 @@ export interface WeatherState {
   source: 'Open-Meteo'; sourceUrl: string; location: LocationSettings;
   units: { temperature: '°C' | '°F'; windSpeed: 'km/h' | 'mph'; precipitation: 'mm' | 'in' };
   current: WeatherCurrent | null; daily: WeatherDay[]; hourly: RainInterval[];
+  /** API-only, never persisted (#351): a provider request for this state is still in flight, so ask again soon. */
+  refreshing?: boolean;
 }
 export interface PreviewState {
   available: boolean; capturedAt: string | null; width: number | null; height: number | null;
@@ -122,6 +124,8 @@ export interface AirQualityState {
   current: { time: string; aqi: number | null; dominant: AirPollutant | null; pm2_5: number | null; pm10: number | null; uvIndex: number | null } | null;
   /** At most 24 upcoming instants, starting with the current hour. */
   hourly: AirQualityReading[];
+  /** API-only, never persisted (#351): a provider request for this state is still in flight, so ask again soon. */
+  refreshing?: boolean;
 }
 /**
  * One official alert in effect (#437). `name` is the provider's own wording (ECCC's has only its first
