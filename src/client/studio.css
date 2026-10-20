@@ -1858,8 +1858,8 @@ html.studio-editor {
 
 /*
  * Widget picker samples (#361). Each family fills the stage width, at most twice the canvas scale
- * (100 px per cell), with a 9 px text floor in place of the display's own floors (the display's
- * scale with its screen; a sample has none). Content the floor makes overfull zooms out as a whole,
+ * (100 px per cell), with a fixed 9 px text and 10.5 px data floor in place of the display's own
+ * floors, which scale with its screen. Content the floor makes overfull zooms out as a whole,
  * as on the display. A small map under the sample shows the family's footprint on the board.
  */
 .studio .widget-picker .sample-stage {
