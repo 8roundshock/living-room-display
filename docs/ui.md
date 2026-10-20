@@ -19,9 +19,11 @@ display at `/display`. Their titles are "Still · Home", "Still · Edit display"
 **Pages** nav holds **Home** and **Edit display** with `aria-current="page"` on the
 current one (at 480 px or narrower only the other page's link shows), and **Open
 display** (icon-only at 480 px or narrower, still named "Open display") targets one
-named window, `still-display`, shared with #436, so repeated clicks reuse that window
-rather than opening another tab each time. The link has no `rel="noreferrer"`, which
-would sever the window name. All three are plain links, so Edit display's leave prompt
+named window, `still-display`, shared with #436, so repeated clicks from the same tab
+reuse that window rather than opening another tab each time. The browser finds a named
+window only from the tab that opened it: a click from an unrelated tab (each Start menu
+launch opens one) opens a second display tab, which #464 tracks. The link has no
+`rel="noreferrer"`, which would sever the window name. All three are plain links, so Edit display's leave prompt
 still guards an unsaved draft. Only `/editor` may ask for device location
 (`Permissions-Policy: geolocation=(self)`); Home and the display send `geolocation=()`.
 

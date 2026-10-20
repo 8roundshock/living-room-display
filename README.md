@@ -31,10 +31,10 @@ chosen to keep it private until a usable release; there is no public release yet
 For Windows 10 and 11 (x64), the simplest route is Setup:
 `LivingRoomDisplaySetup-<version>.exe` installs just for your account, with no
 administrator rights, no developer tools and no account. Double-click it, click
-**Install**, and it opens the editor when it's done. Find it again in the Start
-menu as **Living Room Display** (editor) and **Living Room Display - Show
-display**. It doesn't start with Windows or change your screen saver. To update,
-run a newer Setup: your settings, reminders and photo stay, and a backup copy is
+**Install**, and it opens Home when it's done, with **Edit display** a click away.
+Find it again in the Start menu as **Living Room Display** (Home) and **Living Room
+Display - Show display**. It doesn't start with Windows or change your screen saver.
+To update, run a newer Setup: your settings, reminders and photo stay, and a backup copy is
 saved first. To remove it, use **Settings > Apps** (or right-click the Start
 entry) and choose whether to keep your data.
 

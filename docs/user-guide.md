@@ -42,12 +42,14 @@ reminders without a date and what is coming up in the next week; tick the circle
 something is done. **All reminders** opens the full list. Changes you make on Home
 reach the display within a few seconds.
 
-## Open Edit display
+## Open Home and Edit display
 
-Open the Start menu and choose **Living Room Display**. Edit display opens in your
-browser (`http://127.0.0.1:4318/editor`); Setup also opens it once when it finishes
-installing. Use the **Home** and **Edit display** links at the top to move between the
-two pages.
+Open the Start menu and choose **Living Room Display**. Home opens in your browser
+(`http://127.0.0.1:4318/`); Setup also opens it once when it finishes installing.
+Each time you choose it, it opens another browser tab, so close the ones you no longer
+need. To choose what the display shows and how it looks, click **Edit display** at the
+top (`http://127.0.0.1:4318/editor`). Use the **Home** and **Edit display** links at
+the top to move between the two pages.
 
 You can keep Edit display open while you change things. Changes to the look, the
 widgets and the weather settings are a draft: they show at once in the preview on
@@ -58,9 +60,11 @@ they save as soon as you add, change or tick one.
 
 ## First run: choose your city
 
-The weather starts with Toronto until you choose a place. A card at the top of the
-**Widgets** tab says so (for example "Showing Toronto weather") and offers two
-choices:
+The weather starts with Toronto until you choose a place. Home says so ("Weather shows
+Toronto until you choose your city"), and its **Choose your city** link opens the
+**Weather** tab in Edit display with the **City** box ready. In Edit display, a card at
+the top of the **Widgets** tab says so too (for example "Showing Toronto weather") and
+offers two choices:
 
 - **Use my location**: your browser asks once whether the app may use your
   location. The app keeps only a rounded position, enough for local weather.
@@ -79,7 +83,9 @@ Make sure the TV shows your PC's screen.
   the whole screen straight away. If the PC has more than one screen, it uses the
   main one.
 - **From Home or Edit display:** click **Open display** at the top. It opens in a new
-  browser tab the first time and reuses that tab after that. Press **F** to make it
+  browser tab the first time; clicking it again from the same tab goes back to that
+  display tab. Another Home or Edit display tab, such as one a later Start menu launch
+  opened, opens its own display tab, so close any extra ones. Press **F** to make it
   full screen.
 
 ## Leave the display

@@ -462,8 +462,9 @@ serialized write the widget keeps its saved placement (with a free-size custom s
 cells are free, else takes the first free cells for its default family, then for each smaller
 family, with no custom size; no other widget moves. With no room it returns 409 "No room for
 {Name} on your display." and writes nothing; an enabled widget returns 200 and writes nothing.
-Home turns a widget off with `PATCH /api/settings` `{ "widgets": { "<id>": false } }`, which keeps
-its placement. `showPlacement` in `src/shared/show.ts` is the rule both sides use.
+There is no hide endpoint, and Home has no control that turns a widget off. Edit display does that:
+its save is a `PATCH /api/settings` whose `widgets` map has `"<id>": false`, which keeps the
+widget's placement. `showPlacement` in `src/shared/show.ts` is the rule both sides use.
 
 ### Change marker
 
