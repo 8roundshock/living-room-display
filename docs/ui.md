@@ -209,7 +209,7 @@ motion or the Off animation level.
 - **Widgets** lists the widgets on the display in the picker's groups (Time, Weather & sky,
   Personal, Pictures; catalog order inside each, #365) and selects inline size/position and
   per-widget controls. On a coarse pointer the size families and room fixes are 44 px tall,
-  as are Note's **Clear** everywhere (#349). **Add widget**
+  as is Note's **Clear** button everywhere (#349). **Add widget**
   opens a compact category rail and one actual renderer with synthetic family
   content, size choices and a reachable Add action. Every module can be removed, including clock
   and weather separately. Small/medium/large families adapt their content.
