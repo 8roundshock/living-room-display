@@ -108,8 +108,8 @@ Other widgets reject a span (`<Name> does not support custom sizes`); too-small 
 too-wide spans return 400 with a clear message. In a placement PATCH, `span: null`
 clears a custom size, and so does a `size` without `span` (a family choice); a
 move keeps it. The editor sends a changed placement whole, with `span: null` when
-it has none. The previous installed release (`3fee844`) reads a saved span; the older
-`bedca44` does not, so a downgrade that far needs the
+it has none. The previous installed release (`3446400`) and the earlier `3fee844`
+read a saved span; `bedca44` does not, so a downgrade that far needs the
 [strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
 Legacy version-one settings acquire the safe default grid while preserving old
 widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
@@ -125,8 +125,10 @@ unchanged until Native is chosen. `color` tints every widget's accent elements w
 [native palette](design.md#native-palette)). `accentColor` is kept in both modes.
 A stored retired swatch value (Sand `#b8a17a`, retuned in #224) renders as that
 swatch's current value and is never rewritten.
-At rest `color` is omitted; `native` is written and is a
-[rollback exception](install.md#additive-data-and-rollback-compatibility-84).
+At rest `color` is omitted and `native` is written. The previous installed release
+(`3446400`) and `3fee844` read `native`
+([rollback compatibility](install.md#additive-data-and-rollback-compatibility-84));
+it is a rollback exception only for [`bedca44`](install.md#earlier-rollback-target-bedca44).
 
 `appearance.animation` is `off`, `subtle` or `lively`; data without it reads as
 `subtle`, and `subtle` is omitted at rest. It governs motion inside widgets and the
@@ -392,8 +394,10 @@ weather, snapshot pixels, and native tokens are excluded. Store backups privatel
 At rest, `state.json`, `state.backup.json` and exports omit additive values while
 they equal the current read default: `appearance.accentMode` `color`,
 `appearance.animation` `subtle`, default `widgetData` sections, and disabled widget
-ids the previous installed release does not know. The previous release (`3fee844`)
+ids the previous installed release does not know. The previous release (`3446400`)
 reads every one of these keys and knows every widget id, so all widget ids are
-written. API responses
-(`/api/state`, the `PATCH /api/settings` response and the native session) always
-include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).
+written and omitting the other values is optional. It is kept unchanged (#272) so a
+reader bump does not change the data format, and it remains the mechanism for a
+future additive key or new widget id that the previous release does not know. API
+responses (`/api/state`, the `PATCH /api/settings` response and the native session)
+always include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).

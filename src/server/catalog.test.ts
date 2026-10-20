@@ -45,7 +45,7 @@ test('every catalog entry declares a valid category, tone, status and supported 
 
 test('planned entries reserve the #78 ids after the shipped ones and are never active', () => {
   assert.deepEqual(WIDGET_IDS, [...FOUNDATION_IDS, ...NEW_IDS]);
-  // New ids are appended: the previous installed release's ids (all 13 since 3fee844, #263) stay a prefix.
+  // New ids are appended: the previous installed release's ids (all 13 since 3fee844, #263; 3446400 since #367) stay a prefix.
   assert.deepEqual(WIDGET_IDS.slice(0, PREVIOUS_RELEASE.widgetIds.length), [...PREVIOUS_RELEASE.widgetIds]);
   // Rain is retired into Weather (#74); every other foundation id stays active, and each #78 id is
   // active once its unit deletes `status`.
