@@ -9,7 +9,7 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
-import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
+import { catalogBoardDefaults, forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_IDS, normalizePlacement, widgetRevealOrder, widgetSizes } from '../../src/shared/widgets.ts';
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
@@ -642,6 +642,8 @@ export async function runMotionQa({ playwright, edge, performance = true } = {})
     }
     {
       // Editor polish (Subtle): sliding tab indicator, disclosure, Save bar, picker and drop-in, each ≤ 240 ms.
+      // The drop-in needs a free cell: the catalog board has one, the #435 default board is full.
+      await app.store.update(data => { data.settings = catalogBoardDefaults(); });
       const { page, close } = await editorPage();
       const editorMotion = () => page.evaluate(() => document.getAnimations().filter(animation => !(animation.timeline instanceof ScrollTimeline) && !animation.effect?.target?.closest?.('.preview-surface')).map(animation => ({ name: animation.animationName ?? `transition:${animation.transitionProperty}`, pseudo: animation.effect.pseudoElement, target: animation.effect.target.className?.baseVal ?? animation.effect.target.className, duration: animation.effect.getTiming().duration })));
       await page.getByRole('tab', { name: 'Reminders', exact: true }).click();
