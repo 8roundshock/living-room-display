@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { AirPollutant, AirQualityState, Settings } from '../shared/contracts.ts';
-import { RefreshClock, refreshDue, type FetchLike, type Stamp } from './weather.ts';
+import { REFRESH_WAIT_MS, RefreshClock, refreshDue, waitAtMost, type FetchLike, type Stamp } from './weather.ts';
 
 /**
  * Air quality for the saved weather location from the keyless Open-Meteo air-quality API (CAMS
@@ -76,9 +76,13 @@ export class AirQualityService {
   #fetch: FetchLike;
   /** Wall and monotonic time, as for the forecast (#244): a clock set back neither stalls refreshes nor freshens a reading. */
   #clock: RefreshClock;
+  #waitMs: number;
   #cache = new Map<string, Entry>();
-  constructor(fetcher: FetchLike = fetch, now: () => number = Date.now, monotonic?: () => number) { this.#fetch = fetcher; this.#clock = new RefreshClock(now, monotonic); }
+  constructor(fetcher: FetchLike = fetch, now: () => number = Date.now, monotonic?: () => number, waitMs = REFRESH_WAIT_MS) {
+    this.#fetch = fetcher; this.#clock = new RefreshClock(now, monotonic); this.#waitMs = waitMs;
+  }
 
+  /** The reading, refreshed first when due, waiting for that at most `waitMs` like the forecast (#351). */
   async get(settings: Settings, scale: AirScale = settings.widgetData.airQuality.scale): Promise<AirQualityState> {
     const key = JSON.stringify([settings.location, scale]);
     let entry = this.#cache.get(key);
@@ -88,11 +92,13 @@ export class AirQualityService {
       this.#cache.set(key, entry);
     }
     if (refreshDue(this.#clock, entry, TTL, RETRY)) {
-      entry.pending ??= this.#refresh(settings, scale, entry).finally(() => { delete entry!.pending; });
-      await entry.pending;
+      const current = entry;
+      current.pending ??= this.#refresh(settings, scale, current).finally(() => { delete current.pending; });
+      await waitAtMost(current.pending, this.#waitMs);
     }
     const result = structuredClone(entry.state);
     if (result.updatedAt && entry.fetched && this.#clock.since(entry.fetched) >= TTL) result.status = 'stale';
+    if (entry.pending) result.refreshing = true;
     return result;
   }
 
