@@ -18,10 +18,9 @@ Inspect authentication locally and retain only whether the intended account is
 authenticated and which provider it uses. Do not put email addresses, tokens,
 account output, personal memory or other repositories in a task or Git.
 
-Checked on 2026-10-18: the owner's existing Claude Code 2.1.302 reports an
-authenticated first-party subscription account. Local help supports print mode,
-JSON results, explicit session IDs/resume, tool selection and denying unanswered
-permission requests. No agent was installed and no account, model or global
+Checked on 2026-10-18: the owner's existing Claude Code 2.1.302 is signed in.
+Local help supports print mode, JSON results, explicit session IDs/resume, tool
+selection and denying unanswered permission requests. No agent was installed and no account, model or global
 permission setting was changed. This discovery does not prove a model request ran.
 
 ## One request and one handoff

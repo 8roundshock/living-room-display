@@ -124,6 +124,7 @@ calendar, cloud hosting, or smart-home platform requirements.
 A future usable release should be installable and operable by another user's
 agent from repository instructions, with that user's own configuration and no
 dependency on the owner's accounts, absolute paths, or private memory. See the
-[installation contract](install.md). Keep the repository private until a usable
-release; publication is a separate reviewed step. Stars and feedback are optional
+[installation contract](install.md). The repository is public (owner decision,
+2026-10-20, [#441](https://github.com/8roundshock/living-room-display/issues/441));
+publishing a release is a separate reviewed step. Stars and feedback are optional
 and require the end user's permission before an agent acts on their behalf.

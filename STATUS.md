@@ -12,9 +12,9 @@ The owner's per-user install runs clean
 `34464001af41af0e2ea67fb090734b296f72c1c2`, the merge of
 [PR #286](https://github.com/8roundshock/living-room-display/pull/286) (time, sky
 and pictures polish, [#271](https://github.com/8roundshock/living-room-display/issues/271)).
-It was installed on 2026-10-19 at 19:34 UTC with the control script's
+It was installed on 2026-10-19 with the control script's
 `Update -NoBrowser`, over `4cb7dc1` (the merge of PR #327), which had been installed
-at 18:40 UTC the same day over `3fee844` (PR #163, installed at 05:27 UTC). Setup has
+earlier the same day over `3fee844` (PR #163, also installed that day). Setup has
 not run on the owner's PC. The
 [install evidence](https://github.com/8roundshock/living-room-display/issues/130#issuecomment-6275615800)
 records:
@@ -25,9 +25,9 @@ records:
 - installed provenance (`installation.json` at `3446400`, clean), a healthy
   `/api/health`, and served JavaScript and CSS matching the installed build;
 - unchanged `state.json` and `state.backup.json` hashes, the same bytes as before the
-  `3fee844` install: the owner had not saved since 2026-10-18;
-- unchanged Windows screensaver values (`scrnsave.scr`, active, 1200 s, not secure).
-  Idle activation was not changed (no `EnableIdle`);
+  `3fee844` install;
+- unchanged Windows screensaver settings. Idle activation was not changed
+  (no `EnableIdle`);
 - `app.previous` matching `4cb7dc1`, and one headless render of `/editor`, viewed and
   deleted, with no saved data written.
 
@@ -198,7 +198,7 @@ wave listed above.
   isolated Edge job and scoped process management. Windows Setup (#77, #201) builds
   reproducibly from a clean commit in CI, installs per user without administrator
   rights and puts the previous version back when an update fails its health check.
-  It is a private, unsigned prerelease.
+  It is an unsigned prerelease; no release is published yet.
 - A plain-language [user guide](docs/user-guide.md) for everyday use (#360, part 1).
 
 ## Verification
@@ -265,18 +265,18 @@ native acceptance or comfort across the room.
   The owner checks Settings > Billing and plans for the `8roundshock` account. Until
   jobs start again there is no CI on any branch, and PR #385 stays held.
 
-This is a current-PC source installation, not a public or signed release. TV
+This is a current-PC source installation, not a published or signed release. TV
 control, live app preview and multi-monitor selection remain future work; the host
 targets one primary display.
 
 ## Earlier evidence
 
-- `4cb7dc1` (PR #327) was installed on 2026-10-19 at 18:40 UTC over `3fee844`, with
+- `4cb7dc1` (PR #327) was installed on 2026-10-19 over `3fee844`, with
   the first polish wave except PR #286. Its
   [install evidence](https://github.com/8roundshock/living-room-display/issues/130#issuecomment-6274585737)
   reports a stopped-app data copy, provenance, health, matching served assets,
   unchanged data hashes and screensaver values, and `app.previous` matching `3fee844`.
-- `3fee844` (PR #163, the feature wave) was installed on 2026-10-19 at 05:27 UTC over
+- `3fee844` (PR #163, the feature wave) was installed on 2026-10-19 over
   `bedca44`, with the same checks
   ([install evidence](https://github.com/8roundshock/living-room-display/issues/130#issuecomment-6260374373)).
   Its pre-update data copy is the one a rollback to `bedca44` needs.
@@ -305,8 +305,10 @@ otherwise Toronto with a manual-city override;
 metric units and 12-hour time. Windows idle activation stays disabled until tested
 and explicitly enabled. See [architecture](docs/architecture.md) and [API](docs/api.md).
 
-Keep the repository private until a usable release and a reviewed publication
-step. Each PR requires a separate independent reviewer and final reviewed SHA;
-no external review integration is required. See the
+The repository is public (owner decision, 2026-10-20,
+[#441](https://github.com/8roundshock/living-room-display/issues/441)); follow the
+privacy rule in [AGENTS.md](AGENTS.md#change-and-verify), and publishing a release
+remains a separate reviewed step. Each PR requires a separate independent reviewer
+and final reviewed SHA; no external review integration is required. See the
 [backlog](https://github.com/8roundshock/living-room-display/issues) and
 [installation readiness](docs/install.md) for remaining acceptance work.

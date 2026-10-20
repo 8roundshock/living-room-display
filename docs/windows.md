@@ -124,7 +124,9 @@ to `main` and manual dispatch.
 
 - **Build** (windows-2025): `Test-Windows.ps1` under PowerShell 5.1 and 7, the
   Inno version check (installs the pinned, hash-verified 6.7.1 if needed),
-  `Build-Installer.ps1`, the payload checks, and the artifact (14 days).
+  `Build-Installer.ps1`, the payload checks, and the artifact (14 days). A pull
+  request from a fork uploads no artifact and skips the smoke job, so an installer
+  built from unreviewed fork code is never offered as this repository's artifact.
 - **Smoke** (windows-2022 and windows-2025 gating, windows-11-arm non-gating,
   each with the default folder and a folder path containing a space and a
   non-ASCII character): records the before-state, then installs silently. It then
@@ -205,7 +207,7 @@ that rollout. This documentation correction adds no live probes. Recheck current
 provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](install.md).
 On 2026-10-18 a later marker-only read reported clean `bedca44e` after PR #70,
-installed at 19:08:23 UTC, without rechecking backend/served assets, private
+installed that day, without rechecking backend/served assets, private
 data/backup equality or registration. Each install since `3fee844` rechecked
 provenance, health, served assets, data hashes and screensaver values; see
 [current status](../STATUS.md).
@@ -220,7 +222,7 @@ later merged application changes also passed their final-head reviews and CI.
 The native cursor replacement is a separate, uninstalled candidate in
 [draft PR51](https://github.com/8roundshock/living-room-display/pull/51), reviewed
 at combined head `f4a57b5` with both CI jobs successful. Its integrated runtime
-gates still apply; the repository stays private and this PR is not deployment evidence.
+gates still apply; this PR is not deployment evidence.
 
 ## Actual current-PC runtime evidence
 
@@ -239,7 +241,7 @@ Earlier lifecycle tests on 2026-10-18 used source `eba70fc`, Windows 10 Pro 1904
 x64 and the same actual 3840x2160 display:
 
 - Per-user nonadmin install downloaded/checksummed official Node 24.19.0 and built
-  the web/native app. The system Node 16.14.2 installation was unchanged. Installed
+  the web/native app. The system Node installation was unchanged. Installed
   editor/display routes returned 200; owned server on 4318 was healthy.
 - Synthetic reminder add/edit/complete survived restart. Stop removed the owned
   listener; repeated Start retained the PID. Real update, previous-app rollback
@@ -254,10 +256,10 @@ x64 and the same actual 3840x2160 display:
   The precise expiry cause was not isolated from input/browser dismissal.
 - After exit, preview metadata was absent and image GET returned 404; helper and
   app-profile Edge process counts were 0 and the server remained healthy. No
-  capture file was found. New PNG files were only Edge 128x128/448x448 static icons,
-  plus the preexisting npm QR example. Preview flags were unchanged.
-- The original Windows blank saver, 1200-second timeout and security 0 stayed
-  unchanged; this app's automatic idle activation remains off.
+  capture file was found. New PNG files were only Edge 128x128/448x448 static icons.
+  Preview flags were unchanged.
+- The original Windows screensaver settings stayed unchanged; this app's
+  automatic idle activation remains off.
 
 Native `/c` end-to-end cold startup was **not executed**: automatic approval review
 rejected that optional test before action, stating only `blocked by policy`.
@@ -269,11 +271,11 @@ Pending: actual integrated acceptance and a subsequent reviewed update for PR51,
 fresh-account install, movie/game/screensaver inhibition, real lock/resume,
 across-room comfort and multi-monitor behavior. The earlier native smoke test
 does not prove these cases. The coordinator's last direct verification kept app
-idle off with the original blank saver, 1200-second timeout and security 0; the newer marker
+idle off with the original screensaver settings unchanged; the newer marker
 read does not establish current registration or authorize activation.
-The user is away as of the latest 2026-10-18 handoff. Wait for fresh readiness
-before physical tests; do not launch native tests, capture or input, change the
-installed app/data, or alter idle/TV settings during unattended source work.
+Physical tests need the owner's fresh go-ahead. Until then, do not launch native
+tests, capture or input, change the installed app/data, or alter idle/TV settings
+during unattended source work.
 
 Cursor bug [#36](https://github.com/8roundshock/living-room-display/issues/36):
 the user reported a bright white pointer, and native readings confirmed a visible
@@ -291,8 +293,8 @@ and restoration separately. The last hardware preflight on 2026-10-18 aborted
 before launch with immediate error 5 (access denied); the borrowed current Default
 desktop was not receiving input. Minimal/observer x64 structs matched under
 PS5.1/7. Exact lock/secure/switch cause is unproven. All native/current-desktop
-probing stopped. Recheck only after the user returns to the normal interactive
-desktop and cursor observation is available, with a new coordinated preflight/GO;
+probing stopped. Recheck only with the owner's go-ahead, on the normal interactive
+desktop with cursor observation available, with a new coordinated preflight/GO;
 do not open/switch desktops, dismiss security UI or weaken guards. See
 [diagnosis](https://github.com/8roundshock/living-room-display/pull/51#issuecomment-6249615459).
 

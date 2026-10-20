@@ -47,9 +47,9 @@ repeated permission questions once the user has granted the relevant scope.
 ## First local pass
 
 1. Read the instruction/status/install files at the revision actually checked
-   out. Inspect status and remotes; preserve pending changes. Check access with
-   the user's account. While private, a shared link needs authorized access;
-   stop that download with a clear access error instead of seeking owner tokens.
+   out. Inspect status and remotes; preserve pending changes. Use the user's own
+   account for any access; if a link needs access the user lacks, stop with a
+   clear access error instead of seeking owner tokens.
 2. Follow the actual installation commands. Record source commit/version and
    supported OS/runtime versions, without recording credentials or private paths.
    For installed Windows bugs, use Status `SourceRevision`/`SourceState` from
@@ -230,9 +230,9 @@ gh repo fork 8roundshock/living-room-display --clone=false --remote=false
 ```
 
 If an authorized fork already exists, reuse it after verifying its parent. If
-private-repository policy blocks forks, keep a local patch; never create a public
-mirror. For a clean contributor clone whose origin is the original project,
-explicitly arrange the remotes as follows (skip/adjust if already correct):
+forking is blocked, keep a local patch; never create a separate public mirror.
+For a clean contributor clone whose origin is the original project, explicitly
+arrange the remotes as follows (skip/adjust if already correct):
 
 ```powershell
 git remote rename origin upstream

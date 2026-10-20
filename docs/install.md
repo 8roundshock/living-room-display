@@ -3,7 +3,7 @@
 **Current-PC source installation is verified; broader release checks remain.**
 The per-user install, server/data lifecycle and bounded native visual check passed
 on Windows 10. Keep idle off until review and explicit activation approval.
-This is a private prerelease, not a signed/public package. Read [STATUS.md](../STATUS.md) and
+This is an unsigned prerelease, not a signed/published package. Read [STATUS.md](../STATUS.md) and
 [Windows verification](windows.md#verification) for current evidence.
 Read AGENTS.md and follow the independent [PR workflow](agent-workflow.md) when
 changing source. Readiness is tracked in [issue #10](https://github.com/8roundshock/living-room-display/issues/10).
@@ -11,8 +11,8 @@ changing source. Readiness is tracked in [issue #10](https://github.com/8roundsh
 Target: Windows 10 x64 with Microsoft Edge, .NET Framework 4.x and Windows
 PowerShell 5.1 (PowerShell 7 also works). Installation is per user and needs no
 administrator rights. This is an initial source installation, not a signed or
-public release. The repository remains private. Use your own authorized GitHub
-access while cloning; the maintainer's GitHub helper is not an app prerequisite.
+published release. Clone with your own Git access; the maintainer's GitHub helper
+is not an app prerequisite.
 The host targets one primary display; monitor selection and multi-monitor layout
 are not implemented. Install directories/subdirectories must be ordinary local
 paths without junctions/symlinks; cleanup refuses reparse traversal.
@@ -29,7 +29,7 @@ process. npm retrieves the pinned dependencies in `package-lock.json`.
 `LivingRoomDisplaySetup-<version>.exe` is a per-user setup for people who don't
 use Git or PowerShell ([#77](https://github.com/8roundshock/living-room-display/issues/77)).
 CI builds it from reviewed commits as the `living-room-display-setup` artifact,
-with a `.sha256` file and the `release.json` manifest. It is still a private,
+with a `.sha256` file and the `release.json` manifest. It is still an
 unsigned prerelease: how it is distributed ([#114](https://github.com/8roundshock/living-room-display/issues/114))
 and code signing ([#115](https://github.com/8roundshock/living-room-display/issues/115))
 are owner decisions, and clean-PC acceptance is tracked in

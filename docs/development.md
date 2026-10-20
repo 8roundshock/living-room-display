@@ -123,8 +123,9 @@ the runner. The weekly schedule (Monday 07:23 UTC) and a manual run
 (`workflow_dispatch`) add the **scheduled set**, the slower motion, palette and
 weather suites. A change to Markdown files only skips the workflow. On the first
 CI runs the pull-request set took about 11 minutes of suites (widgets about 6) plus
-about a minute of setup, and the scheduled set about 6; runner minutes on this private repository are limited, so weigh
-adding a slow suite to the pull-request set against that
+about a minute of setup, and the scheduled set about 6; every run still takes runner
+time and delays a PR's checks, so weigh adding a slow suite to the pull-request set
+against that
 ([#384](https://github.com/8roundshock/living-room-display/issues/384)). The runner
 has no GPU, so CI passes `--no-gpu` to the motion suite: its resting glyph pixel
 parity and #248 frame budget depend on GPU rasterising and stay local checks. A new
@@ -137,8 +138,8 @@ and the failing step, and keep a suite with a known flake out of the pull-reques
 set until it is fixed.
 
 A filtering proxy or ad blocker on the test machine can add its own script to the
-suites' pages. On the owner's PC, AdGuard for Windows loads
-`http://local.adguard.org/?…&type=content-script…` into every page, which slows the
+suites' pages (AdGuard for Windows, for example, loads
+`http://local.adguard.org/?…&type=content-script…` into every page), which slows the
 suites and, under load, has failed one with a console error. The motion and canvas
 scope suites answer every request outside their own server with an empty response
 (`tests/ui/lib/local-only.mjs`) and list it; the other suites do not yet
@@ -146,20 +147,20 @@ scope suites answer every request outside their own server with an empty respons
 
 ## Local checkout and agent startup
 
-On the owner's Windows PC:
+On Windows, from the checkout (replace `<checkout>` with its actual path):
 
 ```powershell
-Set-Location 'C:\Users\8roun\source\repos\living-room-display'
+Set-Location '<checkout>'
 git status --short --branch
 git remote -v
-codex -C 'C:\Users\8roun\source\repos\living-room-display'
+codex -C '<checkout>'
 ```
 
 Checked 2026-10-18: `Get-Command codex` resolves a CLI and `codex --version`
 reports `codex-cli 0.163.0`; its `--help` confirms that `-C` sets the working directory.
 The final command launches an agent, not the display; no interactive launch was
 performed as part of these checks. On another computer, use
-the actual checkout path and installed agent. An agent that does not discover
+the agent actually installed there. An agent that does not discover
 instruction files must be told to read `AGENTS.md` explicitly.
 
 `CLAUDE.md` and `GEMINI.md` import `AGENTS.md`, following the official
@@ -181,19 +182,20 @@ workflow. See [installation readiness](install.md).
 
 Use [scripts/gh-personal.ps1](../scripts/gh-personal.ps1) for GitHub CLI operations
 on this PC. It uses the existing `8roundshock` Git credential in memory, verifies
-the login, exact origin, repository name, and private visibility, scopes GitHub
-CLI environment variables to the command, and restores them afterward. It does
+the login, exact origin and exact repository name, scopes GitHub CLI environment
+variables to the command, and restores them afterward. It accepts either
+repository visibility and never changes it. It does
 not require the personal-memory repository or write a token to disk.
 
 ```powershell
 .\scripts\gh-personal.ps1 api user --jq '.login'
-.\scripts\gh-personal.ps1 repo view --json 'nameWithOwner,isPrivate,url'
+.\scripts\gh-personal.ps1 repo view --json 'nameWithOwner,visibility,url'
 ```
 
 The helper finds an installed `gh` on PATH or at this PC's existing user-level
 GitHub CLI location. It does not install packages or change global accounts.
 Where ordinary `gh` is already authenticated to `8roundshock`, it may be used
-with the same explicit identity, repository, and privacy verification. Bare `gh`
+with the same explicit identity and repository verification. Bare `gh`
 authentication has not been established by this scaffold.
 
 `pr create`, `pr view`, `pr comment`, `pr merge`, `issue` commands and `api` work
@@ -214,25 +216,27 @@ character of the PR body. PowerShell 7's `Set-Content -Encoding utf8` and most
 editors write none. From Git Bash, give API endpoints without a leading slash;
 Git Bash rewrites `/repos/...` into a Windows path.
 
-Do not broaden credential scopes or switch a shared work account as a routine
+Do not broaden credential scopes or switch accounts as a routine
 workaround. If the personal credential or CLI is unavailable, report the exact
 blocker. Credential lookup disables Git terminal prompts and Git Credential
 Manager interaction for the command, restoring both settings afterward. Never
 print credential output or persist a token.
 
 Direct Git uses the repository-local personal identity and credential username.
-Before pushing, verify the exact origin and the helper's identity/privacy checks:
+Before pushing, verify the exact origin and the helper's identity/repository checks:
 
 ```powershell
 git remote get-url origin
 git config --local user.name
 git config --local user.email
 git config --local credential.https://github.com.username
-.\scripts\gh-personal.ps1 repo view --json 'nameWithOwner,isPrivate'
+.\scripts\gh-personal.ps1 repo view --json 'nameWithOwner,visibility'
 ```
 
 Expected origin: `https://github.com/8roundshock/living-room-display.git`.
-Expected Git identity: `Vladimir Dolgopolov <vladimir@dolgopolov.ca>`; GitHub login
+Commit with the owner's GitHub noreply email
+(`78567380+8roundshock@users.noreply.github.com`, owner decision on
+[#441](https://github.com/8roundshock/living-room-display/issues/441)); GitHub login
 and credential username: `8roundshock`. Configure identity only in this repo if
 needed. See the [PR workflow](agent-workflow.md).
 
@@ -281,7 +285,7 @@ uses the Microsoft Store `pwsh`; substitute your own script and arguments:
 ```bash
 env -u PSModulePath -u PSExecutionPolicyPreference \
   "$LOCALAPPDATA/Microsoft/WindowsApps/pwsh.exe" -NoProfile -NonInteractive \
-  -File scripts/gh-personal.ps1 repo view --json 'nameWithOwner,isPrivate'
+  -File scripts/gh-personal.ps1 repo view --json 'nameWithOwner,visibility'
 ```
 
 The same variable clearing applies when `powershell.exe` is the intended host, but
@@ -363,6 +367,9 @@ The Setup build is reproducible from a clean commit
 - Run the ISCC compile and the install/uninstall smoke test only in CI
   (`.github/workflows/installer.yml`). It runs on installer-related pull
   requests, pushes to `main` and manual dispatch, and uploads a 14-day artifact.
+  A pull request from a fork builds and checks the installer but uploads nothing
+  and skips the smoke job, so an installer built from unreviewed fork code is never
+  offered as this repository's artifact; the push to `main` after merge runs it.
   CI also passes `-RollbackTestOutputDirectory`, which builds a second Setup,
   `LivingRoomDisplaySetup-<version>-rollback-test.exe`, from the same files
   except `app/package.json`, whose version no longer matches `release.json`.
