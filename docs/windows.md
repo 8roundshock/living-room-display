@@ -187,9 +187,11 @@ Source provenance checks use synthetic local Git repositories to verify clean,
 dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
 verify metadata refresh on successful install and retention after failed update
 or uninstall. No paths, remotes, changes or credentials are saved in provenance.
-The current installed baseline is recorded in [STATUS.md](../STATUS.md) (clean
-`3fee844`, the merge of PR #163, on 2026-10-19, replacing `bedca44` from PR #70;
-[evidence](https://github.com/8roundshock/living-room-display/issues/130#issuecomment-6260374373)).
+[STATUS.md](../STATUS.md) records the current installed revision, its install
+evidence and its rollback pair. On 2026-10-19 three coordinated web installs followed
+`bedca44` (PR #70): clean `3fee844` (PR #163), `4cb7dc1` (PR #327) and then `3446400`
+(PR #286), each with a verified data copy (see the
+[#130 install evidence](https://github.com/8roundshock/living-room-display/issues/130)).
 An earlier rollout installed clean `7e654fd`, the normal merge of PR #57. Its 79
 application tests, full production build, independent final-head reviews and
 Windows/Linux CI passed before rollout. The
@@ -204,8 +206,9 @@ provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](install.md).
 On 2026-10-18 a later marker-only read reported clean `bedca44e` after PR #70,
 installed at 19:08:23 UTC, without rechecking backend/served assets, private
-data/backup equality or registration. The `3fee844` install rechecked provenance,
-health, served assets, data hashes and screensaver values; see [current status](../STATUS.md).
+data/backup equality or registration. Each install since `3fee844` rechecked
+provenance, health, served assets, data hashes and screensaver values; see
+[current status](../STATUS.md).
 The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
 passes actual computed-style checks for loading/error, viewport edges, widget
 controls, display-to-editor navigation, the embedded preview and a new display
@@ -222,8 +225,9 @@ gates still apply; the repository stays private and this PR is not deployment ev
 ## Actual current-PC runtime evidence
 
 The clean `7e654fd` historical web rollout is verified as described above; no
-combined-host native acceptance was performed during that update or established
-by the newer marker-only `bedca44e` read. Earlier actual
+combined-host native acceptance was performed during that update, established by
+the later marker-only `bedca44e` read, or performed during any web install since
+(see [STATUS.md](../STATUS.md)). Earlier actual
 native preview source/content and readability on the 3840x2160 primary were
 accepted under
 [#46](https://github.com/8roundshock/living-room-display/issues/46): raw PNG and

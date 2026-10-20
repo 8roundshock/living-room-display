@@ -231,8 +231,9 @@ composition stay identical.
   wear and constant motion).
 - **Deferred, with tickets:** events from a local
   calendar file or subscription (#94), rotating local photos (#95), Now Playing
-  (#96), several instances of one widget (#97), reminder dots on the calendar (#98)
-  and per-second re-fit cost (#99).
+  (#96), several instances of one widget (#97) and reminder dots on the calendar
+  (#98). The per-second re-fit cost (#99) is fixed: the shared fit no longer reruns
+  on every render (see [Families and editing](#families-and-editing)).
 
 ## Ambient appearance and recurring exposure
 
