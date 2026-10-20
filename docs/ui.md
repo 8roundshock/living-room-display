@@ -53,13 +53,19 @@ visible above it, including narrow screens and compact keyboard-height windows.
   open reminder forms are kept, and an error caused by the lost connection clears
   once a later poll or Retry reaches the server; a server's own error message stays
   until the next action (#232). The loading page explains the same failure beside
-  **Try again**.
+  **Try again**. On narrow layouts (700 CSS px or less) the canvas sits above the
+  inspector, so while the row of an action's error has no room in view (above the Save
+  bar) the same alert, with its dismiss control, floats at the top of the viewport and
+  returns to its row once the canvas is scrolled back into view. Focus stays where it was,
+  and the page scrolls just enough that the alert never covers the control that was used
+  (#312). Connection and storage alerts keep their row.
 - **Cancel** restores the latest saved settings across every section, resets the
   city query/style form, and invalidates pending device/photo callbacks. It does not
   undo saved reminders. Leaving with settings edits uses the browser's prompt.
 - **Phone**, **Room** and **Night** are looks (#153, #110, #226): each sets the
-  brightness, the accent (**Native** colours, keeping a single colour of its own
-  for switching back), the text colour, the typeface and the retained legacy layout,
+  brightness, the accent (**Native** colours; Phone and Night also store a single colour
+  of their own, which only older colour-mode data shows, #303), the text colour, the
+  typeface and the retained legacy layout,
   and keeps everything else: the widgets and their layout, widget options (clock
   style, Hide when empty, Last screen), Text size, the Animation level, Drift and
   fade, the move interval and the fade length, as well as location, units,
@@ -70,17 +76,26 @@ visible above it, including narrow screens and compact keyboard-height windows.
   is an ordinary draft change, so Save appears only for effective changes. Their
   miniatures show Lilac, Mist and Rose bars. New installs use the Room look. Up to
   twelve saved styles include visual/widget/empty-reminder settings, the accent mode
-  and the Animation level; applying one restores its whole board.
+  and the Animation level; applying one restores its whole board. **Saved styles** opens
+  with one hint (“Saves the current look and widgets so you can switch back later.”),
+  prefixed with “Up to 12 styles.” once there are twelve (#344). **Style name** is only
+  for a new name: choosing a style leaves it empty, **Add style** clears it, and
+  **Update** keeps the chosen style's name unless another is typed. A name another style
+  already uses, ignoring case and surrounding spaces, is refused inline (“A style named
+  Evening already exists”). After Add style or **Delete selected style**, focus moves to
+  the **Saved style** select (#343).
 - The **Accent** row offers Native (a ring of palette tones named "Native colours":
   each widget uses its own colour, see [native palette](design.md#native-palette))
-  and five colour swatches; a custom colour picker (**+**) sits on the heading line,
-  which also names the current choice (Native, the swatch name or Custom). A swatch
-  or custom colour selects one accent for every widget; Native keeps the last
-  colour, so switching back restores it. A custom colour you chose appears as a
-  **Custom colour** swatch, pressed while it is the accent, so after Native one
-  activation restores it, and the saved one stays offered while a swatch is only a
-  draft (#151). A built-in style's own single colour is offered there only while it
-  is the accent. Sand was retuned in
+  and five colour swatches; a custom colour picker (**+**, named “Choose a custom
+  colour”) sits on the heading line, which also names the current choice (Native, the
+  swatch name or Custom). A swatch or custom colour selects one accent for every widget;
+  Native keeps the last colour, so switching back restores it. A custom colour you chose
+  appears as a swatch named with its value (“Custom colour #123456”), pressed while it is
+  the accent, so after Native one activation restores it, and the saved one stays offered
+  while a swatch is only a draft (#151). Phone's or Night's own single colour is offered
+  there only while it is the accent: in the draft, or in saved older colour-mode data,
+  where it stays one activation away (also after Native) until another colour is saved
+  (#303). The row, the picker and Typography's **Text colour** use one spelling. Sand was retuned in
   #224; data saved with the earlier Sand reads as Sand and renders the new value
   without being rewritten. Every accent control keeps a 44 × 44 CSS px hit area
   (#137): seven fit one line in the 1280 × 720 inspector and at 390 px, and narrower
@@ -99,23 +114,38 @@ visible above it, including narrow screens and compact keyboard-height windows.
   prefers reduced motion, a hint explains that animation stays off there while the
   control still edits the saved value. Editor polish (tab indicator, disclosures,
   picker, drag settle, new-widget drop-in, Save bar entrance) follows the editor's
-  effective level and stays within 240 ms; Off keeps the existing transitions.
+  effective level and stays within 240 ms; Off keeps the existing transitions. Every
+  slider (Brightness, Text size, Move widgets every, Fade duration and Last screen's
+  Snapshot opacity) speaks its value with the unit (“55%”, “3 minutes”, “2 seconds”);
+  the value shown beside its label is not announced a second time (#342).
 - **Data & recovery** (#234): **Export saved data** downloads a backup of the saved
   settings, styles and reminders (never the photo). **Restore from backup…** is
   refused while settings edits are unsaved ("Save or cancel your changes before
   restoring a backup."); otherwise it opens a file picker. The editor checks that
   the file is an export (version 1; a newer version asks to update the app first),
   then shows its date and contents, for example "2 reminders (1 completed) and 1
-  saved style", with **Restore** and **Don't restore**. Restore sends the file to
-  `POST /api/import`, which validates it again; an unreadable or rejected file changes
-  nothing and the section's status line says why. A restore replaces the saved
+  saved style", with **Restore** and **Don't restore**; focus moves to the question's
+  title when it appears (#302). Restore sends the file to `POST /api/import`, which
+  validates it again. Nothing changes when a file is unreadable or refused, and the
+  section's status line says why in plain words: a file the server refuses reads “This
+  backup has settings this version can't read. It may come from a newer version of the
+  app, or the file was changed.” with the server's own text under **Technical details**,
+  and no answer reads “Couldn't reach the display server, so nothing was restored. Try
+  again in a moment.” and keeps the question open. A restore replaces the saved
   settings, styles and reminders, keeps the current photo and refreshes the editor
-  with a clean draft. The server keeps the replaced state as `state.backup.json`,
-  its previous-state recovery backup, until the next save, so the confirmation
-  suggests exporting first to keep it longer. **Reset appearance…** asks inline;
-  **Reset** returns every Style tab value to its default (the Room look, Text size
-  100%, Subtle, Drift and fade on, every 3 minutes, a 2 s fade) as an ordinary draft
-  change, while widgets, their layout, the clock style and saved styles stay. The
+  with a clean draft. Don't restore, a refused file and a finished restore return focus
+  to **Restore from backup…**. The server keeps the replaced state as
+  `state.backup.json` only until the next change (a settings save or any reminder
+  change rewrites it), and reads it only to recover automatically when the saved data
+  can't be read; the confirmation says so and suggests exporting first to keep a copy
+  you can restore (#301). **Reset appearance…** asks inline and focuses **Keep my
+  appearance**; Keep or Reset returns focus to Reset appearance… (#343). **Reset**
+  returns every Style tab value to its default (the Room look, Text size 100%, Subtle,
+  Drift and fade on, every 3 minutes, a 2 s fade) as an ordinary draft change, while
+  widgets, their layout, the clock style and saved styles stay; the status line reads
+  “Appearance reset. Save changes to keep it.” only while the reset is unsaved, clears
+  on Cancel and reads “Appearance reset and saved.” after Save (#300). A link styled as
+  a button (**Export saved data**) spaces its icon like the buttons beside it (#304). The
   [studio harness](../tests/ui/studio-browser.mjs) covers these flows.
 - The authored canvas never relocates; outside Edit layout it shows value and glyph
   motion for the draft Animation level, and during Edit layout widgets stay still. **Edit layout** reveals a faint
@@ -176,7 +206,10 @@ visible above it, including narrow screens and compact keyboard-height windows.
   pending”).
 - **Preview movement** explicitly reveals numbered arrangements and **Automatic**
   ambient preview. Editing returns to authored placement. **Open display** opens
-  a browser tab; its pointer remains visible, including fullscreen. Unmodified
+  a browser tab; its pointer remains visible, including fullscreen. One dim line beside
+  it (under the header on narrow windows) says where the full-screen display is: “For
+  full screen on this PC: Start › Living Room Display - Show display, or press F on the
+  display” (#360). Unmodified
   **F** toggles fullscreen without stealing typing, modifier shortcuts or repeats.
   Manual display controls appear on pointer movement or Tab and hide after
   3.5 seconds without another supported interaction. Focused controls stay visible.
@@ -196,9 +229,16 @@ Desktop shows a narrow scrolling rail with each group label above its buttons (l
 and names at least 11 px, #195);
 narrow screens show three buttons per row under each label. Up/Down move through the
 whole list (across groups) and preview the focused widget (Left/Right do the same, matching
-the narrow three-column layout); Home/End jump to the first or last; Tab keeps its normal
-order. Samples are the actual renderers with synthetic
-content (the sample clock, “Weekend trip”, “Birthday” and “Holiday”, “Dinner at seven”).
+the narrow three-column layout); Home/End jump to the first or last. The rail is one tab
+stop (#348): only the previewed widget takes Tab, so Tab goes from Close to the rail, then
+the size buttons, Add and any room fixes (Add is at most five presses from Close). Samples are the
+actual renderers with synthetic content (“Weekend trip”, “Birthday” and “Holiday”, “Dinner
+at seven”); only the date and time are real, so the Clock shows this computer's time, the
+Calendar marks today and Countdown's days count from today (#361). Each sample fills the
+width of its area at up to twice the canvas scale, with a 9 px text floor (the display's
+own floors scale with its screen; content that then overflows zooms out as a whole, as on
+the display), a very wide family at most 2.5 times as wide as tall, and a small map of the
+board under it shows the family's footprint (“4 × 2 cells of 12 × 8”).
 
 - **Calendar** (Time, default medium) follows the computer's local date like the Clock
   and rolls over at midnight. **Week starts on** offers Automatic (labelled with the
@@ -232,7 +272,9 @@ do reset which widgets are shown). Countdowns and the note are private content s
 on this device and included in exports. `tests/ui/catalog-time-browser.mjs` checks the
 picker groups and keyboard (Weather listed, no Rain; the free-size caption only for
 Reminders, qualified on the default board), the initial selection, item and Add names,
-the single “No room” region and its Fine/Small fixes, each panel, Save/Cancel, reload,
+the rail's single tab stop, sample text of at least 9 px in every family at 1280×720 and
+today's date in the samples, the single “No room” region and its Fine/Small fixes, each
+panel, Save/Cancel, reload,
 styles, display hiding, a dense board where the three sit beside a full-height
 Reminders column and keep relocating, 320/390 px reflow, Save-bar clearance and the
 compact picker viewports with rail text of at least 11 px.
@@ -276,7 +318,11 @@ read it. `tests/ui/first-run-browser.mjs` covers the card.
 the Clock removed (#235); the Clock panel keeps a mirrored Time format control. The
 format drives the clock, reminder times, World clocks, rain timing, Sun & moon, Air
 quality hours and the Last screen caption; the editor list and canvas follow an unsaved
-change.
+change. The status line below shows the forecast's age (“Saved forecast · 2 hr ago” when
+stale, “Forecast unavailable” when there is none, both with an amber dot) and, when an
+update failed, the server's reason under it in the caution tone (“Weather update failed.
+Showing the last successful forecast.”, “Weather is unavailable. Check the connection and
+location settings.”, #347); **Location & forecast details** keeps only explanatory hints.
 
 Preview weather retains its actual city/units while a selection is unsaved or
 refreshing. Forecast dates/intervals use the weather city's timezone, or the computer's

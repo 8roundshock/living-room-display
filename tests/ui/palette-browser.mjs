@@ -386,31 +386,31 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     assert.equal(await pressed(p, 'Sand'), true); assert.equal(await pressed(p, 'Native colours'), false); assert.equal(await heading(p), 'Sand'); assert.equal(await canvasMode(p), 'color');
     await save(p); assert.equal(appearance().accentMode, 'color'); assert.equal(appearance().accentColor, SAND);
     await nativeSwatch.click(); await save(p);
-    await p.locator('input[aria-label="Custom accent color"]').fill('#123456');
+    await p.locator('input[aria-label="Choose a custom colour"]').fill('#123456');
     assert.equal(await heading(p), 'Custom'); assert.equal(await pressed(p, 'Native colours'), false); assert.equal(await canvasMode(p), 'color');
     await save(p); assert.equal(appearance().accentMode, 'color'); assert.equal(appearance().accentColor, '#123456');
     checks.push('Cancel restores Native; a swatch after Native selects color with that swatch; the custom colour input switches to color');
 
     // #151: the kept custom colour is a pressed swatch. After Native, one activation (no colour input,
     // so nothing relies on fill() of an unchanged value) restores it; the Save bar follows the saved state.
-    const custom = () => swatch(p, 'Custom colour');
-    assert.equal(await pressed(p, 'Custom colour'), true, 'the saved custom colour shows as a pressed swatch');
-    assert.equal(await custom().getAttribute('title'), 'Custom colour #123456');
+    const CUSTOM = 'Custom colour #123456', custom = () => swatch(p, CUSTOM);
+    assert.equal(await pressed(p, CUSTOM), true, 'the saved custom colour shows as a pressed swatch');
+    assert.equal(await custom().getAttribute('title'), CUSTOM);
     await nativeSwatch.click(); await saveBar(p).waitFor();
-    assert.equal(await pressed(p, 'Custom colour'), false); assert.equal(await heading(p), 'Native');
+    assert.equal(await pressed(p, CUSTOM), false); assert.equal(await heading(p), 'Native');
     await custom().click();
-    assert.equal(await pressed(p, 'Custom colour'), true); assert.equal(await heading(p), 'Custom'); assert.equal(await canvasMode(p), 'color');
+    assert.equal(await pressed(p, CUSTOM), true); assert.equal(await heading(p), 'Custom'); assert.equal(await canvasMode(p), 'color');
     await saveBar(p).waitFor({ state: 'detached' });
     await nativeSwatch.click(); await save(p);
     assert.deepEqual([appearance().accentMode, appearance().accentColor], ['native', '#123456'], 'Native keeps the custom colour');
     await p.reload(); await p.getByRole('tab', { name: 'Style', exact: true }).click();
-    assert.equal(await pressed(p, 'Custom colour'), false); assert.equal(await pressed(p, 'Native colours'), true);
+    assert.equal(await pressed(p, CUSTOM), false); assert.equal(await pressed(p, 'Native colours'), true);
     await custom().click(); await saveBar(p).waitFor();
     assert.equal(await p.locator('.preview-surface .ambient-clock .ambient-label').evaluate((el) => getComputedStyle(el).color), rgb('#123456'), 'the canvas shows the restored custom colour');
     await save(p); assert.deepEqual([appearance().accentMode, appearance().accentColor], ['color', '#123456']);
     // A swatch replaces the colour in the draft; the saved custom colour stays one activation away until another colour is saved.
     await swatch(p, 'Mist').click(); await saveBar(p).waitFor();
-    assert.equal(await pressed(p, 'Custom colour'), false, 'the saved custom colour is still offered');
+    assert.equal(await pressed(p, CUSTOM), false, 'the saved custom colour is still offered');
     await custom().click(); await saveBar(p).waitFor({ state: 'detached' });
     checks.push('#151 a kept custom colour is a named, pressed swatch; from Native (also after reload) one activation restores it, the Save bar appears only while the restored state differs, and it stays offered while a swatch is only a draft');
 
@@ -422,7 +422,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     }
     await save(p);
     assert.deepEqual({ preset: appearance().preset, accentMode: appearance().accentMode, brightness: appearance().brightness, accentColor: appearance().accentColor }, { preset: 'night', accentMode: 'native', brightness: 0.28, accentColor: '#9990b7' });
-    assert.equal(await swatch(p, 'Custom colour').count(), 0, "a built-in style's own single colour is not offered as a custom colour (#151)");
+    assert.equal(await p.getByRole('button', { name: /^Custom colour/ }).count(), 0, "a built-in style's own single colour is not offered as a custom colour (#151)");
     checks.push('Phone, Room and Night apply Native with their own brightness and accent colour; miniatures show Lilac, Mist and Rose bars');
 
     await p.getByText('Saved styles', { exact: true }).click();
@@ -450,7 +450,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     await app.store.update((data) => { data.settings.appearance.accentMode = 'color'; data.settings.appearance.accentColor = LEGACY_SAND; });
     ({ studio, page: p } = await editor());
     assert.equal(await pressed(p, 'Sand'), true); assert.equal(await heading(p), 'Sand');
-    assert.equal(await swatch(p, 'Custom colour').count(), 0, 'the retired Sand is not a custom colour');
+    assert.equal(await p.getByRole('button', { name: /^Custom colour/ }).count(), 0, 'the retired Sand is not a custom colour');
     assert.equal(await saveBar(p).count(), 0, 'reading it is not an edit');
     assert.equal(await p.locator('.preview-surface .ambient-clock .ambient-label').evaluate((el) => getComputedStyle(el).color), rgb(SAND), 'the canvas renders the retuned Sand');
     await swatch(p, 'Native colours').click(); await saveBar(p).waitFor();
@@ -460,6 +460,25 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     assert.equal(appearance().accentColor, LEGACY_SAND, 'the stored value is unchanged');
     await studio.close();
     checks.push('#224 a stored retired Sand is selected as Sand (no custom swatch) and renders the retuned value; Native or Mist and back to Sand is not an edit; the stored value is unchanged');
+
+    // #303: data saved by Night before Native colours (#75) has Night's own colour as a single accent.
+    // It is the accent, so it stays offered as the Custom colour swatch: after Native one activation
+    // restores it (no edit), and it goes only once another colour is saved.
+    await app.store.update((data) => { data.settings = defaultSettings(); data.settings.appearance = { ...data.settings.appearance, accentMode: 'color', accentColor: '#9990b7', preset: 'night' }; });
+    ({ studio, page: p } = await editor());
+    const NIGHT = 'Custom colour #9990b7';
+    assert.equal(await pressed(p, NIGHT), true, 'older colour-mode Night data shows its colour as a pressed swatch');
+    assert.equal(await heading(p), 'Custom');
+    await swatch(p, 'Native colours').click(); await saveBar(p).waitFor();
+    assert.equal(await pressed(p, NIGHT), false, 'after Native the saved colour is still offered');
+    await swatch(p, NIGHT).click(); await saveBar(p).waitFor({ state: 'detached' });
+    assert.equal(await pressed(p, NIGHT), true, 'one activation restores it, which is not an edit');
+    await swatch(p, 'Mist').click(); await saveBar(p).waitFor();
+    assert.equal(await pressed(p, NIGHT), false, 'a swatch only in the draft keeps it offered');
+    await save(p);
+    assert.equal(await p.getByRole('button', { name: /^Custom colour/ }).count(), 0, 'once another colour is saved it is gone');
+    await studio.close();
+    checks.push("#303 older colour-mode data with Night's own colour as the accent offers it as \"Custom colour #9990b7\" (pressed); after Native one activation restores it without an edit, a draft swatch keeps it offered and saving another colour removes it; the picker is \"Choose a custom colour\"");
 
     // #137: every accent control (Native, the five colours, a kept custom colour and the picker on the
     // heading line) keeps a 44 x 44 hit area with no overlap. At 1280 x 720 the row stays one line and
@@ -484,7 +503,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
         ({ studio, page: p } = await editor(viewport));
         const label = viewport.width + 'x' + viewport.height + (kept ? ' with a kept custom colour' : '');
         const targets = await accentTargets();
-        assert.deepEqual(targets.boxes.map((box) => box.name), ['Native colours', ...ACCENT_SWATCHES.map((item) => item.name), ...(kept ? ['Custom colour'] : []), 'Custom accent color'], label);
+        assert.deepEqual(targets.boxes.map((box) => box.name), ['Native colours', ...ACCENT_SWATCHES.map((item) => item.name), ...(kept ? ['Custom colour #123456'] : []), 'Choose a custom colour'], label);
         for (const box of targets.boxes) assert.ok(box.width >= 43.99 && box.height >= 43.99, label + ': ' + box.name + ' hit area ' + box.width + 'x' + box.height);
         assert.deepEqual(targets.overlaps, [], label + ': hit areas do not overlap');
         assert.ok(targets.overflow <= 0 && targets.outside === 0 && targets.pageOverflow <= 0, label + ': ' + JSON.stringify(targets));
