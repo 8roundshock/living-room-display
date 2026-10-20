@@ -113,6 +113,13 @@ button {
   justify-content: center;
   gap: 8px;
 }
+/* A link styled as a button lays out its icon and label like a button (#304). */
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
 .button {
   min-height: 42px;
   padding: 10px 16px;

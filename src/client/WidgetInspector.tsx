@@ -252,7 +252,7 @@ export function WidgetInspector({
                     <label className="control-block">
                       <span className="control-label">
                         Snapshot opacity
-                        <output>
+                        <output aria-hidden="true">
                           {Math.round(settings.preview.opacity * 100)}%
                         </output>
                       </span>
@@ -260,6 +260,7 @@ export function WidgetInspector({
                         className="range-input"
                         type="range"
                         aria-label="Snapshot opacity"
+                        aria-valuetext={`${Math.round(settings.preview.opacity * 100)}%`}
                         min={2}
                         max={30}
                         value={Math.round(settings.preview.opacity * 100)}
