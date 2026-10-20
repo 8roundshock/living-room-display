@@ -185,12 +185,15 @@ const QUALIFIERS = { fresh: null, stale: null, estimate: /^Saved estimate$/, las
  * #221 and #309: small and medium keep fit 1 at Text 100% in every density at this viewport and (once) at
  * 1280×720, fresh, stale and offline, and for a three-digit or long-category AQI (US 128, 156, 301 and
  * European 105) fresh, stale, with "Saved estimate" and with "Last known"; #185: no Intl formatter per tick.
- * The renders use a page of their own with a paused clock (#306): the main page's clock never moves for
- * them, ages stay fixed and every case is one navigation that waits for this widget's footer.
+ * The renders use a browser context of their own with a paused clock (#306): Playwright's clock belongs to
+ * a context, so the main page's clock never moves or pauses for them; ages stay fixed and every case is one
+ * navigation that waits for this widget's footer. The context serves the same synthetic state object.
  */
 export async function sweep({ page, viewport, state, base, now }) {
   const views = viewport.width === 1920 ? [{ width: 1280, height: 720 }, viewport] : [viewport];
-  const own = await page.context().newPage(), errors = [];
+  const context = await page.context().browser().newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+  await context.route('**/api/state', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(state) }));
+  const own = await context.newPage(), errors = [];
   own.on('pageerror', error => errors.push(error.message));
   await own.clock.install({ time: new Date(now) }); await own.clock.pauseAt(new Date(now));
   // Chromium delays frames in a background tab, so the rendering page is brought to the front.
@@ -242,12 +245,12 @@ export async function sweep({ page, viewport, state, base, now }) {
       }
     }
     assert.deepEqual(errors, [], 'the sweep page throws nothing');
-  } finally { await own.close(); await page.bringToFront(); }
+  } finally { await context.close(); await page.bringToFront(); }
   await page.setViewportSize(viewport);
   if (viewport.width === 1920) {
     state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'airQuality']));
     state.settings.widgetGrid.placements.airQuality = { column: 0, row: 0, size: 'large' }; state.airQuality = airQualityFixture(now, state.weather.location); await reload(page);
     assert.equal(await intlPerTicks(page), 0, 'large Air quality builds no Intl formatter per tick');
   }
-  return `Air quality small/medium fit 1 at Text 100% with unbroken phrases in every density at 720p/1080p/4K: fresh/stale/offline (one-row footer from medium up) and US 128/156/301 and European 105 fresh, stale, "Saved estimate" and "Last known" with the qualifier as the full-opacity shared status cue, on its own line under the reading in small (#309; ${cases} cases at ${viewport.width}, one navigation each on a paused-clock page waiting for the widget's footer, #306); large builds no Intl formatter per tick`;
+  return `Air quality small/medium fit 1 at Text 100% with unbroken phrases in every density at 720p/1080p/4K: fresh/stale/offline (one-row footer from medium up) and US 128/156/301 and European 105 fresh, stale, "Saved estimate" and "Last known" with the qualifier as the full-opacity shared status cue, on its own line under the reading in small (#309; ${cases} cases at ${viewport.width}, one navigation each in a paused-clock context of their own, waiting for the widget's footer, #306); large builds no Intl formatter per tick`;
 }
