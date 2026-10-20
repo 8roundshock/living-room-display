@@ -63,15 +63,22 @@ Make sure the TV shows your PC's screen.
 
 ## Choose widgets
 
-Each piece of information is a widget, and every widget is optional. In the
+Each piece of information is a widget, and every widget is optional. The display
+starts with a large Calendar and Clock across the top, a large Weather and Forecast
+below them, and a smaller Last screen and Reminders, filling the whole grid. In the
 **Widgets** tab you can add, resize or remove them:
 
 - **Add widget** (the **+** on the preview) opens a list grouped as Time, Weather
   & sky, Personal and Pictures. Pick a widget, pick a size (small, medium or
-  large) and click **Add**.
+  large) and click **Add**. While the grid is full, the editor says there is no
+  room and offers a fix, such as a finer grid or making one widget smaller; your
+  choice is a change you can still Save or Cancel.
 - **Edit layout** lets you drag widgets around the grid and resize them from their
   corner. Click **Done** when you're finished.
 - Select a widget in the list to change its options or remove it.
+- **Style › Data & recovery › Reset layout…** puts the starting layout back: those
+  six widgets in their places and every other widget off. Your widget settings,
+  reminders and looks stay, and nothing changes until you Save.
 
 The widgets are: Clock, World clocks (up to four cities), Calendar, Weather (with
 rain timing when rain is near), Forecast (the next seven days), Air quality, Sun &
