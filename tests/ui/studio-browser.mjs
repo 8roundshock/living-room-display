@@ -969,15 +969,33 @@ export async function runStudioQa({ playwright, edge } = {}) {
     );
 
     // #83: a later Style save must not reset the saved clock style.
+    // #277: a Clock style edit is an appearance edit, so it stores the label of the built-in look
+    // that is showing (Room on the default board), never Custom.
     await reset();
     ({ page, context } = await open());
     await tab(page, 'Widgets');
     await page.getByRole('button', { name: 'Clock', exact: true }).click();
+    await page.getByRole('button', { name: 'Digital', exact: true }).click();
+    await save(page).click();
+    await saved(page);
+    assert.deepEqual(
+      [app.store.snapshot().settings.appearance.clockStyle, app.store.snapshot().settings.appearance.preset],
+      ['digital', 'room'],
+      'Clock → Digital → Save stores the Room label of the look that is showing (#277)',
+    );
     await page.getByRole('button', { name: 'Analog', exact: true }).click();
     await save(page).click();
     await saved(page);
     assert.equal(app.store.snapshot().settings.appearance.clockStyle, 'analog');
+    assert.equal(app.store.snapshot().settings.appearance.preset, 'room', 'Analog keeps the Room label (#277)');
     await tab(page, 'Style');
+    assert.deepEqual(
+      await page
+        .locator('.preset-button[aria-pressed="true"] .preset-label')
+        .evaluateAll((els) => els.map((el) => el.textContent.trim())),
+      ['Room'],
+      'the Style tab shows the stored label as chosen (#277)',
+    );
     await range(page, 'Brightness');
     await save(page).click();
     await saved(page);
@@ -996,7 +1014,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     );
     await context.close();
     checks.push(
-      '#83 clock style Analog survives a later Brightness save and reload',
+      '#83 clock style Analog survives a later Brightness save and reload; #277 Clock → Digital and Analog saves store the Room label the Style tab shows',
     );
 
     // #153, #110, #226: built-in styles are looks only. A personal board (Note added, Drift and

@@ -387,8 +387,9 @@ test('Reset appearance returns every Style tab value to its default and keeps th
 test('the stored style label follows the look on every appearance edit and never makes a draft dirty by itself (#277)', () => {
   const room = defaultSettings();
   assert.equal(room.appearance.preset, 'room');
-  // A change outside the look (Text size, motion, Animation) keeps the matching built-in label.
-  for (const update of [{ fontScale: 1.25 }, { motionEnabled: false }, { motionIntervalSeconds: 600 }, { fadeSeconds: 5 }, { animation: 'lively' as const }]) {
+  // A change outside the look (Text size, motion, Animation, the Clock widget's style) keeps the
+  // matching built-in label.
+  for (const update of [{ fontScale: 1.25 }, { motionEnabled: false }, { motionIntervalSeconds: 600 }, { fadeSeconds: 5 }, { animation: 'lively' as const }, { clockStyle: 'digital' as const }]) {
     assert.equal(withAppearance(room, update).appearance.preset, 'room', JSON.stringify(update));
   }
   // A change to the look is Custom; reverting it is the built-in style again.

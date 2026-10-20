@@ -13,6 +13,7 @@ import {
 import { FreeSizeControls, RoomNotice } from './FreeSizeControls';
 import { Icon } from './icons';
 import type { RoomFix, RoomProblem } from './make-room';
+import { withAppearance } from './model';
 import { WidgetPicker } from './WidgetPicker';
 import { WIDGET_MODULES } from './widgets/registry';
 
@@ -177,14 +178,9 @@ export function WidgetInspector({
                                 style[0].toUpperCase() + style.slice(1)
                               }
                               onClick={() =>
-                                onChange((previous) => ({
-                                  ...previous,
-                                  appearance: {
-                                    ...previous.appearance,
-                                    clockStyle: style,
-                                    preset: 'custom',
-                                  },
-                                }))
+                                onChange((previous) =>
+                                  withAppearance(previous, { clockStyle: style }),
+                                )
                               }
                             >
                               <span
