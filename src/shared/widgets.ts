@@ -370,15 +370,11 @@ export function switchGridDensity(grid: WidgetGrid, density: GridDensity, enable
   return { ...fit, history: { current: structuredClone(fit.grid), enabled: { ...enabled }, layouts: { ...prior, [grid.density]: structuredClone(grid), [density]: structuredClone(fit.grid) } } };
 }
 
-/** Reflections plus a non-repeating low-discrepancy offset keep successive cycles varied. */
+/** A whole-board reflection of one placement (the #93/#182 fallback of composeWidgetGrid). */
 export function displayPlacement(grid: WidgetGrid, id: WidgetId, cycle: number): WidgetPlacement {
   const original = grid.placements[id]; const span = placementSpan(id, original, grid.revision); const limits = GRID_DENSITIES[grid.density];
   return { ...original, column: cycle % 2 ? limits.columns - original.column - span.columns : original.column,
     row: Math.floor(cycle / 2) % 2 ? limits.rows - original.row - span.rows : original.row };
-}
-export function motionOffset(cycle: number): { x: number; y: number } {
-  if (cycle === 0) return { x: 0, y: 0 };
-  return { x: ((cycle * 0.61803398875) % 1 - 0.5) * 4, y: ((cycle * 0.41421356237) % 1 - 0.5) * 4 };
 }
 /** Reveal choreography order (#76): visible widgets in reading order (row, then column); ties keep catalog order. */
 export function widgetRevealOrder(grid: WidgetGrid, ids: readonly WidgetId[]): WidgetId[] {
@@ -452,7 +448,7 @@ function keptShare(span: WidgetSpan, from: { column: number; row: number }, to: 
 export const RELOCATION_KEEP_LIMIT = 0.5;
 const SEARCH_ATTEMPTS = 20_000, TILE_ATTEMPTS = 5_000, EXCHANGE_ATTEMPTS = 4_000;
 /**
- * Keep the edited layout at rest, then choose distant legal cells during a black interval.
+ * Keep the edited layout at rest, then (Swap places, #436) choose distant legal cells for the next swap.
  * `earlier` holds the compositions before `previous`, most recent first (the display passes the one
  * from two cycles back, #317). A widget "stays" when it covers more than half of its previous cells
  * again, or more than the least that any legal origin of its span allows (#338). In order of preference:
@@ -461,8 +457,8 @@ const SEARCH_ATTEMPTS = 20_000, TILE_ATTEMPTS = 5_000, EXCHANGE_ATTEMPTS = 4_000
  * 2. a whole-board reflection of the previous composition (#93; the #182 choice first) in which no widget
  *    stays: a widget that stays trades places with a same-size clean region elsewhere (its own cells or
  *    its row or column band), and widgets of the same span may exchange cells. A reflection alone cannot
- *    move a widget centred on its axis, and the whole-plane offset (motionOffset, at most 2% of the plane
- *    each way) cannot move one by a large share of its size. An earlier composition may return only when
+ *    move a widget centred on its axis, and the board's float (#436, src/shared/float.ts, at most 3.5% of
+ *    the display each way) cannot move one by a large share of its size. An earlier composition may return only when
  *    no such reflection avoids it;
  * 3. a searched composition that moves every widget to other cells and recreates no earlier one,
  *    improved the same way where it can be;

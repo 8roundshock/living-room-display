@@ -10,6 +10,7 @@ import {
 import type { AppState } from '../shared/contracts';
 import { ApiError, api } from './api';
 import { AmbientDisplay } from './Display';
+import { useSingleDisplay } from './displayWindow';
 import { Editor } from './Editor';
 
 interface LoadError {
@@ -36,6 +37,9 @@ export function App() {
   );
   const display = window.location.pathname.startsWith('/display');
   const nativeDisplay = display && window.self === window.top && new URLSearchParams(window.location.search).get('native') === '1';
+  // #436 one display window: a newer browser display retires this one (it closes, or shows a card and
+  // stops polling, floating and holding the screen awake). The native screensaver page is single-instance on its own.
+  const retired = useSingleDisplay(display && !nativeDisplay && window.self === window.top);
   useLayoutEffect(() => {
     if (!nativeDisplay) return;
     // Cover loading/error states and descendant controls before paint. The
@@ -69,16 +73,26 @@ export function App() {
     }
   }, []);
   useEffect(() => {
+    if (retired) return;
     void reload();
     const timer = window.setInterval(() => {
       void reload();
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [reload]);
+  }, [reload, retired]);
   useEffect(() => {
     document.title = display ? 'Still · Display' : 'Still · Your room';
   }, [display]);
 
+  if (retired)
+    return (
+      <main className="display-retired">
+        <div className="display-retired-card" role="status">
+          <p>The display is open in another window.</p>
+          <p>Close this tab (Ctrl+W).</p>
+        </div>
+      </main>
+    );
   if (!state)
     return (
       <main className={`loading-page ${display ? 'display-fallback' : ''}`}>

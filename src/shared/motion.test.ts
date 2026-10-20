@@ -9,7 +9,6 @@ import {
   advanceClockHands,
   effectiveAnimationLevel,
   motionPlan,
-  rebaseClockHands,
   revealTiming,
   type MotionSurface,
 } from './motion.ts';
@@ -107,18 +106,23 @@ test('#76 analog hands: 10:59 → 11:00, 11:59 → 12:00 and midnight move forwa
   assert.equal(at(10, 46, at(10, 30)).animate, false, 'more than 15 minutes is a jump');
   assert.equal(at(10, 44, at(10, 30)).animate, true, 'a short catch-up still eases');
   assert.ok(HOUR_HAND_MAX_STEP === 7.5);
-  // A long run accumulates; a black-rest rebase returns to [0, 360) without changing orientation.
+  // #436: a long run accumulates and never re-bases (the display never goes black), so every minute
+  // turns both hands forward by exactly one step, never backwards, across every 59 → 00 and 12:59 → 1:00.
   let hands = at(0, 0);
-  for (let minute = 1; minute <= 60 * 30; minute++) hands = at(Math.floor(minute / 60) % 24, minute % 60, hands);
-  assert.ok(hands.minute > 360 * 10, 'accumulated over many turns');
-  const rebased = rebaseClockHands(hands);
-  for (const key of ['hour', 'minute'] as const) {
-    assert.ok(rebased[key] >= 0 && rebased[key] < 360, `${key} bounded after rebase`);
-    assert.ok(Math.abs(((hands[key] - rebased[key]) % 360 + 360) % 360) < 1e-6 || Math.abs(((hands[key] - rebased[key]) % 360 + 360) % 360 - 360) < 1e-6, `${key} keeps its orientation`);
+  for (let minute = 1; minute <= 60 * 30; minute++) {
+    const next = at(Math.floor(minute / 60) % 24, minute % 60, hands);
+    assert.ok(next.animate, `minute ${minute} eases`);
+    assert.ok(Math.abs(next.minute - hands.minute - 6) < 1e-9, `minute ${minute}: the minute hand turns forward 6°`);
+    assert.ok(Math.abs(next.hour - hands.hour - 0.5) < 1e-9, `minute ${minute}: the hour hand turns forward 0.5°`);
+    hands = next;
   }
-  assert.equal(rebased.animate, false);
-  const after = at(6, 1, rebased);
-  assert.equal(after.animate, true); assert.ok(after.minute < 360, 'continues from the rebased angle');
+  assert.ok(hands.minute > 360 * 10, 'accumulated over many turns');
+  // 12:59 → 1:00 rotates forward once: the minute hand from 354° (mod 360) to the next 360° multiple.
+  const before = at(12, 59, at(12, 58)), oneOClock = at(13, 0, before);
+  assert.equal(oneOClock.animate, true);
+  assert.equal(oneOClock.minute - before.minute, 6, 'the minute hand moves forward once');
+  assert.equal(oneOClock.minute % 360, 0);
+  assert.ok(oneOClock.hour > before.hour && Math.abs(oneOClock.hour % 360 - 30) < 1e-9, 'the hour hand reaches 1 forward');
 });
 
 test('#76 widgetRevealOrder is row-major, deterministic, visible-only with catalog-order ties', () => {

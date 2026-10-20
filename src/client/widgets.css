@@ -11,12 +11,18 @@
    (fine grid: ~1.07%/1.26%), rather than letting the fit scale shrink everything. */
 .grid-ambient .ambient-widget { --min-text: var(--ambient-min-text, 0px); --min-data: var(--ambient-min-data, 0px); }
 .grid-ambient .ambient-forecast.widget-size-small { --min-text: min(var(--ambient-min-text, 0px), 7.25cqh); --min-data: min(var(--ambient-min-data, 0px), 8.5cqh); }
-.grid-ambient .ambient-content { display: block; width: auto; height: auto; padding: 0; gap: 0; transform: translate(var(--motion-x, 0), var(--motion-y, 0)); }
-.grid-ambient.layout-editing .ambient-content { transform: none; }
+/* #436: the plane rests where the user put it; Display.tsx's float timer writes its translation inline. */
+.grid-ambient .ambient-content { display: block; width: auto; height: auto; padding: 0; gap: 0; transform: none; transition: none; }
 .grid-ambient .ambient-widget { position: absolute; grid-area: auto; padding: min(1.2cqw, 1.8cqh); container-type: size; animation: none; transform: none; }
 .grid-ambient .ambient-widget .widget-content { animation: none; width: 100%; height: auto; }
-/* The drift of Drift and fade between moves (±0.5% of the plane in 36 discrete steps, one about every 2 s) is a timer in Display.tsx
-   rather than an animation, so the display draws a frame only when the plane moves (#248). */
+/* #436 float (replacing #248's drift, keeping its principle): one timer in Display.tsx moves the plane up to ±3.5%
+   of the display, one device pixel at a time, and each widget's content inside its own slack through --float-x and
+   --float-y, applied with the individual translate property. No animation or transition runs, nothing changes
+   layout, fit or the reveal keyframes on .widget-content, and the display draws a frame only when something moves.
+   Registered without inheritance, so a step restyles only the section. */
+@property --float-x { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --float-y { syntax: '<length>'; inherits: false; initial-value: 0px; }
+.grid-ambient[data-float] > .widget-grid-plane > .ambient-widget { translate: var(--float-x) var(--float-y); }
 .grid-ambient .widget-body { width: 100%; min-height: 100cqh; height: auto; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .grid-ambient .widget-body > * { flex-shrink: 0; }
 .grid-ambient .ambient-label { display: flex; align-items: center; gap: 2cqw; font-size: calc(max(var(--min-text), min(6.4cqw, 8cqh)) * var(--font-scale)); line-height: 1.2; margin: 0 0 3cqh; font-weight: 500; color: var(--ambient-accent); overflow-wrap: anywhere; }

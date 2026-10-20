@@ -1,5 +1,5 @@
-/* Motion levels (#76): Off / Subtle / Lively, separate from Drift and fade between moves
-   (whole-arrangement fades, drift and travel). Everything that moves is gated by the effective level on the ambient root
+/* Motion levels (#76): Off / Subtle / Lively, separate from Float gently and Swap places
+   (moving the board, #436). Everything that moves is gated by the effective level on the ambient root
    (.grid-ambient[data-animation]) or the editor root (.studio[data-animation]); a screen that
    prefers reduced motion always reports Off. Only transform (translate/rotate/scale) and opacity
    animate, opacity never rises above its resting value, and in-widget offsets come from above or
@@ -44,7 +44,7 @@
 .grid-ambient[data-animation='subtle'] > .widget-grid-plane { --motion-rise: min(1.5cqh, 1.2cqw); }
 .grid-ambient[data-animation='lively'] > .widget-grid-plane { --motion-rise: min(3cqh, 1.2cqw, 1.8cqh); }
 
-/* Reveal choreography: after a black rest (Drift and fade on, fade above 0) or an editor replay,
+/* Reveal choreography: when the display first loads (Float gently on, glide above 0) or on an editor replay,
    each widget's content settles from above in reading order, capped at six steps. Display.tsx
    sets --reveal-order on each widget and .revealing[data-reveal] on the plane. */
 .grid-ambient .widget-grid-plane.revealing > .ambient-widget {
@@ -72,8 +72,4 @@
   animation-delay: var(--reveal-delay);
 }
 
-/* Loops hold still while the arrangement is fading out or resting on black. (!important because
-   each loop's animation shorthand resets the play state with a more specific selector.) */
-.grid-ambient .widget-grid-plane.fading :is(.glyph-part, .glyph-motion) {
-  animation-play-state: paused !important;
-}
+/* #436: the board never fades out or rests on black, so Lively loops never pause. */

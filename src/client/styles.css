@@ -256,11 +256,8 @@ button {
   gap: 3.8cqh 4.5cqw;
   padding: 6cqh 5.5cqw;
   filter: brightness(var(--ambient-brightness));
-  transition: opacity var(--fade-duration, 1800ms) ease-in-out;
+  /* #436: the plane never fades; only the first-load entrance (#76) animates content opacity. */
   opacity: 1;
-}
-.ambient-content.fading {
-  opacity: 0;
 }
 .ambient-widget {
   min-width: 0;
@@ -521,6 +518,34 @@ button {
   color: #a8acc0;
   border-color: #272936;
   font-size: 12px;
+}
+/* #436: a display retired by a newer display window, when the browser would not let it close itself.
+   A calm, dim card on black; nothing floats, polls or holds the screen awake behind it. */
+.display-retired {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  height: 100dvh;
+  width: 100vw;
+  padding: 24px;
+  background: #000;
+}
+.display-retired-card {
+  max-width: 32rem;
+  padding: 20px 24px;
+  border: 1px solid #1c1e28;
+  border-radius: 12px;
+  color: #8d93a6;
+  font-size: clamp(15px, 1.6vw, 24px);
+  line-height: 1.5;
+  text-align: center;
+}
+.display-retired-card p {
+  margin: 0;
+}
+.display-retired-card p + p {
+  margin-top: 0.4em;
+  color: #6c7184;
 }
 /* Classic: Georgia's default old-style figures bob around the baseline, so numbers use lining,
    tabular figures (#363). Rules that set font-variant-numeric themselves keep lining-nums too. */
