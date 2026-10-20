@@ -1102,12 +1102,15 @@ export async function runStudioQa({ playwright, edge } = {}) {
     const layoutStatus = page.locator('.data-status');
     const resetLayoutButton = page.getByRole('button', { name: 'Reset layout…', exact: true });
     const focusedName = () => page.evaluate(() => document.activeElement?.textContent?.trim() ?? '');
-    const canvasBoard = () => page.locator('.preview-surface [data-widget-id]').evaluateAll((sections) => sections.map((section) => [section.getAttribute('data-widget-id'), section.getAttribute('data-widget-span'), section.style.left, section.style.top]).sort());
+    // Origins as percentages of the canvas, rounded: the style attribute keeps fewer digits.
+    const percent = (value) => Math.round(Number.parseFloat(value) * 100) / 100;
+    const canvasBoard = () => page.locator('.preview-surface [data-widget-id]').evaluateAll((sections) => sections.map((section) => [section.getAttribute('data-widget-id'), section.getAttribute('data-widget-span'), section.style.left, section.style.top]).sort())
+      .then((rows) => rows.map(([id, span, left, top]) => [id, span, percent(left), percent(top)]));
     const spans = { calendar: '4x4', clock: '8x4', weather: '4x4', forecast: '8x2', preview: '4x2', reminders: '4x2' };
     // Last screen has no snapshot to show in this editor, so the canvas shows the other five.
     const expectedCanvas = Object.keys(spans).filter((id) => id !== 'preview').map((id) => {
       const placement = defaults.widgetGrid.placements[id];
-      return [id, spans[id], `${placement.column / 12 * 100}%`, `${placement.row / 8 * 100}%`];
+      return [id, spans[id], percent(placement.column / 12 * 100), percent(placement.row / 8 * 100)];
     }).sort();
     // Keep: nothing changes, focus returns to the button.
     await resetLayoutButton.click();
