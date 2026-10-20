@@ -1,4 +1,4 @@
-// First-run location card (#252), the Weather tab's Time & units (#235) and inspector names (#241)
+// First-run location card (#252, #310, #349), the Weather tab's Time & units (#235) and inspector names (#241)
 // in the production build. Own ephemeral loopback server and data; synthetic location, geocoding and
 // reminders; screenshots stay in RAM.
 import assert from 'node:assert/strict';
@@ -131,18 +131,39 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
     await card().waitFor();
     checks.push('“Hide location tip” is stored in browser storage only (saved settings byte-identical, no Save bar), survives reload, and a new browser profile shows the card; every tab fits at 1280×720 without it');
 
-    // 5. 390 px: the card stacks above the tabs without horizontal overflow.
-    await open({ viewport: { width: 390, height: 800 } });
-    await card().scrollIntoViewIfNeeded();
-    const narrow = await card().evaluate(element => {
+    // 5. #349: every card control is a 44 px target (Hide location tip 44 × 44) at 1280×720 and 390 px,
+    // where the card stacks above the tabs without horizontal overflow.
+    const targets = () => card().evaluate(element => {
       const box = element.getBoundingClientRect();
-      return { left: box.left, right: box.right, width: innerWidth, page: document.documentElement.scrollWidth, controls: [...element.querySelectorAll('button')].every(control => { const r = control.getBoundingClientRect(); return r.left >= box.left - 1 && r.right <= box.right + 1 && r.height >= 34; }) };
+      return { left: box.left, right: box.right, width: innerWidth, page: document.documentElement.scrollWidth,
+        controls: [...element.querySelectorAll('button')].map(control => { const r = control.getBoundingClientRect(); return { name: control.getAttribute('aria-label') || control.textContent.trim(), inside: r.left >= box.left - 1 && r.right <= box.right + 1, width: r.width, height: r.height }; }) };
     });
-    assert.ok(narrow.left >= 0 && narrow.right <= narrow.width && narrow.page <= narrow.width && narrow.controls, JSON.stringify(narrow));
-    images.push({ name: 'first-run-390', bytes: await page.screenshot() });
-    checks.push('390 px: the card and its 34 px+ controls fit the width with no horizontal scroll');
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+      await open({ viewport });
+      await card().scrollIntoViewIfNeeded();
+      const found = await targets();
+      assert.ok(found.left >= 0 && found.right <= found.width && found.page <= found.width, JSON.stringify(found));
+      assert.deepEqual(found.controls.map(control => control.name), ['Hide location tip', 'Use my location', 'Choose a city']);
+      for (const control of found.controls) assert.ok(control.inside && control.height >= 44 && (control.name !== 'Hide location tip' || control.width >= 44), `${viewport.width}: ${JSON.stringify(control)}`);
+      if (viewport.width === 390) images.push({ name: 'first-run-390', bytes: await page.screenshot() });
+    }
+    checks.push('1280×720 and 390×844: the card’s controls are 44 px targets (Hide location tip 44 × 44) and fit the width with no horizontal scroll (#349)');
 
-    // 6. #235 and #241: Time format beside Units with the Clock off; the Reminders tab names its count.
+    // 6. #310: at 1280×600 the default Widgets tab still fits beside the card. At 1024×600 and 760×600 the
+    // card's height makes it scroll by less than the card's own height; it fits once the tip is hidden
+    // (the trade-off recorded in docs/ui.md).
+    for (const viewport of [{ width: 1280, height: 600 }, { width: 1024, height: 600 }, { width: 760, height: 600 }]) {
+      await open({ viewport });
+      fit = await panelFit();
+      const height = (await card().boundingBox()).height;
+      if (viewport.width === 1280) assert.ok(fit.scroll <= fit.client + 1, `the Widgets tab fits at 1280×600 with the card: ${JSON.stringify(fit)}`);
+      else assert.ok(fit.scroll - fit.client < height, `${viewport.width}×600 scrolls by less than the ${height}px card: ${JSON.stringify(fit)}`);
+      await button('Hide location tip').click(); fit = await panelFit();
+      assert.ok(fit.scroll <= fit.client + 1, `${viewport.width}×600 fits without the card: ${JSON.stringify(fit)}`);
+    }
+    checks.push('the default Widgets tab fits beside the card at 1280×720 and 1280×600; at 1024×600 and 760×600 it scrolls by less than the card and fits once the tip is hidden (#310 trade-off)');
+
+    // 7. #235 and #241: Time format beside Units with the Clock off; the Reminders tab names its count.
     await reset(settings => { settings.widgets.clock = false; settings.locationSource = 'manual'; });
     await open();
     assert.equal(await page.getByRole('tab', { name: 'Reminders, 3 pending', exact: true }).count(), 1, 'the tab count is named');

@@ -102,3 +102,9 @@
   white-space: normal;
   text-align: center;
 }
+/* #349: like the size families, a fix is a full 44 px touch target on a coarse pointer. */
+@media (pointer: coarse) {
+  .studio .button.small.room-fix {
+    min-height: 44px;
+  }
+}

@@ -311,7 +311,7 @@ html.studio-editor {
 .first-run-card {
   flex: none;
   margin: 14px 16px 0;
-  padding: 7px 8px 9px 12px;
+  padding: 6px 8px 6px 12px;
   border: 1px solid #ffffff12;
   border-radius: 14px;
   background: #ffffff05;
@@ -336,11 +336,12 @@ html.studio-editor {
   line-height: 1.35;
   letter-spacing: 0;
 }
+/* #349: a 44 px target whose negative margins keep the heading row as tall as before. */
 .studio .icon-button.first-run-dismiss {
-  width: 34px;
-  min-width: 34px;
-  height: 34px;
-  margin: -5px -3px -5px 0;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  margin: -10px -8px -10px -5px;
   border-radius: 10px;
 }
 .studio .first-run-status {
@@ -360,7 +361,7 @@ html.studio-editor {
 }
 .studio .first-run-actions .button.small {
   flex: 1 1 auto;
-  min-height: 34px;
+  min-height: 44px;
   padding: 5px 12px;
 }
 @media (min-width: 701px) {
@@ -1398,12 +1399,31 @@ html.studio-editor {
     box-shadow: 0 10px 40px #000a;
   }
 }
-/* Layout messages and the weather note share one reserved line under the canvas actions. */
+/* Layout messages, the Edit layout how-to and the weather note share one reserved line under the canvas actions. */
 .canvas-messages {
   min-height: 18px;
 }
 .studio .canvas-messages .grid-status {
   min-height: 0;
+}
+/* #345: the how-to stays quieter than a real message, which replaces it. */
+.canvas-hint {
+  margin: 0 2px;
+  color: #9d96a9;
+  font-size: 12px;
+}
+@media (pointer: coarse) {
+  .canvas-hint-keys {
+    display: none;
+  }
+}
+/* #346: a refused grid density's one draft fix sits at the end of its message. */
+.studio .grid-status .density-fix {
+  min-height: 40px;
+  margin-left: 8px;
+  padding-inline: 4px;
+  font-size: inherit;
+  vertical-align: middle;
 }
 /* The editor's loading page explains a failure as well as offering Try again (#232). */
 .fallback-message {
@@ -1743,7 +1763,7 @@ html.studio-editor {
     flex: none;
   }
   .canvas-toolbar > span { display: none; }
-  .canvas-note, .grid-status { flex: none; font-size: 11px; }
+  .canvas-note, .grid-status, .canvas-hint { flex: none; font-size: 11px; }
   .canvas-messages { flex: none; }
   /*
    * A Save bar taller than the reserved bottom padding (82px, plus the 24px the clearance adds)

@@ -77,6 +77,30 @@
   visibility: visible;
   pointer-events: auto;
 }
+/*
+ * #349: the handle takes a 44 × 44 CSS px hit area from a transparent pseudo-element; the visible
+ * corner keeps its size and drags behave the same (a resize follows the pointer's movement, not where
+ * it pressed). The area reaches a few pixels past the frame, so the frame showing a handle sits above
+ * its neighbours, and at the canvas's right or bottom edge it reaches inward instead of being clipped.
+ */
+.grid-widget-frame.selected,
+.grid-widget-frame:focus-within {
+  z-index: 2;
+}
+.grid-resize-handle::before {
+  content: '';
+  position: absolute;
+  right: -7px;
+  bottom: -4px;
+  width: 44px;
+  height: 44px;
+}
+.grid-widget-frame[data-edge~='right'] > .grid-resize-handle::before {
+  right: 0;
+}
+.grid-widget-frame[data-edge~='bottom'] > .grid-resize-handle::before {
+  bottom: 0;
+}
 .grid-resize-handle svg {
   width: 17px;
   height: 17px;
@@ -98,10 +122,21 @@
   background: #a58cc11a;
 }
 .studio .grid-density-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
   min-width: 190px;
 }
+/* #345: a short visible label beside the select, whose accessible name stays "Grid density". */
+.grid-density-label {
+  flex: none;
+  color: #b9b1c6;
+  font-size: 12px;
+  font-weight: 550;
+}
 .studio .grid-density-control .select-input {
+  flex: 1;
   font-size: 12px;
   min-height: 42px;
   padding: 9px 12px;
@@ -124,6 +159,12 @@
   flex: 1;
   min-width: 64px;
   padding-inline: 8px;
+}
+/* #349: size families are frequent touch targets; a coarse pointer gets the full 44 px. */
+@media (pointer: coarse) {
+  .studio .size-options .button {
+    min-height: 44px;
+  }
 }
 .studio .size-options .button[aria-pressed='true'] {
   border-color: #b9a6d3;
@@ -423,6 +464,9 @@
     width: 30px;
     height: 30px;
     padding: 3px;
+  }
+  .grid-resize-handle::before {
+    bottom: -7px;
   }
   .studio .grid-density-control {
     min-width: 180px;
