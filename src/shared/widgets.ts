@@ -397,16 +397,8 @@ function hash(value: string): number {
   for (let index = 0; index < value.length; index++) { result ^= value.charCodeAt(index); result = Math.imul(result, 16777619); }
   return result >>> 0;
 }
-/**
- * #93: when the bounded search cannot move every widget on a dense board, a whole-board reflection of
- * the previous composition (horizontal, vertical or both) is always collision-free and in bounds.
- * Returns a reflection that moves widgets, or null when every reflection maps the board onto itself.
- * #182: whenever another reflection also moves widgets, consecutive fallbacks apply different
- * reflections. Reflections commute, so a board with a third reflected arrangement visits three or four
- * arrangements (for example A, rA, brA, bA) instead of returning to the one from two cycles earlier.
- * Exported for the relocation tests; the display reaches it only through composeWidgetGrid.
- */
-export function reflectedComposition(grid: WidgetGrid, ids: WidgetId[], previous: WidgetGrid, cycle: number): WidgetGrid | null {
+/** The moving whole-board reflections of the previous composition (horizontal, vertical or both), with how many widgets each moves. */
+function reflectionOptions(grid: WidgetGrid, ids: WidgetId[], previous: WidgetGrid): { grid: WidgetGrid; moved: number }[] {
   // A stale previous composition (another density or other spans) cannot be reflected; use the authored board.
   const compatible = previous.density === grid.density && ids.every(id => sameSpan(placementSpan(id, previous.placements[id]), placementSpan(id, grid.placements[id])));
   const base = compatible ? previous : grid;
@@ -419,6 +411,10 @@ export function reflectedComposition(grid: WidgetGrid, ids: WidgetId[], previous
     const moved = ids.filter(id => previous.placements[id].column !== result.placements[id].column || previous.placements[id].row !== result.placements[id].row).length;
     if (moved) options.push({ grid: result, moved });
   }
+  return options;
+}
+/** The #182 choice among moving reflections; see reflectedComposition. */
+function chooseReflection(options: { grid: WidgetGrid; moved: number }[], cycle: number): WidgetGrid | null {
   // A reflection leaves the same widgets in place (those centred on its axes) in every reflected
   // arrangement of a board, so this ranking holds from one fallback to the next.
   const most = Math.max(0, ...options.map(option => option.moved));
@@ -434,16 +430,61 @@ export function reflectedComposition(grid: WidgetGrid, ids: WidgetId[], previous
   const second = rest.filter(option => option.moved === fewer);
   return second.length && cycle % 2 ? second[Math.floor(cycle / 2) % second.length]!.grid : best[0]!.grid;
 }
-/** Keep the edited layout at rest, then choose distant legal cells during a black interval. */
-export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<WidgetId, boolean>>, cycle: number, previous = grid): WidgetGrid {
+/**
+ * #93: when the bounded search cannot move every widget on a dense board, a whole-board reflection of
+ * the previous composition A (horizontal hA, vertical vA or both hvA) is always collision-free and in
+ * bounds. Returns a reflection that moves widgets, or null when every reflection maps the board onto
+ * itself. #182: whenever another reflection also moves widgets, consecutive fallbacks apply different
+ * reflections. Reflections commute, so a board's reflected arrangements are A, hA, vA and hvA (one,
+ * two or four of them distinct), and a run of fallbacks on a board with four visits all four (for
+ * example A, vA, hA, hvA) instead of returning to the arrangement from two cycles earlier.
+ * Exported for the relocation tests; the display reaches it only through composeWidgetGrid, which may
+ * also exchange same-size widgets between a reflection's cells (#338, #317).
+ */
+export function reflectedComposition(grid: WidgetGrid, ids: WidgetId[], previous: WidgetGrid, cycle: number): WidgetGrid | null {
+  return chooseReflection(reflectionOptions(grid, ids, previous), cycle);
+}
+/** #338: the share of a widget's previous cells that a placement of the same span covers again. */
+function keptShare(span: WidgetSpan, from: { column: number; row: number }, to: { column: number; row: number }): number {
+  const columns = Math.max(0, Math.min(from.column, to.column) + span.columns - Math.max(from.column, to.column));
+  const rows = Math.max(0, Math.min(from.row, to.row) + span.rows - Math.max(from.row, to.row));
+  return columns * rows / (span.columns * span.rows);
+}
+/** #338: a widget that covers more than half of its previous cells again has stayed in place. */
+export const RELOCATION_KEEP_LIMIT = 0.5;
+const SEARCH_ATTEMPTS = 20_000, TILE_ATTEMPTS = 5_000, EXCHANGE_ATTEMPTS = 4_000;
+/**
+ * Keep the edited layout at rest, then choose distant legal cells during a black interval.
+ * `earlier` holds the compositions before `previous`, most recent first (the display passes the one
+ * from two cycles back, #317). A widget "stays" when it covers more than half of its previous cells
+ * again, or more than the least that any legal origin of its span allows (#338). In order of preference:
+ * 1. a searched composition in which no widget stays and that recreates no earlier composition: first
+ *    widget by widget with distant cells first, then cell by cell for boards with few spare cells;
+ * 2. a whole-board reflection of the previous composition (#93; the #182 choice first) in which no widget
+ *    stays: a widget that stays trades places with a same-size clean region elsewhere (its own cells or
+ *    its row or column band), and widgets of the same span may exchange cells. A reflection alone cannot
+ *    move a widget centred on its axis, and the whole-plane offset (motionOffset, at most 2% of the plane
+ *    each way) cannot move one by a large share of its size. An earlier composition may return only when
+ *    no such reflection avoids it;
+ * 3. a searched composition that moves every widget to other cells and recreates no earlier one,
+ *    improved the same way where it can be;
+ * 4. the reflection or search result that leaves the fewest widgets staying, preferring one that
+ *    recreates no earlier composition;
+ * 5. a search that lets widgets stay (only a board every reflection maps onto itself gets here), and
+ *    finally the authored board.
+ * Every step is bounded. Every result is collision-free and in bounds, keeps every span and relocates
+ * the whole group at once.
+ */
+export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<WidgetId, boolean>>, cycle: number, previous = grid, earlier: readonly WidgetGrid[] = []): WidgetGrid {
   if (cycle === 0) return structuredClone(grid);
   const limits = GRID_DENSITIES[grid.density];
   const ids = WIDGET_IDS.filter(id => enabled[id]).sort((a, b) => {
     const as = placementSpan(a, grid.placements[a]); const bs = placementSpan(b, grid.placements[b]);
     return bs.columns * bs.rows - as.columns * as.rows || hash(`${cycle}:${a}`) - hash(`${cycle}:${b}`);
   });
+  const spans = Object.fromEntries(ids.map(id => [id, placementSpan(id, grid.placements[id])])) as Record<WidgetId, WidgetSpan>;
   const candidates = Object.fromEntries(ids.map(id => {
-    const span = placementSpan(id, grid.placements[id]); const origin = previous.placements[id];
+    const span = spans[id]; const origin = previous.placements[id];
     const values: WidgetPlacement[] = [];
     for (let row = 0; row + span.rows <= limits.rows; row++) for (let column = 0; column + span.columns <= limits.columns; column++) values.push({ ...grid.placements[id], column, row });
     // Alternate the farthest half of legal origins so motion is substantial without a four-position loop.
@@ -455,25 +496,182 @@ export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<Widg
     });
     return [id, values];
   })) as Record<WidgetId, WidgetPlacement[]>;
-  for (const requireMovement of [true, false]) {
-    const result = structuredClone(grid); const placed: Partial<Record<WidgetId, boolean>> = {}; let attempts = 0;
-    function search(index: number): boolean {
-      if (index === ids.length) return true;
-      const id = ids[index]!;
+  // Boards in another density or with other spans (a stale composition after an edit) are not compared.
+  const comparable = (board: WidgetGrid) => board.density === grid.density && ids.every(id => sameSpan(placementSpan(id, board.placements[id]), spans[id]));
+  const tracked = comparable(previous);
+  // The most of its previous cells each widget may keep: half, or the least that any legal origin keeps.
+  const keepLimit = Object.fromEntries(ids.map(id => [id, tracked ? Math.max(RELOCATION_KEEP_LIMIT, Math.min(...candidates[id].map(point => keptShare(spans[id], previous.placements[id], point)))) : 1])) as Record<WidgetId, number>;
+  const key = (board: WidgetGrid) => ids.map(id => `${board.placements[id].column},${board.placements[id].row}`).join('|');
+  const recent = new Set(earlier.filter(comparable).map(key));
+  const staying = (board: WidgetGrid) => ids.filter(id => keptShare(spans[id], previous.placements[id], board.placements[id]) > keepLimit[id]).length;
+
+  /** Bounded depth-first search: `apart` keeps every widget within its limit, `moved` only changes its cells, `any` lets it stay. */
+  function search(rule: 'apart' | 'moved' | 'any', avoidRecent: boolean): WidgetGrid | null {
+    const result = structuredClone(grid); const occupied = new Uint8Array(limits.columns * limits.rows); let attempts = 0;
+    // Only placed widgets occupy cells, exactly as placementFits counts them (hidden widgets never do).
+    const free = (point: WidgetPlacement, span: WidgetSpan) => {
+      for (let row = point.row; row < point.row + span.rows; row++) for (let column = point.column; column < point.column + span.columns; column++) if (occupied[row * limits.columns + column]) return false;
+      return true;
+    };
+    const mark = (point: WidgetPlacement, span: WidgetSpan, value: number) => {
+      for (let row = point.row; row < point.row + span.rows; row++) occupied.fill(value, row * limits.columns + point.column, row * limits.columns + point.column + span.columns);
+    };
+    function step(index: number): boolean {
+      if (index === ids.length) return !(avoidRecent && recent.has(key(result)));
+      const id = ids[index]!, span = spans[id], prior = previous.placements[id];
       for (const candidate of candidates[id]) {
-        if (++attempts > 20_000) return false;
-        const prior = previous.placements[id];
-        if (requireMovement && candidate.column === prior.column && candidate.row === prior.row && candidates[id].length > 1) continue;
-        if (!placementFits(result, id, candidate, placed)) continue;
-        result.placements[id] = candidate; placed[id] = true;
-        if (search(index + 1)) return true;
-        delete placed[id];
+        if (++attempts > SEARCH_ATTEMPTS) return false;
+        if (rule !== 'any' && candidate.column === prior.column && candidate.row === prior.row && candidates[id].length > 1) continue;
+        if (rule === 'apart' && keptShare(span, prior, candidate) > keepLimit[id]) continue;
+        if (!free(candidate, span)) continue;
+        result.placements[id] = candidate; mark(candidate, span, 1);
+        if (step(index + 1)) return true;
+        mark(candidate, span, 0);
       }
       return false;
     }
-    if (search(0)) return result;
-    if (requireMovement) { const reflected = reflectedComposition(grid, ids, previous, cycle); if (reflected) return reflected; }
+    return step(0) ? result : null;
   }
+  /**
+   * #338: the reflection `base` with widgets of the same span exchanging cells, so that every widget keeps
+   * within its limit (and, with `avoidRecent`, no earlier composition returns). The cells are exactly the
+   * reflection's, so the result stays collision-free and in bounds. Each widget tries its own reflected
+   * cell first, so a reflection that already qualifies comes back unchanged.
+   */
+  function exchange(base: WidgetGrid, avoidRecent: boolean): WidgetGrid | null {
+    if (!tracked) return null;
+    const order = ids.map(id => {
+      const own = base.placements[id];
+      const cells = ids.filter(other => sameSpan(spans[other], spans[id])).map(other => base.placements[other])
+        .filter(cell => keptShare(spans[id], previous.placements[id], cell) <= keepLimit[id])
+        .sort((a, b) => Number(b === own) - Number(a === own) || hash(`${cycle}:${id}:${a.column}:${a.row}`) - hash(`${cycle}:${id}:${b.column}:${b.row}`));
+      return { id, cells };
+    }).sort((a, b) => a.cells.length - b.cells.length);
+    if (order.some(entry => !entry.cells.length)) return null;
+    const result = structuredClone(base); const taken = new Set<string>(); let attempts = 0;
+    function step(index: number): boolean {
+      if (index === order.length) return !(avoidRecent && recent.has(key(result)));
+      const { id, cells } = order[index]!;
+      for (const cell of cells) {
+        if (++attempts > EXCHANGE_ATTEMPTS) return false;
+        const slot = `${spans[id].columns}x${spans[id].rows}@${cell.column},${cell.row}`;
+        if (taken.has(slot)) continue;
+        taken.add(slot); result.placements[id] = { ...grid.placements[id], column: cell.column, row: cell.row };
+        if (step(index + 1)) return true;
+        taken.delete(slot);
+      }
+      return false;
+    }
+    return step(0) ? result : null;
+  }
+  /**
+   * #338: a widget that keeps more than its limit moves with a clean region around it (its own cells, or
+   * the row or column band it sits in), which trades places with a same-size clean region elsewhere. A
+   * region is clean when every widget touching it lies entirely inside it, so translating the contents of
+   * two disjoint clean regions into each other keeps the board collision-free and in bounds. A swap is
+   * kept only when every widget it moves stays within its own limit. Unlike an exchange, this also moves
+   * a widget that no other widget shares a span with.
+   */
+  function settle(base: WidgetGrid): WidgetGrid {
+    if (!tracked) return base;
+    const inRect = (point: WidgetPlacement, size: WidgetSpan, rect: WidgetPlacement, area: WidgetSpan) => point.column >= rect.column && point.row >= rect.row && point.column + size.columns <= rect.column + area.columns && point.row + size.rows <= rect.row + area.rows;
+    let board = base;
+    const touching = (rect: WidgetPlacement, area: WidgetSpan) => ids.filter(other => intersects(board.placements[other], spans[other], rect, area));
+    const clean = (rect: WidgetPlacement, area: WidgetSpan) => touching(rect, area).every(other => inRect(board.placements[other], spans[other], rect, area));
+    /** The smallest band of whole rows (or columns) around a widget that no other widget crosses. */
+    const band = (id: WidgetId, rows: boolean): { rect: WidgetPlacement; area: WidgetSpan } | null => {
+      const point = board.placements[id];
+      let start = rows ? point.row : point.column, end = start + (rows ? spans[id].rows : spans[id].columns);
+      for (let grown = true; grown;) {
+        grown = false;
+        for (const other of ids) {
+          const from = rows ? board.placements[other].row : board.placements[other].column, to = from + (rows ? spans[other].rows : spans[other].columns);
+          if (from < end && to > start && (from < start || to > end)) { start = Math.min(start, from); end = Math.max(end, to); grown = true; }
+        }
+      }
+      // A band wider than half the board has no disjoint band of its size to trade with.
+      if ((end - start) * 2 > (rows ? limits.rows : limits.columns)) return null;
+      return rows ? { rect: { ...point, column: 0, row: start }, area: { columns: limits.columns, rows: end - start } } : { rect: { ...point, column: start, row: 0 }, area: { columns: end - start, rows: limits.rows } };
+    };
+    for (const id of ids) {
+      if (keptShare(spans[id], previous.placements[id], board.placements[id]) <= keepLimit[id]) continue;
+      const regions = [{ rect: board.placements[id], area: spans[id] }, band(id, true), band(id, false)].filter(region => region !== null);
+      found: for (const { rect: from, area } of regions) {
+        const targets: WidgetPlacement[] = [];
+        for (let row = 0; row + area.rows <= limits.rows; row++) for (let column = 0; column + area.columns <= limits.columns; column++) if (!intersects(from, area, { ...from, column, row }, area)) targets.push({ ...from, column, row });
+        targets.sort((a, b) => hash(`${cycle}:${id}:${a.column}:${a.row}`) - hash(`${cycle}:${id}:${b.column}:${b.row}`));
+        for (const to of targets) {
+          const { column, row } = to;
+          if (!clean(to, area)) continue;
+          const moving = [...touching(from, area).map(other => ({ other, by: { column: column - from.column, row: row - from.row } })), ...touching(to, area).map(other => ({ other, by: { column: from.column - column, row: from.row - row } }))];
+          const shifted = (other: WidgetId, by: { column: number; row: number }) => ({ column: board.placements[other].column + by.column, row: board.placements[other].row + by.row });
+          if (moving.some(({ other, by }) => keptShare(spans[other], previous.placements[other], shifted(other, by)) > keepLimit[other])) continue;
+          const next = structuredClone(board);
+          for (const { other, by } of moving) next.placements[other] = { ...grid.placements[other], ...shifted(other, by) };
+          board = next; break found;
+        }
+      }
+    }
+    return board;
+  }
+
+  /**
+   * #338: the same rule as `search('apart')`, packed cell by cell: the first free cell (in reading order)
+   * either takes the top-left corner of a widget that fits there or stays empty while the board has spare
+   * cells. A widget-by-widget search rarely completes a board with few or no spare cells within its
+   * budget; this order never leaves an unfillable hole, so it finds such boards' arrangements quickly.
+   * Widgets are tried in an order that changes with the cycle.
+   */
+  function tile(avoidRecent: boolean): WidgetGrid | null {
+    const result = structuredClone(grid); const occupied = new Uint8Array(limits.columns * limits.rows); let attempts = 0;
+    let spare = limits.columns * limits.rows - ids.reduce((sum, id) => sum + spans[id].columns * spans[id].rows, 0);
+    const order = [...ids].sort((a, b) => hash(`${cycle}:tile:${a}`) - hash(`${cycle}:tile:${b}`)); const placed = new Set<WidgetId>();
+    const fits = (id: WidgetId, column: number, row: number) => {
+      const span = spans[id];
+      if (column + span.columns > limits.columns || row + span.rows > limits.rows) return false;
+      for (let y = row; y < row + span.rows; y++) for (let x = column; x < column + span.columns; x++) if (occupied[y * limits.columns + x]) return false;
+      return true;
+    };
+    const mark = (id: WidgetId, column: number, row: number, value: number) => {
+      for (let y = row; y < row + spans[id].rows; y++) occupied.fill(value, y * limits.columns + column, y * limits.columns + column + spans[id].columns);
+    };
+    function step(from: number): boolean {
+      if (placed.size === ids.length) return !(avoidRecent && recent.has(key(result)));
+      let cell = from; while (occupied[cell]) cell++;
+      if (cell >= occupied.length) return false;
+      const column = cell % limits.columns, row = Math.floor(cell / limits.columns);
+      for (const id of order) {
+        if (placed.has(id)) continue;
+        if (++attempts > TILE_ATTEMPTS) return false;
+        const prior = previous.placements[id];
+        if (candidates[id].length > 1 && column === prior.column && row === prior.row) continue;
+        if (keptShare(spans[id], prior, { column, row }) > keepLimit[id] || !fits(id, column, row)) continue;
+        mark(id, column, row, 1); placed.add(id); result.placements[id] = { ...grid.placements[id], column, row };
+        if (step(cell + 1)) return true;
+        mark(id, column, row, 0); placed.delete(id);
+      }
+      // Leave this cell empty (only a board with spare cells may).
+      if (spare <= 0 || ++attempts > TILE_ATTEMPTS) return false;
+      spare--; occupied[cell] = 2;
+      const done = step(cell + 1);
+      occupied[cell] = 0; spare++;
+      return done;
+    }
+    return step(0) ? result : null;
+  }
+
+  const apart = search('apart', true) ?? tile(true); if (apart) return apart;
+  const options = reflectionOptions(grid, ids, previous), chosen = chooseReflection(options, cycle);
+  const reflections = (chosen ? [chosen, ...options.map(option => option.grid).filter(option => option !== chosen)] : []).map(settle);
+  for (const avoidRecent of [true, false]) for (const base of reflections) { const exchanged = exchange(base, avoidRecent); if (exchanged) return exchanged; }
+  const moved = search('moved', true);
+  if (moved) { const settled = settle(moved); return exchange(settled, true) ?? (recent.has(key(settled)) ? moved : settled); }
+  if (reflections.length) {
+    const fallbacks = [...reflections]; const searched = search('moved', false); if (searched) fallbacks.push(settle(searched));
+    // Array#sort is stable, so the #182 choice wins a tie.
+    return fallbacks.sort((a, b) => staying(a) - staying(b) || Number(recent.has(key(a))) - Number(recent.has(key(b))))[0]!;
+  }
+  const any = search('any', false); if (any) return any;
   // An authored valid board is always a safe fallback when bounded search is exhausted.
   return structuredClone(grid);
 }

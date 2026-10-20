@@ -52,6 +52,13 @@ code and tests for actual symbols and commands; the documentation is not a schem
   with `rotationSlot` from `src/client/dynamic.ts` (wall-clock slots; slot 0 on the editor
   canvas and picker samples) and starts no timer of its own: the display's one-second tick
   re-renders it.
+- Know when the shared fit reruns (#314): on a box or content-size change, a text or
+  structure change, a `class` change inside the content, and a Text size or typeface
+  change, never on a `style` or `data-*` change alone. Restyle through a class when the
+  change can alter overflow, or ask for a refit.
+- The registry wraps your renderer in an error boundary (#318): a throw shows
+  "<Widget> unavailable" in your widget's footprint instead of blanking the display
+  or editor. Still render honest unavailable states yourself; the boundary is a net.
 - Colour follows the contract's [colour rules](../../../docs/widgets.md#ambient-appearance-and-recurring-exposure)
   (#75, #214): primary content (times, temperatures, titles) uses the text colour;
   labels, units, captions, secondary values, bars and dots use `var(--ambient-accent)`,
