@@ -27,7 +27,6 @@ export type PersistableSettings = Record<string, unknown>;
 
 type Loose = Record<string, any>;
 const previousIds: ReadonlySet<string> = new Set(PREVIOUS_RELEASE.widgetIds);
-const identity = { offsetX: 0, offsetY: 0, scale: 1 };
 
 function omitVisual(visual: Loose): void {
   const appearance = visual.appearance as Loose | undefined;
@@ -37,16 +36,19 @@ function omitVisual(visual: Loose): void {
   for (const id of WIDGET_IDS) {
     if (previousIds.has(id)) continue;
     if (visual.widgets?.[id] === false) delete visual.widgets[id];
-    if (visual.widgetOverrides && isDeepStrictEqual(visual.widgetOverrides[id], identity)) delete visual.widgetOverrides[id];
+    // #135: legacy transforms no longer render, and the previous release rejects any transform for an id
+    // it does not know, so none is ever written for such an id, whatever its value (#437).
+    if (visual.widgetOverrides) delete visual.widgetOverrides[id];
     if (visual.widgetGrid?.placements && visual.widgets?.[id] !== true) delete visual.widgetGrid.placements[id];
   }
 }
 
 /**
  * Returns a new object (never mutates its input). Omits only AT_REST values and default widgetData
- * sections, and for widget ids the previous release does not know (none since #263) an off
- * visibility, an identity transform and a hidden placement; every other key (for example rain) is
- * always written.
+ * sections, and for widget ids the previous release does not know (Dynamic since #437) an off
+ * visibility, every transform (the #135 rule: transforms no longer render, so dropping one loses
+ * nothing) and a hidden placement; every other key (for example rain) is always written. An enabled
+ * unknown id keeps its visibility and placement: that is a documented rollback exception.
  * Apply only where data reaches disk or an export: never to snapshots, API responses or in-memory
  * data, which the editor compares key by key.
  */

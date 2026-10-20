@@ -98,6 +98,14 @@ const worldClocks = z.array(worldClock).max(4).refine(uniqueIds, 'World clock ID
 const countdowns = z.array(countdown).max(12).refine(uniqueIds, 'Countdown IDs must be unique');
 const weekStart = z.enum(['locale', 'sunday', 'monday']);
 const airQualityScale = z.enum(['us', 'european']);
+/** Dynamic's sources (#437): each reads as on when missing, and a saved section keeps at least one on. */
+export const DYNAMIC_SOURCES_PROBLEM = 'Dynamic needs at least one source';
+const dynamicSources = z.object({
+  weather: z.boolean().default(true), alerts: z.boolean().default(true), air: z.boolean().default(true),
+  sky: z.boolean().default(true), personal: z.boolean().default(true),
+}).strict().refine(value => Object.values(value).some(Boolean), DYNAMIC_SOURCES_PROBLEM)
+  .default(() => ({ weather: true, alerts: true, air: true, sky: true, personal: true }));
+const dynamicSourcesPatch = z.object({ weather: z.boolean(), alerts: z.boolean(), air: z.boolean(), sky: z.boolean(), personal: z.boolean() }).strict().partial();
 /** Persisted settings and imports only: never part of visualShape, so saved styles never contain it. */
 const widgetData = z.object({
   worldClocks: worldClocks.default(() => []),
@@ -105,6 +113,7 @@ const widgetData = z.object({
   countdowns: countdowns.default(() => []),
   note: z.object({ text: noteText.default('') }).strict().default(() => ({ text: '' })),
   airQuality: z.object({ scale: airQualityScale.default('us') }).strict().default(() => ({ scale: 'us' as const })),
+  dynamic: dynamicSources,
 }).strict().default(() => defaultSettings().widgetData);
 /** PATCH: exactly the supplied keys, never a default; arrays replace whole. */
 const widgetDataPatch = z.object({
@@ -113,6 +122,7 @@ const widgetDataPatch = z.object({
   countdowns: countdowns.optional(),
   note: z.object({ text: noteText }).strict().partial().optional(),
   airQuality: z.object({ scale: airQualityScale }).strict().partial().optional(),
+  dynamic: dynamicSourcesPatch.optional(),
 }).strict();
 function checkGrid(value: Pick<Settings, 'widgetGrid' | 'widgets'>, context: z.RefinementCtx) {
   // Strict, except that an enabled retired widget may overlap the target absorbing it (#74).
@@ -199,7 +209,8 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
     widgetData: { ...current.widgetData, ...patch.widgetData,
       calendar: { ...current.widgetData.calendar, ...patch.widgetData?.calendar },
       note: { ...current.widgetData.note, ...patch.widgetData?.note },
-      airQuality: { ...current.widgetData.airQuality, ...patch.widgetData?.airQuality } },
+      airQuality: { ...current.widgetData.airQuality, ...patch.widgetData?.airQuality },
+      dynamic: { ...current.widgetData.dynamic, ...patch.widgetData?.dynamic } },
   };
   // Existing API callers that explicitly edit a city are manual overrides too.
   if (changes.location && changes.locationSource === undefined) next.locationSource = 'manual';

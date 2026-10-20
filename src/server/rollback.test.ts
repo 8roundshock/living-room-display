@@ -104,9 +104,10 @@ test('negative controls: the previous release still rejects an unknown key and i
   }
 });
 
-test('#272 every value omitted at rest is readable by the previous release when written, so the omission is optional', () => {
+test('#272 every value omitted at rest is readable by the previous release when written, except the #437 Dynamic sources', () => {
   // Default data with every omitted value present: colour accent, Subtle and the default widgetData sections,
   // in settings and in a saved style. Decision (#272): keep the omission; nothing on disk changes format here.
+  // Dynamic's default sources (#437) are the exception: 3446400 rejects the section, so its omission is required.
   const settings = colorAccentDefaults();
   settings.savedPresets = [{ id: 'synthetic-style', name: 'Synthetic style', visual: getVisual(settings) }];
   const full = { version: 1 as const, settings, reminders: [], photoAsset: null };
@@ -123,7 +124,14 @@ test('#272 every value omitted at rest is readable by the previous release when 
     for (const [key, value] of Object.entries(AT_REST.appearance)) assert.equal(appearance[key], value, `${key} is written`);
   }
   assert.deepEqual(written.settings.widgetData, colorAccentDefaults().widgetData, 'every default widgetData section is written');
-  assertPreviousReaderAccepts('data', written, 'every omitted value written in state.json');
+  assertPreviousReaderRejects('data', written, 'the default Dynamic sources and the off Dynamic id written in state.json');
+  // Required, not optional, for Dynamic (#437): its default sources, and its off visibility, transform and
+  // hidden placement in settings and saved styles.
+  delete written.settings.widgetData.dynamic;
+  for (const visual of [written.settings, written.settings.savedPresets[0].visual]) {
+    delete visual.widgets.dynamic; delete visual.widgetOverrides.dynamic; delete visual.widgetGrid.placements.dynamic;
+  }
+  assertPreviousReaderAccepts('data', written, 'every other omitted value written in state.json');
   const exported = { version: written.version, exportedAt: new Date(0).toISOString(), settings: written.settings, reminders: [] };
   assertPreviousReaderAccepts('import', exported, 'every omitted value written in an export');
 });
@@ -268,10 +276,10 @@ test('(e) every former bedca44 exception is readable by the previous release in 
 });
 
 test('#135 a non-identity transform for a #78 id, sent by PATCH or import, stays readable; no planned ids remain', async () => {
-  // persistableSettings writes every transform of an id the previous release knows. Planned ids are the
-  // case #135 guards against; revisit that rule (normalise or reject) before adding one.
+  // persistableSettings writes every transform of an id the previous release knows, and never one for an id
+  // it lacks (the #135 rule, #437: Dynamic). Planned ids are the case #135 guards against.
   assert.deepEqual(WIDGET_IDS.filter(isPlannedWidget), [], 'the catalog has no planned ids');
-  assert.deepEqual(WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id)), [], 'the previous release knows every catalog id: a new id needs its non-identity transforms kept out of saved data (#135) or a documented exception');
+  assert.deepEqual(WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id)), ['dynamic'], 'the ids the previous release lacks: their transforms are never written (#135), see the #437 test below');
   const directory = await temporary('lrd-rollback-135-'), target = await temporary('lrd-rollback-135-import-');
   await seedColorAccentData(directory); await seedColorAccentData(target);
   const app = await application(directory), imported = await application(target);
@@ -291,6 +299,55 @@ test('#135 a non-identity transform for a #78 id, sent by PATCH or import, stays
     await imported.send('POST', '/api/import', exported);
     assert.equal((await readJson(target, 'state.json')).settings.widgetOverrides.note.offsetX, 5);
     await assertFilesAccepted(target, 'imported #78 transforms');
+  } finally {
+    await app.close(); await imported.close();
+    await rm(directory, { recursive: true, force: true }); await rm(target, { recursive: true, force: true });
+  }
+});
+
+test('#437 Dynamic: off, disabled again or only transformed stays readable; enabled, non-default sources or a style with it on are the documented exceptions', async () => {
+  const directory = await temporary('lrd-rollback-437-'), target = await temporary('lrd-rollback-437-import-');
+  await seedColorAccentData(directory); await seedColorAccentData(target);
+  const app = await application(directory), imported = await application(target);
+  try {
+    // Accepted: a non-identity transform is never written (#135), from a PATCH or an import.
+    await app.send('PATCH', '/api/settings', { widgetOverrides: { dynamic: { offsetX: 5, scale: 1.2 } } });
+    assert.deepEqual(app.store.snapshot().settings.widgetOverrides.dynamic, { offsetX: 5, offsetY: 0, scale: 1.2 }, 'the store keeps it');
+    assert.equal('dynamic' in (await readJson(directory, 'state.json')).settings.widgetOverrides, false, 'state.json leaves it out');
+    await assertFilesAccepted(directory, 'Dynamic transform');
+    const transformed = await app.send('GET', '/api/export');
+    assert.equal('dynamic' in transformed.settings.widgetOverrides, false, 'the export leaves it out');
+    assertPreviousReaderAccepts('import', transformed, 'export after a Dynamic transform');
+    const handmade = structuredClone(transformed); handmade.settings.widgetOverrides.dynamic = { offsetX: -4, offsetY: 3, scale: 0.8 };
+    await imported.send('POST', '/api/import', handmade);
+    assert.equal('dynamic' in (await readJson(target, 'state.json')).settings.widgetOverrides, false, 'an imported transform is not written either');
+    await assertFilesAccepted(target, 'imported Dynamic transform');
+
+    // The documented exceptions: an enabled Dynamic, sources other than all on, a saved style made while it was on.
+    await app.send('PATCH', '/api/settings', { widgets: { dynamic: true } });
+    const enabled = await readJson(directory, 'state.json');
+    assert.equal(enabled.settings.widgets.dynamic, true);
+    assertPreviousReaderRejects('data', enabled, 'an enabled Dynamic in state.json');
+    assertPreviousReaderRejects('import', await app.send('GET', '/api/export'), 'an enabled Dynamic in an export');
+    await app.send('PATCH', '/api/settings', { savedPresets: [{ id: 'with-dynamic', name: 'With Dynamic', visual: getVisual(app.store.snapshot().settings) }] });
+    await app.send('PATCH', '/api/settings', { widgets: { dynamic: false } });
+    const styled = await readJson(directory, 'state.json');
+    assert.equal(styled.settings.savedPresets[0].visual.widgets.dynamic, true, 'the style keeps Dynamic on');
+    assert.equal('dynamic' in styled.settings.widgets, false, 'the board itself has Dynamic off, omitted');
+    assertPreviousReaderRejects('data', styled, 'a saved style with Dynamic on');
+    await app.send('PATCH', '/api/settings', { savedPresets: [] });
+    await app.send('PATCH', '/api/settings', { widgetData: { dynamic: { air: false, personal: false } } });
+    const sources = await readJson(directory, 'state.json');
+    assert.deepEqual(sources.settings.widgetData.dynamic, { weather: true, alerts: true, air: false, sky: true, personal: false });
+    assertPreviousReaderRejects('data', sources, 'non-default Dynamic sources');
+
+    // Accepted again once the user follows the documented steps: all sources on, Dynamic off, no style with it, Save.
+    await app.send('PATCH', '/api/settings', { widgetData: { dynamic: { air: true, personal: true } } });
+    await app.send('PATCH', '/api/settings', { units: 'imperial' });
+    const restored = await readJson(directory, 'state.json');
+    assert.equal('widgetData' in restored.settings, false, 'the default sources are omitted at rest again');
+    await assertFilesAccepted(directory, 'Dynamic enabled, then disabled and saved');
+    assertPreviousReaderAccepts('import', await app.send('GET', '/api/export'), 'export after Dynamic was disabled');
   } finally {
     await app.close(); await imported.close();
     await rm(directory, { recursive: true, force: true }); await rm(target, { recursive: true, force: true });

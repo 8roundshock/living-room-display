@@ -16,6 +16,10 @@ test('weather attribution follows the first enabled weather module and can all b
   // Rain is retired into Weather (#74): even an injected enabled Rain never carries the credit.
   settings.widgets.weather = false; settings.widgets.rain = true; assert.equal(weatherAttributionWidget(settings), null);
   settings.widgets.rain = false; assert.equal(weatherAttributionWidget(settings), null);
+  // Dynamic (#437) carries it only while Forecast and Weather are both off.
+  settings.widgets.dynamic = true; assert.equal(weatherAttributionWidget(settings), 'dynamic');
+  settings.widgets.weather = true; assert.equal(weatherAttributionWidget(settings), 'weather');
+  settings.widgets.weather = false; settings.widgets.forecast = true; assert.equal(weatherAttributionWidget(settings), 'forecast');
 });
 import {
   ageLabel,

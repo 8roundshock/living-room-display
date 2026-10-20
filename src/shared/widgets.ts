@@ -9,7 +9,7 @@ export const WIDGET_CATEGORIES: Record<WidgetCategory, string> = { time: 'Time',
 export type WidgetStatus = 'active' | 'planned' | 'retired';
 export interface WidgetDefinition {
   name: string; description: string;
-  icon: 'clock' | 'cloud' | 'rain' | 'calendar' | 'check' | 'monitor' | 'photo' | 'globe' | 'hourglass' | 'note' | 'air' | 'sunrise' | 'forecast';
+  icon: 'clock' | 'cloud' | 'rain' | 'calendar' | 'check' | 'monitor' | 'photo' | 'globe' | 'hourglass' | 'note' | 'air' | 'sunrise' | 'forecast' | 'sparkles';
   category: WidgetCategory;
   /** Palette role used by native accent colours (#75). */
   tone: PaletteRole;
@@ -51,6 +51,8 @@ export const WIDGET_CATALOG = {
   note: { name: 'Note', description: 'A short message on screen', icon: 'note', category: 'personal', tone: 'personal', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 } },
   airQuality: { name: 'Air quality', description: 'Air quality and UV index', icon: 'air', category: 'weather', tone: 'sky', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 10, row: 6 } },
   sunMoon: { name: 'Sun & moon', description: 'Daylight and moon phase', icon: 'sunrise', category: 'weather', tone: 'sun', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 8, row: 6 } },
+  // #437 (docs/widgets.md "Dynamic (#437)"): optional and off by default.
+  dynamic: { name: 'Dynamic', description: 'What matters now, or a calm rotation', icon: 'sparkles', category: 'weather', tone: 'sky', sizes: standard, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 } },
 } satisfies Record<string, WidgetDefinition>;
 export type WidgetKind = keyof typeof WIDGET_CATALOG;
 /** Every id, including planned and retired ones: schemas and geometry need them all. */
@@ -476,3 +478,15 @@ export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<Widg
   return structuredClone(grid);
 }
 
+/**
+ * Whether a board needs air quality (#437): the Air quality widget, or Dynamic with its Air & UV source.
+ * The server requests the CAMS reading for /api/state only then; the editor previews it for a draft.
+ */
+export function needsAirQuality(settings: Pick<VisualSettings, 'widgets'> & { widgetData: { dynamic: { air: boolean } } }): boolean {
+  const on = (id: WidgetId) => !!settings.widgets[id] && isActiveWidget(id);
+  return on('airQuality') || (on('dynamic') && settings.widgetData.dynamic.air);
+}
+/** Whether a board needs official weather alerts (#437): Dynamic with its alerts source, as saved. */
+export function needsAlerts(settings: Pick<VisualSettings, 'widgets'> & { widgetData: { dynamic: { alerts: boolean } } }): boolean {
+  return !!settings.widgets.dynamic && isActiveWidget('dynamic') && settings.widgetData.dynamic.alerts;
+}

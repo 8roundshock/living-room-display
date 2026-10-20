@@ -10,6 +10,8 @@ import { DataStore } from './store.ts';
 import { persistableSettings } from './persistence.ts';
 import { WeatherService, type FetchLike } from './weather.ts';
 import { AirQualityService, offAirQuality } from './air.ts';
+import { AlertsService, offAlerts } from './alerts.ts';
+import { needsAirQuality, needsAlerts } from '../shared/widgets.ts';
 import { windowsStatus } from './windows.ts';
 import { automaticLocationSchema, importSchema, mergeSettings, reminderCreateSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
 
@@ -53,6 +55,7 @@ export async function createApplication(options: ApplicationOptions) {
   const now = options.now ?? Date.now;
   const weather = new WeatherService(options.fetcher, now);
   const air = new AirQualityService(options.fetcher, now);
+  const alerts = new AlertsService(options.fetcher, now);
   const hostToken = randomBytes(32).toString('hex');
   let image: Buffer | null = null;
   let previewGeneration = 0;
@@ -111,9 +114,10 @@ export async function createApplication(options: ApplicationOptions) {
     if (method === 'GET' && path === '/api/windows/status') { json(response, 200, await windowsStatus()); return; }
     if (method === 'GET' && path === '/api/state') {
       const { settings, reminders, photoAsset } = store.snapshot();
-      // Air quality is requested only while the widget is saved enabled.
-      const [weatherState, airQuality] = await Promise.all([weather.get(settings), settings.widgets.airQuality ? air.get(settings) : offAirQuality(settings)]);
-      const state: AppState = { settings, reminders, weather: weatherState, preview: previewState(), airQuality,
+      // Air quality is requested only while a saved widget shows it (Air quality, or Dynamic with Air & UV),
+      // and official alerts only while Dynamic shows them (#437). Alerts are API-only: never stored or exported.
+      const [weatherState, airQuality, alertsState] = await Promise.all([weather.get(settings), needsAirQuality(settings) ? air.get(settings) : offAirQuality(settings), needsAlerts(settings) ? alerts.get(settings) : offAlerts()]);
+      const state: AppState = { settings, reminders, weather: weatherState, preview: previewState(), airQuality, alerts: alertsState,
         photo: photoAsset ? { available: true, id: photoAsset.id, width: photoAsset.width, height: photoAsset.height, updatedAt: photoAsset.updatedAt } : { available: false, id: null, width: null, height: null, updatedAt: null } };
       json(response, 200, { ...state, storageWarning: store.warning }); return;
     }

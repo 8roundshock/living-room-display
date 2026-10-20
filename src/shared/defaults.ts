@@ -21,7 +21,11 @@ export const DEFAULT_SETTINGS: Settings = {
   widgetOverrides: Object.fromEntries(WIDGET_IDS.map(id => [id, { offsetX: 0, offsetY: 0, scale: 1 }])) as Record<WidgetId, WidgetTransform>,
   preview: { enabled: true, opacity: 0.24, widthPercent: 20 },
   idle: { enabled: false, idleMinutes: 10 }, savedPresets: [],
-  widgetData: { worldClocks: [], calendar: { weekStart: 'locale' }, countdowns: [], note: { text: '' }, airQuality: { scale: 'us' } },
+  widgetData: {
+    worldClocks: [], calendar: { weekStart: 'locale' }, countdowns: [], note: { text: '' }, airQuality: { scale: 'us' },
+    // #437: everything Dynamic may show is on by default; this default section is omitted at rest.
+    dynamic: { weather: true, alerts: true, air: true, sky: true, personal: true },
+  },
 };
 
 export function defaultSettings(): Settings { return structuredClone(DEFAULT_SETTINGS); }

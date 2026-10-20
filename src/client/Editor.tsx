@@ -1705,6 +1705,8 @@ export function Editor({
               <WidgetInspector
                 message={gridMessage}
                 settings={draft}
+                appState={state}
+                saved={saved}
                 selected={selectedWidget}
                 onSelect={(id) => {
                   setSelectedWidget(id);

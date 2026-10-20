@@ -15,6 +15,7 @@ import { CountdownWidget } from './Countdown.tsx';
 import { NoteWidget } from './Note.tsx';
 import { AirQualityWidget } from './AirQuality.tsx';
 import { SunMoonWidget } from './SunMoon.tsx';
+import { DynamicWidget } from './Dynamic.tsx';
 
 export type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
 
@@ -33,6 +34,7 @@ export const WIDGET_MODULES: Record<WidgetId, WidgetModule> = {
   note: NoteWidget,
   airQuality: AirQualityWidget,
   sunMoon: SunMoonWidget,
+  dynamic: DynamicWidget,
 };
 export const WIDGET_RENDERERS = Object.fromEntries(WIDGET_IDS.map(id => [id, WIDGET_MODULES[id].Renderer])) as Record<WidgetId, ComponentType<WidgetContentProps>>;
 export function widgetVisible(id: WidgetId, props: WidgetContentProps): boolean {

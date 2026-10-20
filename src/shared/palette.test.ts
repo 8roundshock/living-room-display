@@ -124,11 +124,12 @@ test('catalog tones and weather glyphs all map to palette roles', () => {
 
 test('the merged catalog keeps its tone decisions, and every literal data-glyph has a sub-tone', () => {
   // Agreed across the #73/#74/#78 units: World clocks and Calendar are time, Countdown and Note
-  // personal (like Reminders), Air quality sky (like Weather and Forecast), Sun & moon sun.
+  // personal (like Reminders), Air quality sky (like Weather and Forecast), Sun & moon sun. Dynamic
+  // (#437) is sky; each card's own role reaches only its glyph and detail.
   const tones = Object.fromEntries(ACTIVE_WIDGET_IDS.map(id => [id, WIDGET_CATALOG[id].tone]));
   assert.deepEqual(tones, {
     clock: 'time', worldClocks: 'time', calendar: 'time',
-    weather: 'sky', forecast: 'sky', airQuality: 'sky', sunMoon: 'sun',
+    weather: 'sky', forecast: 'sky', airQuality: 'sky', sunMoon: 'sun', dynamic: 'sky',
     reminders: 'personal', countdown: 'personal', note: 'personal',
     preview: 'stone', photo: 'stone',
   });

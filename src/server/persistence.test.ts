@@ -16,11 +16,10 @@ import type { Settings, VisualSettings, WidgetId } from '../shared/contracts.ts'
 const previous: ReadonlySet<string> = new Set(PREVIOUS_RELEASE.widgetIds);
 /**
  * Catalog ids the previous release does not know, written out so the omission checks below cannot go
- * silently vacuous. Empty since the 3fee844 baseline (#263); 3446400 (#367) also knows all 13 ids.
- * A new catalog id belongs here until the baseline knows it: while off and at its defaults it is
- * omitted at rest.
+ * silently vacuous. 3446400 (#367) knows the 13 ids before Dynamic (#437). A new catalog id belongs here
+ * until the baseline knows it: while off it is omitted at rest, and its transform never is written (#135).
  */
-const NOT_IN_PREVIOUS: WidgetId[] = [];
+const NOT_IN_PREVIOUS: WidgetId[] = ['dynamic'];
 /** The #78 ids, which bedca44 lacked and every baseline since 3fee844 knows: their keys are always written. */
 const KNOWN_SINCE_3FEE844: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
 const visualOf = ({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview }: Settings): VisualSettings => structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview });
@@ -103,4 +102,22 @@ test('files and exports omit additive defaults while state and PATCH responses c
       assert.deepEqual(Object.keys(settings.widgets), WIDGET_IDS.filter(id => !NOT_IN_PREVIOUS.includes(id)), 'every id the previous release knows is written');
     }
   } finally { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }
+});
+
+test('#135 a transform for an id the previous release lacks is never written, whatever its value (#437)', () => {
+  const settings = mergeSettings(defaultSettings(), { widgetOverrides: { dynamic: { offsetX: 4, offsetY: -2, scale: 1.2 }, note: { offsetX: 3 } } });
+  settings.savedPresets = [{ id: 'style', name: 'Style', visual: visualOf(settings) }];
+  assert.deepEqual(settings.widgetOverrides.dynamic, { offsetX: 4, offsetY: -2, scale: 1.2 }, 'the API keeps it');
+  for (const enabled of [false, true]) {
+    const board = structuredClone(settings); board.widgets.dynamic = enabled; board.savedPresets[0]!.visual.widgets.dynamic = enabled;
+    const written = persistableSettings(board) as any;
+    for (const visual of [written, written.savedPresets[0].visual]) {
+      assert.equal('dynamic' in visual.widgetOverrides, false, `no Dynamic transform at rest (enabled ${enabled})`);
+      assert.deepEqual(visual.widgetOverrides.note, { offsetX: 3, offsetY: 0, scale: 1 }, 'an id the previous release knows keeps its transform');
+      // An enabled Dynamic keeps its visibility and placement: that is the documented rollback exception.
+      assert.equal(visual.widgets.dynamic, enabled ? true : undefined);
+      assert.equal('dynamic' in visual.widgetGrid.placements, enabled);
+    }
+    assert.deepEqual(dataSchema.parse(JSON.parse(JSON.stringify({ version: 1, settings: written, reminders: [], photoAsset: null }))).settings.widgetOverrides.dynamic, { offsetX: 0, offsetY: 0, scale: 1 }, 'it reads back as the identity, which renders the same');
+  }
 });

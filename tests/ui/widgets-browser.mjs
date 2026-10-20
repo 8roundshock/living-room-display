@@ -14,7 +14,7 @@ import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, isActive
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
 
 /** Renderers that read the weather or air-quality status or the connection; the others render the same when stale or offline. */
-const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'offline'], airQuality: ['stale', 'offline'], reminders: ['offline'] };
+const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'offline'], airQuality: ['stale', 'offline'], reminders: ['offline'], dynamic: ['stale', 'offline'] };
 /**
  * #221: at Text 100% a family with an element on a readability floor must render at fit 1. These families
  * still zoom out below it; each allowance names the ticket fixing it. An allowance no longer needed fails,
@@ -30,7 +30,7 @@ const INTL_TICK_ALLOWANCES = {};
 /** Every active widget on one Balanced 12 x 8 board (as in motion-browser.mjs). */
 const FULL_BOARD = {
   clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
-  sunMoon: { column: 0, row: 2, size: 'large' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
+  sunMoon: { column: 0, row: 2, size: 'medium' }, dynamic: { column: 0, row: 4, size: 'medium' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
   reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
   note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
 };

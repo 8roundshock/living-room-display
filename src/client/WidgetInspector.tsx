@@ -1,4 +1,4 @@
-import type { Settings, WidgetId } from '../shared/contracts';
+import type { AppState, Settings, WidgetId } from '../shared/contracts';
 import { useEffect, useRef } from 'react';
 import {
   WIDGET_CATALOG,
@@ -37,6 +37,8 @@ export function WidgetInspector({
   onPhotoCancel,
   saving,
   message,
+  appState,
+  saved,
 }: {
   settings: Settings;
   selected: WidgetId | null;
@@ -63,6 +65,9 @@ export function WidgetInspector({
   onPhotoCancel: () => void;
   saving: boolean;
   message: string;
+  /** The last server state and the saved settings, for widget panels that report them (#437). */
+  appState?: AppState;
+  saved?: Settings;
 }) {
   const addButton = useRef<HTMLButtonElement>(null),
     wasOpen = useRef(false);
@@ -324,6 +329,8 @@ export function WidgetInspector({
                       settings={settings}
                       onChange={onChange}
                       saving={saving}
+                      state={appState}
+                      saved={saved}
                     />
                   )}
                 </div>

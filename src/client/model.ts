@@ -10,9 +10,12 @@ export function getVisual(settings: Settings): VisualSettings {
   return structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview });
 }
 
-/** Rain is retired into Weather (#74), so it never carries the credit. */
-export function weatherAttributionWidget(settings: Settings): 'forecast' | 'weather' | null {
-  return settings.widgets.forecast ? 'forecast' : settings.widgets.weather ? 'weather' : null;
+/**
+ * The one widget that carries the “Forecast by Open-Meteo” credit: Forecast, else Weather, else Dynamic
+ * (#437) while both are off. Rain is retired into Weather (#74), so it never carries the credit.
+ */
+export function weatherAttributionWidget(settings: Settings): 'forecast' | 'weather' | 'dynamic' | null {
+  return settings.widgets.forecast ? 'forecast' : settings.widgets.weather ? 'weather' : settings.widgets.dynamic ? 'dynamic' : null;
 }
 
 export function reminderPresentation(

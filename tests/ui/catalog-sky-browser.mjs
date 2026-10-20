@@ -99,7 +99,7 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     const groupItems = name => page.getByRole('group', { name, exact: true }).locator('.catalog-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label').replace(/^Preview /, '').replace(/, on your display$/, '')));
     assert.deepEqual(await groupItems('Time'), ['Clock', 'World clocks', 'Calendar']);
-    assert.deepEqual(await groupItems('Weather & sky'), ['Weather', 'Forecast', 'Air quality', 'Sun & moon']);
+    assert.deepEqual(await groupItems('Weather & sky'), ['Weather', 'Forecast', 'Air quality', 'Sun & moon', 'Dynamic']);
     assert.deepEqual(await groupItems('Personal'), ['Reminders', 'Countdown', 'Note']);
     await page.getByRole('button', { name: 'Close widget picker', exact: true }).click(); await page.clock.runFor(200);
     checks.push('Grouped picker (#157): World clocks under Time; Air quality and Sun & moon under Weather & sky');

@@ -1,0 +1,99 @@
+/* Dynamic (#437): one card at a time, the same slots in every card so a swap keeps its rhythm: the
+   kicker, the glyph or value beside the headline and detail, the large family's rows, the footer.
+   Urgency comes from words, rank and size only: no weight above 500, no fill, frame, underline,
+   inverse text, glow or loop, and no added light. The section's catalog tone (sky) colours the kicker,
+   rows and footer; the card's own tone-<role> reaches only its glyph and detail. */
+.grid-ambient .ambient-dynamic { --dynamic-accent: var(--ambient-accent); }
+.grid-ambient .ambient-dynamic .dynamic-card :is(.dynamic-source, .dynamic-also, .dynamic-also-more, .dynamic-footer) { --ambient-accent: var(--dynamic-accent); }
+.grid-ambient .ambient-dynamic .dynamic-body { position: relative; }
+.grid-ambient .ambient-dynamic .dynamic-card { display: flex; flex-direction: column; justify-content: center; min-width: 0; width: 100%; min-height: 100cqh; }
+.grid-ambient .ambient-dynamic .dynamic-source { margin: 0 0 3cqh; flex-wrap: wrap; column-gap: 1.6cqw; row-gap: 0; }
+.grid-ambient .ambient-dynamic .dynamic-source svg { stroke-width: 1.5; }
+.grid-ambient .ambient-dynamic .dynamic-more { opacity: 0.8; white-space: nowrap; }
+.grid-ambient .ambient-dynamic .dynamic-main { display: flex; align-items: center; gap: 5cqw; min-width: 0; }
+.grid-ambient .ambient-dynamic .dynamic-lead { flex: none; display: flex; align-items: center; justify-content: center; color: var(--ambient-accent); }
+.grid-ambient .ambient-dynamic .dynamic-glyph { flex: none; display: block; width: min(16cqw, 20cqh); height: min(16cqw, 20cqh); color: var(--ambient-accent); overflow: visible; }
+.grid-ambient .ambient-dynamic .dynamic-value { color: var(--ambient-text); font-size: calc(min(15cqw, 20cqh) * var(--font-scale)); font-weight: 400; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.grid-ambient .ambient-dynamic .dynamic-copy { flex: 1 1 auto; min-width: 0; }
+/* Headlines: rotation one step below the warning/focus step. Always the text colour unless a status. */
+.grid-ambient .ambient-dynamic .dynamic-headline { margin: 0; color: var(--ambient-text); font-size: calc(max(var(--min-text), min(7cqw, 10cqh)) * var(--font-scale)); line-height: 1.2; font-weight: 500; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.grid-ambient .ambient-dynamic .dynamic-headline.status-caution { color: var(--ambient-caution); }
+.grid-ambient .ambient-dynamic :is(.dynamic-mode-alert, .dynamic-mode-focus) .dynamic-headline { font-size: calc(max(var(--min-text), min(8cqw, 11cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-dynamic .dynamic-detail { margin: 2cqh 0 0; color: var(--ambient-accent); font-size: calc(max(var(--min-data), min(5.5cqw, 8cqh)) * var(--font-scale)); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid-ambient .ambient-dynamic .dynamic-flag { color: var(--ambient-caution); }
+/* The footer is one run of phrases (provenance · age · status · credit) that wraps only between them; it is
+   dim, and a status in the caution tone at full opacity, as everywhere (#223). */
+.grid-ambient .ambient-dynamic .dynamic-footer { margin: 4cqh 0 0; font-size: calc(max(var(--min-text), min(5cqw, 6cqh)) * var(--font-scale)); line-height: 1.3; color: var(--ambient-accent); opacity: 0.72; overflow-wrap: anywhere; }
+.grid-ambient .ambient-dynamic .dynamic-footer > span > span { white-space: nowrap; }
+.grid-ambient .ambient-dynamic .dynamic-footer .status-caution { color: var(--ambient-caution); }
+.grid-ambient .ambient-dynamic .dynamic-footer:has(.status-caution) { opacity: 1; }
+.grid-ambient .ambient-dynamic .dynamic-footer:has(.status-caution) > span > span:not(.status-caution) { opacity: 0.72; }
+.grid-ambient .ambient-dynamic .dynamic-phrase { white-space: nowrap; }
+
+/* Small 2 × 2: kicker; glyph or value beside a short headline (up to three lines); one detail line; one footer phrase. */
+.grid-ambient .ambient-dynamic.widget-size-small .dynamic-main { gap: 4cqw; }
+.grid-ambient .ambient-dynamic.widget-size-small .dynamic-glyph { width: min(18cqw, 22cqh); height: min(18cqw, 22cqh); }
+.grid-ambient .ambient-dynamic.widget-size-small .dynamic-footer { margin-top: 3cqh; }
+.grid-ambient .ambient-dynamic.widget-size-small .dynamic-footer > span > span { white-space: normal; }
+
+/* Medium 4 × 2: a glyph or value column of about 30%, the headline (two lines) and detail beside it, one footer row. */
+.grid-ambient .ambient-dynamic.widget-size-medium .ambient-label { font-size: calc(max(var(--min-text), min(4.4cqw, 10cqh)) * var(--font-scale)); margin-bottom: 2.5cqh; }
+.grid-ambient .ambient-dynamic.widget-size-medium .dynamic-lead { flex: 0 0 26%; }
+.grid-ambient .ambient-dynamic.widget-size-medium .dynamic-glyph { width: min(13cqw, 30cqh); height: min(13cqw, 30cqh); }
+.grid-ambient .ambient-dynamic.widget-size-medium .dynamic-value { font-size: calc(min(14cqw, 34cqh) * var(--font-scale)); }
+.grid-ambient .ambient-dynamic.widget-size-medium .dynamic-headline { font-size: calc(max(var(--min-text), min(5.5cqw, 12.5cqh)) * var(--font-scale)); -webkit-line-clamp: 2; }
+.grid-ambient .ambient-dynamic.widget-size-medium :is(.dynamic-mode-alert, .dynamic-mode-focus) .dynamic-headline { font-size: calc(max(var(--min-text), min(6.2cqw, 14cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-dynamic.widget-size-medium .dynamic-detail { margin-top: 1.5cqh; font-size: calc(max(var(--min-data), min(4.4cqw, 10cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-dynamic.widget-size-medium .dynamic-footer { margin-top: 3cqh; font-size: calc(max(var(--min-text), min(3.6cqw, 7.5cqh)) * var(--font-scale)); }
+
+/* Large 4 × 4: a hero row and the detail, then whole rows (source word, short headline, time) measured from
+   layout boxes like the large Countdown (#216, #221), with an exact "+N more". The body is fixed at 100cqh;
+   rows that do not fit take no layout outside measuring, which always runs top-anchored. One card alone is
+   centred with no list. */
+.grid-ambient .ambient-dynamic.widget-size-large .ambient-label { font-size: calc(max(var(--min-text), min(6cqw, 6cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-dynamic.widget-size-large .dynamic-glyph { width: min(15cqw, 15cqh); height: min(15cqw, 15cqh); }
+.grid-ambient .ambient-dynamic.widget-size-large .dynamic-value { font-size: calc(min(16cqw, 17cqh) * var(--font-scale)); }
+.grid-ambient .ambient-dynamic.widget-size-large .dynamic-detail { font-size: calc(max(var(--min-data), min(5cqw, 5.5cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-dynamic.widget-size-large .dynamic-footer { margin-top: 3cqh; font-size: calc(max(var(--min-text), min(4cqw, 4.4cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-dynamic.widget-size-large .dynamic-with-rows { position: relative; height: 100cqh; min-height: 0; overflow: hidden; }
+.grid-ambient .ambient-dynamic.widget-size-large .dynamic-with-rows[data-measuring] { justify-content: flex-start; }
+.grid-ambient .ambient-dynamic .dynamic-also { list-style: none; margin: 4cqh 0 0; padding: 0; display: flex; flex-direction: column; gap: 2.2cqh; min-width: 0; }
+.grid-ambient .ambient-dynamic .dynamic-also > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; column-gap: 2.5cqw; font-size: calc(max(var(--min-text), min(4.6cqw, 5.2cqh)) * var(--font-scale)); line-height: 1.3; }
+.grid-ambient .ambient-dynamic .dynamic-also > li.dynamic-overflow { display: none; }
+.grid-ambient .ambient-dynamic [data-measuring] .dynamic-also > li.dynamic-overflow { display: grid; visibility: hidden; }
+.grid-ambient .ambient-dynamic .dynamic-also-source { color: var(--ambient-accent); white-space: nowrap; }
+.grid-ambient .ambient-dynamic .dynamic-also-source.status-caution { color: var(--ambient-caution); }
+.grid-ambient .ambient-dynamic .dynamic-also-headline { color: var(--ambient-text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid-ambient .ambient-dynamic .dynamic-also-time { color: var(--ambient-text); opacity: 0.72; white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
+.grid-ambient .ambient-dynamic :is(.dynamic-also-more, .dynamic-also-probe) { margin: 2cqh 0 0; font-size: calc(max(var(--min-text), min(4.4cqw, 5cqh)) * var(--font-scale)); line-height: 1.3; color: var(--ambient-accent); opacity: 0.72; }
+.grid-ambient .ambient-dynamic .dynamic-also-probe { display: none; }
+.grid-ambient .ambient-dynamic [data-measuring] .dynamic-also-probe { display: block; visibility: hidden; }
+.grid-ambient .ambient-dynamic [data-measuring] .dynamic-also-more { position: absolute; visibility: hidden; }
+
+/* The moon keeps an outline with a dim lit fraction, as in Sun & moon. */
+.grid-ambient .ambient-dynamic .moon-lit { fill: currentColor; fill-opacity: 0.28; stroke: none; }
+.grid-ambient .ambient-dynamic .moon-outline { fill: none; stroke: currentColor; stroke-width: 1.2; vector-effect: non-scaling-stroke; opacity: 0.85; }
+
+/* The editor placeholder when there is nothing to show (the display hides the widget then). */
+.grid-ambient .ambient-dynamic .dynamic-placeholder .ambient-description { font-size: calc(max(var(--min-text), min(5.4cqw, 7cqh)) * var(--font-scale)); }
+
+/* Swap: the incoming card fades in with the value-change fade; Lively also settles it from above,
+   inside the widget padding. Off and reduced motion swap at once; the first card never animates. */
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .dynamic-card[data-swapped] {
+  transition: opacity var(--motion-value) var(--motion-ease);
+}
+.grid-ambient[data-animation='lively'] .ambient-widget[data-settled] .dynamic-card[data-swapped] {
+  transition: opacity var(--motion-value) var(--motion-ease), translate var(--motion-enter) var(--motion-ease);
+}
+@starting-style {
+  .grid-ambient:is([data-animation='subtle'], [data-animation='lively']) .ambient-widget[data-settled] .dynamic-card[data-swapped] { opacity: 0; }
+  .grid-ambient[data-animation='lively'] .ambient-widget[data-settled] .dynamic-card[data-swapped] { translate: 0 calc(-1 * var(--motion-rise)); }
+}
+
+/* Editor panel. */
+.studio .dynamic-sources { margin: 4px 0 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.studio .dynamic-sources > .field-label { padding: 0; margin-bottom: 2px; }
+.studio .dynamic-source-option { display: flex; flex-direction: column; }
+.studio .dynamic-source-option > .hint { margin: -6px 0 6px; }
+.studio .dynamic-alerts-status { color: #c3bccd; }
+.studio .dynamic-summary { color: #c3bccd; }
