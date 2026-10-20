@@ -169,8 +169,11 @@ function Range({
   /** A control on the label line, before the value (Brightness's mode, #439). */
   extra?: React.ReactNode;
 }) {
+  // A label names its first labelable descendant, so a block with its own control on the label line
+  // is a div; the slider keeps its aria-label name (#466 review).
+  const Block = extra ? 'div' : 'label';
   return (
-    <label className="control-block">
+    <Block className="control-block">
       <span className="control-label">
         <span>{label}</span>
         {extra}
@@ -191,7 +194,7 @@ function Range({
           } as React.CSSProperties
         }
       />
-    </label>
+    </Block>
   );
 }
 

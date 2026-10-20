@@ -173,6 +173,27 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     const modes = page.getByRole('group', { name: 'Brightness mode', exact: true });
     assert.deepEqual(await modes.getByRole('button').evaluateAll(buttons => buttons.map(item => [item.textContent, item.getAttribute('aria-pressed')])), [['Fixed', 'true'], ['Follow daylight', 'false']]);
     assert.equal(await slider('Brightness').inputValue(), '55');
+    // In Fixed the mode group sits in no <label> (#466 review): each button keeps its own name, in
+    // Playwright's lookup and in Chromium's accessibility tree, and the line's name and value press
+    // nothing.
+    assert.equal(await button('Fixed').count(), 1, 'Fixed is found by its name while pressed');
+    assert.equal(await button('Fixed').getAttribute('aria-pressed'), 'true');
+    assert.equal(await button('Follow daylight').getAttribute('aria-pressed'), 'false');
+    assert.equal(await modes.evaluate(group => group.closest('label') === null), true, 'the mode group is in no label');
+    const cdp = await context.newCDPSession(page);
+    const axName = async selector => {
+      const { root } = await cdp.send('DOM.getDocument', { depth: 0 });
+      const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector });
+      const { nodes } = await cdp.send('Accessibility.getPartialAXTree', { nodeId, fetchRelatives: false });
+      return nodes[0]?.name?.value;
+    };
+    assert.deepEqual([await axName('#brightness-mode-fixed'), await axName('#brightness-mode-daylight'), await axName('input[aria-label="Brightness"]')], ['Fixed', 'Follow daylight', 'Brightness'], 'Chromium names each control on its own');
+    await cdp.detach();
+    const fixedLine = page.locator('.control-block', { has: slider('Brightness') }).locator('.control-label');
+    await fixedLine.locator('> span:first-child').click();
+    await fixedLine.locator('output').click(); await page.clock.runFor(200);
+    assert.notEqual(await page.evaluate(() => document.activeElement?.id), 'brightness-mode-fixed', 'clicking the name or value does not press Fixed');
+    assert.equal(await savebar().count(), 0);
     const fit = await page.locator('.inspector-panel').evaluate(element => ({ client: element.clientHeight, scroll: element.scrollHeight }));
     assert.ok(fit.scroll <= fit.client + 1, `the default Style tab still fits at 1280×720: ${JSON.stringify(fit)}`);
     // The mode buttons sit on the label line, with a taller hit area that never covers the slider.
@@ -236,7 +257,7 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     await page.clock.fastForward(60 * 60_000); await page.clock.runFor(1000);
     const afternoon = Number((await status()).match(/Now (\d+)%/)[1]);
     assert.ok(afternoon < 75 && afternoon > 25, `an hour after noon the status falls: ${afternoon}%`);
-    checks.push('Style tab: Fixed is pressed by default and the tab still fits at 1280×720; the mode buttons sit on the label line with a hit area above and below that never covers the slider; Follow daylight is a draft starting at 28–70% with “Now 70% · brightest at 1:02 PM” and the canvas at 0.7 at once (no glide); Dimmest and Brightest carry each other; Fixed again hides the Save bar and keeps focus; the session range returns; Night and Room keep the mode; Save persists through reload; Cancel restores; 24-hour time; the status follows the clock');
+    checks.push('Style tab: Fixed is pressed by default, named “Fixed” (Playwright and Chromium) in no label, and clicking the line’s name or value presses nothing; the tab still fits at 1280×720; the mode buttons sit on the label line with a hit area above and below that never covers the slider; Follow daylight is a draft starting at 28–70% with “Now 70% · brightest at 1:02 PM” and the canvas at 0.7 at once (no glide); Dimmest and Brightest carry each other; Fixed again hides the Save bar and keeps focus; the session range returns; Night and Room keep the mode; Save persists through reload; Cancel restores; 24-hour time; the status follows the clock');
 
     // 6. Polar status lines.
     await reset(settings => { settings.location = { ...TROMSO }; settings.appearance.daylightBrightness = RANGE; });
