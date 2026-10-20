@@ -44,14 +44,16 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false }
       const range = document.createRange(); range.selectNodeContents(label); const text = range.getBoundingClientRect();
       return { label: label.textContent.trim(), tag: control.tagName, display: getComputedStyle(control).display, align: getComputedStyle(control).alignItems, columnGap: getComputedStyle(control).columnGap, gap: Number((text.left - icon.right).toFixed(2)), offset: Math.abs((icon.top + icon.bottom) / 2 - (text.top + text.bottom) / 2) };
     }));
-    assert.deepEqual(layout.map(item => [item.tag, item.label]), [['BUTTON', 'Fullscreen · F'], ['A', 'Editor · Esc']]);
+    // #438: Home · Esc goes to Home and Edit display · E to Edit display.
+    assert.deepEqual(layout.map(item => [item.tag, item.label]), [['BUTTON', 'Fullscreen · F'], ['A', 'Home · Esc'], ['A', 'Edit display · E']]);
+    assert.deepEqual(await controls.locator('a').evaluateAll(links => links.map(link => link.getAttribute('href'))), ['/', '/editor']);
     for (const item of layout) {
       // inline-flex, blockified to flex inside the flex row of controls.
       assert.deepEqual([item.display, item.align, item.columnGap], ['flex', 'center', '8px'], `${item.label} uses the shared layout`);
       assert.ok(Math.abs(item.gap - 8) <= 0.5, `${item.label}: 8px between icon and label, got ${item.gap}`);
       assert.ok(item.offset <= 2, `${item.label}: icon and label share a centre line (${item.offset}px)`);
     }
-    checks.push(`Both display controls share one inline-flex layout with an 8px icon gap: ${JSON.stringify(layout.map(item => [item.label, item.gap]))}`);
+    checks.push(`The three display controls (Fullscreen · F, Home · Esc to /, Edit display · E to /editor) share one inline-flex layout with an 8px icon gap: ${JSON.stringify(layout.map(item => [item.label, item.gap]))}`);
     await move(200, 200); await page.clock.runFor(2500);
     await move(250, 220); await page.clock.runFor(2500);
     assert.equal(await interacting(), true, 'Pointer activity restarts the idle deadline instead of hiding after the first movement');
@@ -70,6 +72,12 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false }
     await page.locator('body').evaluate(el => { el.tabIndex = -1; el.focus(); }); assert.equal(await opacity(), 0);
     checks.push('Keyboard activity refreshes the deadline; focus remains visible without moving focus on timeout');
 
+    // #438: unmodified Esc goes to Home and E to Edit display; typing in a field or with a modifier does neither.
+    await open(); await page.keyboard.press('Escape'); await page.waitForURL(`${base}/`); await page.locator('.home-page').waitFor();
+    await open(); await page.keyboard.press('e'); await page.waitForURL(`${base}/editor`); await page.locator('.preview-surface').waitFor();
+    await open(); await page.keyboard.press('Control+e'); await page.keyboard.press('Shift+Escape'); await page.clock.runFor(200);
+    assert.equal(new URL(page.url()).pathname, '/display', 'modified keys do not navigate');
+    checks.push('Esc goes to Home (/) and E to Edit display (/editor); Ctrl+E and Shift+Esc stay on the display');
     await move(300, 250); await open('/editor'); await page.clock.runFor(4000);
     assert.equal(await page.locator('.display-help').count(), 0);
     await open('/display?native=1'); assert.equal(await controls.count(), 0);
