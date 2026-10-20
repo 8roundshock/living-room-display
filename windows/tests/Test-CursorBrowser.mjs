@@ -47,10 +47,10 @@ try {
   await page.getByRole('button', { name: 'Try again' }).click();
   await page.locator('.display-page').waitFor({ state: 'visible' });
   await page.mouse.move(100, 100);
-  await page.getByRole('link', { name: 'Editor · Esc' }).waitFor({ state: 'visible' });
+  await page.getByRole('link', { name: 'Edit display · E' }).waitFor({ state: 'visible' });
   assert.ok((await cursors(page, ['html', 'body', '.display-page', '.ambient-widget', '.display-help button', '.display-help a', '.display-help svg'])).every(value => value !== 'none'));
   assert.notEqual(await page.evaluate(() => getComputedStyle(document.elementFromPoint(0, 0)).cursor), 'none', 'Browser viewport edges retain the pointer.');
-  await page.getByRole('link', { name: 'Editor · Esc' }).click();
+  await page.getByRole('link', { name: 'Edit display · E' }).click();
   await page.locator('.preview-surface').waitFor({ state: 'visible' });
   assert.equal(await page.locator('html').evaluate(element => element.classList.contains('native-display')), false, 'Native presentation is absent from editor navigation.');
   const editorCursors = await cursors(page, ['html', '.preview-surface', '.preview-surface .ambient-widget', 'a.open-display']);
