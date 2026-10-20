@@ -22,8 +22,8 @@ records:
   `/api/health`, and served JavaScript and CSS matching the installed build (SHA-256);
 - unchanged `state.json` and `state.backup.json` hashes after the install and after
   one live render;
-- unchanged Windows screensaver values (`scrnsave.scr`, active, 1200 s, not secure).
-  Idle activation was not changed (no `EnableIdle`);
+- unchanged Windows screensaver settings. Idle activation was not changed
+  (no `EnableIdle`);
 - `app.previous` matching `bedca44`, and one headless render each of `/display` and
   `/editor`, viewed and deleted, with no saved data written.
 
