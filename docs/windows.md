@@ -68,9 +68,9 @@ display-off and sleep timeouts, read with `powercfg.exe /query SCHEME_CURRENT
 SUB_VIDEO VIDEOIDLE` and `SUB_SLEEP STANDBYIDLE` (read-only, no administrator
 rights, 2 s timeout; the last two `0x…` values are AC then DC whatever the display
 language) and the plan name from `powercfg /getactivescheme`. The editor shows them
-and warns when either comes before the screensaver wait. Verified read-only on the
-owner's PC on 2026-10-20: High performance, display off Never (AC) and 10 min (DC),
-sleep Never on both; the screensaver wait is 1200 s.
+and warns when either comes before the screensaver wait. Verified read-only on a
+Windows 10 PC on 2026-10-20: the plan name and both timeouts matched `powercfg`'s
+own output.
 
 ## Preview and privacy
 
