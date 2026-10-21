@@ -117,6 +117,26 @@ function Assert-Healthy([string]$When) {
     $health = (Get-Http '/api/health').Content | ConvertFrom-Json
     Assert-True ($health.status -eq 'ok' -and $health.version -eq $expectedVersion) "health $When`: $($health | ConvertTo-Json -Compress)"
 }
+function Assert-SetupMessage([string]$Log, [string]$Pattern, [string]$When) {
+    # The message Setup showed the user (Inno logs it as "PrepareToInstall failed:"),
+    # so the wording Setup chose from the helper log is checked too.
+    $message = [regex]::Match((Get-Content -LiteralPath $Log -Raw), 'PrepareToInstall failed: ([^\r\n]+)').Groups[1].Value
+    Write-Host "Setup message ($When): $message"
+    if ($message -notmatch $Pattern) { Show-Log $Log; throw "SMOKE FAILED: Setup's message $When does not match '$Pattern': $message" }
+}
+function Get-RemovalFolders { return @(Get-ChildItem -LiteralPath $installRoot -Directory -Force | Where-Object { $_.Name -match '^removing(-\d{1,2})?$' }) }
+function Get-InstallState {
+    # What a refusal must leave exactly as it was: every program folder, the data,
+    # the snapshots, the marker and the rollback record.
+    $folders = foreach ($name in @('app','app.previous','runtime','data')) { $name + '=' + (Get-TreeState (Join-Path $installRoot $name)) }
+    $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $installRoot 'backups') -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object Name | Sort-Object)
+    $record = Join-Path $installRoot 'package-transaction.json'
+    return [pscustomobject]@{Folders=(@($folders) -join "`n");Snapshots=($snapshots -join ',');Marker=(Get-FileHash -LiteralPath $marker -Algorithm SHA256).Hash;Record=$(if (Test-Path -LiteralPath $record) { (Get-FileHash -LiteralPath $record -Algorithm SHA256).Hash } else { '<absent>' });Removal=@(Get-RemovalFolders).Count}
+}
+function Assert-SameInstall($Before, [string]$When) {
+    $after = Get-InstallState
+    foreach ($name in @('Folders','Snapshots','Marker','Record','Removal')) { Assert-True ($after.$name -eq $Before.$name) "$When changed $name" }
+}
 function Invoke-Uninstall([string]$Extra) {
     $uninstaller = Join-Path $installRoot 'uninstall\unins000.exe'
     Assert-True (Test-Path -LiteralPath $uninstaller) 'the uninstaller is missing'
@@ -185,13 +205,17 @@ try {
 
     Write-Step 'Automatic rollback on a real install: the new server fails its health check (#189)'
     # The rollback-test Setup differs only in app/package.json, so its server
-    # reports another version. Setup must stop that real server, wait for it to
-    # exit and rename app back; a Stop that returned early would race the rename.
+    # reports another version. Setup must stop that real server and rename app
+    # back. Each rename retries for a few seconds, which covers a brief hold by a
+    # server that is still exiting, so this case alone would very likely pass even
+    # if Stop returned early. The guard against that is the HasExited check of
+    # Test-Windows.ps1 -NodeExe in the CI build job (#205).
     $appTree = Get-TreeState (Join-Path $installRoot 'app')
     $runtimeTree = Get-TreeState (Join-Path $installRoot 'runtime')
     $markerBefore = Get-Content -LiteralPath $marker -Raw
     $result = Invoke-Setup 'rollback' '' $RollbackSetupPath
     if ($result.Code -ne 7 -or -not (Get-Content -LiteralPath $result.Log -Raw).Contains('Helper exit code: 15')) { Show-Log $result.Log; throw "SMOKE FAILED: the rollback-test Setup exited $($result.Code); expected 7 with helper exit code 15" }
+    Assert-SetupMessage $result.Log "^The new version didn't start, so Setup put the previous version back\. Your data was not changed\." 'after the rollback'
     Assert-True ((Get-TreeState (Join-Path $installRoot 'app')) -eq $appTree -and (Get-TreeState (Join-Path $installRoot 'runtime')) -eq $runtimeTree) 'the rollback did not put app and runtime back exactly'
     Assert-True ((Get-FileHash -LiteralPath (Join-Path $installRoot 'app.failed\release.json')).Hash -eq (Get-FileHash -LiteralPath $RollbackReleaseJson).Hash) 'app.failed does not hold the rollback-test candidate'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot 'package-transaction.json')) -and (Get-Content -LiteralPath $marker -Raw) -eq $markerBefore) 'the rollback left its record or did not restore installation.json'
@@ -203,11 +227,88 @@ try {
     Assert-Healthy 'after the repair that followed the rollback'
     Assert-True ((Get-TreeState $data) -eq $dataHash) 'the repair after the rollback changed data'
 
-    Write-Step 'A failed uninstall keeps the registration, and a repair then works (#158)'
+    Write-Step 'A file held in the older app.previous stops an update before anything changes (E22, #200)'
+    # Setup sets app.previous aside by a whole-folder rename before it stops the
+    # app; a held file makes that rename fail, so it must refuse with every
+    # folder and the running server as they were, then succeed once released.
+    $installBefore = Get-InstallState
+    $held = [IO.File]::Open((Join-Path $installRoot 'app.previous\package.json'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    try { $result = Invoke-Setup 'held-app-previous' } finally { $held.Dispose() }
+    $setupLog = Get-Content -LiteralPath $result.Log -Raw
+    if ($result.Code -ne 7 -or -not $setupLog.Contains('Helper exit code: 22') -or $setupLog -notmatch 'LRD-E22: A file in [^\r\n]*app\.previous is in use') { Show-Log $result.Log; throw "SMOKE FAILED: an update with a held file in app.previous exited $($result.Code); expected 7 with helper exit code 22 naming app.previous" }
+    Assert-SetupMessage $result.Log '^A file in [^\r\n]*\\app\.previous, which an earlier update left, is in use, .* Nothing was changed\.$' 'for E22 (app.previous)'
+    Assert-SameInstall $installBefore 'the E22 refusal'
+    Assert-Healthy 'after the E22 refusal (the server was never stopped)'
+    # Stale staging held the same way: Setup's message names that folder, as the helper did.
+    $staleStage = Join-Path $installRoot 'package.next\app'
+    $null = New-Item -ItemType Directory -Path $staleStage -Force
+    [IO.File]::WriteAllText((Join-Path $staleStage 'stale.txt'), 'synthetic stale staging')
+    $installBefore = Get-InstallState
+    $held = [IO.File]::Open((Join-Path $staleStage 'stale.txt'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    try { $result = Invoke-Setup 'held-package-next' } finally { $held.Dispose() }
+    if ($result.Code -ne 7 -or -not (Get-Content -LiteralPath $result.Log -Raw).Contains('Helper exit code: 22')) { Show-Log $result.Log; throw "SMOKE FAILED: an update with held stale staging exited $($result.Code); expected 7 with helper exit code 22" }
+    Assert-SetupMessage $result.Log '^A file in [^\r\n]*\\package\.next, which an earlier update left, is in use, .* Nothing was changed\.$' 'for E22 (package.next)'
+    Assert-SameInstall $installBefore 'the E22 refusal for stale staging'
+    Assert-True (Test-Path -LiteralPath $staleStage) 'the E22 refusal removed the stale staging'
+    $result = Invoke-Setup 'after-held-app-previous'
+    if ($result.Code -ne 0) { Show-Log $result.Log; throw "SMOKE FAILED: the update after releasing app.previous exited $($result.Code)" }
+    Assert-Healthy 'after releasing app.previous'
+    Assert-True ((Get-TreeState $data) -eq $dataHash -and @(Get-RemovalFolders).Count -eq 0 -and -not (Test-Path -LiteralPath (Join-Path $installRoot 'package.next'))) 'the update after releasing app.previous changed data, or left a removal folder or the stale staging'
+
+    Write-Step 'A Setup record held open moves nothing (E20), then a committed one is only removed (#204)'
+    # The record a healthy update could not remove, held by another program
+    # without read sharing: Setup can't read it, so it must move nothing.
+    $installedMarker = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+    $committed = [string]$installedMarker.committedTransaction
+    Assert-True ($committed -match '^[0-9a-f]{32}$') "installation.json does not name the committed update: $($installedMarker | ConvertTo-Json -Compress)"
+    $record = Join-Path $installRoot 'package-transaction.json'
+    $recordJson = [ordered]@{product='living-room-display';schema=1;id=$committed;version=$expectedVersion;originalMarker=$null;appMoved=$true;newApp=$true;runtimeMoved=$false;newRuntime=$false} | ConvertTo-Json
+    [IO.File]::WriteAllText($record, $recordJson, (New-Object Text.UTF8Encoding($false)))
+    $installBefore = Get-InstallState
+    $held = [IO.File]::Open($record, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    try { $result = Invoke-Setup 'held-record' } finally { $held.Dispose() }
+    $setupLog = Get-Content -LiteralPath $result.Log -Raw
+    if ($result.Code -ne 7 -or -not $setupLog.Contains('Helper exit code: 20') -or -not $setupLog.Contains('is in use by another program')) { Show-Log $result.Log; throw "SMOKE FAILED: an update with a held record exited $($result.Code); expected 7 with helper exit code 20 (record in use)" }
+    Assert-SetupMessage $result.Log "^Setup couldn't read its record of an earlier unfinished update \(package-transaction\.json\) because another program is using it, so it didn't move anything\." 'for a held record'
+    Assert-SameInstall $installBefore 'the held-record refusal'
+    Assert-True (Test-Path -LiteralPath $record) 'the held-record refusal removed the record'
+    Assert-Healthy 'after the held-record refusal'
+    $result = Invoke-Setup 'after-held-record'
+    $setupLog = Get-Content -LiteralPath $result.Log -Raw
+    if ($result.Code -ne 0 -or -not $setupLog.Contains('left behind') -or $setupLog.Contains('Setup first put back')) { Show-Log $result.Log; throw "SMOKE FAILED: the committed record was rolled back or refused once released ($($result.Code))" }
+    Assert-True (-not (Test-Path -LiteralPath $record) -and (Get-TreeState $data) -eq $dataHash) 'the committed record was left or data changed'
+    Assert-Healthy 'after the committed record was removed'
+    # A damaged record beside a committed install is only removed too.
+    [IO.File]::WriteAllBytes($record, (New-Object byte[] 64))
+    $result = Invoke-Setup 'damaged-record'
+    $setupLog = Get-Content -LiteralPath $result.Log -Raw
+    if ($result.Code -ne 0 -or -not $setupLog.Contains('names a committed update') -or $setupLog.Contains('Setup first put back')) { Show-Log $result.Log; throw "SMOKE FAILED: a damaged record beside a committed install was rolled back or refused ($($result.Code))" }
+    Assert-True (-not (Test-Path -LiteralPath $record) -and (Get-TreeState $data) -eq $dataHash) 'the damaged record was left or data changed'
+    Assert-Healthy 'after the damaged record was removed'
+
+    Write-Step 'An update over a NUL-filled installation.json rebuilds it and recovers (#199)'
+    # A leftover removal folder from an earlier uninstall or update goes too (#207).
+    $leftover = Join-Path $installRoot 'removing'
+    $null = New-Item -ItemType Directory -Path (Join-Path $leftover 'dist') -Force
+    [IO.File]::WriteAllText((Join-Path $leftover 'dist\leftover.txt'), 'synthetic leftover')
+    [IO.File]::WriteAllBytes($marker, (New-Object byte[] 256))
+    $result = Invoke-Setup 'nul-marker'
+    $setupLog = Get-Content -LiteralPath $result.Log -Raw
+    if ($result.Code -ne 0 -or -not $setupLog.Contains('installation.json is empty, NUL-filled or not valid JSON') -or -not $setupLog.Contains('Wrote the rebuilt installation.json')) { Show-Log $result.Log; throw "SMOKE FAILED: an update over a NUL-filled installation.json exited $($result.Code) or did not rebuild it" }
+    $installed = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+    Assert-True ($installed.product -eq 'living-room-display' -and $installed.state -eq 'installed' -and $installed.channel -eq 'package' -and $installed.version -eq $expectedVersion -and [string]$installed.committedTransaction -match '^[0-9a-f]{32}$') "marker after the rebuild: $($installed | ConvertTo-Json -Compress)"
+    Assert-True ((Get-TreeState $data) -eq $dataHash -and @(Get-RemovalFolders).Count -eq 0) 'the rebuild changed data or left the removal folder'
+    Assert-Healthy 'after the marker was rebuilt'
+
+    Write-Step 'A failed uninstall leaves the app complete and keeps the registration, and a repair then works (#158, #207)'
     # Hold one app file open without sharing: Uninstall stops the server, then
-    # can't remove app, so the uninstaller must abort with the registration kept.
+    # can't rename app aside, so the uninstaller must abort with the registration
+    # kept and app exactly as it was (it renames every folder before it deletes any).
     $uninstaller = Join-Path $installRoot 'uninstall\unins000.exe'
     $uninstallLog = Join-Path $work 'uninstall-failure.log'
+    $appTree = Get-TreeState (Join-Path $installRoot 'app')
+    $runtimeTree = Get-TreeState (Join-Path $installRoot 'runtime')
+    $previousTree = Get-TreeState (Join-Path $installRoot 'app.previous')
     $held = [IO.File]::Open((Join-Path $installRoot 'app\package.json'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
     try {
         # /SUPPRESSMSGBOXES suppresses the error box (Inno's ShowExceptionMsg is
@@ -219,7 +320,8 @@ try {
     $uninstallText = if (Test-Path -LiteralPath $uninstallLog) { Get-Content -LiteralPath $uninstallLog -Raw } else { '' }
     if ($code -eq 0 -or -not (Test-Path -LiteralPath $appIdKey) -or -not (Test-Path -LiteralPath $uninstaller)) { Show-Log $uninstallLog; throw "SMOKE FAILED: a failed uninstall exited $code or removed the registration or the uninstaller" }
     Assert-True ((Get-TreeState $data) -eq $dataHash -and (Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).state -eq 'installed') 'a failed uninstall changed data or the marker'
-    if ($uninstallText -notmatch 'Failed: [^\r\n]{10,}' -or -not $uninstallText.Contains('couldn''t stop or remove some files')) { Show-Log $uninstallLog; throw 'SMOKE FAILED: the helper''s Failed: reason or the abort message is missing from the uninstall log' }
+    Assert-True ((Get-TreeState (Join-Path $installRoot 'app')) -eq $appTree -and (Get-TreeState (Join-Path $installRoot 'runtime')) -eq $runtimeTree -and (Get-TreeState (Join-Path $installRoot 'app.previous')) -eq $previousTree -and @(Get-RemovalFolders).Count -eq 0) 'a failed uninstall did not leave app, runtime and app.previous complete, or left a removal folder (#207)'
+    if ($uninstallText -notmatch 'Failed: [^\r\n]{10,}' -or -not $uninstallText.Contains('couldn''t stop or remove some files') -or -not $uninstallText.Contains('left the app in place')) { Show-Log $uninstallLog; throw 'SMOKE FAILED: the helper''s Failed: reason or the abort message is missing from the uninstall log' }
     $result = Invoke-Setup 'repair-after-failed-uninstall'
     if ($result.Code -ne 0) { Show-Log $result.Log; throw "SMOKE FAILED: repair after a failed uninstall exit code $($result.Code)" }
     Assert-Healthy 'after the repair that followed the failed uninstall'
@@ -227,7 +329,7 @@ try {
 
     Write-Step 'Silent default uninstall keeps data'
     Invoke-Uninstall ''
-    foreach ($gone in @('app','runtime','run','edge-profile','app.previous','app.failed','package-transaction.json','uninstall\unins000.exe')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot $gone))) "uninstall left $gone" }
+    foreach ($gone in @('app','runtime','run','edge-profile','app.previous','app.failed','removing','package-transaction.json','uninstall\unins000.exe')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $installRoot $gone))) "uninstall left $gone" }
     Assert-True ((Get-TreeState $data) -eq $dataHash) 'default uninstall changed data'
     Assert-True ((Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).state -eq 'uninstalled') 'marker not kept as uninstalled'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $programs 'Living Room Display.lnk')) -and -not (Test-Path -LiteralPath (Join-Path $programs 'Living Room Display - Show display.lnk'))) 'shortcuts remain'

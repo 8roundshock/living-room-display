@@ -294,7 +294,20 @@ test('the editor and display share one pending order: soon dated, undated, later
   assert.equal(reminderPresentation(settings, values.filter((value) => value.completed), true), 'unavailable');
 });
 
-import { BUILTIN_PRESETS, builtinLook, matchingBuiltinPreset, resetAppearance, resetLayout } from './model.ts';
+import {
+  BUILTIN_PRESETS,
+  MAX_SAVED_STYLES,
+  builtinLook,
+  duplicateStyleName,
+  labelLook,
+  matchingBuiltinPreset,
+  resetAppearance,
+  resetLayout,
+  spokenInterval,
+  spokenSeconds,
+  withAppearance,
+} from './model.ts';
+import { sameEffectiveSettings, settingsChanges } from './draft.ts';
 import { catalogBoardDefaults } from '../server/fixtures.ts';
 import { gridProblem } from '../shared/widgets.ts';
 
@@ -395,6 +408,65 @@ test('Reset layout returns the widgets, their places and sizes and the grid to t
     assert.equal(defaultSettings().widgetGrid.placements.clock.column, 4, 'an independent copy of the defaults');
   }
   assert.deepEqual(resetLayout(defaults), defaults, 'resetting the default board changes nothing');
+});
+
+test('the stored style label follows the look on every appearance edit and never makes a draft dirty by itself (#277)', () => {
+  const room = defaultSettings();
+  assert.equal(room.appearance.preset, 'room');
+  // A change outside the look (Text size, motion, Animation, the Clock widget's style) keeps the
+  // matching built-in label.
+  for (const update of [{ fontScale: 1.25 }, { motionEnabled: false }, { motionIntervalSeconds: 600 }, { fadeSeconds: 5 }, { animation: 'lively' as const }, { clockStyle: 'digital' as const }]) {
+    assert.equal(withAppearance(room, update).appearance.preset, 'room', JSON.stringify(update));
+  }
+  // A change to the look is Custom; reverting it is the built-in style again.
+  const brighter = withAppearance(room, { brightness: 0.6 });
+  assert.equal(brighter.appearance.preset, 'custom');
+  assert.equal(withAppearance(brighter, { brightness: 0.55 }).appearance.preset, 'room');
+  assert.equal(withAppearance(room, { accentMode: 'color' }).appearance.preset, 'custom', 'a single accent is no built-in look');
+  assert.equal(withAppearance(room, { fontFamily: 'serif' }).appearance.preset, 'custom');
+  assert.equal(withAppearance(room, { textColor: '#ffffff' }).appearance.preset, 'custom');
+  // Reaching another built-in look by hand stores that style's label.
+  const night = builtinLook('night');
+  assert.equal(withAppearance(room, { brightness: night.brightness, accentColor: night.accentColor, textColor: night.textColor }).appearance.preset, 'night');
+  // An older label that disagrees with the look is corrected by the next edit.
+  const stale = defaultSettings(); stale.appearance.preset = 'custom';
+  assert.equal(labelLook(stale.appearance).preset, 'room');
+  const unchanged = defaultSettings().appearance;
+  assert.equal(labelLook(unchanged), unchanged, 'an already correct label returns the same object');
+  // Every value stays one the previous release accepts.
+  for (const settings of [room, brighter, applyBuiltinPreset(room, 'phone'), resetAppearance(brighter)])
+    assert.ok(['phone', 'room', 'night', 'custom'].includes(settings.appearance.preset));
+  assert.equal(resetAppearance(brighter).appearance.preset, 'room', 'Reset appearance labels the Room look');
+  // The label alone is not an effective change: no Save bar and nothing to send.
+  const relabelled = structuredClone(stale); relabelled.appearance = labelLook(relabelled.appearance);
+  assert.equal(sameEffectiveSettings(stale, relabelled), true);
+  assert.deepEqual(settingsChanges(stale, relabelled), {});
+  // With a real change the corrected label travels with it.
+  assert.deepEqual(settingsChanges(stale, withAppearance(stale, { fontScale: 1.1 })).appearance, { fontScale: 1.1, preset: 'room' });
+  assert.equal(room.appearance.fontScale, 1, 'withAppearance does not mutate its input');
+});
+
+test('saved style names are unique without case and surrounding spaces (#344)', () => {
+  const styles = [{ id: 'a', name: 'Evening' }, { id: 'b', name: ' Morning light ' }];
+  assert.equal(duplicateStyleName(styles, 'Evening'), 'Evening');
+  assert.equal(duplicateStyleName(styles, '  evening  '), 'Evening', 'case and spaces do not make a new name');
+  assert.equal(duplicateStyleName(styles, 'MORNING LIGHT'), ' Morning light ');
+  assert.equal(duplicateStyleName(styles, 'Evenings'), null);
+  assert.equal(duplicateStyleName(styles, '   '), null, 'an empty name is not a duplicate');
+  assert.equal(duplicateStyleName(styles, 'evening', 'a'), null, 'renaming a style to its own name is allowed');
+  assert.equal(duplicateStyleName(styles, 'evening', 'b'), 'Evening', 'renaming onto another style is refused');
+  assert.equal(MAX_SAVED_STYLES, 12);
+});
+
+test('slider values are read aloud with their unit (#342)', () => {
+  assert.equal(spokenInterval(30), '30 seconds');
+  assert.equal(spokenInterval(60), '1 minute');
+  assert.equal(spokenInterval(90), '1 minute 30 seconds');
+  assert.equal(spokenInterval(180), '3 minutes');
+  assert.equal(spokenInterval(1800), '30 minutes');
+  assert.equal(spokenSeconds(0), '0 seconds');
+  assert.equal(spokenSeconds(1), '1 second');
+  assert.equal(spokenSeconds(2), '2 seconds');
 });
 
 const pendingReminder = { id: 'qa', text: 'Synthetic reminder', completed: false,

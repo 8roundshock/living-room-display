@@ -85,11 +85,17 @@ export interface RainOutlookHour {
   inSpell: boolean;
 }
 
+export type RainQualifier = 'likely' | 'possible';
+
 export interface RainOutlook {
   kind: RainOutlookKind;
   emphasis: RainEmphasis;
   /** From the highest known peak of every spell in the window, the same spells the detail covers (#167). */
-  qualifier: 'likely' | 'possible';
+  qualifier: RainQualifier;
+  /** From the first spell's own peak (#319): for a headline that names only the first spell. */
+  firstQualifier: RainQualifier;
+  /** From the later spells' highest known peak, or null without later spells. */
+  laterQualifier: RainQualifier | null;
   firstSpell: RainSpell | null;
   laterSpells: RainSpell[];
   unknownReason: RainUnknownReason | null;
@@ -112,6 +118,10 @@ const EMPHASIS: Record<RainOutlookKind, RainEmphasis> = { calm: 'calm', now: 'el
 function spellsPeak(spells: RainSpell[]): number | null {
   const chances = spells.map(item => item.peakChance).filter(value => value !== null);
   return chances.length ? Math.max(...chances) : null;
+}
+/** “likely” at or above RAIN_LIKELY_CHANCE; below it, or with no known chance, “possible”. */
+function qualify(peak: number | null): RainQualifier {
+  return peak !== null && peak >= RAIN_LIKELY_CHANCE ? 'likely' : 'possible';
 }
 
 /** Classifies the saved hourly intervals at `now`; expired intervals are ignored. */
@@ -152,13 +162,15 @@ export function rainOutlook(weather: Pick<WeatherState, 'hourly' | 'units'>, now
   else if (intervals.some(hour => (hour.precipitationProbability ?? -1) >= PRECIPITATION_POSSIBLE_CHANCE || (hour.precipitationAmount ?? 0) >= threshold)) kind = 'possible';
   else if (base.incomplete || base.hasGaps) { kind = 'unknown'; unknownReason = 'partial'; }
   else kind = 'calm';
-  const peak = spellsPeak(spells);
+  const later = spells.slice(1);
   return {
     kind,
     emphasis: EMPHASIS[kind],
-    qualifier: peak !== null && peak >= RAIN_LIKELY_CHANCE ? 'likely' : 'possible',
+    qualifier: qualify(spellsPeak(spells)),
+    firstQualifier: qualify(firstSpell?.peakChance ?? null),
+    laterQualifier: later.length ? qualify(spellsPeak(later)) : null,
     firstSpell,
-    laterSpells: spells.slice(1),
+    laterSpells: later,
     unknownReason,
     peakChance: base.chance,
     unit,
@@ -175,25 +187,30 @@ export function rainOutlook(weather: Pick<WeatherState, 'hourly' | 'units'>, now
  * Wording in the weather city's timezone and the 12/24-hour setting. `compact` is the one-line
  * small family; `full` the medium/large wording. Calm returns no headline: saying nothing about
  * rain means the 12-hour forecast is complete and dry. Never claims it is or will be raining.
- * The headline, its qualifier, the detail's peak and the amount cover the same spells: every spell
- * in the window (#167). A headline that names one end never implies the window is dry after it.
+ * The detail's peak and the amount cover every spell in the window (#167), and so does the
+ * qualifier of a headline that covers them all (“on and off …”). A headline that names only the
+ * first spell (“now”, “from 10 AM”, a later spell) takes that spell's own qualifier, and says so
+ * when a later spell is likelier: “Rain possible now, likely later” (#319). A headline that names
+ * one end never implies the window is dry after it.
  */
 export function rainOutlookCopy(outlook: RainOutlook, timeZone: string, clockFormat: '12h' | '24h', now: Date | number, variant: 'compact' | 'full'): RainOutlookCopy {
   const time = (iso: string) => compactWeatherTime(iso, timeZone, clockFormat);
-  const spell = outlook.firstSpell, rain = `Rain ${outlook.qualifier}`;
+  const spell = outlook.firstSpell, every = `Rain ${outlook.qualifier}`, first = `Rain ${outlook.firstQualifier}`;
   const several = outlook.laterSpells.length > 0, last = outlook.laterSpells.at(-1) ?? spell;
+  // Only the first spell is named, so a likelier later spell is mentioned rather than borrowed.
+  const likelyLater = several && outlook.firstQualifier === 'possible' && outlook.laterQualifier === 'likely' ? ', likely later' : '';
   let headline = '';
   if (outlook.kind === 'now' && spell) {
-    if (variant === 'compact') headline = spell.openEnded || several ? `${rain} now` : `${rain} until ${time(spell.end)}`;
-    else if (several) headline = `${rain} on and off ${last!.openEnded ? 'beyond' : 'until'} ${time(last!.end)}`;
-    else headline = `${rain} ${spell.openEnded ? 'beyond' : 'until'} ${time(spell.end)}`;
+    if (variant === 'compact') headline = spell.openEnded || several ? `${first} now${likelyLater}` : `${first} until ${time(spell.end)}`;
+    else if (several) headline = `${every} on and off ${last!.openEnded ? 'beyond' : 'until'} ${time(last!.end)}`;
+    else headline = `${first} ${spell.openEnded ? 'beyond' : 'until'} ${time(spell.end)}`;
   } else if (outlook.kind === 'soon' && spell) {
-    headline = !several && !spell.openEnded ? `${rain} ${compactWeatherRange(spell.start, spell.end, timeZone, clockFormat)}`
-      : several && variant === 'full' ? `${rain} on and off from ${time(spell.start)}` : `${rain} from ${time(spell.start)}`;
+    headline = !several && !spell.openEnded ? `${first} ${compactWeatherRange(spell.start, spell.end, timeZone, clockFormat)}`
+      : several && variant === 'full' ? `${every} on and off from ${time(spell.start)}` : `${first} from ${time(spell.start)}${likelyLater}`;
   } else if (outlook.kind === 'later' && spell) {
     const date = civilDate(new Date(spell.start), timeZone);
     const day = variant === 'full' && date !== civilDate(now, timeZone) ? `${forecastDay(date, timeZone, now)} ` : '';
-    headline = `${rain} from ${day}${time(spell.start)}`;
+    headline = `${first} from ${day}${time(spell.start)}${likelyLater}`;
   } else if (outlook.kind === 'possible') headline = outlook.peakChance === null ? 'Precipitation possible' : `Precipitation possible${NBSP}·${NBSP}${outlook.peakChance}%`;
   else if (outlook.kind === 'unknown') headline = outlook.unknownReason === 'rain-data' ? 'Rain timing unavailable' : outlook.unknownReason === 'partial' ? 'Rain outlook partial' : 'Rain outlook unavailable';
   let detail = '';

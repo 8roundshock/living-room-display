@@ -125,9 +125,22 @@ const
   PayloadSha256 = '{#PayloadSha256}';
   NewVersion = '{#AppVersion}';
   MsgNothingChanged = ' Nothing was changed.';
-  // The helper logs this exact line after it first finished an earlier run's
-  // rollback ($script:resumedRollbackNote in LivingRoomDisplay.ps1).
+  // The helper logs these exact lines; LivingRoomDisplay.ps1 carries the same
+  // text ($script:...Note) and Test-InstallerPolicy.ps1 checks that they match.
+  // It first finished an earlier run's rollback (a previous version went back),
+  // or first undid an earlier unfinished install that had no previous version.
   ResumedNote = 'Setup first put back the version from before an earlier unfinished update.';
+  ResumedUndoNote = 'Setup first undid an earlier unfinished installation.';
+  // The record of an earlier unfinished update could not be read (E20, #204).
+  RecordInUseNote = 'The record of an earlier unfinished update is in use by another program';
+  // What a failed first install left behind (#206).
+  FirstInstallRemovedNote = 'Removed everything the failed first install added.';
+  FirstInstallKeptDataNote = 'Removed the program files the failed first install added; the data the app wrote stays.';
+  FirstInstallLeftNote = 'The failed first install leaves';
+  FirstInstallCleanupFailedNote = 'Could not remove everything the failed first install added';
+  // E22 names the folder that holds a file in use (#200).
+  HeldFolderPrefix = 'LRD-E22: A file in ';
+  HeldFolderSuffix = ' is in use';
 
 var
   DesktopCheck: TNewCheckBox;
@@ -139,9 +152,15 @@ var
   // wording of its failure messages.
   HadPreviousApp: Boolean;
   KeptDataOnly: Boolean;
-  // Read from the helper log: this run first finished an earlier rollback, so a
-  // later refusal must not claim that nothing was changed.
-  ResumedEarlierRollback: Boolean;
+  // Read from the helper log. ResumedText: the note above when this run first
+  // finished an earlier run's rollback, so no message claims that nothing was
+  // changed. The rest: what the helper did, so the message says exactly that.
+  ResumedText: String;
+  RecordInUse: Boolean;
+  FirstInstallRemovedAll: Boolean;
+  FirstInstallKeptData: Boolean;
+  FirstInstallLeftFiles: Boolean;
+  HeldFolder: String;
 
 function SetTimer(hWnd, nIDEvent, uElapse, lpTimerFunc: Longword): Longword;
   external 'SetTimer@user32.dll stdcall';
@@ -353,6 +372,33 @@ begin
   else if Step = 'start' then ProgressPage.Msg2Label.Caption := 'Starting Living Room Display...';
 end;
 
+procedure ReadHelperLine(const Line: String);
+var
+  P: Integer;
+  Rest: String;
+begin
+  if Pos(ResumedNote, Line) > 0 then
+    ResumedText := ResumedNote
+  else if (Pos(ResumedUndoNote, Line) > 0) and (ResumedText = '') then
+    ResumedText := ResumedUndoNote;
+  if Pos(RecordInUseNote, Line) > 0 then
+    RecordInUse := True;
+  if Pos(FirstInstallRemovedNote, Line) > 0 then
+    FirstInstallRemovedAll := True;
+  if Pos(FirstInstallKeptDataNote, Line) > 0 then
+    FirstInstallKeptData := True;
+  if (Pos(FirstInstallLeftNote, Line) > 0) or (Pos(FirstInstallCleanupFailedNote, Line) > 0) then
+    FirstInstallLeftFiles := True;
+  P := Pos(HeldFolderPrefix, Line);
+  if P > 0 then
+  begin
+    Rest := Copy(Line, P + Length(HeldFolderPrefix), Length(Line));
+    P := Pos(HeldFolderSuffix, Rest);
+    if P > 1 then
+      HeldFolder := Copy(Rest, 1, P - 1);
+  end;
+end;
+
 procedure AppendHelperLog(const FileName: String);
 var
   Lines: TArrayOfString;
@@ -367,8 +413,7 @@ begin
   for I := 0 to GetArrayLength(Lines) - 1 do
   begin
     Log(Lines[I]);
-    if Pos(ResumedNote, Lines[I]) > 0 then
-      ResumedEarlierRollback := True;
+    ReadHelperLine(Lines[I]);
   end;
   Log('--- end of helper log ---');
 end;
@@ -383,10 +428,25 @@ end;
 
 function NothingChanged: String;
 begin
-  if ResumedEarlierRollback then
-    Result := ' ' + ResumedNote + ' Nothing else was changed.'
+  if ResumedText <> '' then
+    Result := ' ' + ResumedText + ' Nothing else was changed.'
   else
     Result := MsgNothingChanged;
+end;
+
+// E15, E16 and E20 start with the same note as a refusal when this run first
+// finished an earlier run's rollback (#206).
+function ResumedFirst: String;
+begin
+  if ResumedText <> '' then
+    Result := ResumedText + ' '
+  else
+    Result := '';
+end;
+
+function DeleteFolderHint: String;
+begin
+  Result := ' If you don''t want to, you can delete the folder ' + ExpandConstant('{app}') + '.';
 end;
 
 function HelperFailureMessage(Code: Integer; LogWritten: Boolean): String;
@@ -404,27 +464,35 @@ begin
           Result := 'A newer version of Living Room Display (' + InstalledVersion + ') is already installed.' + NothingChanged;
     13: Result := 'The setup files look damaged or incomplete. Download Setup again.' + NothingChanged;
     14: Result := 'Living Room Display is busy with another update or uninstall. Wait a moment and try again.';
-    15: Result := 'The new version didn''t start, so Setup put the previous version back. Your data was not changed.' + LogHint;
+    15: Result := ResumedFirst + 'The new version didn''t start, so Setup put the previous version back. Your data was not changed.' + LogHint;
     16: if HadPreviousApp then
-          Result := 'The new version didn''t start, so Setup put the previous version back. Neither version could start; your data was not changed.' + LogHint
+          Result := ResumedFirst + 'The new version didn''t start, so Setup put the previous version back. Neither version could start; your data was not changed.' + LogHint
         else if KeptDataOnly then
-          Result := 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it. The settings, reminders and photo you kept were not changed. Run Setup again to try again.' + LogHint
-        // A failed first install removes what it added (#179); say what is left.
-        else if DirExists(ExpandConstant('{app}')) then
-          Result := 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it and removed the program files it had added. Run Setup again to try again. If you don''t want to, you can delete the folder ' + ExpandConstant('{app}') + '.' + LogHint
+          Result := ResumedFirst + 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it. The settings, reminders and photo you kept were not changed. Run Setup again to try again.' + LogHint
+        // A failed first install removes what it added (#179). Say what the
+        // helper logged that it did, not what the folder looks like (#206).
+        else if FirstInstallRemovedAll then
+          Result := ResumedFirst + 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it and removed everything it had added. Run Setup again to try again.' + LogHint
+        else if FirstInstallKeptData then
+          Result := ResumedFirst + 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it and removed the program files it had added. Run Setup again to try again.' + DeleteFolderHint + LogHint
+        else if FirstInstallLeftFiles then
+          Result := ResumedFirst + 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it, and it couldn''t remove everything it had added yet. Run Setup again: it cleans up first, then tries again.' + DeleteFolderHint + LogHint
         else
-          Result := 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it and removed everything it had added. Run Setup again to try again.' + LogHint;
+          Result := ResumedFirst + 'Living Room Display didn''t start on this PC, so Setup couldn''t finish installing it. Your data was not changed. Run Setup again to try again.' + LogHint;
     17: Result := 'There isn''t enough free disk space (about 500 MB needed).' + NothingChanged;
     18: Result := 'An unexpected runtime is in the app folder; Setup left it untouched.' + NothingChanged;
-    19: if ResumedEarlierRollback then
+    19: if ResumedText <> '' then
           Result := 'Setup couldn''t make a safe backup of your data, so it stopped.' + NothingChanged
         else
           Result := 'Setup couldn''t make a safe backup of your data, so nothing was changed.';
-    20: if HadPreviousApp then
-          Result := 'Setup couldn''t finish, and couldn''t put the previous version back by itself. Your previous version and data are kept. Run Setup again: it puts the previous version back first, then tries the update again.' + LogHint
+    20: if RecordInUse then
+          Result := 'Setup couldn''t read its record of an earlier unfinished update (package-transaction.json) because another program is using it, so it didn''t move anything. Your previous version and data are kept. Close that program or restart the PC, then run Setup again.' + LogHint
+        else if HadPreviousApp then
+          Result := ResumedFirst + 'Setup couldn''t finish, and couldn''t put the previous version back by itself. Your previous version and data are kept. Run Setup again: it puts the previous version back first, then tries the update again.' + LogHint
         else
-          Result := 'Setup couldn''t finish, and couldn''t undo all of its changes by itself. Your data was not changed. Run Setup again: it finishes undoing them first, then tries again.' + LogHint;
+          Result := ResumedFirst + 'Setup couldn''t finish, and couldn''t undo all of its changes by itself. Your data was not changed. Run Setup again: it finishes undoing them first, then tries again.' + LogHint;
     21: Result := 'The install folder ' + ExpandConstant('{app}') + ' is too long a path for Living Room Display''s files. Install it in a shorter folder.' + NothingChanged;
+    22: Result := 'A file in ' + HeldFolder + ', which an earlier update left, is in use, so Setup couldn''t remove that folder before updating. Close the program that''s using it, or restart the PC, then run Setup again.' + NothingChanged;
   else
     if not LogWritten then
       Result := 'Windows settings on this PC don''t allow Setup''s helper script to run (common on work or school PCs). Ask the PC''s administrator, or install on a personal PC.'
@@ -457,8 +525,16 @@ begin
     HelperLog := ExpandConstant('{tmp}\setup-helper.log');
     StepFile := HelperLog + '.step';
     LastStep := '';
-    ResumedEarlierRollback := False;
-    HadPreviousApp := DirExists(ExpandConstant('{app}\app')) or DirExists(ExpandConstant('{app}\app.previous'));
+    ResumedText := '';
+    RecordInUse := False;
+    FirstInstallRemovedAll := False;
+    FirstInstallKeptData := False;
+    FirstInstallLeftFiles := False;
+    HeldFolder := ExpandConstant('{app}\app.previous');
+    // An app left by an interrupted first install (marker state installing) is
+    // that install's own candidate, which the helper discards: not a previous
+    // version (#206).
+    HadPreviousApp := (DirExists(ExpandConstant('{app}\app')) or DirExists(ExpandConstant('{app}\app.previous'))) and (MarkerState <> 'installing');
     KeptDataOnly := IsKeptDataReinstall;
     Params := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Helper + '" InstallPackage -InstallRoot "' + ExpandConstant('{app}') + '" -PackageArchive "' + Payload + '" -PackageSha256 ' + PayloadSha256 + ' -LogPath "' + HelperLog + '"';
     if ExpandConstant('{param:ALLOWDOWNGRADE|0}') = '1' then
@@ -532,9 +608,14 @@ begin
       if Pos('Failed: ', Lines[I]) > 0 then
         Reason := Copy(Lines[I], Pos('Failed: ', Lines[I]) + 8, Length(Lines[I]));
     end;
+  Reason := Trim(Reason);
+  if (Length(Reason) > 0) and (Reason[Length(Reason)] = '.') then
+    Delete(Reason, Length(Reason), 1);
   // Raising here aborts the uninstall before anything else is removed, so the
-  // Apps & Features entry stays and Setup can repair the install.
-  RaiseException('Living Room Display couldn''t stop or remove some files: ' + Reason + '. Your data was not deleted. Run Setup again to repair, then uninstall.');
+  // Apps & Features entry stays and Setup can repair the install. The helper
+  // renames every folder aside before it deletes any (#207), so a file in use
+  // leaves the app in place.
+  RaiseException('Living Room Display couldn''t stop or remove some files: ' + Reason + '. Your data was not deleted. Close any program that is using these files (or restart the PC), then uninstall again. If Living Room Display doesn''t open, run Setup again to repair it first.');
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

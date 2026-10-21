@@ -145,7 +145,12 @@ try {
         if ($Channel) { $fields.channel = $Channel; $fields.runtimeVersion = '24.19.0'; $fields.runtimePreviousOwner = $null; $fields.packageSha256 = ('d' * 64) }
         Write-Json $marker $fields
     }
-    function Assert-NoStaging { foreach ($name in @('package.next','runtime.next','app.next')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $name))) "$name was left behind." } }
+    function Assert-NoStaging {
+        foreach ($name in @('package.next','runtime.next','app.next')) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $name))) "$name was left behind." }
+        Assert-True (@(Get-AsideDirectories @('removing')).Count -eq 0 -and -not (Test-Path -LiteralPath ($marker + '.tmp')) -and -not (Test-Path -LiteralPath ($transaction + '.tmp'))) 'A removal folder or a temporary record or marker file was left behind.'
+    }
+    # A file held open without sharing, as a scanner or an open editor can do.
+    function Open-Held([string]$Path) { return [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None) }
 
     # ---- 1. fresh install into a missing folder, then an empty folder -------
     foreach ($precreate in @($false,$true)) {
@@ -392,6 +397,7 @@ try {
     $code = Invoke-Package (New-TestPackage)
     $left = @(Get-ChildItem -LiteralPath $testRoot -Force | ForEach-Object Name | Sort-Object)
     Assert-True ($code -eq 16 -and ($left -join ',') -eq 'data,installation.json' -and (Get-Marker).state -eq 'installing' -and -not (Test-Path -LiteralPath $transaction)) "A failed first install that wrote data returned $code or left: $($left -join ', ')"
+    Assert-True ((Get-Content -Raw $logFile).Contains($script:firstInstallKeptDataNote)) 'The helper log does not say that only the data the app wrote was kept (#206).'
     $dataBefore = Get-TreeState $data
     Reset-Mocks
     Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and (Get-Marker).state -eq 'installed' -and (Get-TreeState $data) -eq $dataBefore) 'A retry after a failed first install with data did not install or changed the data.'
@@ -573,7 +579,7 @@ try {
     $script:runtimeVersion = 'v24.10.0'
     $code = Invoke-Package (New-TestPackage)
     $log = Get-Content -Raw $logFile
-    Assert-True ($code -eq 0 -and $log -match 'record is unreadable' -and $log -match 'previous app to put back: True; candidate in app: True; runtime to put back: True') "A damaged record with a placed candidate returned $code. Log: $log"
+    Assert-True ($code -eq 0 -and $log -match 'record is damaged' -and $log -match 'previous app to put back: True; candidate in app: True; runtime to put back: True') "A damaged record with a placed candidate returned $code. Log: $log"
     Assert-True ((Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $before.App -and (Get-TreeState $data) -eq $before.Data -and [IO.File]::ReadAllText((Join-Path $InstallRoot 'runtime.previous\node.exe')) -eq 'previous node') 'A damaged record lost the last working app or runtime.'
     Assert-True ((Get-FolderVersion 'app.failed') -eq '0.2.0' -and -not (Test-Path -LiteralPath $transaction)) 'A damaged record did not keep the candidate or was not removed.'
     # An empty record from before the first rename: nothing to put back.
@@ -614,6 +620,268 @@ try {
         Assert-True ($snapshots.Count -eq 1 -and $snapshots[0].Name -match '^data-before-0\.1\.0-') 'The snapshot after an interrupted swap is not labelled with the restored version.'
     }
     Complete-Check 'interrupted swap'
+
+    # ---- a damaged or missing installation.json in our own folder (#199) -----
+    # An older, non-durable marker write cut short by a crash or a power cut can
+    # leave the marker missing, empty, NUL-filled or torn. In a folder that is
+    # clearly this app's, Setup rebuilds a minimal marker from the app's own
+    # files and carries on; it writes it only once the run starts changing files.
+    $damagedMarkers = [ordered]@{
+        'empty' = { [IO.File]::WriteAllBytes($marker, [byte[]]@()) }
+        'NUL-filled' = { [IO.File]::WriteAllBytes($marker, (New-Object byte[] 180)) }
+        'torn' = { [IO.File]::WriteAllText($marker, '{"product":"living-room-disp') }
+        'missing' = { Remove-Item -LiteralPath $marker -Force }
+    }
+    foreach ($name in $damagedMarkers.Keys) {
+        Reset-Root; Reset-Mocks
+        Assert-True ((Invoke-Package (New-TestPackage)) -eq 0) "Install before the $name marker case failed."
+        Assert-True (-not (Test-Path -LiteralPath ($marker + '.tmp'))) 'A durable marker write left its temporary file.'
+        $null = New-Item -ItemType Directory -Path $data -Force
+        [IO.File]::WriteAllText((Join-Path $data 'state.json'), '{"syntheticSettings":"preserve"}')
+        $appBefore = Get-TreeState $app; $dataBefore = Get-TreeState $data
+        & $damagedMarkers[$name]
+        Reset-Mocks
+        $code = Invoke-Package (New-TestPackage)
+        $log = Get-Content -Raw $logFile
+        Assert-True ($code -eq 0 -and $log -match 'continuing with a rebuilt marker \(state installed, version 0\.2\.0 from the app' -and $log.Contains('Wrote the rebuilt installation.json')) "A $name marker in our folder returned $code or was not rebuilt. Log: $log"
+        $installed = Get-Marker
+        Assert-True ($installed.product -eq 'living-room-display' -and $installed.state -eq 'installed' -and $installed.channel -eq 'package' -and $installed.version -eq '0.2.0' -and $installed.committedTransaction -match '^[0-9a-f]{32}$') "The marker after a $name marker is wrong: $($installed | ConvertTo-Json -Compress)"
+        Assert-True ((Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $appBefore -and (Get-TreeState $data) -eq $dataBefore -and @(Get-ChildItem -LiteralPath (Join-Path $InstallRoot 'backups') -Directory).Count -eq 1) "The update over a $name marker lost the previous app, changed data or took no snapshot."
+        Assert-NoStaging
+    }
+    # The rebuilt marker keeps the downgrade guard (app\release.json means Setup),
+    # and a refusal leaves the damaged marker exactly as it was.
+    Reset-Root; Reset-Mocks
+    Assert-True ((Invoke-Package (New-TestPackage -Version '0.3.0')) -eq 0) 'Install 0.3.0 before the guard case failed.'
+    [IO.File]::WriteAllBytes($marker, (New-Object byte[] 64))
+    Reset-Mocks
+    $before = Get-TreeState $InstallRoot
+    $code = Invoke-Package (New-TestPackage -Version '0.2.0')
+    Assert-True ($code -eq 12 -and (Get-TreeState $InstallRoot) -eq $before) "An older package over a damaged marker returned $code or changed files."
+    $message = $null
+    try { Assert-Installed } catch { $message = $_.Exception.Message }
+    Assert-True ($message -match 'installation marker .* is damaged .*Run Setup again') "The CLI does not say that the marker is damaged: $message"
+    # A source install (package.json names the app), an uninstall that kept the
+    # data (no app), and an interrupted first install (only the marker).
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    [IO.File]::WriteAllText((Join-Path $app 'package.json'), '{"name":"living-room-display","version":"0.1.0"}')
+    [IO.File]::WriteAllBytes($marker, (New-Object byte[] 64))
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 0 -and (Get-Content -Raw $logFile) -match 'rebuilt marker \(state installed, version 0\.1\.0' -and (Get-Marker).channel -eq 'package' -and @(Get-ChildItem -LiteralPath (Join-Path $InstallRoot 'backups') -Directory | Where-Object Name -like 'data-before-0.1.0-*').Count -eq 1) "A damaged marker beside a source app returned $code or was not rebuilt from package.json."
+    Reset-Root; Reset-Mocks
+    $null = New-Item -ItemType Directory -Path (Join-Path $data 'photos'),(Join-Path $InstallRoot 'backups\data-before-0.1.0-20260101T000000000Z') -Force
+    [IO.File]::WriteAllText((Join-Path $data 'state.json'), '{"syntheticSettings":"kept"}')
+    $dataBefore = Get-TreeState $data
+    [IO.File]::WriteAllBytes($marker, (New-Object byte[] 64))
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 0 -and (Get-Content -Raw $logFile) -match 'rebuilt marker \(state uninstalled\)' -and (Get-Marker).state -eq 'installed' -and (Get-TreeState $data) -eq $dataBefore) "A damaged marker beside kept data returned $code or changed the data."
+    Reset-Root; Reset-Mocks
+    $null = New-Item -ItemType Directory -Path $testRoot
+    [IO.File]::WriteAllBytes($marker, (New-Object byte[] 64))
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 0 -and (Get-Content -Raw $logFile) -match 'rebuilt marker \(state installing\)' -and (Get-Marker).state -eq 'installed') "A folder holding only a damaged marker returned $code."
+    # A folder that is not clearly this app's stays refused, unchanged.
+    $foreignCases = [ordered]@{
+        'another file' = { [IO.File]::WriteAllText((Join-Path $testRoot 'someone-else.txt'), 'unrelated') }
+        'another app' = { $null = New-Item -ItemType Directory -Path $app; [IO.File]::WriteAllText((Join-Path $app 'package.json'), '{"name":"another-product","version":"1.0.0"}') }
+        'data beside another file' = { $null = New-Item -ItemType Directory -Path $data; [IO.File]::WriteAllText((Join-Path $data 'state.json'), '{}'); [IO.File]::WriteAllText((Join-Path $testRoot 'notes.txt'), 'unrelated') }
+    }
+    foreach ($name in $foreignCases.Keys) {
+        foreach ($markerCase in @('NUL-filled','missing')) {
+            Reset-Root; Reset-Mocks
+            $null = New-Item -ItemType Directory -Path $testRoot
+            & $foreignCases[$name]
+            if ($markerCase -eq 'NUL-filled') { [IO.File]::WriteAllBytes($marker, (New-Object byte[] 64)) }
+            $before = Get-TreeState $testRoot
+            $code = Invoke-Package (New-TestPackage)
+            Assert-True ($code -eq 10 -and (Get-TreeState $testRoot) -eq $before -and (Get-Content -Raw $logFile) -notmatch 'rebuilt marker') "A $markerCase marker in a folder with $name returned $code, changed files or was rebuilt."
+        }
+    }
+    Complete-Check 'damaged marker rebuild'
+
+    # ---- an older app.previous or runtime.previous that can't be removed (#200) --
+    # Setup sets them aside by whole-folder renames before it stops the app. A
+    # file held in one stops the run with E22 naming that folder, with nothing
+    # changed (an earlier rename in the same step is put back), and the run
+    # succeeds once the file is released.
+    $held = $null
+    try {
+        Reset-Root; Reset-Mocks
+        New-SourceInstall '0.1.0'
+        Assert-True ((Invoke-Package (New-TestPackage)) -eq 0) 'Install before the held app.previous case failed.'
+        Reset-Mocks
+        $script:serverRunning = $true
+        $before = Get-TreeState $InstallRoot
+        $held = Open-Held (Join-Path $InstallRoot 'app.previous\package.json')
+        $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+        $held.Dispose(); $held = $null
+        $log = Get-Content -Raw $logFile
+        Assert-True ($code -eq 22 -and $log -match 'Failed \(exit 22\): LRD-E22: A file in [^\r\n]*\\app\.previous is in use') "A held file in app.previous returned $code instead of 22 naming the folder. Log: $log"
+        Assert-True ((Get-TreeState $InstallRoot) -eq $before -and $script:stops -eq 0 -and $script:snapshotCalls -eq 0 -and $script:serverRunning) 'E22 changed files, stopped the app or took a snapshot.'
+        Reset-Mocks
+        $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+        Assert-True ($code -eq 0 -and (Get-FolderVersion 'app.previous') -eq '0.2.0' -and (Get-FolderVersion 'app') -eq '0.3.0') "The update after releasing app.previous returned $code or swapped the wrong folders."
+        Assert-NoStaging
+        # A rename that fails once (a scanner's brief hold) is retried.
+        Reset-Mocks
+        $script:moveFailuresLeft = 1; $script:faults['move-removing'] = $transientFault
+        $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot 'removing-3\dist') -Force
+        $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+        Assert-True ($code -eq 0 -and (Get-Content -Raw $logFile) -match 'attempt 1 of') "A removal rename that failed once returned $code."
+        Assert-NoStaging
+        # A removal folder that can't be deleted yet is only logged; the next run removes it.
+        Reset-Mocks
+        $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot 'removing') -Force
+        [IO.File]::WriteAllText((Join-Path $InstallRoot 'removing\held.txt'), 'held')
+        $held = Open-Held (Join-Path $InstallRoot 'removing\held.txt')
+        $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+        $held.Dispose(); $held = $null
+        Assert-True ($code -eq 0 -and (Get-Content -Raw $logFile) -match 'Could not remove [^\r\n]*\\removing yet') "A removal folder that could not be deleted yet returned $code or was not logged."
+        Reset-Mocks
+        Assert-True ((Invoke-Package (New-TestPackage -Version '0.3.0')) -eq 0) 'The run after a leftover removal folder failed.'
+        Assert-NoStaging
+
+        # A Setup-made runtime.previous that this run would replace.
+        Reset-Root; Reset-Mocks
+        New-SourceInstall '0.1.0'
+        $script:runtimeVersion = 'v24.10.0'
+        Assert-True ((Invoke-Package (New-TestPackage)) -eq 0 -and (Get-Marker).runtimePreviousOwner -eq 'package') 'The swap before the held runtime.previous case failed.'
+        Reset-Mocks
+        $script:runtimeVersion = 'v24.18.0'
+        $before = Get-TreeState $InstallRoot
+        $held = Open-Held (Join-Path $InstallRoot 'runtime.previous\node.exe')
+        $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+        $held.Dispose(); $held = $null
+        $log = Get-Content -Raw $logFile
+        Assert-True ($code -eq 22 -and $log -match 'LRD-E22: A file in [^\r\n]*\\runtime\.previous is in use' -and $log -match 'Set [^\r\n]*\\app\.previous aside as') "A held file in runtime.previous returned $code instead of 22 naming the folder. Log: $log"
+        Assert-True ((Get-TreeState $InstallRoot) -eq $before -and $script:stops -eq 0) 'E22 for runtime.previous changed files (app.previous was not put back) or stopped the app.'
+        Reset-Mocks
+        $script:runtimeVersion = 'v24.18.0'
+        $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+        Assert-True ($code -eq 0 -and [IO.File]::ReadAllText((Join-Path $InstallRoot 'runtime.previous\node.exe')) -eq 'synthetic node 24.19.0' -and (Get-FolderVersion 'app.previous') -eq '0.2.0') "The swap after releasing runtime.previous returned $code or kept the wrong copies."
+        Assert-NoStaging
+        # A user-made runtime.previous is never set aside: the runtime is kept instead.
+        Reset-Root; Reset-Mocks
+        New-SourceInstall '0.1.0'
+        $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot 'runtime.previous') -Force
+        [IO.File]::WriteAllText((Join-Path $InstallRoot 'runtime.previous\node.exe'), 'user runtime backup')
+        $script:runtimeVersion = 'v24.10.0'
+        $held = Open-Held (Join-Path $InstallRoot 'runtime.previous\node.exe')
+        $code = Invoke-Package (New-TestPackage)
+        $held.Dispose(); $held = $null
+        Assert-True ($code -eq 0 -and [IO.File]::ReadAllText((Join-Path $InstallRoot 'runtime.previous\node.exe')) -eq 'user runtime backup') "A held user-made runtime.previous returned $code or was touched."
+    } finally { if ($held) { $held.Dispose() } }
+    Complete-Check 'held app.previous and runtime.previous'
+
+    # ---- a record that can't be read moves nothing (#204) --------------------
+    # Only a record that was read but doesn't parse is worked out from the
+    # folders. One that another program holds without read sharing stops the run
+    # with E20 and moves nothing, whether its update was committed or not.
+    $held = $null
+    try {
+        Reset-Root; Reset-Mocks
+        New-SourceInstall '0.1.0'
+        function Clear-PackageTransaction { }
+        try { $code = Invoke-Package (New-TestPackage) } finally { ${function:Clear-PackageTransaction} = $realClear }
+        Assert-True ($code -eq 0 -and (Test-PackageTransactionCommitted (Read-PackageTransaction))) 'The committed leftover record was not left.'
+        Reset-Mocks
+        $script:serverRunning = $true
+        $before = Get-TreeState $InstallRoot
+        $held = Open-Held $transaction
+        $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+        $log = Get-Content -Raw $logFile
+        # A source Update refuses too, and changes nothing.
+        $refused = $null
+        try { Install-App } catch { $refused = $_.Exception.Message }
+        $held.Dispose(); $held = $null
+        Assert-True ($code -eq 20 -and $log -match "Failed \(exit 20\): LRD-E20: $([regex]::Escape($script:recordInUseNote))" -and $log -notmatch 'Worked out from the folders' -and -not $log.Contains($script:resumedRollbackNote)) "A held committed record returned $code or was worked out from the folders. Log: $log"
+        Assert-True ((Get-TreeState $InstallRoot) -eq $before -and $script:stops -eq 0 -and $script:serverRunning) 'A held committed record moved a folder or stopped the app.'
+        Assert-True ($refused -match "can't be read") "A source Update did not refuse a held record: $refused"
+        Reset-Mocks
+        $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+        $log = Get-Content -Raw $logFile
+        Assert-True ($code -eq 0 -and $log -match 'left behind' -and -not $log.Contains($script:resumedRollbackNote) -and (Get-FolderVersion 'app.previous') -eq '0.2.0' -and (Get-FolderVersion 'app') -eq '0.3.0') "The released committed record was rolled back or refused ($code). Log: $log"
+        # An uncommitted record (a swap that stopped part-way) held open: the same,
+        # and once released the earlier rollback is finished first.
+        Reset-Root; Reset-Mocks
+        $prior = New-InterruptedSwap
+        $before = Get-TreeState $InstallRoot
+        $held = Open-Held $transaction
+        $code = Invoke-Package (New-TestPackage)
+        $held.Dispose(); $held = $null
+        $log = Get-Content -Raw $logFile
+        Assert-True ($code -eq 20 -and $log.Contains($script:recordInUseNote) -and (Get-TreeState $InstallRoot) -eq $before) "A held uncommitted record returned $code or moved folders. Log: $log"
+        Reset-Mocks
+        $code = Invoke-Package (New-TestPackage)
+        Assert-True ($code -eq 0 -and (Get-Content -Raw $logFile).Contains($script:resumedRollbackNote) -and (Get-TreeState (Join-Path $InstallRoot 'app.previous')) -eq $prior.App -and (Get-FolderVersion 'app.failed') -eq '0.2.0') "The released uncommitted record was not finished first ($code)."
+    } finally { if ($held) { $held.Dispose() } }
+    # A damaged record beside a committed install (its version is the one in
+    # app\release.json) is only removed.
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    function Clear-PackageTransaction { }
+    try { $code = Invoke-Package (New-TestPackage) } finally { ${function:Clear-PackageTransaction} = $realClear }
+    [IO.File]::WriteAllBytes($transaction, (New-Object byte[] 40))
+    Reset-Mocks
+    $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+    $log = Get-Content -Raw $logFile
+    Assert-True ($code -eq 0 -and $log -match 'names a committed update' -and $log -notmatch 'Worked out from the folders' -and (Get-FolderVersion 'app.previous') -eq '0.2.0' -and (Get-FolderVersion 'app') -eq '0.3.0' -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'app.failed'))) "A damaged record beside a committed install was rolled back ($code). Log: $log"
+    # ...but not when app\release.json names another version: a later swap that
+    # stopped part-way still goes back, and the committed app returns.
+    Reset-Root; Reset-Mocks
+    New-SourceInstall '0.1.0'
+    Assert-True ((Invoke-Package (New-TestPackage)) -eq 0) 'Install before the mid-swap damaged record case failed.'
+    $committedApp = Get-TreeState $app
+    Remove-OwnedDirectory (Join-Path $InstallRoot 'app.previous')
+    Move-Item -LiteralPath $app -Destination (Join-Path $InstallRoot 'app.previous')
+    $null = New-Item -ItemType Directory -Path (Join-Path $app 'dist\server') -Force
+    [IO.File]::WriteAllText((Join-Path $app 'release.json'), '{"version":"0.3.0"}')
+    [IO.File]::WriteAllText($transaction, '{"product":')
+    Reset-Mocks
+    $script:portBusy = $true
+    $code = Invoke-Package (New-TestPackage -Version '0.3.0')
+    Assert-True ($code -eq 11 -and (Get-Content -Raw $logFile) -match 'Worked out from the folders' -and (Get-TreeState $app) -eq $committedApp -and (Get-FolderVersion 'app.failed') -eq '0.3.0') "A damaged record mid-swap beside an older committed marker returned $code or was not rolled back."
+    # After a rollback worked out from the folders, installation.json names the
+    # restored version, not the candidate the damaged record left described.
+    Reset-Root; Reset-Mocks
+    $prior = New-InterruptedSwap -Record '{"product":'
+    Write-Json $marker ([ordered]@{product='living-room-display';state='installed';version='0.2.0';channel='package';runtimeVersion='24.19.0';runtimePreviousOwner=$null;packageSha256=('f' * 64)})
+    $script:portBusy = $true
+    $code = Invoke-Package (New-TestPackage)
+    Assert-True ($code -eq 11 -and (Get-Content -Raw $logFile) -match 'installation.json now names the restored version 0\.1\.0' -and (Get-Marker).version -eq '0.1.0' -and (Get-TreeState $app) -eq $prior.App) "The marker after an inferred rollback does not name the restored version ($code)."
+    Complete-Check 'unreadable and damaged record'
+
+    # ---- what a failed first install did is logged for Setup's message (#206) --
+    # An interrupted first install had placed its candidate (marker installing).
+    # The next run undoes it with no previous version to put back, and says so;
+    # when its own retry then fails, it logs exactly what it removed.
+    Reset-Root; Reset-Mocks
+    $null = New-Item -ItemType Directory -Path (Join-Path $app 'dist\server') -Force
+    [IO.File]::WriteAllText((Join-Path $app 'release.json'), '{"version":"0.2.0"}')
+    $installingMarker = [ordered]@{product='living-room-display';state='installing';createdFolder=$true} | ConvertTo-Json
+    [IO.File]::WriteAllText($marker, $installingMarker)
+    Write-Json $transaction ([ordered]@{product='living-room-display';schema=1;id=('2' * 32);version='0.2.0';originalMarker=$installingMarker;appMoved=$false;newApp=$true;runtimeMoved=$false;newRuntime=$false})
+    $script:healthResults.Enqueue($false)
+    $code = Invoke-Package (New-TestPackage)
+    $log = Get-Content -Raw $logFile
+    Assert-True ($code -eq 16 -and $log.Contains($script:resumedUndoNote) -and -not $log.Contains($script:resumedRollbackNote) -and $log.Contains($script:firstInstallRemovedNote) -and $log -match 'there is no previous version to restore' -and -not (Test-Path -LiteralPath $testRoot)) "A failed retry of an interrupted first install returned $code or logged the wrong steps. Log: $log"
+    # A set-aside copy that can't be removed yet: the log says what is left.
+    Reset-Root; Reset-Mocks
+    $null = New-Item -ItemType Directory -Path (Join-Path $InstallRoot 'runtime.next') -Force
+    [IO.File]::WriteAllText((Join-Path $InstallRoot 'runtime.next\node.exe'), 'older set-aside runtime')
+    Write-Json $marker ([ordered]@{product='living-room-display';state='installing';createdFolder=$true})
+    $held = Open-Held (Join-Path $InstallRoot 'runtime.next\node.exe')
+    try {
+        $script:healthResults.Enqueue($false)
+        $code = Invoke-Package (New-TestPackage)
+    } finally { $held.Dispose(); $held = $null }
+    $log = Get-Content -Raw $logFile
+    Assert-True ($code -eq 16 -and $log -match "$([regex]::Escape($script:firstInstallLeftNote)) [^\r\n]*runtime\.next" -and -not $log.Contains($script:firstInstallRemovedNote) -and -not $log.Contains($script:firstInstallKeptDataNote)) "A failed first install next to a held copy returned $code or logged the wrong outcome. Log: $log"
+    Reset-Mocks
+    Assert-True ((Invoke-Package (New-TestPackage)) -eq 0) 'The retry after the held copy was released failed.'
+    Assert-NoStaging
+    Complete-Check 'first install outcome lines'
 
     # ---- stale staging, operation lock and reparse refusal -----------------
     Reset-Root; Reset-Mocks

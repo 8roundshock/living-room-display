@@ -1,5 +1,6 @@
-// Editor connection and sync (#232, #142, #242): clear network errors that clear after recovery,
-// status-based reminder conflicts and two editor tabs keeping each other's list edits. Build first;
+// Editor connection and sync (#232, #142, #242, #287, #350, #289): clear network errors that clear
+// after recovery, status-based reminder conflicts, two editor tabs keeping each other's list edits and
+// widgets (also when one saves before its poll), and Save keeping focus while it runs. Build first;
 // the server, its data folder and every value are synthetic and temporary. Images stay in RAM.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -153,6 +154,98 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     await first.waitForFunction(() => [...document.querySelectorAll('.widget-option.selected input[aria-label$=" title"]')].length === 2);
     assert.deepEqual(await titles(first), ['From tab A', 'From tab B'], 'the first tab shows both after its poll');
     checks.push('two editor tabs: a countdown added in each ends with both on the server and in both tabs');
+
+    // 6. #287: the same, but B saves before its poll. Its stale Save is refused, merged and sent again.
+    await reset(data => { data.settings.widgets.countdown = true; data.settings.widgetGrid.placements.countdown = { column: 2, row: 4, size: 'small' }; });
+    const tabA = await open(), tabB = await open();
+    const patches = [];
+    tabB.on('response', response => { if (response.url().endsWith('/api/settings') && response.request().method() === 'PATCH') patches.push(response.status()); });
+    await addDate(tabA, 'Saved first in A'); await addDate(tabB, 'Saved second in B');
+    await button(tabA, 'Save changes').click(); await tabA.locator('.studio-savebar').waitFor({ state: 'detached' });
+    await button(tabB, 'Save changes').click(); await tabB.locator('.studio-savebar').waitFor({ state: 'detached' });
+    assert.deepEqual(patches, [409, 200], 'the stale Save is refused once, then the clean merge saves by itself');
+    assert.deepEqual(app.store.snapshot().settings.widgetData.countdowns.map(item => item.title), ['Saved first in A', 'Saved second in B'], 'the server keeps both countdowns');
+    assert.deepEqual(await titles(tabB), ['Saved first in A', 'Saved second in B']);
+    assert.equal(await tabB.locator('.studio-error').count(), 0, 'a clean retry needs no message');
+    await tabA.clock.runFor(30_000);
+    await tabA.waitForFunction(() => [...document.querySelectorAll('.widget-option.selected input[aria-label$=" title"]')].length === 2);
+    checks.push('#287: B saves before its poll; the 409 merge keeps both countdowns and saves once more by itself');
+
+    // 7. #287: both tabs change the same value. B's draft is kept with a review message; its next Save wins.
+    for (const target of [tabA, tabB]) await tab(target, 'Style');
+    const brightness = target => target.getByRole('slider', { name: 'Brightness', exact: true });
+    await brightness(tabA).focus(); await tabA.keyboard.press('ArrowRight');
+    await brightness(tabB).focus(); await tabB.keyboard.press('ArrowLeft'); await tabB.keyboard.press('ArrowLeft');
+    const fromB = await brightness(tabB).inputValue();
+    await button(tabA, 'Save changes').click(); await tabA.locator('.studio-savebar').waitFor({ state: 'detached' });
+    patches.length = 0;
+    await button(tabB, 'Save changes').click();
+    await alert(tabB, 'Settings changed in another window. Review and save again.').waitFor();
+    assert.deepEqual(patches, [409], 'no automatic retry would overwrite the other window’s value');
+    assert.equal(await brightness(tabB).inputValue(), fromB, 'the draft is kept');
+    assert.equal(await tabB.locator('.save-status').innerText(), 'Unsaved changes');
+    assert.equal(await tabB.locator('.studio-savebar .button.primary').evaluate(element => element === document.activeElement), true, 'focus stays on Save');
+    if (capture) images.push({ name: 'stale-save-review', bytes: await tabB.screenshot() });
+    await button(tabB, 'Save changes').click(); await tabB.locator('.studio-savebar').waitFor({ state: 'detached' });
+    assert.deepEqual(patches, [409, 200]);
+    assert.equal(app.store.snapshot().settings.appearance.brightness, Number(fromB) / 100, 'the reviewed Save wins');
+    checks.push('#287: the same value changed in both tabs keeps B’s draft with “Settings changed in another window”, and B’s next Save wins');
+
+    // 8. #350: an unsaved Countdown in B, Note saved elsewhere, a poll, then Save: Note stays enabled.
+    await reset();
+    const layoutTab = await open();
+    await tab(layoutTab, 'Widgets'); await button(layoutTab, 'Add widget').click(); await button(layoutTab, 'Preview Countdown').click(); await button(layoutTab, 'Add Countdown').click();
+    await app.store.patchSettings({ widgets: { note: true }, widgetGrid: { placements: { note: { column: 10, row: 6, size: 'small' } } } });
+    await layoutTab.clock.runFor(30_000);
+    const canvasWidget = (target, id) => target.locator(`.preview-frame [data-widget-id="${id}"]`);
+    await canvasWidget(layoutTab, 'note').waitFor();
+    assert.equal(await canvasWidget(layoutTab, 'countdown').count(), 1, 'the unsaved Countdown stays');
+    await button(layoutTab, 'Save changes').click(); await layoutTab.locator('.studio-savebar').waitFor({ state: 'detached' });
+    let saved = app.store.snapshot().settings;
+    assert.equal(saved.widgets.note, true, 'Note saved elsewhere is still enabled'); assert.equal(saved.widgets.countdown, true);
+    assert.deepEqual(saved.widgetGrid.placements.note, { column: 10, row: 6, size: 'small' });
+    checks.push('#350: an unsaved Countdown, Note saved elsewhere, a poll and Save keep Note enabled at its saved place');
+
+    // 9. #350: with no room for it on this layout, the draft wins and the editor says so.
+    await reset();
+    await layoutTab.reload(); await button(layoutTab, 'Edit layout').waitFor();
+    await tab(layoutTab, 'Widgets'); await button(layoutTab, 'Add widget').click(); await button(layoutTab, 'Preview Countdown').click(); await button(layoutTab, 'Add Countdown').click();
+    // The other window gives Note the very cells this draft gave Countdown (the first free ones).
+    assert.equal(await canvasWidget(layoutTab, 'countdown').getAttribute('data-widget-size'), 'small');
+    await app.store.patchSettings({ widgets: { note: true }, widgetGrid: { placements: { note: { column: 2, row: 4, size: 'small' } } } });
+    await layoutTab.clock.runFor(30_000);
+    const noRoom = 'Note was added in another window; there is no room for it in this layout';
+    // A poll's message is not an edit made in the Widgets list, so the canvas line shows it once and the
+    // one layout announcer speaks it (#311, #341).
+    await layoutTab.locator('.canvas-messages .grid-status').filter({ hasText: noRoom }).waitFor();
+    assert.equal(await layoutTab.locator('.widget-list .inline-message').filter({ hasText: noRoom }).count(), 0, 'shown once, in the canvas line');
+    assert.equal(await layoutTab.locator('[role="status"], [aria-live], [role="alert"]').evaluateAll((nodes, text) => nodes.filter(node => node.textContent.includes(text)).length, noRoom), 1, 'one live region speaks it');
+    assert.equal(await canvasWidget(layoutTab, 'note').count(), 0);
+    if (capture) images.push({ name: 'no-room-message', bytes: await layoutTab.screenshot() });
+    await button(layoutTab, 'Save changes').click(); await layoutTab.locator('.studio-savebar').waitFor({ state: 'detached' });
+    saved = app.store.snapshot().settings;
+    assert.equal(saved.widgets.countdown, true); assert.equal(saved.widgets.note, false, 'the announced draft wins');
+    checks.push('#350: a widget saved elsewhere with no room on this layout is named once, in the canvas line, by one live region, and the draft wins');
+
+    // 10. #289: Save keeps focus while a held request runs, and a second Enter sends nothing.
+    await tab(layoutTab, 'Style');
+    await brightness(layoutTab).focus(); await layoutTab.keyboard.press('ArrowRight');
+    let release; const held = new Promise(resolve => { release = resolve; });
+    let sent = 0;
+    await layoutTab.route('**/api/settings', async route => { if (route.request().method() === 'PATCH') { sent++; await held; } await route.continue(); });
+    const saveButton = layoutTab.locator('.studio-savebar .button.primary');
+    await saveButton.focus(); await layoutTab.keyboard.press('Enter');
+    await layoutTab.locator('.save-status').filter({ hasText: 'Saving…' }).waitFor();
+    assert.equal(await saveButton.evaluate(element => element === document.activeElement), true, 'focus stays on Save while saving');
+    assert.equal(await saveButton.getAttribute('aria-disabled'), 'true');
+    assert.equal(await saveButton.evaluate(element => element.disabled), false, 'not the disabled attribute, which would drop focus');
+    await layoutTab.keyboard.press('Enter'); await layoutTab.keyboard.press('Space'); await layoutTab.waitForTimeout(150);
+    assert.equal(sent, 1, 'a second activation sends no second request');
+    release();
+    await layoutTab.locator('.studio-savebar').waitFor({ state: 'detached' });
+    assert.equal(sent, 1);
+    await layoutTab.unroute('**/api/settings');
+    checks.push('#289: during a held Save, focus stays on Save (aria-disabled) and a second Enter or Space sends nothing');
 
     assert.deepEqual(errors, []);
     return { checks, images };

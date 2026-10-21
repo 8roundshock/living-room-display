@@ -8,8 +8,8 @@ import { join } from 'node:path';
 import { DataStore } from './store.ts';
 import { dataSchema, settingsSchema } from './validation.ts';
 import { PREVIOUS_READER } from './compat/previous-reader.ts';
-import { WIDGET_CATALOG as PREVIOUS_CATALOG } from './compat/3446400/shared/widgets.ts';
-import { defaultSettings as previousDefaults } from './compat/3446400/shared/defaults.ts';
+import { WIDGET_CATALOG as PREVIOUS_CATALOG } from './compat/d66832b/shared/widgets.ts';
+import { defaultSettings as previousDefaults } from './compat/d66832b/shared/defaults.ts';
 import { catalogBoardDefaults } from './fixtures.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import {
@@ -62,7 +62,7 @@ test('style defaults are unchanged by the default board (#435 scope)', () => {
   assert.deepEqual(widgetBehavior, { reminders: { hideWhenEmpty: true } });
 });
 
-test('older data still backfills from the catalog, which is the installed 3446400 catalog unchanged', () => {
+test('older data still backfills from the catalog, which is the installed d66832b catalog unchanged (#497)', () => {
   // The catalog fields that backfill older data are byte-for-byte what the installed release has.
   for (const id of WIDGET_IDS) {
     const current: WidgetDefinition = WIDGET_CATALOG[id], previous: WidgetDefinition = PREVIOUS_CATALOG[id];
@@ -88,7 +88,7 @@ test('older data still backfills from the catalog, which is the installed 344640
   assert.deepEqual(previous.widgetGrid, defaultWidgetGrid());
 });
 
-test('a fresh data folder writes the default board, and the 3446400 reader reads that board unchanged', async () => {
+test('a fresh data folder writes the default board, and the d66832b reader (#497) reads that board unchanged', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-default-board-'));
   try {
     const store = await DataStore.open(directory);

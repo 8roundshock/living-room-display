@@ -1,5 +1,5 @@
 // Rollback compatibility (#84): data written by this build must still parse with the frozen reader of
-// the previous installed release (3446400 since #367). Synthetic data in temporary folders only.
+// the previous installed release (d66832b since #497). Synthetic data in temporary folders only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -15,9 +15,9 @@ import { AT_REST, PREVIOUS_RELEASE, persistableData } from './persistence.ts';
 import {
   LEGACY_FIXTURE, LEGACY_FIXTURE_BLOBS, PREVIOUS_READER, VENDORED_BLOBS, assertPreviousReaderAccepts, assertPreviousReaderRejects,
 } from './compat/previous-reader.ts';
-import { defaultSettings as previousDefaults } from './compat/3446400/shared/defaults.ts';
-import { persistableData as previousPersistableData } from './compat/3446400/server/persistence.ts';
-import { WIDGET_CATALOG as PREVIOUS_CATALOG } from './compat/3446400/shared/widgets.ts';
+import { defaultSettings as previousDefaults } from './compat/d66832b/shared/defaults.ts';
+import { persistableData as previousPersistableData } from './compat/d66832b/server/persistence.ts';
+import { WIDGET_CATALOG as PREVIOUS_CATALOG } from './compat/d66832b/shared/widgets.ts';
 import { defaultSettings as legacyDefaults } from './compat/bedca44/shared/defaults.ts';
 import { WIDGET_CATALOG as LEGACY_CATALOG, defaultWidgetGrid as legacyGrid } from './compat/bedca44/shared/widgets.ts';
 import { WIDGET_IDS, fitGridDensity, isPlannedWidget } from '../shared/widgets.ts';
@@ -61,7 +61,7 @@ async function vendoredFiles(folder: string): Promise<string[]> {
 
 test('the frozen reader is an unedited copy of the previous release and its catalog matches PREVIOUS_RELEASE', async () => {
   const folder = PREVIOUS_READER.revision.slice(0, 7);
-  // 3446400's validation.ts and its transitive imports, nothing else (#263, #367).
+  // d66832b's validation.ts and its transitive imports, nothing else (#263, #367, #497).
   assert.deepEqual(await vendoredFiles(folder), Object.keys(VENDORED_BLOBS).sort(), 'every vendored file has a blob id, and every blob id a file');
   assert.deepEqual(Object.keys(VENDORED_BLOBS).sort(), ['server/persistence.ts', 'server/photo.ts', 'server/validation.ts', 'shared/contracts.ts', 'shared/defaults.ts', 'shared/motion.ts', 'shared/palette.ts', 'shared/widgets.ts'].map(path => `${folder}/${path}`));
   for (const [path, blob] of Object.entries(VENDORED_BLOBS)) assert.equal(await blobId(path), blob, `${path} must stay byte-for-byte identical to ${folder}`);
@@ -145,7 +145,7 @@ test('(a) a fresh data folder, Native colours (#75) included, is readable by the
 
 test('(b, c) previous-release data stays readable after unrelated saves, and so does its export', async () => {
   const directory = await temporary('lrd-rollback-saves-');
-  // Exactly what the previous release (3446400) writes for its defaults: its own at-rest form.
+  // Exactly what the previous release (d66832b) writes for its defaults: its own at-rest form.
   const previous = previousPersistableData({ version: 1, settings: previousDefaults(), reminders: [], photoAsset: null });
   assertPreviousReaderAccepts('data', previous, 'synthetic previous-release state');
   await writeFile(join(directory, 'state.json'), JSON.stringify(previous, null, 2));
@@ -209,8 +209,8 @@ const withStyle = (settings: Settings, edit: (visual: Settings) => Settings): Se
 const styleOf = (file: Loose) => file.settings.savedPresets[0]?.visual as Loose | undefined;
 
 /**
- * Every choice the bedca44 reader rejected (the former rollback exceptions in docs/install.md); 3fee844
- * and 3446400 know each key. `written` proves the file or export actually carries the choice, so an
+ * Every choice the bedca44 reader rejected (the former rollback exceptions in docs/install.md); every
+ * baseline since 3fee844, d66832b included, knows each key. `written` proves the file or export actually carries the choice, so an
  * accepted file is never accepted only because the choice was left out.
  */
 const FORMER_EXCEPTIONS: [string, (settings: Settings) => SettingsPatch, (file: Loose) => boolean][] = [

@@ -116,7 +116,7 @@ async function stateAfter(patch: Parameters<DataStore['patchSettings']>[0]): Pro
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
-test('#76 rollback: every Animation level stays readable by the previous release (3446400 knows the key)', async () => {
+test('#76 rollback: every Animation level stays readable by the previous release (d66832b knows the key)', async () => {
   const subtle = await stateAfter({ appearance: { animation: 'subtle' } });
   assertPreviousReaderAccepts('data', subtle.state, 'Subtle state.json');
   assert.equal('animation' in subtle.state.settings.appearance, false, 'Subtle is omitted at rest');

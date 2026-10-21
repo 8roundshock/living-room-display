@@ -41,8 +41,9 @@ the default is not a claim about the user's location. Probability covers all
 precipitation; rain amount is separate so snow does not become a false rain warning.
 
 Editing should not require changing source code. Keep the editor separate from
-the sparse display experience. Personal reminders and settings need persistence
-and a recovery/export plan once their storage is designed; private user content
+the sparse display experience. Personal reminders and settings persist in a local
+per-user store with a previous-state backup and export/import
+([persistence and recovery](api.md#persistence-and-recovery)); private user content
 does not belong in Git. A local editor does not imply public or LAN exposure.
 Every information module is independently optional, including clock and weather.
 New installs start on the owner's board (#435): a large Calendar and Clock across
@@ -94,8 +95,9 @@ against OLED burn-in. Do not claim a measured or guaranteed safety benefit.
 ## Activation and optional integrations
 
 Manual fullscreen use and automatic idle activation are distinct capabilities.
-If a Windows helper is selected, verify activation and dismissal around movies,
-games, fullscreen applications, and ordinary input. A lack of keyboard or mouse
+The selected Windows helper ([architecture](architecture.md)) must be verified for
+activation and dismissal around movies, games, fullscreen applications, and
+ordinary input before idle activation is enabled. A lack of keyboard or mouse
 activity alone does not mean the leisure PC is unused.
 
 TV off/on, wake, input switching, and remote control are optional later work.
@@ -111,20 +113,22 @@ the TV off instead of meeting the ambient-display requirement.
   and no audio. Include the preview in movement/brightness checks if enabled.
 - Exercise fresh, stale, failed, and missing weather states using explicit test
   data; distinguish simulations from live provider results.
-- If reminders are in scope, demonstrate add/edit/complete and persistence through
-  restart, with an export or recovery path.
+- Demonstrate reminder add/edit/complete and persistence through restart, with an
+  export or recovery path.
 - For the chosen preview mode, verify source selection, freshness labeling,
   toggle/hide behavior, no recursive capture, and no screenshot files left behind.
 - Verify the chosen start/exit behavior without interrupting movies or games.
 
-These are future acceptance targets, not checks already passed. There are no
-external calendar, cloud hosting, or smart-home platform requirements.
+These are the integrated acceptance targets. [STATUS.md](../STATUS.md) records
+which have been checked and which remain owner- or TV-gated. There are no external
+calendar, cloud hosting, or smart-home platform requirements.
 
 ## Installation and sharing
 
 A future usable release should be installable and operable by another user's
 agent from repository instructions, with that user's own configuration and no
 dependency on the owner's accounts, absolute paths, or private memory. See the
-[installation contract](install.md). Keep the repository private until a usable
-release; publication is a separate reviewed step. Stars and feedback are optional
+[installation contract](install.md). The repository is public (owner decision,
+2026-10-20, [#441](https://github.com/8roundshock/living-room-display/issues/441));
+publishing a release is a separate reviewed step. Stars and feedback are optional
 and require the end user's permission before an agent acts on their behalf.

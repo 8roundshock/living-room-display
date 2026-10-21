@@ -3,7 +3,7 @@
 Build a silent ambient display, initially targeted at the owner's Windows 10
 leisure PC and Samsung S90F OLED. Other users supply their own local settings;
 do not infer that their location, display, or preferences match the owner.
-This is an independent private project, not a personal-memory workspace.
+This is an independent project, not a personal-memory workspace.
 
 ## Start
 
@@ -61,18 +61,22 @@ idle/screensaver helper. Implementation is authorized and in progress;
   safeguards. See [preview requirements](docs/product.md#screen-preview).
 - Local implementation, dependency setup, and scoped testing are authorized.
   Keep loopback-only defaults; enable Windows idle activation only after actual
-  verification and coordinator approval. TV control, LAN exposure, and public
+  verification and coordinator approval. TV control, LAN exposure, and release
   publication remain separate scope.
 
 ## Change and verify
 
 - Use command-line Git and GitHub CLI/API. For owner-side maintenance, keep origin
-  at `8roundshock/living-room-display`, verify the `8roundshock` identity and private
-  visibility, and use [the project auth helper](docs/development.md). Outside
+  at `8roundshock/living-room-display`, verify the `8roundshock` identity and the
+  exact repository, and use [the project auth helper](docs/development.md). Outside
   contributors use their own authorized account, a fork as `origin`, and the
   original repository as `upstream`; never use owner credentials or its helper.
-  Keep the repository private until a usable release and a reviewed publication
-  step; do not change visibility as part of the current foundation.
+- The repository is public (owner decision, 2026-10-20,
+  [#441](https://github.com/8roundshock/living-room-display/issues/441)). Never
+  commit or post secrets, tokens, the owner's private data (state.json, exports,
+  reminder or calendar text, photos, screen captures), personal contact details,
+  PC security settings or presence/away details, hostnames, network names, or
+  links into the owner's personal repositories. Do not change repository visibility.
 - Use topic branches and reviewed pull requests; never push directly to `main`,
   force-push, discard others' work, or bypass branch protection.
 - In owner-authorized project work, track all intended work in GitHub issues:

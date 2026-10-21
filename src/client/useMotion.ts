@@ -27,6 +27,8 @@ export interface MotionState {
   revealing: boolean;
   /** The arrangement is fading out or resting on black. */
   resting: boolean;
+  /** The arrangement is fully black: from the end of the fade-out until the next reveal (#174). */
+  black: boolean;
 }
 
 export const STILL_MOTION: MotionState = {
@@ -34,6 +36,7 @@ export const STILL_MOTION: MotionState = {
   revealEpoch: 0,
   revealing: false,
   resting: false,
+  black: false,
 };
 
 export const MotionContext = createContext<MotionState>(STILL_MOTION);

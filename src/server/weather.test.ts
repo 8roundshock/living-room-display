@@ -171,3 +171,20 @@ test('hours are kept from the earlier of the provider\'s and this computer\'s cu
   assert.equal(slow.hourly[0]?.intervalStart, '2026-10-18T05:00:00.000Z', 'a slow clock keeps the hour it considers current');
   assert.equal(slow.hourly.length, 24);
 });
+
+test('the forecast waits for a due refresh only briefly, and peek never contacts the provider (#351, #352)', async () => {
+  let calls = 0; let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const service = new WeatherService(async () => { calls++; await held; return Response.json(forecastFixture()); }, () => Date.parse('2026-10-18T06:30:00Z'), undefined, 150);
+  const settings = defaultSettings();
+  assert.deepEqual(service.peek(settings), { ...service.peek(settings) }); assert.equal(calls, 0, 'peek makes no request');
+  assert.equal(service.peek(settings).status, 'unavailable'); assert.equal(service.peek(settings).error, null);
+  const started = performance.now();
+  const waiting = await service.get(settings);
+  assert.ok(performance.now() - started < 150 + 250, 'answered after the wait');
+  assert.equal(waiting.refreshing, true); assert.equal(waiting.error, null); assert.equal(calls, 1);
+  assert.equal(service.peek(settings).refreshing, true, 'peek reports the refresh in flight');
+  release(); await new Promise(resolve => setTimeout(resolve, 20));
+  const fresh = service.peek(settings);
+  assert.equal(fresh.status, 'fresh'); assert.equal(fresh.refreshing, undefined); assert.equal(calls, 1);
+});

@@ -5,12 +5,17 @@ import { catalogBoardDefaults } from '../server/fixtures.ts';
 import { gridProblem, switchGridDensity } from '../shared/widgets.ts';
 import { getVisual } from './model.ts';
 import {
+  crowdedOutMessage,
+  keepsSavedChanges,
+  listLimitProblem,
   rebaseDraft,
   rebaseSettings,
+  rebaseSettingsReport,
   same,
   sameEffectiveSettings,
   settingsChanges,
 } from './draft.ts';
+import { addToGrid } from './make-room.ts';
 
 test('draft rebase refreshes untouched nested fields and retains local edits', () => {
   const base = defaultSettings(),
@@ -103,14 +108,160 @@ test('a density draft remains a valid atomic layout through a concurrent placeme
   assert.equal(gridProblem(incoming.widgetGrid, incoming.widgets), null, 'the incoming saved board is valid in its own density');
   const next = rebaseSettings(base, draft, incoming);
   assert.deepEqual(next.widgetGrid, draft.widgetGrid);
-  assert.deepEqual(next.widgets, draft.widgets);
+  assert.deepEqual(next.widgets, { ...draft.widgets, clock: false }, 'a widget removed elsewhere and untouched here is removed here too (#350)');
   assert.equal(gridProblem(next.widgetGrid, next.widgets), null);
   assert.equal(next.appearance.brightness, 0.3);
   assert.equal(next.location.name, 'Concurrent city');
   assert.equal(next.preview.opacity, 0.15, 'independent opacity refreshes normally');
-  const back = switchGridDensity(next.widgetGrid, 'balanced', next.widgets, compact.history); assert.ok(back);
+  // A poll that only moves a widget keeps the draft's visibility and its density history.
+  const moved = structuredClone(incoming); moved.widgets.clock = true;
+  const kept = rebaseSettings(base, draft, moved);
+  assert.deepEqual(kept.widgets, draft.widgets);
+  const back = switchGridDensity(kept.widgetGrid, 'balanced', kept.widgets, compact.history); assert.ok(back);
   assert.deepEqual(back.grid, base.widgetGrid, 'polling does not corrupt density round-trip history');
   assert.deepEqual(rebaseSettings(base, structuredClone(base), incoming), incoming, 'an untouched layout refreshes as a whole');
+});
+
+// #350: visibility merges three ways against the draft's own base while the draft keeps its layout.
+// On the catalog board, which has free cells (#435: the default board fills the grid).
+function withCountdownDraft() {
+  const base = catalogBoardDefaults();
+  const draft = structuredClone(base);
+  const grid = addToGrid(draft.widgetGrid, 'countdown', 'small', draft.widgets); assert.ok(grid);
+  draft.widgetGrid = grid; draft.widgets.countdown = true;
+  return { base, draft };
+}
+
+test('a widget saved elsewhere joins a layout draft at its saved place when it fits (#350)', () => {
+  const { base, draft } = withCountdownDraft();
+  const incoming = structuredClone(base);
+  incoming.widgets.note = true;
+  incoming.widgetGrid.placements.note = { column: 10, row: 6, size: 'small' };
+  assert.equal(gridProblem(incoming.widgetGrid, incoming.widgets), null);
+  assert.equal(gridProblem(draft.widgetGrid, { ...draft.widgets, note: true }) === null, false, 'the note does not fit at its default place on the draft board, only at the saved one');
+  const { settings: next, crowdedOut } = rebaseSettingsReport(base, draft, incoming);
+  assert.deepEqual(crowdedOut, []);
+  assert.equal(next.widgets.note, true); assert.equal(next.widgets.countdown, true);
+  assert.deepEqual(next.widgetGrid.placements.note, incoming.widgetGrid.placements.note);
+  assert.deepEqual(next.widgetGrid.placements.countdown, draft.widgetGrid.placements.countdown, 'the draft layout is kept');
+  assert.equal(gridProblem(next.widgetGrid, next.widgets), null);
+  const patch = settingsChanges(incoming, next);
+  assert.deepEqual(patch.widgets, { countdown: true }, 'Save sends only this draft’s change, never note: false');
+  assert.deepEqual(Object.keys(patch.widgetGrid?.placements ?? {}), ['countdown']);
+  assert.equal(keepsSavedChanges(base, incoming, next), true);
+  // The next poll with nothing new leaves the merged draft alone.
+  assert.deepEqual(rebaseSettingsReport(incoming, next, structuredClone(incoming)), { settings: next, crowdedOut: [] });
+});
+
+test('a widget saved elsewhere with no room on the layout draft stays off and is reported (#350)', () => {
+  const { base, draft } = withCountdownDraft();
+  const incoming = structuredClone(base);
+  incoming.widgets.note = true;
+  // The other window chose the very cells this draft gave Countdown.
+  incoming.widgetGrid.placements.note = { ...draft.widgetGrid.placements.countdown };
+  assert.equal(gridProblem(incoming.widgetGrid, incoming.widgets), null);
+  const { settings: next, crowdedOut } = rebaseSettingsReport(base, draft, incoming);
+  assert.deepEqual(crowdedOut, ['note']);
+  assert.equal(next.widgets.note, false); assert.equal(next.widgets.countdown, true);
+  assert.equal(gridProblem(next.widgetGrid, next.widgets), null);
+  assert.equal(keepsSavedChanges(base, incoming, next), false, 'a Save would undo the note, so it needs a review');
+  assert.equal(crowdedOutMessage(crowdedOut), 'Note was added in another window; there is no room for it in this layout');
+  assert.equal(crowdedOutMessage(['note', 'calendar', 'photo']), 'Note, Calendar and Photo were added in another window; there is no room for them in this layout');
+  // A different density cannot use the saved place either.
+  const denser = structuredClone(draft);
+  const fine = switchGridDensity(denser.widgetGrid, 'fine', denser.widgets); assert.ok(fine);
+  denser.widgetGrid = fine.grid;
+  incoming.widgetGrid.placements.note = { column: 10, row: 6, size: 'small' };
+  assert.deepEqual(rebaseSettingsReport(base, denser, incoming).crowdedOut, ['note']);
+});
+
+test('when both sides changed a widget the draft wins; Last screen keeps its capture flag in step (#350)', () => {
+  const { base, draft } = withCountdownDraft();
+  const incoming = structuredClone(base);
+  incoming.widgets.countdown = true;
+  incoming.widgetGrid.placements.countdown = { column: 10, row: 6, size: 'small' };
+  incoming.widgets.reminders = false;
+  const next = rebaseSettings(base, draft, incoming);
+  assert.deepEqual(next.widgetGrid.placements.countdown, draft.widgetGrid.placements.countdown, 'both added Countdown: this draft’s place wins');
+  assert.equal(next.widgets.reminders, false, 'Reminders removed elsewhere is removed here too');
+  // Last screen removed elsewhere: the widget and its capture flag go together.
+  const noPreview = structuredClone(base);
+  noPreview.widgets.preview = false; noPreview.preview.enabled = false;
+  const removed = rebaseSettings(base, draft, noPreview);
+  assert.equal(removed.widgets.preview, false); assert.equal(removed.preview.enabled, false);
+  // Last screen removed here and moved elsewhere: this draft's removal wins.
+  const removedHere = structuredClone(draft);
+  removedHere.widgets.preview = false; removedHere.preview.enabled = false;
+  const movedThere = structuredClone(base);
+  movedThere.widgetGrid.placements.preview = { column: 8, row: 6, size: 'medium' };
+  movedThere.widgets.forecast = false;
+  const kept = rebaseSettings(base, removedHere, movedThere);
+  assert.equal(kept.widgets.preview, false); assert.equal(kept.preview.enabled, false);
+  assert.equal(kept.widgets.forecast, false);
+});
+
+test('a refused Save retries by itself only when the merge keeps everything the other window saved (#287)', () => {
+  const base = defaultSettings();
+  const countdown = (id: string, title: string) => ({ id: `${id}0000000-0000-4000-8000-000000000000`, title, date: '2026-12-25', repeatsYearly: false });
+  const mine = structuredClone(base), theirs = structuredClone(base);
+  mine.widgetData.countdowns = [countdown('b', 'From tab B')];
+  theirs.widgetData.countdowns = [countdown('a', 'From tab A')];
+  theirs.appearance.fontScale = 1.2;
+  const merged = rebaseSettings(base, mine, theirs);
+  assert.equal(keepsSavedChanges(base, theirs, merged), true, 'two additions and an untouched field merge cleanly');
+  assert.deepEqual(settingsChanges(theirs, merged), { widgetData: { countdowns: merged.widgetData.countdowns } });
+  // The same field changed on both sides: this draft would overwrite the other window's value.
+  const brighter = structuredClone(base); brighter.appearance.brightness = 0.7;
+  const dimmer = structuredClone(base); dimmer.appearance.brightness = 0.3;
+  assert.equal(keepsSavedChanges(base, dimmer, rebaseSettings(base, brighter, dimmer)), false);
+  // An item removed there but edited here comes back, which is not clean either.
+  const listed = structuredClone(base); listed.widgetData.countdowns = [countdown('1', 'Trip')];
+  const edited = structuredClone(listed); edited.widgetData.countdowns = [{ ...countdown('1', 'Trip'), title: 'Trip abroad' }];
+  const cleared = structuredClone(listed); cleared.widgetData.countdowns = [];
+  assert.equal(keepsSavedChanges(listed, cleared, rebaseSettings(listed, edited, cleared)), false);
+  // A preset label the other window changed is not an effective change.
+  const relabelled = structuredClone(base); relabelled.appearance.preset = 'custom';
+  assert.equal(keepsSavedChanges(base, relabelled, rebaseSettings(base, mine, relabelled)), true);
+});
+
+test('an automatic location draft yields to a manual city saved elsewhere, as the server guard would (#287)', () => {
+  const base = defaultSettings();
+  const automatic = structuredClone(base);
+  automatic.locationSource = 'device';
+  automatic.location = { name: 'Device area', latitude: 12.3, longitude: 45.7, timezone: 'auto' };
+  automatic.appearance.brightness = 0.3;
+  const manual = structuredClone(base);
+  manual.locationSource = 'manual';
+  manual.location = { name: 'Other editor city', latitude: 40, longitude: 50, timezone: 'UTC' };
+  const kept = rebaseSettingsReport(base, automatic, manual).settings;
+  assert.equal(kept.location.name, 'Device area', 'without the guard a pending location stays one draft selection');
+  const yielded = rebaseSettingsReport(base, automatic, manual, { automaticLocation: true }).settings;
+  assert.deepEqual(yielded.location, manual.location); assert.equal(yielded.locationSource, 'manual');
+  assert.equal(yielded.appearance.brightness, 0.3, 'other edits stay');
+  assert.equal(keepsSavedChanges(base, manual, yielded), true, 'so a refused Save can retry by itself');
+  assert.deepEqual(settingsChanges(manual, yielded, true), { appearance: { brightness: 0.3 } });
+  // A device location chosen explicitly (no guard) is a real conflict with the other window's city.
+  assert.equal(keepsSavedChanges(base, manual, kept), false);
+});
+
+test('a merged list over its limit blocks Save with the reason (#288)', () => {
+  const base = defaultSettings();
+  const event = (index: number) => ({ id: `${String(index).padStart(8, '0')}-0000-4000-8000-000000000000`, title: `Synthetic ${index}`, date: '2026-12-25', repeatsYearly: false });
+  const saved = structuredClone(base), local = structuredClone(base);
+  saved.widgetData.countdowns = Array.from({ length: 11 }, (_, index) => event(index));
+  local.widgetData.countdowns = [event(20), event(21)];
+  assert.equal(listLimitProblem(saved), null); assert.equal(listLimitProblem(local), null, 'each tab is within the limit');
+  const merged = rebaseSettings(base, local, saved);
+  assert.equal(merged.widgetData.countdowns.length, 13);
+  assert.equal(listLimitProblem(merged), 'Up to 12 dates · remove one to save');
+  merged.widgetData.countdowns.pop();
+  assert.equal(listLimitProblem(merged), null, 'removing one unblocks Save');
+  const city = (index: number) => ({ id: `${String(index).padStart(8, '0')}-0000-4000-8000-000000000000`, label: `City ${index}`, timezone: 'Asia/Tokyo', latitude: 35.68, longitude: 139.69 });
+  const clocks = structuredClone(base); clocks.widgetData.worldClocks = [1, 2, 3, 4, 5].map(city);
+  assert.equal(listLimitProblem(clocks), 'Up to 4 cities · remove one to save');
+  const styles = structuredClone(base);
+  styles.savedPresets = Array.from({ length: 13 }, (_, index) => ({ id: `style-${index}`, name: `Style ${index}`, visual: getVisual(base) }));
+  assert.equal(listLimitProblem(styles), 'Up to 12 saved styles · remove one to save');
 });
 
 test('effective equality ignores object order, preset labels and disabled widget positions', () => {

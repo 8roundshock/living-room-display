@@ -11,7 +11,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
-import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, fitWidgetFamily } from '../../src/shared/widgets.ts';
+import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, fitWidgetFamily, widgetSizes, widgetSpan } from '../../src/shared/widgets.ts';
 import { addToGrid } from '../../src/client/make-room.ts';
 
 /** The picker's grouped order (#154): WIDGET_CATEGORIES order, catalog order inside each group. */
@@ -124,11 +124,29 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await page.keyboard.press('ArrowLeft'); assert.equal(await focused(), order[0]);
     const groupBoundary = groups[0].items.length;
     await button(order[groupBoundary - 1]).focus(); await page.keyboard.press('ArrowDown'); assert.equal(await focused(), order[groupBoundary], 'Down crosses into the next group');
-    await page.keyboard.press('Tab'); assert.equal(await focused(), order[groupBoundary + 1], 'Tab keeps its normal order: every widget stays a tab stop');
+    // #348: the rail is one roving tab stop, the previewed widget; Tab leaves it for the sizes.
+    const tabStops = () => page.locator('.catalog-item').evaluateAll(items => items.filter(item => item.tabIndex === 0).map(item => item.getAttribute('aria-label')));
+    assert.deepEqual(await tabStops(), [order[groupBoundary]], 'only the previewed widget takes Tab');
+    const nextName = WIDGET_CATALOG[GROUPED[groupBoundary]].name;
+    await page.keyboard.press('Tab'); assert.equal(await focused(), `${nextName} ${widgetSizes(GROUPED[groupBoundary])[0]}`, 'Tab goes from the rail to the size buttons');
+    await page.keyboard.press('Shift+Tab'); assert.equal(await focused(), order[groupBoundary], 'Shift+Tab returns to the previewed widget');
+    assert.equal(await page.locator('.catalog-item[data-widget-id]').count(), 0, 'rail items carry no data-widget-id (#310)');
+    // From Close, Add is at most five Tab presses away: Close → rail → sizes → Add (a widget not yet
+    // on the display, so Add is enabled).
+    await button(itemName(firstUnadded, defaults)).click();
+    await button('Close widget picker').focus();
+    const path = [];
+    const named = () => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent.trim());
+    for (let press = 0; press < 5 && !path.at(-1)?.startsWith('Add '); press++) { await page.keyboard.press('Tab'); path.push(await named()); }
+    assert.equal(path.at(-1), `Add ${WIDGET_CATALOG[firstUnadded].name}`, `Add is reached in at most five Tab presses: ${path.join(' → ')}`);
+    assert.equal(path[0], itemName(firstUnadded, defaults), 'the first Tab enters the rail at the previewed widget');
+    await button(itemName('preview', defaults)).click();
+    assert.equal(await page.locator('.picker-detail-heading p').innerText(), 'A dim picture of your screen from just before the display starts', 'plain Last screen description (#281)');
     await button(itemName('calendar', defaults)).click(); assert.equal(await button('Calendar medium').getAttribute('aria-pressed'), 'true', 'Calendar is added at medium');
     assert.match(await page.locator('.picker-detail').innerText(), /This month at a glance/);
-    await page.locator('.picker-sample [data-widget-id], .picker-sample .ambient-calendar').first().waitFor();
-    assert.equal(await page.locator('.picker-sample .calendar-grid td[aria-current="date"]').innerText(), '18', 'the sample uses the sample clock');
+    await page.locator('.picker-sample .ambient-calendar').first().waitFor();
+    assert.equal(await page.locator('.picker-sample .calendar-grid td[aria-current="date"]').innerText(), '18', 'the sample marks today (#361)');
+    assert.equal(await page.locator('.sample-footprint').innerText(), '4 × 2 cells of 12 × 8', 'the footprint names the family and the board');
     await button('Preview Countdown').click();
     assert.match(await page.locator('.picker-sample').innerText(), /12\s*days\s*Weekend trip/);
     await button('Preview Note').click();
@@ -141,7 +159,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     assert.match(await page.locator('.picker-footnote').innerText(), /Sample content/);
     if (capture) images.push({ name: 'picker-1440', bytes: await page.screenshot() });
     await page.keyboard.press('Escape');
-    checks.push('Grouped picker on the #435 default board: Time / Weather & sky / Personal / Pictures in catalog order with labelled groups, Calendar named as on your display, Weather and no Rain (#74), opens on the first unadded widget in that order (#154), item names carry the added state and Add names match their visible text (#241), Up/Down/Home/End (clamped, across groups) preview the focused widget, Tab order kept, synthetic samples for the three widgets, free-size caption only for Reminders, qualified when a column has no room (“make Clock smaller”, #73, #238)');
+    checks.push('Grouped picker on the #435 default board: Time / Weather & sky / Personal / Pictures in catalog order with labelled groups, Calendar named as on your display, Weather and no Rain (#74), opens on the first unadded widget in that order (#154), item names carry the added state and Add names match their visible text (#241), Up/Down/Home/End (clamped, across groups) preview the focused widget, the rail is one roving tab stop and Add is within five Tab presses of Close (#348), no data-widget-id on rail items (#310), plain Last screen description (#281), synthetic samples for the three widgets with today marked and the footprint named (#361), free-size caption only for Reminders, qualified when a column has no room (“make Clock smaller”, #73, #238)');
 
     // 1a. The #435 default board fills the grid: an add says so once and offers Fine and one reduction,
     // each applied as one draft edit that Cancel restores.
@@ -201,17 +219,17 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await cancel();
     assert.equal(await canvas('countdown').count(), 0, 'Cancel restores the board');
     assert.equal(await page.getByRole('combobox', { name: 'Grid density' }).inputValue(), 'balanced', 'Cancel restores the grid');
-    // "Try Small" when only the small family fits.
+    // "Try small" when only the small family fits.
     await reset(settings => { qaBoard(settings); settings.widgetGrid = fitWidgetFamily(settings.widgetGrid, 'preview', 'small', settings.widgets); });
     await open();
     await tab('Widgets'); await button('Add widget').click();
     await button('Preview Note').click(); await button('Note medium').click(); await button('Add Note').click(); await page.clock.runFor(100);
     assert.equal(await page.getByText('No room for Note at medium size.', { exact: true }).count(), 1);
-    await button('Try Small').click(); await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    await button('Try small').click(); await page.locator('.widget-picker').waitFor({ state: 'detached' });
     assert.equal(await canvas('note').getAttribute('data-widget-size'), 'small');
     await cancel();
     await reset(); await open();
-    checks.push('“No room” (#238): shown once in one live region, cleared by another size or closing the picker; “Switch the grid to Fine” and “Try Small” add the widget as one draft edit that Cancel restores');
+    checks.push('“No room” (#238): shown once in one live region, cleared by another size or closing the picker; “Switch the grid to Fine” and “Try small” add the widget as one draft edit that Cancel restores');
 
     // 2. Calendar: add, week start, Cancel, Save, reload.
     await addFromPicker('Calendar');
@@ -502,6 +520,59 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
     }
     checks.push('Grouped picker fits 1280×720, 1280×600, 1024×600, 760×600, 390×700, 390×480 and 640×300 with visible group labels, rail text of at least 11 px on desktop widths (#195), the initial selection in view (#154) and reachable Add actions');
+
+    // 9. #361: readable samples. At 1280×720 every family's smallest text line is at least 9 px, the
+    // sample fills the stage width (at most 100 px per cell) and the footprint names its span. The
+    // date and time are this computer's, on any day: here the page clock is 5 March 2027, 10:20.
+    // On the catalog board, where Calendar is not yet on the display (#435).
+    await reset();
+    const catalogWidgets = catalogBoardDefaults().widgets;
+    await context?.close();
+    context = await browser.newContext({ viewport: { width: 1280, height: 720 }, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion: 'reduce' });
+    page = await context.newPage();
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    await page.addInitScript(() => Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'prompt' }) } }));
+    await page.clock.install({ time: new Date('2027-03-05T15:20:00Z') });
+    await page.goto(base + '/editor'); await button('Edit layout').waitFor(); await page.clock.runFor(500);
+    await tab('Widgets'); await button('Add widget').click();
+    const smallest = [];
+    for (const id of ACTIVE_WIDGET_IDS) {
+      await button(itemName(id, catalogWidgets)).click();
+      for (const size of widgetSizes(id)) {
+        await button(`${WIDGET_CATALOG[id].name} ${size}`).click(); await page.clock.runFor(50);
+        await page.locator(`.picker-sample .ambient-${id}.widget-size-${size}`).waitFor();
+        const measured = await page.evaluate(() => {
+          const sample = document.querySelector('.picker-sample'), stage = document.querySelector('.sample-area').getBoundingClientRect(), box = sample.getBoundingClientRect();
+          let min = Infinity, text = '';
+          const walker = document.createTreeWalker(sample, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (!node.textContent.trim()) continue;
+            const style = getComputedStyle(node.parentElement);
+            if (style.visibility === 'hidden' || Number(style.opacity) === 0) continue;
+            const range = document.createRange(); range.selectNodeContents(node);
+            for (const rect of range.getClientRects()) if (rect.width > 0 && rect.height > 0 && rect.height < min) { min = rect.height; text = node.textContent.trim(); }
+          }
+          const ratio = Number.parseFloat(sample.style.getPropertyValue('--sample-ratio')), columns = Number.parseFloat(sample.style.getPropertyValue('--sample-columns'));
+          return { min: min === Infinity ? null : Math.round(min * 10) / 10, text, width: box.width, fill: Math.min(stage.width, stage.height * ratio, columns * 100), footprint: document.querySelector('.sample-footprint').textContent };
+        });
+        const span = widgetSpan(id, size), label = `${id} ${size}`;
+        if (measured.min !== null) { assert.ok(measured.min >= 9, `${label}: smallest sample text ${measured.min} px ("${measured.text}")`); smallest.push(measured.min); }
+        assert.ok(Math.abs(measured.width - measured.fill) <= 1, `${label} fills its area (width, height or the 2× cap): ${JSON.stringify(measured)}`);
+        assert.ok(measured.width <= span.columns * 100 + 1, `${label} is at most twice the canvas scale: ${JSON.stringify(measured)}`);
+        assert.equal(measured.footprint, `${span.columns} × ${span.rows} cells of 12 × 8`, label);
+      }
+    }
+    assert.ok(Math.min(...smallest) >= 9);
+    await button(itemName('clock', catalogWidgets)).click(); await button('Clock small').click();
+    assert.match(await page.locator('.picker-sample').innerText(), /10:20/, 'the Clock sample shows this computer\'s time');
+    await button('Preview Calendar').click();
+    assert.equal(await page.locator('.picker-sample .calendar-grid td[aria-current="date"]').innerText(), '5', 'the Calendar sample marks today');
+    assert.match(await page.locator('.picker-sample').innerText(), /March/);
+    await button('Preview Countdown').click(); await button('Countdown small').click();
+    assert.match(await page.locator('.picker-sample').innerText(), /12\s*days\s*Weekend trip\s*Wed, Mar 17/, 'Countdown counts from today');
+    if (capture) images.push({ name: 'picker-samples-1280x720', bytes: await page.screenshot() });
+    checks.push(`#361 at 1280×720 every picker family's smallest sample text line is at least 9 px (smallest ${Math.min(...smallest)} px), each sample fills the stage width at no more than twice the canvas scale and names its footprint; on 5 March 2027 the Clock shows 10:20, the Calendar marks the 5th and Countdown still reads 12 days`);
     assert.deepEqual(errors, []);
     return { checks, images };
   } finally {
