@@ -193,9 +193,8 @@ rebuild or re-pin any acceptance bundle. Future acceptance needs a separately
 identified current candidate/build, independent artifact and binding review,
 fresh current-backend/served-asset proof, and physical-user readiness.
 
-The user earlier confirmed the normal interactive desktop on 2026-10-18, but
-subsequently left the PC. Physical acceptance is on hold until fresh readiness
-from the owner. Unattended source work must not launch native/screensaver/receiver or
+Physical acceptance is on hold until the owner's fresh go-ahead. Unattended
+source work must not launch native/screensaver/receiver or
 fullscreen tests, inventory windows, probe the desktop/cursor/input, capture,
 synthesize input, terminate a renderer, or change the installed backend/assets/data,
 Windows registry/idle settings or TV. No access to the installed HTTP service is
@@ -207,8 +206,8 @@ failure tests remain coordinated gates. See the
 Native `/c` cold startup was blocked by automatic approval review before action
 and remains unverified. Fresh-account installation, movie/game inhibition,
 secure lock/resume and across-room readability are unverified. This coordinator's
-last directly verified activation state kept app idle off and the original blank saver,
-1200-second timeout and security 0. The newer marker read does not recheck that
+last directly verified activation state kept app idle off and the original
+screensaver settings unchanged. The newer marker read does not recheck that
 state or authorize activation. This is a current-PC source installation, not a
 public/signed release. TV control, live app preview and multi-monitor selection
 remain future work; the host targets one primary display.

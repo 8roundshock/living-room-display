@@ -62,13 +62,13 @@ and restoration remain separate Windows acceptance checks.
 
 ## Local checkout and agent startup
 
-On the owner's Windows PC:
+On Windows, from the checkout (replace `<checkout>` with its actual path):
 
 ```powershell
-Set-Location 'C:\Users\8roun\source\repos\living-room-display'
+Set-Location '<checkout>'
 git status --short --branch
 git remote -v
-codex -C 'C:\Users\8roun\source\repos\living-room-display'
+codex -C '<checkout>'
 ```
 
 Checked 2026-10-18: `Get-Command codex` resolves a CLI and `codex --version`
@@ -130,7 +130,9 @@ git config --local credential.https://github.com.username
 ```
 
 Expected origin: `https://github.com/8roundshock/living-room-display.git`.
-Expected Git identity: `Vladimir Dolgopolov <vladimir@dolgopolov.ca>`; GitHub login
+Commit with the owner's GitHub noreply email
+(`78567380+8roundshock@users.noreply.github.com`, owner decision on
+[#441](https://github.com/8roundshock/living-room-display/issues/441)); GitHub login
 and credential username: `8roundshock`. Configure identity only in this repo if
 needed. See the [PR workflow](agent-workflow.md).
 
