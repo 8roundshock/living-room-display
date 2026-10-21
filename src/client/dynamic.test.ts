@@ -175,6 +175,36 @@ test('air: estimate and last-known readings, off and unavailable; UV from upcomi
   assert.equal(find(signal({ airQuality: air({ start, updatedAt: NOW - 20 * MINUTE, uv: index => index === 9 ? 7 : 2 }) }), 'air:uv')?.detail, 'Peaks 7 at 12 PM');
 });
 
+test('#511 exhausted saved sources stay visible instead of becoming an empty Dynamic widget', () => {
+  const only = (source: 'weather' | 'alerts' | 'air') => ({ weather: false, alerts: false, air: false, sky: false, personal: false, [source]: true });
+  const oldAir = NOW - 30 * HOUR, oldWeather = NOW - 8 * 24 * HOUR;
+  const providers = {
+    airQuality: { ...air({ status: 'stale', updatedAt: oldAir, start: oldAir - oldAir % HOUR }), error: 'Synthetic air outage' },
+    weather: { ...weather({ status: 'stale', now: oldWeather, updatedAt: oldWeather, today: '2026-10-12' }), error: 'Synthetic forecast outage' },
+    alerts: { ...alerts([], 'stale'), checkedAt: iso(NOW - 16 * MINUTE), error: 'Synthetic alerts outage' },
+  };
+  for (const [source, statusText] of [['air', 'Saved air reading'], ['weather', 'Saved forecast'], ['alerts', 'Saved alerts']] as const) {
+    const signals = signal({ ...providers, sources: only(source) });
+    assert.equal(all(signals).length, 0, `${source}: no usable current card remains`);
+    assert.equal(chooseDynamic(signals, 0, null, 2).mode, 'unavailable', `${source}: stay visible with the saved-source status`);
+    const status = signals.statuses.find(item => item.source === source)!;
+    assert.ok(status.text.startsWith(statusText));
+    assert.equal(status.caution, true);
+    assert.equal(status.degraded, true);
+
+    const withSky = signal({ ...providers, sources: { ...only(source), sky: true } });
+    const usable = chooseDynamic(withSky, 0, null, 2);
+    assert.equal(usable.mode, 'rotate', `${source}: an independent usable source still renders`);
+    assert.equal(usable.lead?.source, 'sky');
+  }
+  const combined = signal({ ...providers, sources: { weather: true, alerts: true, air: true, sky: false, personal: false } });
+  assert.equal(chooseDynamic(combined, 0, null, 2).mode, 'unavailable', 'multiple exhausted saved sources also stay visible');
+
+  const quiet = signal({ alerts: alerts([]), sources: only('alerts') });
+  assert.equal(quiet.degraded, false, 'a successful empty alert list is not a failed source');
+  assert.equal(chooseDynamic(quiet, 0, null, 2).mode, 'empty', 'confirmed quiet alerts may still hide');
+});
+
 test('reminders: due within an hour or overdue by up to two is focus, later today and long overdue are notable, at most three', () => {
   const tier = (due: number | null, completed = false) => all(signal({ reminders: [reminder(due, 'Synthetic', completed)] })).find(card => card.source === 'personal')?.kind ?? 'none';
   assert.equal(tier(NOW + 60 * MINUTE), 'reminder-soon');

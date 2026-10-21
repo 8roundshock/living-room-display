@@ -193,7 +193,7 @@ function alertCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   }
   const alive = alerts.alerts.filter(alert => !alertEnded(alert, ctx.now));
   const checked = alerts.checkedAt ? ctx.time(Date.parse(alerts.checkedAt)) : null;
-  if (alerts.status === 'stale' && checked) statuses.push({ source: 'alerts', text: `Saved alerts${NBSP}·${NBSP}checked ${checked}`, caution: true, smallRank: null, degraded: false });
+  if (alerts.status === 'stale' && checked) statuses.push({ source: 'alerts', text: `Saved alerts${NBSP}·${NBSP}checked ${checked}`, caution: true, smallRank: null, degraded: true });
   // A confirmed empty list is said only where there is room, and never while the list is saved.
   if (alerts.status === 'fresh' && !alive.length && checked) statuses.push({ source: 'alerts', text: `No alerts${NBSP}·${NBSP}checked ${checked}`, caution: false, smallRank: null, largeOnly: true, degraded: false });
   const age = alertsAge(alerts, ctx);
@@ -251,7 +251,7 @@ function weatherCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
     statuses.push({ source: 'weather', text: 'Weather unavailable', caution: true, smallRank: 2, degraded: true });
     return [];
   }
-  if (weather.status === 'stale') statuses.push({ source: 'weather', text: 'Saved forecast', caution: true, smallRank: 3, degraded: false });
+  if (weather.status === 'stale') statuses.push({ source: 'weather', text: 'Saved forecast', caution: true, smallRank: 3, degraded: true });
   const { now, tz } = ctx, thresholds = ctx.metric ? DYNAMIC_THRESHOLDS.metric : DYNAMIC_THRESHOLDS.imperial;
   const age: DynamicPhrase = {
     text: `${disconnected ? `Offline${NBSP}·${NBSP}` : weather.status === 'stale' ? `Saved forecast${NBSP}·${NBSP}` : ''}${ageText(weather.updatedAt, now)}`,
@@ -436,7 +436,7 @@ function airCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   const { now } = ctx, zone = weatherTimeZone(air.location.timezone), scale = air.scale ?? ctx.input.airScale;
   const view = airReadingView({ updatedAt: air.updatedAt, hourly: air.hourly }, air.current, now, zone, clockFormat);
   if (view.kind === 'lastKnown') {
-    statuses.push({ source: 'air', text: 'Saved air reading', caution: true, smallRank: null, degraded: false });
+    statuses.push({ source: 'air', text: 'Saved air reading', caution: true, smallRank: null, degraded: true });
     return [];
   }
   const segments = airAgeSegments({ age: ageText(air.updatedAt, now), stale: air.status === 'stale', reading: true, disconnected });

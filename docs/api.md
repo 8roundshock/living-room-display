@@ -591,6 +591,11 @@ card at all Dynamic is `unavailable` when a source is degraded (shown, saying wh
 | Reminders not readable | "Reminders unavailable" |
 | Location timezone `auto` | This computer's zone, as Sun & moon |
 
+When no usable card remains but a source has saved data that cannot be refreshed, Dynamic
+stays visible with that saved-source status instead of hiding as empty (#511). This includes
+an exhausted forecast, stale empty alerts and a last-known air reading. A successful empty
+alert list may still hide, and usable cards from other sources continue to render.
+
 Status phrases sit in the footer and leave out the lead card's own source; the small family
 shows one, in this order: Offline, Weather alerts unavailable, Weather unavailable, Saved
 forecast, Air quality unavailable, Reminders unavailable. Forecast cards say "Forecast
