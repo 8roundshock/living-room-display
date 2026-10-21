@@ -8,13 +8,23 @@ combined verification. Publication does not establish installation or activation
 
 The first pushed checkpoint, `018aef7`, passed Application checks and all Windows
 installer jobs. Its browser job was still running when this entry was written.
-The next source checkpoint adds #511 and #512 below; the earlier full browser
+The next source checkpoint adds #511, #512 and #513 below; the earlier full browser
 aggregate remains evidence for its explicitly recorded revision, not these additions.
 
 Dynamic now keeps exhausted stale forecast, alert and air sources visible as
 unavailable (#511), while usable alternate sources and freshly empty sources keep
 their existing behavior. The regression failed before the correction; the isolated
 fix and its initial integration both passed build and all 482 unit tests.
+
+### Home display-card follow-up (#513)
+
+Home's card and header now share one display-window controller, with the editor using
+the same controller logic. Opening from the card exposes Show/Close in the header;
+repeated clicks focus the existing document without reloading, and closing resets both
+links. The focused browser regression failed before the fix and passed afterward.
+The screen and display-controls suites passed (8 and 6 groups), alongside build and
+481 unit tests in its isolated branch. This records local source checks with synthetic
+data, not installation.
 
 ### Home Note follow-up (#512)
 

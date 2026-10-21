@@ -14,6 +14,7 @@ import { defaultSettings } from '../../src/shared/defaults.ts';
 import { WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { checkHomeNoteSync } from './lib/home-note-sync.mjs';
+import { checkHomeDisplayCard } from './lib/home-display-card.mjs';
 
 /** 6:42 PM on Tuesday, October 20, 2026 in Toronto. */
 const NOW = Date.parse('2026-10-20T22:42:00.000Z');
@@ -444,6 +445,8 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     // One display window, and the display's keys.
     for (const extra of context.pages()) if (extra !== page) await extra.close();
     await home(page);
+    await checkHomeDisplayCard(page);
+    checks.push('#513 Home card and header share Show/Close state, focus the same display without navigation, and both return to Open display after closing');
     const popup = context.waitForEvent('page');
     await page.locator('.studio-header a.open-display').click();
     const window = await popup; await window.locator('.display-page').waitFor();

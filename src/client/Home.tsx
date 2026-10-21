@@ -12,7 +12,7 @@ import { HOME_WIDGETS, longDay, namesList, relativeDay, todayGroups, type Coming
 import { HomeSheet, type SheetKind } from './HomeSheets';
 import { ReminderRow, makeRoomLink, type HomeContext, type StatusMessage } from './HomeParts';
 import { Icon, type IconName } from './icons';
-import { DISPLAY_WINDOW } from './route';
+import { DISPLAY_WINDOW, useDisplayWindow, type DisplayWindowControls } from './displayWindow';
 import { StudioHeader } from './StudioHeader';
 import { doneAgo, spokenTimeLeft, timeOfDay, timerDigits, timerEnds, timerPhrase } from './timer';
 import { usePrefersReducedMotion } from './useMotion';
@@ -65,6 +65,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
   reload: () => Promise<void>;
 }) {
   const settings = state.settings;
+  const displayControls = useDisplayWindow();
   const minute = useMinute();
   const timers = state.timers ?? [];
   const boundary = useTimerBoundaries(timers);
@@ -164,7 +165,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
 
   return (
     <div className="studio home-page" data-animation={reducedMotion ? 'off' : settings.appearance.animation}>
-      <StudioHeader page="home" />
+      <StudioHeader page="home" displayControls={displayControls} />
       <main className="home-main">
         <div className="home-columns">
           <div className="home-primary">
@@ -191,7 +192,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
             </div>
             <TodayList context={context} groups={groups} timers={homeTimers} warning={warning} onDismissWarning={() => setDismissedWarning(state.timersWarning ?? null)} openAll={open('allReminders')} />
           </div>
-          <DisplayCard state={state} showing={showing} waiting={waiting} waitingWithoutRoom={waitingWithoutRoom} disconnected={disconnected} />
+          <DisplayCard state={state} showing={showing} waiting={waiting} waitingWithoutRoom={waitingWithoutRoom} disconnected={disconnected} displayControls={displayControls} />
         </div>
         <div className={`home-status ${status && !sheet ? 'shown' : ''} ${status?.tone === 'error' ? 'error' : ''}`} role="status" aria-live="polite">
           {status && !sheet && renderStatus(status)}
@@ -233,7 +234,7 @@ function WorldClockChips({ cities, minute, clockFormat }: { cities: Settings['wi
   );
 }
 
-function DisplayCard({ state, showing, waiting, waitingWithoutRoom, disconnected }: { state: AppState; showing: WidgetId[]; waiting: WidgetId[]; waitingWithoutRoom: WidgetId[]; disconnected: boolean }) {
+function DisplayCard({ state, showing, waiting, waitingWithoutRoom, disconnected, displayControls }: { state: AppState; showing: WidgetId[]; waiting: WidgetId[]; waitingWithoutRoom: WidgetId[]; disconnected: boolean; displayControls: DisplayWindowControls }) {
   return (
     <aside className="home-card" aria-labelledby="home-card-title">
       <h2 id="home-card-title" className="home-card-title">On your display</h2>
@@ -246,7 +247,7 @@ function DisplayCard({ state, showing, waiting, waitingWithoutRoom, disconnected
       <p className="home-card-caption">Your saved arrangement. The display moves it around to protect the screen.</p>
       <div className="home-card-actions">
         <a className="button primary home-edit-display" href="/editor"><Icon name="edit" size={16} />Edit display</a>
-        <a className="button home-open-display" href="/display" target={DISPLAY_WINDOW}><Icon name="monitor" size={16} />Open display</a>
+        <a className="button home-open-display" href="/display" target={DISPLAY_WINDOW} onClick={displayControls.openDisplay}><Icon name="monitor" size={16} />{displayControls.displayOpen ? 'Show display' : 'Open display'}</a>
       </div>
       <p className="home-card-showing">{showing.length ? <>Showing: {namesList([...showing].sort((a, b) => WIDGET_CATALOG[a].name.localeCompare(WIDGET_CATALOG[b].name, 'en')))}.</> : 'Nothing is shown on your display.'}</p>
       {waiting.length > 0 && (
