@@ -426,7 +426,9 @@ and the windows: the display shows a finished timer for 10 minutes and Home list
 - `POST /api/timers` `{ label?, durationMs }` returns 201 with the timer, 409 "Up to 6 timers at
   once. Dismiss or cancel one first." or 400 "Choose a time between 1 second and 24 hours.".
   Undo re-creates a cancelled timer with its `endsAt` (from an hour ago up to 24 hours ahead) or
-  its `remainingMs` (at most `durationMs`), never both.
+  its `remainingMs` (1 ms to 24 hours), never both. Added time can take a paused remainder
+  beyond its original `durationMs`; Undo keeps both that remainder and the starting length
+  used by Restart (#487).
 - `PATCH /api/timers/:id` takes exactly one of `paused` (true keeps what is left; false resumes
   with `endsAt = now + remaining`), `addMs` (1 s to 1 hour; on a finished timer it runs again
   for that long) or `restart: true` (`endsAt = now + durationMs`). A request that changes

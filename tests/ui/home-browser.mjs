@@ -166,6 +166,15 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     await row.getByRole('button', { name: 'Add 1 minute to 10 min timer' }).click();
     for (let attempt = 0; (await timers())[0].remainingMs === pausedLeft; attempt++) { assert.ok(attempt < 50, '+1 min saves'); await page.waitForTimeout(20); }
     assert.equal((await timers())[0].remainingMs, pausedLeft + 60_000, '+1 min adds to what is left');
+    // #487: cancel while still paused, after +1 min grew the remainder past the starting length.
+    await row.getByRole('button', { name: 'Cancel 10 min timer' }).click();
+    await row.waitFor({ state: 'detached' });
+    assert.deepEqual(await timers(), []);
+    await status(page).getByRole('button', { name: 'Undo' }).click();
+    await row.getByRole('button', { name: 'Resume 10 min timer' }).waitFor();
+    const pausedRestored = (await timers())[0];
+    assert.deepEqual([pausedRestored.durationMs, pausedRestored.remainingMs, pausedRestored.endsAt],
+      [600_000, pausedLeft + 60_000, null], 'Undo keeps the extended paused remainder and original restart length');
     await row.getByRole('button', { name: 'Resume 10 min timer' }).click(); await page.getByRole('button', { name: 'Pause 10 min timer' }).waitFor();
     const runningEnd = (await timers())[0].endsAt;
     await row.getByRole('button', { name: 'Cancel 10 min timer' }).click();
@@ -179,7 +188,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     assert.equal(restored[0].endsAt, runningEnd, 'with the same end');
     await advance(context, 6_000);
     await slotSays(display, /^1[01] min left · ends/);
-    checks.push('Timer: the 10 min preset starts in 2 activations, focus moves to the new row and the display Clock shows "10 min left · ends 6:52 PM" within 6 s; Pause shows "· paused" on the display, +1 min adds to what is left, Cancel and Undo restore the same end');
+    checks.push('Timer: the 10 min preset starts in 2 activations, focus moves to the new row and the display Clock shows "10 min left · ends 6:52 PM" within 6 s; Pause shows "· paused" on the display, +1 min adds to what is left, Cancel and Undo restore the extended paused remainder and the same running end');
 
     // Done: the status tone, the row, the announcement and the title; the display hides it after 10 minutes.
     await fetch(`${base}/api/timers/${restored[0].id}`, { method: 'DELETE' }); await advance(context, 6_000);

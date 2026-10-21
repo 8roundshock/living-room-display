@@ -198,7 +198,7 @@ export const worldClockCreateSchema = worldClock.omit({ id: true }).extend({
 const timerLabel = z.string().trim().max(TIMER_LABEL_MAX, `Use at most ${TIMER_LABEL_MAX} characters`);
 const timerLength = z.number().int(TIMER_MESSAGES.range).min(TIMER_MIN_MS, TIMER_MESSAGES.range).max(TIMER_MAX_MS, TIMER_MESSAGES.range);
 const timerInstant = z.iso.datetime({ offset: true }).transform(value => new Date(value).toISOString());
-/** The persisted form: exactly one of `endsAt` and `remainingMs`, a paused remainder within the length. */
+/** The persisted form: exactly one of `endsAt` and `remainingMs`, a paused remainder up to 24 hours. */
 export const timerSchema = z.object({
   id: z.uuid(), label: timerLabel, durationMs: timerLength,
   endsAt: z.iso.datetime().nullable(), remainingMs: z.number().int().min(1).max(TIMER_MAX_MS).nullable(),
@@ -222,7 +222,8 @@ export function timerCreateSchema(now: number) {
       const at = Date.parse(value.endsAt);
       if (at < now - KEEP_DONE_MS || at > now + TIMER_MAX_MS) context.addIssue({ code: 'custom', path: ['endsAt'], message: 'Use an end within the last hour or the next 24 hours' });
     }
-    if (value.remainingMs !== undefined && value.remainingMs > value.durationMs) context.addIssue({ code: 'custom', path: ['remainingMs'], message: 'Use a remainder no longer than the timer' });
+    // +1 min can extend a paused timer beyond its original restart length (#487). The field's
+    // 24-hour bound matches timerSchema and TimerStore.patch, so Undo can restore that valid state.
   });
 }
 /** PATCH: exactly one action. */

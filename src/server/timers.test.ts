@@ -99,6 +99,32 @@ test('#438 timers start, pause, resume, add time, restart and delete through the
   } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
+test('#487 Undo restores a paused timer extended beyond its starting length', async () => {
+  const directory = await folder(), clock = { now: START };
+  const app = await application(directory, clock);
+  try {
+    const created = await app.send('POST', '/api/timers', { durationMs: 300_000, label: 'Synthetic tea' });
+    assert.equal(created.status, 201);
+    clock.now += 30_000;
+    assert.equal((await app.send('PATCH', `/api/timers/${created.body.id}`, { paused: true })).status, 200);
+    const extended = await app.send('PATCH', `/api/timers/${created.body.id}`, { addMs: 60_000 });
+    assert.equal(extended.status, 200);
+    assert.equal(extended.body.remainingMs, 330_000);
+    assert.equal((await app.send('DELETE', `/api/timers/${created.body.id}`)).status, 204);
+    // This is the exact Undo shape TimerRow.cancel sends, retaining the original restart length.
+    const restored = await app.send('POST', '/api/timers', {
+      label: extended.body.label, durationMs: extended.body.durationMs, remainingMs: extended.body.remainingMs,
+    });
+    assert.equal(restored.status, 201, 'Undo must accept every paused remainder produced by +1 min');
+    assert.deepEqual([restored.body.label, restored.body.durationMs, restored.body.remainingMs, restored.body.endsAt],
+      ['Synthetic tea', 300_000, 330_000, null]);
+    const reopened = await TimerStore.open(directory, clock.now);
+    assert.deepEqual(reopened.list(clock.now), [restored.body], 'the restored timer survives reopening unchanged');
+    const restarted = await app.send('PATCH', `/api/timers/${restored.body.id}`, { restart: true });
+    assert.equal(restarted.body.endsAt, new Date(clock.now + 300_000).toISOString(), 'Restart still uses the original duration');
+  } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
 test('#438 timer creation validates its length, label, limit and the Undo fields', async () => {
   const directory = await folder(), clock = { now: START };
   const app = await application(directory, clock);
@@ -112,7 +138,8 @@ test('#438 timer creation validates its length, label, limit and the Undo fields
     assert.equal((await app.send('POST', '/api/timers', { durationMs: 60_000, endsAt: new Date(START + 1000).toISOString(), remainingMs: 1000 })).status, 400);
     assert.equal((await app.send('POST', '/api/timers', { durationMs: 60_000, endsAt: new Date(START - KEEP_DONE_MS - 1).toISOString() })).status, 400);
     assert.equal((await app.send('POST', '/api/timers', { durationMs: 60_000, endsAt: new Date(START + 86_400_001).toISOString() })).status, 400);
-    assert.equal((await app.send('POST', '/api/timers', { durationMs: 60_000, remainingMs: 60_001 })).status, 400);
+    for (const remainingMs of [0, -1, 86_400_001, 1500.5])
+      assert.equal((await app.send('POST', '/api/timers', { durationMs: 60_000, remainingMs })).status, 400);
     const response = await fetch(`${app.url}/api/timers`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{"durationMs":60000}' });
     assert.equal(response.status, 415);
 
