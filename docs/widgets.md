@@ -329,7 +329,7 @@ in [Dynamic signals](api.md#dynamic-signals).
 
 - Its five sources (Weather, Official weather alerts, Air & UV, Sun & moon, Reminders &
   countdowns) are `widgetData.dynamic`, all on by default and omitted at rest then; at
-  least one stays on. An enabled Dynamic is a documented 3446400 rollback exception
+  least one stays on. An enabled Dynamic is a documented d66832b rollback exception
   ([install](install.md#additive-data-and-rollback-compatibility-84)) until #130.
 - Rotation uses wall-clock slots (`rotationSlot`, `DYNAMIC_ROTATE_MS` = 60 s) with no timer
   of its own: the display's one-second tick re-renders, and the editor canvas and picker

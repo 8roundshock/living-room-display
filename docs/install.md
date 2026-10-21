@@ -460,14 +460,14 @@ No automatic geometry downgrade is provided.
 
 ### Additive data and rollback compatibility (#84)
 
-The previous installed release is `d66832b` (the merge of PR #491). Its reader
+The frozen rollback reader is `d66832b` (the merge of PR #491). Its reader
 rejects unknown keys, so an additive key written to disk would make `state.json`,
 and after the next save `state.backup.json`, unreadable by it. `d66832b` reads
 default data with Fixed brightness and Dynamic off with all sources on, including
 every choice that was
 an exception for `bedca44` (custom Reminders sizes, Native colours, Animation Off or
-Lively, and the new widgets of #78 with their content), so `app.previous` remains a
-working rollback after the next update unless a choice in the table below was used. This build still omits a few additive values from files and
+Lively, and the new widgets of #78 with their content), so that revision remains a
+data-compatible rollback target unless a choice in the table below was used. This build still omits a few additive values from files and
 exports while they equal the value the current reader restores (see
 [API](api.md#persistence-and-recovery)). `d66832b` reads `accentMode`, `animation`
 and pre-Dynamic `widgetData` either way, so their omission is optional. It was kept to avoid a
@@ -507,10 +507,12 @@ newer data directory and restore the matching pre-upgrade data copy.
 
 <a id="rolling-back-the-installed-3446400"></a>
 
-#### Rolling back the installed d66832b
+#### Historical rollback pair for d66832b
 
-The installed `d66832b` keeps `3446400` (the merge of PR #286) as `app.previous`
-until the next update, and this table stays valid while it does. `3446400` was
+At the `d66832b` installation, `3446400` (the merge of PR #286) was recorded as
+`app.previous`. This is historical evidence; recheck the current installation and
+recovery pair before using it. [STATUS.md](../STATUS.md) records the latest marker
+observation, which does not establish the current backup directory contents. `3446400` was
 installed on 2026-10-19 over `4cb7dc1` (the merge of PR #327), which had replaced
 `3fee844` the same day.
 

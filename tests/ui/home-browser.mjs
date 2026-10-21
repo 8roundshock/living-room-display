@@ -451,16 +451,21 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     assert.equal(extraPage, false, 'Open display from Edit display reuses the window Home opened');
     assert.equal(context.pages().length, 2);
     await window.locator('.display-page').waitFor();
-    await window.keyboard.press('Escape'); await window.waitForURL(`${base}/`);
-    await window.locator('.home-page').waitFor();
-    await window.goto(base + '/display'); await window.locator('.display-page').waitFor();
-    await window.keyboard.press('e'); await window.waitForURL(`${base}/editor`);
-    await window.goto(base + '/display'); await window.locator('.display-page').waitFor();
-    await window.mouse.move(200, 200);
-    const labels = await window.getByRole('navigation', { name: 'Display controls' }).locator('.display-control').allInnerTexts();
+    const closed = window.waitForEvent('close'); await window.keyboard.press('Escape'); await closed;
+    assert.equal(context.pages().length, 1, 'the script-opened display closes back to its opener');
+    // Directly opened displays navigate in their own tab (#438), while #436 owns popup closure.
+    const direct = await context.newPage();
+    await direct.goto(base + '/display'); await direct.locator('.display-page').waitFor();
+    await direct.keyboard.press('Escape'); await direct.waitForURL(`${base}/`);
+    await direct.locator('.home-page').waitFor();
+    await direct.goto(base + '/display'); await direct.locator('.display-page').waitFor();
+    await direct.keyboard.press('e'); await direct.waitForURL(`${base}/editor`);
+    await direct.goto(base + '/display'); await direct.locator('.display-page').waitFor();
+    await direct.mouse.move(200, 200);
+    const labels = await direct.getByRole('navigation', { name: 'Display controls' }).locator('.display-control').allInnerTexts();
     assert.deepEqual(labels.map(label => label.trim()), ['Fullscreen · F', 'Home · Esc', 'Edit display · E']);
-    await window.close();
-    checks.push('Open display from Home and then from Edit display leaves one display window (still-display); on the display Esc goes to / and E to /editor, with the controls Fullscreen · F, Home · Esc and Edit display · E');
+    await direct.close();
+    checks.push('Open display from Home and then from Edit display leaves one display window (still-display), closed by Esc; on a direct display Esc goes to / and E to /editor, with the controls Fullscreen · F, Home · Esc and Edit display · E');
 
     // Keyboard-only: Tab from the header reaches the actions; a sheet traps focus and Esc returns it.
     await home(page);

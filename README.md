@@ -7,7 +7,7 @@ short note, air quality, sun and moon times, and an optional dim screen preview.
 All modules are optional. Drag and resize widgets on a snapping grid, choose
 adaptive sizes and outline/digital/analog clocks, or add a dim local photo.
 
-**Current state: local display/editor and current-PC source install verified.**
+**Current state: local Home/display/editor integration under verification.**
 The selected approach is a custom local web dashboard plus a Windows helper.
 The React UI, local API, persistence, weather and RAM-only snapshot handoff are implemented.
 Device-area weather with a Toronto fallback, editable presets and reminders,
@@ -16,10 +16,10 @@ uses the [recorded HIG-inspired design choices](docs/design.md). The display stu
 puts one focused Style, Widgets, Weather or Reminders inspector beside its live
 preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
-The owner's PC runs a verified install of `main` with the new widgets and the first
-polish wave; later changes on `main` wait for the next coordinated install, and native
-screensaver acceptance and wider release compatibility checks remain.
-[STATUS.md](STATUS.md) records the installed revision and what is still pending.
+The latest read-only installation marker observation identifies `f85be29`, installed
+2026-10-21 at 04:50:32 UTC. This local feature integration has not been installed
+or published. Native screensaver acceptance and wider release compatibility checks
+remain. [STATUS.md](STATUS.md) separates source checks from installation evidence.
 
 This is the independent
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)

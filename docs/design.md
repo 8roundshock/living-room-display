@@ -191,13 +191,13 @@ pixel at a time and at most 30 steps a second, with nothing animating in between
 the display draws a frame only when something moves (#248's principle, which replaced
 a continuous drift that drew about 120 frames a second). **Swap places** (opt-in) also
 trades cells every interval with a glide. The screen never fades out or rests on
-black: the board keeps moving at every level and under reduced motion, in one step
-each interval. A screen that asks for reduced motion shows Off whatever is saved; on
+black. Animation level does not control the board's float. Float gently off or
+reduced motion replaces continuous float with one step each interval. A screen that asks for reduced motion shows Off whatever is saved; on
 the TV that is Windows Settings → Accessibility → Visual effects → Animation effects.
 
-- **Off** keeps widgets still: no value, digit, glyph or entrance motion. The editor
+- **Off** keeps widget content animations still: no value, digit, glyph or entrance motion. The editor
   keeps its existing brief transitions.
-- **Subtle** moves only when something changes and never loops. When the display first
+- **Subtle** animates content only when something changes and has no glyph loops. When the display first
   loads (Float gently on, swap glide above 0) each widget settles from about 1.5% of
   the display height above over 700 ms, 70 ms apart in reading order (capped at six
   steps).
@@ -211,7 +211,7 @@ the TV that is Windows Settings → Accessibility → Visual effects → Animati
   with its words, rather than fading its colour.
 - **Lively** adds richer reveal choreography (forecast days, rain and air-quality bars
   rising from their baseline, weather metrics, reminder rows fading in place) and
-  the only loops, all on the current-weather glyph: sun rays
+  content loops on the current-weather glyph: sun rays
   turn once in 90 s while the core dims to 82% every 8 s, the moon rocks ±4°, clouds
   drift ±2.5%, rain and drizzle drops fall and fade every 1.8 s, snow turns once in
   40 s, and the storm bolt dims once for 1.2 s every 9 s. Partly cloudy's partial rays
@@ -224,8 +224,10 @@ animate; opacity never rises above its resting value, so nothing flashes or
 brightens; offsets come from above or the left, or stay inside the glyph box, and
 never exceed the widget padding, so content stays inside its rectangle and the fit
 scale never changes; numbers are never tweened through invented values; stale,
-offline or unavailable weather keeps its glyph still; age and attribution never
-move; every animation lasts at most 2 s except the Lively glyph loops. Editor
+offline or unavailable weather keeps its glyph still; age and attribution have no
+independent animation. The whole widget still participates in the shared float.
+Content transitions last at most 2 s except the Lively glyph loops; board float and
+optional swap glides follow the separate movement contract (#436, #481). Editor
 micro-interactions (sliding tab indicator, disclosures, picker, drag pickup and
 settle, new-widget drop-in, Save bar entrance) last at most 240 ms and never bounce.
 
@@ -233,8 +235,8 @@ settle, new-widget drop-in, Save bar entrance) last at most 240 ms and never bou
 | --- | --- |
 | [Apple Motion](https://developer.apple.com/design/human-interface-guidelines/motion) | Purposeful, brief, optional motion that never blocks; respect Reduce Motion. |
 | [WidgetKit: Animating data updates](https://developer.apple.com/documentation/widgetkit/animating-data-updates-in-widgets-and-live-activities) | Animate a change rather than continuously; each widget animation is capped at 2 s. |
-| [Apple Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Always-On widgets do not animate; here only Lively's one hero glyph loops, and only when chosen. |
-| [WCAG 2.2.2 Pause, Stop, Hide](https://www.w3.org/WAI/WCAG22/Understanding/pause-stop-hide.html) | Perpetual motion is opt-in (Lively); Off or the system setting stops it. |
+| [Apple Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Always-On widgets do not animate; here Lively adds a chosen hero-glyph loop, while the owner-requested shared float is independent of content animation. |
+| [WCAG 2.2.2 Pause, Stop, Hide](https://www.w3.org/WAI/WCAG22/Understanding/pause-stop-hide.html) | Lively glyph loops are opt-in and Off stops them. Float gently is separately enabled by default; turning it off or requesting reduced motion replaces continuous float with periodic steps. |
 | [WCAG 2.3.3 Animation from Interactions](https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html) | `prefers-reduced-motion: reduce` turns all animation off on that screen. |
 | [WCAG 2.3.1 Three Flashes](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html) | No flashes: opacity only dims, and the bolt pulse is one 1.2 s dip in 9 s. |
 | [Chrome compositing](https://developer.chrome.com/docs/lighthouse/performance/non-composited-animations) | Transform and opacity on HTML boxes run on the compositor. Chromium does not composite them on SVG roots (verified in Edge 155), so glyph loops move HTML wrappers. |

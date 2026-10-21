@@ -191,10 +191,11 @@ that would happen before your screensaver starts.
 
 ## One display window
 
-**Open display** in the editor opens one display window and brings it back to the
+**Open display** on Home or Edit display opens one display window and brings it back to the
 front when you click it again (it then reads **Show display**, with **Close
-display** beside it). Press **Esc** on that display to go back to the editor and
-close it. If you open the display another way, older display tabs close themselves
+display** beside it). Press **Esc** on that display to return to its opener and
+close it, even if that opener has since closed. A directly opened display uses
+**Esc** for Home and **E** for Edit display. If you open the display another way, older display tabs close themselves
 or ask you to close them.
 
 ## Animation levels

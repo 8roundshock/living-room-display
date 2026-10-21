@@ -642,7 +642,7 @@ the app restarted, so they were cleared." until the next timer write. `state.jso
 touched. Labels are private user content: never logged or put in diagnostics.
 
 Timers are never in `state.json`, `state.backup.json` or exports, and an import leaves them
-alone. The previous installed release (`3446400`) never opens `timers.json`, so timers need no
+alone. The frozen previous-release reader (`d66832b`) never opens `timers.json`, so timers need no
 rollback exception; its reader rejects every in-file shape (a top-level `timers` key,
 `widgetData.timers`, a `timer` widget id), which `src/server/rollback.test.ts` proves along with
 a "Home day-to-day use" scenario whose state files and export it accepts. Setup's copy of the
