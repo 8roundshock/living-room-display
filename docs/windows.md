@@ -28,7 +28,9 @@ this helper is still pending (see [verification](#verification)).
 The helper observes input to dismiss an active display, not to decide when to
 activate. One fixed input baseline is captured before startup and never replaced;
 genuine input cancels startup or dismisses the display, including its first
-second. A per-user mutex prevents simultaneous ambient sessions. Session lock,
+second. Manual `--display` launches follow the same rule
+([#502](https://github.com/8roundshock/living-room-display/issues/502) tracks
+checking that against the launching click). A per-user mutex prevents simultaneous ambient sessions. Session lock,
 logoff and disconnect close the display. A named event scoped to the installed
 helper path lets `Stop` ask it to exit normally.
 Session observation starts before cold server startup and handshake. A cancelled
@@ -61,7 +63,9 @@ or cancellation hide the surface and end its exact browser job. No timer repairs
 cursor state or forces focus. HTTP cleanup follows hiding/disposal of the surface.
 Readiness matches the owned Edge window by the display document's title
 (`Still · Display`), so a change to that title in `src/client/App.tsx` must also
-change `windows/NativeDisplay.cs`.
+change `windows/NativeDisplay.cs` until
+[#444](https://github.com/8roundshock/living-room-display/issues/444) removes that
+dependency.
 
 Cross-queue WM_ACTIVATE is asynchronous: its next-window hint can be NULL/stale.
 One fresh actual foreground sample controls immediate closure; the mandatory poll
