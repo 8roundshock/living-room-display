@@ -1,13 +1,34 @@
 # Project status
 
-## Home Note follow-up (#512)
+## Published continuation
+
+The integration is published in [PR #507](https://github.com/8roundshock/living-room-display/pull/507)
+for #447. It remains a draft while native startup and daily-use fixes receive
+combined verification. Publication does not establish installation or activation.
+
+The first pushed checkpoint, `018aef7`, passed Application checks and all Windows
+installer jobs. Its browser job was still running when this entry was written.
+The next source checkpoint adds #511 and #512 below; the earlier full browser
+aggregate remains evidence for its explicitly recorded revision, not these additions.
+
+Dynamic now keeps exhausted stale forecast, alert and air sources visible as
+unavailable (#511), while usable alternate sources and freshly empty sources keep
+their existing behavior. The regression failed before the correction; the isolated
+fix and its initial integration both passed build and all 482 unit tests.
+
+### Home Note follow-up (#512)
 
 A clean open Note now follows another page's saved text without creating a false
 draft or unload prompt. Genuine local typing remains intact, Discard uses the latest
 saved text, and typing back to saved clears the retained draft. The focused browser
 regression failed on the prior source and passed with this fix; the earlier Note
 Save/Discard/Clear-Undo sweep and the full Home browser suite also passed. Build and
-all 481 unit tests passed with Node 24. This records local source verification only.
+all 481 unit tests passed with Node 24 in its isolated branch. This records local
+source verification only; combined checks are recorded at the final source freeze.
+
+The combined #511/#512 source checkpoint `b4ce352` passed `npm run build` and
+all **482 unit tests**, with no skipped tests. Its detailed local logs are
+`.local/publication-note-build.log` and `.local/publication-note-unit.log`.
 
 Reviewed locally on 2026-10-21 for [#447](https://github.com/8roundshock/living-room-display/issues/447).
 This report records the verified `codex/wave3-local` source checkpoint before
@@ -65,7 +86,7 @@ choices and enabled Dynamic remain documented exceptions. See
 [rollback compatibility](docs/install.md#additive-data-and-rollback-compatibility-84).
 Timers use their own sidecar and do not enter settings exports.
 
-## Verification in this continuation
+## Completed local verification checkpoint
 
 Final browser code/test checkpoint: `d58980a3697181e0e5c85aa73369912153a70f1f`.
 Product implementation is unchanged since `58431495ee879c6f5d63f740d29cfcc1d16e6ea7`.
@@ -174,7 +195,8 @@ and `.local/reminders-anchor-focused-conservative-final.log`.
 The final helper retains full text ranges: glyphs can extend beyond a short line
 box. A RAM-only pixel probe distinguished a harmless 2 px range/padding discrepancy
 from the actual cell-escape regression; it did not justify trimming any bounds.
-The unpublished issue draft is `.local/anchor-clamp-issue-draft.md`.
+The originally local issue draft is now tracked publicly as
+[#510](https://github.com/8roundshock/living-room-display/issues/510).
 Original failure logs remain beside the successful runs.
 
 No fresh GitHub CI run was triggered during that local verification phase.
