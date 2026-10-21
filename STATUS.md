@@ -1,16 +1,15 @@
 # Project status
 
 Reviewed locally on 2026-10-21 for [#447](https://github.com/8roundshock/living-room-display/issues/447).
-This report describes the local `codex/wave3-local` integration branch. It has not
-been pushed, merged remotely, installed, or activated.
+This report records the verified `codex/wave3-local` source checkpoint before
+publication. Current-head CI, reviewed merging and installation are coordinated
+through #447; the local evidence below does not by itself establish those outcomes.
 
 ## Source and installation are separate
 
 The source starting point was clean `main` at
-`f85be2902f4f670b395175349f97f095ec276892`. Claude's last handoff reported the
-current-main installation complete and work stopped at its usage budget, with the
-five feature PRs below still awaiting integration. The Claude session was idle;
-this continuation did not resume it.
+`f85be2902f4f670b395175349f97f095ec276892`, with the five feature PRs below
+awaiting integration.
 
 A read-only observation of the installation marker identified `f85be29`, clean,
 installed at **2026-10-21 04:50:32 UTC**. That is marker evidence only: this session
@@ -18,11 +17,9 @@ did not validate the running server, served assets, native cursor, capture,
 screensaver activation, or the current recovery directory. No installed files,
 private data, screensaver settings or power settings were changed.
 
-The original checkout and all 29 existing worktrees were inspected read-only.
-Two worktrees had uncommitted entries: `.worktrees/widget-authoring` (2) and
-`.worktrees/widget-framework` (1). They were preserved. Development used independent
-full clones; the integration clone has no shared Git object hardlinks or shared
-build output with the original checkout.
+The original checkout and existing uncommitted work were preserved. Development
+used independent full clones, without shared Git object hardlinks or build output
+with the original checkout.
 
 ## Integrated locally
 
@@ -42,8 +39,9 @@ Integration also includes immediate float-offset clamping after content grows
 motion contracts (#481), composition-anchor float clamping, paused extended-timer
 Undo (#487), resolved Note draft
 cache handling, bounded alert error bodies, and stable widget-fit readiness in
-browser tests (#431). New issue write-ups remain local drafts; no issues or PRs
-were published or updated during this continuation.
+browser tests (#431). The completed local verification phase kept new issue
+write-ups as local drafts. Publication and follow-up tracking are now coordinated
+through #447 under the owner's continued-work authorization.
 
 Home and Edit display share Open/Show/Close display controls. A script-opened
 display closes back to its opener. A directly opened display uses Esc for Home and
@@ -170,7 +168,8 @@ from the actual cell-escape regression; it did not justify trimming any bounds.
 The unpublished issue draft is `.local/anchor-clamp-issue-draft.md`.
 Original failure logs remain beside the successful runs.
 
-No fresh GitHub CI run was triggered. Local checks do not replace Windows/Linux CI,
+No fresh GitHub CI run was triggered during that local verification phase.
+Publication requires current-head checks. Local checks do not replace Windows/Linux CI,
 Setup smoke testing, native acceptance or physical TV comfort.
 
 ## Remaining acceptance and follow-ups
@@ -184,7 +183,9 @@ Setup smoke testing, native acceptance or physical TV comfort.
 - Dynamic follow-ups #485 (dates on secondary rows) and #486 (coverage) remain.
   Wider provider coverage and other product follow-ups retain their existing scope.
 - Distribution, signing, clean Windows 11 / fresh standard-account checks and any
-  future install remain separate work. This task authorizes local development only.
+  future install remain separately coordinated work. The owner has authorized
+  reviewed merging and activation; native acceptance and installation evidence must
+  be recorded by the responsible Windows workstream.
 
 ## Earlier evidence
 

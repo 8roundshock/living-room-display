@@ -17,9 +17,10 @@ puts one focused Style, Widgets, Weather or Reminders inspector beside its live
 preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
 The latest read-only installation marker observation identifies `f85be29`, installed
-2026-10-21 at 04:50:32 UTC. This local feature integration has not been installed
-or published. Native screensaver acceptance and wider release compatibility checks
-remain. [STATUS.md](STATUS.md) separates source checks from installation evidence.
+2026-10-21 at 04:50:32 UTC. The verified source checkpoint is being
+published for review and CI; that is separate from an installed candidate or a
+release package. Native screensaver acceptance and wider release compatibility
+checks remain. [STATUS.md](STATUS.md) separates source checks from installation evidence.
 
 This is the independent
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)
