@@ -75,7 +75,9 @@ and a fresh ownership check permit alpha1 reveal; alpha0, color-key transparency
 and WS_EX_TRANSPARENT are not used. Loading that never becomes ready closes after
 15 seconds. Renderer loss, foreign/NULL foreground, visible cursor, input, stop
 or cancellation hide the surface and end its exact browser job. No timer repairs
-cursor state or forces focus. HTTP cleanup follows hiding/disposal of the surface.
+cursor state or forces focus. UI-thread cleanup hides/disposes the surface before
+waiting for HTTP cleanup. Monitor cancellation may already have started HTTP clear;
+disposal ends the owned browser job before waiting for that clear (#505).
 Readiness matches the owned Edge window by the display document's title
 (`Still · Display`), so a change to that title in `src/client/App.tsx` must also
 change `windows/NativeDisplay.cs` until

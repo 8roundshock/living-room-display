@@ -5,7 +5,8 @@ using System.Threading;
 using System.Windows.Forms;
 
 // The input window owns its own queue, never an external Edge parent/owner.
-// Active callbacks perform only bounded native reads; HTTP clear follows hiding.
+// Active UI callbacks perform only bounded native reads; UI cleanup hides the surface first.
+// Monitor cancellation may already be clearing HTTP state; Dispose ends the browser before waiting.
 internal sealed class AmbientSession : ApplicationContext
 {
     private readonly SurfacePolicy policy;
