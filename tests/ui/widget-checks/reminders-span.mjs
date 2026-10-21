@@ -260,7 +260,7 @@ export async function sweep({ page, viewport, state, base, now }) {
           try {
             const forced = await boardGeometry(page, '.ambient [data-widget-id]');
             for (let index = 0; index < forced.length; index++) for (const edge of ['left', 'top', 'right', 'bottom']) assert.ok(Math.abs(forced[index].cell[edge] - before[index].cell[edge]) <= 0.5, 'forcing float leaves authored cell geometry unchanged');
-            assert.throws(() => assertBoardGeometry(forced, 4, 'excessive-offset negative control'), /paint stays inside its padded cell/);
+            assert.throws(() => assertBoardGeometry(forced, 4, 'excessive-offset negative control'), /content bounds stay inside its authored cell/);
           } finally { await tall.evaluate((element, value) => { if (value) element.style.setProperty('--float-y', value); else element.style.removeProperty('--float-y'); }, previous); }
           assertBoardGeometry(await boardGeometry(page, '.ambient [data-widget-id]'), 4, `${label} restored`);
         }
