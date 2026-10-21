@@ -176,11 +176,13 @@ motion or the Off animation level.
   **Reset layout…** sits beside Reset appearance… (#435). It asks inline with focus on
   **Keep my layout**; **Reset** puts the [default board](widgets.md#default-board-435) on
   the canvas as an ordinary draft change (Calendar, Clock, Weather and Forecast large, Last
-  screen and Reminders medium, on Balanced; every other widget off) and says “Layout reset.
-  Save changes to keep it.”, or “Layout is back to the default.” when nothing changed.
-  Widget options (clock style, Hide when empty, snapshot opacity), widget content, the
-  appearance, saved styles, the photo and reminders stay; Cancel restores the saved board.
-  Either answer returns focus to **Reset layout…**. The
+  screen and Reminders medium, on Balanced; every other widget off). Its status line follows
+  the same rule: “Layout reset. Save changes to keep it.” only while the reset is unsaved,
+  cleared by Cancel or a further layout change, and “Layout reset and saved.” after Save;
+  “Layout is back to the default.” when the saved board already is the default. Widget
+  options (clock style, Hide when empty, snapshot opacity), widget content, the appearance,
+  saved styles, the photo and reminders stay; Cancel restores the saved board. Either answer
+  returns focus to **Reset layout…**. The
   [studio harness](../tests/ui/studio-browser.mjs) covers these flows.
 - The authored canvas never relocates; outside Edit layout it shows value and glyph
   motion for the draft Animation level, and during Edit layout widgets stay still. **Edit layout** reveals a faint

@@ -1486,10 +1486,15 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.clock.runFor(600);
     assert.deepEqual(await canvasBoard(), expectedCanvas, 'the canvas shows the default board');
     assert.equal(await page.locator('.preview-surface [data-widget-id="note"]').count(), 0, 'Note leaves the display');
+    await watchResetStatus();
     await cancel(page).click();
     await saved(page);
     assert.deepEqual(current(), layoutBefore, 'Cancel restores the saved board');
     assert.equal(await page.locator('.preview-surface [data-widget-id="note"]').count(), 1);
+    // #300 for Reset layout: Cancel clears its status in the update that removes the Save bar (#499).
+    assert.equal(await layoutStatus.innerText(), '', 'Cancel clears the layout reset status');
+    assert.equal(await staleResetStatus(), 0, 'Cancel clears the layout reset status in the update that removes the Save bar');
+    assert.equal(await focusedName(), 'Reset layout…', 'Cancel returns focus to Reset layout…');
     const openReset = async () => {
       if (!(await resetLayoutButton.isVisible())) {
         await tab(page, 'Style');
@@ -1501,8 +1506,12 @@ export async function runStudioQa({ playwright, edge } = {}) {
     // Reset and Save: the default board is saved; options and content stay.
     await openReset();
     await page.locator('.studio-savebar').waitFor();
+    await layoutStatus.filter({ hasText: 'Layout reset. Save changes to keep it.' }).waitFor();
+    await watchResetStatus();
     await save(page).click();
     await saved(page);
+    await layoutStatus.filter({ hasText: 'Layout reset and saved.' }).waitFor();
+    assert.equal(await staleResetStatus(), 0, 'Save replaces the layout reset status in the update that removes the Save bar (#499)');
     const afterLayout = app.store.snapshot().settings;
     assert.deepEqual(afterLayout.widgets, defaults.widgets, "the default board's widgets are saved");
     for (const id of Object.keys(spans)) assert.deepEqual(afterLayout.widgetGrid.placements[id], defaults.widgetGrid.placements[id], `${id} is saved in its default place`);
@@ -1516,6 +1525,15 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await openReset();
     await layoutStatus.filter({ hasText: 'Layout is back to the default.' }).waitFor();
     assert.equal(await page.locator('.studio-savebar').count(), 0, 'no Save bar for an unchanged board');
+    // #474: an unrelated unsaved edit does not make an unchanged board ask to be saved.
+    await page.getByRole('slider', { name: 'Brightness', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    await page.locator('.studio-savebar').waitFor();
+    await openReset();
+    await layoutStatus.filter({ hasText: 'Layout is back to the default.' }).waitFor();
+    assert.equal(await page.locator('.studio-savebar').count(), 1, 'the Brightness edit keeps its Save bar');
+    await cancel(page).click();
+    await saved(page);
     // Both reset buttons share one row at 1280 × 720 and wrap without overflow at 390 px.
     const resetRow = () => page.locator('.reset-actions').evaluate((row) => {
       const [a, b] = row.querySelectorAll('button'), ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
@@ -1532,7 +1550,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await reset435.getByRole('button', { name: 'Keep my layout', exact: true }).click();
     await context.close();
     checks.push(
-      '#435 Reset layout… beside Reset appearance asks inline with focus on Keep my layout; Keep changes nothing; Reset shows the default board on the canvas as a draft (all six widgets in their default cells, Last screen as its placeholder, Note gone) that Cancel restores; Save keeps the clock style, Hide when empty, snapshot opacity and the note; an unchanged board says “Layout is back to the default.” with no Save bar; focus returns to Reset layout…; the row fits 1280 × 720 and 390 px',
+      '#435 Reset layout… beside Reset appearance asks inline with focus on Keep my layout; Keep changes nothing; Reset shows the default board on the canvas as a draft (all six widgets in their default cells, Last screen as its placeholder, Note gone) that Cancel restores, clearing its status line (#300, #499); Save reads “Layout reset and saved.” and keeps the clock style, Hide when empty, snapshot opacity and the note; an unchanged board says “Layout is back to the default.” with no Save bar, and still does beside an unrelated unsaved edit (#474); focus returns to Reset layout…; the row fits 1280 × 720 and 390 px',
     );
     assert.deepEqual(errors, []);
     return { checks, images };
