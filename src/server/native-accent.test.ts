@@ -42,7 +42,7 @@ test('a fresh store defaults to native; pre-#75 data reads as color', async () =
       assert.equal((await app.send('GET', '/api/state')).settings.appearance.accentMode, 'native');
       const file = await readJson(fresh, 'state.json');
       assert.equal(file.settings.appearance.accentMode, 'native');
-      // The previous release (3446400) knows accentMode, so fresh Native data is not a rollback exception.
+      // The previous release (d66832b) knows accentMode, so fresh Native data is not a rollback exception.
       assertPreviousReaderAccepts('data', file, 'fresh Native state.json');
     } finally { await app.close(); }
     await preNative(legacy);
@@ -93,7 +93,7 @@ test('rollback: a user who never picks Native stays readable by the previous rel
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-test('rollback: Native saved anywhere is readable by the previous release (3446400 knows accentMode)', async () => {
+test('rollback: Native saved anywhere is readable by the previous release (d66832b knows accentMode)', async () => {
   const scenarios: [string, (settings: Settings) => Settings, (file: any) => unknown][] = [
     ['Native in settings', settings => ({ ...settings, appearance: { ...settings.appearance, accentMode: 'native', preset: 'custom' } }), file => file.settings.appearance.accentMode],
     ['a built-in style', settings => applyBuiltinPreset(settings, 'night'), file => file.settings.appearance.accentMode],

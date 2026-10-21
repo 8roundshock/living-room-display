@@ -95,7 +95,7 @@ test('enabling the widgets and editing their content goes through the API with m
   } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
-test('rollback: default data, enabled widgets and their content stay readable by the previous release (3446400 knows them)', async () => {
+test('rollback: default data, enabled widgets and their content stay readable by the previous release (d66832b knows them)', async () => {
   // Every folder starts from an existing user's colour-accent defaults, so each choice is a change the files must carry.
   const fresh = await mkdtemp(join(tmpdir(), 'lrd-catalog-time-fresh-'));
   try {
@@ -192,7 +192,7 @@ test('Calendar, Countdown and Note sit beside a custom Reminders span and keep a
       assert.ok(ids.some(id => next.placements[id].column !== previous.placements[id].column || next.placements[id].row !== previous.placements[id].row), `cycle ${cycle} relocates the full board through a reflection`);
       previous = next;
     }
-    // Rollback: the previous release (3446400) reads the span (#73) and the new widgets (#78) at every step.
+    // Rollback: the previous release (d66832b) reads the span (#73) and the new widgets (#78) at every step.
     assertPreviousReaderAccepts('data', await stateFile(directory), 'a span beside the three widgets');
     assertPreviousReaderAccepts('import', await (await app.send('GET', '/api/export')).json(), 'the export of a span beside the three widgets');
     assert.equal((await app.send('PATCH', '/api/settings', { widgets: { calendar: false, countdown: false, note: false } })).status, 200);
