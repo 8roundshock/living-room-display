@@ -50,12 +50,18 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     await page.route('**/api/**', route => route.abort());
     await page.goto(base + '/editor');
     await page.getByText("Can't reach the display server on this computer.", { exact: true }).waitFor();
-    assert.match(await page.locator('.fallback-hint').innerText(), /may still be starting, or it may have stopped/);
+    assert.equal(await page.locator('.fallback-hint').innerText(), 'The editor needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.');
     await noRawFetch(page, 'loading page');
     if (capture) images.push({ name: 'offline-loading', bytes: await page.screenshot() });
+    // #438: Home's loading page names Home.
+    await page.goto(base + '/');
+    await page.getByText("Can't reach the display server on this computer.", { exact: true }).waitFor();
+    assert.equal(await page.locator('.fallback-hint').innerText(), 'Home needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.');
+    await page.goto(base + '/editor'); await page.getByText("Can't reach the display server on this computer.", { exact: true }).waitFor();
     await page.unroute('**/api/**');
     await button(page, 'Try again').click(); await button(page, 'Edit layout').waitFor();
-    checks.push('loading page: clear explanation without the raw browser error, Try again recovers');
+    assert.equal(await page.title(), 'Still · Edit display');
+    checks.push('loading page: clear explanation without the raw browser error (Edit display\'s and Home\'s own hints), Try again recovers; the title is "Still · Edit display"');
 
     // 2. Save while the server is unreachable keeps the draft, shows the clear message, hands the
     //    Retry offer to the next failed poll and clears everything once a poll succeeds.

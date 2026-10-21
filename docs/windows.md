@@ -18,7 +18,9 @@ this helper is still pending (see [verification](#verification)).
 
 - `/s` or `--display`: ensure the installed backend is owned/ready, capture one
   last-desktop thumbnail if enabled, then launch the isolated Edge kiosk.
-- `/c` (also `/c:<handle>`) or no argument: start the backend and open `/editor`.
+- `/c` (also `/c:<handle>`) or no argument: start the backend and open `/editor`
+  (Edit display); `--editor` (the Start menu, desktop and Setup-finish shortcuts)
+  opens Home (`/`, #438).
 - `/p <parent HWND>` (also `/p:<handle>`): draw a dim, capture-free placeholder
   in the Windows screensaver preview; no Edge/backend is launched.
 - `--check`: verify Edge can be found; no display or capture.

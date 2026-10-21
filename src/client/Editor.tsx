@@ -73,6 +73,7 @@ import {
 import { CitySearch } from './CitySearch';
 import { useAirQualityPreview } from './airPreview';
 import {
+  ACTIVE_WIDGET_IDS,
   GRID_DENSITIES,
   WIDGET_CATALOG,
   WIDGET_IDS,
@@ -90,12 +91,12 @@ import {
 import { GridEditor, type LayoutEdit } from './GridEditor';
 import { WidgetInspector, useHeldPointers, widgetListOrder, type InspectorReveal } from './WidgetInspector';
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
-import { DISPLAY_WINDOW } from './displayWindow';
 import { MotionSentence, ScreenSettings } from './ScreenSettings';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel, reminderFormPending } from './RemindersPanel';
 import { FirstRunCard, readFirstRunDismissed, rememberFirstRunDismissed } from './FirstRunCard';
+import { StudioHeader } from './StudioHeader';
 import {
   addToGrid,
   applyRoomFix,
@@ -159,6 +160,21 @@ function forecastMatches(settings: Settings, weather: WeatherState): boolean {
     weather.location.longitude === settings.location.longitude &&
     weather.units.temperature === (settings.units === 'imperial' ? '°F' : '°C')
   );
+}
+
+/**
+ * Home's deep links into Edit display (#438), read once when the editor opens: `?add=<id>` opens the
+ * Widgets tab with Edit layout on and the picker on that widget (with its Make-room fixes), for an active
+ * widget that is off; `?focus=city` opens the Weather tab with City focused.
+ */
+function readDeepLink(widgets: Settings['widgets']): { add: WidgetId | null; focusCity: boolean; present: boolean } {
+  const params = new URLSearchParams(window.location.search);
+  const add = params.get('add') as WidgetId | null;
+  return {
+    add: add && (ACTIVE_WIDGET_IDS as readonly string[]).includes(add) && !widgets[add] ? add : null,
+    focusCity: params.get('focus') === 'city',
+    present: params.has('add') || params.has('focus'),
+  };
 }
 
 /** Focus the first selector that matches a connected, enabled, rendered element. */
@@ -277,7 +293,8 @@ export function Editor({
   const savedRevision = useRef(revisionOf(state.settings));
   // Guards Save against a second activation before the first one's state has rendered (#289).
   const savingNow = useRef(false);
-  const [section, setSection] = useState<Section>('Widgets');
+  const [deepLink] = useState(() => readDeepLink(state.settings.widgets));
+  const [section, setSection] = useState<Section>(deepLink.add ? 'Widgets' : deepLink.focusCity ? 'Weather' : 'Widgets');
   const [saving, setSaving] = useState(false),
     [error, setErrorState] = useState<ActionError | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
@@ -301,8 +318,8 @@ export function Editor({
   useHeldPointers();
   // #339: what the Widgets tab scrolls into view after a selection, an add or a no-room explanation.
   const [reveal, setReveal] = useState<InspectorReveal | null>(null);
-  const [layoutEditing, setLayoutEditing] = useState(false),
-    [pickerOpen, setPickerOpen] = useState(false);
+  const [layoutEditing, setLayoutEditing] = useState(deepLink.add !== null),
+    [pickerOpen, setPickerOpen] = useState(deepLink.add !== null);
   const [gridPreview, setGridPreview] = useState<WidgetGrid | null>(null);
   // Layout messages (#311, #341): one visible copy (the canvas line, or the Widgets list for an edit
   // made there) and one always-mounted announcer. Each message gets a new id, so the announcer
@@ -322,7 +339,11 @@ export function Editor({
   const resizeExploration = useRef<{ id: WidgetId; base: WidgetGrid; widgets: Settings['widgets']; result: WidgetGrid } | null>(null);
   // #252: the first-run location card; dismissal lives in this browser only.
   const [firstRunDismissed, setFirstRunDismissed] = useState(readFirstRunDismissed);
-  const [cityFocus, setCityFocus] = useState(0);
+  const [cityFocus, setCityFocus] = useState(deepLink.focusCity ? 1 : 0);
+  useEffect(() => {
+    // A deep link is read once; the address goes back to /editor so a reload starts plainly.
+    if (deepLink.present) window.history.replaceState(null, '', '/editor');
+  }, [deepLink]);
   useEffect(() => {
     // "Choose a city" opens the Weather tab with the city field focused.
     if (cityFocus) document.getElementById('city-search')?.focus();
@@ -361,39 +382,8 @@ export function Editor({
   // the entrance once after a level is chosen.
   const editorReducedMotion = usePrefersReducedMotion();
   const [revealNonce, setRevealNonce] = useState(0);
-  // #436 one display window: the editor opens, reuses and focuses the window named still-display, and
-  // keeps its handle so it can say "Show display" and offer Close display while that window is open.
-  const displayWindow = useRef<Window | null>(null);
-  // Style › Motion has been opened: its Screen part then reads the Windows power status once (#436).
+  // Style > Motion reads the Windows power status only once opened (#436).
   const [motionOpened, setMotionOpened] = useState(false);
-  const [displayOpen, setDisplayOpen] = useState(false);
-  useEffect(() => {
-    const check = () => setDisplayOpen(displayWindow.current !== null && displayWindow.current.closed === false);
-    const timer = window.setInterval(check, 1000);
-    window.addEventListener('focus', check);
-    return () => { window.clearInterval(timer); window.removeEventListener('focus', check); };
-  }, []);
-  function openDisplay(event: React.MouseEvent<HTMLAnchorElement>) {
-    // Modified clicks (a new tab on purpose) keep the browser's own behaviour.
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    const current = displayWindow.current;
-    const win = current?.closed === false ? current : window.open('', DISPLAY_WINDOW);
-    if (!win) { window.location.assign('/display'); return; }
-    try {
-      if (win.location.pathname !== '/display') win.location.replace('/display');
-    } catch {
-      win.location.replace('/display');
-    }
-    win.focus();
-    displayWindow.current = win;
-    setDisplayOpen(true);
-  }
-  function closeDisplay() {
-    displayWindow.current?.close();
-    displayWindow.current = null;
-    setDisplayOpen(false);
-  }
   const photoChanged =
     photoDraft !== undefined &&
     (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
@@ -1454,41 +1444,7 @@ export function Editor({
       className="studio"
       data-animation={editorReducedMotion ? 'off' : draft.appearance.animation}
     >
-      <header className="studio-header">
-        <a className="brand" href="/editor" aria-label="Still editor">
-          <span className="brand-symbol">
-            <Icon name="moon" size={20} />
-          </span>
-          still
-        </a>
-        {/* #360: Open display is an ordinary browser tab; say where the full-screen display is. */}
-        <div className="open-display-group">
-          <p className="open-display-hint" id="open-display-hint">
-            For full screen on this PC: Start › Living Room Display - Show display, or press F
-            on the display
-          </p>
-        <div className="display-window-actions">
-          {displayOpen && (
-            <button className="button close-display" onClick={closeDisplay} aria-label="Close display" title="Close display">
-              <Icon name="close" size={15} />
-              <span className="close-display-label">Close display</span>
-            </button>
-          )}
-          {/* A same-origin loopback window, so no rel: the display needs window.opener to return here (#436). */}
-          <a
-            className="button open-display"
-            href="/display"
-            target={DISPLAY_WINDOW}
-            onClick={openDisplay}
-            aria-describedby="open-display-hint"
-          >
-            <Icon name="monitor" size={17} />
-            {displayOpen ? 'Show display' : 'Open display'}
-            <Icon name="arrow" size={15} />
-          </a>
-          </div>
-        </div>
-      </header>
+      <StudioHeader page="edit" />
       <main className="studio-workspace">
         <section className="canvas-column" aria-label="Display preview">
           <div className="canvas-heading">
@@ -2433,6 +2389,7 @@ export function Editor({
                 onSelect={(id) => selectWidget(id, true)}
                 reveal={reveal}
                 pickerOpen={pickerOpen}
+                pickerInitial={deepLink.add}
                 onPicker={setPickerOpen}
                 onAdd={addWidget}
                 onFix={applyFix}

@@ -33,10 +33,14 @@ export const RENAME_RETRY_DELAYS_MS = [25, 50, 100, 150, 200, 250, 250];
  * progress, which takes about a second at most: startup removes only such files (#320).
  */
 export const STALE_TEMPORARY_FILE_MS = 60_000;
-/** `state.json.<uuid>.tmp` or `state.backup.json.<uuid>.tmp`, as atomicWrite names them. */
-const TEMPORARY_FILE = /^state(?:\.backup)?\.json\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
+/**
+ * `state.json.<uuid>.tmp`, `state.backup.json.<uuid>.tmp` or the timers sidecar's `timers.json.<uuid>.tmp`
+ * (#438), as atomicWrite names them.
+ */
+const TEMPORARY_FILE = /^(?:state(?:\.backup)?|timers)\.json\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
 
-async function atomicWrite(path: string, data: string, files: StoreFiles): Promise<void> {
+/** Writes `data` to a private temporary file, flushes it and renames it over `path`; the timers sidecar uses it too (#438). */
+export async function atomicWrite(path: string, data: string, files: StoreFiles): Promise<void> {
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
     const file = await open(temporary, 'wx', 0o600);
@@ -85,6 +89,8 @@ export class DataStore {
   #generation = 0;
   /** The selected photo's PNG bytes, decoded once per photo id (#353). */
   #photoImage: { id: string; content: Buffer } | null = null;
+  /** Successful writes in this process, for `GET /api/changes` (#438); never persisted. */
+  #changes = 0;
   private constructor(directory: string, data: PersistedData, files: StoreFiles) { this.directory = directory; this.#data = data; this.#files = files; }
 
   static async open(directory: string, overrides: Partial<StoreFiles> = {}): Promise<DataStore> {
@@ -144,6 +150,9 @@ export class DataStore {
     return this.#photoImage;
   }
 
+  /** How many writes have succeeded since this process opened the store (#438). */
+  get changes(): number { return this.#changes; }
+
   async update(mutator: (data: PersistedData) => void): Promise<PersistedData> {
     return (await this.commit(mutator)).data;
   }
@@ -172,6 +181,7 @@ export class DataStore {
       const settingsChanged = !isDeepStrictEqual(this.#data.settings, validated.settings);
       this.#data = validated;
       if (settingsChanged) this.#generation++;
+      this.#changes++;
       return { data: this.snapshot(), settingsRevision: this.settingsRevision };
     });
     this.#queue = operation.catch(() => undefined);

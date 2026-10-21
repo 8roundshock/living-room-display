@@ -205,7 +205,8 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
       if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen(); showControls(); }
-      if (event.key === 'Escape' || event.key.toLowerCase() === 'e') leaveDisplay();
+      if (event.key === 'Escape') leaveDisplay('/');
+      if (event.key.toLowerCase() === 'e') leaveDisplay('/editor');
       if (event.key === 'Tab') showControls();
     };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
@@ -482,8 +483,9 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     </div>
     {!embedded && !native && <nav className="display-help" aria-label="Display controls">
       <button className="button display-control" onClick={toggleFullscreen}><Icon name="monitor" size={15} />Fullscreen · F</button>
-      <a className="button display-control" href="/editor" onClick={event => { if (!liveOpener()) return; event.preventDefault(); leaveDisplay(); }}><Icon name="settings" size={15} />Editor · Esc</a>
-      {opened && <button className="button display-control display-close" onClick={leaveDisplay}><Icon name="close" size={15} />Close display</button>}
+      <a className="button display-control" href="/" onClick={event => { if (!liveOpener()) return; event.preventDefault(); leaveDisplay('/'); }}><Icon name="home" size={15} />Home · Esc</a>
+      <a className="button display-control" href="/editor" onClick={event => { if (!liveOpener()) return; event.preventDefault(); leaveDisplay('/editor'); }}><Icon name="edit" size={15} />Edit display · E</a>
+      {opened && <button className="button display-control display-close" onClick={() => leaveDisplay('/editor')}><Icon name="close" size={15} />Close display</button>}
     </nav>}
   </Surface>;
 }

@@ -33,7 +33,7 @@ internal static class Program
             if (mode == "/c" || mode.StartsWith("/c:") || mode == "--editor")
             {
                 EnsureServer();
-                Process.Start(BaseUrl + "/editor");
+                Process.Start(BaseUrl + (mode == "--editor" ? "/" : "/editor"));
                 return 0;
             }
             if (mode != "/s" && mode != "--display" && mode != "--test-display")

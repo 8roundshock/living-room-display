@@ -55,12 +55,12 @@ export function liveOpener(): Window | null {
 }
 
 /** Esc, E, Editor or Close display: back to the editor that opened this display, or open the editor here. */
-export function leaveDisplay(): void {
+export function leaveDisplay(destination = '/editor'): void {
   const opener = liveOpener();
   if (opener) {
     opener.focus();
     window.close();
     return;
   }
-  window.location.assign('/editor');
+  window.location.assign(destination);
 }

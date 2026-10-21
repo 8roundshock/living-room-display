@@ -37,7 +37,9 @@ export const ALLOWED_RULES = ['.studio *, .studio ::before, .studio ::after', '.
  * (`:hover`, `:focus-visible`, ...) is dropped before matching, so `.studio .x::before` and
  * `.studio .x:hover` are checked against `.x`.
  */
-function studioMatches(allowed) {
+function studioMatches(options) {
+  // The allowed rules, or { allowed, scope } with the scope's selector pattern (Home adds `home-` classes, #438).
+  const { allowed, scope = String.raw`\.studio(?![\w-])` } = Array.isArray(options) ? { allowed: options } : options;
   const surface = document.querySelector('.preview-surface');
   if (!surface) return { error: 'no .preview-surface on the page' };
   const elements = [surface, ...surface.querySelectorAll('*')];
@@ -55,7 +57,7 @@ function studioMatches(allowed) {
     return parts;
   };
   const normalize = (text) => split(text).map((part) => part.replace(/\s+/g, ' ').replace(/\*::/g, '::')).join(', ');
-  const studio = /\.studio(?![\w-])/, canvasRoot = /\.(grid-ambient|preview-surface)(?![\w-])/;
+  const studio = new RegExp(scope), canvasRoot = /\.(grid-ambient|preview-surface)(?![\w-])/;
   const subject = (selector) => {
     let query = selector
       .replace(/::?(before|after|marker|placeholder|selection|backdrop|first-line|first-letter|file-selector-button|-webkit-[\w-]+|-moz-[\w-]+)(\([^)]*\))?/g, '')
@@ -191,6 +193,22 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
       assert.ok(result.rules > 100 && result.selectors > 50, `${label}: the guard read the studio stylesheet (${result.rules} rules, ${result.selectors} studio selectors)`);
     }
 
+    /** Home's saved-arrangement preview (#438): no `.studio` or `home-` rule may reach it either. */
+    async function inspectHome(page, state, label, { expect = null } = {}) {
+      current = state;
+      await page.goto(base + '/');
+      await page.locator('.home-preview .preview-surface .widget-grid-plane').waitFor();
+      if (expect?.length) for (const id of expect) await page.locator(`.home-preview .preview-surface [data-widget-id="${id}"]`).waitFor();
+      await page.clock.runFor(500);
+      const result = await page.evaluate(studioMatches, { allowed, scope: String.raw`\.studio(?![\w-])|\.home-[\w-]+` });
+      assert.equal(result.error, undefined, `${label}: ${result.error}`);
+      assert.deepEqual(result.skipped, [], `${label}: every studio- or home-scoped selector can be matched`);
+      if (expect) assert.deepEqual([...new Set(result.widgets)].sort(), [...expect].sort(), `${label}: the preview renders the expected widgets`);
+      for (const selector of result.deliberate) deliberate.add(selector);
+      for (const hit of result.found) failures.push(`${label}: ${hit.selector} (rule "${hit.rule}" in ${hit.origin}) matches ${hit.count} preview element(s): ${hit.elements.join(', ')}`);
+      scenarios++; inspected += result.elements;
+    }
+
     // Every active widget alone in every family at the owner's TV size (1280×720), at the default
     // Subtle level and with reduced motion (Animation Off on the studio root).
     for (const reducedMotion of ['no-preference', 'reduce']) {
@@ -217,6 +235,20 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
       await view.close();
     }
     checks.push('the full board (every active widget, a snapshot and a photo), its saved-weather variant, a board of editor-only placeholders, the full board in Edit layout and the default board on the editor canvas at 1280×720 and 390×844');
+
+    // Home's preview (#438), with a timer in the Clock's date line, at 1280×720 and 390×844.
+    const withTimer = (state) => {
+      const at = (offset) => new Date(now + offset).toISOString();
+      state.timers = [{ id: '00000000-0000-4000-8000-000000000001', label: 'Synthetic tea', durationMs: 600_000, endsAt: at(480_000), remainingMs: null, createdAt: at(-60_000), updatedAt: at(-60_000) }];
+    };
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+      const view = await editor({ viewport });
+      const label = `${viewport.width}×${viewport.height}`;
+      await inspectHome(view.page, fullBoard(withTimer), `Home preview of the full board with a timer at ${label}`, { expect: ACTIVE_WIDGET_IDS });
+      await inspectHome(view.page, fullBoard(placeholders), `Home preview of an empty full board at ${label}`);
+      await view.close();
+    }
+    checks.push("Home's saved-arrangement preview (#438) of the full board with a timer in the Clock, and of an empty full board, at 1280×720 and 390×844: no .studio or home- rule reaches it");
 
     assert.deepEqual(failures, [], `#313: a widget renderer element on the editor canvas matches a .studio-scoped rule (allowed: ${ALLOWED_RULES.map((rule) => `"${rule}"`).join(' and ')}). Rename the renderer class so it does not reuse a studio class name`);
     checks.push(`no element on the editor canvas matches a .studio-scoped rule other than ${ALLOWED_RULES.map((rule) => `"${rule}"`).join(' and ')}: ${scenarios} canvases, ${inspected} elements, ${studioSelectors} studio-scoped selectors`);

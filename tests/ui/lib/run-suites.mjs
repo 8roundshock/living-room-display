@@ -33,6 +33,7 @@ export const SETS = {
     'daylight', // #439: not yet timed on the runner; 25 to 70 locally under load, where catalog-time took 59
     'dynamic', // #437: its own Dynamic scenarios, timed locally (see docs/development.md)
     'screen', // #436, about 40 locally
+    'home', // #438, about 70 locally
   ],
   scheduled: ['motion', 'weather', 'palette'], // 219, 81, 68
 };

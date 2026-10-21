@@ -142,9 +142,118 @@ export async function family({ widget, size, density, viewport }) {
   assert.ok(outline.stroke * outline.fit >= OUTLINE_STROKE * viewport.height / 720 - 0.01, `outline ${size}/${density} ${viewport.width}: stroke ${outline.stroke}`);
 }
 
+/**
+ * The timer slot (#438): a timer replaces the date line in the same elements and fonts. A synthetic
+ * 40-character label and the longest values ("23 h 59 min left · ends tomorrow …", " · offline", "+5").
+ */
+const TIMER_LABEL = 'Synthetic slow-roast vegetables and rice';
+const TIMER_STATES = ['running', 'ticking', 'paused', 'done', 'offline'];
+function withTimers(state, kind, now) {
+  const at = offset => new Date(now + offset).toISOString(), base = { label: TIMER_LABEL, createdAt: at(-60_000), updatedAt: at(-60_000) };
+  const id = index => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+  const lead = kind === 'paused' ? { durationMs: 86_400_000, endsAt: null, remainingMs: 86_340_000 }
+    : kind === 'ticking' ? { durationMs: 60_000, endsAt: at(45_000), remainingMs: null }
+    : kind === 'done' ? { durationMs: 600_000, endsAt: at(-9 * 60_000 - 5_000), remainingMs: null }
+    : { durationMs: 86_400_000, endsAt: at(86_340_000), remainingMs: null };
+  // Five more timers, so the slot also says "+5"; a later end (or more left) keeps the lead first.
+  const rest = Array.from({ length: 5 }, (_, index) => ({ ...base, id: id(index + 2), label: '', durationMs: 86_400_000, endsAt: kind === 'paused' ? null : at(86_350_000 + index), remainingMs: kind === 'paused' ? 86_350_000 + index : null }));
+  state.timers = [{ ...base, id: id(1), ...lead }, ...rest];
+}
+/** Fit, clipping, floors and colours of the timer slot in the clock at the top-left corner. */
+function timerSlot(widget) {
+  return widget.evaluate(section => {
+    const probe = expression => { const span = document.createElement('span'); span.style.cssText = `position:absolute;visibility:hidden;font-size:${expression}`; section.append(span); const size = parseFloat(getComputedStyle(span).fontSize); span.remove(); return size; };
+    const outer = section.getBoundingClientRect(), face = section.querySelector('.clock-face').getBoundingClientRect();
+    const fit = new DOMMatrix(getComputedStyle(section.querySelector('.widget-content')).transform).a;
+    const part = selector => {
+      const element = section.querySelector(selector); if (!element) return null;
+      const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+      return { text: element.textContent, phase: element.dataset.timerPhase, size: parseFloat(style.fontSize) * fit, color: style.color, left: rect.left - outer.left, right: rect.right - outer.left, top: rect.top - outer.top, bottom: rect.bottom - outer.top, width: rect.width, whiteSpace: style.whiteSpace };
+    };
+    const name = section.querySelector('.clock-timer-name'), nameStyle = name && getComputedStyle(name);
+    return {
+      fit, width: outer.width, height: outer.height, faceWidth: face.width, floor: probe('calc(var(--min-text) * var(--font-scale))') * fit,
+      caution: getComputedStyle(section.closest('.ambient')).getPropertyValue('--ambient-caution').trim(),
+      label: part('.clock-timer-label'), value: part('.clock-timer-value'), date: section.querySelectorAll('.clock-calendar .clock-date:not(.clock-timer-value)').length,
+      name: name && { overflow: nameStyle.overflow, ellipsis: nameStyle.textOverflow },
+    };
+  });
+}
+function rgb(hex) { const value = Number.parseInt(hex.slice(1), 16); return `rgb(${value >> 16}, ${(value >> 8) & 255}, ${value & 255})`; }
+
+/** Every timer state × style × density × family at each view; returns the number of cases. */
+async function timerSweep(page, state, views) {
+  let cases = 0, marker = 0;
+  // Each case reaches the page through the display's own 5 s change poll (#438) rather than a reload,
+  // which keeps these hundreds of cases quick: a new marker, five seconds, then the state request.
+  const changes = route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ change: `timer-sweep.${marker}` }) });
+  const refresh = async () => {
+    marker++;
+    const loaded = page.waitForResponse(response => new URL(response.url()).pathname === '/api/state');
+    await page.clock.runFor(5_000); await loaded; await page.clock.runFor(100); await page.waitForTimeout(20);
+  };
+  await page.route('**/api/changes', changes);
+  try {
+  for (const view of views) {
+    await page.setViewportSize(view);
+    only(state, { size: 'large', density: 'balanced', style: 'outline' }); delete state.timers; await reload(page);
+    for (const kind of TIMER_STATES) for (const style of ['outline', 'digital', 'analog']) for (const density of Object.keys(GRID_DENSITIES)) for (const size of widgetSizes('clock')) {
+      // Offline changes only a large clock (" · offline"); smaller families read exactly as running.
+      if (kind === 'offline' && size !== 'large') continue;
+      only(state, { size, density, style }); state.settings.clockFormat = '12h';
+      withTimers(state, kind, await page.evaluate(() => Date.now()));
+      await refresh();
+      const label = `timer ${kind} ${style} ${size}/${density} ${view.width}×${view.height}`;
+      if (kind === 'offline') {
+        // The display has loaded once and then cannot reach the computer: it keeps counting from endsAt.
+        await page.unroute('**/api/changes', changes);
+        await page.route(/\/api\/(state|changes)$/, route => route.abort());
+        try {
+          await page.clock.runFor(5_000);
+          for (let attempt = 0; !/offline/.test(await page.locator('.clock-timer-value').innerText()); attempt++) { assert.ok(attempt < 100, `${label}: says offline`); await page.waitForTimeout(20); }
+        } finally { await page.unroute(/\/api\/(state|changes)$/); await page.route('**/api/changes', changes); }
+      }
+      const slot = await timerSlot(page.locator('[data-widget-id="clock"]'));
+      assert.ok(slot.label && slot.value, `${label}: the date line shows the timer`);
+      assert.equal(slot.date, 0, `${label}: the date is replaced, not added`);
+      const phase = kind === 'offline' || kind === 'ticking' ? 'running' : kind;
+      assert.equal(slot.label.phase, phase, label); assert.equal(slot.value.phase, phase, label);
+      assert.match(slot.label.text, /\+5$/, `${label}: "+5" for the other timers`);
+      assert.equal(slot.fit, 1, `${label}: the clock fits at 1 (Text 100%) ${JSON.stringify(slot)}`);
+      for (const part of [slot.label, slot.value]) {
+        assert.ok(part.left >= -1 && part.top >= -1 && part.right <= slot.width + 1 && part.bottom <= slot.height + 1, `${label}: ${part.text} stays inside the widget ${JSON.stringify(part)}`);
+        assert.ok(part.size >= slot.floor - 0.01, `${label}: ${part.text} ${part.size}px keeps the ${slot.floor}px floor`);
+      }
+      assert.equal(slot.label.whiteSpace, 'nowrap', label);
+      assert.deepEqual([slot.name.overflow, slot.name.ellipsis], ['hidden', 'ellipsis'], `${label}: a long name ends in an ellipsis`);
+      if (size === 'large') assert.ok(slot.label.width <= slot.faceWidth * 0.6 + 1, `${label}: the name takes at most 60% of a large clock (${slot.label.width} of ${slot.faceWidth})`);
+      const value = slot.value.text;
+      if (kind === 'done') {
+        assert.equal(slot.value.color, rgb(slot.caution), `${label}: Done in the status tone`);
+        assert.equal(value, size === 'small' ? 'Done' : 'Done · 9 min ago', label);
+      } else if (kind === 'ticking') assert.match(value, size === 'large' ? /^[34]\d s left$/ : /^[34]\d s$/, label);
+      else if (kind === 'paused') assert.equal(value, size === 'large' ? '23 h 59 min left · paused' : '23 h 59 min', label);
+      else {
+        assert.match(value, size === 'large' ? /^23 h 5[89] min left · ends tomorrow \d{1,2}:\d{2} [AP]M( · offline)?$/ : /^23 h 5[89] min$/, `${label}: ${value}`);
+        if (size === 'large') assert.equal(value.endsWith(' · offline'), kind === 'offline', `${label}: " · offline" only while disconnected`);
+      }
+      cases++;
+    }
+  }
+  } finally { await page.unroute('**/api/changes', changes); }
+  // A running timer outside its final minute builds no Intl formatter on the tick (#99).
+  await page.setViewportSize(views.at(-1));
+  only(state, { size: 'large', density: 'balanced', style: 'outline' }); withTimers(state, 'running', await page.evaluate(() => Date.now())); await reload(page);
+  assert.equal(await intlPerTicks(page), 0, 'a running timer: no Intl formatter per tick while the minute holds');
+  delete state.timers;
+  return cases;
+}
+
 export async function sweep({ page, viewport, state }) {
   // Analog in every family and density at this viewport, and at 720p (with the Outline floor) once.
   const views = viewport.width === 1920 ? [SMALL_TV, viewport] : [viewport];
+  const timerCases = await timerSweep(page, state, views);
+  const timerSummary = `#438 Clock timer slot: ${timerCases} cases (running, last minute, paused and done in every family, and offline in the large one, × outline/digital/analog × every density at ${views.map(view => `${view.width}×${view.height}`).join(', ')}) fit at 1 with a 40-character name ending in an ellipsis (≤ 60% of a large clock), "+5", the readability floor, Done in the status tone and " · offline"; no Intl formatter per tick`;
   for (const view of views) {
     await page.setViewportSize(view);
     for (const density of Object.keys(GRID_DENSITIES)) for (const size of widgetSizes('clock')) {
@@ -162,7 +271,7 @@ export async function sweep({ page, viewport, state }) {
     }
   }
   await page.setViewportSize(viewport);
-  if (viewport.width !== 1920) return 'Analog clock: every family and density at 720p/1080p/4K fits at 1, hands ≥ 3/2 px at 720p (scaled), 30%/45% reach, text-colour HTML hands with an accent pivot, small/medium sized to the cell height with the date beside; Outline stroke ≥ 1.2 px at 720p (scaled) in every family; medium Outline and Digital keep the date nearer their time than the cell edge (#332)';
+  if (viewport.width !== 1920) return `Analog clock: every family and density at 720p/1080p/4K fits at 1, hands ≥ 3/2 px at 720p (scaled), 30%/45% reach, text-colour HTML hands with an accent pivot, small/medium sized to the cell height with the date beside; Outline stroke ≥ 1.2 px at 720p (scaled) in every family; medium Outline and Digital keep the date nearer their time than the cell edge (#332). ${timerSummary}`;
 
   // #363: Classic (Georgia) numerals are lining and tabular: every digit shares one baseline and height. Georgia's
   // default old-style 9 would descend about a fifth of the size below the 0s.
@@ -213,5 +322,5 @@ export async function sweep({ page, viewport, state }) {
     only(state, { size: 'large', density: 'balanced', style: 'outline' }); await reload(page);
     assert.equal(await intlPerTicks(page), 0, 'outline: no Intl formatter per tick');
   } finally { await page.emulateMedia({ reducedMotion: 'reduce' }); }
-  return 'Analog clock at rest: identical box and hand geometry at Off/Subtle/Lively with each hand at its labelled angle; a minute change at Subtle transitions only `rotate` on HTML hand wrappers; zero Intl formatters per tick within a minute; Classic digits are lining (one baseline and height, #363)';
+  return `Analog clock at rest: identical box and hand geometry at Off/Subtle/Lively with each hand at its labelled angle; a minute change at Subtle transitions only rotate on HTML hand wrappers; zero Intl formatters per tick within a minute; Classic digits are lining (one baseline and height, #363). ${timerSummary}`;
 }

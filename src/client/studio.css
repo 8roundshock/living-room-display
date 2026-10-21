@@ -116,6 +116,7 @@ html.studio-editor {
 .studio .brand {
   display: flex;
   align-items: center;
+  min-height: 44px;
   gap: 10px;
   font-size: 26px;
   font-weight: 650;
@@ -155,6 +156,36 @@ html.studio-editor {
     text-align: left;
     font-size: 11px;
   }
+}
+/* The Pages nav Home and Edit display share (#438): beside the brand, Open display stays at the right. */
+.studio-pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 auto 0 28px;
+}
+.studio .studio-page-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 100px;
+  color: var(--studio-muted);
+  font-size: 14px;
+  font-weight: 550;
+}
+.studio .studio-page-link:hover {
+  color: var(--studio-text);
+  background: #ffffff08;
+}
+.studio .studio-page-link.current {
+  color: var(--studio-text);
+  background: #ffffff0d;
+}
+.studio .studio-page-link:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
 }
 .brand-symbol {
   width: 34px;
@@ -1662,6 +1693,26 @@ html.studio-editor {
     padding: 9px 11px;
   }
   .studio .close-display-label {
+    display: none;
+  }
+  /* #438: only the other page's link shows, and Open display is icon-only (its name stays "Open display"). */
+  .studio-pages {
+    margin-left: 12px;
+  }
+  .studio .studio-page-link.current {
+    display: none;
+  }
+  .studio .studio-page-link {
+    padding: 0 10px;
+    font-size: 13px;
+  }
+  .studio .open-display {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .open-display-label,
+  .studio .open-display > svg:last-child {
     display: none;
   }
   .studio-workspace {

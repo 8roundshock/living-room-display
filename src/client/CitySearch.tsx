@@ -116,7 +116,8 @@ export function CitySearch({
         }}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === 'Escape') {
+          // Escape closes an open list; with no list it is left alone, so it can close Home's sheet (#438).
+          if (event.key === 'Escape' && open) {
             event.preventDefault();
             setOpen(false);
             setActive(-1);

@@ -4,6 +4,7 @@ import { defaultSettings } from '../shared/defaults.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, absorbRetiredWidgets, absorbableGridProblem, defaultWidgetGrid, firstPlacement, fitGridDensity, isPlannedWidget, normalizePlacement, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
 import { ACCENT_MODES } from '../shared/palette.ts';
 import { ANIMATION_LEVELS } from '../shared/motion.ts';
+import { KEEP_DONE_MS, TIMER_ADD_MAX_MS, TIMER_LABEL_MAX, TIMER_LIMIT, TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts';
 import { checkPhotoUpload, photoAssetSchema, photoAssetShape } from './photo.ts';
 import { AT_REST } from './persistence.ts';
 
@@ -207,6 +208,53 @@ export const dataSchema = z.object({ version: z.literal(1), settings: settingsSc
 export const checkedPhotoDataSchema = z.object({ version: z.literal(1), settings: settingsSchema, reminders: z.array(reminderSchema).max(1000), photoAsset: photoAssetShape.nullable().default(null) }).strict()
   .refine(uniqueReminders, 'Reminder IDs must be unique');
 export const importSchema = z.object({ version: z.literal(1), exportedAt: z.iso.datetime(), settings: settingsSchema, reminders: z.array(reminderSchema).max(1000) }).strict();
+
+// Home's item endpoints (#438) reuse the persisted field schemas; Undo may pass the removed id and its index.
+export const countdownCreateSchema = countdown.omit({ id: true }).extend({
+  repeatsYearly: z.boolean().default(false), id: z.uuid().optional(), index: z.number().int().min(0).max(11).optional(),
+}).strict();
+export const worldClockCreateSchema = worldClock.omit({ id: true }).extend({
+  id: z.uuid().optional(), index: z.number().int().min(0).max(3).optional(),
+}).strict();
+
+// Timers (#438) live in the timers.json sidecar, never in the settings data above.
+const timerLabel = z.string().trim().max(TIMER_LABEL_MAX, `Use at most ${TIMER_LABEL_MAX} characters`);
+const timerLength = z.number().int(TIMER_MESSAGES.range).min(TIMER_MIN_MS, TIMER_MESSAGES.range).max(TIMER_MAX_MS, TIMER_MESSAGES.range);
+const timerInstant = z.iso.datetime({ offset: true }).transform(value => new Date(value).toISOString());
+/** The persisted form: exactly one of `endsAt` and `remainingMs`, a paused remainder up to 24 hours. */
+export const timerSchema = z.object({
+  id: z.uuid(), label: timerLabel, durationMs: timerLength,
+  endsAt: z.iso.datetime().nullable(), remainingMs: z.number().int().min(1).max(TIMER_MAX_MS).nullable(),
+  createdAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
+}).strict().refine(timer => (timer.endsAt === null) !== (timer.remainingMs === null), 'A timer is either running (endsAt) or paused (remainingMs)');
+export const timersFileSchema = z.object({
+  version: z.literal(1),
+  timers: z.array(timerSchema).max(TIMER_LIMIT).refine(uniqueIds, 'Timer IDs must be unique'),
+}).strict();
+/**
+ * POST: a label and a length. Undo re-creates a cancelled timer as it was, with its end (from an hour
+ * ago, so a recently finished one can come back, up to 24 hours ahead) or, for a paused one, what was left.
+ */
+export function timerCreateSchema(now: number) {
+  return z.object({
+    label: timerLabel.optional(), durationMs: timerLength,
+    endsAt: timerInstant.optional(), remainingMs: z.number().int().min(1).max(TIMER_MAX_MS).optional(),
+  }).strict().superRefine((value, context) => {
+    if (value.endsAt !== undefined && value.remainingMs !== undefined) context.addIssue({ code: 'custom', message: 'Send endsAt or remainingMs, not both' });
+    if (value.endsAt !== undefined) {
+      const at = Date.parse(value.endsAt);
+      if (at < now - KEEP_DONE_MS || at > now + TIMER_MAX_MS) context.addIssue({ code: 'custom', path: ['endsAt'], message: 'Use an end within the last hour or the next 24 hours' });
+    }
+    // +1 min can extend a paused timer beyond its original restart length (#487). The field's
+    // 24-hour bound matches timerSchema and TimerStore.patch, so Undo can restore that valid state.
+  });
+}
+/** PATCH: exactly one action. */
+export const timerPatchSchema = z.union([
+  z.object({ paused: z.boolean() }).strict(),
+  z.object({ addMs: z.number().int().min(TIMER_MIN_MS).max(TIMER_ADD_MAX_MS) }).strict(),
+  z.object({ restart: z.literal(true) }).strict(),
+], { error: 'Send exactly one of paused, addMs or restart' });
 
 export function mergeSettings(current: Settings, patch: SettingsPatch): Settings {
   const { automaticLocation, photoChange: _photoChange, ...changes } = patch;

@@ -9,9 +9,142 @@ and scoped [#58](https://github.com/8roundshock/living-room-display/issues/58),
 Browser checks establish source behavior; installation and native pointer/idle
 acceptance are recorded separately in [STATUS](../STATUS.md).
 
-## Editing
+## Pages
 
-`/editor` (also `/`) opens a large live appearance preview and a focused inspector.
+The app has three pages (#438), chosen by `pageForPath` in `src/client/route.ts`: **Home**
+at `/` (and any other extension-less path), **Edit display** at `/editor` and the ambient
+display at `/display`. Their titles are "Still · Home", "Still · Edit display" and
+"Still · Display". Home and Edit display share one header (`StudioHeader`, 64 px from
+701 CSS px, 72 px at 480 px and narrower): the brand goes to Home ("Still home"), a
+**Pages** nav holds **Home** and **Edit display** with `aria-current="page"` on the
+current one (at 480 px or narrower only the other page's link shows), and **Open
+display** (icon-only at 480 px or narrower, still named "Open display") targets one
+named window, `still-display`, shared with #436, so repeated clicks from the same tab
+reuse that window rather than opening another tab each time. The browser finds a named
+window only from the tab that opened it: a click from an unrelated tab (each Start menu
+launch opens one) opens a second display tab, which #464 tracks. The link has no
+`rel="noreferrer"`, which would sever the window name. All three are plain links, so Edit display's leave prompt
+still guards an unsaved draft. Only `/editor` may ask for device location
+(`Permissions-Policy: geolocation=(self)`); Home and the display send `geolocation=()`.
+
+## Home
+
+Home (`<div class="studio home-page">`, `src/client/Home.tsx`) is for day-to-day use
+beside the display rather than for setting it up. It reuses the studio's tokens,
+buttons, inputs, city search and Reminders panel; every rule of its own names a
+`home-` class, and none reaches the embedded preview (#313). Base text is 16 px.
+
+- **Layout at 1280 × 720:** the header, then a `minmax(0, 1fr) 400px` grid (gap 32,
+  padding 24/32). The left column holds the date as the `h1` (with a screen-reader
+  "Home · " before it) and the time beside it; world-clock chips ("London 11:42 PM ·
+  +5 h"); while no city has been saved and the first-run tip was not hidden (the same
+  `localStorage` key as Edit display's card) one line, "Weather shows Toronto until you
+  choose your city. Choose your city", which opens `/editor?focus=city`; six quick
+  actions in a 3 × 2 grid (each at least 88 px tall, named by its label and described
+  by its line); and **Today**. The date, all six actions, the Today heading with its
+  first row and **Edit display** are above the fold. The right column is **On your
+  display**: the saved arrangement at 400 × 225 (`AmbientDisplay embedded`, still,
+  inert and hidden from assistive technology; a click opens Edit display) captioned
+  "Your saved arrangement. The display moves it around to protect the screen.",
+  **Edit display** (primary) and **Open display**, "Showing: Calendar, Clock and
+  Weather." and, when a widget Home feeds has content but is off, "Not on your display:
+  World clocks and Countdown." with **Make room in Edit display** when one has no room.
+- **At 390 px:** one column with a 16 px gutter (date, actions, Today, then the card);
+  the actions stay 3 × 2 from 360 px and become 2 × 3 below; their descriptions are
+  screen-reader only below 600 px; every target is at least 44 × 44 and nothing
+  overflows sideways at 390 or 320 px.
+- **Quick actions** each open a native `<dialog>` with `showModal()` (`aria-haspopup`):
+  focus moves to its first field (Timer's first preset), Esc returns focus to the
+  button that opened it, and after a create focus moves to the new row. Below 600 px a
+  sheet is a bottom sheet (`max-height: calc(100dvh - 24px)`) with its own scroll and a
+  sticky primary button. Typed values outlive a closed sheet for the page's life.
+  - **Timer** ("Counts down on your display's clock"): presets 1, 3, 5, 10, 15 and 30
+    minutes and 1 hour start at once (two activations from Home); **Custom** takes
+    Hours, Minutes, Seconds and "Name (optional)", then **Start timer** ("Choose a time
+    between 1 second and 24 hours."). With the Clock off: "Timers show in your
+    display's Clock, which is off." with **Show the clock**, or **Make room in Edit
+    display** when it has no room.
+  - **Reminder** ("With or without a time"): What (1–240 characters), When (Anytime,
+    Today, Tomorrow or Pick a date) and a time that defaults to the next whole hour for
+    today (23:59 from 11 PM) and 9:00 AM otherwise. A missing date or time reads "Enter
+    both a date and a time, or choose Anytime."; a time that has passed reads "That time
+    has passed. Choose a later time." and keeps focus in the field.
+  - **Calendar** ("Pick a day; it becomes a reminder", `HomeCalendar.tsx`): the month on
+    the saved week start with Previous month, Today and Next month; neighbouring days are
+    dim and clickable; days with pending dated reminders carry a dot (the caution tone
+    when one is overdue) and are named "Friday, October 30, 2 reminders"; today has
+    `aria-current="date"` and the selected day `aria-selected`. A roving-tabindex grid:
+    arrows move by day or week across months, PageUp/PageDown by month (the day
+    clamped, January 31 → February 28), Home/End to the week's edges, and Enter or Space
+    selects the day and moves to What. The selected day lists its reminders, then "Add
+    a reminder on Friday, October 30" with What, Time (9:00 AM; on today, the next whole
+    hour once 9:00 AM has passed) and **Add to calendar**, which creates an ordinary
+    dated reminder. A past day reads "This day has passed." with **Go to today**; a past
+    time today is refused. A time that a spring-forward change skips is saved an hour
+    later and named ("2:30 AM doesn't exist on Sun, Mar 14 (clocks spring forward).
+    Saved for 3:30 AM."); the repeated autumn hour uses its first occurrence. Days are
+    this computer's local days.
+  - **World clock** ("Time in another city"): the cities with their time and **Remove**
+    (with Undo), the city search with a Label and **Add clock** (disabled at four,
+    "Up to 4 cities. Remove one to add another."), and "Rename or reorder in Edit
+    display." (#463).
+  - **Countdown** ("Days until a date"): the dates ("In 7 days", "Passed") with
+    **Remove** (with Undo), then Title (1–60), Date (a week ahead), **Every year** and
+    **Add countdown**.
+  - **Note** ("A short message on your display"): 200 characters and 4 lines with a
+    "37/200" counter; **Save note** and **Discard** appear only while the trimmed text
+    differs from the saved note (and only then does leaving the page prompt); **Clear
+    note** saves an empty note with Undo. Saving, discarding or undoing Clear removes
+    the retained draft, so reopening reads a later saved edit from another page.
+    Closing with unsaved text keeps that draft for this page's lifetime.
+  - **Show on my display** (World clock, Countdown, Note, Reminder and Calendar, the
+    latter two for Reminders): while that widget is off and has room, a switch, on by
+    default, turns it on after the content saves (`POST /api/widgets/:id/show`, free
+    cells only); with no room, "No room on your display · Make room in Edit display"
+    links to `/editor?add=<id>`; while it is on, "World clocks is on your display".
+- **Today** shows only groups with items. **Timers**: running ones count down live
+  (m:ss or h:mm:ss, ticking in the row's own one-second interval so the page does not
+  re-render) with "ends 6:51 PM" and **Pause/Resume**, **+1 min** and **Cancel** (with
+  Undo); a paused one reads "· paused"; a finished one reads "Done · 2 min ago" in the
+  caution tone for up to an hour with **Restart** and **Dismiss**. The digits are hidden
+  from screen readers, which hear "about 8 minutes left" once a minute. Controls name
+  their timer: "Pause Pasta timer", "Add 1 minute to Pasta timer". **Due today**:
+  overdue first, then by time, each with a one-tap check ("Check off Call mom") that
+  settles for 0.9 s, leaves and offers Undo; focus moves to the next check. **Anytime**:
+  three, then "+N more". **Coming up**: dated reminders and countdowns in the next seven
+  days, at most five. **All reminders · N** opens a sheet with the Reminders panel (its
+  only instance on the page). With nothing to show: "Nothing on today. Start a timer or
+  add a reminder."
+- **Status:** one polite live region, always mounted, with Undo or Retry for 8 s:
+  "10 min timer started · on your display's clock.", "10 min timer cancelled · Undo",
+  "Added for Fri, Oct 30 at 9:00 AM · in Reminders on your display.", "Saved. No room
+  for Countdown on your display · Make room in Edit display". While a sheet is open the
+  line shows inside it, so nothing hides behind the backdrop. A finished timer is
+  announced once ("Pasta timer is done.") and the tab reads "Done · Still · Home"
+  until it is dismissed. A lost connection reads "Can't reach the display server on
+  this computer. Your changes are kept — try again." with **Retry**, keeping typed
+  values; while offline the forms are disabled, saved data stays visible and the line
+  reads "Offline · showing saved reminders". The timers-file warning shows in the
+  Timers group. Limits come from the server's messages.
+- **Freshness:** Home and the display ask `GET /api/changes` every 5 s while visible
+  and reload the state when it changed (and once when the server answers again after a
+  lost connection); Edit display keeps its 30 s poll.
+- **Motion:** Home follows the saved Animation level, Off when the screen prefers
+  reduced motion; its transitions take 240 ms or less.
+- **Tab order:** the header, the first-run line, the quick actions, Today, then the card.
+
+`tests/ui/home-browser.mjs` covers the routes, the fold, both narrow widths, timers end to
+end with the display (including Done, its title and a server restart), the calendar
+(keyboard, the stored instant, the dot, the display's Reminders, refusals and the
+spring-forward message), every other action, Show on my display and its Edit display
+links, two pages at once and a Home add during an Edit display draft, one display
+window and its keys, keyboard focus, a lost connection and silence (no `play()`, no
+`AudioContext`, no media element, no notification request).
+
+## Edit display
+
+`/editor` opens Edit display (#438; it was the editor at `/` and `/editor`, and every flow
+is unchanged): a large live appearance preview and a focused inspector.
 Style, Widgets, Weather and Reminders share one settings draft. Desktop keeps the
 preview beside a height-bounded inspector with fixed tabs and contained scrolling
 above 700 CSS pixels. Canvas actions remain visible at compact desktop heights;
@@ -345,9 +478,14 @@ motion or the Off animation level.
   Room Display - Show display, or press F on the display" (#360). Unmodified **F** toggles fullscreen without stealing typing, modifier
   shortcuts or repeats. Manual display controls appear on pointer movement or Tab and
   hide after 3.5 seconds without another supported interaction. Focused controls stay
-  visible. Esc or E on a display the editor opened (a live same-origin
-  `window.opener`) focuses the editor and closes the display, as does its **Close
-  display** control (shown only then); otherwise Esc or E opens the editor in that tab.
+  visible. Esc or E on a display opened by Home or Edit display focuses its still-open
+  opener and closes the display; **Close display** is shown for that opened window.
+  A directly opened display uses **Home · Esc** and **Edit display · E** to navigate
+  in the same tab. Both pages share the Open/Show/Close display controls.
+- **Deep links** from Home (#438), read once and then cleared to `/editor`:
+  `?add=<id>` (an active widget that is off) opens the Widgets tab with Edit layout on
+  and the picker on that widget, with its Make-room fixes (`WidgetPicker`'s `initial`);
+  `?focus=city` opens the Weather tab with City focused.
 
 Only explicit `native=1` presentation hides the document cursor and omits browser
 controls. Browser loading/failure/display and editor/embedded previews retain
@@ -635,7 +773,9 @@ scaled with the display) and a small dim pivot dot. Small and medium size the ha
 to the cell height with the weekday and date beside them; large keeps the centred
 hands over a quiet calendar line. The Outline stroke never thins below 1.2 px at 720p.
 The clock's labels are built once per minute (#99), and the analog minute ease runs on
-the compositor (#161). Photo starts disabled; choose a JPEG/PNG/WebP on this
+the compositor (#161). While a timer started from Home is visible, the date line shows it
+(see [the Clock timer slot](widgets.md#clock-timer-slot)); the Clock panel says "While a
+timer runs, the date line shows it. Start timers from Home." Photo starts disabled; choose a JPEG/PNG/WebP on this
 device, then Save or Cancel with the rest of the draft. It is dimmed and moves
 as one widget; a newly chosen photo fades in only after it has loaded (#173). It never uses the desktop snapshot or a remote feed. The private
 recovery backup may retain an older selected image after replacement or clearing.

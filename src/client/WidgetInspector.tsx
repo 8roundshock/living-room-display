@@ -127,6 +127,7 @@ export function WidgetInspector({
   onSelect,
   reveal,
   pickerOpen,
+  pickerInitial = null,
   onPicker,
   onAdd,
   onFix,
@@ -153,6 +154,8 @@ export function WidgetInspector({
   /** Scroll this into view once it renders (a new object per request). */
   reveal: InspectorReveal | null;
   pickerOpen: boolean;
+  /** The widget a Home deep link asked for (#438); the picker opens on it. */
+  pickerInitial?: WidgetId | null;
   onPicker: (open: boolean) => void;
   /** Adds a widget as a draft; returns the no-room explanation when it does not fit. */
   onAdd: (id: WidgetId, size: WidgetSize) => RoomProblem | null;
@@ -227,6 +230,7 @@ export function WidgetInspector({
     return (
       <WidgetPicker
         settings={settings}
+        initial={pickerInitial}
         onAdd={(id, size) => {
           const problem = onAdd(id, size);
           if (!problem) added.current = id;
@@ -377,6 +381,7 @@ export function WidgetInspector({
                           <option value="24h">24-hour</option>
                         </select>
                       </label>
+                      <p className="hint">While a timer runs, the date line shows it. Start timers from Home.</p>
                     </>
                   )}
                   {id === 'reminders' && (
