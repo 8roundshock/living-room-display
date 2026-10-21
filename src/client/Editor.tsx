@@ -51,6 +51,7 @@ import {
   matchingBuiltinPreset,
   reminderPresentation,
   resetAppearance,
+  resetLayout,
   spokenInterval,
   spokenSeconds,
   withAppearance,
@@ -324,7 +325,7 @@ export function Editor({
   const [presetName, setPresetName] = useState(''),
     [presetId, setPresetId] = useState('');
   // Style → Data & recovery (#234): a checked backup awaiting confirmation, the section's status
-  // line, an import in flight and the inline Reset appearance question.
+  // line, an import in flight and the inline Reset appearance and Reset layout (#435) questions.
   const [backup, setBackup] = useState<BackupFile | null>(null),
     [dataMessage, setDataMessage] = useState<{
       text: string;
@@ -333,7 +334,8 @@ export function Editor({
       detail?: string | null;
     } | null>(null),
     [restoring, setRestoring] = useState(false),
-    [confirmReset, setConfirmReset] = useState(false);
+    [confirmReset, setConfirmReset] = useState(false),
+    [confirmLayoutReset, setConfirmLayoutReset] = useState(false);
   const backupInput = useRef<HTMLInputElement>(null);
   const [locationQuery, setLocationQuery] = useState(''),
     [locationMessage, setLocationMessage] = useState('');
@@ -1149,15 +1151,34 @@ export function Editor({
       : same(lookOf(draft.appearance), lookOf(resetLook))
         ? 'unsaved'
         : 'undone';
+  // #435, #474: Reset layout's line follows the same rule for the board it put on the canvas (the
+  // widgets shown, the grid, where they sit and Last screen's capture). Each reset button ends the
+  // other reset's tracking.
+  const [resetBoard, setResetBoard] = useState<Settings | null>(null);
+  const boardOf = (settings: Settings) => ({
+    widgets: settings.widgets,
+    density: settings.widgetGrid.density,
+    placements: WIDGET_IDS.filter((id) => settings.widgets[id]).map((id) => settings.widgetGrid.placements[id]),
+    preview: !!settings.widgets.preview && settings.preview.enabled,
+  });
+  const layoutResetOutcome = !resetBoard
+    ? null
+    : same(boardOf(saved), boardOf(resetBoard))
+      ? 'saved'
+      : same(boardOf(draft), boardOf(resetBoard))
+        ? 'unsaved'
+        : 'undone';
   // #499: the line shown follows the outcome in the same render, like a room notice (#310). An
   // effect's update renders a task later, so after Cancel the save bar had gone while the line still
-  // asked to save, for a painted frame. The effect only records the outcome.
+  // asked to save, for a painted frame. The effects only record the outcomes.
   const shownDataMessage: typeof dataMessage =
     resetOutcome === 'saved'
       ? { text: 'Appearance reset and saved.' }
-      : resetOutcome === 'undone'
-        ? null
-        : dataMessage;
+      : layoutResetOutcome === 'saved'
+        ? { text: 'Layout reset and saved.' }
+        : resetOutcome === 'undone' || layoutResetOutcome === 'undone'
+          ? null
+          : dataMessage;
   useEffect(() => {
     if (resetOutcome === 'saved') {
       setResetLook(null);
@@ -1167,18 +1188,30 @@ export function Editor({
       setDataMessage(null);
     }
   }, [resetOutcome]);
+  useEffect(() => {
+    if (layoutResetOutcome === 'saved') {
+      setResetBoard(null);
+      setDataMessage({ text: 'Layout reset and saved.' });
+    } else if (layoutResetOutcome === 'undone') {
+      setResetBoard(null);
+      setDataMessage(null);
+    }
+  }, [layoutResetOutcome]);
   // Data & recovery questions belong to the Style tab; leaving it drops them.
   useEffect(() => {
     if (section === 'Style') return;
     setBackup(null);
     setConfirmReset(false);
+    setConfirmLayoutReset(false);
     setDataMessage(null);
     setResetLook(null);
+    setResetBoard(null);
   }, [section]);
   const unsavedBeforeRestore = 'Save or cancel your changes before restoring a backup.';
   /** Restore from backup (#234): refused while edits are unsaved, which a restore would otherwise mix in. */
   function chooseBackup() {
     setConfirmReset(false);
+    setConfirmLayoutReset(false);
     setBackup(null);
     if (dirty || saving) {
       setDataMessage({ text: unsavedBeforeRestore, error: true });
@@ -1257,6 +1290,26 @@ export function Editor({
         : 'Appearance reset. Save changes to keep it.',
     });
     setStyleFocus({ target: '.reset-appearance', edit: true });
+  }
+  /** Reset layout (#435): the default board as an ordinary draft change; Save keeps it, Cancel restores the saved board. */
+  function confirmResetLayout() {
+    const after = resetLayout(draftRef.current);
+    const unchanged = same(boardOf(savedRef.current), boardOf(after));
+    setConfirmLayoutReset(false);
+    // As when Photo is removed: a photo chosen in this draft for an unsaved Photo widget is dropped.
+    if (draftRef.current.widgets.photo && !after.widgets.photo) forgetUnsavedPhoto('photo');
+    densityHistory.current = undefined;
+    resizeExploration.current = null;
+    selectWidget(null);
+    setRoomNotice(null);
+    setDensityNotice(null);
+    say('');
+    change(() => after);
+    setResetBoard(unchanged ? null : after);
+    setDataMessage({
+      text: unchanged ? 'Layout is back to the default.' : 'Layout reset. Save changes to keep it.',
+    });
+    setStyleFocus({ target: '.reset-layout', edit: true });
   }
   const pendingCount = state.reminders.filter((item) => !item.completed).length;
   // The built-in style whose look is showing (#153): pressed whenever applying it changes nothing.
@@ -2085,20 +2138,68 @@ export function Editor({
                           </button>
                         </div>
                       </div>
-                    ) : (
-                      <button
-                        className="text-button reset-appearance"
-                        onClick={() => {
-                          setBackup(null);
-                          setDataMessage(null);
-                          setResetLook(null);
-                          setConfirmReset(true);
-                          // #343: the question replaces this button; the safe answer takes focus.
-                          setStyleFocus({ target: '.reset-confirm .keep-appearance' });
-                        }}
+                    ) : confirmLayoutReset ? (
+                      <div
+                        className="data-confirm reset-layout-confirm"
+                        role="group"
+                        aria-label="Reset layout"
                       >
-                        Reset appearance…
-                      </button>
+                        <p>
+                          Reset the layout to Calendar, Clock, Weather,
+                          Forecast, Last screen and Reminders on the Balanced
+                          grid? Other widgets leave the display. Widget
+                          settings, the clock style, appearance and reminders
+                          stay.
+                        </p>
+                        <div className="data-confirm-actions">
+                          <button
+                            className="button small primary"
+                            onClick={confirmResetLayout}
+                          >
+                            Reset
+                          </button>
+                          <button
+                            className="button small reset-layout-keep"
+                            onClick={() => {
+                              setConfirmLayoutReset(false);
+                              setStyleFocus({ target: '.reset-layout' });
+                            }}
+                          >
+                            Keep my layout
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="reset-actions">
+                        <button
+                          className="text-button reset-appearance"
+                          onClick={() => {
+                            setBackup(null);
+                            setDataMessage(null);
+                            setResetLook(null);
+                            setResetBoard(null);
+                            setConfirmReset(true);
+                            // #343: the question replaces this button; the safe answer takes focus.
+                            setStyleFocus({ target: '.reset-confirm .keep-appearance' });
+                          }}
+                        >
+                          Reset appearance…
+                        </button>
+                        <button
+                          className="text-button reset-layout"
+                          onClick={() => {
+                            setBackup(null);
+                            setDataMessage(null);
+                            setResetLook(null);
+                            setResetBoard(null);
+                            setConfirmLayoutReset(true);
+                            // As for Reset appearance (#343): the safe answer takes focus.
+                            setStyleFocus({ target: '.reset-layout-confirm .reset-layout-keep' });
+                          }}
+                        >
+                          Reset layout…
+                        </button>
+                      </div>
                     )}
                     <p
                       className={`inline-message data-status ${shownDataMessage?.error ? 'error' : ''}`}

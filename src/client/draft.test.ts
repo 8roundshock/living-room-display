@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { defaultSettings } from '../shared/defaults.ts';
+import { catalogBoardDefaults } from '../server/fixtures.ts';
 import { gridProblem, switchGridDensity } from '../shared/widgets.ts';
 import { getVisual } from './model.ts';
 import {
@@ -95,7 +96,8 @@ test('a pending city remains an atomic selection when another editor saves a loc
 });
 
 test('a density draft remains a valid atomic layout through a concurrent placement and visibility poll', () => {
-  const base = defaultSettings(), draft = structuredClone(base), incoming = structuredClone(base);
+  // The catalog board (the default before #435) has the free cells the concurrent move below needs.
+  const base = catalogBoardDefaults(), draft = structuredClone(base), incoming = structuredClone(base);
   const compact = switchGridDensity(base.widgetGrid, 'spacious', base.widgets); assert.ok(compact);
   draft.widgetGrid = compact.grid;
   incoming.widgetGrid.placements.weather = { column: 8, row: 6, size: 'medium' };
@@ -121,8 +123,9 @@ test('a density draft remains a valid atomic layout through a concurrent placeme
 });
 
 // #350: visibility merges three ways against the draft's own base while the draft keeps its layout.
+// On the catalog board, which has free cells (#435: the default board fills the grid).
 function withCountdownDraft() {
-  const base = defaultSettings();
+  const base = catalogBoardDefaults();
   const draft = structuredClone(base);
   const grid = addToGrid(draft.widgetGrid, 'countdown', 'small', draft.widgets); assert.ok(grid);
   draft.widgetGrid = grid; draft.widgets.countdown = true;

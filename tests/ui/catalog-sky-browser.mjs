@@ -9,8 +9,7 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
-import { forecastFixture } from '../../src/server/fixtures.ts';
-import { defaultSettings } from '../../src/shared/defaults.ts';
+import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { ACTIVE_WIDGET_IDS, GRID_DENSITIES, WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { CITIES } from './widget-checks/worldClocks.mjs';
 
@@ -47,9 +46,10 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const errors = [], images = [], checks = [];
+  // The catalog board (the default before #435) has room to add these widgets; the #435 default board is full.
   async function reset(update = () => {}) {
     await app.store.update(data => {
-      data.settings = defaultSettings(); data.settings.locationSource = 'manual'; data.reminders = []; data.photoAsset = null;
+      data.settings = catalogBoardDefaults(); data.settings.locationSource = 'manual'; data.reminders = []; data.photoAsset = null;
       update(data.settings);
     });
   }

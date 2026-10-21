@@ -27,7 +27,7 @@ busy dashboards. The application must produce no audio.
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 | Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |
 | World clocks | Time in up to four other cities. |
-| Calendar | This month at a glance. |
+| Calendar | This month at a glance; on the default board (#435). |
 | Countdown | Days until dates you choose. |
 | Note | A short message on screen. |
 | Air quality | Air quality and UV index. |
@@ -46,6 +46,10 @@ per-user store with a previous-state backup and export/import
 ([persistence and recovery](api.md#persistence-and-recovery)); private user content
 does not belong in Git. A local editor does not imply public or LAN exposure.
 Every information module is independently optional, including clock and weather.
+New installs start on the owner's board (#435): a large Calendar and Clock across
+the top, a large Weather and Forecast below, and a medium Last screen and Reminders,
+filling the Balanced grid with every other widget off. **Reset layout** returns to
+it; older saved boards are never changed by it.
 Use a shared catalog and supported small/medium/large content families. The live
 canvas offers direct drag, selected/focused resize handles, reversible fitted
 grid density choices and keyboard alternatives. Reflow neighbors when possible;

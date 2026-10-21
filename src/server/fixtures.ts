@@ -4,15 +4,29 @@ import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import type { Settings } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
+import { defaultWidgetGrid, defaultWidgetVisibility } from '../shared/widgets.ts';
 import { persistableData } from './persistence.ts';
 
 /**
- * Today's defaults with a colour accent: default data as an existing (pre-#75) user has it. A fresh
- * data folder starts Native (#75); tests that need a choice to be a real change in the files, or the
- * data an upgraded install holds, start from these settings instead.
+ * Today's defaults on the catalog board: Clock, Weather, Forecast, Reminders and Last screen at the
+ * catalog placements, which older data backfills from and which new installs started with before
+ * #435. A fresh data folder starts on the default board (`DEFAULT_BOARD`), which fills the grid;
+ * tests whose geometry was written for the catalog board, or that need free cells, start here.
+ */
+export function catalogBoardDefaults(): Settings {
+  const settings = defaultSettings();
+  settings.widgets = defaultWidgetVisibility();
+  settings.widgetGrid = defaultWidgetGrid();
+  return settings;
+}
+
+/**
+ * Default data as an existing user has it: the catalog board (before #435) with a colour accent
+ * (before #75). A fresh data folder starts Native on the default board; tests that need a choice to
+ * be a real change in the files, or the data an upgraded install holds, start from these settings.
  */
 export function colorAccentDefaults(): Settings {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   settings.appearance.accentMode = 'color';
   return settings;
 }

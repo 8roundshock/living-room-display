@@ -2,13 +2,14 @@
 // atomic arrangement during polling.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { defaultSettings } from '../shared/defaults.ts';
+// The catalog board (the default before #435) leaves the free cells these spans need.
+import { catalogBoardDefaults } from '../server/fixtures.ts';
 import { fitWidgetFamily, gridProblem, resizeWidgetSpan } from '../shared/widgets.ts';
 import { mergeSettings } from '../server/validation.ts';
 import { rebaseSettings, sameEffectiveSettings, settingsChanges } from './draft.ts';
 
 function withColumn() {
-  const base = defaultSettings();
+  const base = catalogBoardDefaults();
   base.widgets.preview = false; base.preview.enabled = false;
   // The post-#74 large Weather leaves no room for a 2 × 8 column beside Clock and Forecast (#183).
   base.widgetGrid.placements.weather = { ...base.widgetGrid.placements.weather, size: 'medium' };
@@ -42,7 +43,7 @@ test('a span edit sends the complete placement and removal sends span: null', ()
 });
 
 test('the same origin and family with a removed span is still a change', () => {
-  const saved = mergeSettings(defaultSettings(), { widgets: { forecast: false, preview: false } });
+  const saved = mergeSettings(catalogBoardDefaults(), { widgets: { forecast: false, preview: false } });
   saved.widgetGrid.placements.reminders = { column: 0, row: 4, size: 'small', span: { columns: 2, rows: 3 } };
   assert.equal(gridProblem(saved.widgetGrid, saved.widgets), null);
   const draft = structuredClone(saved); delete draft.widgetGrid.placements.reminders.span;
@@ -51,7 +52,7 @@ test('the same origin and family with a removed span is still a change', () => {
 });
 
 test('resizing back to the saved family span is clean', () => {
-  const base = mergeSettings(defaultSettings(), { widgets: { forecast: false, preview: false } });
+  const base = mergeSettings(catalogBoardDefaults(), { widgets: { forecast: false, preview: false } });
   const taller = resizeWidgetSpan(base.widgetGrid, 'reminders', { columns: 2, rows: 4 }, base.widgets); assert.ok(taller);
   const draft = structuredClone(base); draft.widgetGrid = taller;
   assert.equal(sameEffectiveSettings(base, draft), false);

@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
+import { catalogBoardDefaults } from './fixtures.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, composeWidgetGrid, firstPlacement, fitGridDensity, fitWidgetFamily, gridProblem, motionOffset, placeWidget, reflowWidget, repackGrid, switchGridDensity, widgetContentLimits, widgetSizes } from '../shared/widgets.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
 
+// The default board for new installs (#435) is checked first; every later test is written for the
+// catalog board (the default before #435), which older data backfills from and which has free cells.
 test('all optional widgets and their family metadata have a valid independent default', () => {
   const settings = defaultSettings();
   assert.equal(gridProblem(settings.widgetGrid, settings.widgets), null);
@@ -17,7 +20,7 @@ test('all optional widgets and their family metadata have a valid independent de
 });
 
 test('invalid drops, overlaps, unsupported sizes and bounds cannot mutate saved settings or presets', () => {
-  const settings = defaultSettings(); const original = structuredClone(settings.widgetGrid);
+  const settings = catalogBoardDefaults(); const original = structuredClone(settings.widgetGrid);
   assert.equal(placeWidget(settings.widgetGrid, 'clock', { column: 8, row: 0, size: 'large' }, settings.widgets), null);
   assert.equal(placeWidget(settings.widgetGrid, 'clock', { column: -1, row: 0, size: 'small' }, settings.widgets), null);
   assert.throws(() => mergeSettings(settings, { widgetGrid: { placements: { preview: { column: 8, row: 0 } } } }), /overlaps/);
@@ -29,7 +32,7 @@ test('invalid drops, overlaps, unsupported sizes and bounds cannot mutate saved 
 });
 
 test('per-widget supported families are authoritative for validation and placement', () => {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   const sizes = WIDGET_CATALOG.weather.sizes;
   // A future renderer may deliberately omit a family; generic helpers must honor that contract.
   WIDGET_CATALOG.weather.sizes = { small: sizes.small, medium: sizes.medium } as typeof sizes;
@@ -42,7 +45,7 @@ test('per-widget supported families are authoritative for validation and placeme
 });
 
 test('density changes preserve families and every enabled module or reject without truncation', () => {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   const fine = repackGrid(settings.widgetGrid, 'fine', settings.widgets); assert.ok(fine);
   assert.equal(gridProblem(fine, settings.widgets), null);
   for (const id of WIDGET_IDS) assert.equal(fine.placements[id].size, settings.widgetGrid.placements[id].size);
@@ -54,7 +57,7 @@ test('density changes preserve families and every enabled module or reject witho
 });
 
 test('adding a large photo searches nearby origins when its old origin blocks the wide forecast', () => {
-  const settings = defaultSettings(), original = structuredClone(settings.widgetGrid);
+  const settings = catalogBoardDefaults(), original = structuredClone(settings.widgetGrid);
   const preferred = { ...original.placements.photo, size: 'large' as const };
   assert.equal(firstPlacement(original, 'photo', 'large', settings.widgets), null);
   assert.equal(reflowWidget(original, 'photo', preferred, settings.widgets), null, 'the old hidden origin partitions the free space');
@@ -68,7 +71,7 @@ test('adding a large photo searches nearby origins when its old origin blocks th
 });
 
 test('density fitting keeps every widget and exactly restores an explored authored layout and families', () => {
-  const settings = defaultSettings(); settings.widgets.photo = true;
+  const settings = catalogBoardDefaults(); settings.widgets.photo = true;
   const original = structuredClone(settings.widgetGrid);
   const compact = switchGridDensity(original, 'spacious', settings.widgets); assert.ok(compact);
   assert.equal(gridProblem(compact.grid, settings.widgets), null);
@@ -86,7 +89,7 @@ test('density fitting keeps every widget and exactly restores an explored author
 });
 
 test('density history cannot overwrite a meaningful widget edit with a stale snapshot', () => {
-  const settings = defaultSettings(); for (const id of WIDGET_IDS) settings.widgets[id] = id === 'clock';
+  const settings = catalogBoardDefaults(); for (const id of WIDGET_IDS) settings.widgets[id] = id === 'clock';
   settings.widgetGrid.placements.clock = { column: 6, row: 6, size: 'small' };
   const original = structuredClone(settings.widgetGrid);
   const compact = switchGridDensity(original, 'spacious', settings.widgets); assert.ok(compact);
@@ -98,7 +101,7 @@ test('density history cannot overwrite a meaningful widget edit with a stale sna
 });
 
 test('direct manipulation pins the requested widget, displaces neighbors, and leaves unrelated cells intact', () => {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   const original = structuredClone(settings.widgetGrid);
   const next = reflowWidget(original, 'weather', { column: 6, row: 0, size: 'medium' }, settings.widgets); assert.ok(next);
   assert.deepEqual(next.placements.weather, { column: 6, row: 0, size: 'medium' });
@@ -110,7 +113,7 @@ test('direct manipulation pins the requested widget, displaces neighbors, and le
 });
 
 test('legacy family geometry is validated before migration while current invalid layouts remain errors', () => {
-  const legacy = JSON.parse(JSON.stringify(defaultSettings())); delete legacy.widgetGrid.revision;
+  const legacy = JSON.parse(JSON.stringify(catalogBoardDefaults())); delete legacy.widgetGrid.revision;
   // Revision-one positions of the foundation (pre-#78) ids, written out rather than read from PREVIOUS_RELEASE (#263).
   const positions = { clock: [0, 0], weather: [8, 0], rain: [0, 3], forecast: [2, 6], reminders: [5, 3], preview: [8, 3], photo: [4, 3] };
   for (const [id, [column, row]] of Object.entries(positions)) legacy.widgetGrid.placements[id] = { ...legacy.widgetGrid.placements[id], column, row };
@@ -141,7 +144,7 @@ test('legacy family geometry is validated before migration while current invalid
 });
 
 test('additive legacy migration preserves visibility, cities, presets and obsolete transforms', () => {
-  const legacy = JSON.parse(JSON.stringify(defaultSettings()));
+  const legacy = JSON.parse(JSON.stringify(catalogBoardDefaults()));
   delete legacy.widgetGrid; delete legacy.appearance.clockStyle; delete legacy.widgets.rain; delete legacy.widgets.photo;
   delete legacy.widgetOverrides.rain; delete legacy.widgetOverrides.photo; legacy.widgets.weather = false; legacy.widgetOverrides.clock.offsetX = 12;
   const visual = { appearance: legacy.appearance, widgets: legacy.widgets, widgetOverrides: legacy.widgetOverrides, widgetBehavior: legacy.widgetBehavior, preview: legacy.preview };
@@ -158,7 +161,7 @@ test('additive legacy migration preserves visibility, cities, presets and obsole
 });
 
 test('missing additive modules use accepted revision-one origins before settings and preset migration', () => {
-  const legacy = JSON.parse(JSON.stringify(defaultSettings()));
+  const legacy = JSON.parse(JSON.stringify(catalogBoardDefaults()));
   legacy.locationSource = 'manual'; legacy.location.name = 'Preserved legacy city'; legacy.units = 'imperial';
   legacy.widgetGrid = { density: 'balanced', placements: {
     clock: { column: 0, row: 0, size: 'large' }, weather: { column: 8, row: 0, size: 'medium' },
@@ -181,7 +184,7 @@ test('missing additive modules use accepted revision-one origins before settings
 });
 
 test('catalog defaults generically backfill an absent module throughout saved visuals', () => {
-  const legacy = JSON.parse(JSON.stringify(defaultSettings()));
+  const legacy = JSON.parse(JSON.stringify(catalogBoardDefaults()));
   for (const field of ['widgets', 'widgetOverrides']) delete legacy[field].photo;
   delete legacy.widgetGrid.placements.photo;
   const saved = settingsSchema.parse(legacy);
@@ -192,7 +195,7 @@ test('catalog defaults generically backfill an absent module throughout saved vi
 });
 
 test('a centered single widget visits distant regions rather than remaining locked by reflections', () => {
-  const settings = defaultSettings(); const enabled = Object.fromEntries(WIDGET_IDS.map(id => [id, id === 'clock']));
+  const settings = catalogBoardDefaults(); const enabled = Object.fromEntries(WIDGET_IDS.map(id => [id, id === 'clock']));
   settings.widgetGrid.placements.clock = { column: 3, row: 3, size: 'large' };
   let previous = settings.widgetGrid; const origins = new Set<string>();
   for (let cycle = 1; cycle <= 40; cycle++) {
@@ -208,7 +211,7 @@ test('a centered single widget visits distant regions rather than remaining lock
 
 test('long-running full and dense boards remain collision-free and move modules across varied origins', () => {
   for (const density of Object.keys(GRID_DENSITIES) as (keyof typeof GRID_DENSITIES)[]) {
-    const settings = defaultSettings(); settings.widgets.photo = true;
+    const settings = catalogBoardDefaults(); settings.widgets.photo = true;
     if (density === 'spacious') for (const id of WIDGET_IDS) settings.widgetGrid.placements[id].size = 'small';
     let grid = repackGrid(settings.widgetGrid, density, settings.widgets); assert.ok(grid);
     const original = structuredClone(grid); const origins = Object.fromEntries(WIDGET_IDS.map(id => [id, new Set<string>()]));
@@ -221,6 +224,6 @@ test('long-running full and dense boards remain collision-free and move modules 
     for (const id of WIDGET_IDS.filter(id => settings.widgets[id])) assert.ok(origins[id]!.size >= 5, `${density}/${id} needs more than four fixed origins`);
     assert.notDeepEqual(motionOffset(1), motionOffset(5), 'additional protected-plane offsets do not repeat on the old four-cycle boundary');
   }
-  const grid = defaultSettings().widgetGrid;
-  assert.ok(firstPlacement(grid, 'photo', 'small', defaultSettings().widgets));
+  const grid = catalogBoardDefaults().widgetGrid;
+  assert.ok(firstPlacement(grid, 'photo', 'small', catalogBoardDefaults().widgets));
 });

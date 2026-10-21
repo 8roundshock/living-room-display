@@ -37,6 +37,17 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     await page.clock.install({ time: new Date(now) });
     await page.goto(base + '/editor'); await button('Edit layout').waitFor();
   }
+  /**
+   * Adds the previewed Photo. The #435 default board fills the grid, so the add is explained with room
+   * fixes; the first (Switch the grid to Fine) adds it as the same single draft edit.
+   */
+  async function addPhoto() {
+    await button('Add Photo').click();
+    await page.locator('.studio-savebar, .widget-picker .room-fix').first().waitFor();
+    const fix = page.locator('.widget-picker .room-fix').first();
+    if (await fix.count()) { assert.equal(await fix.innerText(), 'Switch the grid to Fine'); await fix.scrollIntoViewIfNeeded(); await fix.click(); }
+    await button('Save changes').waitFor();
+  }
   async function inView(locator, label) {
     const box = await locator.boundingBox(); const viewport = page.viewportSize();
     assert.ok(box && box.x >= -1 && box.y >= -1 && box.x + box.width <= viewport.width + 1 && box.y + box.height <= viewport.height + 1, `${label} must fit the viewport: ${JSON.stringify(box)}`);
@@ -89,7 +100,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     // A rejected photo, with the Save bar showing for the added Photo widget.
     await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click();
     if (viewport.width <= 700) await button('Photo large').click();
-    await button('Add Photo').scrollIntoViewIfNeeded(); await button('Add Photo').click(); await button('Save changes').waitFor();
+    await button('Add Photo').scrollIntoViewIfNeeded(); await addPhoto();
     await page.getByLabel('Choose local photo').setInputFiles({ name: 'bad.png', mimeType: 'text/plain', buffer: Buffer.from('not an image') });
     await page.getByRole('alert').filter({ hasText: 'Choose a JPEG, PNG or WebP image' }).waitFor();
     await alertClear(viewport, `${viewport.width}x${viewport.height} rejected photo`);
@@ -403,7 +414,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       for (const name of ['Widgets', 'Style', 'Weather', 'Reminders']) { await tab(name); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'narrow/200% equivalent must not scroll horizontally'); }
       await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click(); await button('Photo large').click(); await button('Add Photo').scrollIntoViewIfNeeded(); await inView(button('Add Photo'), 'Mobile Add');
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
-      await button('Add Photo').click(); await button('Save changes').waitFor();
+      await addPhoto();
       const upload = page.locator('.photo-upload-control'); await upload.scrollIntoViewIfNeeded();
       const icon = await upload.locator('svg').boundingBox(); assert.ok(icon.width === 16 && icon.height === 16, 'upload icon keeps explicit geometry');
       await tab('Weather'); const input = page.getByRole('combobox', { name: 'City', exact: true }); await input.focus();

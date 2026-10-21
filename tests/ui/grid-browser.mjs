@@ -8,7 +8,7 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
-import { forecastFixture } from '../../src/server/fixtures.ts';
+import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { repackGrid } from '../../src/shared/widgets.ts';
 
@@ -36,7 +36,9 @@ export async function runGridQa({ playwright, edge } = {}) {
     checks = [],
     images = [];
   let context, page;
-  async function open(settings = defaultSettings(), options = {}) {
+  // The editing flows were written for the catalog board (the default before #435), which has free
+  // cells; the display check at the end renders the #435 default board.
+  async function open(settings = catalogBoardDefaults(), options = {}) {
     await context?.close();
     await app.store.update((data) => {
       data.settings = structuredClone(settings);
@@ -102,7 +104,7 @@ export async function runGridQa({ playwright, edge } = {}) {
     await page.clock.runFor(220);
   }
   function onlyClock() {
-    const s = defaultSettings();
+    const s = catalogBoardDefaults();
     for (const id of Object.keys(s.widgets)) s.widgets[id] = id === 'clock';
     return s;
   }
@@ -231,7 +233,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       'spacious',
     );
     await dirty();
-    assert.equal(await page.locator('.grid-widget-frame').count(), 5, 'five default widgets; Rain is part of Weather (#74)');
+    assert.equal(await page.locator('.grid-widget-frame').count(), 5, 'five catalog-board widgets; Rain is part of Weather (#74)');
     assert.equal(await page.locator('.ambient-clock').getAttribute('data-widget-size'), 'medium');
     const fittedFrames = await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style')));
     await move().focus(); await page.keyboard.press('Tab');
@@ -514,7 +516,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       'all modules optional including independent weather and clock; styles render distinctly; add/remove returns clean',
     );
 
-    const settings = defaultSettings();
+    const settings = catalogBoardDefaults();
     settings.widgets.photo = true;
     // Repack a smaller visible board to leave room for the local image.
     for (const id of ['reminders', 'preview', 'forecast'])
@@ -779,17 +781,28 @@ export async function runGridQa({ playwright, edge } = {}) {
       'small/medium forecast labels remain one line at every grid density with full accessible civil dates',
     );
 
+    // #435: the full default board at the owner's 1280 × 720 TV, 1080p and 4K. Every shown widget
+    // moves as part of the whole board in every composition.
     for (const viewport of [
+      { width: 1280, height: 720 },
       { width: 1920, height: 1080 },
       { width: 3840, height: 2160 },
     ]) {
       await open(defaultSettings(), { viewport });
       await page.goto(base + '/display');
       await page.locator('.clock-time').waitFor();
+      const places = () => page.locator('.ambient-widget').evaluateAll((elements) => Object.fromEntries(elements.map((element) => {
+        const r = element.getBoundingClientRect(); return [element.dataset.widgetId, `${Math.round(r.left)},${Math.round(r.top)}`];
+      })));
+      let previous = null;
       for (let cycle = 0; cycle < 5; cycle++) {
         await page.clock.runFor(cycle ? 180000 : 1000);
         await page.clock.runFor(4000);
         await bounds();
+        const current = await places();
+        assert.deepEqual(Object.keys(current).sort(), ['calendar', 'clock', 'forecast', 'weather'], `${viewport.width}: the default board shows Calendar, Clock, Weather and Forecast (no reminders or snapshot to show)`);
+        if (previous) for (const [id, place] of Object.entries(current)) assert.notEqual(place, previous[id], `${viewport.width} cycle ${cycle}: ${id} moves with the board`);
+        previous = current;
       }
       assert.equal(await page.locator('html.native-display').count(), 0);
       assert.notEqual(await page.locator('html').evaluate(element => getComputedStyle(element).cursor), 'none');
@@ -799,7 +812,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       });
     }
     checks.push(
-      '1080p/4K actual rendered widget bounds and pairwise non-overlap over varied compositions; visible browser cursor',
+      '#435 default board at 1280×720, 1080p and 4K: actual rendered widget bounds and pairwise non-overlap over varied compositions, every shown widget moving in every composition; visible browser cursor',
     );
     assert.deepEqual(errors, []);
     return { checks, images };

@@ -9,7 +9,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 
 | Authority | Responsibility |
 | --- | --- |
-| [`src/shared/widgets.ts`](../src/shared/widgets.ts) | The catalog (category, tone, status), supported families, grid definitions, placement and layout helpers. |
+| [`src/shared/widgets.ts`](../src/shared/widgets.ts) | The catalog (category, tone, status), supported families, grid definitions, placement and layout helpers, and `DEFAULT_BOARD`, the board new installs start with (#435). |
 | [`src/shared/palette.ts`](../src/shared/palette.ts) | Accent modes and the palette roles a catalog entry declares as its `tone`. |
 | [`src/shared/motion.ts`](../src/shared/motion.ts) | Animation levels and their labels. |
 | [`src/shared/contracts.ts`](../src/shared/contracts.ts) and [`defaults.ts`](../src/shared/defaults.ts) | Persisted types, `widgetData` and catalog-derived initial settings. |
@@ -77,11 +77,45 @@ Start with `WIDGET_CATALOG`, `GRID_DENSITIES` and `widgetSpan`; use
 packing rule. `composeWidgetGrid` and `motionOffset` own ambient placement variation.
 Schema/default changes belong at these authorities with their tests.
 Legacy settings/presets without a grid receive the safe catalog default grid.
+The catalog's `defaultEnabled`, `defaultPlacement` and `defaultSize` are that
+backfill; new installs and Reset layout use the separate default board below, so
+changing one never changes the other.
 Their visibility/location choices survive; old offsets/scale and
 `appearance.layout` are retained data, not converted or applied to the grid.
 Grid revision 2 gives the large clock real height. Revision 1 is validated against
 its original geometry before migration; enabled widgets remain present, with
 family reduction only when needed to fit. Current invalid layouts are rejected.
+
+### Default board (#435)
+
+New installs and **Reset layout** start on the owner's board, `DEFAULT_BOARD`
+(`defaultBoardGrid()` and `defaultBoardVisibility()`, used by `DEFAULT_SETTINGS`).
+On Balanced 12 × 8 it fills every cell:
+
+| Widget | Column, row | Family (cells) |
+| --- | --- | --- |
+| Calendar | 0, 0 | Large (4 × 4) |
+| Clock | 4, 0 | Large (8 × 4) |
+| Weather | 0, 4 | Large (4 × 4) |
+| Forecast | 4, 4 | Large (8 × 2) |
+| Last screen | 4, 6 | Medium (4 × 2) |
+| Reminders | 8, 6 | Medium (4 × 2) |
+
+Every other widget is off, and every widget stays optional. Hidden widgets wait at
+their catalog placement, except the retired Rain, which sits inside Weather as in the
+catalog board, so a stale editor that enables it merges into Weather (#74). The
+catalog itself is unchanged: Calendar's `defaultEnabled` stays `false`, so older data
+without a Calendar key still reads it as off, and a settings object without a grid
+still receives the catalog board (Clock, Weather, Forecast, Reminders and Last screen).
+`src/server/default-board.test.ts` proves both, and that the catalog's backfill
+fields equal the installed `d66832b` catalog (#497). Because the board is full, adding a
+widget always goes through room guidance: every hidden widget, in every family,
+gets “No room for … at … size.” with **Switch the grid to Fine** and one reduction
+(**Make room: Reminders small** for a small widget, **Weather medium** for a medium
+one, **Clock medium** for a large one), each one valid draft. A full-height Reminders
+column names Clock, and **Make room: Clock medium** fits it. Every widget of the full
+board moves in every relocation cycle (`relocation.test.ts`). Style defaults are
+not part of the board.
 
 ## Families and editing
 
@@ -207,8 +241,9 @@ The catalog has twelve active widgets now that Weather has absorbed Rain (#74), 
 in the picker by `WIDGET_CATEGORIES`: **Time** (Clock, World clocks, Calendar),
 **Weather & sky** (Weather, Forecast, Air quality, Sun & moon), **Personal**
 (Reminders, Countdown, Note) and **Pictures** (Photo, Last screen). Every new widget
-is optional, off by default and appended after `photo`, so existing packing and
-composition stay identical.
+is optional, off in the catalog and appended after `photo`, so existing packing and
+composition stay identical. Since #435 the default board for new installs shows
+Calendar (large); older data still reads it as off.
 
 - **Kept as is:** Clock, Forecast, Last screen and Photo. Weather and Rain belong to
   #74 and Reminders to #73.

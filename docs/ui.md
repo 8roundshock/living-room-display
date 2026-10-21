@@ -172,7 +172,17 @@ motion or the Off animation level.
   widgets, their layout, the clock style and saved styles stay; the status line reads
   “Appearance reset. Save changes to keep it.” only while the reset is unsaved, clears
   on Cancel and reads “Appearance reset and saved.” after Save (#300). A link styled as
-  a button (**Export saved data**) spaces its icon like the buttons beside it (#304). The
+  a button (**Export saved data**) spaces its icon like the buttons beside it (#304).
+  **Reset layout…** sits beside Reset appearance… (#435). It asks inline with focus on
+  **Keep my layout**; **Reset** puts the [default board](widgets.md#default-board-435) on
+  the canvas as an ordinary draft change (Calendar, Clock, Weather and Forecast large, Last
+  screen and Reminders medium, on Balanced; every other widget off). Its status line follows
+  the same rule: “Layout reset. Save changes to keep it.” only while the reset is unsaved,
+  cleared by Cancel or a further layout change, and “Layout reset and saved.” after Save;
+  “Layout is back to the default.” when the saved board already is the default. Widget
+  options (clock style, Hide when empty, snapshot opacity), widget content, the appearance,
+  saved styles, the photo and reminders stay; Cancel restores the saved board. Either answer
+  returns focus to **Reset layout…**. The
   [studio harness](../tests/ui/studio-browser.mjs) covers these flows.
 - The authored canvas never relocates; outside Edit layout it shows value and glyph
   motion for the draft Animation level, and during Edit layout widgets stay still. **Edit layout** reveals a faint
@@ -208,17 +218,20 @@ motion or the Off animation level.
   boards (#403). Cancel restores the saved arrangement.
 - **Free-size Reminders** (#73): its handle snaps to whole cells from 2 × 2 up to
   the full grid height and two-thirds of the width; neighbours reflow live, and an
-  impossible size keeps the board with “No room for that size”. The default board's
-  large Clock, Weather (#74) and Forecast leave no room for a Column, so its preset
-  is `aria-disabled` (still focusable) with the reason “Column needs more room on
-  this board.” Choosing a preset or stepper size that has no room changes nothing
-  and names what takes the space in one live region beside the presets: “No room
-  for a full-height Reminders column beside Clock, Weather and Forecast.” (#183).
-  **Make room: Weather medium** applies the smallest single family reduction that
-  fits, found with the shared reflow helpers (`src/client/make-room.ts`), together
-  with the requested size as one draft edit; Cancel restores both. Keyboard focus then
-  moves to the size control that shows the change (the pressed preset or the stepper used),
-  never to the page (#310). Fixed-family
+  impossible size keeps the board with “No room for that size”. A preset with no
+  room is `aria-disabled` (still focusable) with the reason, for example “Column
+  needs more room on this board.” on the catalog board, whose large Clock, Weather
+  (#74) and Forecast leave no room for one. The full default board (#435) leaves
+  none for Large or Column (“Large and Column need more room on this board.”).
+  Choosing a preset or stepper size that has no room changes nothing and names what
+  takes the space in one live region beside the presets: “No room for a
+  full-height Reminders column beside Clock.” on the default board, or “… beside
+  Clock, Weather and Forecast.” on the catalog board (#183). **Make room: Clock
+  medium** (catalog board: **Make room: Weather medium**) applies the smallest single
+  family reduction that fits, found with the shared reflow helpers
+  (`src/client/make-room.ts`), together with the requested size as one draft edit;
+  Cancel restores both. Keyboard focus then moves to the size control that shows the
+  change (the pressed preset or the stepper used), never to the page (#310). Fixed-family
   size buttons explain a missing room the same way. A pointer drag on the canvas says “No
   room for that size” while it has none; when a drag or a handle arrow key ends without room,
   the same explanation and fix appear beside the widget's size controls, worked out once at
@@ -241,7 +254,8 @@ motion or the Off animation level.
   to fit is named (“Reminders 2 × 8 → small to fit. Switch back to restore.”). The
   picker still adds a family with a caption noting free resizing, qualified while
   the board has no room for a full-height column (“Resize freely after adding. Full
-  height needs room first: make Clock, Weather or Forecast smaller.”). On the display a
+  height needs room first: make Clock smaller.” on the default board, “make Clock,
+  Weather or Forecast smaller” on the catalog board). On the display a
   full-height Reminders column alternates top and bottom anchoring between
   arrangements while it relocates sideways.
 - Density/family/position and visibility form one atomic local layout during a
@@ -264,8 +278,11 @@ motion or the Off animation level.
   or widget or by closing the picker. Up to two fixes apply as one draft edit that
   Cancel restores: **Try small** (a smaller family of the same widget), **Switch the
   grid to Fine** (a finer grid that changes no family) or **Make room: Weather
-  medium** (#238). The Reminders tab is named with its count (“Reminders, 8
-  pending”).
+  medium** (#238). The default board (#435) fills the grid, so every add there is
+  explained this way: each hidden widget in each family offers **Switch the grid to
+  Fine** and one reduction (**Make room: Reminders small** for a small widget,
+  **Weather medium** for a medium one, **Clock medium** for a large one). The
+  Reminders tab is named with its count (“Reminders, 8 pending”).
 - **Preview movement** explicitly reveals numbered arrangements and **Automatic**
   ambient preview. Editing returns to authored placement. **Open display** opens
   a browser tab; its pointer remains visible, including fullscreen. One dim line beside
@@ -302,7 +319,8 @@ own floors scale with its screen; content that then overflows zooms out as a who
 the display), a very wide family at most 2.5 times as wide as tall, and a small map of the
 board under it shows the family's footprint (“4 × 2 cells of 12 × 8”).
 
-- **Calendar** (Time, default medium) follows the computer's local date like the Clock
+- **Calendar** (Time, added at medium; large and on by default on the
+  [default board](widgets.md#default-board-435), #435) follows the computer's local date like the Clock
   and rolls over at midnight. **Week starts on** offers Automatic (labelled with the
   resolved day, for example “Automatic · Sunday”, from the browser locale with a Monday
   fallback), Sunday or Monday. It has no data dependency, so it is always shown when

@@ -7,12 +7,14 @@ import { randomUUID } from 'node:crypto';
 import { DataStore, RENAME_RETRY_DELAYS_MS, STALE_TEMPORARY_FILE_MS, SettingsConflict } from './store.ts';
 import { photoFixture } from './fixtures.ts';
 import { defaultSettings } from '../shared/defaults.ts';
+import { catalogBoardDefaults } from './fixtures.ts';
 import { gridProblem } from '../shared/widgets.ts';
 
 test('reading legacy geometry preserves original state bytes and migrates every widget in memory before a normal save', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-grid-migration-'));
   try {
-    const settings = defaultSettings(); delete settings.widgetGrid.revision;
+    // Legacy files hold the catalog board's widgets (the default before #435).
+    const settings = catalogBoardDefaults(); delete settings.widgetGrid.revision;
     settings.widgetGrid.placements.clock = { column: 0, row: 0, size: 'large' };
     // A pre-#74 board: medium Weather and an enabled Rain, which Weather absorbs on read.
     settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' }; settings.widgets.rain = true;

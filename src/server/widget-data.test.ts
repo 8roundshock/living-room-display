@@ -101,8 +101,9 @@ test('#153 each built-in style saved over a board with an added Note keeps the N
     try {
       const store = await DataStore.open(directory);
       const start = store.snapshot().settings;
-      const place = firstPlacement(start.widgetGrid, 'note', 'small', start.widgets);
-      assert.ok(place, 'the default board has room for a small Note');
+      // The default board (#435) fills the grid; removing Last screen leaves room for a small Note.
+      const place = firstPlacement(start.widgetGrid, 'note', 'small', { ...start.widgets, preview: false });
+      assert.ok(place, 'without Last screen the default board has room for a small Note');
       // A non-default widget set: Note added with text, Last screen removed, Reminders shown when empty.
       const board = await store.patchSettings(settingsPatchSchema.parse({
         widgets: { note: true, preview: false }, preview: { enabled: false }, widgetBehavior: { reminders: { hideWhenEmpty: false } },

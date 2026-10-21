@@ -465,8 +465,10 @@ not know.
 `src/server/rollback.test.ts` (part of `npm test`) proves this with a byte-for-byte
 copy of the `d66832b` reader: fresh Native data, previous-release data after unrelated
 saves, saved styles, a photo, a revision-one legacy file, the export, each former
-`bedca44` exception and every value omitted at rest written out in full, in
-`state.json`, `state.backup.json` and the export, all parse. Its negative controls
+`bedca44` exception, Reset layout to the #435 default board (which `d66832b` reads as
+the same board, Calendar included) and every value omitted at rest written out in
+full, in `state.json`, `state.backup.json` and the export, all parse. The default
+board adds no key: it only changes which widgets a fresh data folder shows and where. Its negative controls
 show that an unknown key and invalid values are still rejected. After each
 coordinated install, the baseline moves to the newly installed revision (#130).
 
