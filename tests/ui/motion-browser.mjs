@@ -11,7 +11,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { catalogBoardDefaults, forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
-import { ACTIVE_WIDGET_IDS, WIDGET_IDS, normalizePlacement, widgetRevealOrder, widgetSizes } from '../../src/shared/widgets.ts';
+import { ACTIVE_WIDGET_IDS, WIDGET_IDS, gridProblem, normalizePlacement, widgetRevealOrder, widgetSizes } from '../../src/shared/widgets.ts';
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
 import { keepPagesLocal } from './lib/local-only.mjs';
 
@@ -139,18 +139,24 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
   /** Animation names or transition:<property> running on the elements matching `selector`. */
   const motionIn = (page, selector) => page.evaluate(query => [...document.querySelectorAll(query)].flatMap(element => element.getAnimations().map(animation => animation.animationName ?? (animation.transitionProperty ? `transition:${animation.transitionProperty}` : animation.id || 'script'))), selector);
   /**
-   * #436 owner board: the default 12 × 8 board with two synthetic reminders, a routed Last screen
+   * #436 owner board: the historical catalog 12 × 8 board with two synthetic reminders, a routed Last screen
    * snapshot and Sun & moon, so six widgets show, at a 30 s interval with a 2 s fade, Lively and
    * brightness 0.37, as the owner's saved settings. No Swap places, as after the update.
    */
   const SYNTHETIC_REMINDERS = [1, 2].map(index => ({ id: `00000000-0000-4000-8000-00000000043${index}`, text: `Synthetic reminder ${index}`, completed: false, dueAt: null, createdAt: new Date(now - index * 60_000).toISOString(), updatedAt: new Date(now - index * 60_000).toISOString() }));
   const ownerBoard = (edit = () => undefined) => state => {
+    // This historical six-widget fixture predates #435's full default, whose Calendar and
+    // Reminders placement would otherwise add a seventh widget and overlap Sun & moon.
+    const board = catalogBoardDefaults();
+    state.settings.widgets = board.widgets; state.settings.widgetGrid = board.widgetGrid;
     level('lively')(state);
     Object.assign(state.settings.appearance, { motionIntervalSeconds: 30, fadeSeconds: 2, motionEnabled: true, brightness: 0.37, rearrange: false });
     Object.assign(state.settings.widgets, { clock: true, weather: true, forecast: true, reminders: true, preview: true, sunMoon: true });
     state.settings.preview.enabled = true;
     state.settings.widgetGrid.density = 'balanced';
     state.settings.widgetGrid.placements.sunMoon = { column: 8, row: 6, size: 'small' };
+    assert.equal(Object.values(state.settings.widgets).filter(Boolean).length, 6, 'historical motion fixture has six widgets');
+    assert.equal(gridProblem(state.settings.widgetGrid, state.settings.widgets), null, 'historical motion fixture has no overlaps');
     state.reminders = structuredClone(SYNTHETIC_REMINDERS);
     state.preview = { available: true, capturedAt: new Date(now - 60_000).toISOString(), width: 1920, height: 1080 };
     edit(state);
