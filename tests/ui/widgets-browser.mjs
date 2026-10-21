@@ -12,6 +12,7 @@ import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, isActiveWidget, widgetSizes } from '../../src/shared/widgets.ts';
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
+import { waitForWidgetFit } from './lib/fit-readiness.mjs';
 
 /** Renderers that read the weather or air-quality status or the connection; the others render the same when stale or offline. */
 const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'offline'], airQuality: ['stale', 'offline'], reminders: ['offline'], dynamic: ['stale', 'offline'] };
@@ -175,6 +176,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       for (const density of Object.keys(GRID_DENSITIES)) for (const id of ACTIVE_WIDGET_IDS) for (const size of widgetSizes(id)) {
         current = familyState(id, size, density);
         await open(); const widget = page.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
+        await waitForWidgetFit(page, `[data-widget-id="${id}"]`, { label: `${id}/${size}/${density}/${viewport.width}x${viewport.height}` });
         const bounds = await widget.evaluate(el => { const r = el.getBoundingClientRect(); const content = el.querySelector('.widget-content'); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, scale: new DOMMatrix(getComputedStyle(content).transform).a, border: getComputedStyle(el).borderWidth, background: getComputedStyle(el).backgroundColor, tone: [...el.classList].filter(name => name.startsWith('tone-')), accentMode: el.closest('.ambient')?.getAttribute('data-accent-mode') }; });
         assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.right <= viewport.width + 1 && bounds.bottom <= viewport.height + 1, `${id}/${size}/${density} stays inside display`);
         assert.ok(bounds.scale >= 0.75, `${id}/${size}/${density} should fit by design, scale=${bounds.scale}`);
