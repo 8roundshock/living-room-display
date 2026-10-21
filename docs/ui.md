@@ -94,7 +94,9 @@ buttons, inputs, city search and Reminders panel; every rule of its own names a
   - **Note** ("A short message on your display"): 200 characters and 4 lines with a
     "37/200" counter; **Save note** and **Discard** appear only while the trimmed text
     differs from the saved note (and only then does leaving the page prompt); **Clear
-    note** saves an empty note with Undo.
+    note** saves an empty note with Undo. Saving, discarding or undoing Clear removes
+    the retained draft, so reopening reads a later saved edit from another page.
+    Closing with unsaved text keeps that draft for this page's lifetime.
   - **Show on my display** (World clock, Countdown, Note, Reminder and Calendar, the
     latter two for Reminders): while that widget is off and has room, a switch, on by
     default, turns it on after the content saves (`POST /api/widgets/:id/show`, free

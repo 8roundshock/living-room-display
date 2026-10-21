@@ -421,16 +421,21 @@ function NoteSheet({ context, onDirty }: { context: HomeContext; onDirty: (dirty
   const [busy, setBusy] = useState(false);
   const differs = limitNote(text).trim() !== saved;
   useEffect(() => { onDirty(differs); }, [differs]);
+  function resetText(value: string) {
+    setText(value);
+    // Updating the field also caches it. Saved/discarded text is no longer a draft: clear the
+    // cache afterward so reopening uses the latest saved note, including another page's edits.
+    forget('note.text');
+  }
   async function save(value: string, undoText?: string) {
     setBusy(true);
     try {
       const next = await run(() => api<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify({ widgetData: { note: { text: value } } }) }), () => { void save(value, undoText); });
       if (!next) return false;
       applySettings(next);
-      forget('note.text');
-      setText(next.widgetData.note.text);
+      resetText(next.widgetData.note.text);
       if (undoText !== undefined) {
-        announce({ text: 'Note cleared', undo: async () => { const back = await run(() => api<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify({ widgetData: { note: { text: undoText } } }) })); if (back) { applySettings(back); setText(back.widgetData.note.text); } } });
+        announce({ text: 'Note cleared', undo: async () => { const back = await run(() => api<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify({ widgetData: { note: { text: undoText } } }) })); if (back) { applySettings(back); resetText(back.widgetData.note.text); } } });
         return true;
       }
       const shown = next.widgetData.note.text ? await showAfterSave({ ...context, state: { ...context.state, settings: next } }, 'note', showWanted) : 'off';
@@ -449,7 +454,7 @@ function NoteSheet({ context, onDirty }: { context: HomeContext; onDirty: (dirty
         <ShowSwitch id="note" settings={settings} checked={showWanted} onChange={setShowWanted} />
         <div className="home-sheet-actions">
           {differs && <button type="submit" className="button primary">Save note</button>}
-          {differs && <button type="button" className="button" onClick={() => { forget('note.text'); setText(saved); }}>Discard</button>}
+          {differs && <button type="button" className="button" onClick={() => resetText(saved)}>Discard</button>}
           {!differs && saved && <button type="button" className="button" onClick={() => { void save('', saved); }}>Clear note</button>}
         </div>
       </fieldset>

@@ -344,6 +344,42 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     await page.keyboard.press('Escape'); await sheet(page).waitFor({ state: 'detached' });
     checks.push('Note: Save note and Discard appear only for an effective change (trailing spaces are none), with a 28/200 counter; Clear note saves an empty note and Undo restores it; beforeunload prompts only while the note differs');
 
+    // Saved/discarded text is not a retained draft when another page changes the note.
+    for (const operation of ['save', 'discard', 'undo']) {
+      await action(page, 'note').click(); await note.waitFor();
+      if (operation === 'save') {
+        await note.fill('Synthetic saved note');
+        await sheet(page).getByRole('button', { name: 'Save note' }).click();
+        await sheet(page).getByRole('button', { name: 'Clear note' }).waitFor();
+      } else if (operation === 'discard') {
+        await note.fill('Synthetic discarded draft');
+        await sheet(page).getByRole('button', { name: 'Discard' }).click();
+        await sheet(page).getByRole('button', { name: 'Clear note' }).waitFor();
+      } else {
+        await sheet(page).getByRole('button', { name: 'Clear note' }).click();
+        await sheet(page).getByRole('button', { name: 'Clear note' }).waitFor({ state: 'detached' });
+        await status(page).getByRole('button', { name: 'Undo' }).click();
+        await sheet(page).getByRole('button', { name: 'Clear note' }).waitFor();
+      }
+      await page.keyboard.press('Escape'); await sheet(page).waitFor({ state: 'detached' });
+      const external = `Synthetic external after ${operation}`;
+      const response = await fetch(`${base}/api/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ widgetData: { note: { text: external } } }) });
+      assert.equal(response.status, 200);
+      const refreshed = page.waitForResponse(response => response.url() === `${base}/api/state`);
+      await advance(context, 6_000); await refreshed;
+      await action(page, 'note').click(); await note.waitFor();
+      assert.equal(await note.inputValue(), external, `${operation}: reopening reads the current saved note`);
+      assert.equal(await sheet(page).getByRole('button', { name: 'Save note' }).count(), 0, `${operation}: no stale draft returns`);
+      await page.keyboard.press('Escape'); await sheet(page).waitFor({ state: 'detached' });
+    }
+    await action(page, 'note').click(); await note.fill('Synthetic unsaved draft');
+    await page.keyboard.press('Escape'); await sheet(page).waitFor({ state: 'detached' });
+    await action(page, 'note').click(); await note.waitFor();
+    assert.equal(await note.inputValue(), 'Synthetic unsaved draft', 'real unsaved text survives closing and reopening');
+    await sheet(page).getByRole('button', { name: 'Discard' }).click();
+    await page.keyboard.press('Escape'); await sheet(page).waitFor({ state: 'detached' });
+    checks.push('Note: Save, Discard and Clear/Undo clear the retained draft so external saved changes appear on reopening without Save note; genuine unsaved text survives');
+
     // Show on my display: Clock off → Show the clock; a full board → Make room in Edit display; ?focus=city.
     await reset(settings => { settings.widgets.clock = false; });
     await home(page);
