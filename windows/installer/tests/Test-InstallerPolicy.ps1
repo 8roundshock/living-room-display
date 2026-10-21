@@ -73,24 +73,49 @@ $codes = @([regex]::Matches([IO.File]::ReadAllText($controlScript), 'LRD-E(\d\d)
 $messages = [regex]::Match($iss, '(?s)function HelperFailureMessage\(.*?\r?\nend;').Value
 Assert-True ($codes.Count -ge 12 -and $messages) 'the control script codes and HelperFailureMessage were not found'
 foreach ($code in $codes) { Assert-True ($messages -match "(?m)^\s*$code\s*:") "LRD-E$code has no message in HelperFailureMessage" }
-# Setup words a refusal after a resumed rollback by finding the helper's exact
-# log line, so both files must carry the same text (#190).
-$scriptNote = [regex]::Match([IO.File]::ReadAllText($controlScript), "(?m)^\`$script:resumedRollbackNote = '([^']+)'").Groups[1].Value
-$issNote = [regex]::Match($iss, "(?m)^\s*ResumedNote = '([^']+)';").Groups[1].Value
-Assert-True ($scriptNote -and $scriptNote -eq $issNote) "the resumed-rollback log line differs between the control script ('$scriptNote') and Setup ('$issNote')"
+# Setup words its messages by finding the helper's exact log lines (a resumed
+# rollback, an unreadable record, what a failed first install left), so both
+# files must carry the same text (#190, #204, #206).
+$scriptText = [IO.File]::ReadAllText($controlScript)
+foreach ($pair in @(@('resumedRollbackNote','ResumedNote'),@('resumedUndoNote','ResumedUndoNote'),@('recordInUseNote','RecordInUseNote'),@('firstInstallRemovedNote','FirstInstallRemovedNote'),@('firstInstallKeptDataNote','FirstInstallKeptDataNote'),@('firstInstallLeftNote','FirstInstallLeftNote'),@('firstInstallCleanupFailedNote','FirstInstallCleanupFailedNote'))) {
+    $scriptNote = [regex]::Match($scriptText, "(?m)^\`$script:$($pair[0]) = '([^']+)'").Groups[1].Value
+    $issNote = [regex]::Match($iss, "(?m)^\s*$($pair[1]) = '([^']+)';").Groups[1].Value
+    Assert-True ($scriptNote -and $scriptNote -eq $issNote) "the $($pair[0]) log line differs between the control script ('$scriptNote') and Setup ('$issNote')"
+}
+Assert-True ($scriptText.Contains('throw "LRD-E22: $(') -and $scriptText.Contains('$message = "A file in $path is in use: $reason"') -and $iss.Contains("HeldFolderPrefix = 'LRD-E22: A file in ';") -and $iss.Contains("HeldFolderSuffix = ' is in use';")) 'E22 must name the held folder in the form Setup reads (LRD-E22: A file in <folder> is in use)'
 Assert-True ($messages -match 'NothingChanged' -and $messages -notmatch 'MsgNothingChanged') 'refusal messages must use NothingChanged, which mentions a resumed rollback'
+# E15, E16 and E20 carry the resumed-rollback note too, and the first-install E16
+# follows what the helper logged, not whether the folder still exists (#206).
+foreach ($code in @('15','16','20')) {
+    # Every wording of the code starts with ResumedFirst; only E20's record-in-use
+    # wording comes before any resume and has nothing to report.
+    $branch = [regex]::Match($messages, "(?s)\n\s*$code\s*:(.*?)(?=\n\s*\d\d\s*:)").Groups[1].Value
+    $results = [regex]::Matches($branch, 'Result := ').Count
+    $resumed = [regex]::Matches($branch, 'Result := ResumedFirst \+ ').Count
+    $exempt = if ($code -eq '20') { 1 } else { 0 }
+    Assert-True ($results -gt 0 -and $results - $resumed -eq $exempt) "every E$code wording must start with ResumedFirst after a resumed rollback ($resumed of $results do)"
+}
+$e16 = [regex]::Match($messages, "(?s)\n\s*16\s*:(.*?)(?=\n\s*17\s*:)").Groups[1].Value
+Assert-True ($e16 -notmatch 'DirExists' -and $e16.Contains('FirstInstallRemovedAll') -and $e16.Contains('FirstInstallKeptData') -and $e16.Contains('FirstInstallLeftFiles')) 'the first-install E16 must follow the helper log, not DirExists'
+Assert-True ($iss -match "(?m)^\s*HadPreviousApp := \(DirExists\(ExpandConstant\('\{app\}\\app'\)\) or DirExists\(ExpandConstant\('\{app\}\\app\.previous'\)\)\) and \(MarkerState <> 'installing'\);") 'HadPreviousApp must ignore an app left by an interrupted first install (marker state installing)'
+# Every helper code has a row in the docs/install.md message table.
+$installDocText = [IO.File]::ReadAllText((Join-Path $repository 'docs\install.md'))
+foreach ($code in $codes) { Assert-True ($installDocText -match "(?m)^\| E$code \|") "docs/install.md has no message-table row for E$code" }
 $checks++
 
 # One install-folder limit, derived from the payload path budget, in both docs (#180).
-$scriptText = [IO.File]::ReadAllText($controlScript)
 $budget = [int][regex]::Match($scriptText, "(?m)^\`$script:packagePathBudget = (\d+)\s*$").Groups[1].Value
 Assert-True ($budget -gt 0 -and $scriptText.Contains("`$script:installFolderLimit = 259 - '\package.next\'.Length - `$script:packagePathBudget")) 'the control script must define packagePathBudget and installFolderLimit'
 $folderLimit = 259 - '\package.next\'.Length - $budget
 $installDoc = [IO.File]::ReadAllText((Join-Path $repository 'docs\install.md'))
 $windowsDoc = [IO.File]::ReadAllText((Join-Path $repository 'docs\windows.md'))
 Assert-True ($installDoc.Contains("at most $folderLimit characters") -and $windowsDoc.Contains("up to $folderLimit characters") -and $windowsDoc.Contains("$budget characters")) "docs/install.md and docs/windows.md must give the $folderLimit-character folder limit (payload budget $budget)"
+# Only a statement about a folder or path length counts; another limit with the
+# same wording (a note of up to 280 characters, say) does not (#208).
+$folderLimitStatement = '(?i)\b(?:folders?|paths?)\b[^.\r\n]{0,60}?\b(?:about|under|longer than|at most|up to) (\d{3}) characters'
+Assert-True ('Keep the path at most 130 characters.' -match $folderLimitStatement -and 'install folders of up to 130 characters always fit' -match $folderLimitStatement -and 'A note holds up to 280 characters.' -notmatch $folderLimitStatement -and 'The folder is kept. A label holds at most 140 characters.' -notmatch $folderLimitStatement) 'the folder-limit rule must match folder and path statements only'
 foreach ($doc in @($installDoc, $windowsDoc)) {
-    foreach ($number in @([regex]::Matches($doc, '(?i)(?:about|under|longer than|at most|up to) (\d{3}) characters') | ForEach-Object { [int]$_.Groups[1].Value })) { Assert-True ($number -eq $folderLimit) "a doc quotes a $number-character folder limit instead of $folderLimit" }
+    foreach ($number in @([regex]::Matches($doc, $folderLimitStatement) | ForEach-Object { [int]$_.Groups[1].Value })) { Assert-True ($number -eq $folderLimit) "a doc quotes a $number-character folder limit instead of $folderLimit" }
 }
 $checks++
 

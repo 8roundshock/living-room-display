@@ -110,7 +110,7 @@ Constrained Language Mode can still block it; Setup then shows a plain message
 | `Exec` keeps the `PrepareToInstall` marquee responsive. | Inno 6.7.1 source: `Exec` waits with `MsgWaitForMultipleObjects` and processes messages; `TOutputMarqueeProgressWizardPage.Animate` only pumps messages for the native marquee. The step timer (`SetTimer` + `CreateCallback`) fires in the same loop, and CI exercises it in silent mode. **Not visually inspected.** |
 | The uninstaller's first phase waits for the second. | Inno 6.7.1 `Setup.Uninstall.pas` (`RunFirstPhase`): it waits for the second phase's signal or exit. The control script and smoke test still poll for the registration to disappear (up to 120 s). |
 | `{param:REMOVEDATA}` is readable in the uninstaller. | CI: the `/REMOVEDATA=1` uninstall removes data, snapshots and the folder. |
-| Raising in `CurUninstallStepChanged(usUninstall)` aborts the uninstall. | Inno 6.7.1 source (`Setup.Uninstall.pas`): the exception is logged as fatal and shown through `ShowExceptionMsg`, whose message box is suppressible, so `/VERYSILENT /SUPPRESSMSGBOXES` can't block on it; then `Abort`. The first phase exits with code 1 because the second phase never reports success. CI exercises it ([#158](https://github.com/8roundshock/living-room-display/issues/158)): the smoke test holds a file in `app` open, and the silent uninstall must exit non-zero within 5 minutes and keep the registration, the uninstaller, `installation.json` and data, and the uninstall log must carry the helper's `Failed:` reason and the abort message. A repair with Setup then exits 0. |
+| Raising in `CurUninstallStepChanged(usUninstall)` aborts the uninstall. | Inno 6.7.1 source (`Setup.Uninstall.pas`): the exception is logged as fatal and shown through `ShowExceptionMsg`, whose message box is suppressible, so `/VERYSILENT /SUPPRESSMSGBOXES` can't block on it; then `Abort`. The first phase exits with code 1 because the second phase never reports success. CI exercises it ([#158](https://github.com/8roundshock/living-room-display/issues/158)): the smoke test holds a file in `app` open, and the silent uninstall must exit non-zero within 5 minutes and keep the registration, the uninstaller, `installation.json` and data, and the uninstall log must carry the helper's `Failed:` reason and the abort message. Because the helper renames every folder aside before it deletes any ([#207](https://github.com/8roundshock/living-room-display/issues/207)), `app` must also stay complete. A repair with Setup then exits 0. |
 | `TaskDialogMsgBox` custom labels (**Keep my data** / **Delete my data**). | Documented Inno API; interactive only. **Not verified in CI.** |
 | `WizardStyle` tokens in 6.7.x. | Inno documentation: base `classic` or `modern`, plus `light`, `dark` or `dynamic`. |
 | `ISCC.exe` has no numeric file version. | Observed in CI (version info read as 0.0.0). The build asks the preprocessor (`DecodeVer(Ver)`) instead. |
@@ -144,13 +144,36 @@ to `main` and manual dispatch.
   `app.failed`, leave no `package-transaction.json`, restore
   `installation.json`, keep data unchanged and leave the previous version
   answering `/api/health`. A repair with the normal Setup then exits 0 and
-  removes `app.failed`. Setup has to stop the real server and wait for it to
-  exit before it renames `app`; a `Stop` that returned early would race that
-  rename (12 of 20 such renames failed in the review repro on PR #149).
-- **A failed uninstall** ([#158](https://github.com/8roundshock/living-room-display/issues/158)):
+  removes `app.failed`. Setup has to stop the real server before it renames
+  `app`, but this case does not catch a `Stop` that returns early: each rename
+  retries for a few seconds, which covers a server that is still exiting
+  (checked on the owner's PC with Windows PowerShell 5.1: 1 of 20 first rename
+  attempts failed straight after a kill, none after the retries). The guard
+  against a `Stop` that returns early is the `HasExited` check of
+  `Test-Windows.ps1 -NodeExe` in the build job, which stops a real owned server
+  five times and fails if `Stop` returns before it has exited
+  ([#205](https://github.com/8roundshock/living-room-display/issues/205)).
+- **An older app.previous in use** ([#200](https://github.com/8roundshock/living-room-display/issues/200)):
+  with a file in `app.previous` held open, Setup must exit 7 with
+  `Helper exit code: 22` naming `app.previous`, leave `app`, `app.previous`,
+  `runtime`, data, snapshots and `installation.json` unchanged and the server
+  still answering; once the file is released, the update exits 0.
+- **A rollback record that can't be read, then a damaged one**
+  ([#204](https://github.com/8roundshock/living-room-display/issues/204)): a
+  record that names the committed update, held open without read sharing, must
+  give exit 7 with `Helper exit code: 20` ("in use by another program") and
+  change nothing; once released, the next run removes it without a rollback.
+  A NUL-filled record beside the committed install is then only removed too.
+- **A NUL-filled installation.json** ([#199](https://github.com/8roundshock/living-room-display/issues/199)):
+  the update rebuilds the marker from `app\release.json`, logs that, exits 0 and
+  leaves a valid marker, unchanged data and a healthy server; a leftover
+  `removing` folder is removed on the way.
+- **A failed uninstall** ([#158](https://github.com/8roundshock/living-room-display/issues/158),
+  [#207](https://github.com/8roundshock/living-room-display/issues/207)):
   with `app\package.json` held open, the silent uninstaller must fail as
-  described under [Inno Setup assumptions](#inno-setup-assumptions), and a
-  repair must then succeed before the normal uninstall steps run.
+  described under [Inno Setup assumptions](#inno-setup-assumptions) and leave
+  `app`, `runtime` and `app.previous` hash-identical with no removal folder, and
+  a repair must then succeed before the normal uninstall steps run.
 
 **Evidence (2026-10-18).** Run 39177635973 (PR #149) passed every job: the build (Setup 0.1.0, 27.1 MB, Inno Setup 6.7.1 preinstalled on windows-2025; the payload and both Windows check runs passed) and all six smoke jobs. That covers windows-2022, windows-2025 and windows-11-arm (x64 emulation) × the default folder and the `Living Room Ünicode` folder. The refusal with port 4318 taken left no install folder, which confirms that Setup doesn't create `{app}` before `PrepareToInstall`. Earlier runs on the same PR found the elevated runners, the ISCC version probe and the inherited module path recorded above. After the review fixes (Stop waits for stopped processes, the resumable rollback record, E20 and E21 and the #180 wording), run 39181451761 on 66eeec5 passed the build again (15 Windows check groups under 5.1 and 7, including the real owned-server Stop-then-rename check; the payload checks; Setup 27.1 MB) and all six smoke jobs. PR #201 then added the real-install rollback ([#189](https://github.com/8roundshock/living-room-display/issues/189)) and the failed uninstall ([#158](https://github.com/8roundshock/living-room-display/issues/158)). Run 39187153452 on bd26691 passed the build (15 Windows check groups under 5.1 and 7, with 26 InstallPackage and 9 policy groups; the payload checks; Setup 27.1 MB and the rollback-test Setup) and all six smoke jobs. In each, the rollback-test Setup exited 7 with helper exit code 15 and the repair after it exited 0; the forced uninstall failure exited 1 with the registration kept, and the repair after it exited 0.
 
