@@ -162,7 +162,7 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     checks.push('two editor tabs: a countdown added in each ends with both on the server and in both tabs');
 
     // 6. #287: the same, but B saves before its poll. Its stale Save is refused, merged and sent again.
-    await reset(data => { data.settings.widgets.countdown = true; data.settings.widgetGrid.placements.countdown = { column: 2, row: 4, size: 'small' }; });
+    await reset(data => { data.settings.widgets = defaultWidgetVisibility(); data.settings.widgetGrid = defaultWidgetGrid(); data.settings.widgets.countdown = true; data.settings.widgetGrid.placements.countdown = { column: 2, row: 4, size: 'small' }; });
     const tabA = await open(), tabB = await open();
     const patches = [];
     tabB.on('response', response => { if (response.url().endsWith('/api/settings') && response.request().method() === 'PATCH') patches.push(response.status()); });
@@ -198,7 +198,8 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     checks.push('#287: the same value changed in both tabs keeps B’s draft with “Settings changed in another window”, and B’s next Save wins');
 
     // 8. #350: an unsaved Countdown in B, Note saved elsewhere, a poll, then Save: Note stays enabled.
-    await reset();
+    // Like #242/#287 above, these two scenarios require the old catalog board's free cells.
+    await reset(data => { data.settings.widgets = defaultWidgetVisibility(); data.settings.widgetGrid = defaultWidgetGrid(); });
     const layoutTab = await open();
     await tab(layoutTab, 'Widgets'); await button(layoutTab, 'Add widget').click(); await button(layoutTab, 'Preview Countdown').click(); await button(layoutTab, 'Add Countdown').click();
     await app.store.patchSettings({ widgets: { note: true }, widgetGrid: { placements: { note: { column: 10, row: 6, size: 'small' } } } });
@@ -213,7 +214,7 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     checks.push('#350: an unsaved Countdown, Note saved elsewhere, a poll and Save keep Note enabled at its saved place');
 
     // 9. #350: with no room for it on this layout, the draft wins and the editor says so.
-    await reset();
+    await reset(data => { data.settings.widgets = defaultWidgetVisibility(); data.settings.widgetGrid = defaultWidgetGrid(); });
     await layoutTab.reload(); await button(layoutTab, 'Edit layout').waitFor();
     await tab(layoutTab, 'Widgets'); await button(layoutTab, 'Add widget').click(); await button(layoutTab, 'Preview Countdown').click(); await button(layoutTab, 'Add Countdown').click();
     // The other window gives Note the very cells this draft gave Countdown (the first free ones).
