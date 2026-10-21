@@ -242,6 +242,10 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   // Polling returns new object identities. Recompose only on a real layout change or a swap.
   const grid = useMemo(() => composeFor(effectiveCycle), [gridKey, enabled, effectiveCycle]);
   useEffect(() => { if (previous.current !== grid) { earlier.current = previous.current; previous.current = grid; } }, [grid]);
+  // A composition can change CSS-only content alignment (Reminders top/bottom anchoring)
+  // without resizing a widget or mutating its descendants. Remeasure after that DOM commit
+  // so the existing offset clamps to the new slack before paint, just as for content growth.
+  useLayoutEffect(() => { for (const entry of registry.current.values()) entry.measure(); }, [grid, effectiveCycle]);
 
   // Motion levels (#76). The ambient page and the editor's Preview movement behave as the display;
   // the authored canvas shows the draft level; Edit layout keeps widgets still.
