@@ -176,17 +176,20 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
         const rowPitch = await rows.evaluateAll(elements => elements[1].getBoundingClientRect().top - elements[0].getBoundingClientRect().top);
         if (viewport.width === 1280) assert.ok(fit.scroll <= fit.client + (currentBoard ? rowPitch : 0) + 1, `${currentBoard ? 'six' : 'five'}-row Widgets at 1280x600 with the card: ${JSON.stringify(fit)}`);
         else assert.ok(fit.scroll - fit.client < height + (currentBoard ? rowPitch : 0), `${viewport.width}x600 stays within the card${currentBoard ? ' plus one added row' : ''}: ${JSON.stringify(fit)}`);
-        // The scroll stays inside the panel; every full-size row control can be brought into view.
-        for (const row of await rows.all()) {
-          const control = row.locator('.widget-select');
-          await control.focus(); await control.scrollIntoViewIfNeeded();
-          const box = await control.boundingBox(), panel = await page.locator('.inspector-panel').boundingBox();
-          assert.ok(box.width >= 44 && box.height >= 44 && box.y >= panel.y - 1 && box.y + box.height <= panel.y + panel.height + 1, `${viewport.width}: row control is reachable: ${JSON.stringify({ box, panel })}`);
-          assert.equal(await control.evaluate(element => { const r = element.getBoundingClientRect(); return element.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), true, 'the focused row is unobscured');
-        }
-        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'no horizontal overflow');
+        // The scroll stays inside the panel; every select/remove action can be focused and hit.
+        const reachable = async () => {
+          for (const control of await page.locator('.widget-row button, .add-widget').all()) {
+            await control.focus(); await control.scrollIntoViewIfNeeded();
+            const box = await control.boundingBox(), panel = await page.locator('.inspector-panel').boundingBox();
+            assert.ok(box.width >= 44 && box.height >= 44 && box.y >= panel.y - 1 && box.y + box.height <= panel.y + panel.height + 1, `${viewport.width}: control is reachable: ${JSON.stringify({ box, panel })}`);
+            assert.equal(await control.evaluate(element => { const r = element.getBoundingClientRect(); return element === document.activeElement && element.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), true, 'the control has keyboard focus and an unobscured pointer target');
+          }
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollHeight <= innerHeight + 1), true, 'scroll remains inside the inspector, without body overflow');
+        };
+        await reachable();
         await button('Hide location tip').click(); fit = await panelFit();
         assert.ok(fit.scroll <= fit.client + (currentBoard ? rowPitch : 0) + 1, `${viewport.width}x600 ${currentBoard ? 'has at most one row of scroll' : 'fits'} without the card: ${JSON.stringify(fit)}`);
+        await reachable();
       }
     }
     checks.push('at 600px high, the six-row default adds at most one row of internal scroll to the five-row #310 contract; all row controls remain 44px, focusable, unobscured and reachable at 1280/1024/760px; hiding the tip leaves at most one row of scroll; the original five-row no-scroll/less-than-card checks still pass');
