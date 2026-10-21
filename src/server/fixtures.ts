@@ -1,5 +1,26 @@
-/** Synthetic provider response used only by automated tests. */
+/** Synthetic provider responses and data used only by automated tests. */
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
+import type { Settings } from '../shared/contracts.ts';
+import { defaultSettings } from '../shared/defaults.ts';
+import { persistableData } from './persistence.ts';
+
+/**
+ * Today's defaults with a colour accent: default data as an existing (pre-#75) user has it. A fresh
+ * data folder starts Native (#75); tests that need a choice to be a real change in the files, or the
+ * data an upgraded install holds, start from these settings instead.
+ */
+export function colorAccentDefaults(): Settings {
+  const settings = defaultSettings();
+  settings.appearance.accentMode = 'color';
+  return settings;
+}
+
+/** Writes colorAccentDefaults() in its at-rest form into an empty data folder before the store opens it. */
+export async function seedColorAccentData(directory: string): Promise<void> {
+  await writeFile(join(directory, 'state.json'), JSON.stringify(persistableData({ version: 1, settings: colorAccentDefaults(), reminders: [], photoAsset: null }), null, 2));
+}
 
 export function photoFixture(width = 2, height = 2, pixels?: Buffer): Buffer {
   const chunk = (type: string, content: Buffer) => {

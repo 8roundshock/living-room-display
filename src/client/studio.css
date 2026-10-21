@@ -1,5 +1,7 @@
 /* A focused editor workspace. The ambient canvas owns its dim, true-black palette. */
 html.studio-editor {
+  /* The editor's navy page; the document stays true black elsewhere, including before mount (#334). */
+  background: #090b12;
   scroll-padding-block: 24px var(--studio-footer-clearance, 124px);
 }
 .studio :is(input, select, button, a, summary, [tabindex]) {
@@ -15,7 +17,6 @@ html.studio-editor {
 }
 .clock-digits {
   display: inline-block;
-  animation: value-reveal 550ms ease-out;
 }
 .clock-period {
   font-weight: 500;
@@ -41,10 +42,6 @@ html.studio-editor {
 .current-weather-main {
   gap: 1.3cqw;
 }
-.current-weather-main > .weather-symbol {
-  width: 4cqw;
-  height: 4cqw;
-}
 .weather-condition {
   font-weight: 500;
   font-size: calc(1.55cqw * var(--font-scale));
@@ -67,10 +64,9 @@ html.studio-editor {
 .rain-bars {
   gap: 0.45cqw;
 }
+/* Spell bars 0.65 and other hours 0.35 opacity come from widgets.css (#74). */
 .rain-bar {
   border-radius: 100px 100px 0 0;
-  opacity: 0.75;
-  transition: height 700ms cubic-bezier(0.2, 0.7, 0.25, 1);
 }
 .forecast-day-label {
   font-weight: 500;
@@ -88,16 +84,6 @@ html.studio-editor {
 .ambient-reminder-title {
   font-weight: 500;
   letter-spacing: -0.02em;
-}
-@keyframes value-reveal {
-  from {
-    opacity: 0.55;
-    transform: translateY(0.25cqh);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 .studio {
   --studio-accent: #b9b2ed;
@@ -127,6 +113,41 @@ html.studio-editor {
   font-size: 26px;
   font-weight: 650;
   letter-spacing: -1.2px;
+}
+/* #360: one dim line beside Open display says where the full-screen display is. */
+.open-display-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  min-width: 0;
+}
+.studio .open-display-hint {
+  min-width: 0;
+  color: #a39cad;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: right;
+  text-wrap: balance;
+}
+@media (max-width: 700px) {
+  /* Narrow headers put the hint on its own line under the name and Open display. */
+  .studio .studio-header {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 72px;
+    padding-block: 12px;
+    row-gap: 6px;
+  }
+  .open-display-group {
+    display: contents;
+  }
+  .studio .open-display-hint {
+    order: 3;
+    flex-basis: 100%;
+    text-align: left;
+    font-size: 11px;
+  }
 }
 .brand-symbol {
   width: 34px;
@@ -286,6 +307,73 @@ html.studio-editor {
   font-size: 10px;
   color: #c9c0e1;
 }
+/* First-run location card (#252): above the inspector tabs while no location has been saved. */
+.first-run-card {
+  flex: none;
+  margin: 14px 16px 0;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid #ffffff12;
+  border-radius: 14px;
+  background: #ffffff05;
+}
+.first-run-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.first-run-icon {
+  display: grid;
+  place-items: center;
+  color: #b9b2ed;
+}
+.studio .first-run-card h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: #e6e1ef;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+/* #349: a 44 px target whose negative margins keep the heading row as tall as before. */
+.studio .icon-button.first-run-dismiss {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  margin: -10px -8px -10px -5px;
+  border-radius: 10px;
+}
+.studio .first-run-status {
+  margin: 3px 0 0;
+  color: #b6a6c8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.studio .first-run-status:empty {
+  margin: 0;
+}
+.first-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.studio .first-run-actions .button.small {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 5px 12px;
+}
+@media (min-width: 701px) {
+  .first-run-card { margin: 10px 10px 0; }
+}
+/* Weather tab "Time & units" (#235): Units and Time format side by side, outside any widget. */
+.studio .time-units {
+  margin: 2px 0 0;
+}
+.studio .time-units h3 {
+  margin-bottom: 10px;
+}
 .inspector-panel {
   padding: 24px;
   min-height: 560px;
@@ -351,6 +439,13 @@ html.studio-editor {
   cursor: default;
   opacity: 0.4;
   transform: none;
+}
+/* Save keeps focus while unavailable or saving (#289): the disabled look, with a full-strength focus ring. */
+.studio .studio-savebar .button.primary[aria-disabled='true'] {
+  cursor: default;
+  transform: none;
+  background: color-mix(in srgb, var(--studio-accent) 40%, #302a37);
+  color: color-mix(in srgb, #231e35 40%, #302a37);
 }
 .studio .button.small {
   min-height: 40px;
@@ -427,9 +522,16 @@ html.studio-editor {
 .preset-miniature i {
   height: 3px;
   width: 65%;
-  background: currentColor;
-  opacity: 0.25;
+  background: var(--bar, currentColor);
+  opacity: 0.5;
   border-radius: 5px;
+}
+/* Built-in styles use native colours: Lilac, Mist and Rose bars at each style's own dimness. */
+.miniature-phone i {
+  opacity: 0.7;
+}
+.miniature-night i {
+  opacity: 0.3;
 }
 .miniature-phone {
   color: #a397b9;
@@ -518,13 +620,18 @@ html.studio-editor {
 .inspector-group {
   margin: 28px 0 14px;
 }
+/* #137: every accent control keeps a 44 x 44 hit area. Seven fit one line in the 1280 x 720
+   inspector (Native, five colours and a kept custom colour; the picker sits on the heading line).
+   Narrower panels wrap instead of shrinking targets. */
 .studio .swatches {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 7px;
+  gap: 6px 1px;
   margin: 10px -5px 0;
 }
 .studio .swatch {
+  flex: none;
   width: 44px;
   height: 44px;
   border: 0;
@@ -548,6 +655,44 @@ html.studio-editor {
   outline: 2px solid #d2c9e8;
   outline-offset: 4px;
 }
+/* Native: a thin ring of the palette tones around the panel colour, so it reads as "several". */
+.studio .swatch-native > span {
+  position: relative;
+  color: #ece8f4;
+}
+.studio .swatch-native > span::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #1e1e22;
+}
+.studio .swatch-native > span > svg {
+  position: relative;
+}
+/* #151: a kept custom colour; its check mark switches to light on a dark colour. */
+.studio .swatch-custom > span {
+  color: var(--swatch-mark, #24222d);
+}
+/* The current accent and the custom colour picker ride on the heading line, so they add no height. */
+.studio .accent-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.studio .accent-heading h3 {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.studio .accent-current {
+  color: #aba5b6;
+  font-size: 12px;
+  font-weight: 450;
+}
 .studio .custom-color {
   position: relative;
   width: 44px;
@@ -557,6 +702,15 @@ html.studio-editor {
   flex: none;
   color: #c1b9d0;
   border-radius: 50%;
+}
+/* A 44 px target whose margin box is no taller than the heading text; it reaches up into the
+   group's top margin and stops short of the swatch row below. */
+.studio .accent-heading .custom-color {
+  margin: -16px -5px -10px 0;
+}
+.studio .accent-heading .custom-color:hover {
+  color: #ece7f6;
+  background: #ffffff0a;
 }
 .custom-color input {
   position: absolute;
@@ -680,6 +834,15 @@ html.studio-editor {
   margin-top: 12px;
   flex-wrap: wrap;
 }
+/* Saved styles (#344): one hint line on top, and a duplicate name refused under the name field. */
+.studio .hint.preset-hint {
+  margin: 0 0 12px;
+}
+.studio .inline-message.preset-name-error {
+  min-height: 0;
+  margin: 6px 0 0;
+  color: #e2b4a8;
+}
 .disclosure-body > label + label {
   display: block;
   margin-top: 15px;
@@ -687,6 +850,81 @@ html.studio-editor {
 .studio .reset-appearance {
   display: flex;
   margin-top: 10px;
+}
+/* Style → Data & recovery (#234). */
+.studio .data-hint {
+  margin: 0 0 12px;
+}
+.studio .data-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.studio .data-confirm {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #ffffff14;
+  border-radius: 13px;
+  background: #ffffff05;
+  color: #d9d6e0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.studio .data-confirm p {
+  margin: 0 0 8px;
+}
+.studio .data-confirm .hint {
+  margin: 0 0 10px;
+}
+.studio .data-confirm-title {
+  font-weight: 550;
+}
+.studio .data-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* The status line stays in the accessibility tree (a live region) and takes no room while empty. */
+.studio .inline-message.data-status {
+  min-height: 0;
+  margin: 8px 0 0;
+}
+.studio .inline-message.data-status:empty {
+  margin: 0;
+}
+.studio .inline-message.data-status.error {
+  color: #e2b4a8;
+}
+/* The question's title takes focus when it appears (#302); it is not a control. */
+.studio .data-confirm-title:focus {
+  outline: none;
+}
+.studio .data-confirm-title:focus-visible {
+  outline: 2px solid #a8a1f4;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+/* A refused backup's technical reason stays one tap away (#302). */
+.studio .data-detail {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #aca5b5;
+}
+.studio .data-detail > summary {
+  min-height: 32px;
+  font-size: 12px;
+  color: #b9b1c4;
+}
+.studio .data-detail > summary::after {
+  margin-left: 4px;
+  font-size: 16px;
+}
+.studio .data-detail > p {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.5;
 }
 .widget-list {
   margin: 0 -9px;
@@ -941,8 +1179,27 @@ html.studio-editor {
   font-size: 12px;
   color: #b0a5ba;
 }
-.studio .weather-status-row.stale .status-dot {
+.studio .weather-status-row.stale .status-dot,
+.studio .weather-status-row.unavailable .status-dot {
   background: #b89776;
+}
+/* #347: the server's reason sits on the visible status line, in the caution tone. */
+.studio .weather-status-row:has(.weather-status-error) {
+  align-items: flex-start;
+}
+.studio .weather-status-row:has(.weather-status-error) .status-dot {
+  margin-top: 6px;
+}
+.studio .weather-status-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.studio .weather-status-error {
+  color: #c9a782;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 .weather-credit {
   font-size: 12px;
@@ -1084,24 +1341,103 @@ html.studio-editor {
   padding-inline: 12px;
   font-size: 12px;
 }
-.studio .completed-toggle {
-  margin-top: 14px;
-  font-size: 12px;
-}
 .studio .muted {
   color: #a89bb4;
 }
+/* #227: the alert is its own row in the canvas column, below the canvas actions. */
 .studio-error {
-  grid-column: 1/-1;
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 8px;
+  margin-top: 8px;
   border: 1px solid #90616b66;
   background: #5a29312e;
   color: #edbcc8;
   font-size: 13px;
   border-radius: 14px;
-  padding: 14px 18px;
+  padding: 4px 4px 4px 16px;
+}
+.studio-error > p {
+  flex: 1;
+  min-width: 0;
+  padding-block: 8px;
+  overflow-wrap: anywhere;
+}
+.studio-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.studio .studio-error .text-button {
+  color: #f3d3db;
+  padding-inline: 8px;
+  text-decoration: underline;
+}
+.studio .studio-error .studio-error-dismiss {
+  color: #edbcc8;
+  border-radius: 11px;
+}
+.studio .studio-error .studio-error-dismiss:hover {
+  color: #fff0f3;
+  background: #ffffff10;
+}
+/* #312: on narrow layouts an action's error whose row is out of view floats at the top of the
+   viewport, above the content, until its row is in view again. */
+@media (max-width: 700px) {
+  .studio-error.studio-error-floating {
+    position: fixed;
+    z-index: 13;
+    left: 12px;
+    right: 12px;
+    top: max(12px, env(safe-area-inset-top));
+    margin: 0;
+    max-height: 40vh;
+    overflow: auto;
+    background: #34202a;
+    border-color: #a16d78a8;
+    box-shadow: 0 10px 40px #000a;
+  }
+}
+/* Layout messages, the Edit layout how-to and the weather note share one reserved line under the canvas actions. */
+.canvas-messages {
+  min-height: 18px;
+}
+.studio .canvas-messages .grid-status {
+  min-height: 0;
+}
+/* #345: the how-to stays quieter than a real message, which replaces it. */
+.canvas-hint {
+  margin: 0 2px;
+  color: #9d96a9;
+  font-size: 12px;
+}
+@media (pointer: coarse) {
+  .canvas-hint-keys {
+    display: none;
+  }
+}
+/* #346: a refused grid density's one draft fix sits at the end of its message. */
+.studio .grid-status .density-fix {
+  min-height: 40px;
+  margin-left: 8px;
+  padding-inline: 4px;
+  font-size: inherit;
+  vertical-align: middle;
+}
+/* The editor's loading page explains a failure as well as offering Try again (#232). */
+.fallback-message {
+  display: grid;
+  gap: 8px;
+  max-width: min(460px, calc(100vw - 48px));
+}
+.fallback-message .fallback-title {
+  color: #d3cee0;
+  font-size: 17px;
+}
+.fallback-message .fallback-hint {
+  font-size: 13px;
+  line-height: 1.5;
 }
 .studio-savebar {
   position: fixed;
@@ -1227,9 +1563,6 @@ html.studio-editor {
   .studio-savebar {
     bottom: max(12px, env(safe-area-inset-bottom));
   }
-  .studio .swatches {
-    gap: 12px;
-  }
 }
 @media (max-width: 480px) {
   .studio {
@@ -1306,9 +1639,6 @@ html.studio-editor {
   .tab-count {
     display: none;
   }
-  .studio .swatches {
-    gap: 5px;
-  }
   .studio-savebar {
     max-width: none;
     min-width: 0;
@@ -1341,7 +1671,7 @@ html.studio-editor {
     gap: 8px;
   }
   .studio-error {
-    padding: 13px;
+    padding-left: 13px;
   }
 }
 @media (max-width: 330px) {
@@ -1356,20 +1686,11 @@ html.studio-editor {
   .canvas-toolbar > span {
     display: none;
   }
-  .studio .swatches {
-    flex-wrap: wrap;
-  }
   .studio .input-row {
     grid-template-columns: 1fr;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .clock-digits {
-    animation: none;
-  }
-  .rain-bar {
-    transition: none;
-  }
   .studio *,
   .studio *::before,
   .studio *::after {
@@ -1414,8 +1735,21 @@ html.studio-editor {
   .canvas-heading { flex: none; margin-bottom: 16px; min-height: 40px; }
   .canvas-heading h1 { font-size: 25px; letter-spacing: -0.7px; }
   .canvas-heading-actions { display: flex; gap: 8px; align-items: center; }
+  /*
+   * The canvas takes the height left after its heading, actions, message line and any alert, so
+   * none of them overflows into the Save bar's reserved space (#227, #231). The stage starts at
+   * the width-limited canvas height and only shrinks.
+   */
+  .canvas-column { container-type: inline-size; }
+  .canvas-stage {
+    flex: 0 1 auto;
+    min-height: 0;
+    height: calc((100cqw - 2px) * 9 / 16 + 2px);
+    container-type: size;
+  }
   .studio .preview-frame {
-    width: min(100%, calc((100dvh - 284px) * 16 / 9));
+    width: min(100%, calc((100dvh - 294px) * 16 / 9));
+    width: min(100cqw, calc((100cqh - 2px) * 16 / 9 + 2px));
     margin-inline: auto;
     border-radius: 16px;
     flex: none;
@@ -1429,7 +1763,13 @@ html.studio-editor {
     flex: none;
   }
   .canvas-toolbar > span { display: none; }
-  .canvas-note, .grid-status { flex: none; font-size: 11px; }
+  .canvas-note, .grid-status, .canvas-hint { flex: none; font-size: 11px; }
+  .canvas-messages { flex: none; }
+  /*
+   * A Save bar taller than the reserved bottom padding (82px, plus the 24px the clearance adds)
+   * lifts the column; 1px of slack keeps sub-pixel bar heights from moving the canvas.
+   */
+  .canvas-column { padding-bottom: max(0px, var(--studio-footer-clearance, 24px) - 107px); }
   .inspector {
     height: 100%;
     min-height: 0;
@@ -1479,7 +1819,10 @@ html.studio-editor {
     white-space: nowrap;
   }
   .studio-savebar { bottom: 16px; }
-  .studio-error { max-height: 70px; overflow: auto; }
+  .studio-error { flex: none; max-height: 70px; overflow: auto; margin-top: 4px; }
+  .studio .studio-error .text-button { min-height: 36px; }
+  .studio .studio-error .studio-error-dismiss { width: 36px; min-width: 36px; height: 36px; }
+  .studio-error > p { padding-block: 6px; }
 }
 /* Fade the inspector's bottom edge while more settings remain below. */
 @property --inspector-fade {
@@ -1510,15 +1853,14 @@ html.studio-editor {
 }
 /* Wide layouts: the Save bar sits under the canvas, so settings use the full height. */
 @media (min-width: 1051px) {
-  /* An alert adds a grid row below; the inspector then keeps its own track. */
-  .studio-workspace:not(:has(> .studio-error)) > .inspector { height: calc(100% + 64px); }
+  /* Alerts sit in the canvas column, so the inspector always uses the full height. */
+  .studio-workspace > .inspector { height: calc(100% + 64px); }
   .studio-savebar { left: calc(50% - 187px); }
 }
 @media (min-width: 701px) and (max-width: 1050px) {
   .studio-header { padding-inline: 18px; }
   .studio-workspace { padding: 14px 18px 82px; gap: 18px; grid-template-columns: minmax(0, 1fr) 320px; }
   .inspector-panel { padding-inline: 16px; }
-  .studio .preview-frame { width: min(100%, calc((100dvh - 296px) * 16 / 9)); }
   .canvas-heading h1 { font-size: 22px; }
   .studio .edit-layout { padding-inline: 11px; font-size: 12px; }
   .canvas-toolbar { font-size: 12px; }
@@ -1531,13 +1873,76 @@ html.studio-editor {
   .canvas-heading h1 { font-size: 20px; }
   .canvas-heading-actions { gap: 5px; }
   .studio .canvas-add { width: 36px; min-width: 36px; height: 36px; }
-  .studio .swatches { gap: 2px; }
   .inspector-tabs button { font-size: 11px; }
 }
 @media (max-width: 700px) {
   .studio-workspace { grid-template-columns: minmax(0, 1fr); }
+  /* Seven 44 px accent targets still share one line at 390 px; 320 px wraps. */
+  .studio .swatches { gap: 6px 3px; }
   .canvas-heading-actions { display: flex; gap: 8px; align-items: center; }
   .canvas-column { position: static; }
   .canvas-toolbar { flex-wrap: wrap; }
   .inspector-panel { min-height: 0; }
+}
+
+/*
+ * Widget picker samples (#361). Each family fills the stage width, at most twice the canvas scale
+ * (100 px per cell), with a fixed 9 px text and 10.5 px data floor in place of the display's own
+ * floors, which scale with its screen. Content the floor makes overfull zooms out as a whole,
+ * as on the display. A small map under the sample shows the family's footprint on the board.
+ */
+.studio .widget-picker .sample-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  container-type: size;
+  overflow: hidden;
+}
+.studio .widget-picker .sample-area {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+.studio .widget-picker .picker-sample.ambient {
+  --ambient-min-text: 9px;
+  --ambient-min-data: 10.5px;
+  width: min(100cqw, calc(100cqh * var(--sample-ratio)), calc(var(--sample-columns) * 100px));
+}
+.studio .widget-picker .picker-sample .widget-content {
+  max-height: none;
+}
+.studio .sample-footprint {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: #a39cad;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.studio .footprint-map {
+  display: grid;
+  grid-template-columns: repeat(var(--board-columns), 3px);
+  grid-auto-rows: 3px;
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid #ffffff17;
+  border-radius: 3px;
+}
+.studio .footprint-map > i {
+  background: #ffffff14;
+}
+.studio .footprint-map > i[data-on] {
+  background: #b9b2edc0;
+}
+/* A short stage keeps the sample and drops the map before the words. */
+@container (max-height: 150px) {
+  .studio .footprint-map { display: none; }
+}
+@media (max-width: 700px) {
+  .studio .widget-picker .sample-stage { height: 190px; }
 }

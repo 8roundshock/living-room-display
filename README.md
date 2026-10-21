@@ -1,8 +1,9 @@
 # Living Room Display
 
 A silent, customizable ambient display for a Windows 10 leisure PC connected to
-a Samsung S90F OLED TV: large time and date, weather, a seven-day outlook, rain
-estimates, optional reminders, and an optional dim screen preview.
+a Samsung S90F OLED TV: large time and date, weather with rain estimates when rain
+is near, a seven-day outlook, reminders, world clocks, a calendar, countdowns, a
+short note, air quality, sun and moon times, and an optional dim screen preview.
 All modules are optional. Drag and resize widgets on a snapping grid, choose
 adaptive sizes and outline/digital/analog clocks, or add a dim local photo.
 
@@ -15,19 +16,41 @@ uses the [recorded HIG-inspired design choices](docs/design.md). The display stu
 puts one focused Style, Widgets, Weather or Reminders inspector beside its live
 preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
-The latest recorded marker-only read identifies clean `bedca44e`, after the
-reviewed studio and readability web rollouts. The separate rollout session reports
-its runtime and data checks; see [STATUS.md](STATUS.md) for attributed installation
-evidence and current gates. The combined native cursor lifecycle replacement
-remains draft and uninstalled. Actual visual/input acceptance and wider release
-compatibility checks remain; the runtime hold and last verified idle-off state
-are recorded in the status document.
+The owner's PC runs a verified install of `main` with the new widgets and the first
+polish wave; later changes on `main` wait for the next coordinated install, and native
+screensaver acceptance and wider release compatibility checks remain.
+[STATUS.md](STATUS.md) records the installed revision and what is still pending.
 
-This is the independent private
+This is the independent
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)
 repository. Its code, branches, pull requests, documentation, and future local
-data belong here, separate from personal-memory repositories. The owner has
-chosen to keep it private until a usable release; there is no public release yet.
+data belong here, separate from personal-memory repositories. The repository is
+public (owner decision, 2026-10-20,
+[#441](https://github.com/8roundshock/living-room-display/issues/441)); there is
+no published release yet. Never commit or post secrets or private data; see the
+[privacy rule](AGENTS.md#change-and-verify).
+
+## Install on Windows
+
+For Windows 10 and 11 (x64), the simplest route is Setup:
+`LivingRoomDisplaySetup-<version>.exe` installs just for your account, with no
+administrator rights, no developer tools and no account. Double-click it, click
+**Install**, and it opens the editor when it's done. Find it again in the Start
+menu as **Living Room Display** (editor) and **Living Room Display - Show
+display**. It doesn't start with Windows or change your screen saver. To update,
+run a newer Setup: your settings, reminders and photo stay, and a backup copy is
+saved first. To remove it, use **Settings > Apps** (or right-click the Start
+entry) and choose whether to keep your data.
+
+Once it's installed, the [user guide](docs/user-guide.md) explains everyday use in
+plain words: choosing your city, showing the display full screen on the TV and
+leaving it, reminders, looks, why things move, animation levels, backups, updating
+and uninstalling.
+
+There's no published download yet: Setup is an unsigned prerelease built
+by CI, so Windows SmartScreen will warn before it runs. See
+[installation](docs/install.md#install-with-setup-recommended) for the details,
+messages and rollback, and the source-clone install for development.
 
 ## Start here
 

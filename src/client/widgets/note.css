@@ -1,0 +1,19 @@
+/* Note (#78): only the text. Line breaks are kept and long words wrap anywhere. Note.tsx measures the
+   largest size, between the text floor and the family cap below, at which the whole note fits the box
+   (#194), so a short multi-line note fills the cell; an overfull note keeps the floor and zooms out
+   through the shared fit instead of clipping. The caps are the sizes of a very short note. */
+@property --note-cap { syntax: '<length>'; inherits: true; initial-value: 0px; }
+.grid-ambient .ambient-note .note-face { width: 100%; min-height: 100cqh; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.grid-ambient .ambient-note .note-text { display: block; white-space: pre-line; overflow-wrap: anywhere; word-break: normal; line-height: 1.22; font-weight: 400; font-size: calc(max(var(--min-text), var(--note-size, var(--note-cap))) * var(--font-scale)); }
+.grid-ambient .ambient-note .note-text > .value-transition { white-space: inherit; }
+
+.grid-ambient .ambient-note.widget-size-small .note-face { --note-cap: min(14cqw, 18cqh); }
+.grid-ambient .ambient-note.widget-size-medium .note-face { --note-cap: min(10.5cqw, 26cqh); }
+.grid-ambient .ambient-note.widget-size-large .note-face { --note-cap: min(12.5cqw, 15cqh); }
+
+/* Editor panel. */
+.studio .note-settings .note-input { display: block; min-height: 112px; resize: vertical; font-family: inherit; white-space: pre-wrap; }
+.studio .note-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin-top: 6px; font-size: 12px; color: #aca5b5; }
+.studio .note-settings-row .text-button { min-height: 44px; min-width: 44px; justify-content: center; padding-inline: 4px; font-size: 13px; }
+.studio .note-settings-row .text-button:disabled { opacity: 0.45; cursor: default; text-decoration: none; }
+.studio .note-settings .hint { margin-top: 4px; }

@@ -100,6 +100,13 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
         height,
         boxWidth: r.width,
         regionWidth: e.closest('.ambient-widget').getBoundingClientRect().width,
+        // #225: the image takes the cell's limiting dimension, with its caption below it (the frame
+        // keeps 0.15em of the caption size free for the text's overflow).
+        fillsCell:
+          width >= e.closest('.snapshot-body').getBoundingClientRect().width - 1 ||
+          e.closest('.ambient-widget').querySelector('.preview-caption').getBoundingClientRect().bottom >=
+            e.closest('.snapshot-body').getBoundingClientRect().bottom -
+              parseFloat(getComputedStyle(e.closest('.ambient-widget').querySelector('.preview-caption')).fontSize) * 0.15 - 1.5,
       };
     });
     const shot = await decode(
@@ -206,10 +213,7 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
           samples.dark.every((v) => v >= 8 && v < samples.middle[0]),
           JSON.stringify(samples),
         );
-        assert.ok(
-          samples.boxWidth > samples.regionWidth * 0.8,
-          JSON.stringify(samples),
-        );
+        assert.ok(samples.fillsCell, JSON.stringify(samples));
         await settings({ size, density, widthPercent: 35 });
         await open();
         const changedLegacyWidth = await opticalSamples();
@@ -243,6 +247,100 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
     assert.equal(app.store.snapshot().settings.preview.opacity, 0.3);
     checks.push(
       'opacity remains effective and bounded from2–30%; no hidden minimum overrides a customized value',
+    );
+
+    // Native colours (#75) must not light the panel more than one accent colour.
+    // #220: every mode is shown at the same clock minute (identical digits and ages), and each
+    // measurement waits until the lit board has revealed and settled: weather and forecast show
+    // their fixture values, fonts and images are ready, nothing but loops is running, every widget
+    // has settled. Two consecutive measurements must agree before modes are compared, so a
+    // half-rendered frame cannot read as a palette difference.
+    async function settledBoard() {
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const ready = await page.evaluate(async () => {
+          await document.fonts.ready;
+          const plane = document.querySelector('.widget-grid-plane');
+          if (!plane || plane.classList.contains('fading') || plane.classList.contains('revealing')) return false;
+          if (!/\d°/.test(plane.querySelector('.ambient-weather .current-temperature')?.textContent ?? '')) return false;
+          if (!plane.querySelector('.ambient-forecast .forecast-day')) return false;
+          for (const image of plane.querySelectorAll('img')) {
+            if (!image.complete || !image.naturalWidth) return false;
+            await image.decode();
+          }
+          if (document.getAnimations().some((running) => running.playState === 'running' && running.effect?.getTiming().iterations !== Infinity)) return false;
+          return [...plane.querySelectorAll('.ambient-widget')].every((widget) => widget.dataset.settled === 'true');
+        });
+        if (ready) return;
+        await page.waitForTimeout(25);
+      }
+      throw new Error('the lit board never settled');
+    }
+    async function luminance() {
+      const shot = await decode(
+        await page.screenshot({ type: 'png', animations: 'disabled' }),
+      )
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const linear = (v) =>
+        v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4;
+      let max = 0,
+        sum = 0,
+        count = 0;
+      for (let i = 0; i < shot.data.length; i += shot.info.channels) {
+        const [r, g, b] = shot.data.subarray(i, i + 3);
+        if (!r && !g && !b) continue;
+        const y = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+        max = Math.max(max, y);
+        sum += y;
+        count++;
+      }
+      assert.deepEqual([...shot.data.subarray(0, 3)], [0, 0, 0]);
+      return { max, mean: sum / count };
+    }
+    const agree = (a, b) =>
+      Math.abs(a.max - b.max) <= b.max * 0.005 &&
+      Math.abs(a.mean - b.mean) <= b.mean * 0.005;
+    const sameMinute = await page.evaluate(() => Date.now() - (Date.now() % 60_000) + 61_000);
+    const luminanceLevels = {};
+    for (const brightness of [0.55, 0.28]) {
+      for (const accentMode of ['color', 'native']) {
+        const s = defaultSettings();
+        Object.assign(s.appearance, { accentMode, brightness, motionEnabled: false });
+        await app.store.update((d) => {
+          d.settings = s;
+        });
+        await page.clock.setSystemTime(sameMinute);
+        await open();
+        // #330: agreement is tracked explicitly. `previous` and `measured` stay two distinct
+        // measurements, so a board that never settles fails here and not at the parity check below.
+        let previous = null,
+          measured = null,
+          agreed = false;
+        for (let attempt = 0; attempt < 6; attempt++) {
+          await settledBoard();
+          if (measured) previous = measured;
+          measured = await luminance();
+          if (previous && agree(previous, measured)) {
+            agreed = true;
+            break;
+          }
+        }
+        assert.ok(
+          agreed,
+          `${accentMode} at ${brightness}: two consecutive settled measurements agree within 0.5% (the last two of 6: ${JSON.stringify([previous, measured])})`,
+        );
+        luminanceLevels[`${accentMode}-${brightness}`] = measured;
+      }
+      const color = luminanceLevels[`color-${brightness}`],
+        native = luminanceLevels[`native-${brightness}`];
+      assert.ok(
+        Math.abs(native.max - color.max) / color.max <= 0.05 &&
+          Math.abs(native.mean - color.mean) / color.mean <= 0.05,
+        `native luminance parity at ${brightness}: ${JSON.stringify(luminanceLevels)}`,
+      );
+    }
+    checks.push(
+      'native default composition keeps max/mean lit-pixel luminance within 5% of color mode at 55% and 28% brightness, each from two agreeing measurements of the settled board at one clock minute; exact black kept',
     );
 
     await settings();

@@ -1,0 +1,79 @@
+/* Motion levels (#76): Off / Subtle / Lively, separate from Drift and fade between moves
+   (whole-arrangement fades, drift and travel). Everything that moves is gated by the effective level on the ambient root
+   (.grid-ambient[data-animation]) or the editor root (.studio[data-animation]); a screen that
+   prefers reduced motion always reports Off. Only transform (translate/rotate/scale) and opacity
+   animate, opacity never rises above its resting value, and in-widget offsets come from above or
+   the left (or stay inside the glyph box) so the fit scale never changes. Keyframes use lrd-. */
+
+/* Registered so the rise resolves on the plane in display units (see below). */
+@property --motion-rise { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --reveal-delay { syntax: '<time>'; inherits: true; initial-value: 0s; }
+
+.grid-ambient,
+.studio {
+  --motion-ease: cubic-bezier(0.2, 0.7, 0.25, 1);
+  --motion-micro: 160ms;
+  --motion-short: 240ms;
+}
+/* Subtle moves only when something changes; nothing loops and nothing lasts over 2 s. */
+.grid-ambient[data-animation='subtle'] {
+  --motion-value: 420ms;
+  --motion-enter: 700ms;
+  --motion-stagger: 70ms;
+  --motion-digit: 420ms;
+  --motion-digit-rise: 0.06em;
+  --motion-digit-from: 0.35;
+  --motion-digit-stagger: 0ms;
+  --motion-hand: 600ms;
+  --motion-glyph-settle: 900ms;
+}
+/* Lively adds richer reveal choreography and the only loops (the hero weather glyph). */
+.grid-ambient[data-animation='lively'] {
+  --motion-value: 420ms;
+  --motion-enter: 1000ms;
+  --motion-stagger: 110ms;
+  --motion-digit: 640ms;
+  --motion-digit-rise: 0.14em;
+  --motion-digit-from: 0;
+  --motion-digit-stagger: 40ms;
+  --motion-hand: 900ms;
+  --motion-glyph-settle: 1000ms;
+}
+/* The plane's container is the display, so these are display-relative and never exceed the
+   widget padding, min(1.2cqw, 1.8cqh): settling content stays inside its rectangle. */
+.grid-ambient[data-animation='subtle'] > .widget-grid-plane { --motion-rise: min(1.5cqh, 1.2cqw); }
+.grid-ambient[data-animation='lively'] > .widget-grid-plane { --motion-rise: min(3cqh, 1.2cqw, 1.8cqh); }
+
+/* Reveal choreography: after a black rest (Drift and fade on, fade above 0) or an editor replay,
+   each widget's content settles from above in reading order, capped at six steps. Display.tsx
+   sets --reveal-order on each widget and .revealing[data-reveal] on the plane. */
+.grid-ambient .widget-grid-plane.revealing > .ambient-widget {
+  --reveal-delay: calc(var(--reveal-order, 0) * var(--motion-stagger, 0ms));
+}
+@keyframes lrd-enter {
+  from {
+    opacity: 0;
+    translate: 0 calc(-1 * var(--motion-rise));
+  }
+}
+@keyframes lrd-enter-left {
+  from {
+    opacity: 0;
+    translate: calc(-1 * var(--motion-rise)) 0;
+  }
+}
+@keyframes lrd-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.grid-ambient:is([data-animation='subtle'], [data-animation='lively']) > .widget-grid-plane.revealing > .ambient-widget > .widget-content {
+  animation: lrd-enter var(--motion-enter) var(--motion-ease) backwards;
+  animation-delay: var(--reveal-delay);
+}
+
+/* Loops hold still while the arrangement is fading out or resting on black. (!important because
+   each loop's animation shorthand resets the play state with a more specific selector.) */
+.grid-ambient .widget-grid-plane.fading :is(.glyph-part, .glyph-motion) {
+  animation-play-state: paused !important;
+}

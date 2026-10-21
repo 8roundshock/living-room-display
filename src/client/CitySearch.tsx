@@ -1,20 +1,36 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { LocationResult } from '../shared/contracts';
 import { api } from './api';
 import { Icon } from './icons';
 
-/** Editable APG list-autocomplete: DOM focus remains in the input. */
+/**
+ * Editable APG list-autocomplete: DOM focus remains in the input. The listbox and option ids are
+ * unique per instance, so several searches (Weather and World clocks) can coexist.
+ */
 export function CitySearch({
   value,
   onChange,
   onSelect,
   disabled,
+  id = 'city-search',
+  label = 'City',
+  description,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSelect: (city: LocationResult) => void;
   disabled: boolean;
+  /** Input id for an external label; the Weather tab keeps `city-search`. */
+  id?: string;
+  /** Accessible name of the combobox; match the visible label (#241). */
+  label?: string;
+  /** Optional accessible description, such as how to search. */
+  description?: string;
 }) {
+  const instance = useId();
+  const listId = `${instance}-options`,
+    descriptionId = `${instance}-description`,
+    optionId = (index: number) => `${instance}-option-${index}`;
   const [cities, setCities] = useState<LocationResult[]>([]);
   const [open, setOpen] = useState(false),
     [active, setActive] = useState(-1),
@@ -59,7 +75,7 @@ export function CitySearch({
   useEffect(() => {
     if (active >= 0)
       document
-        .getElementById(`city-option-${active}`)
+        .getElementById(optionId(active))
         ?.scrollIntoView({ block: 'nearest' });
   }, [active]);
   function select(city: LocationResult) {
@@ -73,15 +89,16 @@ export function CitySearch({
     <div className="city-combobox">
       <Icon name="location" size={17} />
       <input
-        id="city-search"
+        id={id}
         className="text-input"
         role="combobox"
-        aria-label="Search for a city"
+        aria-label={label}
+        aria-describedby={description ? descriptionId : undefined}
         aria-autocomplete="list"
         aria-expanded={open}
-        aria-controls={open ? 'city-options' : undefined}
+        aria-controls={open ? listId : undefined}
         aria-activedescendant={
-          open && active >= 0 ? `city-option-${active}` : undefined
+          open && active >= 0 ? optionId(active) : undefined
         }
         autoComplete="off"
         spellCheck={false}
@@ -131,7 +148,7 @@ export function CitySearch({
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => {
             onChange('');
-            document.getElementById('city-search')?.focus();
+            document.getElementById(id)?.focus();
           }}
         >
           <Icon name="close" size={14} />
@@ -139,11 +156,11 @@ export function CitySearch({
       )}
       {open && (
         <div className="city-dropdown">
-          <ul id="city-options" role="listbox" aria-label="Cities">
+          <ul id={listId} role="listbox" aria-label="Cities">
             {cities.map((city, index) => (
               <li
                 key={city.id}
-                id={`city-option-${index}`}
+                id={optionId(index)}
                 role="option"
                 aria-selected={index === active}
                 className={index === active ? 'active' : ''}
@@ -169,6 +186,11 @@ export function CitySearch({
       {!open && (
         <span className="sr-only" role="status">
           {status}
+        </span>
+      )}
+      {description && (
+        <span className="sr-only" id={descriptionId}>
+          {description}
         </span>
       )}
     </div>

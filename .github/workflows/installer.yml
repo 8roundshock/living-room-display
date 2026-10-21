@@ -1,0 +1,140 @@
+name: Windows installer
+# Builds LivingRoomDisplaySetup-<version>.exe and smoke-tests install, repair
+# and uninstall on clean runners. Only installer-related paths trigger it on
+# pull requests (checks.yml already builds and tests the app) to keep
+# Actions time low. A pull request from a fork builds and checks the
+# installer but uploads nothing and skips the smoke job, so an installer
+# built from unreviewed fork code is never offered as this repository's
+# artifact; the push to main after merge runs everything.
+on:
+  pull_request:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/installer.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: installer-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Windows checks (Windows PowerShell 5.1)
+        shell: powershell
+        run: .\windows\Test-Windows.ps1 -NodeExe (Get-Command node).Source
+      - name: Windows checks (PowerShell 7)
+        shell: pwsh
+        run: ./windows/Test-Windows.ps1 -NodeExe (Get-Command node).Source
+      - name: Ensure Inno Setup 6.7 or later
+        shell: pwsh
+        run: |
+          $pin = Get-Content windows/installer/inno.json -Raw | ConvertFrom-Json
+          function Get-InnoVersion([string]$Compiler) {
+            # Inno binaries carry no numeric file version; ask the preprocessor.
+            $probe = Join-Path $env:RUNNER_TEMP 'inno-version.iss'
+            Set-Content -LiteralPath $probe -Value '#pragma message "LRD-INNO-VERSION=" + DecodeVer(Ver)' -Encoding ascii
+            $output = (& $Compiler $probe 2>&1 | Out-String)
+            $match = [regex]::Match($output, 'LRD-INNO-VERSION=(\d+\.\d+\.\d+)')
+            if ($match.Success) { return [Version]$match.Groups[1].Value }
+            Write-Host $output
+            return $null
+          }
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          $usable = $false
+          if (Test-Path -LiteralPath $iscc) {
+            $version = Get-InnoVersion $iscc
+            Write-Host "Preinstalled Inno Setup $version"
+            $usable = $version -and $version.Major -eq 6 -and $version -ge [Version]$pin.minimumVersion
+          }
+          if (-not $usable) {
+            Write-Host "Installing the pinned Inno Setup $($pin.testedVersion)"
+            $download = Join-Path $env:RUNNER_TEMP 'innosetup-pinned.exe'
+            Invoke-WebRequest -Uri $pin.url -OutFile $download -UseBasicParsing
+            if ((Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pin.sha256) { throw 'The Inno Setup download does not match inno.json.' }
+            $target = Join-Path $env:RUNNER_TEMP 'inno-setup'
+            $launch = [Diagnostics.ProcessStartInfo]::new($download, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /DIR=`"$target`"")
+            $launch.UseShellExecute = $false
+            $process = [Diagnostics.Process]::Start($launch)
+            $process.WaitForExit()
+            if ($process.ExitCode -ne 0) { throw "Inno Setup installation failed ($($process.ExitCode))." }
+            $iscc = Join-Path $target 'ISCC.exe'
+          }
+          "ISCC_PATH=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # The version probe leaves ISCC's nonzero exit code (it has no [Setup]).
+          exit 0
+      - name: Build the installer
+        shell: pwsh
+        # Also builds the CI-only rollback-test Setup for the smoke test (#189).
+        run: ./windows/installer/Build-Installer.ps1 -OutputDirectory "$env:RUNNER_TEMP/installer" -IsccPath $env:ISCC_PATH -RollbackTestOutputDirectory "$env:RUNNER_TEMP/rollback-test"
+      - name: Payload checks
+        shell: pwsh
+        run: ./windows/installer/tests/Test-InstallerPayload.ps1 -ArchivePath "$env:RUNNER_TEMP/installer/payload.zip" -ReleaseJson "$env:RUNNER_TEMP/installer/release.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          name: living-room-display-setup
+          path: |
+            ${{ runner.temp }}/installer/LivingRoomDisplaySetup-*.exe
+            ${{ runner.temp }}/installer/LivingRoomDisplaySetup-*.exe.sha256
+            ${{ runner.temp }}/installer/release.json
+          if-no-files-found: error
+          retention-days: 14
+      # Never distributed: its server fails the health check on purpose.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          name: living-room-display-rollback-test
+          path: |
+            ${{ runner.temp }}/rollback-test/LivingRoomDisplaySetup-*-rollback-test.exe
+            ${{ runner.temp }}/rollback-test/LivingRoomDisplaySetup-*-rollback-test.exe.sha256
+            ${{ runner.temp }}/rollback-test/release.json
+          if-no-files-found: error
+          retention-days: 1
+  smoke:
+    needs: build
+    # A fork's pull request uploads no Setup to test (see the header).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025, windows-11-arm]
+        dir: [default, custom]
+    runs-on: ${{ matrix.os }}
+    # Windows on Arm (x64 emulation) is recorded under #122 but does not gate.
+    continue-on-error: ${{ matrix.os == 'windows-11-arm' }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: living-room-display-setup
+          path: ${{ runner.temp }}/setup
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: living-room-display-rollback-test
+          path: ${{ runner.temp }}/rollback-test
+      - name: Install, repair, rollback and uninstall smoke test
+        shell: pwsh
+        run: |
+          function Get-CheckedSetup([string]$Folder, [string]$Filter) {
+            $file = @(Get-ChildItem -LiteralPath $Folder -File | Where-Object { $_.Name -like $Filter })
+            if ($file.Count -ne 1) { throw "Expected one $Filter in $Folder, found $($file.Count)." }
+            $expected = (Get-Content -LiteralPath "$($file[0].FullName).sha256" -Raw).Split(' ')[0].Trim()
+            if ((Get-FileHash -LiteralPath $file[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "$($file[0].Name) does not match its .sha256 file." }
+            return $file[0].FullName
+          }
+          $setup = Get-CheckedSetup "$env:RUNNER_TEMP/setup" 'LivingRoomDisplaySetup-*.exe'
+          $rollback = Get-CheckedSetup "$env:RUNNER_TEMP/rollback-test" 'LivingRoomDisplaySetup-*-rollback-test.exe'
+          ./windows/installer/tests/Test-InstallerSmoke.ps1 -SetupPath $setup -ReleaseJson "$env:RUNNER_TEMP/setup/release.json" -RollbackSetupPath $rollback -RollbackReleaseJson "$env:RUNNER_TEMP/rollback-test/release.json" -DirectoryMode ${{ matrix.dir }}

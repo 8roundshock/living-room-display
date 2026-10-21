@@ -1,7 +1,9 @@
+/* The document is true black until an editor marks it (html.studio-editor in studio.css), so every
+   display start, native activation and reload begins on black, before React mounts (#334). */
 :root {
   font-family: system-ui, 'Segoe UI', Arial, sans-serif;
   color: #d9dce8;
-  background: #090b12;
+  background: #000;
   font-synthesis: none;
   font-weight: 400;
   text-rendering: optimizeLegibility;
@@ -108,6 +110,13 @@ a svg {
   flex: none;
 }
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+/* A link styled as a button lays out its icon and label like a button (#304). */
+a.button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -227,6 +236,8 @@ button {
   --ambient-text: #b8bfce;
   --ambient-brightness: 0.55;
   --font-scale: 1;
+  /* The status tone: stale or saved data and an offline display share one amber (#223, #133). */
+  --ambient-caution: #b0926b;
   position: relative;
   width: 100%;
   height: 100%;
@@ -286,78 +297,6 @@ button {
 .ambient.static .widget-content {
   animation: none;
 }
-.ambient-clock {
-  grid-area: 1/1/2/3;
-}
-.ambient-weather {
-  grid-area: 1/3/2/4;
-}
-.ambient-rain {
-  grid-area: 2/1/3/2;
-}
-.ambient-reminders {
-  grid-area: 2/2/3/3;
-}
-.ambient-preview {
-  grid-area: 2/3/3/4;
-}
-.ambient-forecast {
-  grid-area: 3/1/4/4;
-}
-.composition-1 .ambient-clock {
-  grid-area: 3/2/4/4;
-}
-.composition-1 .ambient-weather {
-  grid-area: 3/1/4/2;
-}
-.composition-1 .ambient-rain {
-  grid-area: 2/3/3/4;
-}
-.composition-1 .ambient-reminders {
-  grid-area: 2/2/3/3;
-}
-.composition-1 .ambient-preview {
-  grid-area: 2/1/3/2;
-}
-.composition-1 .ambient-forecast {
-  grid-area: 1/1/2/4;
-}
-.composition-2 .ambient-clock {
-  grid-area: 1/2/2/4;
-}
-.composition-2 .ambient-weather {
-  grid-area: 1/1/2/2;
-}
-.composition-2 .ambient-rain {
-  grid-area: 2/2/3/3;
-}
-.composition-2 .ambient-reminders {
-  grid-area: 2/3/3/4;
-}
-.composition-2 .ambient-preview {
-  grid-area: 2/1/3/2;
-}
-.composition-2 .ambient-forecast {
-  grid-area: 3/1/4/4;
-}
-.composition-3 .ambient-clock {
-  grid-area: 3/1/4/3;
-}
-.composition-3 .ambient-weather {
-  grid-area: 3/3/4/4;
-}
-.composition-3 .ambient-rain {
-  grid-area: 1/2/2/3;
-}
-.composition-3 .ambient-reminders {
-  grid-area: 1/1/2/2;
-}
-.composition-3 .ambient-preview {
-  grid-area: 1/3/2/4;
-}
-.composition-3 .ambient-forecast {
-  grid-area: 2/1/3/4;
-}
 @keyframes widget-drift {
   0% {
     transform: translate(-0.6cqw, -0.7cqh);
@@ -389,7 +328,7 @@ button {
   font-weight: 320;
   letter-spacing: -0.055em;
   line-height: 0.95;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
 }
 .clock-period {
@@ -437,7 +376,7 @@ button {
   opacity: 0.75;
 }
 .weather-age.stale {
-  color: #b0926b;
+  color: var(--ambient-caution);
 }
 .ambient-title {
   font-size: calc(2.1cqw * var(--font-scale));
@@ -491,7 +430,8 @@ button {
 .ambient-reminder-dot {
   width: 0.4cqw;
   height: 0.4cqw;
-  border: 1px solid var(--ambient-accent);
+  /* The ring scales with the display's text floor (#336): 2 px at 1080p and 4 px at 4K, never under 1 px. */
+  border: max(1px, var(--min-text, 0px) * 0.15) solid var(--ambient-accent);
   border-radius: 50%;
   margin-top: 1.3cqh;
   flex: none;
@@ -530,7 +470,7 @@ button {
   color: var(--ambient-accent);
   font-weight: 500;
 }
-.forecast-day svg {
+.forecast-day > .weather-glyph {
   width: 2.6cqw;
   height: 2.6cqw;
   color: var(--ambient-accent);
@@ -561,24 +501,6 @@ button {
   text-align: right;
   color: var(--ambient-accent);
 }
-.preview-image {
-  max-width: 100%;
-  max-height: 15cqh;
-  object-fit: contain;
-  object-position: left center;
-  filter: saturate(0.45);
-  border-radius: 3px;
-}
-.preview-caption {
-  font-size: 1cqw;
-  line-height: 1.5;
-  color: var(--ambient-accent);
-  margin-top: 1cqh;
-}
-.ambient-preview .ambient-description {
-  font-size: 1.1cqw;
-  max-width: 23cqw;
-}
 .display-help {
   position: absolute;
   right: 20px;
@@ -595,33 +517,27 @@ button {
   opacity: 1;
   pointer-events: auto;
 }
+/* One shared layout for the button and the link (#262): icon and label 8px apart. */
+.display-help .display-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
 .display-help .button {
   background: #14151d;
   color: #a8acc0;
   border-color: #272936;
   font-size: 12px;
 }
-.display-disconnected {
-  position: absolute;
-  bottom: 3cqh;
-  left: 5.5cqw;
-  font-size: 1cqw;
-  color: #977e88;
-  filter: brightness(var(--ambient-brightness));
-  animation: widget-drift 71s ease-in-out infinite alternate;
-}
+/* Classic: Georgia's default old-style figures bob around the baseline, so numbers use lining,
+   tabular figures (#363). Rules that set font-variant-numeric themselves keep lining-nums too. */
 .font-serif {
   font-family: Georgia, 'Times New Roman', serif;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .font-mono {
   font-family: Consolas, 'Courier New', monospace;
-}
-.layout-minimal .ambient-content {
-  padding: 9cqh 8cqw;
-  gap: 6cqh 5cqw;
-}
-.layout-weather-first .current-temperature {
-  font-size: calc(6.8cqw * var(--font-scale));
 }
 
 @media (max-width: 560px) {
@@ -636,7 +552,6 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .ambient-widget,
   .ambient-widget .widget-content,
-  .display-disconnected,
   .loading-orbit {
     animation: none;
   }

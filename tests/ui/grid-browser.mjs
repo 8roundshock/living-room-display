@@ -158,12 +158,16 @@ export async function runGridQa({ playwright, edge } = {}) {
     await clean();
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     await clean();
+    // Rain is part of Weather (#74): the picker never offers it.
+    assert.equal(await page.getByRole('button', { name: 'Preview Rain', exact: true }).count(), 0);
     assert.equal(
       await page
         .getByRole('button', { name: 'Close widget picker' })
         .evaluate((e) => document.activeElement === e),
       true,
     );
+    // The picker opens on the first unadded widget in grouped order (#154), so choose Photo.
+    await page.getByRole('button', { name: 'Preview Photo', exact: true }).click();
     await page
       .getByRole('button', { name: 'Photo medium', exact: true })
       .click();
@@ -176,7 +180,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       true,
     );
     await tab('Weather');
-    await page.getByRole('combobox', { name: 'Search for a city' }).fill('Tor');
+    await page.getByRole('combobox', { name: 'City', exact: true }).fill('Tor');
     await clean();
     await open(onlyClock());
     await layout();
@@ -227,7 +231,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       'spacious',
     );
     await dirty();
-    assert.equal(await page.locator('.grid-widget-frame').count(), 6);
+    assert.equal(await page.locator('.grid-widget-frame').count(), 5, 'five default widgets; Rain is part of Weather (#74)');
     assert.equal(await page.locator('.ambient-clock').getAttribute('data-widget-size'), 'medium');
     const fittedFrames = await page.locator('.grid-widget-frame').evaluateAll(es => es.map(e => e.getAttribute('style')));
     await move().focus(); await page.keyboard.press('Tab');
@@ -254,7 +258,100 @@ export async function runGridQa({ playwright, edge } = {}) {
       'density fits every enabled widget as a visible draft; returning restores exact authored corner placement and families; Cancel restores full grid',
     );
 
-    await open(onlyClock(), { viewport: { width: 390, height: 480 } });
+    // #341: keyboard results say where the widget went or what size it became, and the one layout
+    // live region announces every press, even when the text repeats.
+    await open();
+    await layout();
+    const announcer = page.locator('.layout-announcer');
+    assert.equal(await announcer.getAttribute('role'), 'status');
+    await page.evaluate(() => {
+      window.__announced = [];
+      new MutationObserver((records) => {
+        for (const record of records) for (const node of record.addedNodes) window.__announced.push(node.textContent);
+      }).observe(document.querySelector('.layout-announcer'), { childList: true, subtree: true });
+    });
+    const announced = () => page.evaluate(() => window.__announced.splice(0));
+    const lastScreen = () => page.getByRole('button', { name: 'Move Last screen', exact: true });
+    const describe = async (locator) => page.locator(`[id="${(await locator.getAttribute('aria-describedby')).split(' ')[0]}"]`).textContent();
+    assert.equal(await describe(lastScreen()), 'Column 9, row 5 · Medium', 'each move target is described by its place and size');
+    await lastScreen().focus();
+    for (let press = 0; press < 3; press++) await page.keyboard.press('ArrowLeft');
+    assert.deepEqual(await announced(), ['Last screen moved to column 8, row 5', 'Last screen moved to column 7, row 5', 'Last screen moved to column 6, row 5'], 'three presses, three distinct announcements');
+    assert.equal(await page.locator('.grid-status').textContent(), 'Last screen moved to column 6, row 5');
+    assert.equal(await describe(lastScreen()), 'Column 6, row 5 · Medium');
+    await page.keyboard.press('ArrowUp'); await page.keyboard.press('ArrowUp');
+    assert.deepEqual(await announced(), ['No room above', 'No room above'], 'a repeated refusal is announced again');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.getByRole('button', { name: 'Resize Last screen', exact: true }).evaluate((element) => element === document.activeElement), true);
+    await page.keyboard.press('ArrowLeft');
+    assert.deepEqual(await announced(), ['Last screen resized to Small'], 'a family resize names the family');
+    await page.keyboard.press('ArrowLeft');
+    assert.deepEqual(await announced(), ['Last screen cannot get any smaller']);
+    const liveCopies = await page.locator('[role="status"], [aria-live], [role="alert"]').evaluateAll((nodes) => nodes.filter((node) => node.textContent.includes('Last screen')).length);
+    assert.equal(liveCopies, 1, 'one live region carries layout messages');
+    await cancel().click();
+    await clean();
+    checks.push('#341: three ArrowLeft presses announce “Last screen moved to column 8/7/6, row 5” in the one layout live region; two refused moves (“No room above”) are both announced; a family resize says “Last screen resized to Small”; move targets are described by place and size (“Column 9, row 5 · Medium”)');
+
+    // #346: a refused density names itself and the widget count, once; when hiding one widget lets it
+    // fit, that is offered as one draft edit that Cancel restores.
+    const FULL_BOARD = {
+      clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
+      sunMoon: { column: 0, row: 2, size: 'large' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
+      reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
+      note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
+    };
+    const fullBoard = (without = []) => {
+      const settings = defaultSettings();
+      for (const id of Object.keys(settings.widgets)) settings.widgets[id] = id in FULL_BOARD && !without.includes(id);
+      settings.preview.enabled = !without.includes('preview');
+      Object.assign(settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+      return settings;
+    };
+    const densitySelect = () => page.getByRole('combobox', { name: 'Grid density' });
+    const refusalRegions = (text) => page.locator('[role="status"], [aria-live], [role="alert"]').evaluateAll((nodes, text) => nodes.filter((node) => node.textContent.includes(text)).length, text);
+    await open(fullBoard());
+    await layout();
+    await densitySelect().selectOption('spacious');
+    const full = "Spacious (8 × 6) can't fit these 12 widgets. Make some smaller or remove one, then try again.";
+    assert.equal(await page.locator('.grid-status').textContent(), full);
+    assert.equal(await refusalRegions('can\'t fit'), 1, 'announced from one live region');
+    assert.equal(await densitySelect().inputValue(), 'balanced', 'the grid stays');
+    assert.equal(await page.locator('.density-fix').count(), 0, 'no single removal makes room here');
+    await clean();
+    await open(fullBoard(['photo']));
+    await layout();
+    await densitySelect().selectOption('spacious');
+    assert.equal(await page.locator('.grid-status .density-fix').textContent(), 'Make room: remove Last screen');
+    assert.match(await page.locator('.grid-status').textContent(), /^Spacious \(8 × 6\) can't fit these 11 widgets\./);
+    await clean();
+    // The fix belongs to its refusal, not to the board: a later message on the same board (a refused
+    // keyboard move here) replaces both, and the offer never comes back beside unrelated text.
+    await page.getByRole('button', { name: 'Move Clock', exact: true }).focus();
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.locator('.grid-status').textContent(), 'No room above');
+    assert.equal(await page.locator('.density-fix').count(), 0, 'no density fix beside a refused move');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.locator('.density-fix').count(), 0, 'nor beside a repeated refusal');
+    await clean();
+    await densitySelect().selectOption('spacious');
+    assert.equal(await page.locator('.grid-status .density-fix').textContent(), 'Make room: remove Last screen', 'refusing the density again offers the fix again');
+    await page.getByRole('button', { name: 'Make room: remove Last screen', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await dirty();
+    assert.equal(await densitySelect().inputValue(), 'spacious');
+    assert.equal(await page.locator('[data-frame-id="preview"]').count(), 0, 'Last screen is hidden in the draft');
+    assert.match(await page.locator('.grid-status').textContent(), /^Last screen removed and the grid switched to Spacious\./);
+    assert.equal(await densitySelect().evaluate((element) => element === document.activeElement), true, 'focus returns to the density control');
+    await cancel().click();
+    await clean();
+    assert.equal(await densitySelect().inputValue(), 'balanced');
+    assert.equal(await page.locator('[data-frame-id="preview"]').count(), 1, 'Cancel restores Last screen');
+    checks.push(`#346: the full 12-widget board refuses Spacious with “${full}” from one live region; without Photo, “Make room: remove Last screen” switches to Spacious as one draft that Cancel restores, with focus back on the density control`);
+
+    // Pure geometry: Animation Off, so the #76 release settle (real-time CSS) cannot be mid-flight.
+    const stillClock = onlyClock(); stillClock.appearance.animation = 'off';
+    await open(stillClock, { viewport: { width: 390, height: 480 } });
     await layout();
     await page.evaluate(() => scrollTo(0, 110));
     const position = () => page.evaluate(() => {
@@ -289,6 +386,7 @@ export async function runGridQa({ playwright, edge } = {}) {
 
     const concurrent = onlyClock(); concurrent.widgetGrid.placements.clock.size = 'medium';
     concurrent.widgets.weather = true;
+    concurrent.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' };
     for (const collision of [false, true]) {
       await open(concurrent);
       await layout();
@@ -393,7 +491,6 @@ export async function runGridQa({ playwright, edge } = {}) {
     for (const name of [
       'Clock',
       'Weather',
-      'Rain',
       'Forecast',
       'Reminders',
       'Last screen',
@@ -406,6 +503,7 @@ export async function runGridQa({ playwright, edge } = {}) {
     await cancel().click();
     await clean();
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview Photo', exact: true }).click();
     await page.getByRole('button', { name: 'Add Photo', exact: true }).click();
     await dirty();
     await page
@@ -413,13 +511,13 @@ export async function runGridQa({ playwright, edge } = {}) {
       .click();
     await clean();
     checks.push(
-      'all modules optional including independent rain and clock; styles render distinctly; add/remove returns clean',
+      'all modules optional including independent weather and clock; styles render distinctly; add/remove returns clean',
     );
 
     const settings = defaultSettings();
     settings.widgets.photo = true;
     // Repack a smaller visible board to leave room for the local image.
-    for (const id of ['rain', 'reminders', 'preview', 'forecast'])
+    for (const id of ['reminders', 'preview', 'forecast'])
       settings.widgets[id] = false;
     await open(settings);
     await tab('Widgets');
@@ -568,7 +666,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       'real JPEG/WebP browser decode and 1280px normalized PNG downsample stay cancellable',
     );
 
-    for (const id of ['weather', 'rain']) {
+    for (const id of ['weather']) {
       const settings = onlyClock();
       settings.widgets.clock = false;
       settings.widgets[id] = true;
@@ -584,10 +682,10 @@ export async function runGridQa({ playwright, edge } = {}) {
       );
     }
     checks.push(
-      'provider credit remains inside the relocating current-weather or rain widget without Forecast',
+      'provider credit remains inside the relocating Weather widget without Forecast',
     );
 
-    for (const id of ['weather', 'rain', 'forecast'])
+    for (const id of ['weather', 'forecast'])
       for (const size of ['small', 'medium', 'large']) {
         const settings = onlyClock();
         settings.widgets.clock = false;
@@ -611,10 +709,11 @@ export async function runGridQa({ playwright, edge } = {}) {
             await widget.locator('.weather-context').innerText(),
             /°F/,
           );
-        if (id === 'rain')
+        // The fixture rains, so Weather is elevated; wider families show the amount in inches (#74).
+        if (id === 'weather' && size !== 'small')
           assert.match(
-            await widget.innerText(),
-            /\bin\b/,
+            await widget.locator('.rain-detail').innerText(),
+            / in rain$/,
           );
       }
     checks.push(
@@ -656,7 +755,12 @@ export async function runGridQa({ playwright, edge } = {}) {
         assert.ok(
           labels.some(
             (label) =>
-              label.text === 'Tom.' && label.full.startsWith('Tomorrow, '),
+              // Compact labels name tomorrow by its weekday (#256); assistive text keeps Tomorrow.
+              label.full.startsWith('Tomorrow, ') &&
+              label.text ===
+                new Intl.DateTimeFormat('en', { weekday: 'short', timeZone: 'UTC' }).format(
+                  new Date(`${label.full.slice(-10)}T12:00:00Z`),
+                ),
           ),
         );
         for (const label of labels) {

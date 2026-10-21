@@ -8,6 +8,15 @@
 CLAUDE.local.md
 *.log
 
+# Public repository precautions: never commit app data, exports, browser
+# captures, root-level screenshots or local agent settings (#441)
+living-room-display-backup*.json
+still-backup*.json
+state*.json
+.claude/settings.local.json
+*.har
+/*.png
+
 # Operating system files
 .DS_Store
 Thumbs.db

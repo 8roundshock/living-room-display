@@ -20,13 +20,18 @@ busy dashboards. The application must produce no audio.
 | Area | Intended behavior |
 | --- | --- |
 | Time and date | Optional clock with outline numerals by default, solid digital or minimal analog hands, and 12/24-hour format. |
-| Current weather | Conditions with a clear place label, units, and update age. |
+| Weather | Conditions with a clear place label, units, and update age; when rain is near it adds the chance and estimated timing of upcoming rain inside the same widget, with uncertainty visible (#74). |
 | Forecast | Readable seven-day outlook. |
-| Rain | Chance and estimated timing of upcoming rain, with uncertainty visible. |
-| Reminders | Add, edit, complete, or hide one-time/undated reminders through the local editor. |
-| Appearance | User-editable layout, colors, typography, motion, and saved presets. |
+| Reminders | Add, edit, delete and one-tap check off one-time/undated reminders in the local editor, with Undo and a local history (restore, delete, clear; the latest 500 kept on this computer). The display shows as many pending reminders as fit, soonest first, with an honest “+N more”. The widget can be any whole-cell size from 2 × 2 up to the full grid height and two-thirds of the width; a taller box lists more (#73, #203). |
+| Appearance | User-editable layout, colors, typography, motion, and saved presets. The accent is one colour or Native, where each widget uses its own tone from one harmonious dim palette (default for new installs and built-in styles). |
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 | Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |
+| World clocks | Time in up to four other cities. |
+| Calendar | This month at a glance. |
+| Countdown | Days until dates you choose. |
+| Note | A short message on screen. |
+| Air quality | Air quality and UV index. |
+| Sun & moon | Daylight and moon phase. |
 
 Distinguish forecast probability, expected precipitation amount, and estimated
 rain windows. Label times and intervals correctly. Show stale or unavailable
@@ -36,10 +41,11 @@ the default is not a claim about the user's location. Probability covers all
 precipitation; rain amount is separate so snow does not become a false rain warning.
 
 Editing should not require changing source code. Keep the editor separate from
-the sparse display experience. Personal reminders and settings need persistence
-and a recovery/export plan once their storage is designed; private user content
+the sparse display experience. Personal reminders and settings persist in a local
+per-user store with a previous-state backup and export/import
+([persistence and recovery](api.md#persistence-and-recovery)); private user content
 does not belong in Git. A local editor does not imply public or LAN exposure.
-Every information module is independently optional, including clock and rain.
+Every information module is independently optional, including clock and weather.
 Use a shared catalog and supported small/medium/large content families. The live
 canvas offers direct drag, selected/focused resize handles, reversible fitted
 grid density choices and keyboard alternatives. Reflow neighbors when possible;
@@ -73,8 +79,9 @@ Move whole widget groups through substantially different screen areas. Allow
 periodic recomposition and gentle fades so content does not remain anchored to
 one location. Motion inside an otherwise fixed widget is insufficient. Motion
 style and cadence remain user-editable choices. Recompose collision-free layouts
-with varied legal origins and offsets, fully black between compositions. Soft
-motion and reduced-motion settings remove travel/effects while protective discrete
+with varied legal origins and offsets, fully black between compositions. Turning
+off Drift and fade between moves (called Soft motion before #240), or a
+reduced-motion preference, removes travel/effects while protective discrete
 relocation continues. No fixed decorative frame, footer or source credit remains.
 
 Keep transitions calm, avoid flashes, and provide a reduced-motion option in the
@@ -84,8 +91,9 @@ against OLED burn-in. Do not claim a measured or guaranteed safety benefit.
 ## Activation and optional integrations
 
 Manual fullscreen use and automatic idle activation are distinct capabilities.
-If a Windows helper is selected, verify activation and dismissal around movies,
-games, fullscreen applications, and ordinary input. A lack of keyboard or mouse
+The selected Windows helper ([architecture](architecture.md)) must be verified for
+activation and dismissal around movies, games, fullscreen applications, and
+ordinary input before idle activation is enabled. A lack of keyboard or mouse
 activity alone does not mean the leisure PC is unused.
 
 TV off/on, wake, input switching, and remote control are optional later work.
@@ -101,20 +109,22 @@ the TV off instead of meeting the ambient-display requirement.
   and no audio. Include the preview in movement/brightness checks if enabled.
 - Exercise fresh, stale, failed, and missing weather states using explicit test
   data; distinguish simulations from live provider results.
-- If reminders are in scope, demonstrate add/edit/complete and persistence through
-  restart, with an export or recovery path.
+- Demonstrate reminder add/edit/complete and persistence through restart, with an
+  export or recovery path.
 - For the chosen preview mode, verify source selection, freshness labeling,
   toggle/hide behavior, no recursive capture, and no screenshot files left behind.
 - Verify the chosen start/exit behavior without interrupting movies or games.
 
-These are future acceptance targets, not checks already passed. There are no
-external calendar, cloud hosting, or smart-home platform requirements.
+These are the integrated acceptance targets. [STATUS.md](../STATUS.md) records
+which have been checked and which remain owner- or TV-gated. There are no external
+calendar, cloud hosting, or smart-home platform requirements.
 
 ## Installation and sharing
 
 A future usable release should be installable and operable by another user's
 agent from repository instructions, with that user's own configuration and no
 dependency on the owner's accounts, absolute paths, or private memory. See the
-[installation contract](install.md). Keep the repository private until a usable
-release; publication is a separate reviewed step. Stars and feedback are optional
+[installation contract](install.md). The repository is public (owner decision,
+2026-10-20, [#441](https://github.com/8roundshock/living-room-display/issues/441));
+publishing a release is a separate reviewed step. Stars and feedback are optional
 and require the end user's permission before an agent acts on their behalf.

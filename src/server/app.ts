@@ -1,19 +1,37 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
-import type { AppState, PreviewState, Reminder } from '../shared/contracts.ts';
-import { DataStore } from './store.ts';
-import { WeatherService, type FetchLike } from './weather.ts';
+import type { AppState, ClearCompletedResult, PreviewState, Reminder } from '../shared/contracts.ts';
+import { REMINDER_HISTORY_LIMIT, REMINDER_LIMIT, RESTORE_BEFORE_EDITING, historyReminders, pruneHistory } from '../shared/reminders.ts';
+import { needsForecast } from '../shared/widgets.ts';
+import { DataStore, SettingsConflict } from './store.ts';
+import { persistableSettings } from './persistence.ts';
+import { REFRESH_WAIT_MS, WeatherService, type FetchLike } from './weather.ts';
+import { AirQualityService, offAirQuality } from './air.ts';
 import { windowsStatus } from './windows.ts';
-import { automaticLocationSchema, importSchema, mergeSettings, reminderInputSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
+import { automaticLocationSchema, importSchema, mergeSettings, reminderCreateSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
+
+// Read once at module load. src/server and the built dist/server both sit two
+// levels below the package.json shipped with the app, so health matches it.
+const APP_VERSION = String((JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version?: unknown }).version ?? 'unknown');
 
 class HttpError extends Error {
   status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
 }
-export interface ApplicationOptions { dataDirectory: string; clientDirectory?: string; fetcher?: FetchLike; now?: () => number; development?: boolean }
+/** Aborts a serialized reminder update whose patch matches the stored values, so nothing is written. */
+class UnchangedReminder extends Error {
+  reminder: Reminder;
+  constructor(reminder: Reminder) { super('Reminder unchanged'); this.reminder = reminder; }
+}
+export interface ApplicationOptions {
+  dataDirectory: string; clientDirectory?: string; fetcher?: FetchLike; now?: () => number; development?: boolean;
+  /** How long a request waits for a due weather or air-quality refresh before answering (#351). */
+  refreshWaitMs?: number;
+}
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 
 async function bytes(request: IncomingMessage, limit: number): Promise<Buffer> {
@@ -30,15 +48,27 @@ async function jsonBody(request: IncomingMessage): Promise<unknown> {
   try { return JSON.parse((await bytes(request, 4 * 1024 * 1024)).toString('utf8')); }
   catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(400, 'Invalid JSON'); }
 }
-function json(response: ServerResponse, status: number, body?: unknown): void {
-  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+function json(response: ServerResponse, status: number, body?: unknown, headers: Record<string, string> = {}): void {
+  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
   response.end(status === 204 ? undefined : JSON.stringify(body));
+}
+/** The settings revision as an HTTP entity tag (#287). */
+const etag = (revision: string) => ({ ETag: `"${revision}"` });
+/**
+ * The revisions an `If-Match` header names (#287), or null without one or for `*`. Only strong,
+ * quoted tags can match; anything else names no revision, so the patch is refused as stale.
+ */
+function ifMatch(request: IncomingMessage): string[] | null {
+  const header = request.headers['if-match'];
+  if (header === undefined || header.trim() === '*') return null;
+  return header.split(',').flatMap(tag => { const match = /^"([^"]*)"$/.exec(tag.trim()); return match ? [match[1]!] : []; });
 }
 
 export async function createApplication(options: ApplicationOptions) {
   const store = await DataStore.open(options.dataDirectory);
   const now = options.now ?? Date.now;
-  const weather = new WeatherService(options.fetcher, now);
+  const weather = new WeatherService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
+  const air = new AirQualityService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   const hostToken = randomBytes(32).toString('hex');
   let image: Buffer | null = null;
   let previewGeneration = 0;
@@ -93,18 +123,31 @@ export async function createApplication(options: ApplicationOptions) {
     const path = url.pathname;
     response.setHeader('Permissions-Policy', path.startsWith('/display') ? 'geolocation=()' : 'geolocation=(self)');
 
-    if (method === 'GET' && path === '/api/health') { json(response, 200, { status: 'ok', version: '0.1.0', storageWarning: store.warning }); return; }
+    if (method === 'GET' && path === '/api/health') { json(response, 200, { status: 'ok', version: APP_VERSION, storageWarning: store.warning }); return; }
     if (method === 'GET' && path === '/api/windows/status') { json(response, 200, await windowsStatus()); return; }
     if (method === 'GET' && path === '/api/state') {
-      const { settings, reminders, photoAsset } = store.snapshot();
-      const state: AppState = { settings, reminders, weather: await weather.get(settings), preview: previewState(),
-        photo: photoAsset ? { available: true, id: photoAsset.id, width: photoAsset.width, height: photoAsset.height, updatedAt: photoAsset.updatedAt } : { available: false, id: null, width: null, height: null, updatedAt: null } };
-      json(response, 200, { ...state, storageWarning: store.warning }); return;
+      // Metadata only: the photo bytes are not copied for a poll (#353).
+      const { settings, reminders, photo, settingsRevision } = store.view();
+      // The forecast is refreshed only while a saved widget needs it (#352) and air quality only while
+      // its widget is saved enabled; each waits for a due refresh at most briefly (#351).
+      const [weatherState, airQuality] = await Promise.all([
+        needsForecast(settings) ? weather.get(settings) : weather.peek(settings),
+        settings.widgets.airQuality ? air.get(settings) : offAirQuality(settings),
+      ]);
+      const state: AppState = { settings, reminders, weather: weatherState, preview: previewState(), airQuality,
+        photo: photo ? { available: true, ...photo } : { available: false, id: null, width: null, height: null, updatedAt: null } };
+      json(response, 200, { ...state, storageWarning: store.warning }, etag(settingsRevision)); return;
     }
     if (method === 'PATCH' && path === '/api/settings') {
-      const settings = await store.patchSettings(settingsPatchSchema.parse(await jsonBody(request)), now());
-      if (!settings.preview.enabled || !settings.widgets.preview) clearPreview();
-      json(response, 200, settings); return;
+      const patch = settingsPatchSchema.parse(await jsonBody(request));
+      let saved: Awaited<ReturnType<DataStore['commitSettings']>>;
+      try { saved = await store.commitSettings(patch, now(), ifMatch(request)); } catch (error) {
+        if (!(error instanceof SettingsConflict)) throw error;
+        // A Save computed from outdated settings (#287): the editor merges these and tries again.
+        json(response, 409, { error: error.message, settings: error.settings, revision: error.settingsRevision }, etag(error.settingsRevision)); return;
+      }
+      if (!saved.settings.preview.enabled || !saved.settings.widgets.preview) clearPreview();
+      json(response, 200, saved.settings, etag(saved.settingsRevision)); return;
     }
     if (method === 'POST' && path === '/api/location') {
       const selection = automaticLocationSchema.parse(await jsonBody(request));
@@ -117,36 +160,74 @@ export async function createApplication(options: ApplicationOptions) {
       });
       json(response, 200, saved.settings); return;
     }
-    if (method === 'GET' && path === '/api/weather') { json(response, 200, await weather.get(store.snapshot().settings)); return; }
+    // The editor's Weather tab asks for the forecast whether or not a saved widget needs it (#352).
+    if (method === 'GET' && path === '/api/weather') { json(response, 200, await weather.get(store.view().settings)); return; }
+    if (method === 'GET' && path === '/api/air-quality') {
+      // Editor preview before Save: the saved location, the requested (or saved) scale, the shared cache.
+      const settings = store.view().settings;
+      const scale = z.enum(['us', 'european']).optional().parse(url.searchParams.get('scale') ?? undefined) ?? settings.widgetData.airQuality.scale;
+      json(response, 200, await air.get(settings, scale)); return;
+    }
     if (method === 'GET' && path === '/api/locations') {
       const query = z.string().trim().min(2).max(100).parse(url.searchParams.get('q'));
       try { json(response, 200, await weather.locations(query)); } catch { throw new HttpError(502, 'City search is unavailable. Try again later.'); }
       return;
     }
-    if (method === 'GET' && path === '/api/reminders') { json(response, 200, store.snapshot().reminders); return; }
+    if (method === 'GET' && path === '/api/reminders') { json(response, 200, store.view().reminders); return; }
     if (method === 'POST' && path === '/api/reminders') {
-      const input = reminderInputSchema.parse(await jsonBody(request));
+      const input = reminderCreateSchema(now()).parse(await jsonBody(request));
       const timestamp = new Date(now()).toISOString();
-      const reminder: Reminder = { id: randomUUID(), text: input.text, dueAt: input.dueAt ?? null, completed: false, createdAt: timestamp, updatedAt: timestamp };
-      await store.update(data => { if (data.reminders.length >= 1000) throw new HttpError(409, 'Reminder limit reached'); data.reminders.push(reminder); });
+      // Undo after a delete passes the original createdAt, so the reminder returns to its sorted place (#237).
+      const reminder: Reminder = { id: randomUUID(), text: input.text, dueAt: input.dueAt ?? null, completed: false, createdAt: input.createdAt ?? timestamp, updatedAt: timestamp };
+      await store.update(data => {
+        if (data.reminders.length >= REMINDER_LIMIT) {
+          // A full store makes way by dropping the oldest completed reminder; pending ones are never dropped.
+          const oldest = historyReminders(data.reminders).at(-1);
+          if (!oldest) throw new HttpError(409, 'Reminder limit reached');
+          data.reminders = data.reminders.filter(item => item !== oldest);
+        }
+        data.reminders.push(reminder);
+      });
       json(response, 201, reminder); return;
+    }
+    if (method === 'DELETE' && path === '/api/reminders/completed') {
+      let deleted = 0;
+      await store.update(data => {
+        const pending = data.reminders.filter(item => !item.completed);
+        deleted = data.reminders.length - pending.length;
+        data.reminders = pending;
+      });
+      json(response, 200, { deleted } satisfies ClearCompletedResult); return;
     }
     const reminderMatch = /^\/api\/reminders\/([0-9a-f-]{36})$/i.exec(path);
     if (reminderMatch && (method === 'PATCH' || method === 'DELETE')) {
       const patch = method === 'PATCH' ? reminderPatchSchema.parse(await jsonBody(request)) : null;
       let changed: Reminder | undefined;
-      await store.update(data => {
-        const index = data.reminders.findIndex(item => item.id === reminderMatch[1]);
-        if (index < 0) throw new HttpError(404, 'Reminder not found');
-        if (patch) { changed = { ...data.reminders[index]!, ...patch, updatedAt: new Date(now()).toISOString() }; data.reminders[index] = changed; }
-        else data.reminders.splice(index, 1);
-      });
+      try {
+        await store.update(data => {
+          const index = data.reminders.findIndex(item => item.id === reminderMatch[1]);
+          if (index < 0) throw new HttpError(404, 'Reminder not found');
+          const stored = data.reminders[index]!;
+          if (!patch) { data.reminders.splice(index, 1); return; }
+          const differs = (key: keyof typeof patch) => patch[key] !== undefined && patch[key] !== stored[key];
+          // Retries and double taps write nothing, so a completion keeps its original time.
+          if (!differs('text') && !differs('completed') && !differs('dueAt')) throw new UnchangedReminder(stored);
+          if (stored.completed && patch.completed !== false && (differs('text') || differs('dueAt'))) throw new HttpError(409, RESTORE_BEFORE_EDITING);
+          changed = { ...stored, ...patch, updatedAt: new Date(now()).toISOString() };
+          data.reminders[index] = changed;
+          if (changed.completed && !stored.completed) data.reminders = pruneHistory(data.reminders, REMINDER_HISTORY_LIMIT);
+        });
+      } catch (error) {
+        if (!(error instanceof UnchangedReminder)) throw error;
+        changed = error.reminder;
+      }
       json(response, patch ? 200 : 204, changed); return;
     }
     if (method === 'GET' && path === '/api/export') {
       response.setHeader('Content-Disposition', 'attachment; filename="living-room-display-backup.json"');
-      const { version, settings, reminders } = store.snapshot();
-      json(response, 200, { version, settings, reminders, exportedAt: new Date(now()).toISOString() }); return;
+      const { version, settings, reminders } = store.view();
+      // Exports omit additive defaults so the previous release can import them (#84).
+      json(response, 200, { version, settings: persistableSettings(settings), reminders, exportedAt: new Date(now()).toISOString() }); return;
     }
     if (method === 'POST' && path === '/api/import') {
       const imported = importSchema.parse(await jsonBody(request));
@@ -155,23 +236,24 @@ export async function createApplication(options: ApplicationOptions) {
     }
     if (method === 'GET' && path === '/api/host/session') {
       nativeRequest(request, false);
-      json(response, 200, { token: hostToken, settings: store.snapshot().settings, displayUrl: `http://127.0.0.1:${port}/` }); return;
+      json(response, 200, { token: hostToken, settings: store.view().settings, displayUrl: `http://127.0.0.1:${port}/` }); return;
     }
     if (method === 'GET' && path === '/api/preview') { json(response, 200, previewState()); return; }
     if (method === 'GET' && path === '/api/photo/image') {
-      const asset = store.snapshot().photoAsset;
-      if (!asset || (url.searchParams.has('id') && url.searchParams.get('id') !== asset.id)) throw new HttpError(404, 'No selected photo is available');
-      const content = Buffer.from(asset.pngBase64, 'base64');
-      response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'Content-Length': content.length }); response.end(content); return;
+      // Decoded once per photo and shared until it changes (#353).
+      const photo = store.photoImage();
+      if (!photo || (url.searchParams.has('id') && url.searchParams.get('id') !== photo.id)) throw new HttpError(404, 'No selected photo is available');
+      response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'Content-Length': photo.content.length }); response.end(photo.content); return;
     }
-    if (method === 'GET' && path === '/api/preview/image') {
+    // HEAD answers with GET's status and headers and no body (#124); Node sends no body for HEAD.
+    if ((method === 'GET' || method === 'HEAD') && path === '/api/preview/image') {
       if (!previewState().available || !image) throw new HttpError(404, 'No snapshot is available');
       response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'Content-Length': image.length }); response.end(image); return;
     }
     if (path === '/api/preview' && (method === 'POST' || method === 'DELETE')) {
       nativeRequest(request, true);
       if (method === 'DELETE') { clearPreview(); json(response, 204); return; }
-      const settings = store.snapshot().settings;
+      const settings = store.view().settings;
       if (!settings.preview.enabled || !settings.widgets.preview) throw new HttpError(409, 'Preview is disabled');
       if (request.headers['content-type'] !== 'image/png') throw new HttpError(415, 'Use image/png');
       const capturedAt = z.iso.datetime({ offset: true }).parse(request.headers['x-captured-at']);
@@ -182,7 +264,7 @@ export async function createApplication(options: ApplicationOptions) {
       const width = content.readUInt32BE(16); const height = content.readUInt32BE(20);
       if (width < 1 || height < 1 || width > 4096 || height > 4096 || width * height > 4_194_304) throw new HttpError(400, 'Snapshot dimensions are too large');
       nativeRequest(request, true);
-      const currentSettings = store.snapshot().settings;
+      const currentSettings = store.view().settings;
       if (uploadGeneration !== previewGeneration || !currentSettings.preview.enabled || !currentSettings.widgets.preview) {
         throw new HttpError(409, 'Snapshot upload was cleared or preview is disabled');
       }

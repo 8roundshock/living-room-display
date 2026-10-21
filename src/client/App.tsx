@@ -8,15 +8,34 @@ import {
   type SetStateAction,
 } from 'react';
 import type { AppState } from '../shared/contracts';
-import { api } from './api';
+import { ApiError, apiTagged, rememberRevision } from './api';
 import { AmbientDisplay } from './Display';
 import { Editor } from './Editor';
 
+interface LoadError {
+  message: string;
+  /** No answer from the server at all, as opposed to an answer with an error. */
+  network: boolean;
+}
+const POLL_MS = 30_000;
+/**
+ * While the server is still fetching the forecast or air quality (it answers after a short wait
+ * rather than with the provider, #351), ask again this soon, at most this many times in a row.
+ * The provider's own 8 s timeout ends a refresh well within that.
+ */
+const REFRESH_POLL_MS = 2_000;
+const REFRESH_POLLS = 5;
+
 export function App() {
   const [state, setState] = useState<AppState | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadError | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  // When the latest state request that reached the server was sent (`performance.now()`), so the
+  // editor can clear an error caused by an earlier lost connection (#232).
+  const [reachedAt, setReachedAt] = useState(0);
   const revision = useRef(0);
   const request = useRef(0);
+  const refreshPoll = useRef<{ timer: number | undefined; count: number }>({ timer: undefined, count: 0 });
   const updateState = useCallback<Dispatch<SetStateAction<AppState | null>>>(
     (update) => {
       revision.current++;
@@ -37,27 +56,50 @@ export function App() {
   const reload = useCallback(async () => {
     const startedAt = revision.current;
     const requestId = ++request.current;
+    const sentAt = performance.now();
     try {
-      const received = await api<AppState>('/api/state');
+      const { body: received, etag } = await apiTagged<AppState>('/api/state');
+      // The settings revision travels with these settings, for the editor's If-Match (#287).
+      rememberRevision(received.settings, etag);
+      setReachedAt((previous) => Math.max(previous, sentAt));
       if (requestId === request.current && startedAt === revision.current) {
         setState(received);
         setError(null);
       }
+      // One bounded early poll while a provider refresh is still running (#351).
+      const poll = refreshPoll.current;
+      if (!received.weather.refreshing && !received.airQuality?.refreshing) poll.count = 0;
+      else if (poll.timer === undefined && poll.count < REFRESH_POLLS) {
+        poll.count++;
+        poll.timer = window.setTimeout(() => {
+          poll.timer = undefined;
+          void reload();
+        }, REFRESH_POLL_MS);
+      }
     } catch (caught) {
+      if (caught instanceof ApiError && !caught.network)
+        setReachedAt((previous) => Math.max(previous, sentAt));
       if (requestId === request.current)
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : 'Cannot reach the local display server.',
-        );
+        setError({
+          message:
+            caught instanceof Error
+              ? caught.message
+              : 'Cannot reach the local display server.',
+          network: !(caught instanceof ApiError) || caught.network,
+        });
     }
   }, []);
   useEffect(() => {
     void reload();
     const timer = window.setInterval(() => {
       void reload();
-    }, 30_000);
-    return () => window.clearInterval(timer);
+    }, POLL_MS);
+    const poll = refreshPoll.current;
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(poll.timer);
+      poll.timer = undefined;
+    };
   }, [reload]);
   useEffect(() => {
     document.title = display ? 'Still · Display' : 'Still · Your room';
@@ -69,14 +111,32 @@ export function App() {
         <div className="fallback-content" key={error ? 'error' : 'loading'}>
           {error ? (
             <>
-              <p>{display ? 'Display unavailable' : error}</p>
+              {display ? (
+                <p>Display unavailable</p>
+              ) : (
+                <div className="fallback-message" role="alert">
+                  <p className="fallback-title">
+                    {error.network
+                      ? "Can't reach the display server on this computer."
+                      : error.message}
+                  </p>
+                  <p className="fallback-hint">
+                    {error.network
+                      ? 'The editor needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.'
+                      : 'The display server answered but could not open your settings. Try again in a moment.'}
+                  </p>
+                </div>
+              )}
               <button
                 className="button"
+                aria-busy={retrying}
                 onClick={() => {
-                  void reload();
+                  if (retrying) return;
+                  setRetrying(true);
+                  void reload().finally(() => setRetrying(false));
                 }}
               >
-                Try again
+                {retrying ? 'Trying again…' : 'Try again'}
               </button>
             </>
           ) : (
@@ -94,7 +154,8 @@ export function App() {
     <Editor
       state={state}
       setState={updateState}
-      connectionError={error}
+      connectionError={error?.message ?? null}
+      serverReachedAt={reachedAt}
       reload={reload}
     />
   );

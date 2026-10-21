@@ -10,7 +10,60 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
-import { WIDGET_IDS, GRID_DENSITIES, widgetSizes } from '../../src/shared/widgets.ts';
+import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, isActiveWidget, widgetSizes } from '../../src/shared/widgets.ts';
+import { WIDGET_CHECKS } from './widget-checks/index.mjs';
+
+/** Renderers that read the weather or air-quality status or the connection; the others render the same when stale or offline. */
+const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'offline'], airQuality: ['stale', 'offline'], reminders: ['offline'] };
+/**
+ * #221, #283: at Text 100% every family must render at fit 1 (a zoom-out shrinks its labels and values
+ * whether or not one sits exactly on a floor). These families still zoom out; each allowance names the
+ * ticket fixing it. An allowance no longer needed fails, so it is removed when that work lands.
+ */
+const FLOOR_FIT_ALLOWANCES = { 'note/small': '#291' };
+/**
+ * #99: widgets that still construct Intl formatters on a one-second tick within the same minute, each with
+ * the ticket caching them. An allowance no longer needed fails; with none left the full board must
+ * construct none.
+ */
+const INTL_TICK_ALLOWANCES = {};
+/** Every active widget on one Balanced 12 x 8 board (as in motion-browser.mjs). */
+const FULL_BOARD = {
+  clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
+  sunMoon: { column: 0, row: 2, size: 'large' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
+  reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
+  note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
+};
+
+/** Counts ResizeObserver and Intl constructions and style changes on .widget-content (an init script). */
+function instrumentFit() {
+  const counts = window.__lrdFit = { resizeObservers: 0, intl: 0, styleMutations: 0 };
+  const Observer = window.ResizeObserver;
+  window.ResizeObserver = class extends Observer { constructor(callback) { super(callback); counts.resizeObservers++; } };
+  for (const name of ['DateTimeFormat', 'NumberFormat', 'PluralRules', 'RelativeTimeFormat']) {
+    const Original = Intl[name];
+    const Counted = function (...values) { counts.intl++; return new Original(...values); };
+    Counted.prototype = Original.prototype; Counted.supportedLocalesOf = Original.supportedLocalesOf.bind(Original);
+    Intl[name] = Counted;
+  }
+  new MutationObserver(records => { for (const record of records) if (record.target.classList?.contains('widget-content')) counts.styleMutations++; })
+    .observe(document, { subtree: true, attributes: true, attributeFilter: ['style'] });
+}
+
+/** The widget's fit scale, its floor sizes and the visible text elements whose computed size sits on a floor. */
+function floorReport(widget) {
+  return widget.evaluate(section => {
+    const probe = expression => { const span = document.createElement('span'); span.style.cssText = `position:absolute;visibility:hidden;font-size:${expression}`; section.append(span); const size = parseFloat(getComputedStyle(span).fontSize); span.remove(); return size; };
+    const text = probe('calc(var(--min-text) * var(--font-scale))'), data = probe('calc(var(--min-data) * var(--font-scale))');
+    const content = section.querySelector('.widget-content');
+    const floored = [...content.querySelectorAll('*')]
+      .filter(element => [...element.childNodes].some(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim()) && element.checkVisibility({ visibilityProperty: true }))
+      .map(element => ({ name: String(element.className?.baseVal ?? element.className ?? element.tagName) || element.tagName, size: parseFloat(getComputedStyle(element).fontSize) }))
+      .filter(({ size }) => text > 0 && (Math.abs(size - text) < 0.02 || Math.abs(size - data) < 0.02))
+      .map(({ name, size }) => `${name} ${size.toFixed(2)}px`);
+    return { fit: new DOMMatrix(getComputedStyle(content).transform).a, text, data, floored };
+  });
+}
 
 export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -24,9 +77,11 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
   try {
     const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
     const source = await (await fetch(`${base}/api/state`)).json();
-    source.reminders = Array.from({ length: 5 }, (_, i) => ({ id: `fixture-${i}`, text: ['Read a chapter', 'Water the plants', 'Plan the weekend', 'Call a friend', 'A later reminder'][i], completed: false, dueAt: null, createdAt: new Date(now + i).toISOString(), updatedAt: new Date(now).toISOString() }));
-    source.preview = { available: true, capturedAt: new Date(now).toISOString(), width: 320, height: 200 };
-    source.photo = { available: true, id: 'synthetic', width: 320, height: 200, updatedAt: new Date(now).toISOString() };
+    // Every active widget has a check module (tests/ui/widget-checks); their prepare hooks give it content.
+    for (const id of ACTIVE_WIDGET_IDS) assert.ok(WIDGET_CHECKS[id], `${id} needs a tests/ui/widget-checks module`);
+    for (const check of Object.values(WIDGET_CHECKS)) check.prepare?.(source, { now });
+    const clippingSelectors = [...new Set(['.ambient-label', ...Object.values(WIDGET_CHECKS).flatMap(check => check.selectors ?? [])])].join(',');
+    const familyCount = ACTIVE_WIDGET_IDS.reduce((total, id) => total + widgetSizes(id).length, 0);
     // Deliberately synthetic geometry, never a personal image or desktop capture.
     const pixels = Buffer.alloc((320 * 4 + 1) * 200);
     for (let y = 0; y < 200; y++) for (let x = 0; x < 320; x++) {
@@ -62,35 +117,105 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     await page.keyboard.press('f'); assert.equal(await page.evaluate(() => Boolean(document.fullscreenElement)), false); checks.push('Explicit native presentation hides only that document cursor and has no browser fullscreen shortcut');
 
     const clockFonts = {};
-    for (const viewport of [{ width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
+    /** One widget alone at the top-left corner of the chosen density, Soft motion off, Text 100%. */
+    const familyState = (id, size, density) => {
+      const state = structuredClone(source); state.settings.appearance.motionEnabled = false;
+      state.settings.widgetGrid.density = density; state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id]));
+      state.settings.widgetGrid.placements[id] = { column: 0, row: 0, size };
+      return state;
+    };
+    // #221: stale and offline variants render on their own page, so the main page's clock (which
+    // the family hooks read) never moves for them. Chromium delays rendering frames, and with them
+    // ResizeObserver delivery, in a background tab, so whichever page is in use is brought to the
+    // front: the family hooks (the Reminders remeasure checks, #216) wait on real frames.
+    const statusPage = await context.newPage(); statusPage.on('pageerror', error => errors.push(error.message));
+    await statusPage.clock.install({ time: new Date(now) });
+    await page.bringToFront();
+    async function statusReport(id, size, density, viewport, status) {
+      await statusPage.bringToFront();
+      try { return await renderStatus(id, size, density, viewport, status); } finally { await page.bringToFront(); }
+    }
+    async function renderStatus(id, size, density, viewport, status) {
+      current = familyState(id, size, density);
+      if (status === 'stale') {
+        current.weather = { ...current.weather, status: 'stale', updatedAt: new Date(now - 5 * 3_600_000).toISOString() };
+        current.airQuality = { ...current.airQuality, status: 'stale', updatedAt: new Date(now - 2 * 3_600_000).toISOString() };
+      }
+      await statusPage.setViewportSize(viewport);
+      // An offline display has loaded once and then failed its 30 s refresh.
+      await statusPage.clock.setSystemTime(new Date(status === 'offline' ? now - 30_000 : now));
+      // #306: on a machine shared with other suites a display load has exceeded the default 30 s here; allow its real cost.
+      await statusPage.goto(base + '/display', { timeout: 90_000 }); await statusPage.locator('.display-page').waitFor({ timeout: 90_000 }); await statusPage.clock.runFor(100);
+      const widget = statusPage.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
+      if (status === 'offline') {
+        mode = 'error'; await statusPage.clock.runFor(30_000);
+        for (let attempt = 0; !/offline/i.test(await widget.innerText()); attempt++) { assert.ok(attempt < 100, `${id}/${size} shows its offline state`); await statusPage.waitForTimeout(20); }
+        mode = 'ready';
+      } else assert.match(await widget.innerText(), /Saved/, `${id}/${size} shows its stale state`);
+      return floorReport(widget);
+    }
+    const floorFailures = [], allowancesUsed = new Set(), allowedCases = []; let floorCases = 0, flooredCases = 0;
+    /**
+     * Fit within half a percent of 1 is the fit search resolving a sub-pixel overflow, not a zoom-out. Every
+     * zoom-out at Text 100% counts, whether or not an element sits exactly on a floor (#283): a family whose
+     * smallest text is above the floor still shrinks every label and value when it zooms out.
+     */
+    const floorCheck = (id, size, density, viewport, status, report) => {
+      floorCases++;
+      if (report.floored.length) flooredCases++;
+      if (report.fit >= 0.995) return;
+      const detail = `${id}/${size} ${density} ${viewport.width}×${viewport.height} ${status}: fit ${report.fit.toFixed(3)} with ${report.floored.slice(0, 3).join(', ') || 'no element on a floor'} (floors ${report.text.toFixed(2)}/${report.data.toFixed(2)} px)`;
+      if (FLOOR_FIT_ALLOWANCES[`${id}/${size}`]) { allowancesUsed.add(`${id}/${size}`); allowedCases.push(detail); return; }
+      floorFailures.push(detail);
+    };
+    // The family sweep includes the owner's 1280×720 TV (#283); the per-viewport sweeps below cover 720p from
+    // their 1080p pass, so they run at 1080p and 4K only.
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       await page.setViewportSize(viewport);
-      for (const density of Object.keys(GRID_DENSITIES)) for (const id of WIDGET_IDS) for (const size of widgetSizes(id)) {
-        current = structuredClone(source); current.settings.appearance.motionEnabled = false;
-        current.settings.widgetGrid.density = density; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id]));
-        current.settings.widgetGrid.placements[id] = { column: 0, row: 0, size };
+      for (const density of Object.keys(GRID_DENSITIES)) for (const id of ACTIVE_WIDGET_IDS) for (const size of widgetSizes(id)) {
+        current = familyState(id, size, density);
         await open(); const widget = page.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
-        const bounds = await widget.evaluate(el => { const r = el.getBoundingClientRect(); const content = el.querySelector('.widget-content'); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, scale: new DOMMatrix(getComputedStyle(content).transform).a, border: getComputedStyle(el).borderWidth, background: getComputedStyle(el).backgroundColor }; });
+        const bounds = await widget.evaluate(el => { const r = el.getBoundingClientRect(); const content = el.querySelector('.widget-content'); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, scale: new DOMMatrix(getComputedStyle(content).transform).a, border: getComputedStyle(el).borderWidth, background: getComputedStyle(el).backgroundColor, tone: [...el.classList].filter(name => name.startsWith('tone-')), accentMode: el.closest('.ambient')?.getAttribute('data-accent-mode') }; });
         assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.right <= viewport.width + 1 && bounds.bottom <= viewport.height + 1, `${id}/${size}/${density} stays inside display`);
         assert.ok(bounds.scale >= 0.75, `${id}/${size}/${density} should fit by design, scale=${bounds.scale}`);
         assert.equal(bounds.border, '0px'); assert.equal(bounds.background, 'rgba(0, 0, 0, 0)');
-        const clipped = await widget.evaluate(el => {
+        assert.deepEqual(bounds.tone, [`tone-${WIDGET_CATALOG[id].tone}`]); assert.equal(bounds.accentMode, current.settings.appearance.accentMode);
+        const clipped = await widget.evaluate((el, selectors) => {
           const outer = el.getBoundingClientRect();
-          return [...el.querySelectorAll('.ambient-label,.weather-context,.weather-age,.weather-credit,.rain-bars,.rain-confidence,.rain-amount,.clock-calendar,.forecast-strip,.preview-caption,li')].filter(child => { const r = child.getBoundingClientRect(); return r.top < outer.top - 1 || r.bottom > outer.bottom + 1 || r.left < outer.left - 1 || r.right > outer.right + 1; }).map(child => child.className);
-        });
+          return [...el.querySelectorAll(selectors)].filter(child => { const r = child.getBoundingClientRect(); return r.top < outer.top - 1 || r.bottom > outer.bottom + 1 || r.left < outer.left - 1 || r.right > outer.right + 1; }).map(child => child.className);
+        }, clippingSelectors);
         assert.deepEqual(clipped, [], `${id}/${size}/${density} meaningful descendants stay visible`);
         if (viewport.width === 1920 && density === 'balanced') {
           if (id === 'clock') clockFonts[size] = await widget.locator('.clock-time').evaluate(el => parseFloat(getComputedStyle(el).fontSize));
           if (capture) images.push({ name: `${id}-${size}`, bytes: await widget.screenshot() });
         }
-        if (id === 'forecast') assert.equal(await widget.locator('.forecast-day').count(), size === 'small' ? 3 : size === 'medium' ? 5 : 7);
-        if (id === 'reminders') assert.equal(await widget.locator('li').count(), size === 'small' ? 1 : size === 'medium' ? 2 : 4);
-        if (id === 'photo') assert.equal(await widget.locator('img').evaluate(el => getComputedStyle(el).objectFit), size === 'large' ? 'contain' : 'cover');
-        if (id === 'preview') assert.equal(await widget.locator('img').evaluate(el => getComputedStyle(el).objectFit), 'contain');
-        if (id === 'rain') { assert.match(await widget.innerText(), /mm rain/); if (size === 'large') assert.ok((await widget.locator('.rain-bars').boundingBox()).height >= (await widget.boundingBox()).height * 0.1, 'Rain chart retains real height'); }
+        floorCheck(id, size, density, viewport, 'fresh', await floorReport(widget));
+        await WIDGET_CHECKS[id].family?.({ page, widget, size, density, viewport, state: current });
+        for (const status of STATUS_WIDGETS[id] ?? []) floorCheck(id, size, density, viewport, status, await statusReport(id, size, density, viewport, status));
+      }
+      // Checks beyond the families (tests/ui/widget-checks sweep hooks) run once per viewport.
+      if (viewport.width !== 1280) for (const check of Object.values(WIDGET_CHECKS)) if (check.sweep) {
+        current = structuredClone(source);
+        const summary = await check.sweep({ page, viewport, state: current, base, now });
+        if (summary && !checks.includes(summary)) checks.push(summary);
       }
     }
     assert.ok(clockFonts.large > clockFonts.medium * 1.4, `Large clock should be visibly larger: ${JSON.stringify(clockFonts)}`);
-    checks.push('All 21 widget families × 3 densities × 1080p/4K: bounds, useful content, no frames/fills, photo crops, whole-screen snapshot');
+    checks.push(`All ${familyCount} widget families × 3 densities × 720p/1080p/4K: bounds, useful content, no frames/fills, tone classes, photo crops, whole-screen snapshot`);
+    await statusPage.close();
+    assert.deepEqual(floorFailures, [], '#221, #283: every family renders at fit 1 at Text 100% (a tracked exception needs its own ticket and an allowance)');
+    assert.deepEqual(Object.entries(FLOOR_FIT_ALLOWANCES).filter(([key]) => !allowancesUsed.has(key)).map(([key, ticket]) => `${key} (${ticket})`), [], 'these families now render at fit 1 at Text 100%: remove their allowances');
+    checks.push(`#221/#283 fit at Text 100%: ${floorCases} family × density × 720p/1080p/4K × fresh/stale/offline cases (${flooredCases} with an element on a floor) render at fit 1, except ${allowedCases.length} tracked cases: ${allowedCases.join('; ')}`);
+    // Every #78 id has shipped (#157, #171), so the inactive ids are retired ones (Rain, #74) plus any
+    // future planned entry; the catalog contract says neither is ever rendered.
+    const inactiveIds = WIDGET_IDS.filter(id => !isActiveWidget(id));
+    assert.ok(inactiveIds.length > 0, 'at least one inactive id to inject');
+    for (const id of inactiveIds) {
+      current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id || key === 'clock']));
+      await open(); await page.locator('[data-widget-id="clock"]').waitFor();
+      assert.equal(await page.locator(`[data-widget-id="${id}"]`).count(), 0, `inactive ${id} never renders even when injected as enabled`);
+    }
+    checks.push(`Inactive widget ids (${inactiveIds.join(', ')}) injected as enabled render nothing`);
     await page.setViewportSize({ width: 1920, height: 1080 });
     for (const size of ['small', 'medium', 'large']) {
       current = structuredClone(source); current.settings.appearance.fontScale = 1.25;
@@ -106,17 +231,18 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       current.reminders[0].text = 'A deliberately long synthetic reminder that wraps across the available line length';
       await open(); const longReminderScale = await page.locator('.ambient-reminders .widget-content').evaluate(el => new DOMMatrix(getComputedStyle(el).transform).a); assert.ok(longReminderScale >= 0.65, `${size} long reminders retain their scale: ${longReminderScale}`);
     }
-    current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'rain'])); current.settings.widgetGrid.placements.rain = { column: 0, row: 0, size: 'large' };
+    // Rain timing lives in Weather (#74); see tests/ui/weather-browser.mjs for every mode.
+    current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'weather'])); current.settings.widgetGrid.placements.weather = { column: 0, row: 0, size: 'large' };
     current.weather.hourly[10].precipitationProbability = null; current.weather.hourly[11].rainAmount = null;
-    await open(); assert.equal(await page.locator('.rain-bar-unknown').count(), 1); assert.match(await page.locator('.ambient-rain').innerText(), /Partial data/);
-    if (capture) images.push({ name: 'rain-partial', bytes: await page.locator('.ambient-rain').screenshot() });
+    await open(); assert.equal(await page.locator('.rain-bar-unknown').count(), 1); assert.match(await page.locator('.ambient-weather').innerText(), /Partial data/);
+    if (capture) images.push({ name: 'rain-partial', bytes: await page.locator('.ambient-weather').screenshot() });
     checks.push('Long city/reminder text at125% type, unavailable measurements/condition without an invented icon, partial rain and unknown probability bars');
     for (const style of ['outline', 'digital', 'analog']) {
       current = structuredClone(source); current.settings.appearance.clockStyle = style; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock']));
       await open(); if (capture) images.push({ name: `clock-style-${style}`, bytes: await page.locator('[data-widget-id="clock"]').screenshot() });
     }
     current = structuredClone(source); current.settings.clockFormat = '24h'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'preview'])); await open(); assert.doesNotMatch(await page.locator('.preview-caption').innerText(), /AM|PM/);
-    current = structuredClone(source); current.weather.units.precipitation = 'in'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'rain'])); current.settings.widgetGrid.placements.rain.size = 'small'; current.weather.hourly.forEach(hour => { hour.rainAmount = 0.03; }); await open(); assert.match(await page.locator('.ambient-rain').innerText(), /in rain/);
+    current = structuredClone(source); current.weather.units.precipitation = 'in'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'weather'])); current.settings.widgetGrid.placements.weather.size = 'medium'; current.weather.hourly.forEach(hour => { hour.rainAmount = 0.03; }); await open(); assert.match(await page.locator('.ambient-weather').innerText(), /in rain/);
     current = structuredClone(source); current.settings.appearance.motionEnabled = false; await page.setViewportSize({ width: 1920, height: 1080 }); await open();
     const inset = await page.locator('.widget-grid-plane').evaluate(el => el.getBoundingClientRect().left / innerWidth); assert.ok(Math.abs(inset - 0.04) < 0.002);
     if (capture) images.push({ name: 'default-composition', bytes: await page.screenshot() });
@@ -130,14 +256,173 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     imagesUnavailable = false; current = structuredClone(source); current.preview.available = false; current.photo.available = false;
     current.settings.widgets.photo = true;
     await page.goto(base + '/editor'); await page.locator('.preview-surface').waitFor();
-    assert.match(await page.locator('.ambient-photo').innerText(), /Choose a photo/); assert.match(await page.locator('.ambient-preview').innerText(), /Captured on activation/);
+    assert.match(await page.locator('.ambient-photo').innerText(), /Choose a photo/); assert.match(await page.locator('.ambient-preview').innerText(), /Your screen from just before the display starts/);
     assert.notEqual(await cursor(), 'none');
     checks.push('Honest failed image placeholders, editor-only empty photo/snapshot placeholders, normal editor cursor, no source image or capture needed');
-    assert.deepEqual(errors, []); return { checks, images, clockFonts };
+
+    // #99/#249: the full board at rest on the real clock. The one-second tick re-renders every widget, but
+    // no widget re-creates an observer, refits or writes its style, and nothing extends beyond its box.
+    const fitMetrics = {};
+    for (const [label, viewport, deviceScaleFactor, fontScale] of [['1280×720 ×3, Text 125%', { width: 1280, height: 720 }, 3, 1.25], ['3840×2160 ×1, Text 100%', { width: 3840, height: 2160 }, 1, 1], ['3840×2160 ×1, Text 125%', { width: 3840, height: 2160 }, 1, 1.25]]) {
+      const restContext = await browser.newContext({ viewport, deviceScaleFactor, timezoneId: 'America/Toronto' });
+      try {
+        const state = structuredClone(source); state.settings.appearance.fontScale = fontScale;
+        state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD])); state.settings.preview.enabled = true; state.settings.widgetGrid.density = 'balanced';
+        Object.assign(state.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+        await restContext.addInitScript(instrumentFit);
+        await restContext.route('**/api/state', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(state) }));
+        await restContext.route(/\/api\/(photo|preview)\/image\?/, route => route.fulfill({ contentType: 'image/png', body: image }));
+        const restPage = await restContext.newPage(); restPage.on('pageerror', error => errors.push(error.message));
+        await restPage.goto(base + '/display'); await restPage.locator('.ambient-widget').first().waitFor(); await restPage.waitForTimeout(2_000);
+        // Keep the window inside one wall-clock minute: a new minute legitimately changes text.
+        const second = Date.now() % 60_000 / 1000; if (second > 50) await restPage.waitForTimeout((61 - second) * 1000);
+        const session = await restContext.newCDPSession(restPage); await session.send('Performance.enable');
+        const sample = async () => ({
+          counts: await restPage.evaluate(() => ({ ...window.__lrdFit })),
+          layouts: (await session.send('Performance.getMetrics')).metrics.find(metric => metric.name === 'LayoutCount').value,
+          widgets: await restPage.locator('.ambient-widget').evaluateAll(elements => elements.map(section => {
+            const body = section.querySelector('.widget-content'), style = getComputedStyle(section), fit = new DOMMatrix(getComputedStyle(body).transform).a;
+            const width = section.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), height = section.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+            return { id: section.dataset.widgetId, fit, inside: body.scrollHeight * fit <= height + 1 && body.scrollWidth * fit <= width + 1 };
+          })),
+        });
+        const start = await sample(); const started = performance.now();
+        await restPage.waitForTimeout(5_000);
+        const end = await sample(); const seconds = (performance.now() - started) / 1000;
+        const result = fitMetrics[label] = { widgets: end.widgets.length, belowFit1: end.widgets.filter(widget => widget.fit < 1).map(widget => `${widget.id} ${widget.fit.toFixed(4)}`), resizeObservers: end.counts.resizeObservers - start.counts.resizeObservers, styleMutations: end.counts.styleMutations - start.counts.styleMutations, layoutsPerSecond: Number(((end.layouts - start.layouts) / seconds).toFixed(2)) };
+        assert.equal(result.widgets, ACTIVE_WIDGET_IDS.length, `${label}: the full board shows every widget`);
+        assert.equal(result.resizeObservers, 0, `${label}: no ResizeObserver is created while the clock ticks ${JSON.stringify(result)}`);
+        assert.equal(result.styleMutations, 0, `${label}: no widget refits or writes its style while nothing changes ${JSON.stringify(result)}`);
+        assert.ok(result.layoutsPerSecond <= 0.5, `${label}: about zero layouts per second ${JSON.stringify(result)}`);
+        assert.deepEqual(end.widgets.map(widget => widget.fit), start.widgets.map(widget => widget.fit), `${label}: fit scales stay unchanged`);
+        for (const widget of end.widgets) assert.ok(widget.inside, `${label}: ${widget.id} stays inside its box at fit ${widget.fit}`);
+      } finally { await restContext.close(); }
+    }
+    checks.push(`#99/#249 full board at rest over 5 s of real ticks: no ResizeObserver created, no fit style writes, fit scales unchanged, every widget inside its box: ${JSON.stringify(fitMetrics)}`);
+
+    // #99: Intl formatter constructions per one-second tick with the minute unchanged, each widget alone at
+    // its largest family (Clock medium), then the full board.
+    const intlContext = await browser.newContext({ viewport: { width: 1280, height: 720 }, timezoneId: 'America/Toronto' });
+    const intlPerTick = {};
+    try {
+      let state;
+      await intlContext.addInitScript(instrumentFit);
+      await intlContext.route('**/api/state', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(state) }));
+      await intlContext.route(/\/api\/(photo|preview)\/image\?/, route => route.fulfill({ contentType: 'image/png', body: image }));
+      const intlPage = await intlContext.newPage(); intlPage.on('pageerror', error => errors.push(error.message));
+      await intlPage.clock.install({ time: new Date(now + 5_000) });
+      const perTick = async () => {
+        await intlPage.clock.setSystemTime(new Date(now + 5_000));
+        await intlPage.goto(base + '/display'); await intlPage.locator('.ambient-widget').first().waitFor(); await intlPage.clock.runFor(200); await intlPage.waitForTimeout(50);
+        const before = await intlPage.evaluate(() => window.__lrdFit.intl);
+        for (let tick = 0; tick < 3; tick++) { await intlPage.clock.runFor(1_000); await intlPage.waitForTimeout(40); }
+        return ((await intlPage.evaluate(() => window.__lrdFit.intl)) - before) / 3;
+      };
+      for (const id of ACTIVE_WIDGET_IDS) {
+        state = structuredClone(source); state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id])); state.settings.preview.enabled = true;
+        state.settings.widgetGrid.placements[id] = { column: 0, row: 0, size: id === 'clock' ? 'medium' : widgetSizes(id).at(-1) };
+        intlPerTick[id] = await perTick();
+        if (INTL_TICK_ALLOWANCES[id]) assert.ok(intlPerTick[id] > 0, `${id} constructs no Intl formatter per tick any more: remove its ${INTL_TICK_ALLOWANCES[id]} allowance`);
+        else assert.equal(intlPerTick[id], 0, `${id} constructs ${intlPerTick[id]} Intl formatters per tick within one minute`);
+      }
+      state = structuredClone(source); state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD])); state.settings.preview.enabled = true;
+      Object.assign(state.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+      intlPerTick.fullBoard = await perTick();
+      if (!Object.keys(INTL_TICK_ALLOWANCES).length) assert.equal(intlPerTick.fullBoard, 0, 'the full board constructs no Intl formatter per tick within one minute');
+    } finally { await intlContext.close(); }
+    checks.push(`#99 Intl constructions per tick within one minute: ${JSON.stringify(intlPerTick)}; still allowed: ${Object.entries(INTL_TICK_ALLOWANCES).map(([id, ticket]) => `${id} (${ticket})`).join(', ') || 'none'}`);
+
+    /** Polls from Node (page timers run on page.clock). */
+    const until = async (read, predicate, label) => {
+      for (let attempt = 0; attempt < 150; attempt++) { const value = await read(); if (predicate(value)) return value; await page.waitForTimeout(20); }
+      throw new Error(`Timed out waiting for ${label}: ${JSON.stringify(await read())}`);
+    };
+
+    // #314: the shared fit also reruns on a `class` change inside the content. A class-only restyle that widens a
+    // nowrap phrase changes no box size and no text, yet the widget zooms out to fit it, and back once it is gone.
+    {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      current = structuredClone(source); current.settings.appearance.motionEnabled = false;
+      current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock']));
+      current.settings.widgetGrid.density = 'balanced'; current.settings.widgetGrid.placements.clock = { column: 0, row: 0, size: 'large' };
+      await open();
+      const widget = page.locator('[data-widget-id="clock"]');
+      const fitState = () => widget.evaluate(section => {
+        const body = section.querySelector('.widget-content'), style = getComputedStyle(section), fit = new DOMMatrix(getComputedStyle(body).transform).a;
+        const width = section.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), height = section.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+        return { fit, inside: body.scrollWidth * fit <= width + 1 && body.scrollHeight * fit <= height + 1, timeHeight: section.querySelector('.clock-time').getBoundingClientRect().height / fit };
+      });
+      const rest = await fitState();
+      assert.ok(rest.fit === 1 && rest.inside, `#314: the large clock fits at rest ${JSON.stringify(rest)}`);
+      await page.addStyleTag({ content: '.grid-ambient .clock-time.refit-probe { letter-spacing: 0.6em; }' });
+      await widget.locator('.clock-time').evaluate(element => element.classList.add('refit-probe'));
+      const wide = await until(fitState, value => value.fit < 0.95, 'a refit after a class-only change');
+      assert.ok(wide.inside && Math.abs(wide.timeHeight - rest.timeHeight) < 0.5, `#314: the wider time fits again, with no box or line change ${JSON.stringify({ rest, wide })}`);
+      await widget.locator('.clock-time').evaluate(element => element.classList.remove('refit-probe'));
+      await until(fitState, value => value.fit === 1 && value.inside, 'the refit back to 1');
+      checks.push(`#314 a class-only change that widens the large clock's nowrap time refits it (fit 1 → ${wide.fit.toFixed(3)}, inside its box) and back to 1 when removed`);
+    }
+
+    // #318: one widget's render error stays inside that widget. With the test hook set, Clock throws while rendering:
+    // its section keeps its footprint and keeps relocating, shows "Clock unavailable" in the status tone, the rest of
+    // the full board, the editor canvas and the picker keep working, the error is logged once, and Clock is back on
+    // the next minute after the fault clears.
+    {
+      const consoleErrors = []; const listener = message => { if (message.type() === 'error') consoleErrors.push(message.text()); };
+      page.on('console', listener);
+      await page.setViewportSize({ width: 1280, height: 720 });
+      current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD]));
+      current.settings.preview.enabled = true; current.settings.widgetGrid.density = 'balanced';
+      Object.assign(current.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+      await open();
+      const clock = page.locator('[data-widget-id="clock"]');
+      const footprint = () => clock.evaluate(section => { const r = section.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
+      const composition = async () => Number(await page.locator('.ambient').getAttribute('data-composition'));
+      const before = { footprint: await footprint(), composition: await composition() };
+      await page.evaluate(() => { window.__lrdWidgetFault = 'clock'; });
+      await page.clock.runFor(1_000);
+      await until(() => clock.innerText(), text => text.trim() === 'Clock unavailable', 'Clock unavailable');
+      const failed = await clock.evaluate(section => {
+        const line = section.querySelector('.widget-unavailable .ambient-description'), probe = document.createElement('span');
+        probe.style.color = 'var(--ambient-caution)'; section.append(probe); const caution = getComputedStyle(probe).color; probe.remove();
+        return { color: getComputedStyle(line).color, caution, text: getComputedStyle(section.closest('.ambient')).getPropertyValue('--ambient-text') };
+      });
+      assert.equal(failed.color, failed.caution, `#318: the unavailable line uses the status tone ${JSON.stringify(failed)}`);
+      const after = await footprint();
+      for (const side of ['left', 'top', 'width', 'height']) assert.ok(Math.abs(after[side] - before.footprint[side]) <= 0.5, `#318: the failed widget keeps its footprint (${side})`);
+      const board = await page.locator('.ambient-widget').evaluateAll(sections => sections.map(section => ({ id: section.dataset.widgetId, failed: Boolean(section.querySelector('.widget-unavailable')), content: section.querySelector('.widget-content').innerText.trim().length + section.querySelectorAll('img').length })));
+      assert.equal(board.length, Object.keys(FULL_BOARD).length, '#318: the full board still shows every widget');
+      for (const item of board) if (item.id !== 'clock') assert.ok(!item.failed && item.content > 0, `#318: ${item.id} still renders`);
+      await page.clock.runFor(181_000); await page.clock.runFor(1_500);
+      assert.ok(await composition() > before.composition, '#318: the board keeps relocating');
+      const moved = await footprint();
+      assert.ok(Math.abs(moved.left - before.footprint.left) > 1 || Math.abs(moved.top - before.footprint.top) > 1, '#318: the failed widget relocates with the board');
+      assert.equal((await clock.innerText()).trim(), 'Clock unavailable', '#318: still unavailable while the fault lasts (each new minute retries)');
+      assert.equal(consoleErrors.filter(text => /Synthetic clock fault/.test(text)).length, 1, `#318: logged once ${JSON.stringify(consoleErrors)}`);
+      await page.evaluate(() => { delete window.__lrdWidgetFault; });
+      await page.clock.runFor(60_000);
+      await until(() => clock.locator('.clock-time').count(), count => count === 1, 'Clock back on the next minute');
+      // The editor canvas and the picker sample.
+      await page.goto(base + '/editor'); await page.locator('.preview-surface [data-widget-id="weather"]').waitFor();
+      await page.evaluate(() => { window.__lrdWidgetFault = 'weather'; });
+      await page.clock.runFor(1_000);
+      const canvasWeather = page.locator('.preview-surface [data-widget-id="weather"]');
+      await until(() => canvasWeather.innerText(), text => text.trim() === 'Weather unavailable', 'the editor canvas shows Weather unavailable');
+      assert.ok(await page.locator('.preview-surface [data-widget-id="clock"] .clock-time').count() === 1, '#318: the rest of the editor canvas renders');
+      await page.getByRole('tab', { name: 'Style', exact: true }).click();
+      await page.getByRole('button', { name: 'Add widget to display' }).click();
+      await page.getByRole('button', { name: /^Preview Weather(, on your display)?$/ }).click();
+      await until(() => page.locator('.picker-sample').first().innerText(), text => /Weather unavailable/.test(text), 'the picker sample shows Weather unavailable');
+      await page.keyboard.press('Escape');
+      assert.ok(await page.locator('.studio').count() === 1, '#318: the editor stays mounted and interactive');
+      page.off('console', listener);
+      checks.push('#318 a renderer that throws (test hook) shows "<Widget> unavailable" in the status tone in its own footprint and keeps relocating; the other 11 widgets, the editor canvas and the picker keep rendering; logged once; recovers on the next minute');
+    }
+    assert.deepEqual(errors, []); return { checks, images, clockFonts, fitMetrics, intlPerTick };
   } finally { await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({ options: { playwright: { type: 'string' }, edge: { type: 'string' } } });
-  const result = await runWidgetQa(values); console.log(JSON.stringify({ checks: result.checks, clockFonts: result.clockFonts }, null, 2));
+  const result = await runWidgetQa(values); console.log(JSON.stringify({ checks: result.checks, clockFonts: result.clockFonts, fitMetrics: result.fitMetrics, intlPerTick: result.intlPerTick }, null, 2));
 }

@@ -1,0 +1,74 @@
+name: Browser suites
+# Runs the tests/ui/*-browser.mjs suites headless in the runner's Microsoft Edge (#323). Each suite
+# starts its own loopback server on an ephemeral port with temporary synthetic data. Nothing here
+# installs or starts the app, uses port 4318, reads or writes the registry or screen saver settings,
+# or uploads screenshots or renders: the suites keep images in RAM and no artifact is uploaded.
+# Playwright and sharp are CI-only verification tools, installed at pinned versions into the runner's
+# temporary folder, never into the app's package.json or lockfile.
+#
+# Pull requests and pushes to main run the pull-request set of tests/ui/lib/run-suites.mjs, which
+# always includes the widgets suite, so a fix that leaves a no-longer-needed allowance fails here.
+# The weekly schedule and manual runs add the scheduled set, so every suite runs at least weekly.
+# A change to Markdown files only cannot change a suite's result and skips this workflow, to keep
+# Actions time low. The runner has no GPU, so the motion suite runs with
+# --no-gpu: its GPU-dependent pixel parity and frame budget stay local checks (docs/development.md).
+on:
+  pull_request:
+    paths-ignore: ['**.md']
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  schedule:
+    - cron: '23 7 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: browser-suites-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  PLAYWRIGHT_VERSION: 1.62.1
+  SHARP_VERSION: 0.35.5
+jobs:
+  suites:
+    name: Browser suites (${{ matrix.set }})
+    strategy:
+      fail-fast: false
+      matrix:
+        set: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["pull-request","scheduled"]' || '["pull-request"]') }}
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install Playwright and sharp outside the app
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: |
+          $tools = Join-Path $env:RUNNER_TEMP 'lrd-browser-tools'
+          New-Item -ItemType Directory -Force -Path $tools | Out-Null
+          npm install --prefix $tools --no-save --no-package-lock --no-audit --no-fund "playwright@$env:PLAYWRIGHT_VERSION" "sharp@$env:SHARP_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw "npm install of the browser-test tools failed ($LASTEXITCODE)" }
+          foreach ($name in 'playwright', 'sharp') {
+            $version = (Get-Content -Raw (Join-Path $tools "node_modules\$name\package.json") | ConvertFrom-Json).version
+            Write-Host "$name $version"
+          }
+          git diff --exit-code -- package.json package-lock.json
+          if ($LASTEXITCODE -ne 0) { throw 'Installing the browser-test tools changed the app dependencies' }
+          "LRD_PLAYWRIGHT=$tools\node_modules\playwright" >> $env:GITHUB_ENV
+          "LRD_SHARP=$tools\node_modules\sharp" >> $env:GITHUB_ENV
+      - name: Find the runner's Microsoft Edge
+        run: |
+          $edge = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $edge) { throw 'Microsoft Edge was not found on the runner' }
+          Write-Host "Edge $((Get-Item -LiteralPath $edge).VersionInfo.ProductVersion) at $edge"
+          "LRD_EDGE=$edge" >> $env:GITHUB_ENV
+      - name: Run the ${{ matrix.set }} suites
+        run: |
+          node tests/ui/lib/run-suites.mjs --set '${{ matrix.set }}' --no-gpu --playwright $env:LRD_PLAYWRIGHT --edge $env:LRD_EDGE --sharp $env:LRD_SHARP
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

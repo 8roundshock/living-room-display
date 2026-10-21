@@ -1,0 +1,48 @@
+/* Grouped widget catalog (#78): Time, Weather & sky, Personal, Pictures, in WIDGET_CATEGORIES
+   order. Each group is a labelled set of the same catalog buttons; groups without an active
+   widget are not rendered. */
+.catalog-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+.catalog-group-label {
+  grid-column: 1 / -1;
+  margin: 0 2px;
+  color: #9e99ac;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+/* Desktop rail: one narrow column, each label above its buttons. Labels and names stay at least
+   11 px (#195); the rail is a little wider so two-word names still fit two lines. */
+@media (min-width: 701px) {
+  .catalog-group { display: flex; flex-direction: column; gap: 5px; }
+  .catalog-group-label { margin: 0; padding: 2px 1px 0; font-size: 11px; line-height: 1.2; text-align: center; }
+  .widget-picker .picker-body { grid-template-columns: 80px minmax(0, 1fr); }
+  .widget-catalog .catalog-item { font-size: 11px; line-height: 1.2; padding-inline: 2px; }
+}
+/* Narrow screens: three buttons per row under each label. */
+@media (max-width: 700px) {
+  .catalog-group { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* An already-added widget: the Add button keeps its name and this note says why it is off (#241). */
+.picker-added-note {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 8px 2px 0;
+  color: #a4a69f;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+}
+.widget-picker .room-notice { flex: none; margin: 8px 0 0; }
+.widget-picker .room-notice[data-empty] { margin: 0; }
+.widget-picker .room-fixes .button { flex: 1 1 auto; }

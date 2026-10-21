@@ -47,9 +47,9 @@ repeated permission questions once the user has granted the relevant scope.
 ## First local pass
 
 1. Read the instruction/status/install files at the revision actually checked
-   out. Inspect status and remotes; preserve pending changes. Check access with
-   the user's account. While private, a shared link needs authorized access;
-   stop that download with a clear access error instead of seeking owner tokens.
+   out. Inspect status and remotes; preserve pending changes. Use the user's own
+   account for any access; if a link needs access the user lacks, stop with a
+   clear access error instead of seeking owner tokens.
 2. Follow the actual installation commands. Record source commit/version and
    supported OS/runtime versions, without recording credentials or private paths.
    For installed Windows bugs, use Status `SourceRevision`/`SourceState` from
@@ -70,6 +70,41 @@ repeated permission questions once the user has granted the relevant scope.
 4. Explain the local editor URL and actual start/stop/update/rollback commands.
    Record unresolved limits honestly. Installation success does not mean every
    TV, media app, or clean Windows system was tested.
+
+### Setup or source install
+
+Prefer Setup when the user has a reviewed `LivingRoomDisplaySetup-<version>.exe`
+release artifact. Verify it against its `.sha256` file and `release.json`. Use a
+source install only for development or when no artifact exists. See
+[installation](install.md#install-with-setup-recommended) for the switches,
+messages and rollback.
+
+```powershell
+# Install or update, without opening the editor. Exit 0 = installed, 7 = refused.
+$p = Start-Process .\LivingRoomDisplaySetup-<version>.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG="<private log path>"' -PassThru
+$p.WaitForExit(); $p.ExitCode
+# Installed status (Channel, Version, RuntimeVersion, PackageSha256, health):
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\LivingRoomDisplay\app\windows\LivingRoomDisplay.ps1" Status
+# Uninstall and keep data (add /REMOVEDATA=1 only when the user chose to delete it):
+& "$env:LOCALAPPDATA\LivingRoomDisplay\uninstall\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+```
+
+Wait for the Setup process itself rather than its children: Setup leaves the
+local server running. After uninstalling, wait until the **Living Room Display**
+entry has gone from Apps & Features; the first uninstaller process can exit
+early. Read the Setup log for the helper's own log and its `LRD-E<nn>` reason.
+Keep logs private: they contain local paths.
+
+**Never run Setup, its uninstaller or the CI smoke test on a PC that already has
+a Living Room Display install without that PC owner's explicit go-ahead.** Setup
+stops and replaces the running install. Check the editor for unsaved changes
+first. On the original owner's PC, adoption is the coordinated rollout in
+[#130](https://github.com/8roundshock/living-room-display/issues/130). Never use
+`/ALLOWDOWNGRADE=1` to "recover": follow the manual rollback steps. After an
+`LRD-E20` (Setup couldn't finish its own rollback), the last working app is
+still in `app.previous` and `package-transaction.json` records the unfinished
+steps: run the same Setup again, which finishes the rollback first. Don't delete
+`app.previous` or the record by hand unless you complete the manual steps.
 
 ## Diagnose before reporting
 
@@ -195,9 +230,9 @@ gh repo fork 8roundshock/living-room-display --clone=false --remote=false
 ```
 
 If an authorized fork already exists, reuse it after verifying its parent. If
-private-repository policy blocks forks, keep a local patch; never create a public
-mirror. For a clean contributor clone whose origin is the original project,
-explicitly arrange the remotes as follows (skip/adjust if already correct):
+forking is blocked, keep a local patch; never create a separate public mirror.
+For a clean contributor clone whose origin is the original project, explicitly
+arrange the remotes as follows (skip/adjust if already correct):
 
 ```powershell
 git remote rename origin upstream

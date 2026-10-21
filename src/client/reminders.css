@@ -1,0 +1,228 @@
+/* Editor Reminders tab (#73): Up next / History, one-tap check-off and local history. */
+.studio .reminder-views {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  margin: 0 0 12px;
+  border-radius: 12px;
+  background: #ffffff06;
+  border: 1px solid #ffffff08;
+}
+.studio .reminder-view {
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #b9adc6;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+.studio .reminder-view[aria-pressed='true'] {
+  background: #3a373f;
+  color: #f2eef8;
+  box-shadow: inset 0 1px #ffffff0b;
+}
+/* A completed row settles, then collapses out of Up next. */
+.studio .editor-reminder-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 240ms ease,
+    opacity 240ms ease;
+}
+.studio .editor-reminder-row > .editor-reminder {
+  min-height: 0;
+}
+.studio .editor-reminder-row.leaving {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+.studio .editor-reminder-row.leaving > .editor-reminder {
+  overflow: hidden;
+  border-bottom-color: transparent;
+}
+.studio .complete-button > span {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+.studio .reminder-copy p {
+  transition: color 160ms ease;
+}
+.studio .reminder-copy > span.overdue {
+  color: #c9a77e;
+}
+.studio .reminder-segment {
+  white-space: nowrap;
+}
+.studio .reminder-actions .icon-button:disabled {
+  opacity: 0.35;
+}
+/*
+ * Compact rows (#366): Edit and Delete sit side by side at full 44 px targets, so a one-line reminder
+ * with its due line is about 60 px tall and at least five fit the 1280 × 720 inspector. The circle and
+ * the actions centre on the row; the focus order stays circle, Edit, Delete.
+ */
+.studio .reminders-panel .editor-reminder {
+  align-items: center;
+  padding: 6px 0;
+}
+.studio .reminders-panel .reminder-copy {
+  padding: 4px 6px;
+}
+.studio .reminders-panel .reminder-copy > span {
+  margin-top: 3px;
+}
+.studio .reminders-panel .reminder-actions {
+  flex: none;
+  flex-direction: row;
+}
+.studio .reminders-panel .reminder-actions .icon-button {
+  height: 44px;
+}
+.studio .history-heading {
+  margin: 20px 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #a99cb8;
+}
+.studio .history-day:first-of-type .history-heading {
+  margin-top: 6px;
+}
+.studio .history-more,
+.studio .clear-history {
+  display: flex;
+  min-height: 44px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+.studio .clear-history-confirm {
+  margin-top: 14px;
+  padding: 14px 15px;
+  border: 1px solid #90616b55;
+  border-radius: 14px;
+  background: #5a29311a;
+}
+.studio .clear-history-confirm p {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #e6dcee;
+}
+.studio .clear-history-confirm .form-actions {
+  margin-top: 12px;
+}
+.studio .button.danger {
+  border-color: #b0707c88;
+  background: #6b2f3a55;
+  color: #f4e4e8;
+}
+.studio .empty-history {
+  min-height: 180px;
+}
+.studio .empty-history p {
+  font-size: 13px;
+  color: #a99cb8;
+}
+.studio .history-footnote {
+  margin-top: 16px;
+  font-size: 11px;
+  color: #9d92a8;
+}
+/*
+ * A shown message, Undo included, stays in view (#228): it sticks to the bottom of the inspector's
+ * scroll area on desktop, and above the Save bar (or the screen edge) when the page scrolls. The
+ * empty line stays static at the end of the list, so it never covers a row.
+ */
+.studio .reminder-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+}
+.studio .reminder-status.has-message {
+  position: sticky;
+  bottom: 10px;
+  z-index: 2;
+  min-height: 46px;
+  padding: 0 4px 0 14px;
+  border: 1px solid #ffffff17;
+  border-radius: 13px;
+  background: #2a2730f7;
+  box-shadow: 0 8px 26px #000a;
+  color: #e2d8ec;
+  font-size: 13px;
+}
+.studio .reminder-undo {
+  min-height: 44px;
+  min-width: 44px;
+  justify-content: center;
+  padding-inline: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #dccbf2;
+  text-decoration: underline;
+}
+@media (min-width: 701px) {
+  /* The bottom fade would hide the pinned status line; focus scrolling keeps rows above it. */
+  .studio .inspector-panel:has(.reminder-status.has-message) {
+    mask-image: none;
+    scroll-padding-block-end: 76px;
+  }
+}
+@media (max-width: 700px) {
+  .studio .reminder-status.has-message {
+    bottom: calc(var(--studio-footer-clearance, 24px) - 12px);
+  }
+  html.studio-editor:has(.reminder-status.has-message) {
+    scroll-padding-block-end: calc(var(--studio-footer-clearance, 124px) + 58px);
+  }
+}
+/* The form opens at the top of Up next, or in place of the row it edits (#236). */
+.studio .reminders-panel .reminder-form {
+  margin: 0 0 14px;
+}
+.studio .reminder-list .editor-reminder-row.editing {
+  padding: 6px 0;
+}
+.studio .editor-reminder-row.editing .reminder-form {
+  margin: 0;
+  border-color: #b7a4d166;
+  background: #b7a4d110;
+  box-shadow: inset 3px 0 #b7a4d1aa;
+}
+.studio .reminder-form-title {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6dcf0;
+}
+.studio .reminder-form .text-input[aria-invalid='true'] {
+  border-color: #c58a98;
+}
+.studio .field-problem {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #ecbdc8;
+}
+.studio .reminder-form-hint {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #c9a77e;
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio .editor-reminder-row,
+  .studio .complete-button > span,
+  .studio .reminder-copy p,
+  .studio .reminder-view {
+    transition: none;
+  }
+}
