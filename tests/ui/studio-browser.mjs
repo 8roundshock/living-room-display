@@ -1381,17 +1381,33 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await status.filter({ hasText: 'Appearance reset. Save changes to keep it.' }).waitFor();
     assert.equal(await focused(page), 'Reset appearance…', 'Reset returns focus to Reset appearance…');
     assert.equal(await page.getByRole('slider', { name: 'Brightness', exact: true }).inputValue(), '55');
+    // #499: Cancel or Save changes the status in the same update that removes the Save bar. Every DOM
+    // change is checked, so a status still asking to save after the Save bar has gone fails on any machine.
+    const watchResetStatus = () =>
+      page.evaluate(() => {
+        const watch = { stale: 0 };
+        const observer = new MutationObserver(() => {
+          if (!document.querySelector('.studio-savebar') && document.querySelector('.data-status')?.textContent.includes('Save changes to keep it.')) watch.stale++;
+        });
+        observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+        window.__resetStatusWatch = () => { observer.disconnect(); return watch.stale; };
+      });
+    const staleResetStatus = () => page.evaluate(() => window.__resetStatusWatch());
+    await watchResetStatus();
     await cancel(page).click();
     await saved(page);
     assert.equal(await status.innerText(), '', 'Cancel clears the reset status');
+    assert.equal(await staleResetStatus(), 0, 'Cancel clears the reset status in the update that removes the Save bar (#499)');
     assert.equal(await focused(page), 'Reset appearance…', 'Cancel returns focus to the control last used');
     // After Save it says the reset is kept.
     await resetButton.click();
     await reset234.getByRole('button', { name: 'Reset', exact: true }).click();
     await status.filter({ hasText: 'Appearance reset. Save changes to keep it.' }).waitFor();
+    await watchResetStatus();
     await save(page).click();
     await saved(page);
     await status.filter({ hasText: 'Appearance reset and saved.' }).waitFor();
+    assert.equal(await staleResetStatus(), 0, 'Save replaces the reset status in the update that removes the Save bar (#499)');
     assert.equal(app.store.snapshot().settings.appearance.brightness, 0.55);
     assert.equal(app.store.snapshot().settings.appearance.preset, 'room', 'the reset look is labelled Room (#277)');
     // #304: the Export link spaces its icon like the Restore button beside it.
@@ -1416,7 +1432,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     checks.push(
       "#234 Restore from backup: refused with unsaved edits (no file picker), an invalid file and a server-rejected file change nothing, the summary names the date and contents, Don't restore changes nothing, Restore replaces data and reminders, refreshes a clean draft and keeps the replaced state.json as state.backup.json; Reset appearance asks inline and Keep changes nothing",
       "#301 the restore question names the recovery backup's exact lifetime (until the next change, including any reminder change; automatic recovery only); #302 a refused file reads in plain words with the server's text under Technical details, an unanswered restore says nothing was restored and keeps the question, the question takes focus and Don't restore, a refused file and a finished restore return it to Restore from backup…",
-      '#343 Reset appearance focuses Keep my appearance and Keep or Reset return focus to Reset appearance…; #300 Cancel clears the reset status and Save reads "Appearance reset and saved."; #304 the Export link and Restore button share the flex layout and an 8 px icon gap at 1280×720, 390 and 320 px',
+      '#343 Reset appearance focuses Keep my appearance and Keep or Reset return focus to Reset appearance…; #300 Cancel clears the reset status and Save reads "Appearance reset and saved.", each in the update that removes the Save bar (#499); #304 the Export link and Restore button share the flex layout and an 8 px icon gap at 1280×720, 390 and 320 px',
     );
     assert.deepEqual(errors, []);
     return { checks, images };

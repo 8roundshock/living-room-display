@@ -1141,17 +1141,32 @@ export function Editor({
   // #300: the reset's status line asks to save only while the reset is the unsaved change. Cancel (or
   // a further Style edit) clears it; once the reset look is saved it says so.
   const [resetLook, setResetLook] = useState<Settings['appearance'] | null>(null);
+  const lookOf = ({ preset: _label, layout: _legacy, ...rest }: Settings['appearance']) => rest;
+  const resetOutcome = !resetLook
+    ? null
+    : same(lookOf(saved.appearance), lookOf(resetLook))
+      ? 'saved'
+      : same(lookOf(draft.appearance), lookOf(resetLook))
+        ? 'unsaved'
+        : 'undone';
+  // #499: the line shown follows the outcome in the same render, like a room notice (#310). An
+  // effect's update renders a task later, so after Cancel the save bar had gone while the line still
+  // asked to save, for a painted frame. The effect only records the outcome.
+  const shownDataMessage: typeof dataMessage =
+    resetOutcome === 'saved'
+      ? { text: 'Appearance reset and saved.' }
+      : resetOutcome === 'undone'
+        ? null
+        : dataMessage;
   useEffect(() => {
-    if (!resetLook) return;
-    const look = ({ preset: _label, layout: _legacy, ...rest }: Settings['appearance']) => rest;
-    if (same(look(saved.appearance), look(resetLook))) {
+    if (resetOutcome === 'saved') {
       setResetLook(null);
       setDataMessage({ text: 'Appearance reset and saved.' });
-    } else if (!same(look(draft.appearance), look(resetLook))) {
+    } else if (resetOutcome === 'undone') {
       setResetLook(null);
       setDataMessage(null);
     }
-  }, [saved.appearance, draft.appearance, resetLook]);
+  }, [resetOutcome]);
   // Data & recovery questions belong to the Style tab; leaving it drops them.
   useEffect(() => {
     if (section === 'Style') return;
@@ -2086,16 +2101,16 @@ export function Editor({
                       </button>
                     )}
                     <p
-                      className={`inline-message data-status ${dataMessage?.error ? 'error' : ''}`}
+                      className={`inline-message data-status ${shownDataMessage?.error ? 'error' : ''}`}
                       role="status"
                     >
-                      {dataMessage?.text ?? ''}
+                      {shownDataMessage?.text ?? ''}
                     </p>
                     {/* #302: the server's own reason for a refused backup, for whoever needs it. */}
-                    {dataMessage?.detail && (
+                    {shownDataMessage?.detail && (
                       <details className="data-detail">
                         <summary>Technical details</summary>
-                        <p>{dataMessage.detail}</p>
+                        <p>{shownDataMessage.detail}</p>
                       </details>
                     )}
                   </div>
