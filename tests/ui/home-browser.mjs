@@ -400,7 +400,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     await noRoom.getByRole('link', { name: 'Make room in Edit display' }).click();
     await page.waitForURL(`${base}/editor`);
     await page.locator('.widget-picker').waitFor();
-    assert.equal(await page.locator('.catalog-item[data-widget-id="worldClocks"]').getAttribute('aria-pressed'), 'true', 'the picker opens on World clocks');
+    assert.equal(await page.getByRole('button', { name: 'Preview World clocks', exact: true }).getAttribute('aria-pressed'), 'true', 'the picker opens on World clocks');
     assert.equal(await page.locator('.edit-layout').getAttribute('aria-pressed'), 'true', 'Edit layout is on');
     assert.equal(new URL(page.url()).search, '', 'the deep link is read once');
     await page.goto(`${base}/editor?focus=city`); await page.locator('#city-search').waitFor();
