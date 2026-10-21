@@ -66,7 +66,7 @@ export function StudioHeader({ page }: { page: 'home' | 'edit' }) {
       </nav>
       <div className="open-display-group">
         <p className="open-display-hint" id="open-display-hint">
-          For full screen on this PC: Start &gt; Living Room Display - Show display, or press F
+          For full screen on this PC: Start › Living Room Display - Show display, or press F
           on the display
         </p>
         <div className="display-window-actions">
