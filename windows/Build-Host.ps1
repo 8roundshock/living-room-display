@@ -12,8 +12,8 @@ $compiler = Join-Path $env:WINDIR "Microsoft.NET\$framework\v4.0.30319\csc.exe"
 if (-not (Test-Path -LiteralPath $compiler)) { throw '.NET Framework 4.x C# compiler is required on Windows.' }
 $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
 $output = Join-Path ([IO.Path]::GetFullPath($OutputDirectory)) 'LivingRoomDisplay.scr'
-$arguments = @('/nologo','/target:winexe','/platform:anycpu','/optimize+',"/out:$output",'/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll')
-$sources = @(@('LivingRoomDisplay.cs','SessionStartup.cs','AmbientSession.cs','NativeDisplay.cs','SurfacePolicy.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ })
+$arguments = @('/nologo','/target:winexe','/platform:anycpu','/optimize+',"/out:$output",'/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll','/reference:System.Management.dll')
+$sources = @(@('LivingRoomDisplay.cs','SessionStartup.cs','AmbientSession.cs','NativeDisplay.cs','SurfacePolicy.cs','ServerRuntime.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ })
 $assemblyInfo = $null
 try {
     if ($IconFile) {

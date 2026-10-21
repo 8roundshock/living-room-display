@@ -51,6 +51,16 @@ workflow runs them under both PowerShell 5.1 and 7 when `windows/` changes. Foll
 [CONTRIBUTING.md](../CONTRIBUTING.md) and the [agent runbook](agent-runbook.md) for
 self-service issue/fork/fix handoff; neither enables automatic reporting.
 
+When an installed PowerShell 7 permits local scripts, `pwsh -NoProfile -File
+.\windows\Test-Windows.ps1` runs the same checks without a policy override. Child
+PowerShell checks inherit that host's effective policy instead of overriding it.
+The native `ServerRuntimeTests` cover ownership, foreign listeners and cancellation
+without a display window; native everyday startup itself uses no PowerShell (#117).
+With `-NodeExe`, a second runtime check uses a copied Node and synthetic data on an
+ephemeral loopback port to verify cold startup, actual process/listener ownership,
+and PowerShell/native recognition and stop in both directions. It never contacts
+the installed server on 4318.
+
 Optional production cursor regression, using an already available Playwright
 module and Edge plus an isolated source server:
 

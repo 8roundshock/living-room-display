@@ -24,6 +24,10 @@ this helper is still pending (see [verification](#verification)).
 - `/p <parent HWND>` (also `/p:<handle>`): draw a dim, capture-free placeholder
   in the Windows screensaver preview; no Edge/backend is launched.
 - `--check`: verify Edge can be found; no display or capture.
+- `--start`, `--stop`, `--status`: control only this installation's backend without
+  PowerShell (#117). Start opens no browser; Status writes `ServerRunning` and
+  `Healthy` JSON. Stop leaves any display host alone; the control script's `Stop`
+  remains the full display-and-backend shutdown used during updates.
 - `--test-display`: display with automatic dismissal after eight seconds, for
   bounded integration verification. Capture still follows the preview setting.
 
@@ -46,8 +50,15 @@ Edge is atomically assigned to an owned Windows job at suspended creation, then
 resumes after a cancellation check. The job uses `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, so dismissal and helper crashes
 terminate only that browser process tree. No global Edge/node kill, window input
 injection, audio change or media key is used. The backend lives independently.
-Scripts validate PID, executable path, command line and process start time before
-stopping it. Source runs and other apps are not adopted.
+The native runtime and control script validate PID, executable path, command line
+and process start time before using or stopping it. Source runs and other apps are
+not adopted. Native startup runs the app-owned Node executable directly, with the
+installed data directory and fixed loopback port 4318; it never invokes a shell,
+looks up Node on PATH, or changes an execution policy. It shares the control script's
+operation mutex and `run/server.json` format, so either path can recognize and stop
+the other's server. Health is accepted only with the loopback listener owned by
+that exact process. A foreign listener is refused; cancelled or failed cold startup
+stops only its newly launched, pinned child and removes only its matching record.
 
 Ordinary browser `/display`, including fullscreen, keeps its visible pointer and
 F fullscreen toggle. Explicit `native=1` presentation hides the document cursor
@@ -175,7 +186,7 @@ Constrained Language Mode can still block it; Setup then shows a plain message
 | `.scr` screensaver | Windows 11 still selects `.scr` files per user (`HKCU\Control Panel\Desktop`) through **Settings > Personalization > Lock screen > Screen saver**. Setup never selects it; `EnableIdle` stays opt-in. | Unchanged code path; idle opt-in after review: [#118](https://github.com/8roundshock/living-room-display/issues/118). |
 | Edge kiosk | Edge is built in; `--kiosk --edge-kiosk-type=fullscreen` with an isolated profile and job object is unchanged. Setup warns if Edge is missing. | `--check` passes in CI. Kiosk use on a Windows 11 desktop is part of #116. Edge-free fallback: [#119](https://github.com/8roundshock/living-room-display/issues/119). |
 | .NET Framework | 4.8.1 is built into Windows 11 and runs the AnyCPU helper. | CI runs `--check` on every smoke runner. |
-| Windows PowerShell 5.1 | Present on Windows 10 and 11; used only by Setup, the uninstaller and the helper's Start. | CI runs `Test-Windows.ps1` under 5.1 and 7. |
+| Windows PowerShell 5.1 | Present on Windows 10 and 11; used by Setup and the uninstaller. Native everyday startup uses no PowerShell. | CI runs `Test-Windows.ps1` under 5.1 and 7. |
 | Port 4318 | Bound to 127.0.0.1 only, so there's no firewall prompt. A port already in use stops Setup with E11. | The CI smoke asserts a loopback-only listener and the E11 refusal; alternate port: [#121](https://github.com/8roundshock/living-room-display/issues/121). |
 | Windows on Arm | `x64compatible`: the x64 Node runs under emulation; the AnyCPU helper runs natively. | Non-gating CI on windows-11-arm, recorded under [#122](https://github.com/8roundshock/living-room-display/issues/122). |
 | Path length | Windows PowerShell 5.1 file APIs stop at 259 characters. Every payload path stays within 115 characters, so install folders of up to 130 characters always fit; InstallPackage refuses a folder too long for the payload before writing anything (E21). Both numbers come from `packagePathBudget` in the control script. | `Test-InstallerPayload.ps1` fails a payload over the budget; `Test-InstallerPolicy.ps1` checks that both docs quote the same limit; E21 unit test in `Test-PackageInstall.ps1`. |

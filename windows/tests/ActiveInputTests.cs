@@ -20,10 +20,15 @@ internal static class ActiveInputTests
         public void UploadDesktop(CancellationToken token) { Upload(token); }
         public void Clear() { Interlocked.Increment(ref Clears); ClearAction(); }
     }
-    private sealed class Browser : IAmbientBrowser { public bool IsEmpty { get { return false; } } public void Dispose() { } }
+    private sealed class Browser : IAmbientBrowser {
+        public bool IsEmpty { get { return false; } }
+        internal Action Disposing = delegate { };
+        internal int Disposals;
+        public void Dispose() { Interlocked.Increment(ref Disposals); Disposing(); }
+    }
     private static InputStamp Stamp(uint tick) { return new InputStamp { Success = true, Tick = tick }; }
     private static void Check(bool ok, string why) { if (!ok) throw new Exception(why); }
-    private static void Main()
+    private static void Run()
     {
         var baseline = new ActiveInputBaseline(Stamp(100));
         Check(!baseline.Observe(Stamp(100)), "unchanged input cannot cancel");
@@ -88,17 +93,41 @@ internal static class ActiveInputTests
         using (var enteredClear = new ManualResetEvent(false))
         using (var releaseClear = new ManualResetEvent(false))
         using (var disposed = new ManualResetEvent(false))
+        using (var browserDisposed = new ManualResetEvent(false))
         {
             session = new Session(); preview = new Preview { Upload = delegate { } };
             preview.ClearAction = delegate { enteredClear.Set(); Check(releaseClear.WaitOne(3000), "clear fixture release missing"); };
-            var startup = new SessionStartup(session, delegate { }, delegate { return preview; }, delegate { return new Browser(); });
+            var browser = new Browser { Disposing = delegate { browserDisposed.Set(); } };
+            var startup = new SessionStartup(session, delegate { }, delegate { return preview; }, delegate { return browser; });
             Check(startup.Start(), "clear-lifetime startup failed");
-            var cancellation = new Thread(session.End); cancellation.Start(); Check(enteredClear.WaitOne(3000), "cancellation clear not entered");
-            var disposer = new Thread(delegate() { startup.Dispose(); disposed.Set(); }); disposer.Start();
-            Check(!disposed.WaitOne(100), "session disposed before its in-flight RAM clear finished");
-            releaseClear.Set(); Check(cancellation.Join(3000) && disposer.Join(3000), "cleanup serialization failed");
+            Exception cancelFailure = null, disposeFailure = null;
+            var cancellation = new Thread(delegate() { try { session.End(); } catch (Exception error) { cancelFailure = error; } });
+            var disposer = new Thread(delegate() { try { startup.Dispose(); disposed.Set(); } catch (Exception error) { disposeFailure = error; } });
+            cancellation.Start();
+            bool clearEntered = enteredClear.WaitOne(3000), browserEnded = false, returnedEarly = false;
+            try {
+                if (clearEntered) {
+                    disposer.Start();
+                    browserEnded = browserDisposed.WaitOne(1000);
+                    returnedEarly = disposed.WaitOne(0);
+                }
+            } finally {
+                releaseClear.Set();
+                Check(cancellation.Join(3000), "cancellation cleanup did not finish");
+                if (clearEntered) Check(disposer.Join(3000), "disposal cleanup did not finish");
+                else startup.Dispose();
+            }
+            Check(clearEntered && cancelFailure == null && disposeFailure == null, "cleanup fixture failed");
+            Check(browserEnded, "owned browser disposal waited behind an in-flight RAM clear (#505)");
+            Check(!returnedEarly, "session disposed before its in-flight RAM clear finished");
+            startup.Dispose();
+            Check(browser.Disposals == 1, "repeated disposal ended the owned browser more than once");
             int clears = preview.Clears; session.End(); Check(preview.Clears == clears, "disposed old session could clear a replacement's RAM frame");
         }
-        Console.WriteLine("Active input PASS: fixed caller baseline, early input latch, read failure, startup cancellation/clear and terminal session cleanup; no native/UI/input injection.");
+        Console.WriteLine("Active input PASS: fixed caller baseline, early input latch, read failure, startup cancellation/clear, prompt browser disposal behind a blocked clear, and terminal session cleanup; no native/UI/input injection.");
+    }
+    private static int Main() {
+        try { Run(); return 0; }
+        catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
 }
