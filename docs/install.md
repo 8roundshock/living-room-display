@@ -63,16 +63,17 @@ installs for your account only (no administrator rights) into
   bundled Node runtime against its pinned SHA-256;
 - installs the app;
 - starts the local server and confirms it answers before it reports success;
-- finishes with **Open Living Room Display** checked, which opens
-  <http://127.0.0.1:4318/editor>.
+- finishes with **Open Living Room Display** checked, which opens Home at
+  <http://127.0.0.1:4318/> (#438), with **Edit display** (`/editor`) a click away.
 
 It never adds startup entries, services, scheduled tasks or Run keys, and it
 never changes your screen saver. There's no firewall prompt because the server
 listens only on 127.0.0.1. No account and no cloud are involved.
 
-**Start menu.** **Living Room Display** opens the editor (it starts the server if
-needed). **Living Room Display - Show display** shows the ambient display now;
-move the mouse or press a key to close it. There's no Uninstall shortcut:
+**Start menu.** **Living Room Display** opens Home in a new browser tab (it starts the
+server if needed); **Edit display** is the link at the top. **Living Room Display -
+Show display** shows the ambient display now; move the mouse or press a key to close
+it. There's no Uninstall shortcut:
 right-click the Start entry, or use **Settings > Apps**.
 
 **Updating.** Download and run the newer Setup. The Ready page says

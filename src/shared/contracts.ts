@@ -82,6 +82,31 @@ export interface Reminder {
 export interface ReminderInput { text: string; dueAt?: string | null }
 export interface ReminderPatch { text?: string; completed?: boolean; dueAt?: string | null }
 export interface ClearCompletedResult { deleted: number }
+/**
+ * A silent countdown timer started from Home (#438), stored only in the `timers.json` sidecar: never in
+ * `state.json`, `state.backup.json` or exports. Exactly one of `endsAt` (running, or done once it has
+ * passed) and `remainingMs` (paused) is set; done is derived from `endsAt`, never written. The label is
+ * private user content: never logged or put in diagnostics.
+ */
+export interface Timer {
+  id: string;
+  /** 0–40 characters, trimmed; empty shows a duration name such as "5 min timer". */
+  label: string;
+  /** The length it was started with, 1 s to 24 h, in whole milliseconds. */
+  durationMs: number;
+  /** ISO UTC instant it ends while running (or ended, once done); null while paused. */
+  endsAt: string | null;
+  /** What was left when it was paused; null while running or done. */
+  remainingMs: number | null;
+  createdAt: string; updatedAt: string;
+}
+/** `endsAt` or `remainingMs` only for Undo, which re-creates a cancelled timer as it was. */
+export interface TimerInput { label?: string; durationMs: number; endsAt?: string; remainingMs?: number }
+/** Exactly one action per request. */
+export type TimerPatch = { paused: boolean } | { addMs: number } | { restart: true };
+export interface TimersResult { timers: Timer[]; warning: string | null }
+/** `GET /api/changes`: an opaque marker that changes after every saved change (#438). */
+export interface ChangeMarker { change: string }
 export interface WeatherCurrent {
   time: string; temperature: number | null; feelsLike: number | null;
   weatherCode: number | null; isDay: boolean; windSpeed: number | null;
@@ -123,7 +148,11 @@ export interface AirQualityState {
   /** API-only, never persisted (#351): a provider request for this state is still in flight, so ask again soon. */
   refreshing?: boolean;
 }
-export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; photo?: PhotoState; airQuality?: AirQualityState; storageWarning?: string | null }
+export interface AppState {
+  settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; photo?: PhotoState; airQuality?: AirQualityState; storageWarning?: string | null;
+  /** API-only (#438): the timers from `timers.json`, and why they were cleared after a restart, if they were. */
+  timers?: Timer[]; timersWarning?: string | null;
+}
 export interface LocationResult extends LocationSettings { id: number; country: string; admin1: string }
 export interface ApiError { error: string }
 export interface HostSession { token: string; settings: Settings; displayUrl: string }

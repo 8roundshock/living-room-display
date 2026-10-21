@@ -88,7 +88,8 @@ and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 | Local photo | Explicit selected raster is normalized in-browser, validated and atomically saved with settings in private local state; exports/imports exclude its bytes. Prior recovery backup may retain an older image. |
 | Activation | Manual use first; Windows idle activation remains off until verification and explicit enablement. |
 | Installer | Per-user Inno Setup 6 wrapper (`LivingRoomDisplaySetup-<version>.exe`, no admin) around one checksummed payload of the prebuilt app and pinned Node 24 runtime; the control script's `InstallPackage` owns the transaction (verification, data snapshot, swap, health check, automatic rollback). Rejected: MSIX (virtualized AppData/registry conflict with per-user `.scr` registration), WiX/MSI, a custom bootstrapper and a portable ZIP. See [installation](install.md#install-with-setup-recommended). |
-| Editor access | Loopback only, no LAN/public hosting or account system. |
+| Pages | `/` is Home for day-to-day use (timers, reminders, a calendar that makes dated reminders, world clocks, countdowns and the note), `/editor` is Edit display (the editor) and `/display` the ambient view, chosen by `pageForPath` (#438). Home and the display poll `GET /api/changes` every 5 s while visible; timers live in a `timers.json` sidecar the previous release never opens, and show in the display Clock's date line. |
+| Editor access | Loopback only, no LAN/public hosting or account system; Home likewise (phone or LAN access is #465). |
 
 When a decision is made, replace its pending entry with the choice, source/date,
 rationale, and remaining constraints. Use a separate decision note only when the

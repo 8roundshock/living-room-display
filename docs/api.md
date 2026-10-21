@@ -9,7 +9,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | Method/path                    | Request                                                                | Response                                                                     |
 | ------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `GET /api/health`              | None                                                                   | Status, version (read once at startup from the shipped `package.json`), storage recovery warning. |
-| `GET /api/state`               | None                                                                   | Settings, reminders, weather (refreshed only while a saved widget needs it), air quality (`off` unless enabled), preview metadata, storage warning; the [settings revision](#settings-revision) as `ETag`. |
+| `GET /api/state`               | None                                                                   | Settings, reminders, weather (refreshed only while a saved widget needs it), air quality (`off` unless enabled), preview metadata, storage warning, and (#438) `timers` and `timersWarning`; the [settings revision](#settings-revision) as `ETag`. |
 | `PATCH /api/settings`          | Validated nested partial settings; optional `If-Match`                 | Full saved settings with the new revision as `ETag`; 409 with the current settings when `If-Match` is stale. |
 | `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |
 | `GET /api/reminders`           | None                                                                   | Reminder array.                                                              |
@@ -26,6 +26,17 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `GET`/`HEAD /api/preview/image` | None                                                                  | RAM-only PNG, `no-store`, or 404; HEAD answers the same without a body.      |
 | `GET /api/photo/image?id=hash` | Current photo hash                                                     | Selected local PNG, `no-store`, or 404.                                      |
 | `GET /api/windows/status`      | None                                                                   | Actual screensaver registry state; unavailable on other systems.             |
+| `GET /api/changes`             | None                                                                   | `{ "change": "<boot>.<store>.<timers>.<preview>" }`, `no-store` ([change marker](#change-marker), #438). |
+| `GET /api/timers`              | None                                                                   | `{ timers, warning }` ([timers](#timers), #438).                             |
+| `POST /api/timers`             | `durationMs`, optional `label`; Undo adds `endsAt` or `remainingMs`     | Created timer (201).                                                         |
+| `PATCH /api/timers/:id`        | Exactly one of `paused`, `addMs`, `restart: true`                      | Updated timer.                                                               |
+| `DELETE /api/timers/:id`       | None                                                                   | Empty 204, or 404.                                                           |
+| `DELETE /api/timers/finished`  | None                                                                   | `{ "deleted": n }`.                                                          |
+| `POST /api/countdowns`         | `title`, `date`, optional `repeatsYearly`; Undo adds `id` and `index`  | Saved settings (201) ([Home items](#home-item-endpoints), #438).             |
+| `DELETE /api/countdowns/:id`   | None                                                                   | Saved settings, or 404.                                                      |
+| `POST /api/world-clocks`       | `label`, `timezone`, `latitude`, `longitude`; Undo adds `id`, `index`  | Saved settings (201).                                                        |
+| `DELETE /api/world-clocks/:id` | None                                                                   | Saved settings, or 404.                                                      |
+| `POST /api/widgets/:id/show`   | None                                                                   | Saved settings; 409 when no free cells ([Show on my display](#show-on-my-display)). |
 
 Mutating JSON requests require `Content-Type: application/json`. Errors use
 `{ "error": "message" }` and appropriate 4xx/5xx codes. Unknown settings fields
@@ -234,8 +245,9 @@ An explicit successful device action can replace a manual selection.
 
 The editor performs only one automatic lookup per open, only for nonmanual
 settings and already-granted permission. Otherwise the user must press the device
-button. No permission/position request occurs in `/display`; its response carries
-`Permissions-Policy: geolocation=()`, while editor responses permit only self.
+button. No permission/position request occurs in `/display` or on Home: every response
+carries `Permissions-Policy: geolocation=()` except those for `/editor` paths, which permit
+only self (#438).
 There is no background watch or IP geolocation service.
 Device/fallback results remain local drafts until Save. Cancel invalidates pending
 callbacks; choosing a city invalidates earlier device work. The request-only
@@ -394,6 +406,89 @@ past hours at render time each minute, which a display that has lost the compute
 needs anyway, so trimming on the server would add nothing. Official alerts are a separate decision (#106).
 Open-Meteo's free API is for non-commercial use; see
 [architecture](architecture.md#current-decisions).
+
+## Home (#438)
+
+These endpoints keep the Host/Origin and Fetch Metadata checks, the JSON content type (415),
+the 4 MiB body limit (413) and the `{ "error": "message" }` shape; unknown fields return 400.
+
+### Timers
+
+Silent timers live in their own sidecar, `timers.json` in the data folder:
+`{ "version": 1, "timers": Timer[] }`, validated strictly (at most 6, unique ids). A `Timer`
+(`src/shared/contracts.ts`) is `{ id, label, durationMs, endsAt, remainingMs, createdAt,
+updatedAt }`: `label` is 0–40 characters (empty shows "5 min timer"), `durationMs` the length
+it was started with (whole milliseconds, 1 s to 24 h), and exactly one of `endsAt` (an ISO
+UTC instant while running, and once it has passed, done) and `remainingMs` (paused). Done is
+derived from `endsAt` and never written. `src/shared/timers.ts` holds the phases, the order
+and the windows: the display shows a finished timer for 10 minutes and Home lists it for 60.
+
+- `POST /api/timers` `{ label?, durationMs }` returns 201 with the timer, 409 "Up to 6 timers at
+  once. Dismiss or cancel one first." or 400 "Choose a time between 1 second and 24 hours.".
+  Undo re-creates a cancelled timer with its `endsAt` (from an hour ago up to 24 hours ahead) or
+  its `remainingMs` (at most `durationMs`), never both.
+- `PATCH /api/timers/:id` takes exactly one of `paused` (true keeps what is left; false resumes
+  with `endsAt = now + remaining`), `addMs` (1 s to 1 hour; on a finished timer it runs again
+  for that long) or `restart: true` (`endsAt = now + durationMs`). A request that changes
+  nothing returns 200 and writes nothing. Pausing or resuming a finished timer returns 409 "This
+  timer has finished. Restart it instead."; a total over 24 hours returns 400; an unknown id 404
+  "Timer not found".
+- `DELETE /api/timers/:id` returns 204 or 404; `DELETE /api/timers/finished` dismisses every
+  finished timer and returns `{ deleted }`.
+- `GET /api/timers` and `GET /api/state` (`timers`, `timersWarning`) list the timers Home
+  shows, pruned in memory: a read never writes.
+
+`TimerStore` (`src/server/timers.ts`) serializes its writes on its own queue, so a slow
+settings save never delays a timer tap, and writes through the store's `atomicWrite` (mode
+0600) with no backup copy: timer churn never rotates `state.backup.json`. Startup removes stale
+`timers.json.<uuid>.tmp` files with the state's, prunes finished timers older than an hour
+(writing only when that removed something) and, if the file cannot be read, moves it to
+`timers.corrupt.json`, starts empty and reports `timersWarning` "Timers couldn't be read after
+the app restarted, so they were cleared." until the next timer write. `state.json` is never
+touched. Labels are private user content: never logged or put in diagnostics.
+
+Timers are never in `state.json`, `state.backup.json` or exports, and an import leaves them
+alone. The previous installed release (`3446400`) never opens `timers.json`, so timers need no
+rollback exception; its reader rejects every in-file shape (a top-level `timers` key,
+`widgetData.timers`, a `timer` widget id), which `src/server/rollback.test.ts` proves along with
+a "Home day-to-day use" scenario whose state files and export it accepts. Setup's copy of the
+data folder may include `timers.json`; that release ignores it.
+
+### Home item endpoints
+
+Countdowns and world clocks change one item at a time inside the serialized store write, so two
+pages never drop each other's items (#287). `POST /api/countdowns` takes the countdown fields
+(`title` 1–60, a civil `date` in 1900–2200, `repeatsYearly` default false) and appends one with a
+server uuid: 201 with the saved settings, or 409 "Up to 12 countdowns. Remove one to add
+another.". `POST /api/world-clocks` takes `label` (1–40), an IANA `timezone` (not `auto`),
+`latitude` and `longitude`: 201, or 409 "Up to 4 cities. Remove one to add another.". Undo after
+a removal sends the removed `id` and its `index`, which put the item back in its place; a
+repeated Undo of an id that is already there returns 200 and writes nothing. `DELETE
+/api/countdowns/:id` and `DELETE /api/world-clocks/:id` return the saved settings, or 404. The
+note keeps using `PATCH /api/settings` with `{ "widgetData": { "note": { "text": … } } }`. Item and show
+writes, like any settings write, move the [settings revision](#settings-revision): an Edit display
+draft computed from earlier settings gets 409 with the current ones and rebases, so nothing Home
+added is lost. Timer writes change no settings and leave the revision alone.
+
+### Show on my display
+
+`POST /api/widgets/:id/show` turns on Clock, World clocks, Calendar, Reminders, Countdown or Note
+(other, planned, retired and unknown ids return 400). Home never rearranges the board: inside the
+serialized write the widget keeps its saved placement (with a free-size custom size) when those
+cells are free, else takes the first free cells for its default family, then for each smaller
+family, with no custom size; no other widget moves. With no room it returns 409 "No room for
+{Name} on your display." and writes nothing; an enabled widget returns 200 and writes nothing.
+There is no hide endpoint, and Home has no control that turns a widget off. Edit display does that:
+its save is a `PATCH /api/settings` whose `widgets` map has `"<id>": false`, which keeps the
+widget's placement. `showPlacement` in `src/shared/show.ts` is the rule both sides use.
+
+### Change marker
+
+`GET /api/changes` returns `{ "change": "<boot>.<store>.<timers>.<preview>" }` with
+`Cache-Control: no-store`: a random id for this server process, then counts of successful
+settings/reminder writes, timer writes, and snapshot uploads or clears. It moves after every
+saved change (and on a restart) and never on a read, so Home and the display ask for it every
+5 s while visible and reload `/api/state` only when it moved. Nothing about it is persisted.
 
 ## Native snapshot handoff
 

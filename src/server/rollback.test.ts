@@ -296,3 +296,61 @@ test('#135 a non-identity transform for a #78 id, sent by PATCH or import, stays
     await rm(directory, { recursive: true, force: true }); await rm(target, { recursive: true, force: true });
   }
 });
+
+test('#438 Home day-to-day use writes nothing the previous release cannot read; timers stay in their own file', async () => {
+  const directory = await temporary('lrd-rollback-home-'), target = await temporary('lrd-rollback-home-import-');
+  await seedColorAccentData(directory); await seedColorAccentData(target);
+  const app = await application(directory), imported = await application(target);
+  try {
+    // Reminders from Home's quick add and calendar, one checked off.
+    const dentist = await app.send('POST', '/api/reminders', { text: 'Synthetic dentist', dueAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }) as { id: string };
+    await app.send('POST', '/api/reminders', { text: 'Synthetic anytime', dueAt: null });
+    await app.send('PATCH', `/api/reminders/${dentist.id}`, { completed: true });
+    await assertFilesAccepted(directory, 'Home reminders');
+    // Timers: one running, one paused.
+    await app.send('POST', '/api/timers', { label: 'Synthetic pasta', durationMs: 600_000 });
+    const paused = await app.send('POST', '/api/timers', { durationMs: 300_000 }) as { id: string };
+    await app.send('PATCH', `/api/timers/${paused.id}`, { paused: true });
+    // A countdown, a world clock, the note, and World clocks shown on the display from Home.
+    await app.send('POST', '/api/countdowns', { title: 'Synthetic trip', date: '2027-03-14', repeatsYearly: true });
+    await app.send('POST', '/api/world-clocks', { label: 'Synthetic city', timezone: 'Europe/London', latitude: 51.5, longitude: -0.1 });
+    await app.send('PATCH', '/api/settings', { widgetData: { note: { text: 'Synthetic note' } } });
+    await app.send('POST', '/api/widgets/worldClocks/show');
+    await assertFilesAccepted(directory, 'Home day-to-day use');
+    const primary = await readJson(directory, 'state.json');
+    assert.equal(primary.settings.widgets.worldClocks, true, 'the shown widget is written');
+    assert.equal(primary.settings.widgetData.countdowns.length, 1);
+    assert.equal(primary.settings.widgetData.worldClocks.length, 1);
+    const exported = await app.send('GET', '/api/export') as Loose;
+    assertPreviousReaderAccepts('import', exported, 'export after Home use');
+    const timersFile = await readJson(directory, 'timers.json');
+    assert.equal(timersFile.timers.length, 2, 'timers.json holds both timers');
+    for (const [name, value] of [['state.json', primary], ['state.backup.json', await readJson(directory, 'state.backup.json')], ['the export', exported]] as const) {
+      const text = JSON.stringify(value);
+      assert.equal(/timer/i.test(text), false, `${name} carries no timer data`);
+      assert.equal(text.includes('Synthetic pasta'), false, `${name} carries no timer label`);
+    }
+    await imported.send('POST', '/api/import', exported);
+    await assertFilesAccepted(target, 'imported after Home use');
+  } finally {
+    await app.close(); await imported.close();
+    await rm(directory, { recursive: true, force: true }); await rm(target, { recursive: true, force: true });
+  }
+});
+
+test('#438 the shapes Home avoided are still rejected by the previous release; a countdown through existing keys is accepted', () => {
+  const valid = previousPersistableData({ version: 1, settings: previousDefaults(), reminders: [], photoAsset: null }) as Loose;
+  const reminder = { id: randomUUID(), text: 'Synthetic', completed: false, dueAt: null, createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString() };
+  const cases: [string, (data: Loose) => void][] = [
+    ['a top-level timers key', data => { data.timers = []; }],
+    ['widgetData.timers', data => { data.settings.widgetData = { timers: [] }; }],
+    ['a timer widget id', data => { data.settings.widgets.timer = false; }],
+    ['calendar reminder days', data => { data.settings.widgetData = { calendar: { weekStart: 'locale', reminderDays: true } }; }],
+    ['an all-day reminder', data => { data.reminders = [{ ...reminder, allDay: true }]; }],
+  ];
+  for (const [label, edit] of cases) { const data = structuredClone(valid); edit(data); assertPreviousReaderRejects('data', data, label); }
+  const countdown = structuredClone(valid);
+  countdown.settings.widgets.countdown = true;
+  countdown.settings.widgetData = { countdowns: [event('Synthetic', '2027-01-01')] };
+  assertPreviousReaderAccepts('data', countdown, 'a countdown enabled through existing keys');
+});

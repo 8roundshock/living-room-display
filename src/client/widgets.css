@@ -51,6 +51,27 @@
 .grid-ambient .clock-family-large .clock-time { font-size: calc(min(31cqw, 66cqh) * var(--font-scale)); }
 .grid-ambient .clock-family-large .clock-calendar { display: flex; align-items: baseline; gap: 2cqw; }
 .grid-ambient .clock-family-large .clock-calendar .ambient-label, .grid-ambient .clock-family-large .clock-date { font-size: calc(max(var(--min-text), min(4cqw, 9cqh)) * var(--font-scale)); margin: 0; }
+/* The timer slot (#438) reuses the date line's elements and fonts: the name in the accent colour (one line,
+   ending in an ellipsis, at most 60% of a large clock's width) with a dim "+N", and the time in the text
+   colour; Done uses the shared status tone. Large keeps one line, where the name gives way before the
+   time. The last minute's seconds are tabular, so the line keeps its width while it counts. */
+/* A one-line name's min-content is its whole width; the slot is capped at the clock's width so the name
+   ends in an ellipsis rather than widening the clock (and zooming it out). */
+.grid-ambient .clock-calendar.clock-timer { min-width: 0; max-width: 100%; }
+.grid-ambient .clock-timer-label { gap: 0.4em; min-width: 0; max-width: 100%; white-space: nowrap; overflow-wrap: normal; }
+.grid-ambient .clock-timer-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.grid-ambient .clock-timer-more { flex: none; opacity: 0.6; }
+.grid-ambient .clock-timer-value { display: flex; align-items: center; gap: 0.35em; }
+.grid-ambient .clock-timer-value[data-timer-phase="done"] { color: var(--ambient-caution); }
+.grid-ambient .clock-timer-digits { font-variant-numeric: lining-nums tabular-nums; }
+.grid-ambient .clock-timer-paused { flex: none; display: inline-flex; gap: 0.16em; height: 0.72em; }
+.grid-ambient .clock-timer-paused i { width: 0.17em; border-radius: 0.05em; background: currentColor; }
+/* Large keeps one line: the time never shrinks, and the name gives way first (at most 60% of the clock). */
+.grid-ambient .clock-family-large .clock-timer { flex-wrap: nowrap; justify-content: center; max-width: 100%; }
+.grid-ambient .clock-family-large .clock-timer-label { flex: 0 1 auto; max-width: 60%; }
+.grid-ambient .clock-family-large .clock-timer-value { flex: none; white-space: nowrap; }
+/* Analog small and medium keep the hands beside the slot; the slot takes at most 60% of the row. */
+.grid-ambient .clock-style-analog:is(.clock-family-small, .clock-family-medium) .clock-calendar.clock-timer { flex: 0 1 auto; min-width: 0; max-width: 60%; }
 /* Analog (#222): hands only, no face, bezel or tick ring. Small and medium size the graphic to the cell
    height with the date beside it (the graphic gives way when the date needs the width); large keeps
    its centred composition. Hands are HTML bars on full-box wrappers whose rotation composites (#161).

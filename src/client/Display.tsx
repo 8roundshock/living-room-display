@@ -143,7 +143,9 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
       if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen(); showControls(); }
-      if (event.key === 'Escape' || event.key.toLowerCase() === 'e') window.location.assign('/editor');
+      // #438: Esc goes Home and E to Edit display (#436's close-on-Esc for an editor-opened display wins where it applies).
+      if (event.key === 'Escape') window.location.assign('/');
+      if (event.key.toLowerCase() === 'e') window.location.assign('/editor');
       if (event.key === 'Tab') showControls();
     };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
@@ -278,6 +280,6 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
         </div>
       </MotionContext.Provider>
     </div>
-    {!embedded && !native && <nav className="display-help" aria-label="Display controls"><button className="button display-control" onClick={toggleFullscreen}><Icon name="monitor" size={15} />Fullscreen · F</button><a className="button display-control" href="/editor"><Icon name="settings" size={15} />Editor · Esc</a></nav>}
+    {!embedded && !native && <nav className="display-help" aria-label="Display controls"><button className="button display-control" onClick={toggleFullscreen}><Icon name="monitor" size={15} />Fullscreen · F</button><a className="button display-control" href="/"><Icon name="home" size={15} />Home · Esc</a><a className="button display-control" href="/editor"><Icon name="edit" size={15} />Edit display · E</a></nav>}
   </Surface>;
 }

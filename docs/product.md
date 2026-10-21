@@ -19,10 +19,13 @@ busy dashboards. The application must produce no audio.
 
 | Area | Intended behavior |
 | --- | --- |
+| Home | The main page (`/`, #438) for day-to-day use beside the display rather than setting it up: the date and time, six quick actions (Timer, Reminder, Calendar, World clock, Countdown, Note) that feed the display, a Today list (timers, reminders due today, anytime and coming up) and the saved arrangement with **Edit display** one click away. Loopback only; phone or LAN access is a separate decision (#465). |
+| Edit display | The editor at `/editor` (#438): layout, widgets, looks, weather and reminders, every flow as before. |
+| Timers | Silent countdown timers started from Home (presets or a custom time, an optional name): pause, add a minute, cancel with Undo, restart and dismiss. While one runs, the display Clock's date line shows it ("Pasta 8 min"); a finished one reads Done in the status colour for 10 minutes. No sound, no flashing (#438). |
 | Time and date | Optional clock with outline numerals by default, solid digital or minimal analog hands, and 12/24-hour format. |
 | Weather | Conditions with a clear place label, units, and update age; when rain is near it adds the chance and estimated timing of upcoming rain inside the same widget, with uncertainty visible (#74). |
 | Forecast | Readable seven-day outlook. |
-| Reminders | Add, edit, delete and one-tap check off one-time/undated reminders in the local editor, with Undo and a local history (restore, delete, clear; the latest 500 kept on this computer). The display shows as many pending reminders as fit, soonest first, with an honest “+N more”. The widget can be any whole-cell size from 2 × 2 up to the full grid height and two-thirds of the width; a taller box lists more (#73, #203). |
+| Reminders | Add, edit, delete and one-tap check off one-time/undated reminders in the local editor (and add and check off from Home, whose calendar turns a picked day into a dated reminder, #438), with Undo and a local history (restore, delete, clear; the latest 500 kept on this computer). The display shows as many pending reminders as fit, soonest first, with an honest “+N more”. The widget can be any whole-cell size from 2 × 2 up to the full grid height and two-thirds of the width; a taller box lists more (#73, #203). |
 | Appearance | User-editable layout, colors, typography, motion, and saved presets. The accent is one colour or Native, where each widget uses its own tone from one harmonious dim palette (default for new installs and built-in styles). |
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 | Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |
@@ -40,7 +43,7 @@ uses Open-Meteo and an editable Toronto city default selected by the coordinator
 the default is not a claim about the user's location. Probability covers all
 precipitation; rain amount is separate so snow does not become a false rain warning.
 
-Editing should not require changing source code. Keep the editor separate from
+Editing should not require changing source code. Keep Home and Edit display (the editor) separate from
 the sparse display experience. Personal reminders and settings persist in a local
 per-user store with a previous-state backup and export/import
 ([persistence and recovery](api.md#persistence-and-recovery)); private user content

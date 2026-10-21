@@ -357,6 +357,11 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1280, height: 600 }, { width: 1024, height: 600 }, { width: 760, height: 600 }]) {
       await open(viewport);
       const before = await frame();
+      // #438: the shared header keeps its 64 px height, and the canvas starts below it as before.
+      const header = await page.locator('.studio-header').boundingBox();
+      assert.equal(header.height, 64, `${viewport.width}x${viewport.height}: the header keeps 64 px`);
+      assert.ok(before.y >= header.y + header.height, 'the canvas starts below the header');
+      assert.equal(await page.getByRole('navigation', { name: 'Pages' }).getByRole('link').count(), 2, 'Home and Edit display links');
       for (const name of ['Style', 'Widgets', 'Weather', 'Reminders']) {
         await tab(name);
         assert.equal(await page.evaluate(() => `${document.documentElement.scrollWidth},${document.documentElement.scrollHeight}`), `${viewport.width},${viewport.height}`, `desktop ${name} must use contained scrolling`);
@@ -400,6 +405,12 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     }
     for (const viewport of [{ width: 390, height: 700 }, { width: 390, height: 480 }, { width: 640, height: 300 }]) {
       await open(viewport);
+      // #438: narrow headers keep their heights (72 px at 480 px or narrower, else 78); only the other page's link shows and Open display is icon-only.
+      assert.equal((await page.locator('.studio-header').boundingBox()).height, viewport.width <= 480 ? 72 : 78, `${viewport.width}x${viewport.height}: header height`);
+      if (viewport.width <= 480) {
+        assert.deepEqual(await page.getByRole('navigation', { name: 'Pages' }).getByRole('link').allInnerTexts(), ['Home']);
+        assert.equal(await page.locator('.open-display-label').isVisible(), false); await inView(page.getByRole('link', { name: 'Open display' }), 'icon-only Open display');
+      }
       for (const name of ['Widgets', 'Style', 'Weather', 'Reminders']) { await tab(name); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'narrow/200% equivalent must not scroll horizontally'); }
       await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click(); await button('Photo large').click(); await button('Add Photo').scrollIntoViewIfNeeded(); await inView(button('Add Photo'), 'Mobile Add');
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });

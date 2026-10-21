@@ -17,8 +17,9 @@ npm test
 npm start
 ```
 
-The production app serves the editor at `http://127.0.0.1:4318/editor` and ambient
-view at `http://127.0.0.1:4318/display`; `/api/health` verifies server readiness.
+The production app serves Home at `http://127.0.0.1:4318/`, Edit display (the editor) at
+`http://127.0.0.1:4318/editor` and the ambient view at `http://127.0.0.1:4318/display`;
+`/api/health` verifies server readiness.
 It stores data in the per-user directory documented in [API](api.md), not Git or
 browser storage. Set `LRD_DATA_DIR` to an isolated test folder before integration
 experiments: a source run without it uses the installed app's data folder (on Windows
@@ -83,7 +84,9 @@ A newly active widget also joins `FULL_BOARD` in `tests/ui/palette-browser.mjs`,
 plus `ACCENT_SELECTOR` (a new kind of accent element) or `TEXT_ONLY` (no accent
 element), so the palette harness checks its colours (#214), and the shared
 `FULL_BOARD` in `tests/ui/lib/boards.mjs`, which the canvas scope harness uses to
-check that no studio rule reaches it on the editor canvas (#313). The motion and
+check that no studio rule reaches it on the editor canvas (#313). The `home` suite
+(`tests/ui/home-browser.mjs`, #438) drives Home end to end with the display beside it: its
+server follows the pages' fake clock, so timers end on cue. The motion and
 widgets suites keep their own copies of that board until
 [#388](https://github.com/8roundshock/living-room-display/issues/388).
 The widgets suite is the longest: 10–12 minutes on the owner's PC on 2026-10-19 with
