@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { catalogBoardDefaults } from '../../../src/server/fixtures.ts';
 import { GRID_DENSITIES, WIDGET_IDS, familyForSpan, freeSpanLimits, getWidgetRect, normalizePlacement, resizeWidgetSpan } from '../../../src/shared/widgets.ts';
 
 // Free-size Reminders (#73). Runs through the `sweep` hook, once per viewport after the family sweep:
@@ -127,7 +128,7 @@ function single(state, density, span) {
 
 export async function sweep({ page, viewport, state, base, now }) {
   const widget = page.locator('[data-widget-id="reminders"]');
-  const fourK = viewport.width > 2000, authored = structuredClone(state.settings.widgetGrid);
+  const fourK = viewport.width > 2000;
   // Every shape × density × 1, 5 and 30 pending at this viewport.
   for (const density of Object.keys(GRID_DENSITIES)) {
     const counts = {};
@@ -265,7 +266,8 @@ export async function sweep({ page, viewport, state, base, now }) {
   if (!fourK) {
     state.settings.appearance.motionEnabled = false; state.reminders = reminders(30, now);
     state.settings.appearance.rearrange = true; // the arrangement buttons show only with Swap places on (#436)
-    state.settings.widgetGrid = structuredClone(authored);
+    // This #183 arrangement deliberately uses the catalog geometry from before #435.
+    state.settings.widgetGrid = catalogBoardDefaults().widgetGrid;
     state.settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' };
     state.settings.widgetGrid.placements.photo = { column: 8, row: 2, size: 'medium' };
     state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, ['clock', 'weather', 'photo', 'forecast', 'reminders'].includes(key)]));
