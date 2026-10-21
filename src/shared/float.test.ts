@@ -1,12 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  FLOAT_TRAVEL, MAX_STEPS_PER_SECOND, PLANE_TRACK, devicePosition, easedProgress, floatOffset, floatPath, nextBoundaryDelay,
+  FLOAT_TRAVEL, MAX_STEPS_PER_SECOND, PLANE_TRACK, clampFloatOffset, devicePosition, easedProgress, floatOffset, floatPath, nextBoundaryDelay,
   nextStepDelay, stepPath, waypoint, waypointUnit, widgetPhase, widgetTrack,
 } from './float.ts';
 
 const DAY = 24 * 3600;
 const RANGE = 2 * FLOAT_TRAVEL;
+
+test('#479 growing content clamps a floating offset inside all four new edges at once', () => {
+  // The reported Sun & moon failure: 13 CSS px right, only 2.2 CSS px of room after growth.
+  assert.deepEqual(clampFloatOffset({ x: 13, y: -6 }, { left: 0, right: 2.2, top: 1.1, bottom: 0 }, 3), { x: 2, y: -1 });
+  for (const dpr of [1, 1.25, 2, 3]) {
+    const slack = { left: 2.1, right: 3.1, top: 1.1, bottom: 4.1 };
+    for (const x of [-77, 77]) for (const y of [-77, 77]) {
+      const clamped = clampFloatOffset({ x, y }, slack, dpr);
+      assert.ok(clamped.x >= -slack.left && clamped.x <= slack.right);
+      assert.ok(clamped.y >= -slack.top && clamped.y <= slack.bottom);
+      assert.ok(Math.abs(clamped.x * dpr - Math.round(clamped.x * dpr)) < 1e-9);
+      assert.ok(Math.abs(clamped.y * dpr - Math.round(clamped.y * dpr)) < 1e-9);
+    }
+  }
+  assert.deepEqual(clampFloatOffset({ x: 13, y: -6 }, { left: 0, right: 0, top: 0, bottom: 0 }, 3), { x: 0, y: 0 });
+});
+
+test('#479 a valid offset is unchanged when content shrinks or its slack stays the same', () => {
+  const offset = { x: 8 / 3, y: -4 / 3 };
+  for (const available of [10, 50, 100])
+    assert.deepEqual(clampFloatOffset(offset, { left: available, right: available, top: available, bottom: available }, 3), offset);
+});
 
 test('#436 the board starts where the user put it, and 24 hours of samples stay within ±3.5% of the display', () => {
   assert.deepEqual(floatOffset(0, 30), { x: 0, y: 0 }, 'waypoint 0 is the authored arrangement');

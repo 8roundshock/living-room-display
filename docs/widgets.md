@@ -414,6 +414,8 @@ own slack by translating the section (`--float-x`/`--float-y`, the individual
 content out inside the content box, never depend on the section's screen position,
 and let the shared fit measure the slack (what the content leaves free; horizontal
 slack is to the right because content is left-anchored, vertical slack is centred).
+When content grows, that measurement immediately clamps its existing translation
+inside the new slack (#479); ordinary floating still advances one device pixel at a time.
 The widget's cell is its section box without that translation. Without animation
 (Float gently off or reduced motion) the same timer steps once per interval. Use the
 centralized scheduler/wrapper, not a new per-widget motion loop, and avoid flashes or

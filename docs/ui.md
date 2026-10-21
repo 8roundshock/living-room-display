@@ -480,6 +480,8 @@ motion or the Off animation level.
   hide after 3.5 seconds without another supported interaction. Focused controls stay
   visible. Esc or E on a display opened by Home or Edit display focuses its still-open
   opener and closes the display; **Close display** is shown for that opened window.
+  The display remembers being script-opened after its opener closes (#480). If the
+  browser refuses to close it, it uses the requested Home or Edit route after 200 ms.
   A directly opened display uses **Home · Esc** and **Edit display · E** to navigate
   in the same tab. Both pages share the Open/Show/Close display controls.
 - **Deep links** from Home (#438), read once and then cleared to `/editor`:

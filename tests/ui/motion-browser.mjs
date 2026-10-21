@@ -310,6 +310,50 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     }
     checks.push(`#436 float acceptance (owner board, 6 widgets, 1280×720 ×3, 30 s interval, 2 s fade, Lively): 5 virtual minutes sampled every 50 ms keep the plane at opacity 1 and every widget in its cell at opacity ≥ 0.99, with its content inside the screen; at most one device pixel per step, no animation, transition or layout; ${JSON.stringify(metrics.float)}`);
 
+    // #479: growth must clamp the existing offset during measurement, without waiting for another
+    // float tick (or the next whole interval in step mode). A synthetic empty block supplies an exact
+    // drawn edge, avoiding font-width assumptions; the surrounding real widget keeps its normal fit.
+    for (const floating of [true, false]) {
+      const view = await displayPage({ state: scenario(state => {
+        only('note', 'medium')(state);
+        state.settings.widgetData.note.text = 'x';
+        state.settings.appearance.animation = 'off';
+        state.settings.appearance.motionEnabled = floating;
+        state.settings.appearance.motionIntervalSeconds = 30;
+      }), deviceScaleFactor: 3 });
+      const { page } = view;
+      await page.clock.pauseAt(await page.evaluate(() => Date.now() + 10));
+      await page.evaluate(() => {
+        const probe = document.createElement('div');
+        probe.className = 'float-slack-probe';
+        probe.style.cssText = 'width:1px;height:2px';
+        document.querySelector('.ambient-note .widget-content').append(probe);
+      });
+      let before = 0;
+      for (let step = 0; step < 120 && before <= 6; step++) {
+        await page.clock.runFor(1_000);
+        before = await page.locator('.ambient-note').evaluate(section => parseFloat(section.style.getPropertyValue('--float-x')) || 0);
+      }
+      assert.ok(before > 6, `${floating ? 'float' : 'step'}: content moved right before it grew (${before})`);
+      await page.evaluate(() => {
+        const probe = document.querySelector('.float-slack-probe');
+        probe.style.width = '100%';
+        // Changes that affect geometry ask for the same class-based refit as real widgets (#314).
+        probe.classList.add('grown');
+      });
+      await page.clock.runFor(17);
+      const after = await page.locator('.ambient-note').evaluate(section => {
+        const offset = parseFloat(section.style.getPropertyValue('--float-x')) || 0;
+        const rect = section.getBoundingClientRect(), style = getComputedStyle(section);
+        const edge = rect.right - offset - parseFloat(style.paddingRight);
+        return { offset, overflow: section.querySelector('.float-slack-probe').getBoundingClientRect().right - edge };
+      });
+      assert.ok(after.offset <= 1 / 3, `grown content returns immediately: ${JSON.stringify(after)}`);
+      assert.ok(after.overflow <= 0.5, `grown content stays inside its original box within one frame: ${JSON.stringify(after)}`);
+      await view.close();
+    }
+    checks.push('#479 content growth clamps an existing float or step offset inside its content box within one frame, without waiting for the next scheduled movement');
+
     // (2c) #436 without animation (reduced motion, or Float gently off): the board jumps to its next spot only at
     // interval boundaries, at once and at opacity 1.
     for (const [label, options] of [

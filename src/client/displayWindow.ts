@@ -54,12 +54,13 @@ export function liveOpener(): Window | null {
   } catch { return null; }
 }
 
-/** Esc, E, Editor or Close display: back to the editor that opened this display, or open the editor here. */
-export function leaveDisplay(destination = '/editor'): void {
+/** Return to the opener, or close a display it opened even if the opener has since closed (#480). */
+export function leaveDisplay(destination = '/editor', opened = false): void {
   const opener = liveOpener();
-  if (opener) {
-    opener.focus();
-    window.close();
+  if (opener || opened) {
+    try { opener?.focus(); } catch { /* the opener may close between checking and focusing */ }
+    try { window.close(); } catch { /* fall back when the browser refuses to close */ }
+    window.setTimeout(() => { if (!window.closed) window.location.assign(destination); }, RETIRE_CARD_DELAY_MS);
     return;
   }
   window.location.assign(destination);

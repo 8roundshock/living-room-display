@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import type { AppState, Settings, WidgetGrid, WidgetId } from '../shared/contracts.ts';
 import { GRID_DENSITIES, WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, placementSpan, widgetRevealOrder } from '../shared/widgets.ts';
 import { DEFAULT_ANIMATION_LEVEL, MAX_REVEAL_STEPS, motionPlan, revealTiming, type EntranceLevel, type MotionSurface } from '../shared/motion.ts';
-import { FLOAT_TRAVEL, MAX_STEPS_PER_SECOND, floatPath, nextBoundaryDelay, nextStepDelay, stepPath, widgetTrack, type Point } from '../shared/float.ts';
+import { FLOAT_TRAVEL, MAX_STEPS_PER_SECOND, clampFloatOffset, floatPath, nextBoundaryDelay, nextStepDelay, stepPath, widgetTrack, type FloatSlack, type Point } from '../shared/float.ts';
 import { renderedAccent, toneVariables } from '../shared/palette.ts';
 import { DAYLIGHT_TRANSITION_SECONDS, daylightStep, effectiveBrightness } from './daylight.ts';
 import { Icon } from './icons.tsx';
@@ -18,9 +18,9 @@ function toggleFullscreen() {
 }
 
 /** CSS pixels a widget's visible content can move each way and stay inside its box (#436). */
-interface Slack { left: number; right: number; top: number; bottom: number }
+type Slack = FloatSlack;
 /** What the float timer needs from each widget, kept in a ref so measuring never re-renders. */
-interface FloatEntry { section: HTMLElement; slack: Slack; measure: () => void }
+interface FloatEntry { section: HTMLElement; slack: Slack; offset: Point | null; measure: () => void }
 type FloatRegistry = Map<WidgetId, FloatEntry>;
 const NO_SLACK: Slack = { left: 0, right: 0, top: 0, bottom: 0 };
 /** Elements measured whole: their inside (an analog clock's turning hands, an image) never shifts the content's extent. */
@@ -99,7 +99,19 @@ function Widget({ id, settings, children, index, revealOrder, style, registry }:
   // measurement records how far the content may float inside its box, in a ref (no re-render).
   useLayoutEffect(() => {
     const area = region.current, body = content.current; if (!area || !body) return;
-    const entry: FloatEntry = { section: area, slack: NO_SLACK, measure: () => { entry.slack = inkSlack(area, body, current.current); } };
+    const entry: FloatEntry = { section: area, slack: NO_SLACK, offset: null, measure: () => {
+      entry.slack = inkSlack(area, body, current.current);
+      // A longer line must not wait for the next float tick, or ease back through neighbouring
+      // content for seconds (#479). Clamp now, in the same measurement that sees it grow.
+      if (entry.offset) {
+        const safe = clampFloatOffset(entry.offset, entry.slack, window.devicePixelRatio || 1);
+        if (safe.x !== entry.offset.x || safe.y !== entry.offset.y) {
+          area.style.setProperty('--float-x', `${safe.x}px`);
+          area.style.setProperty('--float-y', `${safe.y}px`);
+          entry.offset = safe;
+        }
+      }
+    } };
     const update = () => {
       const computed = getComputedStyle(area);
       const width = area.clientWidth - parseFloat(computed.paddingLeft) - parseFloat(computed.paddingRight);
@@ -116,7 +128,7 @@ function Widget({ id, settings, children, index, revealOrder, style, registry }:
         else { let low = 0.05, high = 1; for (let step = 0; step < 12; step++) { const middle = (low + high) / 2; if (fits(middle)) low = middle; else high = middle; } next = low; }
       }
       body.style.width = `${100 / next}%`; current.current = next; setFit(next);
-      entry.slack = inkSlack(area, body, next);
+      entry.measure();
     };
     refit.current = update;
     registry.set(id, entry);
@@ -184,7 +196,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(timer); }, []);
   // #436 Keep the screen on: only the ambient page, and only full screen or as the native screensaver.
   const wakeLock = useWakeLock(!embedded && settings.screen.keepAwake, native);
-  // A display the editor opened (window.opener) closes back to it (#436); otherwise the editor opens here.
+  // Remember that this display is script-opened, even after its editor has closed (#480).
   const [opened, setOpened] = useState(false);
   useEffect(() => { if (!embedded && !native) setOpened(liveOpener() !== null); }, [embedded, native]);
 
@@ -205,12 +217,12 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
       if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen(); showControls(); }
-      if (event.key === 'Escape') leaveDisplay('/');
-      if (event.key.toLowerCase() === 'e') leaveDisplay('/editor');
+      if (event.key === 'Escape') leaveDisplay('/', opened);
+      if (event.key.toLowerCase() === 'e') leaveDisplay('/editor', opened);
       if (event.key === 'Tab') showControls();
     };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
-  }, [embedded, native, showControls]);
+  }, [embedded, native, opened, showControls]);
   const effectiveCycle = swapsAllowed ? compositionOverride ?? cycle : 0;
   const enabledKey = JSON.stringify([settings.widgets, settings.preview.enabled]);
   const gridKey = JSON.stringify(settings.widgetGrid);
@@ -323,14 +335,13 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     if (!clock) floatClock.current = { start: at, interval };
     else if (clock.interval !== interval) floatClock.current = { start: at - (at - clock.start) * interval / clock.interval, interval };
     const start = floatClock.current!.start;
-    // The offset last written to each widget's section (a remounted section starts again from 0).
-    const written = new Map<WidgetId, Point & { section: HTMLElement }>();
     let timer: number | undefined, planeAt: Point | null = null, jump = true;
     const tick = () => {
       window.clearTimeout(timer);
       const seconds = (performance.now() - start) / 1000, { width, height } = size.current, dpr = window.devicePixelRatio || 1;
       // Floating never moves anything more than one device pixel per step on either axis, even when a timer
-      // fires late or the slack changes: it catches up a pixel at a time instead (a resize jumps once).
+      // fires late: it catches up a pixel at a time instead (a resize jumps once). A shrinking
+      // widget's measured slack clamps its offset immediately before any ordinary step (#479).
       const toward = (from: number, to: number) => Math.abs(to - from) * dpr <= 1.001 ? to : snap(from + Math.sign(to - from) / dpr, dpr);
       const unit = floating ? floatPath(seconds, interval) : stepPath(seconds, interval);
       const planeTarget = { x: snap(unit.x * FLOAT_TRAVEL * width, dpr), y: snap(unit.y * FLOAT_TRAVEL * height, dpr) };
@@ -349,8 +360,9 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
           target = { x: snap(middle.x + half.x * position.x, dpr), y: snap(middle.y + half.y * position.y, dpr) };
           if (floating) delay = Math.min(delay, nextStepDelay(seconds, interval, { x: half.x * dpr, y: half.y * dpr, originX: middle.x * dpr, originY: middle.y * dpr }, track));
         }
-        const known = written.get(id), fresh = known?.section !== entry.section;
-        const last = fresh ? (floating ? { x: 0, y: 0 } : undefined) : known;
+        target = clampFloatOffset(target, entry.slack, dpr);
+        const fresh = entry.offset === null;
+        const last = entry.offset ?? (floating ? { x: 0, y: 0 } : undefined);
         let offset = target;
         if (last && floating) {
           offset = { x: toward(last.x, target.x), y: toward(last.y, target.y) };
@@ -360,10 +372,9 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
           entry.section.style.setProperty('--float-x', `${offset.x}px`);
           entry.section.style.setProperty('--float-y', `${offset.y}px`);
           if (floating) entry.section.style.willChange = 'translate';
-          written.set(id, { ...offset, section: entry.section });
+          entry.offset = offset;
         }
       }
-      for (const id of written.keys()) if (!registry.current.has(id)) written.delete(id);
       jump = false;
       timer = window.setTimeout(tick, delay * 1000);
     };
@@ -373,7 +384,10 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     return () => {
       window.clearTimeout(timer); kick.current = null;
       element.style.removeProperty('transform'); element.style.removeProperty('will-change');
-      for (const entry of registry.current.values()) for (const property of ['--float-x', '--float-y', 'will-change']) entry.section.style.removeProperty(property);
+      for (const entry of registry.current.values()) {
+        entry.offset = null;
+        for (const property of ['--float-x', '--float-y', 'will-change']) entry.section.style.removeProperty(property);
+      }
     };
   }, [layoutEditing, floating, motionIntervalSeconds]);
 
@@ -483,9 +497,9 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     </div>
     {!embedded && !native && <nav className="display-help" aria-label="Display controls">
       <button className="button display-control" onClick={toggleFullscreen}><Icon name="monitor" size={15} />Fullscreen · F</button>
-      <a className="button display-control" href="/" onClick={event => { if (!liveOpener()) return; event.preventDefault(); leaveDisplay('/'); }}><Icon name="home" size={15} />Home · Esc</a>
-      <a className="button display-control" href="/editor" onClick={event => { if (!liveOpener()) return; event.preventDefault(); leaveDisplay('/editor'); }}><Icon name="edit" size={15} />Edit display · E</a>
-      {opened && <button className="button display-control display-close" onClick={() => leaveDisplay('/editor')}><Icon name="close" size={15} />Close display</button>}
+      <a className="button display-control" href="/" onClick={event => { if (!opened && !liveOpener()) return; event.preventDefault(); leaveDisplay('/', opened); }}><Icon name="home" size={15} />Home · Esc</a>
+      <a className="button display-control" href="/editor" onClick={event => { if (!opened && !liveOpener()) return; event.preventDefault(); leaveDisplay('/editor', opened); }}><Icon name="edit" size={15} />Edit display · E</a>
+      {opened && <button className="button display-control display-close" onClick={() => leaveDisplay('/editor', opened)}><Icon name="close" size={15} />Close display</button>}
     </nav>}
   </Surface>;
 }
