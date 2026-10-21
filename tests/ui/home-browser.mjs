@@ -451,7 +451,9 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     assert.equal(extraPage, false, 'Open display from Edit display reuses the window Home opened');
     assert.equal(context.pages().length, 2);
     await window.locator('.display-page').waitFor();
-    const closed = window.waitForEvent('close'); await window.keyboard.press('Escape'); await closed;
+    const closed = window.waitForEvent('close');
+    await window.keyboard.press('Escape').catch(error => { if (!window.isClosed()) throw error; });
+    await closed;
     assert.equal(context.pages().length, 1, 'the script-opened display closes back to its opener');
     // Directly opened displays navigate in their own tab (#438), while #436 owns popup closure.
     const direct = await context.newPage();
