@@ -7,7 +7,7 @@ short note, air quality, sun and moon times, and an optional dim screen preview.
 All modules are optional. Drag and resize widgets on a snapping grid, choose
 adaptive sizes and outline/digital/analog clocks, or add a dim local photo.
 
-**Current state: local Home/display/editor integration under verification.**
+**Current state: Home/display/editor integration verified locally.**
 The selected approach is a custom local web dashboard plus a Windows helper.
 The React UI, local API, persistence, weather and RAM-only snapshot handoff are implemented.
 Device-area weather with a Toronto fallback, editable presets and reminders,

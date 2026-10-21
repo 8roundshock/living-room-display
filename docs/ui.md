@@ -15,16 +15,16 @@ The app has three pages (#438), chosen by `pageForPath` in `src/client/route.ts`
 at `/` (and any other extension-less path), **Edit display** at `/editor` and the ambient
 display at `/display`. Their titles are "Still · Home", "Still · Edit display" and
 "Still · Display". Home and Edit display share one header (`StudioHeader`, 64 px from
-701 CSS px, 72 px at 480 px and narrower): the brand goes to Home ("Still home"), a
-**Pages** nav holds **Home** and **Edit display** with `aria-current="page"` on the
-current one (at 480 px or narrower only the other page's link shows), and **Open
-display** (icon-only at 480 px or narrower, still named "Open display") targets one
-named window, `still-display`, shared with #436, so repeated clicks from the same tab
-reuse that window rather than opening another tab each time. The browser finds a named
-window only from the tab that opened it: a click from an unrelated tab (each Start menu
-launch opens one) opens a second display tab, which #464 tracks. The link has no
-`rel="noreferrer"`, which would sever the window name. All three are plain links, so Edit display's leave prompt
-still guards an unsaved draft. Only `/editor` may ask for device location
+701 CSS px; below that it has automatic height, a 72 px minimum and room for the
+hint below the controls): the brand goes to Home ("Still home"), a **Pages** nav
+holds **Home** and **Edit display** with `aria-current="page"` on the current one
+(at 480 px or narrower only the other page's link shows). **Open display** is
+icon-only at 480 px or narrower and retains its accessible name. It uses the shared
+window helper and named window `still-display`; **Show display** reuses that tab's
+open display and **Close display** closes it. A display opened from an unrelated
+tab retires the older display through the same-origin channel, stopping its polls
+and wake lock. Page-navigation links still guard an unsaved Edit display draft;
+opening a display leaves the editor in place. Only `/editor` may ask for device location
 (`Permissions-Policy: geolocation=(self)`); Home and the display send `geolocation=()`.
 
 ## Home
@@ -587,12 +587,17 @@ while the picker is open, so every tab's default contents still fit at 1280×720
 is gone for good once a location is saved. **Hide location tip** dismisses it in this
 browser only (`localStorage`); no key joins the saved data, so older releases still
 read it. Its buttons are 44 px targets, **Hide location tip** 44 × 44 (#349); the card is
-88 px tall and the default Widgets tab still fits beside it at 1280×720 and 1280×600. At
-1024×600 and 760×600 the Widgets tab then scrolls by 58 px (Last screen below the fold,
-cued by the panel's bottom fade) and fits again once the tip is hidden. That is a
-deliberate trade-off (#310): only dropping the 44 px targets or one of the card's two
-actions would make room, and the card is temporary. `tests/ui/first-run-browser.mjs`
-covers the card.
+88 px tall and the six-row default Widgets tab fits beside it at 1280×720. At
+600 px high, the default board from #435 needs internal panel scrolling: measured
+52 px at 1280 px wide and 112 px at 1024/760 px wide with the tip; hiding the tip
+leaves 0 px and 14 px respectively. This is at most one added Calendar row beyond
+the five-row #310 trade-off. The six-row board keeps the existing control sizes
+(44 px row actions, 40 px desktop Add widget); every row and action remains
+keyboard- and pointer-reachable, with no body overflow. The original five-row
+board still fits at 1280×600, scrolls by less than the card at 1024/760×600 and fits
+there once the tip is hidden. `tests/ui/first-run-browser.mjs` covers both boards,
+with and without the tip; the temporary card does not shrink controls to fit.
+
 
 **Time & units** in the Weather tab holds Units (°C · metric or °F · imperial) and
 **Time format** (12-hour or 24-hour) side by side, so the format stays reachable with
@@ -899,8 +904,11 @@ is left-anchored, and centred vertically, each axis capped at 6% of the display;
 under 2 device pixels it stays still) through `--float-x`/`--float-y` on the section,
 applied with the individual `translate` property, so fit, layout and the entrance
 keyframes on `.widget-content` never change. A widget's cell is its section box
-without that translation; tests that check cells subtract it. Every widget starts
-where it was placed. With **Float gently** off, or when the display prefers reduced
+without that translation; tests that check cells subtract it and independently
+verify complete text/atomic content bounds stay inside authored cells and remain disjoint. Content growth
+(#479) and composition-driven alignment changes, such as Reminders switching between
+top and bottom anchoring, remeasure slack and clamp the current offset before paint.
+Every widget starts where it was placed. With **Float gently** off, or when the display prefers reduced
 motion, the plane and the widget content jump to the next spot at each interval
 boundary instead, without animation. The plane's opacity is always 1; only the
 first-load entrance may start content from 0. **Swap places** (`rearrange`, opt-in)
