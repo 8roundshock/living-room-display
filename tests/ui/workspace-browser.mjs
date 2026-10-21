@@ -416,8 +416,25 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     }
     for (const viewport of [{ width: 390, height: 700 }, { width: 390, height: 480 }, { width: 640, height: 300 }]) {
       await open(viewport);
-      // #438: narrow headers keep their heights (72 px at 480 px or narrower, else 78); only the other page's link shows and Open display is icon-only.
-      assert.equal((await page.locator('.studio-header').boundingBox()).height, viewport.width <= 480 ? 72 : 78, `${viewport.width}x${viewport.height}: header height`);
+      // #360 keeps the hint on its own row below 700 px; #438 adds the Pages nav to the 44 px control row.
+      // Pin that two-row geometry instead of the pre-hint fixed header height.
+      const header = await page.locator('.studio-header').evaluate(element => {
+        const box = element.getBoundingClientRect(), hint = element.querySelector('.open-display-hint').getBoundingClientRect();
+        const controls = [...element.querySelectorAll('.brand, .studio-page-link, .open-display, .close-display')].filter(control => control.checkVisibility()).map(control => {
+          const rect = control.getBoundingClientRect();
+          return { name: control.getAttribute('aria-label') ?? control.textContent.trim(), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height };
+        });
+        return { top: box.top, bottom: box.bottom, height: box.height, hint: { top: hint.top, bottom: hint.bottom, height: hint.height }, controls };
+      });
+      for (const control of header.controls) {
+        assert.ok(control.width >= 44 && control.height >= 44, `${control.name}: 44 px header target`);
+        assert.ok(control.left >= 0 && control.right <= viewport.width, `${control.name}: inside the viewport`);
+        assert.ok(Math.abs(control.top - header.top - 12) <= 1, `${control.name}: control row starts after 12 px padding`);
+      }
+      const controlBottom = Math.max(...header.controls.map(control => control.bottom));
+      assert.ok(Math.abs(header.hint.top - controlBottom - 6) <= 1, 'the hint has its own row, 6 px below the controls');
+      assert.ok(Math.abs(header.height - (24 + 44 + 6 + header.hint.height + 1)) <= 1, 'header contains both rows, 12 px vertical padding and 1 px border without extra space');
+      assert.ok(Math.abs(header.bottom - header.hint.bottom - 13) <= 1, 'the hint clears the bottom padding and border');
       if (viewport.width <= 480) {
         assert.deepEqual(await page.getByRole('navigation', { name: 'Pages' }).getByRole('link').allInnerTexts(), ['Home']);
         assert.equal(await page.locator('.open-display-label').isVisible(), false); await inView(page.getByRole('link', { name: 'Open display' }), 'icon-only Open display');
