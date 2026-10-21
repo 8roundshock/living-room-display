@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type {
   AppState,
+  DaylightBrightness,
   LocationResult,
   Settings,
   WeatherState,
@@ -57,6 +58,8 @@ import {
   withAppearance,
 } from './model';
 import { browserLocationPlatform, getDeviceLocation } from './location';
+import { defaultDaylightRange } from './daylight';
+import { DaylightStatus } from './DaylightStatus';
 import {
   crowdedOutMessage,
   keepsSavedChanges,
@@ -205,6 +208,7 @@ function Range({
   onChange,
   display,
   spoken,
+  extra,
 }: {
   label: string;
   value: number;
@@ -215,11 +219,17 @@ function Range({
   display?: string;
   /** The value in words with its unit (#342); defaults to the visible text. */
   spoken?: string;
+  /** A control on the label line, before the value (Brightness's mode, #439). */
+  extra?: React.ReactNode;
 }) {
+  // A label names its first labelable descendant, so a block with its own control on the label line
+  // is a div; the slider keeps its aria-label name (#466 review).
+  const Block = extra ? 'div' : 'label';
   return (
-    <label className="control-block">
+    <Block className="control-block">
       <span className="control-label">
         <span>{label}</span>
+        {extra}
         {/* The slider speaks its own value (aria-valuetext); the visible copy is not announced again. */}
         <output aria-hidden="true">{display ?? value}</output>
       </span>
@@ -239,7 +249,7 @@ function Range({
           } as React.CSSProperties
         }
       />
-    </label>
+    </Block>
   );
 }
 
@@ -878,6 +888,54 @@ export function Editor({
   ) {
     change((previous) => withAppearance(previous, { [key]: value }));
   }
+  // Brightness mode (#439). Like Animation it is not part of a look, so the style label stays.
+  // Fixed ↔ Follow daylight in one session returns to the last range chosen here.
+  const lastDaylight = useRef<DaylightBrightness | null>(
+    state.settings.appearance.daylightBrightness,
+  );
+  const brightnessModeFocus = useRef(false);
+  function setDaylightBrightness(range: DaylightBrightness | null) {
+    change((previous) => ({
+      ...previous,
+      appearance: { ...previous.appearance, daylightBrightness: range },
+    }));
+  }
+  function brightnessMode(daylight: boolean) {
+    const current = draftRef.current.appearance.daylightBrightness;
+    if (daylight === !!current) return;
+    if (current) lastDaylight.current = current;
+    brightnessModeFocus.current = true;
+    setDaylightBrightness(
+      daylight
+        ? (lastDaylight.current ??
+            defaultDaylightRange(draftRef.current.appearance.brightness))
+        : null,
+    );
+  }
+  /** Moving one end past the other carries the other along, so Dimmest never exceeds Brightest. */
+  function daylightEnd(end: keyof DaylightBrightness, value: number) {
+    const range = draftRef.current.appearance.daylightBrightness;
+    if (!range) return;
+    setDaylightBrightness(
+      end === 'dimmest'
+        ? { dimmest: value, brightest: Math.max(value, range.brightest) }
+        : { dimmest: Math.min(value, range.dimmest), brightest: value },
+    );
+  }
+  const followDaylight = draft.appearance.daylightBrightness !== null;
+  // The mode buttons move between the Fixed slider's label line and the daylight group; keep focus
+  // on the pressed one, and let Save or Cancel return to it (#229).
+  useLayoutEffect(() => {
+    if (!brightnessModeFocus.current) return;
+    brightnessModeFocus.current = false;
+    const pressed = document.getElementById(
+      followDaylight ? 'brightness-mode-daylight' : 'brightness-mode-fixed',
+    );
+    if (pressed) {
+      pressed.focus();
+      lastEdited.current = pressed;
+    }
+  }, [followDaylight]);
   async function deviceLocation(automatic: boolean) {
     if (saving || locationBusy) return;
     const epoch = ++locationEpoch.current;
@@ -1694,14 +1752,86 @@ export function Editor({
                     </button>
                   ))}
                 </div>
-                <Range
-                  label="Brightness"
-                  min={10}
-                  max={100}
-                  value={Math.round(draft.appearance.brightness * 100)}
-                  display={`${Math.round(draft.appearance.brightness * 100)}%`}
-                  onChange={(value) => appearance('brightness', value / 100)}
-                />
+                {/* #439: Fixed (one level) or Follow daylight (Dimmest to Brightest, peaking at
+                    solar noon). The mode sits on the label line, so the default Fixed tab keeps
+                    its height at 1280×720. */}
+                {(() => {
+                  const modes = (
+                    <span
+                      className="brightness-mode"
+                      role="group"
+                      aria-label="Brightness mode"
+                    >
+                      <button
+                        type="button"
+                        id="brightness-mode-fixed"
+                        aria-pressed={!followDaylight}
+                        onClick={() => brightnessMode(false)}
+                      >
+                        Fixed
+                      </button>
+                      <button
+                        type="button"
+                        id="brightness-mode-daylight"
+                        aria-pressed={followDaylight}
+                        onClick={() => brightnessMode(true)}
+                      >
+                        Follow daylight
+                      </button>
+                    </span>
+                  );
+                  const range = draft.appearance.daylightBrightness;
+                  if (!range)
+                    return (
+                      <Range
+                        label="Brightness"
+                        min={10}
+                        max={100}
+                        value={Math.round(draft.appearance.brightness * 100)}
+                        display={`${Math.round(draft.appearance.brightness * 100)}%`}
+                        onChange={(value) => appearance('brightness', value / 100)}
+                        extra={modes}
+                      />
+                    );
+                  const dimmest = Math.round(range.dimmest * 100),
+                    brightest = Math.round(range.brightest * 100);
+                  return (
+                    <div
+                      className="control-block brightness-daylight"
+                      role="group"
+                      aria-labelledby="brightness-daylight-label"
+                    >
+                      <span className="control-label">
+                        <span id="brightness-daylight-label">Brightness</span>
+                        {modes}
+                        <output>
+                          {dimmest === brightest ? `${dimmest}%` : `${dimmest}–${brightest}%`}
+                        </output>
+                      </span>
+                      <Range
+                        label="Dimmest"
+                        min={10}
+                        max={100}
+                        value={dimmest}
+                        display={`${dimmest}%`}
+                        onChange={(value) => daylightEnd('dimmest', value / 100)}
+                      />
+                      <Range
+                        label="Brightest"
+                        min={10}
+                        max={100}
+                        value={brightest}
+                        display={`${brightest}%`}
+                        onChange={(value) => daylightEnd('brightest', value / 100)}
+                      />
+                      <DaylightStatus
+                        range={range}
+                        settings={draft}
+                        weatherZone={state.weather.location.timezone}
+                      />
+                    </div>
+                  );
+                })()}
                 <Range
                   label="Text size"
                   min={70}

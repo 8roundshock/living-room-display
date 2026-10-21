@@ -16,7 +16,7 @@ import {
   LEGACY_FIXTURE, LEGACY_FIXTURE_BLOBS, PREVIOUS_READER, VENDORED_BLOBS, assertPreviousReaderAccepts, assertPreviousReaderRejects,
 } from './compat/previous-reader.ts';
 import { defaultSettings as previousDefaults } from './compat/d66832b/shared/defaults.ts';
-import { persistableData as previousPersistableData } from './compat/d66832b/server/persistence.ts';
+import { AT_REST as PREVIOUS_AT_REST, persistableData as previousPersistableData } from './compat/d66832b/server/persistence.ts';
 import { WIDGET_CATALOG as PREVIOUS_CATALOG } from './compat/d66832b/shared/widgets.ts';
 import { defaultSettings as legacyDefaults } from './compat/bedca44/shared/defaults.ts';
 import { WIDGET_CATALOG as LEGACY_CATALOG, defaultWidgetGrid as legacyGrid } from './compat/bedca44/shared/widgets.ts';
@@ -105,6 +105,10 @@ test('negative controls: the previous release still rejects an unknown key and i
   }
 });
 
+/** AT_REST keys the previous release knows (optional omission) and those it does not (required, #439). */
+const KNOWN_AT_REST = Object.keys(AT_REST.appearance).filter(key => key in PREVIOUS_AT_REST.appearance) as (keyof typeof AT_REST.appearance)[];
+const NEW_AT_REST = Object.keys(AT_REST.appearance).filter(key => !(key in PREVIOUS_AT_REST.appearance)) as (keyof typeof AT_REST.appearance)[];
+
 test('#272 every value omitted at rest is readable by the previous release when written, so the omission is optional', () => {
   // Default data with every omitted value present: colour accent, Subtle and the default widgetData sections,
   // in settings and in a saved style. Decision (#272): keep the omission; nothing on disk changes format here.
@@ -117,16 +121,87 @@ test('#272 every value omitted at rest is readable by the previous release when 
     for (const key of Object.keys(AT_REST.appearance)) assert.equal(key in appearance, false, `${key} is omitted at rest`);
   }
   assert.equal('widgetData' in atRest, false, 'default widgetData is omitted at rest');
-  // A future AT_REST key that the previous release does not know fails below: its omission is then
-  // required, not optional, until the baseline knows it.
+  assertPreviousReaderAccepts('data', { ...full, settings: atRest }, 'the at-rest form');
+  // Keys the previous release does not know (see the #439 test below) are left out here: their
+  // omission is required, not optional, until the baseline knows them.
+  assert.deepEqual(KNOWN_AT_REST, ['accentMode', 'animation']);
   const written = JSON.parse(JSON.stringify(full)) as Loose;
   for (const appearance of [written.settings.appearance, written.settings.savedPresets[0].visual.appearance]) {
-    for (const [key, value] of Object.entries(AT_REST.appearance)) assert.equal(appearance[key], value, `${key} is written`);
+    for (const key of NEW_AT_REST) delete appearance[key];
+    for (const key of KNOWN_AT_REST) assert.equal(appearance[key], AT_REST.appearance[key], `${key} is written`);
   }
   assert.deepEqual(written.settings.widgetData, colorAccentDefaults().widgetData, 'every default widgetData section is written');
   assertPreviousReaderAccepts('data', written, 'every omitted value written in state.json');
   const exported = { version: written.version, exportedAt: new Date(0).toISOString(), settings: written.settings, reminders: [] };
   assertPreviousReaderAccepts('import', exported, 'every omitted value written in an export');
+});
+
+test('#439 Fixed brightness omits daylightBrightness at rest, which the previous release requires', () => {
+  assert.deepEqual(NEW_AT_REST, ['daylightBrightness'], 'the previous release does not know the Follow daylight key');
+  const settings = colorAccentDefaults();
+  settings.savedPresets = [{ id: 'synthetic-style', name: 'Synthetic style', visual: getVisual(settings) }];
+  const full = { version: 1 as const, settings, reminders: [], photoAsset: null };
+  assert.equal(full.settings.appearance.daylightBrightness, null, 'Fixed in memory and in API responses');
+  const written = JSON.parse(JSON.stringify(full)) as Loose;
+  assertPreviousReaderRejects('data', written, 'daylightBrightness: null written out');
+  assertPreviousReaderRejects('import', { version: 1, exportedAt: new Date(0).toISOString(), settings: written.settings, reminders: [] }, 'daylightBrightness: null in an export');
+  const atRest = persistableData(full);
+  assert.equal('daylightBrightness' in (atRest.settings as Loose).appearance, false);
+  assert.equal('daylightBrightness' in (atRest.settings as Loose).savedPresets[0].visual.appearance, false);
+  assertPreviousReaderAccepts('data', atRest, 'Fixed at rest');
+});
+
+const DAYLIGHT = { dimmest: 0.25, brightest: 0.75 };
+const daylightOf = (file: Loose) => file.settings.appearance.daylightBrightness;
+/** The documented strip (docs/install.md): delete every daylightBrightness, which is Fixed at `brightness`. */
+function stripDaylight(file: Loose): Loose {
+  const copy = structuredClone(file);
+  for (const appearance of [copy.settings?.appearance, ...(copy.settings?.savedPresets ?? []).map((preset: Loose) => preset?.visual?.appearance)]) {
+    if (appearance && typeof appearance === 'object') delete appearance.daylightBrightness;
+  }
+  return copy;
+}
+
+test('#439 Follow daylight is a documented rollback exception until Fixed is saved again or the key is stripped', async () => {
+  const directory = await temporary('lrd-rollback-daylight-'), target = await temporary('lrd-rollback-daylight-import-');
+  const app = await application(directory), imported = await application(target);
+  try {
+    // A fresh folder is Fixed and writes no key.
+    const fresh = await readJson(directory, 'state.json');
+    assert.equal('daylightBrightness' in fresh.settings.appearance, false, 'a fresh folder omits the key');
+    await app.send('PATCH', '/api/settings', { appearance: { daylightBrightness: DAYLIGHT } });
+    const following = await readJson(directory, 'state.json');
+    assert.deepEqual(daylightOf(following), DAYLIGHT, 'state.json carries the range');
+    assertPreviousReaderRejects('data', following, 'Follow daylight state.json');
+    assertPreviousReaderAccepts('data', stripDaylight(following), 'Follow daylight state.json after the strip');
+    assert.equal(stripDaylight(following).settings.appearance.brightness, following.settings.appearance.brightness, 'the strip keeps the Fixed level');
+    const exported = await app.send('GET', '/api/export');
+    assert.deepEqual(daylightOf(exported), DAYLIGHT, 'the export carries the range');
+    assertPreviousReaderRejects('import', exported, 'Follow daylight export');
+    assertPreviousReaderAccepts('import', stripDaylight(exported), 'Follow daylight export after the strip');
+    // A saved style made while following daylight carries it too.
+    await app.send('PATCH', '/api/settings', { savedPresets: [{ id: 'daylight-style', name: 'Daylight style', visual: getVisual(app.store.snapshot().settings) }] });
+    const styled = await readJson(directory, 'state.json');
+    assert.deepEqual(styled.settings.savedPresets[0]?.visual.appearance.daylightBrightness, DAYLIGHT);
+    // Back to Fixed: settings write no key again; the saved style still needs stripping or deleting.
+    await app.send('PATCH', '/api/settings', { appearance: { daylightBrightness: null } });
+    const fixedAgain = await readJson(directory, 'state.json');
+    assert.equal('daylightBrightness' in fixedAgain.settings.appearance, false, 'Fixed omits the key again');
+    assertPreviousReaderRejects('data', fixedAgain, 'Fixed settings with a Follow daylight saved style');
+    assertPreviousReaderAccepts('data', stripDaylight(fixedAgain), 'after stripping the saved style');
+    await app.send('PATCH', '/api/settings', { savedPresets: [] });
+    await assertFilesAccepted(directory, 'Fixed without the style, after one more save', false);
+    await app.send('PATCH', '/api/settings', { units: 'imperial' });
+    await assertFilesAccepted(directory, 'Fixed, state.backup.json after one more save');
+    assertPreviousReaderAccepts('import', await app.send('GET', '/api/export'), 'Fixed export');
+    // Importing a Follow daylight export restores the range in the newer app.
+    await imported.send('POST', '/api/import', exported);
+    assert.deepEqual(daylightOf(await readJson(target, 'state.json')), DAYLIGHT);
+    assert.deepEqual(imported.store.snapshot().settings.appearance.daylightBrightness, DAYLIGHT);
+  } finally {
+    await app.close(); await imported.close();
+    await rm(directory, { recursive: true, force: true }); await rm(target, { recursive: true, force: true });
+  }
 });
 
 test('(a) a fresh data folder, Native colours (#75) included, is readable by the previous release', async () => {

@@ -28,17 +28,23 @@ export const location = z.object({
   longitude: z.number().min(-180).max(180), timezone: z.union([timezone, z.literal('auto')]),
 }).strict();
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex color');
+const brightnessLevel = z.number().min(0.1).max(1);
+/** Follow daylight (#439): a whole range, replaced whole by PATCH; null is Fixed. */
+const daylightBrightness = z.object({ dimmest: brightnessLevel, brightest: brightnessLevel }).strict()
+  .refine(range => range.dimmest <= range.brightest, { message: 'Dimmest must not be brighter than Brightest', path: ['dimmest'] })
+  .nullable();
 // Field schemas carry no defaults: zod applies .default() inside .partial(), which made a
 // brightness-only PATCH reset a saved clock style (#83). Only the persisted reader fills defaults.
 const appearanceFields = {
   preset: z.enum(['phone', 'room', 'night', 'custom']), accentColor: color, textColor: color,
-  brightness: z.number().min(0.1).max(1), fontScale: z.number().min(0.7).max(1.5),
+  brightness: brightnessLevel, fontScale: z.number().min(0.7).max(1.5),
   fontFamily: z.enum(['sans', 'serif', 'mono']), layout: z.enum(['balanced', 'minimal', 'weather-first']),
   motionEnabled: z.boolean(), motionIntervalSeconds: z.number().int().min(30).max(1800),
   fadeSeconds: z.number().min(0).max(10),
   clockStyle: z.enum(['outline', 'digital', 'analog']),
   accentMode: z.enum(ACCENT_MODES),
   animation: z.enum(ANIMATION_LEVELS),
+  daylightBrightness,
 };
 /** Persisted settings, saved styles and imports: additive fields read as their defaults. */
 const appearance = z.object({
@@ -46,6 +52,7 @@ const appearance = z.object({
   clockStyle: appearanceFields.clockStyle.default('outline'),
   accentMode: appearanceFields.accentMode.default(AT_REST.appearance.accentMode),
   animation: appearanceFields.animation.default(AT_REST.appearance.animation),
+  daylightBrightness: appearanceFields.daylightBrightness.default(AT_REST.appearance.daylightBrightness),
 }).strict();
 /** PATCH: exactly the supplied keys, never a default. */
 const appearancePatch = z.object(appearanceFields).strict().partial();

@@ -169,9 +169,32 @@ sent by itself; data saved before #277 may still carry a stale label until the n
 appearance edit. Rendering must not depend on it: use `matchingBuiltinPreset()` (#150).
 The four values are the ones the previous release requires, so no stored shape changes.
 
+`appearance.daylightBrightness` is the brightness mode (#439). `null`, the default
+and what data without the key reads as, is **Fixed**: the display shows `brightness`,
+exactly as before. `{ "dimmest": 0.2, "brightest": 0.8 }` is **Follow daylight**:
+both values in `brightness`'s 0.1–1 range, with `dimmest` ≤ `brightest` (equal is a
+flat line). A PATCH sends the whole range or `null`; a partial range, Dimmest above
+Brightest, a value out of range or an unknown key returns 400. `brightness` stays
+the Fixed level in both modes, so returning to Fixed restores it. The browser computes
+the value; the API and the server never do. For the start of each minute it takes the
+sun's elevation at the saved `location` (with [astronomy.ts](../src/client/astronomy.ts),
+no network) and shows
+`dimmest + (brightest − dimmest) · max(0, sin(elevation)) / sin(elevation at solar noon)`,
+using the solar noon of the current solar day and a noon elevation of at least 5°.
+So it is Dimmest from sunset to sunrise and through a polar night, Brightest at local
+solar noon, above Dimmest all through a polar day, and a minute never changes it by
+more than about 1% of the range; around midwinter beyond about 61° latitude, where the
+noon sun stays under 5°, it peaks lower ([src/client/daylight.ts](../src/client/daylight.ts)).
+The ambient page glides to each new value over 10 seconds; editor canvases follow the
+draft at once. Night, Native colours and per-element opacity all scale from that one
+value through the same `--ambient-brightness` cap. Built-in styles keep the mode (they
+set only the Fixed level), Reset appearance returns to Fixed, and saved styles store
+it. At rest `null` is omitted; the previous installed release (`d66832b`) does not know
+the key, so a saved range is a [rollback exception](install.md#additive-data-and-rollback-compatibility-84).
+
 Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
-`accentMode` or `animation` keeps its saved value (#83). Only the persisted reader
-fills defaults.
+`accentMode`, `animation` or `daylightBrightness` keeps its saved value (#83). Only
+the persisted reader fills defaults.
 
 Planned catalog ids (entries with `status: 'planned'` in `src/shared/widgets.ts`;
 none since #157 and #171 activated all six #78 ids) appear in `widgets`, `widgetOverrides` and `widgetGrid.placements` but
@@ -456,11 +479,14 @@ weather, snapshot pixels, and native tokens are excluded. Store backups privatel
 
 At rest, `state.json`, `state.backup.json` and exports omit additive values while
 they equal the current read default: `appearance.accentMode` `color`,
-`appearance.animation` `subtle`, default `widgetData` sections, and disabled widget
-ids the previous installed release does not know. The previous release (`d66832b`)
-reads every one of these keys and knows every widget id, so all widget ids are
-written and omitting the other values is optional. It is kept unchanged (#272) so a
-reader bump does not change the data format, and it remains the mechanism for a
-future additive key or new widget id that the previous release does not know. API
+`appearance.animation` `subtle`, `appearance.daylightBrightness` `null` (Fixed,
+#439), default `widgetData` sections, and disabled widget ids the previous installed
+release does not know. The previous release (`d66832b`) knows every widget id and
+reads every one of these keys except `daylightBrightness`, so all widget ids are
+written and omitting `accentMode`, `animation` and `widgetData` is optional. It is
+kept unchanged (#272) so a reader bump does not change the data format. Omitting
+`daylightBrightness` is required: it is the mechanism that keeps Fixed data readable
+by `d66832b`, as it would be for any future additive key or new widget id that the
+previous release does not know. API
 responses (`/api/state`, the `PATCH /api/settings` response and the native session)
 always include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).

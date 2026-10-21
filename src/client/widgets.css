@@ -267,3 +267,8 @@
 .grid-ambient .image-placeholder .ambient-label, .grid-ambient .image-placeholder .ambient-description { margin: 0; }
 .grid-ambient[data-motion-surface='canvas-editing'] .ambient-widget, .grid-ambient[data-motion-surface='canvas-editing'] .widget-content { animation: none; }
 .grid-ambient.reduce-motion .ambient-content, .grid-ambient.static .ambient-content { transition: none; }
+/* Follow daylight (#439): the ambient page glides to each minute's brightness (Display.tsx sets
+   --brightness-transition only there). A brightness glide is not motion, so it stays with reduced
+   motion and with Drift and fade off; Fixed changes stay immediate. */
+.grid-ambient[data-brightness='daylight'] > .ambient-content { transition: opacity var(--fade-duration, 1800ms) ease-in-out, filter var(--brightness-transition, 0s) ease-in-out; }
+.grid-ambient[data-brightness='daylight']:is(.reduce-motion, .static) > .ambient-content { transition: filter var(--brightness-transition, 0s) ease-in-out; }
