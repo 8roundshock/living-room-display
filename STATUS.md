@@ -1,5 +1,14 @@
 # Project status
 
+## Home Note follow-up (#512)
+
+A clean open Note now follows another page's saved text without creating a false
+draft or unload prompt. Genuine local typing remains intact, Discard uses the latest
+saved text, and typing back to saved clears the retained draft. The focused browser
+regression failed on the prior source and passed with this fix; the earlier Note
+Save/Discard/Clear-Undo sweep and the full Home browser suite also passed. Build and
+all 481 unit tests passed with Node 24. This records local source verification only.
+
 Reviewed locally on 2026-10-21 for [#447](https://github.com/8roundshock/living-room-display/issues/447).
 This report records the verified `codex/wave3-local` source checkpoint before
 publication. Current-head CI, reviewed merging and installation are coordinated

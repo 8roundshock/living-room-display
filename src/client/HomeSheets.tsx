@@ -420,7 +420,15 @@ function NoteSheet({ context, onDirty }: { context: HomeContext; onDirty: (dirty
   const [showWanted, setShowWanted] = useState(true);
   const [busy, setBusy] = useState(false);
   const differs = limitNote(text).trim() !== saved;
+  const previousSaved = useRef(saved);
   useEffect(() => { onDirty(differs); }, [differs]);
+  useEffect(() => {
+    const previous = previousSaved.current;
+    previousSaved.current = saved;
+    // A poll must not turn untouched text into a draft, or replace genuine local typing (#512).
+    if (saved !== previous && limitNote(text).trim() === previous) resetText(saved);
+    else if (!differs) forget('note.text');
+  }, [saved, text, differs]);
   function resetText(value: string) {
     setText(value);
     // Updating the field also caches it. Saved/discarded text is no longer a draft: clear the
