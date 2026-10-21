@@ -195,7 +195,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(timer); }, []);
   // #436 Keep the screen on: only the ambient page, and only full screen or as the native screensaver.
   const wakeLock = useWakeLock(!embedded && settings.screen.keepAwake, native);
-  // A display the editor opened (window.opener) closes back to it (#436); otherwise the editor opens here.
+  // Remember that this display is script-opened, even after its editor has closed (#480).
   const [opened, setOpened] = useState(false);
   useEffect(() => { if (!embedded && !native) setOpened(liveOpener() !== null); }, [embedded, native]);
 
@@ -216,11 +216,11 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
       if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen(); showControls(); }
-      if (event.key === 'Escape' || event.key.toLowerCase() === 'e') leaveDisplay();
+      if (event.key === 'Escape' || event.key.toLowerCase() === 'e') leaveDisplay('/editor', opened);
       if (event.key === 'Tab') showControls();
     };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
-  }, [embedded, native, showControls]);
+  }, [embedded, native, opened, showControls]);
   const effectiveCycle = swapsAllowed ? compositionOverride ?? cycle : 0;
   const enabledKey = JSON.stringify([settings.widgets, settings.preview.enabled]);
   const gridKey = JSON.stringify(settings.widgetGrid);
@@ -487,8 +487,8 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     </div>
     {!embedded && !native && <nav className="display-help" aria-label="Display controls">
       <button className="button display-control" onClick={toggleFullscreen}><Icon name="monitor" size={15} />Fullscreen · F</button>
-      <a className="button display-control" href="/editor" onClick={event => { if (!liveOpener()) return; event.preventDefault(); leaveDisplay(); }}><Icon name="settings" size={15} />Editor · Esc</a>
-      {opened && <button className="button display-control display-close" onClick={leaveDisplay}><Icon name="close" size={15} />Close display</button>}
+      <a className="button display-control" href="/editor" onClick={event => { if (!opened && !liveOpener()) return; event.preventDefault(); leaveDisplay('/editor', opened); }}><Icon name="settings" size={15} />Editor · Esc</a>
+      {opened && <button className="button display-control display-close" onClick={() => leaveDisplay('/editor', opened)}><Icon name="close" size={15} />Close display</button>}
     </nav>}
   </Surface>;
 }

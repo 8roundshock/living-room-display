@@ -308,9 +308,11 @@ motion or the Off animation level.
   Room Display - Show display, or press F on the display" (#360). Unmodified **F** toggles fullscreen without stealing typing, modifier
   shortcuts or repeats. Manual display controls appear on pointer movement or Tab and
   hide after 3.5 seconds without another supported interaction. Focused controls stay
-  visible. Esc or E on a display the editor opened (a live same-origin
-  `window.opener`) focuses the editor and closes the display, as does its **Close
-  display** control (shown only then); otherwise Esc or E opens the editor in that tab.
+visible. Esc or E on a display the editor opened focuses the editor if it is still
+open and closes the display, as does its **Close display** control (shown only for
+an editor-opened display). It remembers that origin after the editor closes (#480).
+Otherwise Esc or E opens the editor in that tab; if a browser refuses to close an
+editor-opened display, it opens the editor there too.
 
 Only explicit `native=1` presentation hides the document cursor and omits browser
 controls. Browser loading/failure/display and editor/embedded previews retain

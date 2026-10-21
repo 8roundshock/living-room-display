@@ -191,6 +191,29 @@ export async function runScreenQa({ playwright, edge } = {}) {
     }
     checks.push('one display window: three clicks on Open display leave one /display page with focus; the button reads Show display with Close display beside it (and on the display); Close display closes it; Esc on an editor-opened display closes it and leaves one editor');
 
+    // #480 The remembered script-opened state survives the editor closing first.
+    for (const control of ['Close display', 'Escape', 'e']) {
+      const session = await context();
+      const editor = await session.context.newPage();
+      await editor.goto(base + '/editor'); await editor.locator('.studio').waitFor();
+      const popup = session.context.waitForEvent('page');
+      await editor.locator('.open-display').click();
+      const shown = await popup;
+      await shown.locator('.display-close').waitFor({ state: 'attached' });
+      await editor.close();
+      assert.equal(await shown.evaluate(() => !window.opener || window.opener.closed), true, 'the opening editor is gone');
+      if (control === 'Close display') await shown.mouse.move(300, 300);
+      const closed = shown.waitForEvent('close');
+      const action = control === 'Close display'
+        ? shown.locator('.display-close').click()
+        : shown.keyboard.press(control);
+      await action.catch(error => { if (!shown.isClosed()) throw error; });
+      await closed;
+      assert.equal(session.context.pages().length, 0, `${control} closes the display without opening another editor`);
+      await session.close();
+    }
+    checks.push('#480 Close display, Escape and E still close an editor-opened display after its editor has closed');
+
     // (3) A display opened directly retires the older one: it closes (editor-opened) or shows the card and stops polling.
     {
       const session = await context();
