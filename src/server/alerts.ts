@@ -186,21 +186,28 @@ function release(body: ReadableStream | ReadableStreamDefaultReader | null | und
   void body?.cancel().catch(() => undefined);
 }
 
-/** Reads at most `limit` bytes of a JSON body; a longer one fails rather than filling memory. */
-export async function readLimitedJson(response: Response, limit = ALERTS_BODY_LIMIT): Promise<unknown> {
+/** Bounds both success and error bodies before parsing or retaining any provider text. */
+async function readLimitedText(response: Response, limit = ALERTS_BODY_LIMIT): Promise<string> {
   const declared = Number(response.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > limit) { release(response.body); throw new Error('Provider response is too large'); }
-  if (!response.body) return JSON.parse(await response.text());
+  if (!response.body) return '';
   const reader = response.body.getReader(), chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > limit) { release(reader); throw new Error('Provider response is too large'); }
-    chunks.push(value);
-  }
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) { release(reader); throw new Error('Provider response is too large'); }
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks).toString('utf8');
+  } finally { reader.releaseLock(); }
+}
+
+/** Reads at most `limit` bytes of a JSON body; a longer one fails rather than filling memory. */
+export async function readLimitedJson(response: Response, limit = ALERTS_BODY_LIMIT): Promise<unknown> {
+  return JSON.parse(await readLimitedText(response, limit));
 }
 
 class ProviderError extends Error {
@@ -282,7 +289,7 @@ export class AlertsService {
     });
     if (!response.ok) {
       const retryAfter = response.status === 429 || response.status === 503 ? retryAfterMs(response.headers.get('retry-after'), this.#clock.wall()) : null;
-      const body = response.status === 400 ? (await response.text().catch(() => '')).slice(0, 2000) : '';
+      const body = response.status === 400 ? (await readLimitedText(response).catch(() => '')).slice(0, 2000) : '';
       if (response.status !== 400) release(response.body);
       throw new ProviderError(`Provider returned ${response.status}`, response.status, retryAfter, body);
     }
