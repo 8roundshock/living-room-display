@@ -57,6 +57,10 @@ finishing; chat and code comments are not the backlog. Outside users and
 contributors follow the reporting authorization rules below.
 Use plain issue references for unfinished acceptance; GitHub can parse closing
 keywords even inside negated or future-tense phrases.
+GitHub links a closing keyword only to the issue right after it: `Fixes #10, #12`
+closes #10 and leaves #12 open. A PR that resolves several tickets repeats the
+keyword for each one, one per line (`Fixes #10`, then `Fixes #12`)
+([#316](https://github.com/8roundshock/living-room-display/issues/316)).
 
 File reproducible bugs with expected/observed behavior, steps, affected version,
 severity/impact, and relevant evidence. Do not invent bugs or include secrets,
@@ -87,9 +91,9 @@ other workers' changes into a feature commit.
    the log from the chosen base (`origin/main..HEAD` for owner maintenance,
    `upstream/main..HEAD` for fork contributions) for unintended commits.
 5. Verify identity and remotes before a push. Owner maintenance must verify
-   `8roundshock`, exact original origin, and private visibility with the project
-   helper. Contributors verify their own account and fork; never run the owner's
-   helper or broaden shared-account credentials. Push only the topic branch to
+   `8roundshock`, the exact original origin and the exact repository with the
+   project helper. Contributors verify their own account and fork; never run the
+   owner's helper or broaden shared-account credentials. Push only the topic branch to
    the intended repository. Create the PR against the original repository with
    explicit `--base main` and `--head` (for forks, `<your-login>:<branch>`), the
    exact ticket/title format above, and a reviewed multiline `--body-file` in
@@ -105,7 +109,12 @@ other workers' changes into a feature commit.
 7. The author fixes findings, pushes the changes, and requests a reviewer recheck
    of the final commit. Record reviewer identity/role, outcome, and exact reviewed
    SHA in the PR body or comment. Keep this evidence distinct from CI results.
-   Do not install or activate an external review integration.
+   Do not install or activate an external review integration. Before merge, the
+   reviewer checks the PR's linked closing issues
+   (`pr view <n> --json closingIssuesReferences`) against the tickets the PR
+   resolves, with nothing missing and nothing that stays unfinished. A body fix
+   goes through the REST fallback in [development](development.md#github-authentication-on-windows)
+   and leaves the reviewed head unchanged.
 8. Wait for applicable checks/reviews on the current head. Resolve findings; do
    not bypass required reviews or protection. No checks configured is not a pass.
 9. A contributor submits the PR and leaves merging to authorized maintainers;

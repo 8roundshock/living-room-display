@@ -32,6 +32,11 @@
 .grid-ambient [data-glyph="rain"] { --ambient-accent: var(--tone-water); }
 .grid-ambient [data-glyph="storm"] { --ambient-accent: var(--tone-water); }
 .grid-ambient [data-glyph="snow"] { --ambient-accent: var(--tone-sky); }
+/* #251: partly cloudy is its cloud's stone (its sun or moon part carries data-glyph="sun"/"moon"), fog stone, drizzle sea glass. */
+.grid-ambient [data-glyph="suncloud"] { --ambient-accent: var(--tone-stone); }
+.grid-ambient [data-glyph="mooncloud"] { --ambient-accent: var(--tone-stone); }
+.grid-ambient [data-glyph="fog"] { --ambient-accent: var(--tone-stone); }
+.grid-ambient [data-glyph="drizzle"] { --ambient-accent: var(--tone-water); }
 
 /* Precipitation inside sky widgets: Forecast's daily chance and Weather's rain block (#74). */
 .grid-ambient .forecast-rain { --ambient-accent: var(--tone-water); }

@@ -93,7 +93,7 @@ const city = (label: string) => ({ id: randomUUID(), label, timezone: 'Asia/Toky
 
 const readBackup = async (directory: string) => JSON.parse(await readFile(join(directory, 'state.backup.json'), 'utf8'));
 
-test('rollback: defaults and these widgets in use stay readable by the previous release (3446400 knows them)', async () => {
+test('rollback: defaults and these widgets in use stay readable by the previous release (d66832b knows them)', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-air-rollback-'));
   try {
     // An existing user's colour-accent defaults, so each choice below is a change the files must carry.

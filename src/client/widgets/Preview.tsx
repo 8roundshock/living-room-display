@@ -31,7 +31,7 @@ function Preview({ state: { preview }, settings, embedded }: WidgetContentProps)
   return <div className="widget-body snapshot-body" style={{ '--snapshot-ratio': shape } as CSSProperties}>
     <div className="snapshot-frame">
       <SnapshotShell key={capturedAt} src={`/api/preview/image?t=${encodeURIComponent(capturedAt)}`} opacity={settings.preview.opacity} hold={shown} onError={() => setFailed(true)} onLoad={loaded} />
-      <div className="preview-caption">Last screen · {caption}</div>
+      <div className="preview-caption"><span className="preview-caption-label">Last screen ·</span> <span className="preview-caption-time">{caption}</span></div>
     </div>
   </div>;
 }

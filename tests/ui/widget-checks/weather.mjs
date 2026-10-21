@@ -14,4 +14,6 @@ export async function family({ widget, size, density }) {
   if (size === 'large') assert.ok((await widget.locator('.rain-bars').boundingBox()).height >= (await widget.boundingBox()).height * 0.1, 'the rain chart retains real height');
   // The chart's accessible name summarises its hours and peak (#166).
   if (size === 'large') assert.match(await widget.locator('.rain-bars[role=img]').getAttribute('aria-label'), /^Hourly precipitation chance, \d.* to \d.*: peak \d+% at \d/);
+  // The axis Air quality's chart shares (#261): “Now” under the bar covering now.
+  if (size === 'large') assert.equal(await widget.locator('.rain-hours .value-transition').first().innerText(), 'Now');
 }

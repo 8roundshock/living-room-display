@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $expectedRepository = '8roundshock/living-room-display'
 $expectedOrigin = "https://github.com/$expectedRepository.git"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-if ($args.Count -eq 0) { throw 'Pass a GitHub CLI command, for example: repo view --json nameWithOwner,isPrivate' }
+if ($args.Count -eq 0) { throw 'Pass a GitHub CLI command, for example: repo view --json nameWithOwner,visibility' }
 
 $origin = git -C $projectRoot remote get-url origin
 if ($LASTEXITCODE -ne 0 -or $origin -ne $expectedOrigin) {
@@ -42,11 +42,13 @@ try {
     if ($LASTEXITCODE -ne 0 -or $login -ne '8roundshock') {
         throw 'Expected personal 8roundshock identity; requested command was not run.'
     }
-    $repositoryJson = & $ghExecutable repo view $expectedRepository --json 'nameWithOwner,isPrivate'
-    if ($LASTEXITCODE -ne 0) { throw 'Could not verify project repository privacy.' }
+    # Either visibility is accepted (#441 makes the repository public); the login and
+    # exact repository are still verified before any command runs.
+    $repositoryJson = & $ghExecutable repo view $expectedRepository --json 'nameWithOwner'
+    if ($LASTEXITCODE -ne 0) { throw 'Could not verify the project repository.' }
     $repository = $repositoryJson | ConvertFrom-Json
-    if ($repository.nameWithOwner -ne $expectedRepository -or $repository.isPrivate -ne $true) {
-        throw 'Expected the private living-room-display repository; requested command was not run.'
+    if ($repository.nameWithOwner -ne $expectedRepository) {
+        throw 'Expected the living-room-display repository; requested command was not run.'
     }
     & $ghExecutable @args
     $commandExitCode = $LASTEXITCODE

@@ -59,10 +59,11 @@ desktop capture permission. Keep the thumbnail dim, adjustable, movable, and
 toggleable. Do not save screenshots. Actual native capture and rendered preview
 were inspected in RAM on the current 3840x2160 Windows 10 setup on 2026-10-18;
 normal exit cleared the image to 404 without capture files. That native preview
-evidence predates the later web rollouts: clean `7e654fd` (PR #57 studio
-refinement) and then clean `bedca44` (PR #70) on 2026-10-18; see [STATUS.md](../STATUS.md)
-for the current baseline. The `7e654fd` [rollout evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)
-verifies served assets and unchanged private data without a new native launch.
+evidence predates every later web rollout, from clean `7e654fd` (PR #57 studio
+refinement) on 2026-10-18 to the installed revision that [STATUS.md](../STATUS.md)
+records. Those rollouts, such as the `7e654fd` one
+([evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)),
+verify served assets and unchanged private data without a new native launch.
 Recheck current provenance through installed CLI
 `Status` or `installation.json`; see [installation](install.md). This does
 not establish live capture, locked/protected desktop access, another account or
@@ -78,10 +79,10 @@ and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 | Architecture | B: custom local dashboard plus Windows helper. |
 | Initial feature slice | Time, adaptive weather with rain timing inside it (#74), reminders, visual editor/presets, last-state preview. |
 | Language/framework and host | Node 24/TypeScript, React/Vite, native Node HTTP server, Windows helper. |
-| Weather/defaults | Open-Meteo; editable Toronto city default, metric, 12-hour clock. This is a product default, not inferred user location. |
+| Weather/defaults | Open-Meteo; editable Toronto city default, metric, 12-hour clock. This is a product default, not inferred user location. The local server requests the forecast only while a saved widget needs it (Weather or Forecast, or Sun & moon or Air quality while a device location's timezone is unresolved) or the editor asks for it (its Weather tab, or a draft showing such a widget) (#352). Requests wait for a due forecast or air-quality refresh at most about a second and the browser asks again shortly (#351). |
 | Air quality data | Keyless Open-Meteo air-quality API (Copernicus CAMS model, US or European AQI), requested by the local server only while the widget is saved enabled or previewed (#78). Open-Meteo's free tier is for non-commercial use; revisit the provider and terms before any commercial use. Sun & moon is calculated locally and works offline. |
 | Data | Per-user JSON with serialized atomic writes, prior backup, and export/import; no kiosk-storage dependency. |
-| Visual controls | Reviewed Studio/grid, optional modules, outline/digital/analog clocks and presets were installed in the last verified 2026-10-18 baseline; actual 4K preview is accepted, while across-room comfort and compatibility gates remain. |
+| Visual controls | Reviewed Studio/grid, optional modules, outline/digital/analog clocks, Native colours, animation levels and presets are installed on the owner's PC (revision and evidence in [STATUS.md](../STATUS.md)); actual 4K preview is accepted, while across-room comfort and compatibility gates remain. |
 | Preview | Last-desktop snapshot in RAM only; live app preview deferred. |
 | Local photo | Explicit selected raster is normalized in-browser, validated and atomically saved with settings in private local state; exports/imports exclude its bytes. Prior recovery backup may retain an older image. |
 | Activation | Manual use first; Windows idle activation remains off until verification and explicit enablement. |

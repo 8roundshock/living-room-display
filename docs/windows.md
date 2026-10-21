@@ -124,7 +124,9 @@ to `main` and manual dispatch.
 
 - **Build** (windows-2025): `Test-Windows.ps1` under PowerShell 5.1 and 7, the
   Inno version check (installs the pinned, hash-verified 6.7.1 if needed),
-  `Build-Installer.ps1`, the payload checks, and the artifact (14 days).
+  `Build-Installer.ps1`, the payload checks, and the artifact (14 days). A pull
+  request from a fork uploads no artifact and skips the smoke job, so an installer
+  built from unreviewed fork code is never offered as this repository's artifact.
 - **Smoke** (windows-2022 and windows-2025 gating, windows-11-arm non-gating,
   each with the default folder and a folder path containing a space and a
   non-ASCII character): records the before-state, then installs silently. It then
@@ -210,9 +212,11 @@ Source provenance checks use synthetic local Git repositories to verify clean,
 dirty, archive, wrong-parent and composed-source results. Lifecycle fixtures
 verify metadata refresh on successful install and retention after failed update
 or uninstall. No paths, remotes, changes or credentials are saved in provenance.
-The current installed baseline is recorded in [STATUS.md](../STATUS.md) (clean
-`3fee844`, the merge of PR #163, on 2026-10-19, replacing `bedca44` from PR #70;
-[evidence](https://github.com/8roundshock/living-room-display/issues/130#issuecomment-6260374373)).
+[STATUS.md](../STATUS.md) records the current installed revision, its install
+evidence and its rollback pair. On 2026-10-19 three coordinated web installs followed
+`bedca44` (PR #70): clean `3fee844` (PR #163), `4cb7dc1` (PR #327) and then `3446400`
+(PR #286), each with a verified data copy (see the
+[#130 install evidence](https://github.com/8roundshock/living-room-display/issues/130)).
 An earlier rollout installed clean `7e654fd`, the normal merge of PR #57. Its 79
 application tests, full production build, independent final-head reviews and
 Windows/Linux CI passed before rollout. The
@@ -226,9 +230,10 @@ that rollout. This documentation correction adds no live probes. Recheck current
 provenance using installed CLI `Status` or
 `%LOCALAPPDATA%\LivingRoomDisplay\installation.json`; see [installation](install.md).
 On 2026-10-18 a later marker-only read reported clean `bedca44e` after PR #70,
-installed at 19:08:23 UTC, without rechecking backend/served assets, private
-data/backup equality or registration. The `3fee844` install rechecked provenance,
-health, served assets, data hashes and screensaver values; see [current status](../STATUS.md).
+installed that day, without rechecking backend/served assets, private
+data/backup equality or registration. Each install since `3fee844` rechecked
+provenance, health, served assets, data hashes and screensaver values; see
+[current status](../STATUS.md).
 The optional `windows/tests/Test-CursorBrowser.mjs` production Edge regression
 passes actual computed-style checks for loading/error, viewport edges, widget
 controls, display-to-editor navigation, the embedded preview and a new display
@@ -240,13 +245,14 @@ later merged application changes also passed their final-head reviews and CI.
 The native cursor replacement is a separate, uninstalled candidate in
 [draft PR51](https://github.com/8roundshock/living-room-display/pull/51), reviewed
 at combined head `f4a57b5` with both CI jobs successful. Its integrated runtime
-gates still apply; the repository stays private and this PR is not deployment evidence.
+gates still apply; this PR is not deployment evidence.
 
 ## Actual current-PC runtime evidence
 
 The clean `7e654fd` historical web rollout is verified as described above; no
-combined-host native acceptance was performed during that update or established
-by the newer marker-only `bedca44e` read. Earlier actual
+combined-host native acceptance was performed during that update, established by
+the later marker-only `bedca44e` read, or performed during any web install since
+(see [STATUS.md](../STATUS.md)). Earlier actual
 native preview source/content and readability on the 3840x2160 primary were
 accepted under
 [#46](https://github.com/8roundshock/living-room-display/issues/46): raw PNG and
@@ -258,7 +264,7 @@ Earlier lifecycle tests on 2026-10-18 used source `eba70fc`, Windows 10 Pro 1904
 x64 and the same actual 3840x2160 display:
 
 - Per-user nonadmin install downloaded/checksummed official Node 24.19.0 and built
-  the web/native app. The system Node 16.14.2 installation was unchanged. Installed
+  the web/native app. The system Node installation was unchanged. Installed
   editor/display routes returned 200; owned server on 4318 was healthy.
 - Synthetic reminder add/edit/complete survived restart. Stop removed the owned
   listener; repeated Start retained the PID. Real update, previous-app rollback

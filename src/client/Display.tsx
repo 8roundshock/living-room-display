@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import type { AppState, Settings, WidgetId } from '../shared/contracts.ts';
+import type { AppState, Settings, WidgetGrid, WidgetId } from '../shared/contracts.ts';
 import { GRID_DENSITIES, WIDGET_CATALOG, WIDGET_IDS, composeWidgetGrid, getWidgetRect, motionOffset, placementSpan, widgetRevealOrder } from '../shared/widgets.ts';
 import { DEFAULT_ANIMATION_LEVEL, MAX_REVEAL_STEPS, motionPlan, revealTiming, type EntranceLevel, type MotionSurface } from '../shared/motion.ts';
 import { renderedAccent, toneVariables } from '../shared/palette.ts';
@@ -23,7 +23,9 @@ function Widget({ id, settings, children, index, revealOrder, style }: { id: Wid
   // #99: the display re-renders every widget on its one-second tick, so the fit must not follow
   // `children` (a new element each render). One ResizeObserver (the box and the content's size) and
   // one MutationObserver (text or structure that React actually changed, such as a new minute or a
-  // data refresh) live as long as the widget; Text size and typeface changes refit explicitly below.
+  // data refresh, and any `class` change inside the content, #314) live as long as the widget; Text
+  // size and typeface changes refit explicitly below. The fit itself writes only the content's
+  // `style`, which the observer ignores, so a refit never triggers another.
   useLayoutEffect(() => {
     const area = region.current, body = content.current; if (!area || !body) return;
     const update = () => {
@@ -45,7 +47,7 @@ function Widget({ id, settings, children, index, revealOrder, style }: { id: Wid
     };
     refit.current = update;
     const resize = new ResizeObserver(update); resize.observe(area); resize.observe(body);
-    const mutation = new MutationObserver(update); mutation.observe(body, { childList: true, characterData: true, subtree: true });
+    const mutation = new MutationObserver(update); mutation.observe(body, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     update();
     return () => { resize.disconnect(); mutation.disconnect(); refit.current = () => undefined; };
   }, []);
@@ -77,8 +79,12 @@ function Widget({ id, settings, children, index, revealOrder, style }: { id: Wid
 }
 
 interface Reveal { epoch: number; active: boolean }
+/** The relocation step in progress: the fade-out (`hiding`) or the black rest (`resting`), started at `at` (performance.now). */
+interface Relocation { phase: 'idle' | 'hiding' | 'resting'; at: number; fadeMs: number }
+/** The fully black rest between one arrangement's fade-out and the next one's reveal. */
+const BLACK_REST_MS = 1100;
 
-/** Soft motion drift (#248): ±0.5% of the plane over 71 s each way, in 36 discrete steps. */
+/** The drift of Drift and fade between moves (#248, `motionEnabled`): ±0.5% of the plane over 71 s each way, in 36 discrete steps. */
 const DRIFT_SECONDS = 71, DRIFT_STEPS = 36;
 /** The drift offset (percent of the plane) after `seconds`, and the seconds until its next step. */
 function planeDrift(seconds: number): { offset: number; next: number } {
@@ -95,6 +101,8 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   revealNonce?: number;
 }) {
   const [now, setNow] = useState(() => new Date()); const [cycle, setCycle] = useState(0); const [fading, setFading] = useState(false); const [interacting, setInteracting] = useState(false);
+  // #174: true only while the arrangement is fully black (from the end of the fade-out to the reveal).
+  const [black, setBlack] = useState(false);
   const interactionTimer = useRef<number | undefined>(undefined);
   const showControls = useCallback(() => {
     if (embedded || native) return;
@@ -106,13 +114,25 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   useEffect(() => () => window.clearTimeout(interactionTimer.current), []);
   const reducedMotion = usePrefersReducedMotion();
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(timer); }, []);
+  const relocation = useRef<Relocation>({ phase: 'idle', at: 0, fadeMs: 0 });
   useEffect(() => {
-    if (layoutEditing || compositionOverride !== undefined) { setFading(false); return; }
+    if (layoutEditing || compositionOverride !== undefined) { relocation.current = { phase: 'idle', at: 0, fadeMs: 0 }; setFading(false); setBlack(false); return; }
+    // Reduced motion removes travel and effects, never relocation: the arrangement still goes black.
+    const fadeMs = reducedMotion || !settings.appearance.motionEnabled ? 0 : settings.appearance.fadeSeconds * 1000;
     let hide: number | undefined; let reveal: number | undefined;
+    const rest = (ms: number) => { reveal = window.setTimeout(() => { relocation.current = { phase: 'idle', at: 0, fadeMs: 0 }; setFading(false); setBlack(false); }, ms); };
+    // Fully black: the next composition replaces this one during the black rest.
+    const darken = () => { relocation.current = { phase: 'resting', at: performance.now(), fadeMs: 0 }; setCycle(value => value + 1); setBlack(true); rest(BLACK_REST_MS); };
+    // #357: a settings or preference change that re-runs this effect during a fade-out or the black rest
+    // finishes that step instead of abandoning it on black until the next interval. The fade-out already
+    // running keeps its duration (a fade that is now off has jumped to black), so the composition still
+    // changes only while black, and the reveal follows the rest as usual.
+    const step = relocation.current;
+    if (step.phase === 'hiding') hide = window.setTimeout(darken, fadeMs === 0 ? 0 : Math.max(0, step.at + step.fadeMs - performance.now()));
+    else if (step.phase === 'resting') rest(Math.max(0, step.at + BLACK_REST_MS - performance.now()));
     const timer = window.setInterval(() => {
-      setFading(true);
-      // Fully black rest separates compositions; reduced motion removes travel, never relocation.
-      hide = window.setTimeout(() => { setCycle(value => value + 1); reveal = window.setTimeout(() => setFading(false), 1100); }, reducedMotion || !settings.appearance.motionEnabled ? 0 : settings.appearance.fadeSeconds * 1000);
+      relocation.current = { phase: 'hiding', at: performance.now(), fadeMs };
+      setFading(true); hide = window.setTimeout(darken, fadeMs);
     }, settings.appearance.motionIntervalSeconds * 1000);
     return () => { window.clearInterval(timer); window.clearTimeout(hide); window.clearTimeout(reveal); };
   }, [settings.appearance.motionEnabled, settings.appearance.motionIntervalSeconds, settings.appearance.fadeSeconds, layoutEditing, compositionOverride, reducedMotion]);
@@ -132,18 +152,19 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   const enabledKey = JSON.stringify([settings.widgets, settings.preview.enabled]);
   const gridKey = JSON.stringify(settings.widgetGrid);
   const enabled = useMemo(() => ({ ...settings.widgets, preview: settings.widgets.preview && settings.preview.enabled }), [enabledKey]);
-  const previous = useRef(settings.widgetGrid);
+  // The two latest compositions: the next one moves away from the first and avoids recreating the second (#317).
+  const previous = useRef(settings.widgetGrid), earlier = useRef<WidgetGrid | null>(null);
   // Polling returns new object identities. Recompose only on a real layout change or black interval.
-  const grid = useMemo(() => composeWidgetGrid(settings.widgetGrid, enabled, effectiveCycle, previous.current), [gridKey, enabled, effectiveCycle]);
-  useEffect(() => { previous.current = grid; }, [grid]);
+  const grid = useMemo(() => composeWidgetGrid(settings.widgetGrid, enabled, effectiveCycle, previous.current, earlier.current ? [earlier.current] : []), [gridKey, enabled, effectiveCycle]);
+  useEffect(() => { if (previous.current !== grid) { earlier.current = previous.current; previous.current = grid; } }, [grid]);
   const offset = motionOffset(effectiveCycle);
-  // Soft motion drift (#248): a timer moves the whole plane one step about every 2 s (about one
-  // device pixel across a 4K panel) with no transition, so nothing animates and the display draws a
-  // frame only when the plane moves. A CSS animation, even with steps(), keeps the compositor ticking
-  // every frame. The plane's own transform rule (the composition offset) applies when it is still, and
-  // the drift starts from its midpoint, that same position, so starting never jumps. Stopping (Soft
-  // motion off, reduced motion, Edit layout) removes the inline transform at once, so the plane can
-  // shift by up to ±0.5% of its size in one frame, as the earlier CSS animation did.
+  // The drift of Drift and fade between moves (#248): a timer moves the whole plane one step about every
+  // 2 s (about one device pixel across a 4K panel) with no transition, so nothing animates and the display
+  // draws a frame only when the plane moves. A CSS animation, even with steps(), keeps the compositor
+  // ticking every frame. The plane's own transform rule (the composition offset) applies when it is still,
+  // and the drift starts from its midpoint, that same position, so starting never jumps. Stopping (Drift and
+  // fade off, reduced motion, Edit layout) removes the inline transform at once, so the plane can shift by
+  // up to ±0.5% of its size in one frame, as the earlier CSS animation did.
   const plane = useRef<HTMLDivElement>(null);
   const drifting = settings.appearance.motionEnabled && !reducedMotion && !layoutEditing;
   useLayoutEffect(() => {
@@ -214,7 +235,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   }, [revealNonce, embedded, startReveal]);
   // Leaving a surface that may animate (Edit layout, reduced motion) ends any entrance at once.
   useLayoutEffect(() => { if (plan.entrance === 'none' && replayPlan.entrance === 'none') stopReveal(); }, [plan.entrance, replayPlan.entrance, stopReveal]);
-  const motion = useMemo<MotionState>(() => ({ plan, revealEpoch: reveal.epoch, revealing: reveal.active, resting: fading }), [plan, reveal.epoch, reveal.active, fading]);
+  const motion = useMemo<MotionState>(() => ({ plan, revealEpoch: reveal.epoch, revealing: reveal.active, resting: fading, black }), [plan, reveal.epoch, reveal.active, fading, black]);
   const animation = plan.valueTransitions ? plan.level : 'off';
 
   const ambientStyle = { '--ambient-accent': renderedAccent(settings.appearance.accentColor), '--ambient-text': settings.appearance.textColor, '--ambient-brightness': settings.appearance.brightness, '--font-scale': settings.appearance.fontScale,

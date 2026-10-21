@@ -47,8 +47,11 @@ function skyModel(minute: number, latitude: number, longitude: number, timeZone:
 
 function useSky(state: AppState, now: Date): SkyModel {
   const minute = Math.floor(now.getTime() / 60_000);
-  const { latitude, longitude } = state.weather.location;
-  const timeZone = weatherTimeZone(state.weather.location.timezone);
+  const { latitude, longitude, timezone: zone } = state.weather.location;
+  // Memoized like Weather's and Air quality's (#324): while a device location's zone is still `auto`,
+  // the fallback to this computer's zone constructs an Intl formatter, and the display re-renders
+  // every widget each second. A system zone change reaches the display on its next reload.
+  const timeZone = useMemo(() => weatherTimeZone(zone), [zone]);
   return useMemo(() => skyModel(minute, latitude, longitude, timeZone), [minute, latitude, longitude, timeZone]);
 }
 

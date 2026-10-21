@@ -1,4 +1,5 @@
 import type { Reminder, Settings } from '../shared/contracts.ts';
+import { ApiError } from './api.ts';
 
 /**
  * Restore from backup (#234): a quick client-side check of an export before the server's strict
@@ -59,6 +60,32 @@ export function backupContents(backup: BackupFile): string {
   const reminders = `${count(backup.reminders.length, 'reminder', 'reminders')}${completed ? ` (${completed} completed)` : ''}`;
   const styles = count(Array.isArray(backup.settings.savedPresets) ? backup.settings.savedPresets.length : 0, 'saved style', 'saved styles');
   return `${reminders} and ${styles}`;
+}
+
+/** A failed restore in plain words; `detail` is the server's own text, for a disclosure (#302). */
+export interface RestoreFailure {
+  text: string;
+  detail: string | null;
+}
+
+/** The server checked the file and refused it (`importSchema` in src/server/validation.ts). */
+export const BACKUP_REJECTED =
+  "This backup has settings this version can't read. It may come from a newer version of the app, or the file was changed.";
+export const RESTORE_UNREACHABLE =
+  "Couldn't reach the display server, so nothing was restored. Try again in a moment.";
+
+/**
+ * Why `POST /api/import` failed, in plain words (#302). A refused file (4xx) is most likely a backup
+ * from a newer release after a rollback, or an edited file; the validation text stays available as
+ * detail. No answer at all means nothing was restored (a restore is refused while edits are unsaved,
+ * so there are no changes to keep). Branches on the status, never on the message (#142).
+ */
+export function restoreFailure(error: unknown): RestoreFailure {
+  if (error instanceof ApiError && error.network) return { text: RESTORE_UNREACHABLE, detail: null };
+  const detail = error instanceof Error && error.message ? error.message : null;
+  if (error instanceof ApiError && error.status >= 400 && error.status < 500)
+    return { text: BACKUP_REJECTED, detail };
+  return { text: 'Could not restore the backup. Nothing was changed.', detail };
 }
 
 /** When the backup was made, in this computer's time zone and the chosen time format (English, like the rest of the editor). */

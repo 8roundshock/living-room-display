@@ -85,14 +85,18 @@ function assertMeasured(result, expectedTotal, label) {
   assert.equal(result.more, hidden > 0 ? `+${hidden} more` : null, `${label}: honest remaining count`);
   assert.ok(result.moreInside && result.offlineInside, `${label}: footer stays inside the box`);
   // Titles clamp at 2 lines (4 for a single reminder); only when every pending reminder is shown may
-  // clamped titles relax to 3–4 lines (#254).
+  // clamped titles relax to 3–4 lines (#254). Rows after the first may share a one-line clamp instead,
+  // when that shows more rows (#359).
   const base = expectedTotal === 1 ? 4 : 2;
+  const clamp = Number(result.titles[0]?.clamp);
+  const rest = new Set(result.titles.slice(1).map(title => Number(title.clamp)));
+  assert.ok(rest.size <= 1 && [...rest].every(value => value === clamp || value === 1), `${label}: the rows after the first share the first clamp or one line (${JSON.stringify(result.titles.map(title => title.clamp))})`);
   for (const title of result.titles) {
     assert.equal(title.horizontal, false, `${label}: titles never overflow sideways`);
     assert.ok(title.lines <= Number(title.clamp), `${label}: titles clamp at ${title.clamp} lines (${title.lines})`);
-    if (hidden > 0 || result.overfull) assert.equal(Number(title.clamp), base, `${label}: the ${base}-line clamp holds while reminders are hidden`);
-    else assert.ok(Number(title.clamp) >= base && Number(title.clamp) <= 4, `${label}: a relaxed clamp stays within ${base}–4 lines (${title.clamp})`);
   }
+  if (hidden > 0 || result.overfull) assert.equal(clamp, base, `${label}: the first title keeps the ${base}-line clamp while reminders are hidden`);
+  else assert.ok(clamp >= base && clamp <= 4, `${label}: a relaxed clamp stays within ${base}–4 lines (${clamp})`);
 }
 
 export async function family({ page, widget, size, density, viewport, state }) {
@@ -241,7 +245,7 @@ async function offlineStatus({ page, widget, state, now, mode }) {
 
 async function states({ page, widget, state, now }) {
   const display = page.locator('[data-widget-id="reminders"]');
-  // Measurement is stable: the per-second refit and clock ticks never toggle rows or the body.
+  // Measurement is stable: the shared refit (on a box, content, class, Text size or typeface change) and clock ticks never toggle rows or the body.
   state.reminders = reminders(30, now);
   await reopen(page);
   await widget.evaluate(element => {
