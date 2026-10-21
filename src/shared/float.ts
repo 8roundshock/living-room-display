@@ -23,6 +23,18 @@ const PEAK = 1 / (1 - EASE);
 const GOLDEN = 0.61803398875, SILVER = 0.41421356237;
 
 export interface Point { x: number; y: number }
+/** CSS pixels of free space around a widget's drawn content. */
+export interface FloatSlack { left: number; right: number; top: number; bottom: number }
+/**
+ * Keep an already drawn offset inside newly measured slack (#479). Round bounds inward so a
+ * whole-device-pixel translation cannot overshoot a fractional CSS-pixel edge. A content change
+ * may need one immediate jump; ordinary float steps keep their one-device-pixel limit.
+ */
+export function clampFloatOffset(offset: Point, slack: FloatSlack, dpr: number): Point {
+  const axis = (value: number, before: number, after: number) =>
+    Math.min(Math.floor(after * dpr) / dpr, Math.max(Math.ceil(-before * dpr) / dpr, value)) || 0;
+  return { x: axis(offset.x, slack.left, slack.right), y: axis(offset.y, slack.top, slack.bottom) };
+}
 /** Which waypoints a track follows (`lead`) and how far out of step with the board it runs (`phase`, a share of an interval). */
 export interface FloatTrack { lead: number; phase: number }
 /** The board: waypoint 0, the arrangement as the user placed it, at the start. */
