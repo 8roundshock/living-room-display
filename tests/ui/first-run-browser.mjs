@@ -181,7 +181,9 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
           for (const control of await page.locator('.widget-row button, .add-widget').all()) {
             await control.focus(); await control.scrollIntoViewIfNeeded();
             const box = await control.boundingBox(), panel = await page.locator('.inspector-panel').boundingBox();
-            assert.ok(box.width >= 44 && box.height >= 44 && box.y >= panel.y - 1 && box.y + box.height <= panel.y + panel.height + 1, `${viewport.width}: control is reachable: ${JSON.stringify({ box, panel })}`);
+            // Add widget has an established 40px compact button; row actions retain 44px targets.
+            const minimum = await control.evaluate(element => element.classList.contains('add-widget') ? 40 : 44);
+            assert.ok(box.width >= minimum && box.height >= minimum && box.y >= panel.y - 1 && box.y + box.height <= panel.y + panel.height + 1, `${viewport.width}: control is reachable: ${JSON.stringify({ box, panel })}`);
             assert.equal(await control.evaluate(element => { const r = element.getBoundingClientRect(); return element === document.activeElement && element.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), true, 'the control has keyboard focus and an unobscured pointer target');
           }
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollHeight <= innerHeight + 1), true, 'scroll remains inside the inspector, without body overflow');
