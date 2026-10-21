@@ -355,21 +355,24 @@ export async function runScreenQa({ playwright, edge } = {}) {
     }
     checks.push('Motion: Float gently, Move every with the live sentence for float, steps and swaps, Swap places (off) with its hint, Swap glide only while swapping, arrangement buttons only while swapping, the old black-move wording gone; Swap places saves without marking the style Custom');
 
-    // (5) Small screens: the editor header keeps Open display and Close display usable at 390 px.
-    {
-      const session = await context({ viewport: { width: 390, height: 844 } });
+    // (5) Small screens: shared Home/editor actions retain 44 px targets, including Close display.
+    for (const width of [390, 320]) {
+      const session = await context({ viewport: { width, height: 844 } });
       const editor = await session.context.newPage();
       await editor.goto(base + '/editor'); await editor.locator('.studio').waitFor();
       const popup = session.context.waitForEvent('page');
       await editor.locator('.open-display').click();
       const shown = await popup; await shown.locator('.display-page').waitFor();
-      await until(editor, () => document.querySelector('.close-display') !== null, 'Close display at 390 px');
-      const fits = await editor.evaluate(() => [...document.querySelectorAll('.studio-header .open-display, .studio-header .close-display, .studio-header .brand')].map(element => { const box = element.getBoundingClientRect(); return { name: element.className, left: box.left, right: box.right }; }));
-      for (const item of fits) assert.ok(item.left >= 0 && item.right <= 390, `${item.name} fits at 390 px: ${JSON.stringify(item)}`);
-      assert.equal(await editor.evaluate(() => document.documentElement.scrollWidth <= 390), true, 'no horizontal scroll');
+      await until(editor, () => document.querySelector('.close-display') !== null, `Close display at ${width} px`);
+      const fits = await editor.evaluate(() => [...document.querySelectorAll('.studio-header .open-display, .studio-header .close-display, .studio-header .brand')].map(element => { const box = element.getBoundingClientRect(); return { name: element.className, left: box.left, right: box.right, width: box.width, height: box.height }; }));
+      for (const item of fits) {
+        assert.ok(item.left >= 0 && item.right <= width, `${item.name} fits at ${width} px: ${JSON.stringify(item)}`);
+        assert.ok(item.width >= 44 && item.height >= 44, `${item.name} keeps a 44 px target: ${JSON.stringify(item)}`);
+      }
+      assert.equal(await editor.evaluate(width => document.documentElement.scrollWidth <= width, width), true, 'no horizontal scroll');
       await session.close();
     }
-    checks.push('390 px editor: brand, Show display and Close display fit the header without horizontal scrolling');
+    checks.push('390 and 320 px editor: brand, Show display and Close display retain 44 px targets without horizontal scrolling');
 
     assert.deepEqual(errors, [], 'page or console errors');
     return { checks, outside: [...outside], images: 'none written; all state stays in RAM' };

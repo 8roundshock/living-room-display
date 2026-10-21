@@ -1688,8 +1688,8 @@ html.studio-editor {
   }
   /* Icon only beside the brand and Show display on a phone; the button keeps its name. */
   .studio .close-display {
-    min-height: 40px;
-    min-width: 40px;
+    min-height: 44px;
+    min-width: 44px;
     padding: 9px 11px;
   }
   .studio .close-display-label {
