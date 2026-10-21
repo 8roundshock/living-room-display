@@ -2352,6 +2352,8 @@ export function Editor({
               <WidgetInspector
                 message={layoutMessage?.where === 'list' ? layoutMessage.text : ''}
                 settings={draft}
+                appState={state}
+                saved={saved}
                 selected={selectedWidget}
                 onSelect={(id) => selectWidget(id, true)}
                 reveal={reveal}

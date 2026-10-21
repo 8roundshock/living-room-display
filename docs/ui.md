@@ -663,6 +663,51 @@ per minute (no `Intl` formatter is built while the minute holds, #185); values c
 the shared one-second tick without their own animation.
 Browser suite: `tests/ui/catalog-sky-browser.mjs`.
 
+## Dynamic
+
+Dynamic (#437) starts disabled and is added from the picker (Weather & sky, "What matters
+now, or a calm rotation", all three sizes). Its picker sample is synthetic: hour-aligned
+rain starting within two hours ("Rain likely 11 AM–3 PM" for the sample's 9:41 AM), with
+"Sunset 6:29 PM" and the next full moon as rows in large; it never shows an official alert,
+a reminder or a countdown. Its panel sits under the Size control and joins the normal
+draft (Save/Cancel only for effective changes, no autosave):
+
+- **Show**: a fieldset of five toggles (44 px targets), each with its hint: **Weather**
+  ("Rain timing, storms, snow, heat, cold and wind"), **Official weather alerts**
+  ("Environment Canada or the US National Weather Service. Data Source: Environment and
+  Climate Change Canada."), **Air & UV** ("Air quality and UV index · model estimate"),
+  **Sun & moon** ("Sunrise, sunset and the full moon") and **Reminders & countdowns**
+  ("Shows their titles on the display").
+- Under the alerts toggle, a line from the saved state: "Covers City of Toronto · no
+  alerts now · checked 4 min ago", "Not available for {City}: Canada and the US only.",
+  "Couldn't check alerts. Trying again." or, while the draft differs from what is saved,
+  "Alerts are checked after you save." (a preview before Save is #455), with "(default
+  location — choose your city in Weather)" while the default location is in use.
+- Hint: "Stays on what matters most, such as an official warning, a storm or rain starting
+  soon, and otherwise shows one calm card each minute. Uses your weather location
+  ({name}). Forecasts and model estimates are not official warnings." Then a summary
+  from the draft, as the canvas shows it: "Now showing: Rain soon. Next: Sunset 6:29 PM,
+  Full moon Oct 26."
+- All toggles off blocks Save with "Dynamic needs at least one thing to show"; closing
+  the panel that way restores the saved sources. While the draft shows Air & UV and the
+  saved state has no reading, the canvas previews `GET /api/air-quality` as Air quality does.
+  The canvas holds its first card (slot 0) and never changes by itself.
+
+On the display Dynamic shows one card: a warning first (several take turns each minute,
+"1 of 2"), otherwise the strongest focus card stays with "+N more", otherwise one notable
+or calm card per wall-clock minute ([Dynamic signals](api.md#dynamic-signals)). Small shows
+the kicker, the glyph or a value beside a short headline, one detail line and one footer
+phrase; medium a glyph column beside the headline and detail and one footer run
+(provenance · age · status · credit); large a hero, the detail and up to three whole rows
+measured from layout boxes, then an exact "+N more". "Warning" (and "Overdue") use the
+status tone; nothing else adds light, and a swap fades the new card in only at Subtle and
+Lively. It is hidden on the display when there is nothing to show and no source failed;
+a failed source keeps it visible, saying which. Every family renders at fit 1 at Text 100%
+in every density at 720p, 1080p and 4K, fresh, stale and offline.
+Browser suite: `tests/ui/dynamic-browser.mjs` (its own server and synthetic Open-Meteo,
+GeoMet and NWS answers): A official warnings, B focus, C the calm rotation, D the latch and
+an immediate switch, E every honest state, F the editor.
+
 ## Movement and verification
 
 The edited layout is the first composition. Later collision-free compositions

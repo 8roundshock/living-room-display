@@ -68,7 +68,7 @@ export function App() {
       }
       // One bounded early poll while a provider refresh is still running (#351).
       const poll = refreshPoll.current;
-      if (!received.weather.refreshing && !received.airQuality?.refreshing) poll.count = 0;
+      if (!received.weather.refreshing && !received.airQuality?.refreshing && !received.alerts?.refreshing) poll.count = 0;
       else if (poll.timer === undefined && poll.count < REFRESH_POLLS) {
         poll.count++;
         poll.timer = window.setTimeout(() => {

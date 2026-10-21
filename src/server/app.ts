@@ -6,11 +6,12 @@ import { extname, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import type { AppState, ClearCompletedResult, PreviewState, Reminder } from '../shared/contracts.ts';
 import { REMINDER_HISTORY_LIMIT, REMINDER_LIMIT, RESTORE_BEFORE_EDITING, historyReminders, pruneHistory } from '../shared/reminders.ts';
-import { needsForecast } from '../shared/widgets.ts';
+import { needsAirQuality, needsAlerts, needsForecast } from '../shared/widgets.ts';
 import { DataStore, SettingsConflict } from './store.ts';
 import { persistableSettings } from './persistence.ts';
 import { REFRESH_WAIT_MS, WeatherService, type FetchLike } from './weather.ts';
 import { AirQualityService, offAirQuality } from './air.ts';
+import { AlertsService, offAlerts } from './alerts.ts';
 import { windowsStatus } from './windows.ts';
 import { automaticLocationSchema, importSchema, mergeSettings, reminderCreateSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
 
@@ -29,7 +30,7 @@ class UnchangedReminder extends Error {
 }
 export interface ApplicationOptions {
   dataDirectory: string; clientDirectory?: string; fetcher?: FetchLike; now?: () => number; development?: boolean;
-  /** How long a request waits for a due weather or air-quality refresh before answering (#351). */
+  /** How long a request waits for a due weather, air-quality or alerts refresh before answering (#351). */
   refreshWaitMs?: number;
 }
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
@@ -69,6 +70,7 @@ export async function createApplication(options: ApplicationOptions) {
   const now = options.now ?? Date.now;
   const weather = new WeatherService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   const air = new AirQualityService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
+  const alerts = new AlertsService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   const hostToken = randomBytes(32).toString('hex');
   let image: Buffer | null = null;
   let previewGeneration = 0;
@@ -128,13 +130,16 @@ export async function createApplication(options: ApplicationOptions) {
     if (method === 'GET' && path === '/api/state') {
       // Metadata only: the photo bytes are not copied for a poll (#353).
       const { settings, reminders, photo, settingsRevision } = store.view();
-      // The forecast is refreshed only while a saved widget needs it (#352) and air quality only while
-      // its widget is saved enabled; each waits for a due refresh at most briefly (#351).
-      const [weatherState, airQuality] = await Promise.all([
+      // The forecast is refreshed only while a saved widget needs it (#352); air quality only while a saved
+      // widget shows it (Air quality, or Dynamic with Air & UV, #437); official alerts only while Dynamic
+      // shows them (#437). Each waits for a due refresh at most briefly (#351). Alerts are API-only: never
+      // stored, exported or logged.
+      const [weatherState, airQuality, alertsState] = await Promise.all([
         needsForecast(settings) ? weather.get(settings) : weather.peek(settings),
-        settings.widgets.airQuality ? air.get(settings) : offAirQuality(settings),
+        needsAirQuality(settings) ? air.get(settings) : offAirQuality(settings),
+        needsAlerts(settings) ? alerts.get(settings) : offAlerts(),
       ]);
-      const state: AppState = { settings, reminders, weather: weatherState, preview: previewState(), airQuality,
+      const state: AppState = { settings, reminders, weather: weatherState, preview: previewState(), airQuality, alerts: alertsState,
         photo: photo ? { available: true, ...photo } : { available: false, id: null, width: null, height: null, updatedAt: null } };
       json(response, 200, { ...state, storageWarning: store.warning }, etag(settingsRevision)); return;
     }

@@ -150,3 +150,41 @@ test('exports include non-default widgetData and imports restore it', async () =
     assert.equal((await send('PATCH', '/api/settings', { widgetData: { worldClocks: [{ ...city(), timezone: 'auto' }] } })).status, 400);
   } finally { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }
 });
+
+test('#437 Dynamic sources: all on by default, merged by PATCH, at least one kept on, strict keys, read and exported like any section', async () => {
+  const allOn = { weather: true, alerts: true, air: true, sky: true, personal: true };
+  assert.deepEqual(defaultSettings().widgetData.dynamic, allOn);
+  assert.deepEqual(settingsSchema.parse(withData({})).widgetData.dynamic, allOn, 'a missing section reads the default');
+  assert.deepEqual(settingsSchema.parse(withData({ dynamic: { air: false } })).widgetData.dynamic, { ...allOn, air: false }, 'missing keys read as on');
+  assert.deepEqual(patch({ dynamic: { sky: false } }), { widgetData: { dynamic: { sky: false } } }, 'a PATCH carries exactly the supplied keys');
+  const merged = mergeSettings(mergeSettings(defaultSettings(), patch({ dynamic: { sky: false } })), patch({ dynamic: { personal: false } }));
+  assert.deepEqual(merged.widgetData.dynamic, { ...allOn, sky: false, personal: false }, 'partial PATCHes merge');
+  const none = { weather: false, alerts: false, air: false, sky: false, personal: false };
+  assert.throws(() => settingsSchema.parse(withData({ dynamic: none })), /Dynamic needs at least one source/);
+  assert.throws(() => mergeSettings(defaultSettings(), patch({ dynamic: none })), /Dynamic needs at least one source/);
+  for (const bad of [{ news: true }, { air: 'yes' }, { weather: null }]) {
+    assert.throws(() => settingsSchema.parse(withData({ dynamic: bad })), undefined, `persisted ${JSON.stringify(bad)}`);
+    assert.throws(() => patch({ dynamic: bad }), undefined, `PATCH ${JSON.stringify(bad)}`);
+  }
+  assert.deepEqual(importSchema.parse({ version: 1, exportedAt: new Date().toISOString(), settings: withData({ dynamic: { alerts: false } }), reminders: [] }).settings.widgetData.dynamic, { ...allOn, alerts: false }, 'imports read it');
+
+  const directory = await mkdtemp(join(tmpdir(), 'lrd-widget-data-dynamic-'));
+  const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()) });
+  app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
+  const address = app.server.address(); assert.ok(address && typeof address === 'object');
+  const url = `http://127.0.0.1:${address.port}`;
+  const send = (method: string, path: string, value?: unknown) => fetch(`${url}${path}`, value === undefined ? { method } : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+  try {
+    const off = await send('PATCH', '/api/settings', { widgetData: { dynamic: none } });
+    assert.equal(off.status, 400); assert.match((await off.json()).error, /Dynamic needs at least one source/);
+    assert.equal((await send('PATCH', '/api/settings', { widgetData: { dynamic: { radar: true } } })).status, 400, 'unknown key');
+    assert.equal((await send('PATCH', '/api/settings', { widgetData: { dynamic: { air: 1 } } })).status, 400, 'non-boolean');
+    assert.equal('widgetData' in (await (await send('GET', '/api/export')).json()).settings, false, 'the default section is left out of exports');
+    assert.equal((await send('PATCH', '/api/settings', { widgetData: { dynamic: { air: false } } })).status, 200);
+    const exported = await (await send('GET', '/api/export')).json();
+    assert.deepEqual(exported.settings.widgetData, { dynamic: { ...allOn, air: false } }, 'a changed section is exported whole');
+    assert.equal((await send('PATCH', '/api/settings', { widgetData: { dynamic: { air: true } } })).status, 200);
+    assert.equal((await send('POST', '/api/import', exported)).status, 200);
+    assert.deepEqual(app.store.snapshot().settings.widgetData.dynamic, { ...allOn, air: false }, 'import restores it');
+  } finally { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }
+});

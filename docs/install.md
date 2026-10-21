@@ -451,14 +451,14 @@ No automatic geometry downgrade is provided.
 The previous installed release is `d66832b` (the merge of PR #491). Its reader
 rejects unknown keys, so an additive key written to disk would make `state.json`,
 and after the next save `state.backup.json`, unreadable by it. `d66832b` reads
-everything this build writes with Fixed brightness, including every choice that was
+default data with Fixed brightness and Dynamic off with all sources on, including
+every choice that was
 an exception for `bedca44` (custom Reminders sizes, Native colours, Animation Off or
 Lively, and the new widgets of #78 with their content), so `app.previous` remains a
-working rollback after the next update unless Follow daylight (#439, in the table
-below) was used. This build still omits a few additive values from files and
+working rollback after the next update unless a choice in the table below was used. This build still omits a few additive values from files and
 exports while they equal the value the current reader restores (see
 [API](api.md#persistence-and-recovery)). `d66832b` reads `accentMode`, `animation`
-and `widgetData` either way, so their omission is optional. It was kept to avoid a
+and pre-Dynamic `widgetData` either way, so their omission is optional. It was kept to avoid a
 data-format change ([#272](https://github.com/8roundshock/living-room-display/issues/272)).
 `d66832b` does not know `daylightBrightness`, so omitting its Fixed value (`null`) is
 required: that is what keeps Fixed data readable.
@@ -484,6 +484,7 @@ remove the choice as its row says.
 | --- | --- |
 | Everything up to `d66832b` (#73, #74, #75, #76, #78 and the polish since) | None. |
 | Brightness → Follow daylight (#439) | `appearance.daylightBrightness` in the settings and in saved styles made while it was on. Fixed, the default, writes no key, so Fixed data stays readable. See [removing Follow daylight before a downgrade](#removing-follow-daylight-before-a-downgrade). |
+| #437 Dynamic | An enabled Dynamic widget, a saved style made while it was on, or Dynamic sources other than all on. Before rolling back to `d66832b`, turn all sources on, remove Dynamic, delete or re-save styles that include it, then Save; or restore the pre-upgrade data copy. The next reader bump (#130) removes this exception. Dynamic off with its sources all on is omitted at rest, and its transform is never written (#135), so that data reads. |
 
 <a id="rolling-back-the-installed-3446400"></a>
 

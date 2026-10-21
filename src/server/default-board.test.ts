@@ -6,6 +6,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DataStore } from './store.ts';
+import { persistableSettings } from './persistence.ts';
 import { dataSchema, settingsSchema } from './validation.ts';
 import { PREVIOUS_READER } from './compat/previous-reader.ts';
 import { WIDGET_CATALOG as PREVIOUS_CATALOG } from './compat/d66832b/shared/widgets.ts';
@@ -64,7 +65,7 @@ test('style defaults are unchanged by the default board (#435 scope)', () => {
 
 test('older data still backfills from the catalog, which is the installed d66832b catalog unchanged (#497)', () => {
   // The catalog fields that backfill older data are byte-for-byte what the installed release has.
-  for (const id of WIDGET_IDS) {
+  for (const id of PREVIOUS_READER.widgetIds) {
     const current: WidgetDefinition = WIDGET_CATALOG[id], previous: WidgetDefinition = PREVIOUS_CATALOG[id];
     for (const key of ['defaultEnabled', 'defaultPlacement', 'defaultSize', 'legacyPlacement', 'legacyEnabledFrom'] as const) assert.deepEqual(current[key], previous[key], `${id} ${key}`);
   }
@@ -94,11 +95,12 @@ test('a fresh data folder writes the default board, and the d66832b reader (#497
     const store = await DataStore.open(directory);
     assert.deepEqual(store.snapshot().settings, defaultSettings());
     const file = JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')) as Loose;
-    assert.deepEqual(file.settings.widgets, defaultSettings().widgets, 'every visibility is written');
-    assert.deepEqual(file.settings.widgetGrid, defaultSettings().widgetGrid, 'every placement is written');
+    const written = persistableSettings(defaultSettings()) as Loose;
+    assert.deepEqual(file.settings.widgets, written.widgets, 'known visibilities are written; off Dynamic is omitted');
+    assert.deepEqual(file.settings.widgetGrid, written.widgetGrid, 'known placements are written; hidden Dynamic is omitted');
     const previous = PREVIOUS_READER.dataSchema.parse(file) as Loose;
-    assert.deepEqual(previous.settings.widgets, defaultSettings().widgets, 'the previous release shows the same widgets');
-    assert.deepEqual(previous.settings.widgetGrid, defaultSettings().widgetGrid, 'in the same places and sizes');
+    assert.deepEqual(previous.settings.widgets, written.widgets, 'the previous release shows the same widgets');
+    assert.deepEqual(previous.settings.widgetGrid, written.widgetGrid, 'in the same places and sizes');
     assert.deepEqual(dataSchema.parse(file).settings, defaultSettings(), 'this release reads its own file back');
     // A previous-release copy of the file (after a rollback) reopens in this release unchanged.
     await writeFile(join(directory, 'state.json'), JSON.stringify(previous));

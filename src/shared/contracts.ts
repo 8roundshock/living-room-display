@@ -46,13 +46,16 @@ export interface SavedPreset { id: string; name: string; visual: VisualSettings 
 export interface WorldClockCity { id: string; label: string; timezone: string; latitude: number; longitude: number }
 /** `date` is a civil YYYY-MM-DD date. */
 export interface CountdownEvent { id: string; title: string; date: string; repeatsYearly: boolean }
-/** Per-widget content for #78; not part of saved styles. */
+/** What the Dynamic widget may show (#437); at least one is on. All on is the default, omitted at rest. */
+export interface DynamicSources { weather: boolean; alerts: boolean; air: boolean; sky: boolean; personal: boolean }
+/** Per-widget content for #78 and #437; not part of saved styles. */
 export interface WidgetDataSettings {
   worldClocks: WorldClockCity[];
   calendar: { weekStart: 'locale' | 'sunday' | 'monday' };
   countdowns: CountdownEvent[];
   note: { text: string };
   airQuality: { scale: 'us' | 'european' };
+  dynamic: DynamicSources;
 }
 export interface Settings extends VisualSettings {
   version: 1; location: LocationSettings; locationSource: 'device' | 'manual' | 'fallback'; units: Units; clockFormat: '12h' | '24h';
@@ -75,6 +78,7 @@ export interface SettingsPatch {
   widgetData?: {
     worldClocks?: WorldClockCity[]; calendar?: Partial<WidgetDataSettings['calendar']>; countdowns?: CountdownEvent[];
     note?: Partial<WidgetDataSettings['note']>; airQuality?: Partial<WidgetDataSettings['airQuality']>;
+    dynamic?: Partial<DynamicSources>;
   };
 }
 export type AutomaticLocationSelection = { source: 'device'; latitude: number; longitude: number; automatic: boolean } | { source: 'fallback'; automatic: boolean };
@@ -130,7 +134,34 @@ export interface AirQualityState {
   /** API-only, never persisted (#351): a provider request for this state is still in flight, so ask again soon. */
   refreshing?: boolean;
 }
-export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; photo?: PhotoState; airQuality?: AirQualityState; storageWarning?: string | null }
+/**
+ * One official alert in effect (#437). `name` is the provider's own wording (ECCC's has only its first
+ * letter capitalised), never rewritten. Instants are ISO timestamps.
+ */
+export interface WeatherAlert {
+  id: string; level: 'warning' | 'watch' | 'advisory' | 'statement'; name: string; area: string | null;
+  issuedAt: string; startsAt: string | null; endsAt: string | null; expiresAt: string | null;
+}
+export type AlertsProvider = 'eccc' | 'nws';
+export type AlertsSource = 'Environment and Climate Change Canada' | 'US National Weather Service';
+/**
+ * Official weather alerts for the saved weather location (#437). API-only: never persisted, exported or
+ * logged. `off` means no request was made (Dynamic or its alerts are off); `unsupported` means neither
+ * provider covers the place, which never reads as "no alerts".
+ */
+export interface AlertsState {
+  status: 'off' | 'fresh' | 'stale' | 'unavailable' | 'unsupported';
+  provider: AlertsProvider | null; source: AlertsSource | null; sourceUrl: string | null;
+  /** The covering forecast zone (ECCC), or the first area an alert names (NWS). */
+  area: string | null;
+  /** The last successful check. */
+  checkedAt: string | null; error: string | null;
+  /** At most 10, warnings first. */
+  alerts: WeatherAlert[];
+  /** API-only: a provider request for this state is still in flight, so ask again soon. */
+  refreshing?: boolean;
+}
+export interface AppState { settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; photo?: PhotoState; airQuality?: AirQualityState; alerts?: AlertsState; storageWarning?: string | null }
 export interface LocationResult extends LocationSettings { id: number; country: string; admin1: string }
 export interface ApiError { error: string }
 export interface HostSession { token: string; settings: Settings; displayUrl: string }

@@ -228,7 +228,7 @@ test('#435 the default board fills the grid, and every hidden widget in every fa
   const used = ACTIVE_WIDGET_IDS.filter((id) => settings.widgets[id]).reduce((sum, id) => { const span = placementSpan(id, settings.widgetGrid.placements[id]); return sum + span.columns * span.rows; }, 0);
   assert.equal(used, columns * rows, 'no free cell is left');
   const hidden = ACTIVE_WIDGET_IDS.filter((id) => !settings.widgets[id]);
-  assert.deepEqual(hidden, ['photo', 'worldClocks', 'countdown', 'note', 'airQuality', 'sunMoon']);
+  assert.deepEqual(hidden, ['photo', 'worldClocks', 'countdown', 'note', 'airQuality', 'sunMoon', 'dynamic']);
   for (const id of hidden) for (const size of widgetSizes(id)) {
     const request: RoomRequest = { kind: 'add', id, size };
     assert.equal(addToGrid(settings.widgetGrid, id, size, settings.widgets), null, `${id} ${size} has no free cell`);

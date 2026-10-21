@@ -3,29 +3,13 @@ import type { AirPollutant, AirQualityReading, AirQualityState, AppState } from 
 import { airAgeSegments, airHourly, airReadingView } from '../airHourly.ts';
 import { ageLabel, weatherTimeZone } from '../format.ts';
 import { Icon } from '../icons.tsx';
+import { AIR_CREDIT, SCALE_LABELS, aqiCategory, uvCategory } from '../air-categories.ts';
 import { TransitionText } from './TransitionText.tsx';
 import type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
 import './air-quality.css';
 
 type Scale = AirQualityState['scale'];
-export const SCALE_LABELS: Record<Scale, string> = { us: 'US AQI', european: 'European AQI' };
-/** The short credit the footer row keeps (#221); the inspector hint names Copernicus CAMS in full. */
-export const AIR_CREDIT = 'CAMS · Open-Meteo';
-// Words carry the level; there are deliberately no per-category colours.
-const CATEGORIES: Record<Scale, [number, string, string?][]> = {
-  us: [[50, 'Good'], [100, 'Moderate'], [150, 'Unhealthy for sensitive groups', 'Sensitive groups'], [200, 'Unhealthy'], [300, 'Very unhealthy'], [Infinity, 'Hazardous']],
-  european: [[20, 'Good'], [40, 'Fair'], [60, 'Moderate'], [80, 'Poor'], [100, 'Very poor'], [Infinity, 'Extremely poor']],
-};
-export function aqiCategory(aqi: number | null, scale: Scale, compact = false): string | null {
-  if (aqi === null) return null;
-  const [, name, short] = CATEGORIES[scale].find(([limit]) => Math.round(aqi) <= limit)!;
-  return compact && short ? short : name;
-}
-/** WHO UV index categories. */
-export function uvCategory(uv: number): string {
-  const value = Math.round(uv);
-  return value <= 2 ? 'Low' : value <= 5 ? 'Moderate' : value <= 7 ? 'High' : value <= 10 ? 'Very high' : 'Extreme';
-}
+export { AIR_CREDIT, SCALE_LABELS, aqiCategory, uvCategory } from '../air-categories.ts';
 const POLLUTANTS: Record<AirPollutant, string> = { pm2_5: 'PM2.5', pm10: 'PM10', ozone: 'ozone', nitrogen_dioxide: 'nitrogen dioxide', sulphur_dioxide: 'sulphur dioxide', carbon_monoxide: 'carbon monoxide' };
 
 function airState(state: AppState): AirQualityState {

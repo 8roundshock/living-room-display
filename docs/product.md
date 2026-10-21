@@ -32,6 +32,7 @@ busy dashboards. The application must produce no audio.
 | Note | A short message on screen. |
 | Air quality | Air quality and UV index. |
 | Sun & moon | Daylight and moon phase. |
+| Dynamic | What matters now (an official weather warning for Canada or the US, a storm or rain starting soon, a reminder due within the hour), or else one calm card each minute; its sources are chosen in the editor (#437). |
 
 Distinguish forecast probability, expected precipitation amount, and estimated
 rain windows. Label times and intervals correctly. Show stale or unavailable

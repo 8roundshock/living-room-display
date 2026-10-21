@@ -1,4 +1,4 @@
-import type { Settings, WidgetGrid, WidgetId } from '../shared/contracts';
+import type { AppState, Settings, WidgetGrid, WidgetId } from '../shared/contracts';
 import { useEffect, useRef } from 'react';
 import {
   WIDGET_CATALOG,
@@ -144,6 +144,8 @@ export function WidgetInspector({
   onPhotoCancel,
   saving,
   message,
+  appState,
+  saved,
 }: {
   settings: Settings;
   selected: WidgetId | null;
@@ -177,6 +179,9 @@ export function WidgetInspector({
    * always-mounted layout announcer speaks it, so this copy is not a live region (#311).
    */
   message: string;
+  /** The last server state and the saved settings, for widget panels that report them (#437). */
+  appState?: AppState;
+  saved?: Settings;
 }) {
   const addButton = useRef<HTMLButtonElement>(null),
     wasOpen = useRef(false),
@@ -473,6 +478,8 @@ export function WidgetInspector({
                       settings={settings}
                       onChange={onChange}
                       saving={saving}
+                      state={appState}
+                      saved={saved}
                     />
                   )}
                 </div>

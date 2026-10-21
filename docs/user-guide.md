@@ -82,10 +82,19 @@ below them, and a smaller Last screen and Reminders, filling the whole grid. In 
 
 The widgets are: Clock, World clocks (up to four cities), Calendar, Weather (with
 rain timing when rain is near), Forecast (the next seven days), Air quality, Sun &
-moon, Reminders, Countdown (to dates you choose), Note (a short note of your own),
+moon, Dynamic (what matters now, or a calm rotation), Reminders, Countdown (to dates you choose), Note (a short note of your own),
 Photo (a dim picture from your PC) and Last screen (a dim picture of what was on
 your screen just before the display started, with its time; it is kept in memory
 only and never saved).
+
+**Dynamic** stays on what matters most: an official weather warning (from Environment
+and Climate Change Canada or the US National Weather Service, for Canada and the US
+only), a storm or rain starting soon, a reminder due within the hour. Otherwise it shows
+one calm card each minute, such as the conditions, sunset or the next full moon, skipping
+what another widget on your display already shows. In its options, choose what it may
+show: Weather, Official weather alerts, Air & UV, Sun & moon, and Reminders & countdowns
+(their titles appear on the display). It uses your weather location; forecasts and model
+estimates are never shown as official warnings. Official alerts are checked after you save.
 
 ## Reminders
 

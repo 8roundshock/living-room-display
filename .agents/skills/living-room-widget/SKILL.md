@@ -52,7 +52,10 @@ code and tests for actual symbols and commands; the documentation is not a schem
   `WIDGET_MODULES`. Use `Settings`, `draftProblem` and `sample` hooks instead of
   editing the inspector, editor or picker.
 - Use `WeatherGlyph` for weather symbols and `TransitionText` for changing values.
-  Add no per-widget animation loop.
+  Add no per-widget animation loop. Content that rotates (Dynamic, #437) picks its card
+  with `rotationSlot` from `src/client/dynamic.ts` (wall-clock slots; slot 0 on the editor
+  canvas and picker samples) and starts no timer of its own: the display's one-second tick
+  re-renders it.
 - Know when the shared fit reruns (#314): on a box or content-size change, a text or
   structure change, a `class` change inside the content, and a Text size or typeface
   change, never on a `style` or `data-*` change alone. Restyle through a class when the

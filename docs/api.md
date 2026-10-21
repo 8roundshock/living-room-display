@@ -9,7 +9,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | Method/path                    | Request                                                                | Response                                                                     |
 | ------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `GET /api/health`              | None                                                                   | Status, version (read once at startup from the shipped `package.json`), storage recovery warning. |
-| `GET /api/state`               | None                                                                   | Settings, reminders, weather (refreshed only while a saved widget needs it), air quality (`off` unless enabled), preview metadata, storage warning; the [settings revision](#settings-revision) as `ETag`. |
+| `GET /api/state`               | None                                                                   | Settings, reminders, weather (refreshed only while a saved widget needs it), air quality (`off` unless a saved widget shows it), [official weather alerts](#official-weather-alerts) (`off` unless Dynamic shows them), preview metadata, storage warning; the [settings revision](#settings-revision) as `ETag`. |
 | `PATCH /api/settings`          | Validated nested partial settings; optional `If-Match`                 | Full saved settings with the new revision as `ETag`; 409 with the current settings when `If-Match` is stale. |
 | `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |
 | `GET /api/reminders`           | None                                                                   | Reminder array.                                                              |
@@ -208,9 +208,12 @@ uuid `id`, `label` 1–40 characters, IANA `timezone` other than `auto`, `latitu
 `longitude`), `calendar.weekStart` (`locale` default, `sunday`, `monday`),
 `countdowns` (≤12: uuid `id`, `title` 1–60 characters, civil `date` `YYYY-MM-DD`
 in 1900–2200, `repeatsYearly`), `note.text` (≤200 characters and ≤4 lines, trimmed,
-CRLF stored as LF) and `airQuality.scale` (`us` default or `european`). IDs within a
-list are unique and unknown keys are rejected. Missing sections read as defaults.
-PATCH merges `calendar`, `note` and `airQuality` and replaces either list whole.
+CRLF stored as LF), `airQuality.scale` (`us` default or `european`) and, for Dynamic
+(#437), `dynamic`: five booleans `weather`, `alerts`, `air`, `sky` and `personal`, each
+`true` when missing, with at least one on (all off is a 400 "Dynamic needs at least one
+source"). IDs within a list are unique and unknown keys are rejected. Missing sections
+read as defaults. PATCH merges `calendar`, `note`, `airQuality` and `dynamic` and
+replaces either list whole.
 `widgetData` is not part of saved styles, so applying a style or built-in preset
 leaves it unchanged. It is included in exports and imports like reminders. Note
 text, countdown titles and world-clock labels are private user content: never put
@@ -342,8 +345,8 @@ offset boundaries; hourly epoch instants retain unambiguous timing across DST.
 [Open-Meteo parameter definitions](https://open-meteo.com/en/docs).
 
 `GET /api/state` refreshes the forecast only while a saved, enabled widget needs it
-(#352): Weather or Forecast, or Sun & moon or Air quality while the saved location's
-timezone is still `auto`, which only the forecast resolves. Otherwise it returns the
+(#352): Weather, Forecast or Dynamic (#437), or Sun & moon or Air quality while the saved
+location's timezone is still `auto`, which only the forecast resolves. Otherwise it returns the
 cached forecast for the saved location and units, or the empty `unavailable` state with
 no error, and contacts no provider. `GET /api/weather` refreshes it whenever it is due; the
 editor requests it while its Weather tab is open, and while the draft shows a widget that
@@ -379,9 +382,10 @@ No IP/address auto-location is used.
 `AppState.airQuality` (`AirQualityState` in `src/shared/contracts.ts`) comes from
 the keyless [Open-Meteo air-quality API](https://open-meteo.com/en/docs/air-quality-api),
 which serves the Copernicus Atmosphere Monitoring Service (CAMS) model. The server
-requests it only while the Air quality widget is saved enabled (`GET /api/state`,
-in parallel with the forecast) or while the editor previews an unsaved enable or
-scale change (`GET /api/air-quality`). Otherwise the state is `off` and no request
+requests it only while a saved widget shows it (`GET /api/state`, in parallel with the
+forecast): the Air quality widget, or Dynamic with its Air & UV source (#437,
+`needsAirQuality` in `src/shared/widgets.ts`); or while the editor previews an unsaved
+change that shows it, or a scale change (`GET /api/air-quality`). Otherwise the state is `off` and no request
 is made. The browser never contacts the provider (`connect-src 'self'`).
 
 The request uses the saved weather location's `latitude`, `longitude` and
@@ -416,9 +420,141 @@ stand for 3 hours after `updatedAt` (#188, the same rule as Weather's temperatur
 ("Saved estimate"), or the AQI is qualified "Last known · <hour>" with UV hidden. The
 server keeps serving a `stale` reading's series unchanged: the widget already drops
 past hours at render time each minute, which a display that has lost the computer
-needs anyway, so trimming on the server would add nothing. Official alerts are a separate decision (#106).
+needs anyway, so trimming on the server would add nothing. Official alerts come only
+through Dynamic ([official weather alerts](#official-weather-alerts), #437).
 Open-Meteo's free API is for non-commercial use; see
 [architecture](architecture.md#current-decisions).
+
+## Official weather alerts
+
+`AppState.alerts` (`AlertsState` in `src/shared/contracts.ts`, `src/server/alerts.ts`) lists
+the official alerts in effect for the saved weather location (#437, adopting #106 for
+Canada and the US). It is requested only while Dynamic and its alerts source are saved on
+(`needsAlerts`); otherwise it is `off` and no request is made. It is API-only: never
+written to `state.json`, its backup or an export, and never logged. There is no separate
+endpoint: an unsaved change is checked after Save (an editor preview is #455).
+
+**Providers.** Canada: Environment and Climate Change Canada through MSC GeoMet
+(`api.weather.gc.ca`, "Data Source: Environment and Climate Change Canada"; the licence
+forbids altering content or intent, so names keep their wording and only their first
+letter is capitalised). The United States: the National Weather Service
+(`api.weather.gov`, US government data). Both are keyless; the NWS may require a key one
+day (#457). Europe (MeteoAlarm) is #451.
+
+**Location and privacy.** The key is the saved location rounded to 0.01°, the only
+precision that leaves this computer, and only to the provider whose box contains it. The
+browser contacts no provider (`connect-src 'self'` is unchanged). At most 8 places are
+kept in memory.
+
+**Coverage** (cached 24 hours per place; a failed lookup is retried after 5 minutes):
+
+1. Inside the Canada box (latitude 41.6–83.2, longitude −141.1 to −52.5):
+   `GET https://api.weather.gc.ca/collections/public-standard-forecast-zones/items?f=json&skipGeometry=true&limit=10&bbox=<point ± 0.005°>`.
+   One or more zones make ECCC the provider; the area is the first zone's `NAME` and the
+   zone set their `FEATURE_ID`s.
+2. Otherwise, inside the US box (latitude 17.5–71.6, longitude −180 to −64.5): the NWS.
+   Its first answer confirms it: 200 is covered, 400 "out of bounds" is `unsupported` for
+   24 hours, any other failure is a failure.
+3. Anywhere else: `unsupported`, with no request. The display then says nothing about
+   alerts (never "no alerts"); the editor explains the coverage.
+
+**ECCC alerts:** `GET https://api.weather.gc.ca/collections/weather-alerts/items?f=json&lang=en&skipGeometry=true&limit=100&bbox=<same>`.
+Only features whose `feature_id` is in the zone set count, so a neighbouring zone's
+alert that the small box also touches is left out. `status_en` matching ended or
+cancelled, and anything whose expiration or event end has passed, is dropped; one alert
+covering several of the place's zones (`<alert id>_<zone id>`) counts once. `level` is
+`alert_type`, `name` is `alert_name_en` (only its first letter capitalised), `area` is
+`feature_name_en`, `issuedAt` is `publication_datetime`, `startsAt` is
+`validity_datetime` (when the alert's weather is expected to begin; publication without
+it), `endsAt` is `event_end_datetime` and `expiresAt` is `expiration_datetime`.
+`risk_colour_en` is ignored: no colour coding.
+
+**NWS alerts:** `GET https://api.weather.gov/alerts/active?point=LAT,LON&status=actual&message_type=alert,update`
+with `Accept: application/geo+json`. Status other than Actual, the event "Test Message",
+urgency Past, messageType Cancel and expired alerts are dropped. The level comes from the
+event's last word (Warning, Watch or Advisory; anything else is a statement), `name` is
+`event` verbatim, `area` is the first segment of `areaDesc`, `startsAt` is
+`onset ?? effective` and `endsAt` is `ends ?? expires`.
+
+**Requests** send `User-Agent: LivingRoomDisplay/<version> (local ambient display)`, use an
+8-second timeout and `redirect: 'error'`, read at most 1 MiB of body and send no no-cache
+header. Retry-After on 429 or 503 pauses that provider (up to an hour), and each provider
+gets at most 12 requests an hour whatever the number of places. Each feature is checked on
+its own (#246): a malformed one is skipped, not the list. At most 10 alerts are kept,
+warnings first.
+
+**Cadence and states.** A success is repeated after 5 minutes and a failure retried after
+2, by the forecast's monotonic-and-wall timing (#244); a request waits for a due check at
+most about one second and says `refreshing` meanwhile (#351). `fresh` until the last
+success is 15 minutes old, then `stale`: the retained alerts stay, each until its own end.
+`unavailable` when there has never been a success, or none for 2 hours with nothing still
+in effect. `unsupported` as above; `off` when not requested.
+
+## Dynamic signals
+
+Dynamic (#437) ranks what the display already knows; [`src/client/dynamic.ts`](../src/client/dynamic.ts)
+is the single home of every constant below and is exported for Home (#438). The browser
+computes it from `/api/state` once per minute and data change; nothing is stored. Every
+threshold is a product default, not an official criterion, and no forecast, model or
+personal card uses the words warning, alert, watch or advisory (a unit test checks).
+
+| Threshold | Metric | Imperial |
+| --- | --- | --- |
+| Hot today (until 18:00 in the weather city) / tomorrow: daily high | 32 °C | 90 °F |
+| Feels very cold now | −27 °C | −17 °F |
+| Very cold tomorrow: daily low | −20 °C | −4 °F |
+| Strong wind / windy now | 50 / 39 km/h | 31 / 24 mph |
+| AQI focus / notable | US 151 / 101; European 81 / 61 | |
+| UV among today's upcoming readings | 6 | |
+| Reminder due soon / recently overdue | 60 / 120 min (at most 3 reminder cards) | |
+| Sunrise or sunset soon / full moon "tonight" from | 60 min / 180 min before sunset | |
+
+A rest of today is wet when a remaining hourly interval of the weather city's civil today
+has a 30% chance or a measurable amount (0.1 mm or 0.004 in). Hazard families by WMO code:
+hail 96/99, storm 95, freezing 56/57/66/67, heavy snow 75/86, heavy rain 65/82.
+
+| Tier | Score: card |
+| --- | --- |
+| Alert | 1100: an official warning (several take turns, one per minute, "1 of 2") |
+| Focus (the top one stays) | 1010 official watch; 1000 hail now; 990 thunderstorms now; 985 freezing rain or drizzle now; 980 heavy snow now; 970 / 960 / 955 / 950 hail, storms, freezing, heavy snow in today's forecast (wet rest of today, no "now" card of that family); 945 official advisory; 940 rain likely now; 930 rain likely within 6 hours; 925 heavy rain today (no rain now or soon card); 920 unhealthy air; 915 strong wind; 910 feels very cold; 905 hot today; 900 a reminder due within the hour or overdue by up to two |
+| Notable (rotates first) | 885 official statement; 880 rain possible now or soon; 870 rain later (6–12 hours); 865 today's hazard without hourly timing ("Timing unavailable"); 860 severe weather tomorrow; 850 air unhealthy for sensitive groups; 840 high UV; 830 windy; 825 hot or very cold tomorrow; 820 / 815 a countdown today / tomorrow; 810 a reminder later today; 805 a reminder overdue by more than two hours; 800 sunrise or sunset within the hour; 790 full moon tonight; 780 precipitation possible |
+| Calm (fixed order) | conditions; today's high and low; dry for 12 hours (fresh, connected and complete only); the next sunrise or sunset (or the polar day or night); the next full or new moon; the next countdown at least 2 days away; good or moderate air. Each is skipped while the widget that already shows it is on the board (Weather; Weather or Forecast; Weather; Sun & moon; Sun & moon; Countdown; Air quality), unless that would leave nothing |
+
+Ties go to the earlier start, then the id. Card ids stay stable (`alert:<id>`,
+`weather:hazard`, `weather:rain`, `reminder:<id>`, `countdown:<id>`, `sky:sun`, …), so a swap
+follows the thing, not its wording.
+
+**Selection** (`chooseDynamic`). Warnings first; otherwise the top focus card stays put with
+"+N more" counting the other focus and notable cards; otherwise notable then calm cards
+rotate on wall-clock slots of `DYNAMIC_ROTATE_MS` (60 s; a setting is #454): slot
+`floor(now / 60 s)`, card `slot mod n`, and a card shown earlier in the same slot stays
+(the latch), so data arriving mid-minute never jumps the rotation. A new warning or focus
+card takes the lead at once. The editor canvas and picker samples hold slot 0. With no
+card at all Dynamic is `unavailable` when a source is degraded (shown, saying which) and
+`empty` otherwise (hidden on the display, a placeholder in the editor).
+
+**Honest states.**
+
+| Situation | What Dynamic shows |
+| --- | --- |
+| Forecast stale | Weather cards with "Saved forecast · Updated 2 hr ago" in the status tone; current-based cards only while the reading is up to 3 hours old (the shared last-known rule), with "As of 9 AM", never "Now"; no Dry card |
+| Display offline | "Offline · …"; reminder and countdown cards say "Saved reminders · offline" (or "Saved dates"); alerts are kept until their own end; glyphs are still |
+| Forecast unavailable | No weather cards; "Weather unavailable" in the status tone |
+| Alerts off / unsupported | Nothing from alerts; never "no alerts" (the editor explains coverage) |
+| Alerts fresh, none in effect | Small and medium say nothing; large: "No alerts · checked 9:41 PM" |
+| Alerts stale | Retained alerts until their end, and "Saved alerts · checked 9:10 PM" in the status tone; no "No alerts" claim |
+| Alerts unavailable | "Weather alerts unavailable" in the status tone |
+| Air on, not loaded / unavailable / saved | No air cards and "Air quality not loaded yet" (medium and large) / "Air quality unavailable" / an air card aged "Saved reading · …", "Saved estimate" over 3 hours, or no air card and "Saved air reading" when only the last-known value is left |
+| Reminders not readable | "Reminders unavailable" |
+| Location timezone `auto` | This computer's zone, as Sun & moon |
+
+Status phrases sit in the footer and leave out the lead card's own source; the small family
+shows one, in this order: Offline, Weather alerts unavailable, Weather unavailable, Saved
+forecast, Air quality unavailable, Reminders unavailable. Forecast cards say "Forecast
+estimate" (rain cards their confidence) with the forecast's age; air cards their age and
+"CAMS · Open-Meteo"; sun and moon cards the place; official cards the provider's name in
+full (the small family may say "Environment Canada") and when they were checked. Dynamic
+carries the "Forecast by Open-Meteo" credit only while Forecast and Weather are both off.
 
 ## Native snapshot handoff
 
@@ -481,12 +617,15 @@ At rest, `state.json`, `state.backup.json` and exports omit additive values whil
 they equal the current read default: `appearance.accentMode` `color`,
 `appearance.animation` `subtle`, `appearance.daylightBrightness` `null` (Fixed,
 #439), default `widgetData` sections, and disabled widget ids the previous installed
-release does not know. The previous release (`d66832b`) knows every widget id and
-reads every one of these keys except `daylightBrightness`, so all widget ids are
-written and omitting `accentMode`, `animation` and `widgetData` is optional. It is
-kept unchanged (#272) so a reader bump does not change the data format. Omitting
-`daylightBrightness` is required: it is the mechanism that keeps Fixed data readable
-by `d66832b`, as it would be for any future additive key or new widget id that the
-previous release does not know. API
+release does not know. The previous release (`d66832b`) reads `accentMode`, `animation`
+and pre-Dynamic `widgetData`, so omitting those values is optional (#272). It does
+not know `daylightBrightness`: omitting `null` keeps Fixed brightness readable, while
+a saved range is a rollback exception. It also lacks Dynamic (#437): while off, its
+visibility and hidden placement are omitted, as are its default sources (all on).
+Under the #135 rule no transform is ever written for an unknown id, whatever its
+value; transforms no longer render, so dropping one loses nothing. An enabled
+Dynamic, sources other than all on, or a saved style made while it was on are a
+[rollback exception](install.md#additive-data-and-rollback-compatibility-84) until
+the next reader bump (#130). API
 responses (`/api/state`, the `PATCH /api/settings` response and the native session)
 always include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).

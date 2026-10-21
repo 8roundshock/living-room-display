@@ -164,6 +164,22 @@ a 720-CSS-pixel-tall display such as a 4K TV at 300% scaling, instead of shrinki
 with each widget. See [UI contracts](ui.md), [API](api.md)
 and the [UX role guide](roles/ux.md) for verification and future work.
 
+## Dynamic emphasis
+
+Dynamic (#437) must make an official warning or a storm starting soon noticeable from the
+couch without adding light. Urgency comes from words, rank and size only: the warning or
+focus card leads, its headline takes the elevated step (`min(8cqw, 11cqh)` in small and
+large, `min(6.2cqw, 14cqh)` in medium; rotation one step smaller), and "Warning" alone uses
+the status tone (`--ambient-caution`), as "Overdue" does. No weight above 500, no fill,
+frame, underline, inverse text, glow, pulse, blink or loop; opacity never rises above its
+resting value; colour is never the only signal, and the official provider's colour code is
+ignored. Its weather glyph is never the hero glyph (no loops) and is still while the data is
+saved or the display is offline. There is no audio and no live region. One card shows at a
+time: a new card is a new element (the old one leaves at once), fading in with the
+value-change fade at Subtle and Lively (Lively adds a settle from above, within the padding,
+under 1.3 s); Off and reduced motion swap instantly, and the first card after the widget
+appears never animates.
+
 ## Motion levels
 
 Style → Motion → **Animation** offers Off, Subtle (default) and Lively (#76). It is

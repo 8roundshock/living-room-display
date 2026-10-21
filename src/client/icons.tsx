@@ -23,6 +23,7 @@ export type IconName =
   | 'trash'
   | 'edit'
   | 'sparkles'
+  | 'alert'
   | 'download'
   | 'globe'
   | 'hourglass'
@@ -174,6 +175,13 @@ const paths: Record<IconName, React.ReactNode> = {
   sparkles: (
     <>
       <path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5ZM20 2v4m-2-2h4" />
+    </>
+  ),
+  // Official alerts only (#437): an outline triangle with an exclamation mark, the standard 1.5 stroke.
+  alert: (
+    <>
+      <path d="M10.3 4.2 2.6 17.6A2 2 0 0 0 4.3 20.6h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9.5v4.5m0 3h.01" />
     </>
   ),
   download: (

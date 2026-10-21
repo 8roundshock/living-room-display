@@ -166,7 +166,8 @@ test('dense boards move each widget off at least half of its previous cells (#33
   // widget on more than half of its previous cells (all of them when a reflection kept a widget centred on its
   // axis). Now 7 do, on boards whose largest widgets found no such cells within the bounded search. Over 200
   // cycles of the same boards, 72 of 73,600 moves do (1,553 at 3446400), and no composition repeats the one from
-  // two cycles earlier (85 of 7,164 at 3446400).
+  // two cycles earlier (85 of 7,164 at 3446400). The boards are drawn from every catalog id, so Dynamic (#437)
+  // changed them: 9,000 widget moves, of which 2 keep more than half of their cells (measured 2026-10-20).
   let moves = 0; const staying: string[] = [];
   for (const density of Object.keys(GRID_DENSITIES) as GridDensity[]) {
     for (const [index, run] of denseRunsFor(density).entries()) {
@@ -174,7 +175,7 @@ test('dense boards move each widget off at least half of its previous cells (#33
       staying.push(...stayers(run).map(item => `${density} board ${index} cycle ${item.cycle}: ${item.id} keeps ${item.share.toFixed(2)}`));
     }
   }
-  assert.equal(moves, 8_832);
+  assert.equal(moves, 9_000);
   assert.ok(staying.length <= 10, `${staying.length} of ${moves} moves keep more than half of a widget's cells: ${staying.join('; ')}`);
 });
 
