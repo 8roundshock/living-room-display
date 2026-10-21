@@ -90,6 +90,8 @@ import {
 import { GridEditor, type LayoutEdit } from './GridEditor';
 import { WidgetInspector, useHeldPointers, widgetListOrder, type InspectorReveal } from './WidgetInspector';
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
+import { DISPLAY_WINDOW } from './displayWindow';
+import { MotionSentence, ScreenSettings } from './ScreenSettings';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel, reminderFormPending } from './RemindersPanel';
@@ -359,6 +361,39 @@ export function Editor({
   // the entrance once after a level is chosen.
   const editorReducedMotion = usePrefersReducedMotion();
   const [revealNonce, setRevealNonce] = useState(0);
+  // #436 one display window: the editor opens, reuses and focuses the window named still-display, and
+  // keeps its handle so it can say "Show display" and offer Close display while that window is open.
+  const displayWindow = useRef<Window | null>(null);
+  // Style › Motion has been opened: its Screen part then reads the Windows power status once (#436).
+  const [motionOpened, setMotionOpened] = useState(false);
+  const [displayOpen, setDisplayOpen] = useState(false);
+  useEffect(() => {
+    const check = () => setDisplayOpen(displayWindow.current !== null && displayWindow.current.closed === false);
+    const timer = window.setInterval(check, 1000);
+    window.addEventListener('focus', check);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', check); };
+  }, []);
+  function openDisplay(event: React.MouseEvent<HTMLAnchorElement>) {
+    // Modified clicks (a new tab on purpose) keep the browser's own behaviour.
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    const current = displayWindow.current;
+    const win = current?.closed === false ? current : window.open('', DISPLAY_WINDOW);
+    if (!win) { window.location.assign('/display'); return; }
+    try {
+      if (win.location.pathname !== '/display') win.location.replace('/display');
+    } catch {
+      win.location.replace('/display');
+    }
+    win.focus();
+    displayWindow.current = win;
+    setDisplayOpen(true);
+  }
+  function closeDisplay() {
+    displayWindow.current?.close();
+    displayWindow.current = null;
+    setDisplayOpen(false);
+  }
   const photoChanged =
     photoDraft !== undefined &&
     (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
@@ -1432,17 +1467,26 @@ export function Editor({
             For full screen on this PC: Start › Living Room Display - Show display, or press F
             on the display
           </p>
+        <div className="display-window-actions">
+          {displayOpen && (
+            <button className="button close-display" onClick={closeDisplay} aria-label="Close display" title="Close display">
+              <Icon name="close" size={15} />
+              <span className="close-display-label">Close display</span>
+            </button>
+          )}
+          {/* A same-origin loopback window, so no rel: the display needs window.opener to return here (#436). */}
           <a
             className="button open-display"
             href="/display"
-            target="_blank"
-            rel="noreferrer"
+            target={DISPLAY_WINDOW}
+            onClick={openDisplay}
             aria-describedby="open-display-hint"
           >
             <Icon name="monitor" size={17} />
-            Open display
+            {displayOpen ? 'Show display' : 'Open display'}
             <Icon name="arrow" size={15} />
           </a>
+          </div>
         </div>
       </header>
       <main className="studio-workspace">
@@ -1539,7 +1583,7 @@ export function Editor({
                 <button className={`button small movement-preview ${movementPreview ? 'active' : ''}`} aria-pressed={movementPreview} onClick={() => { setMovementPreview(value => !value); setError(null); }}>
                   <Icon name={movementPreview ? 'check' : 'refresh'} size={15} />{movementPreview ? 'Back to layout' : 'Preview movement'}
                 </button>
-                {movementPreview && <>
+                {movementPreview && draft.appearance.rearrange && <>
                 <div
                   className="composition-picker"
                   aria-label="Preview arrangement"
@@ -1958,7 +2002,12 @@ export function Editor({
                     )}
                   </div>
                 </div>
-                <details className="disclosure motion-disclosure">
+                <details
+                  className="disclosure motion-disclosure"
+                  onToggle={(event) => {
+                    if (event.currentTarget.open) setMotionOpened(true);
+                  }}
+                >
                   <summary>
                     Motion
                     <span>{ANIMATION_LABELS[draft.appearance.animation]}</span>
@@ -1987,8 +2036,8 @@ export function Editor({
                         ))}
                       </div>
                       <p className="animation-hint">
-                        Off keeps widgets still. Subtle animates changes. Lively adds
-                        gentle weather motion.
+                        Off keeps the content of widgets still; movement is set below.
+                        Subtle animates changes. Lively adds gentle weather motion.
                       </p>
                       {editorReducedMotion && (
                         <p className="animation-hint">
@@ -1997,14 +2046,14 @@ export function Editor({
                         </p>
                       )}
                     </div>
-                    {/* #240: plain names for motionEnabled and motionIntervalSeconds. */}
+                    {/* #240, #436: plain names for motionEnabled, motionIntervalSeconds, rearrange and fadeSeconds. */}
                     <Toggle
-                      label="Drift and fade between moves"
+                      label="Float gently"
                       checked={draft.appearance.motionEnabled}
                       onChange={(value) => appearance('motionEnabled', value)}
                     />
                     <Range
-                      label="Move widgets every"
+                      label="Move every"
                       min={30}
                       max={1800}
                       step={30}
@@ -2019,21 +2068,47 @@ export function Editor({
                         appearance('motionIntervalSeconds', value)
                       }
                     />
-                    <Range
-                      label="Fade duration"
-                      min={0}
-                      max={10}
-                      value={draft.appearance.fadeSeconds}
-                      display={`${draft.appearance.fadeSeconds}s`}
-                      spoken={spokenSeconds(draft.appearance.fadeSeconds)}
-                      onChange={(value) => appearance('fadeSeconds', value)}
+                    <MotionSentence appearance={draft.appearance} />
+                    <Toggle
+                      label="Swap places"
+                      checked={draft.appearance.rearrange}
+                      onChange={(value) =>
+                        // A motion preference, not a look: the style preset stays as it is.
+                        change((previous) => ({
+                          ...previous,
+                          appearance: { ...previous.appearance, rearrange: value },
+                        }))
+                      }
                     />
-                    <p className="hint motion-hint">
-                      Widgets always move to a new place through black. With
-                      Drift and fade off, or with Animation effects off in
-                      Windows Settings › Accessibility › Visual effects on the
-                      display PC, they appear without a fade and nothing drifts.
+                    <p className="hint swap-hint">
+                      Widgets sometimes trade places. Your arrangement stays saved.
                     </p>
+                    {draft.appearance.rearrange && (
+                      <Range
+                        label="Swap glide"
+                        min={0}
+                        max={10}
+                        value={draft.appearance.fadeSeconds}
+                        display={`${draft.appearance.fadeSeconds}s`}
+                        spoken={spokenSeconds(draft.appearance.fadeSeconds)}
+                        onChange={(value) => appearance('fadeSeconds', value)}
+                      />
+                    )}
+                    <p className="hint motion-hint">
+                      With Animation effects off in Windows Settings › Accessibility
+                      › Visual effects on the display PC, the display moves without
+                      animation.
+                    </p>
+                    <ScreenSettings
+                      keepAwake={draft.screen.keepAwake}
+                      active={motionOpened}
+                      onKeepAwake={(value) =>
+                        change((previous) => ({
+                          ...previous,
+                          screen: { ...previous.screen, keepAwake: value },
+                        }))
+                      }
+                    />
                   </div>
                 </details>
                 <details className="disclosure">

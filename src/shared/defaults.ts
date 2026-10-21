@@ -16,6 +16,8 @@ export const DEFAULT_SETTINGS: Settings = {
     accentMode: 'native', animation: 'subtle',
     // Fixed brightness (#439); Follow daylight stores its range here.
     daylightBrightness: null,
+    // #436: widgets keep their places and float; swapping is opt-in.
+    rearrange: false,
   },
   // The default board (#435). Older saved data backfills from the catalog instead (validation.ts).
   widgets: defaultBoardVisibility(),
@@ -29,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
     // #437: everything Dynamic may show is on by default; this default section is omitted at rest.
     dynamic: { weather: true, alerts: true, air: true, sky: true, personal: true },
   },
+  screen: { keepAwake: true },
 };
 
 export function defaultSettings(): Settings { return structuredClone(DEFAULT_SETTINGS); }

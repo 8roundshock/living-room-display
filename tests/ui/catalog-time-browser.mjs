@@ -414,8 +414,9 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await app.store.update(data => {
       data.reminders = Array.from({ length: 12 }, (_, index) => ({ id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, text: `Synthetic reminder ${index + 1}`, completed: false, dueAt: null, createdAt: new Date(now - index * 60_000).toISOString(), updatedAt: new Date(now - index * 60_000).toISOString() }));
     });
+    // #436: arrangements change only with Swap places on (opt-in).
     await app.store.patchSettings({
-      appearance: { motionIntervalSeconds: 30 },
+      appearance: { motionIntervalSeconds: 30, rearrange: true },
       widgets: { clock: true, weather: true, forecast: false, reminders: true, preview: false, photo: false, calendar: true, countdown: true, note: true },
       widgetGrid: { placements: {
         reminders: { column: 0, row: 0, size: 'small', span: { columns: 2, rows: 8 } }, clock: { column: 2, row: 0, size: 'large' },
@@ -432,12 +433,16 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
       if (composition) { await page.clock.runFor(30_000); await page.clock.runFor(1_200); }
       assert.equal(await page.locator('.ambient').getAttribute('data-composition'), String(composition));
       const layout = await page.evaluate(ids => {
+        // A swap's glide runs in real time: finish it to read the new cells at rest.
+        for (const animation of document.getAnimations()) if (animation.id === 'lrd-glide') animation.finish();
         const plane = document.querySelector('.widget-grid-plane').getBoundingClientRect();
         return Object.fromEntries(ids.map(id => {
           const element = document.querySelector(`[data-widget-id="${id}"]`);
           if (!element) return [id, null];
-          const box = element.getBoundingClientRect();
-          const outside = [...element.querySelectorAll('*')].filter(node => { const r = node.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.left < box.left - 1 || r.right > box.right + 1 || r.top < box.top - 1 || r.bottom > box.bottom + 1); }).length;
+          // The cell: the box without the #436 float translation (the content floats inside it).
+          const [x, y] = getComputedStyle(element).translate.split(' ').map(value => parseFloat(value) || 0), raw = element.getBoundingClientRect();
+          const box = { left: raw.left - (x ?? 0), top: raw.top - (y ?? 0), right: raw.right - (x ?? 0), bottom: raw.bottom - (y ?? 0) };
+          const outside = [...element.querySelectorAll('*')].filter(node => { const r = node.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.left < raw.left - 1 || r.right > raw.right + 1 || r.top < raw.top - 1 || r.bottom > raw.bottom + 1); }).length;
           return [id, { left: box.left - plane.left, top: box.top - plane.top, right: box.right - plane.left, bottom: box.bottom - plane.top, width: plane.width, height: plane.height, span: element.getAttribute('data-widget-span'), full: element.hasAttribute('data-full-height'), outside }];
         }));
       }, dense);
@@ -459,7 +464,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     }
     for (let index = 1; index < arrangements.length; index++) assert.notEqual(arrangements[index], arrangements[index - 1], `dense board composition ${index} relocates`);
     await app.store.update(data => { data.settings = restore.settings; data.reminders = restore.reminders; });
-    checks.push('Dense Balanced board (88/96 cells) with a 2 × 8 Reminders column beside Calendar, Countdown and Note: the server keeps the span, and display compositions 0–3 keep every widget whole, inside the plane, disjoint and relocating (#73, #93)');
+    checks.push('Dense Balanced board (88/96 cells) with a 2 × 8 Reminders column beside Calendar, Countdown and Note: the server keeps the span, and display compositions 0–3 (Swap places on, #436) keep every widget whole, inside the plane, disjoint and relocating (#73, #93)');
 
     // 7. Narrow reflow and Save-bar clearance for focused fields.
     for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 844 }, { width: 390, height: 480 }]) {

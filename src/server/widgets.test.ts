@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
 import { catalogBoardDefaults } from './fixtures.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, composeWidgetGrid, firstPlacement, fitGridDensity, fitWidgetFamily, gridProblem, motionOffset, placeWidget, reflowWidget, repackGrid, switchGridDensity, widgetContentLimits, widgetSizes } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, composeWidgetGrid, firstPlacement, fitGridDensity, fitWidgetFamily, gridProblem, placeWidget, reflowWidget, repackGrid, switchGridDensity, widgetContentLimits, widgetSizes } from '../shared/widgets.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
 
 // The default board for new installs (#435) is checked first; every later test is written for the
@@ -222,7 +222,6 @@ test('long-running full and dense boards remain collision-free and move modules 
       grid = next;
     }
     for (const id of WIDGET_IDS.filter(id => settings.widgets[id])) assert.ok(origins[id]!.size >= 5, `${density}/${id} needs more than four fixed origins`);
-    assert.notDeepEqual(motionOffset(1), motionOffset(5), 'additional protected-plane offsets do not repeat on the old four-cycle boundary');
   }
   const grid = catalogBoardDefaults().widgetGrid;
   assert.ok(firstPlacement(grid, 'photo', 'small', catalogBoardDefaults().widgets));

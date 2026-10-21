@@ -57,7 +57,7 @@ test('style defaults are unchanged by the default board (#435 scope)', () => {
   const { appearance, preview, widgetBehavior } = defaultSettings();
   assert.deepEqual(appearance, {
     preset: 'room', accentColor: '#8aa8c2', textColor: '#b8c1ca', brightness: 0.55, fontScale: 1, fontFamily: 'sans', layout: 'balanced',
-    motionEnabled: true, motionIntervalSeconds: 180, fadeSeconds: 2, clockStyle: 'outline', accentMode: 'native', animation: 'subtle', daylightBrightness: null,
+    motionEnabled: true, motionIntervalSeconds: 180, fadeSeconds: 2, clockStyle: 'outline', accentMode: 'native', animation: 'subtle', daylightBrightness: null, rearrange: false,
   });
   assert.deepEqual(preview, { enabled: true, opacity: 0.24, widthPercent: 20 });
   assert.deepEqual(widgetBehavior, { reminders: { hideWhenEmpty: true } });

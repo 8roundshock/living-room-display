@@ -113,7 +113,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     return document.getAnimations().filter(animation => animation.effect?.target && plane?.contains(animation.effect.target)).map(animation => {
       const timing = animation.effect.getTiming(), target = animation.effect.target, keyframes = animation.effect.getKeyframes();
       return {
-        name: animation.animationName ?? `transition:${animation.transitionProperty}`,
+        name: animation.animationName ?? (animation.transitionProperty ? `transition:${animation.transitionProperty}` : animation.id || 'script'),
         iterations: timing.iterations, duration: timing.duration, delay: timing.delay, playState: animation.playState,
         plane: target === plane, hero: Boolean(target.closest('[data-glyph-hero]')), part: target.closest('.glyph-part')?.dataset.glyphPart ?? null,
         properties: [...new Set(keyframes.flatMap(frame => Object.keys(frame)).filter(key => !names.includes(key)))],
@@ -134,15 +134,60 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     throw new Error(`Timed out waiting for ${label}`);
   }
   const loops = list => list.filter(animation => animation.iterations === Infinity);
-  /** Motion in the plane (the Soft motion drift is a discrete timer, #248, so it never appears): animation names or transition:<property>. */
+  /** Motion in the plane (the #436 float is a discrete timer, as #248's drift was, so it never appears): animation names or transition:<property>. */
   const planeMotion = async page => (await inventory(page)).map(item => item.name);
   /** Animation names or transition:<property> running on the elements matching `selector`. */
-  const motionIn = (page, selector) => page.evaluate(query => [...document.querySelectorAll(query)].flatMap(element => element.getAnimations().map(animation => animation.animationName ?? `transition:${animation.transitionProperty}`)), selector);
-  /** Steps the page clock until the next arrangement's entrance starts. */
-  async function untilRevealing(page) {
-    for (let step = 0; step < 120; step++) { if (await page.locator('.widget-grid-plane.revealing').count()) return; await page.clock.runFor(100); }
-    throw new Error('Timed out waiting for the next reveal');
-  }
+  const motionIn = (page, selector) => page.evaluate(query => [...document.querySelectorAll(query)].flatMap(element => element.getAnimations().map(animation => animation.animationName ?? (animation.transitionProperty ? `transition:${animation.transitionProperty}` : animation.id || 'script'))), selector);
+  /**
+   * #436 owner board: the default 12 × 8 board with two synthetic reminders, a routed Last screen
+   * snapshot and Sun & moon, so six widgets show, at a 30 s interval with a 2 s fade, Lively and
+   * brightness 0.37, as the owner's saved settings. No Swap places, as after the update.
+   */
+  const SYNTHETIC_REMINDERS = [1, 2].map(index => ({ id: `00000000-0000-4000-8000-00000000043${index}`, text: `Synthetic reminder ${index}`, completed: false, dueAt: null, createdAt: new Date(now - index * 60_000).toISOString(), updatedAt: new Date(now - index * 60_000).toISOString() }));
+  const ownerBoard = (edit = () => undefined) => state => {
+    level('lively')(state);
+    Object.assign(state.settings.appearance, { motionIntervalSeconds: 30, fadeSeconds: 2, motionEnabled: true, brightness: 0.37, rearrange: false });
+    Object.assign(state.settings.widgets, { clock: true, weather: true, forecast: true, reminders: true, preview: true, sunMoon: true });
+    state.settings.preview.enabled = true;
+    state.settings.widgetGrid.density = 'balanced';
+    state.settings.widgetGrid.placements.sunMoon = { column: 8, row: 6, size: 'small' };
+    state.reminders = structuredClone(SYNTHETIC_REMINDERS);
+    state.preview = { available: true, capturedAt: new Date(now - 60_000).toISOString(), width: 1920, height: 1080 };
+    edit(state);
+  };
+  /**
+   * One sample of the display: the plane's translation and opacity, and per widget its cell (left/top),
+   * computed opacity and the bounding box of what it actually draws (text, images, bars) in the viewport.
+   */
+  const sampleBoard = page => page.evaluate(() => {
+    const plane = document.querySelector('.widget-grid-plane'), matrix = new DOMMatrix(getComputedStyle(plane).transform);
+    const range = document.createRange();
+    const ink = section => {
+      let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+      const add = rect => { if (rect.width <= 0 && rect.height <= 0) return; left = Math.min(left, rect.left); top = Math.min(top, rect.top); right = Math.max(right, rect.right); bottom = Math.max(bottom, rect.bottom); };
+      const walk = node => { for (const child of node.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          if (!child.textContent.trim()) continue;
+          // A text rect is the font's content area, taller than the line box for large type (the clock's
+          // digits); the glyphs sit inside the line box, so trim the difference evenly.
+          const style = getComputedStyle(child.parentElement), lineHeight = parseFloat(style.lineHeight);
+          range.selectNodeContents(child);
+          for (const rect of range.getClientRects()) {
+            const trim = Number.isFinite(lineHeight) && rect.height > lineHeight ? (rect.height - lineHeight) / 2 : 0;
+            add(new DOMRect(rect.left, rect.top + trim, rect.width, rect.height - 2 * trim));
+          }
+        }
+        else if (child instanceof Element && !child.classList.contains('sr-only')) { if (child.matches('svg, img, canvas, picture, video, [role="img"]') || (!child.firstElementChild && !child.textContent.trim())) add(child.getBoundingClientRect()); else walk(child); }
+      } };
+      walk(section.querySelector('.widget-content'));
+      return { left, top, right, bottom };
+    };
+    return {
+      t: Date.now(), x: matrix.e, y: matrix.f, opacity: Number(getComputedStyle(plane).opacity), transition: getComputedStyle(plane).transitionProperty,
+      animations: plane.getAnimations().length, width: innerWidth, height: innerHeight,
+      widgets: [...document.querySelectorAll('.ambient-widget')].map(section => ({ id: section.dataset.widgetId, left: section.style.left, top: section.style.top, opacity: Number(getComputedStyle(section).opacity), translate: getComputedStyle(section).translate, ink: ink(section) })),
+    };
+  });
 
   try {
     // (1) The root reports the effective level; reduced motion reports Off and still relocates.
@@ -154,12 +199,16 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       const reduced = await displayPage({ state: scenario(level(animation)), reducedMotion: 'reduce' });
       assert.equal(await reduced.page.locator('.ambient').getAttribute('data-animation'), 'off', `${animation} under reduced motion`);
       assert.equal(await reduced.page.locator('.widget-grid-plane.revealing').count(), 0);
+      const before = await sampleBoard(reduced.page);
       await reduced.page.clock.runFor(185_000);
-      assert.ok(Number(await reduced.page.locator('.ambient').getAttribute('data-composition')) > 0, 'reduced motion still relocates');
+      const after = await sampleBoard(reduced.page);
+      assert.equal(await reduced.page.locator('.ambient').getAttribute('data-float'), 'step');
+      assert.ok(after.x !== before.x || after.y !== before.y, 'reduced motion still moves the board, in steps');
+      assert.equal(after.opacity, 1, 'and never fades it');
       assert.equal((await inventory(reduced.page)).length, 0, 'reduced motion leaves nothing running in the plane');
       await reduced.close();
     }
-    checks.push('effective data-animation per level; reduced motion reports Off, runs nothing and still relocates through black');
+    checks.push('effective data-animation per level; reduced motion reports Off, runs nothing and still moves the board in steps at opacity 1');
 
     // (2) Inventory: Off/Subtle never loop; Lively loops only on hero-glyph layers, ≤3, each ≥1.2 s.
     // #251 adds partly cloudy by day and night, fog and drizzle; each keeps at most three loops on its own parts.
@@ -199,46 +248,190 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
           assert.ok(item.duration >= 1200, `${glyph}: ${item.name} cycle ${item.duration}`);
           if (item.name === 'lrd-glyph-bolt') assert.ok(item.duration >= 8000, 'bolt period');
         }
-        // Loops pause during the black rest.
-        await page.clock.runFor(178_000);
-        assert.equal(await page.locator('.widget-grid-plane.fading').count(), 1);
-        assert.ok(loops(await inventory(page)).every(item => item.playState === 'paused'), `${glyph}: loops pause on black`);
+        // #436: across an interval nothing fades or pauses; the loops keep running.
+        await page.clock.runFor(180_000);
+        assert.equal(await page.locator('.widget-grid-plane.fading').count(), 0);
+        assert.ok(loops(await inventory(page)).every(item => item.playState === 'running'), `${glyph}: loops keep running across an interval`);
       }
       await view.close();
     }
-    checks.push('getAnimations inventory: Off/Subtle zero loops; Lively ≤3 hero-glyph loops ≥1.2 s (bolt ≥8 s) that pause on black; only transform/opacity keyframes, opacity ≤1; ' + (gpu ? 'stacked glyph pixels equal one SVG at rest' : 'glyph pixel parity skipped (--no-gpu)'));
+    checks.push('getAnimations inventory: Off/Subtle zero loops; Lively ≤3 hero-glyph loops ≥1.2 s (bolt ≥8 s) that keep running across an interval (#436); only transform/opacity keyframes, opacity ≤1; ' + (gpu ? 'stacked glyph pixels equal one SVG at rest' : 'glyph pixel parity skipped (--no-gpu)'));
 
-    // (2b) #248: the Soft motion drift moves the whole plane in discrete steps of 1/36 of ±0.5% about every
-    // 2 s, with no animation or transition in between; Soft motion off and reduced motion keep it still.
+    // (2b) #436 float, the acceptance check. On 3446400 and earlier builds it fails: every interval the board dims
+    // for about 4.8 s and is black for about 1.8 s. On the owner's board at 1280 × 720 × 3, five virtual minutes
+    // sampled every 50 ms keep the plane at opacity 1 and every widget in its own cell at full opacity; the board
+    // floats over most of ±3.5% one device pixel at a time with no animation, transition or layout; and every
+    // widget's drawn content stays inside the screen.
     {
-      const drift = async page => page.locator('.widget-grid-plane').evaluate(plane => {
-        const matrix = new DOMMatrix(getComputedStyle(plane).transform);
-        return { x: matrix.e, y: matrix.f, width: plane.offsetWidth, height: plane.offsetHeight, animations: plane.getAnimations().length, transition: getComputedStyle(plane).transitionProperty };
-      });
-      const view = await displayPage({ state: scenario(level('off')), viewport: { width: 1280, height: 720 } });
-      const samples = [];
-      for (let step = 0; step < 48; step++) { samples.push({ at: step * 250, ...await drift(view.page) }); await view.page.clock.runFor(250); }
-      const { width, height } = samples[0];
-      const changes = samples.filter((sample, index) => index && (sample.x !== samples[index - 1].x || sample.y !== samples[index - 1].y));
-      assert.ok(changes.length >= 4 && changes.length <= 7, `about one step every 2 s over 12 s: ${changes.length} ${JSON.stringify(changes.map(change => change.at))}`);
-      for (const [index, change] of changes.entries()) {
-        const before = samples[samples.indexOf(change) - 1];
-        assert.ok(Math.abs(Math.abs(change.x - before.x) - width * 0.01 / 36) < 0.02 && Math.abs(Math.abs(change.y - before.y) - height * 0.01 / 36) < 0.02, `one 1/36 step of ±0.5%: ${JSON.stringify([before, change])}`);
-        if (index) assert.ok(change.at - changes[index - 1].at >= 1_750, `steps are about 2 s apart: ${changes.map(item => item.at)}`);
+      const view = await displayPage({ state: scenario(ownerBoard()), viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3 });
+      const { page } = view;
+      // Page time moves only with runFor from here, so every 50 ms sample is exactly 50 ms of page time.
+      await page.clock.pauseAt(await page.evaluate(() => Date.now() + 10));
+      await page.clock.runFor(2_500);
+      assert.equal(await page.locator('.ambient-widget').count(), 6, 'six widgets on the owner board');
+      assert.equal(await page.locator('.ambient').getAttribute('data-float'), 'float');
+      const session = await view.context.newCDPSession(page); await session.send('Performance.enable');
+      const layouts = async () => (await session.send('Performance.getMetrics')).metrics.find(metric => metric.name === 'LayoutCount').value;
+      const first = await sampleBoard(page), samples = [first];
+      const cells = Object.fromEntries(first.widgets.map(widget => [widget.id, [widget.left, widget.top]]));
+      let layoutStart = null, layoutEnd = null, steps = 0;
+      for (let index = 1; index <= 6_000; index++) {
+        await page.clock.runFor(50);
+        // The no-layout window, 32 to 59 s after loading, holds no minute change (the clock's digits refit then)
+        // and no 30 s state poll (a new reminders list remeasures): only float steps.
+        const sample = await sampleBoard(page);
+        if (layoutStart === null && sample.t >= now + 32_000) layoutStart = { value: await layouts(), steps };
+        if (layoutEnd === null && sample.t >= now + 59_000) layoutEnd = { value: await layouts(), steps };
+        const last = samples.at(-1);
+        assert.equal(sample.opacity, 1, `the plane stays at opacity 1 (${sample.t - now} ms)`);
+        assert.equal(sample.animations, 0, 'nothing animates on the plane');
+        assert.doesNotMatch(sample.transition, /transform|all|opacity/, 'the plane never tweens');
+        assert.ok(Math.abs(sample.x - last.x) * 3 <= 1.01 && Math.abs(sample.y - last.y) * 3 <= 1.01, `at most one device pixel per step: ${JSON.stringify([last.x, last.y, sample.x, sample.y])}`);
+        if (sample.x !== last.x || sample.y !== last.y) steps++;
+        for (const widget of sample.widgets) {
+          assert.deepEqual([widget.left, widget.top], cells[widget.id], `${widget.id} keeps its cell (no swap)`);
+          assert.ok(widget.opacity >= 0.99, `${widget.id} opacity ${widget.opacity} at ${sample.t - now} ms`);
+          const box = widget.ink;
+          assert.ok(box.left >= -0.5 && box.top >= -0.5 && box.right <= sample.width + 0.5 && box.bottom <= sample.height + 0.5, `${widget.id} content inside the screen: ${JSON.stringify(box)}`);
+        }
+        samples.push(sample);
       }
-      for (const sample of samples) {
-        assert.ok(Math.abs(sample.x) <= width * 0.005 + 0.01 && Math.abs(sample.y) <= height * 0.005 + 0.01, `within ±0.5% of the plane: ${JSON.stringify(sample)}`);
-        assert.equal(sample.animations, 0, 'nothing animates on the plane'); assert.doesNotMatch(sample.transition, /transform|all/, 'the plane never tweens between steps');
-      }
+      const xs = samples.map(sample => sample.x), ys = samples.map(sample => sample.y);
+      const reach = { x: (Math.max(...xs) - Math.min(...xs)) / (2 * 0.035 * 1280), y: (Math.max(...ys) - Math.min(...ys)) / (2 * 0.035 * 720) };
+      assert.ok(reach.x >= 0.8 && reach.y >= 0.8, `the board covers at least 80% of ±3.5% on both axes: ${JSON.stringify(reach)}`);
+      for (const sample of samples) assert.ok(Math.abs(sample.x) <= 0.035 * 1280 + 0.01 && Math.abs(sample.y) <= 0.035 * 720 + 0.01, 'within ±3.5%');
+      assert.ok(layoutStart && layoutEnd && layoutEnd.steps - layoutStart.steps >= 100, `many float steps in the no-layout window: ${JSON.stringify([layoutStart, layoutEnd])}`);
+      assert.equal(layoutEnd.value - layoutStart.value, 0, `no layout while the board floats: ${JSON.stringify([layoutStart, layoutEnd])}`);
+      // Each widget's content floats inside its own box too, out of step with the others.
+      const moved = first.widgets.filter(widget => new Set(samples.map(sample => sample.widgets.find(item => item.id === widget.id).translate)).size > 3).map(widget => widget.id);
+      assert.ok(moved.length >= 3, `widget content floats inside its slack: ${moved}`);
+      metrics.float = { steps, reach, floatingWidgets: moved, layoutsWhileFloating: layoutEnd.value - layoutStart.value };
       await view.close();
-      for (const [label, options] of [['Soft motion off', { state: scenario(state => { level('off')(state); state.settings.appearance.motionEnabled = false; }) }], ['reduced motion', { state: scenario(level('subtle')), reducedMotion: 'reduce' }]]) {
-        const still = await displayPage(options); const first = await drift(still.page);
-        await still.page.clock.runFor(10_000);
-        assert.deepEqual(await drift(still.page), first, `${label}: the plane stays still`);
-        await still.close();
-      }
     }
-    checks.push('#248 Soft motion drift: discrete 1/36 steps of ±0.5% of the plane about every 2 s, no animation or transform transition on the plane; Soft motion off and reduced motion keep the plane still');
+    checks.push(`#436 float acceptance (owner board, 6 widgets, 1280×720 ×3, 30 s interval, 2 s fade, Lively): 5 virtual minutes sampled every 50 ms keep the plane at opacity 1 and every widget in its cell at opacity ≥ 0.99, with its content inside the screen; at most one device pixel per step, no animation, transition or layout; ${JSON.stringify(metrics.float)}`);
+
+    // (2c) #436 without animation (reduced motion, or Float gently off): the board jumps to its next spot only at
+    // interval boundaries, at once and at opacity 1.
+    for (const [label, options] of [
+      ['reduced motion', { reducedMotion: 'reduce', state: scenario(ownerBoard()) }],
+      ['Float gently off', { state: scenario(ownerBoard(state => { state.settings.appearance.motionEnabled = false; })) }],
+    ]) {
+      const view = await displayPage({ ...options, viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3 });
+      const { page } = view;
+      await page.clock.pauseAt(await page.evaluate(() => Date.now() + 10));
+      assert.equal(await page.locator('.ambient').getAttribute('data-float'), 'step', label);
+      const changes = [], first = await sampleBoard(page);
+      let last = first;
+      for (let index = 0; index < 95 * 20; index++) {
+        await page.clock.runFor(50);
+        const sample = await sampleBoard(page);
+        assert.equal(sample.opacity, 1, `${label}: opacity 1`);
+        for (const widget of sample.widgets) assert.ok(widget.opacity >= 0.99, `${label}: ${widget.id} opacity`);
+        assert.equal(sample.animations, 0, `${label}: no animation on the plane`);
+        const translates = sample.widgets.map(widget => widget.translate).join('|'), lastTranslates = last.widgets.map(widget => widget.translate).join('|');
+        if (sample.x !== last.x || sample.y !== last.y || translates !== lastTranslates) changes.push(sample.t);
+        last = sample;
+      }
+      assert.ok(changes.length >= 3, `${label}: the board moved at each boundary (${changes.map(at => at - now)})`);
+      // The display mounted between installing the clock (now) and the first sample.
+      assert.ok(changes[0] - now >= 30_000 && changes[0] - first.t <= 30_100, `${label}: first move one interval after loading (${changes[0] - now} ms after the clock started, ${changes[0] - first.t} ms after the first sample)`);
+      for (let index = 1; index < changes.length; index++) assert.ok(Math.abs(changes[index] - changes[index - 1] - 30_000) <= 100, `${label}: moves only at interval boundaries (±100 ms): ${changes.map(at => at - now)}`);
+      await view.close();
+    }
+    checks.push('#436 reduced motion and Float gently off: the board and widget content jump only at interval boundaries (±100 ms), with no animation and opacity 1');
+
+    // (2d) #436 Swap places (opt-in). With a glide, at least one widget changes cell every interval, the plane
+    // stays at 1, no widget drops below 0.35 and no frame dims every widget below 0.5 (stepping each glide's own
+    // timeline, which page.clock does not drive). Reduced motion swaps dim moving widgets to 0.4 and back, with no
+    // translate animation. A settings change mid-glide snaps to the new rectangles.
+    {
+      // A 45 s interval puts the App's 30 s polls between swaps, so a settings change can land mid-glide.
+      const view = await displayPage({ state: scenario(ownerBoard(state => { Object.assign(state.settings.appearance, { rearrange: true, motionIntervalSeconds: 45 }); })), viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3 });
+      const { page } = view;
+      assert.equal(await page.locator('.ambient').getAttribute('data-swap'), 'glide');
+      const frames = [];
+      for (let interval = 1; interval <= 3; interval++) {
+        const before = await sampleBoard(page);
+        for (let step = 0; Number(await page.locator('.ambient').getAttribute('data-composition')) < interval; step++) { assert.ok(step < 1_000, `swap ${interval} happens`); await page.clock.runFor(50); }
+        await until(page, () => document.getAnimations().some(animation => animation.id === 'lrd-glide'), `glide ${interval}`);
+        const result = await page.evaluate(() => {
+          const glides = document.getAnimations().filter(animation => animation.id === 'lrd-glide');
+          for (const animation of glides) animation.pause();
+          const duration = glides[0].effect.getTiming().duration, frames = [];
+          for (let time = 0; time <= duration; time += 50) {
+            for (const animation of glides) animation.currentTime = time;
+            frames.push({ time, plane: Number(getComputedStyle(document.querySelector('.widget-grid-plane')).opacity), widgets: [...document.querySelectorAll('.ambient-widget')].map(section => Number(getComputedStyle(section).opacity)) });
+          }
+          const translated = glides.every(animation => animation.effect.getKeyframes().some(frame => frame.transform && frame.transform !== 'none'));
+          for (const animation of glides) animation.finish();
+          return { count: glides.length, duration, frames, translated };
+        });
+        const after = await sampleBoard(page);
+        const changed = after.widgets.filter(widget => { const old = before.widgets.find(item => item.id === widget.id); return old.left !== widget.left || old.top !== widget.top; });
+        assert.ok(changed.length >= 1 && result.count === changed.length, `swap ${interval}: ${changed.length} widgets changed cell, ${result.count} glided`);
+        assert.ok(Math.abs(result.duration - 3_000) < 1, `glide lasts clamp(2 × 1.5, 1.2, 6) s (${result.duration})`);
+        assert.ok(result.translated, 'a glide translates the widget from its old cell');
+        for (const frame of result.frames) {
+          assert.equal(frame.plane, 1, 'the plane stays at 1 during a swap');
+          assert.ok(Math.min(...frame.widgets) >= 0.35, `no widget below 0.35: ${frame.widgets}`);
+          assert.ok(frame.widgets.some(opacity => opacity >= 0.5), `never every widget below 0.5 at once (${frame.time} ms: ${frame.widgets})`);
+        }
+        frames.push(Math.min(...result.frames.flatMap(frame => frame.widgets)));
+        // The board keeps floating through swaps.
+        assert.equal(after.opacity, 1);
+      }
+      // A settings change mid-glide (Sun & moon turned off, picked up by the next poll while a glide runs in real
+      // time) snaps every widget to its new rectangle at full opacity; nothing is left dim or half-way.
+      for (let step = 0; Number(await page.locator('.ambient').getAttribute('data-composition')) < 4; step++) { assert.ok(step < 1_000, 'swap 4'); await page.clock.runFor(50); }
+      await until(page, () => document.getAnimations().some(animation => animation.id === 'lrd-glide' && animation.playState === 'running'), 'glide 4');
+      view.served.state = structuredClone(view.served.state); view.served.state.settings.widgets.sunMoon = false;
+      let snapped = null;
+      for (let step = 0; step < 40 && !snapped; step++) {
+        await page.clock.runFor(1_000);
+        snapped = await page.evaluate(() => document.querySelector('.ambient-sunMoon') ? null : { running: document.getAnimations().filter(animation => animation.id === 'lrd-glide' && animation.playState === 'running').length, opacities: [...document.querySelectorAll('.ambient-widget')].map(section => Number(getComputedStyle(section).opacity)) });
+      }
+      assert.ok(snapped, 'the poll applied the change');
+      assert.equal(snapped.running, 0, 'the change cancelled the glides');
+      assert.ok(snapped.opacities.every(opacity => opacity === 1), `every widget at its new rectangle at full opacity: ${snapped.opacities}`);
+      assert.equal((await sampleBoard(page)).opacity, 1);
+      await view.close();
+      metrics.swap = { lowestWidgetOpacity: Math.min(...frames) };
+
+      const reduced = await displayPage({ reducedMotion: 'reduce', state: scenario(ownerBoard(state => { state.settings.appearance.rearrange = true; })), viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3 });
+      assert.equal(await reduced.page.locator('.ambient').getAttribute('data-swap'), 'dim');
+      // Page time stands still between runFor calls, while the opacity transitions run in real time.
+      await reduced.page.clock.pauseAt(await reduced.page.evaluate(() => Date.now() + 10));
+      const start = await sampleBoard(reduced.page);
+      await reduced.page.clock.runFor(30_100);
+      await reduced.page.waitForTimeout(800); // the 0.6 s opacity transition runs in real time
+      const dimmed = await reduced.page.evaluate(() => ({ plane: Number(getComputedStyle(document.querySelector('.widget-grid-plane')).opacity), widgets: [...document.querySelectorAll('.ambient-widget')].map(section => Number(getComputedStyle(section).opacity)), motion: [...document.querySelectorAll('.ambient-widget')].flatMap(section => section.getAnimations().map(animation => animation.transitionProperty ?? animation.id ?? 'animation')), composition: document.querySelector('.ambient').dataset.composition }));
+      assert.equal(dimmed.composition, '0', 'moving widgets dim before they move');
+      assert.equal(dimmed.plane, 1);
+      assert.ok(dimmed.widgets.some(opacity => Math.abs(opacity - 0.4) < 0.01) && dimmed.widgets.every(opacity => opacity >= 0.35), `moving widgets dim to 0.4: ${dimmed.widgets}`);
+      await reduced.page.clock.runFor(700);
+      const moved = await sampleBoard(reduced.page);
+      assert.equal(await reduced.page.locator('.ambient').getAttribute('data-composition'), '1');
+      assert.ok(moved.widgets.some(widget => { const old = start.widgets.find(item => item.id === widget.id); return old.left !== widget.left || old.top !== widget.top; }), 'and move while dimmed');
+      const motion = await motionIn(reduced.page, '.ambient-widget');
+      assert.ok(motion.every(name => name === 'transition:opacity'), `a reduced-motion swap only fades opacity, never translates: ${motion}`);
+      await reduced.page.waitForTimeout(800);
+      assert.ok((await sampleBoard(reduced.page)).widgets.every(widget => widget.opacity >= 0.99), 'then every widget is back at full opacity');
+      await reduced.close();
+    }
+    checks.push(`#436 Swap places: a glide every interval moves at least one widget, the plane stays at 1, no widget below 0.35, never every widget below 0.5; reduced motion dims moving widgets to 0.4 with no translate animation; a settings change mid-glide snaps; ${JSON.stringify(metrics.swap)}`);
+
+    // (2e) #436 Animation Off keeps widget content still while the board floats: no keyframe animation runs in the plane.
+    {
+      const view = await displayPage({ state: scenario(ownerBoard(level('off'))) });
+      for (let step = 0; step < 40; step++) {
+        await view.page.clock.runFor(1_000);
+        assert.deepEqual(await planeMotion(view.page), [], 'Animation Off: nothing animates while the board floats');
+      }
+      const sample = await sampleBoard(view.page);
+      assert.ok(sample.x !== 0 || sample.y !== 0, 'the board has floated');
+      await view.close();
+    }
+    checks.push('#436 Animation Off: no in-widget keyframe animations (#76 inventory) while the board floats');
 
     // (3) Stale, offline or unavailable weather keeps the glyph still.
     for (const status of ['stale', 'offline', 'unavailable']) {
@@ -255,55 +448,46 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     }
     checks.push('stale, offline and unavailable weather: still glyph, nothing running on it');
 
-    // (4) Reveal sequence: black first, recomposition only while black, then a bounded reveal.
-    async function observeCycle(mutate) {
+    // (4) Reveal: the first load is the only entrance on the display (#436: no black rest ends in a reveal any more).
+    // It ends within fade + 1.7 s with delays in reading order (cap 6); a later interval reveals nothing.
+    async function observeLoad(mutate) {
       const view = await displayPage({ state: scenario(mutate) });
       const { page } = view;
-      await page.clock.runFor(2_500);
-      await page.evaluate(() => {
-        window.__motion = [];
-        const ambient = document.querySelector('.ambient'), plane = document.querySelector('.widget-grid-plane');
-        const record = () => window.__motion.push({ t: Date.now(), composition: ambient.dataset.composition, fading: plane.classList.contains('fading'), revealing: plane.classList.contains('revealing'), reveal: plane.dataset.reveal ?? null });
-        new MutationObserver(record).observe(ambient, { attributes: true, subtree: true, attributeFilter: ['data-composition', 'class', 'data-reveal'] });
-        record();
-      });
-      await page.clock.runFor(180_000);
-      for (let step = 0; step < 12; step++) await page.clock.runFor(100);
-      // Delays of the entrance follow reading order while revealing.
       const delays = await page.evaluate(() => [...document.querySelectorAll('.widget-grid-plane.revealing > .ambient-widget')].map(section => ({
         id: section.dataset.widgetId, order: Number(getComputedStyle(section).getPropertyValue('--reveal-order')),
         delay: section.querySelector('.widget-content').getAnimations().find(animation => animation.animationName === 'lrd-enter')?.effect.getTiming().delay ?? null,
       })));
-      for (let step = 0; step < 50; step++) await page.clock.runFor(100);
+      const revealing = await page.locator('.widget-grid-plane.revealing').count();
+      await page.evaluate(() => {
+        window.__motion = [];
+        const plane = document.querySelector('.widget-grid-plane');
+        const record = () => window.__motion.push({ t: Date.now(), revealing: plane.classList.contains('revealing'), opacity: getComputedStyle(plane).opacity });
+        new MutationObserver(record).observe(plane, { attributes: true, attributeFilter: ['class', 'data-reveal'] });
+        record();
+      });
+      for (let step = 0; step < 40; step++) await page.clock.runFor(100);
+      const ended = await page.evaluate(() => window.__motion.find(entry => !entry.revealing)?.t ?? null);
+      await page.clock.runFor(200_000);
       const log = await page.evaluate(() => window.__motion);
-      const state = await page.evaluate(() => fetch('/api/state').then(response => response.json()));
       await view.close();
-      return { log, delays, state };
+      return { delays, revealing, ended, log };
     }
     const fadeMs = source.settings.appearance.fadeSeconds * 1000;
     for (const animation of ['subtle', 'lively']) {
-      const { log, delays } = await observeCycle(level(animation));
-      const firstComposition = log[0].composition;
-      const changed = log.find(entry => entry.composition !== firstComposition);
-      assert.ok(changed, 'the composition advanced');
-      const fadedAt = log.find(entry => entry.fading)?.t;
-      assert.ok(fadedAt !== undefined && fadedAt <= changed.t, '.fading before the composition changes');
-      for (let index = 1; index < log.length; index++) if (log[index].composition !== log[index - 1].composition) assert.ok(log[index].fading, 'composition changes only while black');
-      const revealed = log.find(entry => entry.revealing && entry.t >= changed.t);
-      assert.ok(revealed && revealed.reveal !== null, '.revealing with data-reveal after the black rest');
-      assert.ok(!revealed.fading, 'never fading and revealing at once');
-      const ended = log.find(entry => !entry.revealing && entry.t > revealed.t);
-      assert.ok(ended && ended.t - revealed.t <= fadeMs + 1700, `reveal ends within fade + 1.7 s (${ended && ended.t - revealed.t} ms)`);
+      const { delays, revealing, ended, log } = await observeLoad(level(animation));
+      assert.equal(revealing, 1, `${animation}: the first load reveals`);
+      assert.ok(ended !== null && ended - now <= fadeMs + 1700 + 200, `${animation}: the entrance ends within fade + 1.7 s (${ended && ended - now} ms)`);
+      assert.equal(log.filter(entry => entry.revealing && entry.t > ended).length, 0, `${animation}: no entrance after an interval`);
       const ordered = delays.filter(item => item.delay !== null).sort((a, b) => a.order - b.order);
       assert.ok(ordered.length >= 3, `${animation}: widgets entered (${JSON.stringify(delays)})`);
       for (let index = 1; index < ordered.length; index++) assert.ok(ordered[index].delay >= ordered[index - 1].delay, 'delays follow reading order');
       assert.ok(ordered.at(-1).delay > ordered[0].delay, 'a real stagger');
       assert.ok(ordered.at(-1).delay <= 6 * (animation === 'lively' ? 110 : 70), 'stagger capped at six steps');
     }
-    for (const [label, mutate] of [['Soft motion off', state => { state.settings.appearance.motionEnabled = false; }], ['fade 0', state => { state.settings.appearance.fadeSeconds = 0; }]]) {
-      const { log } = await observeCycle(state => { level('lively')(state); mutate(state); });
-      assert.ok(log.some(entry => entry.composition !== log[0].composition), `${label}: still relocates`);
-      assert.equal(log.filter(entry => entry.revealing).length, 0, `${label}: no entrance`);
+    for (const [label, mutate] of [['Float gently off', state => { state.settings.appearance.motionEnabled = false; }], ['fade 0', state => { state.settings.appearance.fadeSeconds = 0; }]]) {
+      const { revealing, log } = await observeLoad(state => { level('lively')(state); mutate(state); });
+      assert.equal(revealing, 0, `${label}: no entrance`);
+      assert.equal(log.filter(entry => entry.revealing).length, 0, `${label}: never an entrance`);
     }
     // Reading order matches the shared helper.
     {
@@ -313,7 +497,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       for (const section of sections) assert.equal(section.order, Math.min(expected.indexOf(section.id), 6), `${section.id} reading order`);
       await view.close();
     }
-    checks.push('reveal: .fading before recomposition, composition only while black, .revealing[data-reveal] ends within fade + 1.7 s, delays in reading order (cap 6); none with Soft motion off or fade 0');
+    checks.push('reveal: the first load reveals once (.revealing ends within fade + 1.7 s, delays in reading order, cap 6) and no interval reveals again; none with Float gently off or fade 0');
 
     // (5) Paused halfway through the entrance, content stays in its rectangle and keeps its fit.
     async function midReveal(page, label, disjoint) {
@@ -326,7 +510,9 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
         }
         const read = () => [...document.querySelectorAll('.ambient-widget')].map(section => {
           const content = section.querySelector('.widget-content'), outer = section.getBoundingClientRect(), inner = content.getBoundingClientRect();
-          return { id: section.dataset.widgetId, outer: { left: outer.left, top: outer.top, right: outer.right, bottom: outer.bottom }, inner: { left: inner.left, top: inner.top, right: inner.right, bottom: inner.bottom }, fit: content.style.transform, translate: getComputedStyle(content).translate };
+          // The cell: the section's box without its #436 float translation (its content floats inside it).
+          const [x, y] = getComputedStyle(section).translate.split(' ').map(value => parseFloat(value) || 0), dx = x ?? 0, dy = y ?? 0;
+          return { id: section.dataset.widgetId, outer: { left: outer.left - dx, top: outer.top - dy, right: outer.right - dx, bottom: outer.bottom - dy }, inner: { left: inner.left - dx, top: inner.top - dy, right: inner.right - dx, bottom: inner.bottom - dy }, fit: content.style.transform, translate: getComputedStyle(content).translate };
         });
         const middle = read();
         for (const animation of document.getAnimations()) if (plane.contains(animation.effect?.target) && animation.effect.getTiming().iterations !== Infinity) animation.finish();
@@ -489,13 +675,14 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
           await until(page, () => document.querySelector('.weather-age')?.classList.contains('stale'), 'the stale label');
           assert.deepEqual(await motionIn(page, '.weather-age, .weather-age *'), [], `${label}: the stale label changes colour without a transition`);
         }
-        if (animation === 'lively' && !still) {
-          await page.clock.runFor(140_000 - 62_000); // the #161 steps above already ran 62 s of the composition
-          await untilRevealing(page);
-          const grow = await motionIn(page, '.rain-bars > .rain-bar');
-          assert.ok(grow.includes('lrd-bar-grow'), `the Lively entrance grows the rain bars (${grow})`);
-        }
         await view.close();
+        if (animation === 'lively' && !still) {
+          // The entrance (on load, #436) grows the bars of an elevated forecast from their baseline.
+          const loaded = await displayPage({ reducedMotion, state: scenario(state => { level(animation)(state); only('weather', 'large')(state); }) });
+          const grow = await motionIn(loaded.page, '.rain-bars > .rain-bar');
+          assert.ok(grow.includes('lrd-bar-grow'), `the Lively entrance grows the rain bars (${grow})`);
+          await loaded.close();
+        }
       }
     }
     checks.push('adaptive Weather: the hero glyph takes its CSS size (no inline size); calm → elevated fades the new rain bars in (never above their 0.35/0.65 resting opacity) and crossfades the rain timing, detail and hours at Subtle and Lively; changed chances ease the bars by translate only and the stale label changes colour without a transition (#161); the Lively entrance grows the bars; Off and reduced motion run nothing');
@@ -560,13 +747,15 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
         await until(page, () => [...document.querySelectorAll('.ambient-reminder-title')].some(title => title.textContent === 'Synthetic edited reminder'), 'the edited title');
         assert.equal(await more(page), countBefore);
         assert.deepEqual(await planeMotion(page), [], `${animation}: a remeasurement replays nothing`);
-        if (animation === 'lively') {
-          await page.clock.runFor(60_000);
-          await untilRevealing(page);
-          const entrance = await motionIn(page, '.ambient-reminder-list > li:not(.reminder-overflow)');
-          assert.ok(entrance.length > 0 && entrance.every(name => name === 'lrd-fade-in'), `Lively reminder rows fade without moving (${entrance})`);
-        }
         await view.close();
+        if (animation === 'lively') {
+          // The entrance (on load, #436) fades reminder rows without moving them.
+          const loaded = await displayPage({ state: scenario(state => { level(animation)(state); only('reminders', 'medium')(state); state.reminders = pendingList(12); }) });
+          await until(loaded.page, () => document.querySelectorAll('.ambient-reminder-list > li:not(.reminder-overflow)').length > 0, 'measured reminder rows');
+          const entrance = await motionIn(loaded.page, '.ambient-reminder-list > li:not(.reminder-overflow)');
+          assert.ok(entrance.length > 0 && entrance.every(name => name === 'lrd-fade-in'), `Lively reminder rows fade without moving (${entrance})`);
+          await loaded.close();
+        }
       }
       assert.deepEqual(shown.subtle, shown.off, 'Subtle measures the same rows as Off');
       assert.deepEqual(shown.lively, shown.off, 'Lively measures the same rows as Off');
@@ -599,102 +788,79 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     }
     checks.push('Air quality (AQI and category), Note, Countdown, Sun & moon, World clocks and Calendar: a changed value remounts its TransitionText and fades in by opacity at Subtle; Off runs nothing');
 
-    // (15) #357: a settings or preference change during a fade-out finishes that relocation instead of leaving the
-    // display black until the next interval. The plane is visible again within the fade plus the 1.1 s black rest,
-    // the arrangement still changes only while black, and the next fade-out comes one (new) interval after the change.
+    // (15) #357 (superseded by #436): there is no fade-out to interrupt. A settings or preference change at any moment,
+    // including just before an interval boundary, keeps the plane at opacity 1 and the board where it is.
     {
-      const fading = page => page.locator('.widget-grid-plane').evaluate(plane => plane.classList.contains('fading'));
-      const now = page => page.evaluate(() => Date.now());
       const results = [];
-      for (const [label, mutate, after] of [
-        ['interval 59 → 120 s', state => { state.settings.appearance.motionIntervalSeconds = 120; }, { interval: 120, fade: 2 }],
-        ['fade 2 → 3 s', state => { state.settings.appearance.fadeSeconds = 3; }, { interval: 59, fade: 3 }],
-        ['Drift and fade off', state => { state.settings.appearance.motionEnabled = false; }, { interval: 59, fade: 0 }],
-        ['reduced motion', null, { interval: 59, fade: 0 }],
+      for (const [label, mutate] of [
+        ['interval 30 → 120 s', state => { state.settings.appearance.motionIntervalSeconds = 120; }],
+        ['Float gently off', state => { state.settings.appearance.motionEnabled = false; }],
+        ['Swap places on', state => { state.settings.appearance.rearrange = true; }],
+        ['reduced motion', null],
       ]) {
-        // A relocation every 59 s with a 2 s fade: the App's 30 s poll at 60 s lands about 1 s into the first fade-out.
-        const view = await displayPage({ state: scenario(state => { level('subtle')(state); Object.assign(state.settings.appearance, { motionIntervalSeconds: 59, fadeSeconds: 2 }); }) });
+        const view = await displayPage({ state: scenario(ownerBoard()) });
         const { page, served } = view;
-        await page.clock.pauseAt(await now(page) + 100);
         let polls = 0; page.on('response', response => { if (new URL(response.url()).pathname === '/api/state') polls++; });
-        await page.evaluate(() => {
-          window.__relocation = [];
-          const ambient = document.querySelector('.ambient'), plane = document.querySelector('.widget-grid-plane');
-          const record = () => window.__relocation.push({ t: Date.now(), composition: Number(ambient.dataset.composition), fading: plane.classList.contains('fading') });
-          new MutationObserver(record).observe(ambient, { attributes: true, subtree: true, attributeFilter: ['class', 'data-composition'] }); record();
-        });
-        await page.clock.runFor(57_000);
-        for (let step = 0; !(await fading(page)); step++) { assert.ok(step < 40, `${label}: the first fade-out starts`); await page.clock.runFor(100); }
-        const composition = Number(await page.locator('.ambient').getAttribute('data-composition'));
+        // The App's 30 s poll lands about at the first interval boundary.
+        await page.clock.runFor(29_000);
+        const before = await sampleBoard(page);
         if (mutate) {
-          served.state = structuredClone(served.state); mutate(served.state); const before = polls;
-          for (let step = 0; polls === before; step++) { assert.ok(step < 30, `${label}: the 30 s poll`); await page.clock.runFor(100); await page.waitForTimeout(20); }
-        } else { await page.clock.runFor(1_000); await page.emulateMedia({ reducedMotion: 'reduce' }); }
-        await page.waitForTimeout(300); // the new settings render while page time stands still
-        const changed = await now(page);
-        assert.ok(await fading(page), `${label}: the change lands during the fade-out`);
-        assert.equal(Number(await page.locator('.ambient').getAttribute('data-composition')), composition, `${label}: before the arrangement changes`);
-        let visible = changed;
-        while (await fading(page)) { assert.ok(visible - changed <= after.fade * 1000 + 1_100 + 200, `${label}: still black ${visible - changed} ms after the change`); await page.clock.runFor(50); visible = await now(page); }
-        const log = await page.evaluate(() => window.__relocation);
-        assert.equal(Number(await page.locator('.ambient').getAttribute('data-composition')), composition + 1, `${label}: the reveal shows the next arrangement`);
-        for (let index = 1; index < log.length; index++) if (log[index].composition !== log[index - 1].composition) assert.ok(log[index].fading, `${label}: the arrangement changes only while black`);
-        await page.clock.runFor(after.interval * 1_000 - (visible - changed) - 1_500);
-        let next = await now(page);
-        while (!(await fading(page))) { assert.ok(next - changed <= after.interval * 1_000 + 300, `${label}: no fade-out ${next - changed} ms after the change`); await page.clock.runFor(50); next = await now(page); }
-        assert.ok(next - changed >= after.interval * 1_000 - 300, `${label}: the next fade-out ${next - changed} ms after the change, expected ${after.interval} s`);
-        results.push(`${label}: visible ${visible - changed} ms after the change, next fade-out after ${((next - changed) / 1000).toFixed(1)} s`);
+          served.state = structuredClone(served.state); mutate(served.state); const start = polls;
+          for (let step = 0; polls === start; step++) { assert.ok(step < 40, `${label}: the 30 s poll`); await page.clock.runFor(100); await page.waitForTimeout(20); }
+        } else await page.emulateMedia({ reducedMotion: 'reduce' });
+        await page.waitForTimeout(300);
+        let lowest = 1;
+        for (let step = 0; step < 80; step++) {
+          const sample = await sampleBoard(page);
+          lowest = Math.min(lowest, sample.opacity, ...sample.widgets.map(widget => widget.opacity));
+          await page.clock.runFor(50);
+        }
+        const after = await sampleBoard(page);
+        assert.equal(lowest >= 0.35, true, `${label}: nothing goes dark (lowest opacity ${lowest})`);
+        assert.ok(Math.abs(after.x - before.x) <= 0.035 * 1280 * 2 && after.opacity === 1, `${label}: the plane stays visible`);
+        results.push(`${label}: lowest opacity ${lowest.toFixed(2)}`);
         await view.close();
       }
-      checks.push(`#357 mid-fade changes: ${results.join('; ')}`);
+      checks.push(`#357/#436 settings changes at an interval boundary never darken the display: ${results.join('; ')}`);
     }
 
-    // (16) #174: a minute's ease that starts just before a fade-out finishes in view, and the angles return to
-    // [0, 360) only once the arrangement is black. #161: the hands turn as composited HTML wrappers, so a minute
-    // change animates only rotate and costs no per-frame style recalculation or layout.
+    // (16) #174/#436: the analog hands accumulate for the whole session (nothing goes black to re-base them), so each
+    // minute turns them forward once, across 10:59 → 11:00, 11:59 → 12:00 and 12:59 → 1:00, never backwards; the
+    // ease completes. #161: the hands turn as composited HTML wrappers, so a minute change animates only rotate.
     {
       const onlyAnalog = state => { state.settings.appearance.clockStyle = 'analog'; state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock'])); };
       const elevenAm = Date.parse('2026-10-18T15:00:00Z'); // 11:00 in America/Toronto: the minute hand wraps from 354° to 360°
-      const view = await displayPage({ state: scenario(state => { level('subtle')(state); onlyAnalog(state); }) });
+      const view = await displayPage({ time: elevenAm - 90_000, state: scenario(state => { level('subtle')(state); onlyAnalog(state); }) });
       const { page } = view;
-      await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
-      await page.clock.runFor(178_000);
-      for (let step = 0; !(await page.locator('.widget-grid-plane.fading').count()); step++) { assert.ok(step < 200, 'the first fade-out'); await page.clock.runFor(20); }
-      await page.clock.runFor(3_500);
-      // The one-second tick and the relocation interval start together, so the next fade-out comes 176.5 s from
-      // now, on a tick. Put 10:59 → 11:00 between the two ticks before it: the minute eases 1 s before the fade-out.
-      await page.clock.setSystemTime(new Date(elevenAm - 175_000));
       await page.evaluate(() => {
         window.__hands = []; window.__handEvents = [];
-        const ambient = document.querySelector('.ambient'), plane = document.querySelector('.widget-grid-plane'), clock = document.querySelector('.analog-clock');
-        const minute = () => clock.querySelector('.analog-minute');
-        const record = () => window.__hands.push({ t: Date.now(), minute: parseFloat(minute().style.rotate), hour: parseFloat(clock.querySelector('.analog-hour').style.rotate), snap: minute().hasAttribute('data-hand-snap'), fading: plane.classList.contains('fading'), composition: Number(ambient.dataset.composition) });
-        new MutationObserver(record).observe(ambient, { attributes: true, subtree: true, attributeFilter: ['class', 'style', 'data-hand-snap', 'data-composition'] });
+        const clock = document.querySelector('.analog-clock'), minute = () => clock.querySelector('.analog-minute');
+        const record = () => window.__hands.push({ t: Date.now(), minute: parseFloat(minute().style.rotate), hour: parseFloat(clock.querySelector('.analog-hour').style.rotate), snap: minute().hasAttribute('data-hand-snap') });
+        new MutationObserver(record).observe(clock, { attributes: true, subtree: true, attributeFilter: ['style', 'data-hand-snap'] });
         for (const type of ['transitionrun', 'transitionend', 'transitioncancel']) clock.addEventListener(type, event => { if (event.target.classList.contains('analog-minute')) window.__handEvents.push({ type, t: Date.now(), property: event.propertyName }); });
         record();
       });
-      await page.clock.runFor(175_600);
+      await page.clock.runFor(90_500);
       const eased = await page.evaluate(() => ({ minute: parseFloat(document.querySelector('.analog-minute').style.rotate), snap: document.querySelector('.analog-minute').hasAttribute('data-hand-snap'), motion: [...document.querySelectorAll('.analog-hand')].flatMap(hand => hand.getAnimations().map(animation => ({ name: animation.transitionProperty ?? animation.animationName, html: hand instanceof HTMLElement }))) }));
       assert.deepEqual([eased.minute, eased.snap], [360, false], `10:59 → 11:00 turns the minute hand on to 360°, easing (${JSON.stringify(eased)})`);
       assert.ok(eased.motion.length >= 1 && eased.motion.every(item => item.name === 'rotate' && item.html), `#161: only rotate on HTML hand wrappers (${JSON.stringify(eased.motion)})`);
       assert.ok((await inventory(page)).every(item => item.name === 'transition:rotate'), '#161: the minute change runs nothing else in the plane');
-      await page.clock.runFor(1_000);
-      assert.equal(await page.locator('.widget-grid-plane.fading').count(), 1, 'the fade-out starts one second after the minute change');
-      await page.waitForTimeout(900); // the 600 ms ease runs in real time while page time stands still
-      const during = await page.evaluate(() => ({ minute: parseFloat(document.querySelector('.analog-minute').style.rotate), snap: document.querySelector('.analog-minute').hasAttribute('data-hand-snap'), events: window.__handEvents }));
-      assert.deepEqual([during.minute, during.snap], [360, false], `#174: no re-base while the arrangement is still fading out (${JSON.stringify(during)})`);
-      // The 11:00 ease is the last one to start (fast-forwarded minutes before it replaced each other's eases).
-      const ease = during.events.slice(during.events.findLastIndex(event => event.type === 'transitionrun') + 1);
-      assert.ok(ease.some(event => event.type === 'transitionend' && event.property === 'rotate'), `#174: the minute ease completes (${JSON.stringify(during.events)})`);
-      assert.ok(!ease.some(event => event.type === 'transitioncancel'), `#174: nothing cuts the ease short (${JSON.stringify(during.events)})`);
-      await page.clock.runFor(2_200);
-      const black = await page.evaluate(() => ({ minute: parseFloat(document.querySelector('.analog-minute').style.rotate), snap: document.querySelector('.analog-minute').hasAttribute('data-hand-snap'), log: window.__hands }));
-      assert.deepEqual([black.minute, black.snap], [0, true], `#174: on black the minute hand re-bases to 0° without a transition (${JSON.stringify(black.minute)})`);
-      const wrapped = black.log.findIndex(entry => entry.minute >= 360);
-      assert.ok(wrapped >= 0, 'the minute hand reached 360°');
-      for (const entry of black.log.slice(wrapped)) if (entry.minute < 360) assert.ok(entry.fading && entry.composition > black.log[wrapped].composition, `#174: angles drop into [0, 360) only while black (${JSON.stringify(entry)})`);
-      await page.clock.runFor(1_200);
-      assert.equal(await page.locator('.widget-grid-plane.fading').count(), 0, 'the next arrangement is revealed');
+      await page.waitForTimeout(900); // the 600 ms ease runs in real time
+      const events = await page.evaluate(() => window.__handEvents);
+      const ease = events.slice(events.findLastIndex(event => event.type === 'transitionrun') + 1);
+      assert.ok(ease.some(event => event.type === 'transitionend' && event.property === 'rotate'), `#174: the minute ease completes (${JSON.stringify(events)})`);
+      assert.ok(!ease.some(event => event.type === 'transitioncancel'), `#174: nothing cuts the ease short (${JSON.stringify(events)})`);
+      // Two more hours (with every interval boundary on the way): 11:59 → 12:00 and 12:59 → 1:00 keep turning forward.
+      await page.clock.runFor(2 * 3_600_000 + 30_000);
+      const log = await page.evaluate(() => window.__hands);
+      for (let index = 1; index < log.length; index++) {
+        assert.ok(log[index].minute >= log[index - 1].minute, `the minute hand never turns backwards (${JSON.stringify([log[index - 1], log[index]])})`);
+        assert.ok(log[index].hour >= log[index - 1].hour, `the hour hand never turns backwards (${JSON.stringify([log[index - 1], log[index]])})`);
+        assert.ok(log[index].minute - log[index - 1].minute <= 6 + 1e-9, 'one minute at a time');
+      }
+      const last = log.at(-1);
+      assert.equal(last.minute, 360 * 3, 'at 1:00 the minute hand has turned forward three full times since 10:59');
+      assert.ok(Math.abs(last.hour - 390) < 1e-9, `12:59 → 1:00: the hour hand reaches 1 going forward (${last.hour}°)`);
       await view.close();
 
       // #161 cost: CDP counts over one minute change at Off, at Subtle (a 600 ms ease) and at Subtle with the ease
@@ -719,13 +885,16 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       assert.ok(Math.abs(cost['subtle, 3 s ease'].RecalcStyleCount - cost.subtle.RecalcStyleCount) <= 4, `#161: style recalculation does not scale with the ease's frames ${JSON.stringify(cost)}`);
       assert.ok(cost.subtle.RecalcStyleCount - cost.off.RecalcStyleCount <= 12, `#161: an eased minute change recalculates style only a few times ${JSON.stringify(cost)}`);
       assert.ok(Math.max(cost.subtle.LayoutCount, cost['subtle, 3 s ease'].LayoutCount) - cost.off.LayoutCount <= 2, `#161: and adds no layout ${JSON.stringify(cost)}`);
-      checks.push(`#174/#161 analog hands: 10:59 → 11:00 one second before a fade-out eases to 360° on HTML wrappers (rotate only), completes (transitionend, no cancel) while fading, and re-bases to 0° only once black; one minute change over 3.5 s at 1280×720 ×3: ${JSON.stringify(cost)}`);
+      checks.push(`#174/#161/#436 analog hands: 10:59 → 11:00 eases to 360° on HTML wrappers (rotate only) and completes (transitionend, no cancel); over two more hours, through 11:59 → 12:00 and 12:59 → 1:00, both hands only ever turn forward, one minute at a time, never re-basing; one minute change over 3.5 s at 1280×720 ×3: ${JSON.stringify(cost)}`);
     }
 
     // (9)–(10) Editor: samples are still; the Animation control follows the draft contract.
     async function editorPage({ reducedMotion = 'no-preference', viewport = { width: 1280, height: 720 } } = {}) {
       const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion }); contexts.add(context);
       const answered = await keepPagesLocal(context, base);
+      // A fixed non-Windows status, so the Motion section's power line (#436, tests/ui/screen-browser.mjs) never
+      // arrives while these checks measure the disclosure.
+      await context.route('**/api/windows/status', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ available: false, selectedScreenSaver: null, active: null, timeoutSeconds: null, secure: null, isLivingRoomDisplay: false, power: { available: false, scheme: null, displayOffSeconds: null, sleepSeconds: null } }) }));
       const page = await context.newPage();
       const watch = collectErrors(page);
       await page.addInitScript(() => Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'prompt' }) } }));
@@ -758,7 +927,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       assert.match(await summary.textContent(), /Subtle/);
       await summary.click();
       assert.equal(await pressed('Subtle').getAttribute('aria-pressed'), 'true');
-      assert.equal(await page.getByText('Off keeps widgets still. Subtle animates changes. Lively adds gentle weather motion.').count(), 1);
+      assert.equal(await page.getByText('Off keeps the content of widgets still; movement is set below. Subtle animates changes. Lively adds gentle weather motion.').count(), 1);
       assert.equal(await page.getByText(/asks for reduced motion/).count(), 0);
       const canvas = page.locator('.preview-surface .ambient');
       await pressed('Lively').click();
@@ -903,29 +1072,50 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
         if (board === 'full') assert.ok(result.off.widgets === ACTIVE_WIDGET_IDS.length && result.lively.widgets === ACTIVE_WIDGET_IDS.length, 'the full board shows every widget');
         checks.push(`performance over 15 s at 1280×720 ×3, ${board} board: Off ${JSON.stringify(result.off)}; Lively ${JSON.stringify(result.lively)}`);
       }
-      // #248 frame budget: at Off with Soft motion on (the default), the display draws only when the plane
-      // steps or a value changes, a few frames per second at most (a continuous drift drew about 120 per
-      // second). Whole-browser CPU (all Edge processes, % of one core) is recorded alongside. Both depend
-      // on the GPU, so `gpu: false` leaves them out.
+      // #248/#436 frame budget: at Off with Float gently on (the default), the display draws a frame only when the
+      // board or a widget's content steps one device pixel (at most 30 steps a second) or a value changes; a
+      // continuous animation drew about 120 frames a second. Whole-browser CPU (all Edge processes, % of one core)
+      // is recorded alongside. Both depend on the GPU, so `gpu: false` leaves them out.
       const frames = metrics.frames = {};
       for (const [label, viewport, deviceScaleFactor] of gpu ? [['1280×720 ×3', { width: 1280, height: 720 }, 3], ['3840×2160 ×1', { width: 3840, height: 2160 }, 1]] : []) {
         const view = await displayPage({ clock: false, fixedTime: now, viewport, deviceScaleFactor, state: scenario(state => { level('off')(state); fullBoard(state); }) });
-        assert.equal(await view.page.locator('.grid-ambient:not(.static)').count(), 1, 'Soft motion is on');
+        assert.equal(await view.page.locator('.grid-ambient[data-float="float"]').count(), 1, 'Float gently is on');
         await view.page.waitForTimeout(3_000);
+        // Count every float step: the plane's and each widget's style writes.
+        await view.page.evaluate(() => { window.__steps = 0; new MutationObserver(records => { window.__steps += records.length; }).observe(document.querySelector('.widget-grid-plane'), { attributes: true, attributeFilter: ['style'], subtree: true }); });
         const session = await view.context.newCDPSession(view.page); const browserSession = await browser.newBrowserCDPSession();
         const cpu = async () => (await browserSession.send('SystemInfo.getProcessInfo')).processInfo.reduce((sum, item) => sum + item.cpuTime, 0);
         const events = []; session.on('Tracing.dataCollected', data => events.push(...data.value));
         await session.send('Tracing.start', { categories: 'disabled-by-default-devtools.timeline.frame', transferMode: 'ReportEvents' });
         const cpuStart = await cpu(), started = Date.now();
         await view.page.waitForTimeout(10_000);
-        const seconds = (Date.now() - started) / 1000, cpuEnd = await cpu();
+        const seconds = (Date.now() - started) / 1000, cpuEnd = await cpu(), steps = await view.page.evaluate(() => window.__steps);
         const complete = new Promise(done => session.once('Tracing.tracingComplete', done)); await session.send('Tracing.end'); await complete;
-        frames[label] = { drawFramesPerSecond: Number((events.filter(event => event.name === 'DrawFrame').length / seconds).toFixed(2)), browserCpuPercent: Number(((cpuEnd - cpuStart) / seconds * 100).toFixed(1)) };
+        const drawn = events.filter(event => event.name === 'DrawFrame').length;
+        frames[label] = { drawFramesPerSecond: Number((drawn / seconds).toFixed(2)), stepsPerSecond: Number((steps / seconds).toFixed(2)), browserCpuPercent: Number(((cpuEnd - cpuStart) / seconds * 100).toFixed(1)) };
         await browserSession.detach().catch(() => undefined);
         await view.close();
-        assert.ok(frames[label].drawFramesPerSecond <= 4, `${label}: at most a few frames per second at rest ${JSON.stringify(frames[label])}`);
+        assert.ok(frames[label].drawFramesPerSecond <= 30, `${label}: at most 30 frames a second ${JSON.stringify(frames[label])}`);
+        assert.ok(drawn <= steps + 2 * seconds + 5, `${label}: a frame only when something steps ${JSON.stringify(frames[label])}`);
       }
-      checks.push(gpu ? `#248 frame budget at Off with Soft motion on, full board over 10 s: ${JSON.stringify(frames)}` : '#248 frame budget skipped (--no-gpu)');
+      checks.push(gpu ? `#248/#436 frame budget at Off with Float gently on, full board over 10 s: ${JSON.stringify(frames)}` : '#248/#436 frame budget skipped (--no-gpu)');
+    }
+    // (17) #436 real time: 70 s at a 30 s interval on the owner board, timers running for real, never below 0.99.
+    {
+      const view = await displayPage({ clock: false, state: scenario(ownerBoard()), viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3 });
+      const started = Date.now();
+      let lowest = 1, samples = 0, moved = new Set();
+      while (Date.now() - started < 70_000) {
+        const sample = await sampleBoard(view.page);
+        lowest = Math.min(lowest, sample.opacity, ...sample.widgets.map(widget => widget.opacity));
+        moved.add(`${sample.x},${sample.y}`); samples++;
+        await view.page.waitForTimeout(100);
+      }
+      await view.close();
+      assert.ok(lowest >= 0.99, `70 s in real time: lowest opacity ${lowest}`);
+      assert.ok(moved.size > 20, `the board floated in real time (${moved.size} positions)`);
+      metrics.realTime = { seconds: 70, samples, lowest, positions: moved.size };
+      checks.push(`#436 70 s in real time at a 30 s interval (owner board): opacity never below 0.99 over ${samples} samples, ${moved.size} board positions`);
     }
     assert.deepEqual(errors, [], `page or console errors (failed requests: ${JSON.stringify(failedRequests)}; cancelled by closing: ${JSON.stringify(cancelled)})`);
     return { checks, metrics, cancelled, outside: [...outside], images: 'none written; all state stays in RAM' };

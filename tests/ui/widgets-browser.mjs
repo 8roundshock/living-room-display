@@ -373,10 +373,17 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       await page.setViewportSize({ width: 1280, height: 720 });
       current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD]));
       current.settings.preview.enabled = true; current.settings.widgetGrid.density = 'balanced';
+      // #436: widgets change cells only with Swap places on (opt-in).
+      current.settings.appearance.rearrange = true;
       Object.assign(current.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
       await open();
       const clock = page.locator('[data-widget-id="clock"]');
-      const footprint = () => clock.evaluate(section => { const r = section.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
+      // The cell: the section's box without the #436 float translation, once any swap glide has finished.
+      const footprint = () => clock.evaluate(section => {
+        for (const animation of document.getAnimations()) if (animation.id === 'lrd-glide') animation.finish();
+        const r = section.getBoundingClientRect(), [x, y] = getComputedStyle(section).translate.split(' ').map(value => parseFloat(value) || 0);
+        return { left: r.left - (x ?? 0), top: r.top - (y ?? 0), width: r.width, height: r.height };
+      });
       const composition = async () => Number(await page.locator('.ambient').getAttribute('data-composition'));
       const before = { footprint: await footprint(), composition: await composition() };
       await page.evaluate(() => { window.__lrdWidgetFault = 'clock'; });
@@ -394,7 +401,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       assert.equal(board.length, Object.keys(FULL_BOARD).length, '#318: the full board still shows every widget');
       for (const item of board) if (item.id !== 'clock') assert.ok(!item.failed && item.content > 0, `#318: ${item.id} still renders`);
       await page.clock.runFor(181_000); await page.clock.runFor(1_500);
-      assert.ok(await composition() > before.composition, '#318: the board keeps relocating');
+      assert.ok(await composition() > before.composition, '#318: the board keeps swapping places');
       const moved = await footprint();
       assert.ok(Math.abs(moved.left - before.footprint.left) > 1 || Math.abs(moved.top - before.footprint.top) > 1, '#318: the failed widget relocates with the board');
       assert.equal((await clock.innerText()).trim(), 'Clock unavailable', '#318: still unavailable while the fault lasts (each new minute retries)');

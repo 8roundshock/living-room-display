@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { createApplication } from './app.ts';
 import { colorAccentDefaults, forecastFixture, photoFixture, seedColorAccentData } from './fixtures.ts';
 import { DataStore } from './store.ts';
-import { AT_REST, PREVIOUS_RELEASE, persistableData } from './persistence.ts';
+import { AT_REST, DEFAULT_SECTIONS_AT_REST, PREVIOUS_RELEASE, persistableData } from './persistence.ts';
 import {
   LEGACY_FIXTURE, LEGACY_FIXTURE_BLOBS, PREVIOUS_READER, VENDORED_BLOBS, assertPreviousReaderAccepts, assertPreviousReaderRejects,
 } from './compat/previous-reader.ts';
@@ -109,6 +109,8 @@ test('negative controls: the previous release still rejects an unknown key and i
 const KNOWN_AT_REST = Object.keys(AT_REST.appearance).filter(key => key in PREVIOUS_AT_REST.appearance) as (keyof typeof AT_REST.appearance)[];
 const NEW_AT_REST = Object.keys(AT_REST.appearance).filter(key => !(key in PREVIOUS_AT_REST.appearance)) as (keyof typeof AT_REST.appearance)[];
 
+const REQUIRED_OMISSIONS = { appearance: ['daylightBrightness', 'rearrange'], sections: ['screen'] } as const;
+
 test('#272 known omitted values stay readable; new appearance keys and Dynamic require omission', () => {
   // Default data with every omitted value present: colour accent, Subtle and the default widgetData sections,
   // in settings and in a saved style. Decision (#272): keep the omission; nothing on disk changes format here.
@@ -122,15 +124,19 @@ test('#272 known omitted values stay readable; new appearance keys and Dynamic r
     for (const key of Object.keys(AT_REST.appearance)) assert.equal(key in appearance, false, `${key} is omitted at rest`);
   }
   assert.equal('widgetData' in atRest, false, 'default widgetData is omitted at rest');
+  for (const key of DEFAULT_SECTIONS_AT_REST) assert.equal(key in atRest, false, `default ${key} is omitted at rest`);
+  assert.deepEqual([...DEFAULT_SECTIONS_AT_REST], [...REQUIRED_OMISSIONS.sections], 'every omitted section is listed with its reason');
   assertPreviousReaderAccepts('data', { ...full, settings: atRest }, 'the at-rest form');
   // Keys the previous release does not know (see the #439 test below) are left out here: their
   // omission is required, not optional, until the baseline knows them.
   assert.deepEqual(KNOWN_AT_REST, ['accentMode', 'animation']);
+  assert.deepEqual(NEW_AT_REST, [...REQUIRED_OMISSIONS.appearance]);
   const written = JSON.parse(JSON.stringify(full)) as Loose;
   for (const appearance of [written.settings.appearance, written.settings.savedPresets[0].visual.appearance]) {
     for (const key of NEW_AT_REST) delete appearance[key];
     for (const key of KNOWN_AT_REST) assert.equal(appearance[key], AT_REST.appearance[key], `${key} is written`);
   }
+  for (const key of REQUIRED_OMISSIONS.sections) delete written.settings[key];
   assert.deepEqual(written.settings.widgetData, colorAccentDefaults().widgetData, 'every default widgetData section is written');
   assertPreviousReaderRejects('data', written, 'the default Dynamic sources and the off Dynamic id written in state.json');
   // Required, not optional, for Dynamic (#437): its default sources, and its off visibility, transform and
@@ -142,10 +148,78 @@ test('#272 known omitted values stay readable; new appearance keys and Dynamic r
   assertPreviousReaderAccepts('data', written, 'every other omitted value written in state.json');
   const exported = { version: written.version, exportedAt: new Date(0).toISOString(), settings: written.settings, reminders: [] };
   assertPreviousReaderAccepts('import', exported, 'every omitted value written in an export');
+  // #436: the omissions the previous release needs. Written out, even at their defaults, it rejects them.
+  for (const key of REQUIRED_OMISSIONS.appearance) {
+    const data = { ...full, settings: structuredClone(atRest) } as Loose;
+    data.settings.appearance[key] = (full.settings.appearance as Loose)[key];
+    assertPreviousReaderRejects('data', data, `appearance.${key} written at its default`);
+  }
+  for (const key of REQUIRED_OMISSIONS.sections) {
+    const data = { ...full, settings: structuredClone(atRest) } as Loose;
+    data.settings[key] = structuredClone(full.settings[key]);
+    assertPreviousReaderRejects('data', data, `${key} written at its default`);
+  }
+});
+
+test('#436 default data and exports stay readable: float, no swap and Keep the screen on are omitted at rest', async () => {
+  const directory = await temporary('lrd-rollback-436-');
+  // The owner's data has neither key: after the update it reads as float, no swap, keep awake, the saved interval.
+  await seedColorAccentData(directory);
+  const app = await application(directory);
+  try {
+    const settings = app.store.snapshot().settings;
+    assert.equal(settings.appearance.rearrange, false); assert.deepEqual(settings.screen, { keepAwake: true });
+    assert.equal(settings.appearance.motionEnabled, true);
+    await app.send('PATCH', '/api/settings', { appearance: { motionIntervalSeconds: 30 } });
+    const primary = await readJson(directory, 'state.json');
+    assert.equal('rearrange' in primary.settings.appearance, false, 'Swap places off is omitted');
+    assert.equal('screen' in primary.settings, false, 'Keep the screen on (the default) is omitted');
+    await assertFilesAccepted(directory, '#436 defaults');
+    const exported = await app.send('GET', '/api/export');
+    assert.equal('screen' in exported.settings, false); assert.equal('rearrange' in exported.settings.appearance, false);
+    assertPreviousReaderAccepts('import', exported, '#436 defaults export');
+    // A saved style made now carries no screen section and no rearrange while off.
+    await app.send('PATCH', '/api/settings', { savedPresets: [{ id: 'synthetic-style', name: 'Synthetic style', visual: getVisual(app.store.snapshot().settings) }] });
+    const styled = await readJson(directory, 'state.json');
+    assert.equal('rearrange' in styled.settings.savedPresets[0].visual.appearance, false);
+    assert.equal('screen' in styled.settings.savedPresets[0].visual, false);
+    await assertFilesAccepted(directory, '#436 saved style');
+  } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+/**
+ * #436 documented rollback exceptions (docs/install.md): Swap places on and Keep the screen on off are
+ * written, and the previous release rejects them until the user switches them back and saves.
+ */
+const EXCEPTIONS_436: [string, SettingsPatch, (file: Loose) => boolean, SettingsPatch][] = [
+  ['#436 Swap places on', { appearance: { rearrange: true } }, file => file.settings.appearance.rearrange === true, { appearance: { rearrange: false } }],
+  ['#436 Keep the screen on off', { screen: { keepAwake: false } }, file => file.settings.screen?.keepAwake === false, { screen: { keepAwake: true } }],
+];
+
+test('#436 Swap places on and Keep the screen on off are the documented exceptions; switching back and saving restores readability', async () => {
+  for (const [label, patch, written, undo] of EXCEPTIONS_436) {
+    const directory = await temporary('lrd-rollback-436-exception-');
+    await seedColorAccentData(directory);
+    const app = await application(directory);
+    try {
+      await app.send('PATCH', '/api/settings', patch);
+      const primary = await readJson(directory, 'state.json');
+      assert.ok(written(primary), `${label}: state.json carries the choice`);
+      assertPreviousReaderRejects('data', primary, `${label} state.json`);
+      const exported = await app.send('GET', '/api/export');
+      assert.ok(written(exported), `${label}: the export carries the choice`);
+      assertPreviousReaderRejects('import', exported, `${label} export`);
+      // The documented way back: switch it back, Save, then roll back (the backup holds the prior save).
+      await app.send('PATCH', '/api/settings', undo);
+      assertPreviousReaderAccepts('data', await readJson(directory, 'state.json'), `${label} switched back`);
+      await app.send('PATCH', '/api/settings', { units: 'imperial' });
+      await assertFilesAccepted(directory, `${label} switched back and saved again`);
+    } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
+  }
 });
 
 test('#439 Fixed brightness omits daylightBrightness at rest, which the previous release requires', () => {
-  assert.deepEqual(NEW_AT_REST, ['daylightBrightness'], 'the previous release does not know the Follow daylight key');
+  assert.ok(NEW_AT_REST.includes('daylightBrightness'), 'the previous release does not know the Follow daylight key');
   const settings = colorAccentDefaults();
   settings.savedPresets = [{ id: 'synthetic-style', name: 'Synthetic style', visual: getVisual(settings) }];
   const full = { version: 1 as const, settings, reminders: [], photoAsset: null };

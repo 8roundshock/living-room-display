@@ -225,9 +225,9 @@ Cancel restores the saved configuration, including grid, styles and selected
 images. Show Save/Cancel only while there are actual unsaved changes, preserving
 the existing async race and concurrent-draft behavior. Reminder records retain
 their documented independent immediate-save behavior.
-The authored editor canvas stays still. Ambient relocation runs only in the
-display or an explicitly requested movement preview, so layout editing never
-competes with the ambient scheduler.
+The authored editor canvas stays still. Ambient movement (float, steps and swaps)
+runs only in the display or an explicitly requested movement preview, so layout
+editing never competes with the ambient scheduler.
 
 Legacy backfill uses revision-one catalog origins before strict validation and
 central migration. An absent additive module is different from an explicitly
@@ -258,8 +258,9 @@ Calendar (large); older data still reads it as off.
   Countdown or Note is hidden on the display and shows a placeholder in the editor.
   World clocks, Sun & moon and Air quality shipped in the parallel unit of the same
   ticket (PR #171).
-  The three use fixed families and sit beside a free-size Reminders span; fuller
-  boards keep relocating through the #93 reflection fallback described below.
+  The three use fixed families and sit beside a free-size Reminders span; with Swap
+  places on, fuller boards keep relocating through the #93 reflection fallback
+  described below.
 - **Rejected, with reasons:** timers and alarms (they need audio and on-screen
   interaction); news, stocks and sports (noise, feeds and keys); commute (keys and
   personal addresses); account calendars, fitness and cloud smart home (accounts and
@@ -364,24 +365,30 @@ minute ease runs on the compositor (#161), and the square clips so a turned wrap
 never adds overflow to the widget fit. At rest the geometry is the same at every
 Animation level. The owner's couch check remains the acceptance gate for #222.
 
-Move the complete layout through substantially different valid locations, with
-varying offsets or routes over time instead of forever repeating identical
-anchors. Small jitter inside fixed widget bounds is insufficient. Keep module
-rectangles disjoint at each visible phase; fade the old composition fully to
-black before revealing a new one, so crossfades cannot overlay bright layouts.
-Include a black rest interval and avoid flashes or synchronized bright accents.
-Use the centralized scheduler/wrapper, not a new per-widget motion loop. A change to
-the move interval, the fade length, Drift and fade between moves or the screen's
-reduced-motion preference that arrives during a fade-out or the black rest finishes
-that step (the running fade keeps its length; a fade switched off is already black),
-so the next arrangement appears within one fade plus the 1.1 s rest and the next move
-comes one new interval later (#357). Renderers learn that the arrangement is fully
-black from the motion context's `black` flag (from the end of the fade-out to the
-reveal); the analog clock re-bases its accumulated hand angles only then, so a minute's
-ease that starts just before a fade-out finishes in view (#174).
+The display never goes dark to move (#436, owner decision 2026-10-20; it replaces the
+black rest of #357 and #395). By default the arrangement stays as placed and floats:
+the centralized timer in `Display.tsx` moves the whole plane along low-discrepancy
+waypoints (`src/shared/float.ts`, up to ±3.5% of the display, a new spot every
+interval) one device pixel at a time, and floats each widget's content inside its
+own slack by translating the section (`--float-x`/`--float-y`, the individual
+`translate` property). A widget must therefore tolerate a translated section: lay
+content out inside the content box, never depend on the section's screen position,
+and let the shared fit measure the slack (what the content leaves free; horizontal
+slack is to the right because content is left-anchored, vertical slack is centred).
+The widget's cell is its section box without that translation. Without animation
+(Float gently off or reduced motion) the same timer steps once per interval. Use the
+centralized scheduler/wrapper, not a new per-widget motion loop, and avoid flashes or
+synchronized bright accents. **Swap places** (opt-in, `appearance.rearrange`) also moves
+the complete layout through substantially different valid locations each interval,
+with module rectangles disjoint in every composition: moved widgets glide there
+(opacity never below 0.4, never the whole board at once) or, without animation, dim
+to 0.4 briefly while they move. The plane itself always stays at opacity 1. There is
+no fully black state, so renderers get no `black` or `resting` flag: the analog
+clock's hand angles accumulate for the whole session and never re-base (#174), so a
+hand only ever turns forward.
 
-Each composition moves every widget off at least half of its previous cells where it
-can (#338): `composeWidgetGrid` treats a widget that covers more than half of its own
+With Swap places on, each composition moves every widget off at least half of its
+previous cells where it can (#338): `composeWidgetGrid` treats a widget that covers more than half of its own
 previous cells again (or more than the least any legal origin of its span allows) as
 staying, and prefers compositions where none stays. The display also passes the
 composition from two cycles back, and a composition that recreates it is used only
@@ -389,16 +396,16 @@ when nothing else qualifies (#317). The bounded search first places widget by wi
 distant cells first; boards with few or no spare cells, where that rarely completes,
 are then packed cell by cell, which never leaves an unfillable hole.
 
-Dense boards keep relocating (#93). When the search finds no such composition, the
+Dense boards keep relocating when they swap (#93). When the search finds no such composition, the
 previous composition is reflected horizontally, vertically or both (`displayPlacement`,
 span-aware). The #182 choice comes first: reflections that tie for the most widgets
 moved rotate with the cycle, and a unique best one (usually both at once, when a widget
 is centred on one axis) alternates on odd cycles with the best of the others.
 Reflections commute, so a board's reflected arrangements are A, hA, vA and hvA (one,
 two or four of them distinct), and a run of reflections on a board with four visits
-all four. A reflection cannot move a widget centred on its axis, and the whole-plane
-offset (`motionOffset`, at most 2% of the plane each way) cannot move a widget by a large
-share of its size, so a widget that a reflection would leave in place trades places
+all four. A reflection cannot move a widget centred on its axis, and the board's
+float (at most 3.5% of the display each way) cannot move a widget by a large share of
+its size, so a widget that a reflection would leave in place trades places
 with a same-size clean region elsewhere (its own cells, or the row or column band it
 sits in, whose widgets all lie inside it), and widgets of the same span may exchange
 cells. These moves keep the reflection's cells or swap whole clean regions, so every
@@ -409,7 +416,7 @@ the one from two cycles earlier from 85 to none of 7,164; on the suites' full 12
 board no widget keeps more than half of its cells between compositions (a 4 × 4 widget,
 Sun & moon or Weather, used to stay put on 38 of 200). Only a board that every reflection maps onto itself
 falls through to the search that allows widgets to stay. A full-height span can only travel
-sideways; any span relocates as one whole group through the black rest. Its
+sideways; any span relocates as one whole group in one swap. Its
 content therefore also alternates vertically: a full-height Reminders column
 (`data-full-height`) anchors its list to the top on even compositions (the authored
 layout included) and to the bottom on odd ones (`composition-1`/`composition-3`).
@@ -420,9 +427,9 @@ rows are fewer than a third of the grid's (5 or more rows in Spacious, 6 in Bala
 renderer marks its body `data-alternate-anchor` for the same `composition-N` rule.
 
 Reduced motion removes travel, zoom and decorative animation while preserving
-periodic spatial relocation through a black interval and an instant reveal (or a
-brief opacity transition when permitted). It must not freeze the ambient display
-at one permanent position. Missing or hidden widgets must not leave a fixed frame.
+periodic movement: the board and widget content jump to the next spot each interval,
+and swaps dim and move without a glide. It must not freeze the ambient display at one
+permanent position. Missing or hidden widgets must not leave a fixed frame.
 
 Motion inside widgets follows the Animation level (#76; Off, Subtle or Lively, see
 [motion levels](design.md#motion-levels)), which `motionPlan()` in
@@ -479,7 +486,7 @@ One widget's failure stays inside that widget (#318). The registry wraps every r
 in its own error boundary ([`WidgetBoundary.tsx`](../src/client/widgets/WidgetBoundary.tsx)),
 so the ambient display, the editor canvas and the picker samples are all covered. A
 renderer that throws shows "<Widget> unavailable" in the status tone inside its own
-footprint, keeps relocating with the board, and is written to the console once per
+footprint, keeps moving with the board (and swapping places when that is on), and is written to the console once per
 widget and message; the rest of the board and the editor keep working. The boundary
 tries the widget again with new state or settings, another family or the next minute,
 so it recovers once the data that broke it changes. A `visible` rule that throws leaves
@@ -526,12 +533,13 @@ to personal photo folders merely to implement a widget.
 ## Verification for a widget change
 
 - Check every supported family on every supported grid, smallest bounds and long
-  content, all relocation phases and black intervals. Inspect actual images for
+  content, a floating (translated) section and, with Swap places on, every swap.
+  Inspect actual images for
   density, clipping, collisions and stale/error/empty states using synthetic data.
 - Exercise add/remove, drag/drop, resize, keyboard alternatives, invalid placement,
   grid changes, Save/Cancel, clean/dirty save-bar visibility, persistence,
   presets and legacy import/migration. Retain edits made while Save is pending.
-- Check reduced motion still relocates, whole-group bounds remain valid, and
+- Check reduced motion still moves the board in steps, whole-group bounds remain valid, and
   pointer hiding stays limited to explicit native presentation. Browser display
   and browser fullscreen retain their pointer; unmodified F toggles fullscreen
   outside editable controls. Keep captures in
@@ -553,7 +561,7 @@ assets, fonts, frameworks, platform integration or certification.
 | --- | --- |
 | [HIG Widgets](https://developer.apple.com/design/human-interface-guidelines/widgets) | Focused glanceable content, family-specific detail and restrained color. StandBy enlarges widgets for distant use; this app has its own grid and does not copy iOS point sizes. |
 | [WidgetFamily](https://developer.apple.com/documentation/widgetkit/widgetfamily) | Declare supported size/shape families and adapt content flexibly. WidgetKit APIs are inspiration, not app dependencies. |
-| [HIG Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Dim secondary content and reduce visual noise. Apple's preference for stable layouts differs from this app's required periodic relocation on a TV. |
+| [HIG Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Dim secondary content and reduce visual noise. Apple's preference for stable layouts differs from this app's continuous float (and optional swaps) on a TV. |
 | [HIG Typography](https://developer.apple.com/design/human-interface-guidelines/typography) | System type, clear size/weight hierarchy and viewing-distance checks. Small supporting text uses regular/medium weight; enlarged outlined time remains a deliberate sparse treatment. |
-| [HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion) | Purposeful, brief editor feedback; fade before relocation when travel conveys no useful information. Reduced motion removes effects while the ambient relocation contract still applies. No audio or haptic feedback is introduced. |
+| [HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion) | Purposeful, brief editor feedback; the board floats slowly and never fades out to move (#436), and a swap glides with a brief dim. Reduced motion removes effects while the board still moves in steps. No audio or haptic feedback is introduced. |
 | [Designing your app for the Always On state](https://developer.apple.com/documentation/watchos-apps/designing-your-app-for-the-always-on-state) | The watchOS example replaces large numeral fills with outlines/dim interiors. It supports the clock treatment, not a claim that this TV inherits Apple luminance or panel controls. |

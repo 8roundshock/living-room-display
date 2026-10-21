@@ -224,8 +224,11 @@ export async function runStudioQa({ playwright, edge } = {}) {
           return { l: r.left, t: r.top, r: r.right, b: r.bottom };
         };
       for (const widget of document.querySelectorAll('.ambient-widget')) {
-        const outer = box(widget),
-          content = box(widget.querySelector('.widget-content'));
+        // The cell without the #436 float translation; the content floats inside it.
+        const [x, y] = getComputedStyle(widget).translate.split(' ').map((value) => parseFloat(value) || 0),
+          shift = (r) => ({ l: r.l - (x ?? 0), t: r.t - (y ?? 0), r: r.r - (x ?? 0), b: r.b - (y ?? 0) });
+        const outer = shift(box(widget)),
+          content = shift(box(widget.querySelector('.widget-content')));
         if (
           outer.l < -1 ||
           outer.t < -1 ||
@@ -748,8 +751,9 @@ export async function runStudioQa({ playwright, edge } = {}) {
     );
 
     await reset();
+    // #436: compositions change only with Swap places on (opt-in); the board floats either way.
     await app.store.patchSettings({
-      appearance: { motionIntervalSeconds: 30, fadeSeconds: 0.2 },
+      appearance: { motionIntervalSeconds: 30, fadeSeconds: 0.2, rearrange: true },
     });
     for (const viewport of [
       { width: 1920, height: 1080 },
@@ -777,7 +781,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
       await context.close();
     }
     checks.push(
-      'four timed compositions fit 1080p and 4K; true black, no audio or ambient geolocation, visible browser cursor',
+      'four timed Swap places compositions fit 1080p and 4K; true black, no audio or ambient geolocation, visible browser cursor',
     );
     ({ page, context } = await open({
       route: '/display',
@@ -795,12 +799,16 @@ export async function runStudioQa({ playwright, edge } = {}) {
         .evaluate((e) => getComputedStyle(e).animationName),
       'none',
     );
+    const planeAt = () =>
+      page.locator('.widget-grid-plane').evaluate((e) => e.style.transform);
+    const planeBefore = await planeAt();
     await page.clock.runFor(90000);
     assert.ok(
       Number(await page.locator('.ambient').getAttribute('data-composition')) >
         0,
-      'Reduced motion retains discrete relocation',
+      'Reduced motion still swaps places without animation (#436)',
     );
+    assert.notEqual(await planeAt(), planeBefore, 'and the board still moves, in steps');
     await context.close();
     for (const width of [390, 320]) {
       ({ page, context } = await open({
@@ -1041,14 +1049,17 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.getByRole('slider', { name: 'Text size', exact: true }).fill('125');
     await page.locator('summary', { hasText: 'Motion' }).click();
     await page
-      .getByRole('checkbox', { name: 'Drift and fade between moves', exact: true })
+      .getByRole('checkbox', { name: 'Float gently', exact: true })
       .uncheck();
+    await page
+      .getByRole('checkbox', { name: 'Swap places', exact: true })
+      .check();
     await save(page).click();
     await saved(page);
     const board = structuredClone(app.store.snapshot().settings);
     assert.deepEqual(
-      [board.widgets.note, board.appearance.clockStyle, board.appearance.fontScale, board.appearance.motionEnabled],
-      [true, 'analog', 1.25, false],
+      [board.widgets.note, board.appearance.clockStyle, board.appearance.fontScale, board.appearance.motionEnabled, board.appearance.rearrange],
+      [true, 'analog', 1.25, false, true],
     );
     assert.deepEqual(await pressedPreset(), ['Room'], 'the default look shows Room pressed');
     await page.getByRole('button', { name: 'Night', exact: true }).click();
@@ -1057,7 +1068,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.equal(await page.locator('.preview-frame [data-widget-id="note"]').count(), 1, 'Night keeps the added Note on the canvas');
     assert.equal(await page.locator('.preview-frame .analog-clock').count(), 1, 'Night keeps Analog');
     assert.equal(await page.getByRole('slider', { name: 'Text size', exact: true }).inputValue(), '125', 'Night keeps Text size');
-    assert.equal(await page.getByRole('checkbox', { name: 'Drift and fade between moves', exact: true }).isChecked(), false, 'Night keeps Drift and fade off');
+    assert.equal(await page.getByRole('checkbox', { name: 'Float gently', exact: true }).isChecked(), false, 'Night keeps Float gently off');
+    assert.equal(await page.getByRole('checkbox', { name: 'Swap places', exact: true }).isChecked(), true, 'Night keeps Swap places on (#436)');
     await page.getByRole('button', { name: 'Room', exact: true }).click();
     await saved(page);
     assert.deepEqual(await pressedPreset(), ['Room'], 'back to the saved look: no Save bar');
@@ -1086,28 +1098,29 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await tab(page, 'Style');
     assert.deepEqual(await pressedPreset(), ['Phone'], 'the saved look shows Phone pressed after reload');
     checks.push(
-      '#153 #110 #226 built-in styles change only the look: Note, Analog, Text size 125% and Drift and fade off survive Night, Room and Phone; the card pressed follows the look (also after a reverted brightness nudge and reload); Save appears only for effective changes; Phone keeps the 3-minute interval',
+      '#153 #110 #226 built-in styles change only the look: Note, Analog, Text size 125%, Float gently off and Swap places on survive Night, Room and Phone; the card pressed follows the look (also after a reverted brightness nudge and reload); Save appears only for effective changes; Phone keeps the 3-minute interval',
     );
 
-    // #240: plain Motion wording, with the stable structure other suites rely on.
+    // #240, #436: plain Motion wording, with the stable structure other suites rely on.
     await page.locator('summary', { hasText: 'Motion' }).click();
     const motionBody = page.locator('.motion-disclosure .disclosure-body');
-    await motionBody.getByRole('checkbox', { name: 'Drift and fade between moves', exact: true }).waitFor();
-    await motionBody.getByRole('slider', { name: 'Move widgets every', exact: true }).waitFor();
-    assert.match(await motionBody.locator('.motion-hint').innerText(), /^Widgets always move to a new place through black\. With Drift and fade off, or with Animation effects off in Windows Settings › Accessibility › Visual effects on the display PC, they appear without a fade and nothing drifts\.$/);
-    assert.equal(await page.getByText(/Soft motion|New arrangement|Reduced motion removes/).count(), 0, 'the old wording is gone');
-    checks.push('#240 Motion reads "Drift and fade between moves", "Move widgets every" and a hint naming Windows Animation effects');
+    await motionBody.getByRole('checkbox', { name: 'Float gently', exact: true }).waitFor();
+    await motionBody.getByRole('slider', { name: 'Move every', exact: true }).waitFor();
+    await motionBody.getByRole('checkbox', { name: 'Swap places', exact: true }).waitFor();
+    assert.match(await motionBody.locator('.motion-hint').innerText(), /^With Animation effects off in Windows Settings › Accessibility › Visual effects on the display PC, the display moves without animation.$/);
+    assert.equal(await page.getByText(/Soft motion|New arrangement|Reduced motion removes|Drift and fade|through black/).count(), 0, 'the old wording is gone');
+    checks.push('#240/#436 Motion reads "Float gently", "Move every", "Swap places" and a hint naming Windows Animation effects');
 
     // #342: every slider speaks its value with the unit, and the visible copy is not a second live region.
     const spoken = (name) => page.getByRole('slider', { name, exact: true }).getAttribute('aria-valuetext');
     assert.equal(await spoken('Brightness'), '70%');
     assert.equal(await spoken('Text size'), '125%');
-    assert.equal(await spoken('Move widgets every'), '3 minutes');
-    assert.equal(await spoken('Fade duration'), '2 seconds');
-    await range(page, 'Move widgets every');
-    assert.equal(await spoken('Move widgets every'), '3 minutes 30 seconds');
-    await range(page, 'Fade duration', 'ArrowLeft');
-    assert.equal(await spoken('Fade duration'), '1 second');
+    assert.equal(await spoken('Move every'), '3 minutes');
+    assert.equal(await spoken('Swap glide'), '2 seconds');
+    await range(page, 'Move every');
+    assert.equal(await spoken('Move every'), '3 minutes 30 seconds');
+    await range(page, 'Swap glide', 'ArrowLeft');
+    assert.equal(await spoken('Swap glide'), '1 second');
     await cancel(page).click();
     await saved(page);
     const outputs = () => page.locator('.control-label output').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-hidden')));
@@ -1117,7 +1130,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.getByRole('button', { name: 'Last screen', exact: true }).click();
     assert.equal(await spoken('Snapshot opacity'), '24%');
     assert.deepEqual([...new Set(await outputs())], ['true'], 'Snapshot opacity shows its value once');
-    checks.push('#342 Brightness, Text size, Move widgets every, Fade duration and Snapshot opacity speak "70%", "125%", "3 minutes" ("3 minutes 30 seconds"), "2 seconds" ("1 second") and "24%"; every visible <output> is aria-hidden');
+    checks.push('#342 Brightness, Text size, Move every, Swap glide and Snapshot opacity speak "70%", "125%", "3 minutes" ("3 minutes 30 seconds"), "2 seconds" ("1 second") and "24%"; every visible <output> is aria-hidden');
 
     // #360: one line beside Open display says where the full-screen display is, within the header.
     const hint = 'For full screen on this PC: Start › Living Room Display - Show display, or press F on the display';

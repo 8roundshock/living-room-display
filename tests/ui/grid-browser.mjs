@@ -126,8 +126,14 @@ export async function runGridQa({ playwright, edge } = {}) {
   }
   async function bounds() {
     const bad = await page.evaluate(() => {
+      // Each widget's cell: its box without the #436 float translation (its content floats inside it).
+      const cell = (e) => {
+        const r = e.getBoundingClientRect(),
+          [x, y] = getComputedStyle(e).translate.split(' ').map((value) => parseFloat(value) || 0);
+        return { left: r.left - (x ?? 0), top: r.top - (y ?? 0), right: r.right - (x ?? 0), bottom: r.bottom - (y ?? 0) };
+      };
       const boxes = [...document.querySelectorAll('.ambient-widget')].map(
-          (e) => ({ id: e.dataset.widgetId, r: e.getBoundingClientRect() }),
+          (e) => ({ id: e.dataset.widgetId, r: cell(e) }),
         ),
         bad = [];
       for (const { id, r } of boxes)

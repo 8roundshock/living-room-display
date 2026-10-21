@@ -380,6 +380,17 @@ policy is not overridden. If you select a different screensaver yourself,
 `DisableIdle` preserves your new choice, including None or an empty/missing
 selection, and retains the backup for inspection.
 
+**Keep the screen on** (Style › Motion › Screen, on by default, #436) holds a Screen Wake
+Lock while the display shows as the screensaver (`native=1`) or full screen, so
+Windows does not turn the screen off or sleep during the session; Windows' own
+power settings apply the rest of the time, and a windowed display tab never holds
+it. It cannot help when Windows turns the screen off or sleeps *before* the
+screensaver starts: the editor's Screen part reads the power plan's display-off
+and sleep timeouts (`powercfg /query`, read-only) and warns when either is shorter
+than the screensaver wait. Change them in Settings › System › Power & sleep, or
+choose a shorter wait. The native host's own hold (`SetThreadExecutionState`) is
+[#442](https://github.com/8roundshock/living-room-display/issues/442).
+
 ## Data, updates, recovery and removal
 
 | Below `%LOCALAPPDATA%\LivingRoomDisplay` | Purpose |
@@ -462,6 +473,9 @@ and pre-Dynamic `widgetData` either way, so their omission is optional. It was k
 data-format change ([#272](https://github.com/8roundshock/living-room-display/issues/272)).
 `d66832b` does not know `daylightBrightness`, so omitting its Fixed value (`null`) is
 required: that is what keeps Fixed data readable.
+Swap places' `rearrange` and the `screen` section (#436) are also unknown to
+`d66832b`: both are omitted while they hold their defaults (Swap places off, Keep
+the screen on on); a non-default choice is a documented exception below.
 
 `src/server/rollback.test.ts` (part of `npm test`) proves this with a byte-for-byte
 copy of the `d66832b` reader: fresh Native data, previous-release data after unrelated
@@ -475,16 +489,20 @@ board adds no key: it only changes which widgets a fresh data folder shows and w
 controls show that an unknown key and invalid values are still rejected. After each
 coordinated install, the baseline moves to the newly installed revision (#130).
 
-A non-default choice that `d66832b` cannot read is listed here. Before rolling
-back after using one, follow the [revision 2 procedure](#widget-geometry-revision-2-update-and-rollback):
-keep the newer data directory and restore the matching pre-upgrade data copy, or
-remove the choice as its row says.
+A non-default choice that `d66832b` cannot read is listed here. Before rolling back
+after using one, either switch it back and save (then save once more, so
+`state.backup.json` holds the switched-back settings too), or follow the
+[revision 2 procedure](#widget-geometry-revision-2-update-and-rollback): keep the
+newer data directory and restore the matching pre-upgrade data copy.
 
 | Feature | Data the previous release (`d66832b`) cannot read |
 | --- | --- |
 | Everything up to `d66832b` (#73, #74, #75, #76, #78 and the polish since) | None. |
 | Brightness → Follow daylight (#439) | `appearance.daylightBrightness` in the settings and in saved styles made while it was on. Fixed, the default, writes no key, so Fixed data stays readable. See [removing Follow daylight before a downgrade](#removing-follow-daylight-before-a-downgrade). |
 | #437 Dynamic | An enabled Dynamic widget, a saved style made while it was on, or Dynamic sources other than all on. Before rolling back to `d66832b`, turn all sources on, remove Dynamic, delete or re-save styles that include it, then Save; or restore the pre-upgrade data copy. The next reader bump (#130) removes this exception. Dynamic off with its sources all on is omitted at rest, and its transform is never written (#135), so that data reads. |
+| #436 **Swap places** on (`appearance.rearrange: true`, also inside a saved style) | The settings, the backup after the next save, and exports. Switch **Swap places** off (and re-save or delete a saved style that has it on), Save, then roll back; or restore the pre-update copy. |
+| #436 **Keep the screen on** off (`screen: { keepAwake: false }`) | The settings, the backup after the next save, and exports. Switch **Keep the screen on** back on, Save, then roll back; or restore the pre-update copy. |
+| #436 float (the default: no swap, keep the screen on) | None: both keys are omitted at rest. |
 
 <a id="rolling-back-the-installed-3446400"></a>
 

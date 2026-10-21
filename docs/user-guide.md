@@ -132,15 +132,34 @@ The **Style** tab sets how everything looks:
 
 ## Why things move
 
-The display moves your widgets as whole groups to a new arrangement every few
-minutes (every 3 minutes unless you change it), fading through black in between.
-Between moves the whole board drifts very slowly. Bright things that never move
-can leave a faint lasting image on OLED and some other TVs. Moving helps to spread
-the wear, but no setting can promise to prevent it.
+Your widgets stay where you put them. The whole board floats slowly, reaching a new
+spot every few minutes (every 3 minutes unless you change it), and the text inside
+each widget floats a little within its own space. The screen never goes dark to
+move. Bright things that never move can leave a faint lasting image on OLED and
+some other TVs. Moving helps to spread the wear, but no setting can promise to
+prevent it.
 
-In **Style › Motion** you can change **Move widgets every** and the fade length. If
-you turn off **Drift and fade between moves**, widgets still move, but jump to
-their new place through black without fading or drifting.
+In **Style › Motion** you can change **Move every**. If you turn off **Float
+gently**, the board still moves, but shifts a little once each interval without
+animation. Turn on **Swap places** if you would also like widgets to trade places
+every interval: they glide to their new places without going dark, and your saved
+arrangement stays as it is. **Swap glide** sets how long that glide takes.
+
+## Keeping the screen on
+
+**Style › Motion › Keep the screen on while the display shows** is on by default.
+While the display is full screen or running as your screensaver, Windows won't turn
+the screen off; the rest of the time Windows' own power settings apply. On Windows,
+the same section shows when Windows turns the screen off and sleeps, and warns if
+that would happen before your screensaver starts.
+
+## One display window
+
+**Open display** in the editor opens one display window and brings it back to the
+front when you click it again (it then reads **Show display**, with **Close
+display** beside it). Press **Esc** on that display to go back to the editor and
+close it. If you open the display another way, older display tabs close themselves
+or ask you to close them.
 
 ## Animation levels
 
@@ -149,7 +168,7 @@ widgets:
 
 - **Off**: widgets stay still.
 - **Subtle** (the default): only changes animate, such as a new time or
-  temperature, and widgets fade in after each move.
+  temperature, and widgets fade in when the display opens.
 - **Lively**: a little more movement, including gentle weather motion.
 
 If Windows is set to show fewer animations, the display treats the level as Off.

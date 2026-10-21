@@ -94,9 +94,9 @@ motion or the Off animation level.
   of their own, which only older colour-mode data shows, #303), the text colour, the
   typeface and the retained legacy layout,
   and keeps everything else: the widgets and their layout, widget options (clock
-  style, Hide when empty, Last screen), Text size, the Animation level, Drift and
-  fade, the move interval and the fade length, as well as location, units,
-  reminders and saved styles. Room brightness is 55%, Phone 70% and Night 28%.
+  style, Hide when empty, Last screen), Text size, the Animation level, Float
+  gently, Swap places, the move interval and the swap glide, as well as location,
+  units, Keep the screen on, reminders and saved styles. Room brightness is 55%, Phone 70% and Night 28%.
   Phone no longer sets its own 2-minute interval, and no built-in style lowers Text
   size, so labels keep the readability floors. A style's card shows as chosen
   whenever its look is showing (also after an edit is reverted), and choosing a look
@@ -150,21 +150,43 @@ motion or the Off animation level.
   overflow. The live canvas, movement preview and picker samples show the draft's
   mode. The [palette harness](../tests/ui/palette-browser.mjs) covers these flows.
 - The Style tab's **Motion** disclosure (its summary shows the level) starts with
-  **Animation**: Off, Subtle or Lively as pressed buttons, then **Drift and fade
-  between moves** (`motionEnabled`), **Move widgets every** (the interval) and Fade
-  duration (#240). Its hint says that widgets always move to a new place through
-  black, and that with Drift and fade off, or with Windows Settings › Accessibility
-  › Visual effects › Animation effects off on the display PC, they appear without a
-  fade and nothing drifts. Choosing a level is an ordinary draft change (the
-  Save bar appears only while it differs from the saved level), does not mark the
-  style Custom, and replays the canvas entrance once. When the editor's own screen
+  **Animation**: Off, Subtle or Lively as pressed buttons ("Off keeps the content of
+  widgets still; movement is set below."), then **Float gently** (`motionEnabled`),
+  **Move every** (the interval) with a live sentence, **Swap places**
+  (`appearance.rearrange`, off by default; "Widgets sometimes trade places. Your
+  arrangement stays saved.") and **Swap glide** (`fadeSeconds`, shown only while
+  Swap places is on) (#240, #436). The sentence follows the draft: "Your widgets stay
+  where you put them and float slowly, reaching a new spot every 30 s, to protect
+  your TV. The screen never goes dark to move."; with Float gently off "…shift a
+  little every 30 s, without animation, …"; with Swap places on "Your widgets float
+  slowly and swap places every 30 s, gliding without going dark." (or, with Float
+  gently off, "…without animation, dimming briefly instead of going dark."). A last
+  hint says that with Windows Settings › Accessibility › Visual effects › Animation
+  effects off on the display PC, the display moves without animation. Choosing a
+  level or Swap places is an ordinary draft change (the Save bar appears only while
+  it differs from the saved value), does not mark the style Custom, and a level
+  replays the canvas entrance once. When the editor's own screen
   prefers reduced motion, a hint explains that animation stays off there while the
   control still edits the saved value. Editor polish (tab indicator, disclosures,
   picker, drag settle, new-widget drop-in, Save bar entrance) follows the editor's
   effective level and stays within 240 ms; Off keeps the existing transitions. Every
-  slider (Brightness, Text size, Move widgets every, Fade duration and Last screen's
+  slider (Brightness, Text size, Move every, Swap glide and Last screen's
   Snapshot opacity) speaks its value with the unit (“55%”, “3 minutes”, “2 seconds”);
   the value shown beside its label is not announced a second time (#342).
+- The Motion disclosure ends with a **Screen** part (#436; inside Motion so the Style
+  tab still fits a 1280 × 720 editor without scrolling) holding **Keep the screen on
+  while the display shows** (`screen.keepAwake`, on by default): "When the display is full screen or running as your screensaver,
+  Windows won't turn the screen off. Windows' own power settings apply the rest of
+  the time." On Windows, opening Motion reads `GET /api/windows/status` once and shows a
+  read-only line such as "Windows turns the screen off after Never · Sleeps after
+  Never" (plugged-in values). When this app is the selected screensaver and Windows
+  would turn the screen off or sleep before the screensaver starts, a warning names
+  both times: "Windows turns the screen off after 10 min, before your screensaver
+  starts at 20 min, so the display won't appear. Change it in Settings › System ›
+  Power & sleep, or choose a shorter wait." A browser without the Screen Wake Lock
+  API says "This browser can't keep the screen on. The screensaver display uses
+  Microsoft Edge, which can." The editor never changes Windows settings. Keep the
+  screen on is not part of saved styles.
 - **Data & recovery** (#234): **Export saved data** downloads a backup of the saved
   settings, styles and reminders (never the photo). **Restore from backup…** is
   refused while settings edits are unsaved ("Save or cancel your changes before
@@ -188,8 +210,8 @@ motion or the Off animation level.
   you can restore (#301). **Reset appearance…** asks inline and focuses **Keep my
   appearance**; Keep or Reset returns focus to Reset appearance… (#343). **Reset**
   returns every Style tab value to its default (the Room look, Fixed brightness, Text size 100%, Subtle,
-  Drift and fade on, every 3 minutes, a 2 s fade) as an ordinary draft change, while
-  widgets, their layout, the clock style and saved styles stay; the status line reads
+  Float gently on, Swap places off, every 3 minutes, a 2 s glide) as an ordinary draft change, while
+  widgets, their layout, the clock style, Keep the screen on and saved styles stay; the status line reads
   “Appearance reset. Save changes to keep it.” only while the reset is unsaved, clears
   on Cancel and reads “Appearance reset and saved.” after Save (#300). A link styled as
   a button (**Export saved data**) spaces its icon like the buttons beside it (#304).
@@ -204,7 +226,7 @@ motion or the Off animation level.
   saved styles, the photo and reminders stay; Cancel restores the saved board. Either answer
   returns focus to **Reset layout…**. The
   [studio harness](../tests/ui/studio-browser.mjs) covers these flows.
-- The authored canvas never relocates; outside Edit layout it shows value and glyph
+- The authored canvas never moves; outside Edit layout it shows value and glyph
   motion for the draft Animation level, and during Edit layout widgets stay still. **Edit layout** reveals a faint
   editor-only grid and whole-widget drag targets. While no message needs it, the reserved
   message line under the canvas reads “Drag a widget to move it · drag its corner to resize
@@ -277,7 +299,7 @@ motion or the Off animation level.
   height needs room first: make Clock smaller.” on the default board, “make Clock,
   Weather or Forecast smaller” on the catalog board). On the display a
   full-height Reminders column alternates top and bottom anchoring between
-  arrangements while it relocates sideways.
+  arrangements while it swaps sideways (Swap places on).
 - Density/family/position and visibility form one atomic local layout during a
   concurrent poll, preserving its validity while unrelated saved settings refresh.
   Adding a widget can seek nearby legal origins when its previous hidden origin
@@ -303,16 +325,29 @@ motion or the Off animation level.
   Fine** and one reduction (**Make room: Reminders small** for a small widget,
   **Weather medium** for a medium one, **Clock medium** for a large one). The
   Reminders tab is named with its count (“Reminders, 8 pending”).
-- **Preview movement** explicitly reveals numbered arrangements and **Automatic**
-  ambient preview. Editing returns to authored placement. **Open display** opens
-  a browser tab; its pointer remains visible, including fullscreen. One dim line beside
-  it (under the header on narrow windows) says where the full-screen display is: “For
-  full screen on this PC: Start › Living Room Display - Show display, or press F on the
-  display” (#360). Unmodified
-  **F** toggles fullscreen without stealing typing, modifier shortcuts or repeats.
-  Manual display controls appear on pointer movement or Tab and hide after
-  3.5 seconds without another supported interaction. Focused controls stay visible.
-  Esc or E returns to the editor.
+- **Preview movement** shows the draft's float (or steps) on the canvas; with Swap
+  places on it also reveals numbered arrangements and **Automatic**, which swaps
+  like the display. Editing returns to authored placement.
+- **Open display** (#436) opens one display window, named `still-display`, and reuses
+  and focuses it on later clicks (`<a href="/display" target="still-display">` without
+  `rel`, same-origin loopback, is the no-script fallback). While that window is open
+  the button reads **Show display** and **Close display** sits beside it (checked on
+  window focus and every second). A display opened any other way (a typed address, a
+  second editor) announces itself on the `still-display` BroadcastChannel; an older
+  browser display then closes itself, or, when the browser will not let a tab it did
+  not open close, shows a calm card ("The display is open in another window. Close
+  this tab (Ctrl+W).") and stops floating, polling and holding the screen awake. The
+  native screensaver needs none of this: `/s`, `--display` and `--test-display`
+  already exit when the `Local\LivingRoomDisplay.Ambient` mutex is held
+  ([Windows](windows.md)). The display's pointer remains visible, including
+  fullscreen. One dim line beside Open display (under the header on narrow windows)
+  says where the full-screen display is: "For full screen on this PC: Start > Living
+  Room Display - Show display, or press F on the display" (#360). Unmodified **F** toggles fullscreen without stealing typing, modifier
+  shortcuts or repeats. Manual display controls appear on pointer movement or Tab and
+  hide after 3.5 seconds without another supported interaction. Focused controls stay
+  visible. Esc or E on a display the editor opened (a live same-origin
+  `window.opener`) focuses the editor and closes the display, as does its **Close
+  display** control (shown only then); otherwise Esc or E opens the editor in that tab.
 
 Only explicit `native=1` presentation hides the document cursor and omits browser
 controls. Browser loading/failure/display and editor/embedded previews retain
@@ -376,7 +411,7 @@ the rail's single tab stop, sample text of at least 9 px in every family at 1280
 today's date in the samples, the single “No room” region and its Fine/Small fixes, each
 panel, Save/Cancel, reload,
 styles, display hiding, a dense board where the three sit beside a full-height
-Reminders column and keep relocating, 320/390 px reflow, Save-bar clearance and the
+Reminders column and keep swapping places (Swap places on), 320/390 px reflow, Save-bar clearance and the
 compact picker viewports with rail text of at least 11 px.
 
 ## Weather and location
@@ -710,36 +745,65 @@ an immediate switch, E every honest state, F the editor.
 
 ## Movement and verification
 
-The edited layout is the first composition. Later collision-free compositions
-vary legal widget origins and whole-plane offsets, with a fully black rest before
-revealing each replacement (default three minutes/two-second fade). Black remains
-`#000`; brightness affects content only. Reduced motion or Drift and fade off removes
-drift/travel and reveal effects while discrete relocation continues through black.
+The display never goes dark to move (#436, owner decision 2026-10-20). By default the
+edited layout stays as placed and floats: one timer in `Display.tsx` moves the whole
+plane along waypoints from `src/shared/float.ts` (up to ±3.5% of the display on each
+axis, about 270 × 150 device pixels of travel at 4K, reaching a new spot every
+interval, default three minutes), one device pixel at a time with `transform` only,
+no transition and no layout, so a frame is drawn only when something moves (#248's
+principle). The same timer floats each widget's content inside its own slack (the
+space its measured content leaves in its box: mostly to the right, because content
+is left-anchored, and centred vertically, each axis capped at 6% of the display;
+under 2 device pixels it stays still) through `--float-x`/`--float-y` on the section,
+applied with the individual `translate` property, so fit, layout and the entrance
+keyframes on `.widget-content` never change. A widget's cell is its section box
+without that translation; tests that check cells subtract it. Every widget starts
+where it was placed. With **Float gently** off, or when the display prefers reduced
+motion, the plane and the widget content jump to the next spot at each interval
+boundary instead, without animation. The plane's opacity is always 1; only the
+first-load entrance may start content from 0. **Swap places** (`rearrange`, opt-in)
+also replaces the board every interval with the next collision-free composition
+(#395's variety, `composeWidgetGrid`): moved widgets glide to their new cells
+(FLIP, `clamp(glide × 1.5, 1.2, 6)` s, ease-in-out) with an opacity dip to 0.4 spread
+over the middle of the glide so the board never dims as a whole; with reduced motion,
+Float gently off or a 0 s glide they dim to 0.4 for at most 0.6 s each way, move and
+brighten again. Widgets that do not move stay at 1, and a settings change mid-glide
+snaps to the new rectangles. Black remains `#000`; brightness affects content only.
 The separate **Animation** setting (Off, Subtle by default, Lively) governs motion
-inside widgets: Subtle animates only changes and the reveal after each black rest,
-Lively adds reveal choreography and slow loops on the current-weather glyph only
-(see [motion levels](design.md#motion-levels)). Each screen shows its effective
+inside widgets: Subtle animates only changes and the first-load entrance, Lively adds
+entrance choreography and slow loops on the current-weather glyph only, which never
+pause (see [motion levels](design.md#motion-levels)). Each screen shows its effective
 level as `data-animation` on the ambient root: Off whenever that screen prefers
 reduced motion, so turning off Windows Settings → Accessibility → Visual effects →
-Animation effects makes the TV show Off. Relocation through black continues either
-way. The [motion harness](../tests/ui/motion-browser.mjs) checks levels, reduced
-motion, the reveal sequence, entrance geometry (every family of every active widget,
+Animation effects makes the TV show Off; the board still moves in steps. The root
+also reports `data-float` (`float` or `step`), `data-swap` (`glide` or `dim`, with
+Swap places on) and `data-wake-lock` (`held`, `unsupported`, `denied` or `off`). The
+[motion harness](../tests/ui/motion-browser.mjs) checks the float acceptance on the
+owner's board (five virtual minutes at a 30 s interval: plane opacity 1, every widget
+in its cell at full opacity with its content inside the screen, most of ±3.5% covered
+one device pixel per step, no layout), steps without animation, swaps (glide and dim,
+no frame with every widget below 0.5), a 70 s real-time run, levels, reduced
+motion, the first-load entrance, entrance geometry (every family of every active widget,
 a full-height free-size Reminders span, the default board and a full board of every
 widget at 1080p and 4K), loop inventory, adaptive Weather (real-size hero glyph,
 calm → elevated fades and Lively bar growth), the measured Reminders list (only a
 newly pending row fades; re-sorts, completions and remeasurements replay nothing and
-the measured rows match at every level), value crossfades in the #78 widgets, editor
-flows and a CDP performance budget for the default and full boards at 1280×720; TV
-smoothness and comfort remain owner acceptance (#111).
-Motion/dimness do not guarantee protection from image retention. No audio, external
+the measured rows match at every level), value crossfades in the #78 widgets, analog
+hands that only ever turn forward, editor flows, a CDP performance budget for the
+default and full boards at 1280×720 and a frame budget (a frame only when something
+steps). The [screen harness](../tests/ui/screen-browser.mjs) checks Keep the screen
+on, one display window and the Screen and Motion controls. TV smoothness and comfort
+remain owner acceptance (#111). Floating in place smears edges across about
+270 × 150 device pixels at 4K but does not even out wear between regions the way
+swapping does; motion and dimness do not guarantee protection from image retention. No audio, external
 fonts, telemetry, cloud accounts or LAN exposure is added.
 
 The reusable
 [Edge harness](../tests/ui/studio-browser.mjs) owns an ephemeral loopback server,
 temporary data and synthetic provider/device responses. It checks global Cancel,
 city keyboard/debounce/races, failed/in-flight saves, polling rebase, saved styles,
-reminders, device cancellation/rounding/manual protection, all four timed 1080p/4K
-bounds, true black, silence, reduced motion and 390px/320px reflow. Regressions also
+reminders, device cancellation/rounding/manual protection, all four timed Swap places
+compositions' 1080p/4K bounds, true black, silence, reduced motion and 390px/320px reflow. Regressions also
 cover failed explicit-location fallback races and focused-field clearance at
 390px/320px with 844px/480px heights. The [grid harness](../tests/ui/grid-browser.mjs)
 adds actual pointer/touch/keyboard moves/resizes, effective dirty-bar reverts,
