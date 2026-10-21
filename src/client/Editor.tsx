@@ -97,6 +97,7 @@ import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel, reminderFormPending } from './RemindersPanel';
 import { FirstRunCard, readFirstRunDismissed, rememberFirstRunDismissed } from './FirstRunCard';
 import { StudioHeader } from './StudioHeader';
+import { useDisplayWindow } from './displayWindow';
 import {
   addToGrid,
   applyRoomFix,
@@ -381,6 +382,7 @@ export function Editor({
   // #76: the editor's own reduced-motion preference turns its animation off; the canvas replays
   // the entrance once after a level is chosen.
   const editorReducedMotion = usePrefersReducedMotion();
+  const displayControls = useDisplayWindow();
   const [revealNonce, setRevealNonce] = useState(0);
   // Style > Motion reads the Windows power status only once opened (#436).
   const [motionOpened, setMotionOpened] = useState(false);
@@ -1444,7 +1446,7 @@ export function Editor({
       className="studio"
       data-animation={editorReducedMotion ? 'off' : draft.appearance.animation}
     >
-      <StudioHeader page="edit" />
+      <StudioHeader page="edit" displayControls={displayControls} />
       <main className="studio-workspace">
         <section className="canvas-column" aria-label="Display preview">
           <div className="canvas-heading">

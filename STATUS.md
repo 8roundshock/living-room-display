@@ -1,5 +1,14 @@
 # Project status
 
+## Home display-card follow-up (#513)
+
+Home's card and header now share one display-window controller, with the editor using
+the same controller logic. Opening from the card exposes Show/Close in the header;
+repeated clicks focus the existing document without reloading, and closing resets both
+links. The focused browser regression failed before the fix and passed afterward.
+The screen and display-controls suites passed (8 and 6 groups), alongside build and
+481 unit tests. This records local source checks with synthetic data, not installation.
+
 ## Home Note follow-up (#512)
 
 A clean open Note now follows another page's saved text without creating a false

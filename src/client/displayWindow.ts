@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
 /**
  * One display window (#436). The editor opens and reuses a window named `still-display`; a display
@@ -64,4 +64,44 @@ export function leaveDisplay(destination = '/editor', opened = false): void {
     return;
   }
   window.location.assign(destination);
+}
+
+export interface DisplayWindowControls {
+  displayOpen: boolean;
+  openDisplay: (event: MouseEvent<HTMLAnchorElement>) => void;
+  closeDisplay: () => void;
+}
+
+/** One controller per Home/editor page; the Home card and header share its live window (#513). */
+export function useDisplayWindow(): DisplayWindowControls {
+  const displayWindow = useRef<Window | null>(null);
+  const [displayOpen, setDisplayOpen] = useState(false);
+  useEffect(() => {
+    const check = () => setDisplayOpen(displayWindow.current !== null && displayWindow.current.closed === false);
+    const timer = window.setInterval(check, 1000);
+    window.addEventListener('focus', check);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', check); };
+  }, []);
+  function openDisplay(event: MouseEvent<HTMLAnchorElement>) {
+    // Modified clicks (a new tab on purpose) keep the browser's own behaviour.
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    const current = displayWindow.current;
+    const win = current?.closed === false ? current : window.open('', DISPLAY_WINDOW);
+    if (!win) { window.location.assign('/display'); return; }
+    try {
+      if (win.location.pathname !== '/display') win.location.replace('/display');
+    } catch {
+      win.location.replace('/display');
+    }
+    win.focus();
+    displayWindow.current = win;
+    setDisplayOpen(true);
+  }
+  function closeDisplay() {
+    displayWindow.current?.close();
+    displayWindow.current = null;
+    setDisplayOpen(false);
+  }
+  return { displayOpen, openDisplay, closeDisplay };
 }

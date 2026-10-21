@@ -46,8 +46,10 @@ buttons, inputs, city search and Reminders panel; every rule of its own names a
   display**: the saved arrangement at 400 × 225 (`AmbientDisplay embedded`, still,
   inert and hidden from assistive technology; a click opens Edit display) captioned
   "Your saved arrangement. The display moves it around to protect the screen.",
-  **Edit display** (primary) and **Open display**, "Showing: Calendar, Clock and
-  Weather." and, when a widget Home feeds has content but is off, "Not on your display:
+  **Edit display** (primary) and **Open display** (then **Show display**). The Open/Show
+  link shares the header's display control: either link focuses the same window without
+  reloading, and the header's **Close display** resets both links (#513). The card lists
+  "Showing: Calendar, Clock and Weather." and, when a widget Home feeds has content but is off, "Not on your display:
   World clocks and Countdown." with **Make room in Edit display** when one has no room.
 - **At 390 px:** one column with a 16 px gutter (date, actions, Today, then the card);
   the actions stay 3 × 2 from 360 px and become 2 × 3 below; their descriptions are
