@@ -13,6 +13,7 @@ import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
+import { checkHomeNoteSync } from './lib/home-note-sync.mjs';
 
 /** 6:42 PM on Tuesday, October 20, 2026 in Toronto. */
 const NOW = Date.parse('2026-10-20T22:42:00.000Z');
@@ -379,6 +380,9 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     await sheet(page).getByRole('button', { name: 'Discard' }).click();
     await page.keyboard.press('Escape'); await sheet(page).waitFor({ state: 'detached' });
     checks.push('Note: Save, Discard and Clear/Undo clear the retained draft so external saved changes appear on reopening without Save note; genuine unsaved text survives');
+
+    await checkHomeNoteSync({ page, base, advance: ms => advance(context, ms) });
+    checks.push('#512 Note: clean open text follows external saves without Save or an unload prompt; real typing survives, Discard uses current saved text, and typing back to saved clears the cached draft');
 
     // Show on my display: Clock off → Show the clock; a full board → Make room in Edit display; ?focus=city.
     await reset(settings => { settings.widgets.clock = false; });

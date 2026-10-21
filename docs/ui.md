@@ -96,6 +96,9 @@ buttons, inputs, city search and Reminders panel; every rule of its own names a
     differs from the saved note (and only then does leaving the page prompt); **Clear
     note** saves an empty note with Undo. Saving, discarding or undoing Clear removes
     the retained draft, so reopening reads a later saved edit from another page.
+    An open field that still matches its previous saved value follows later saved
+    updates; genuine local typing stays intact, and Discard uses the newest saved
+    note (#512). Typing back to the saved value also clears the retained draft.
     Closing with unsaved text keeps that draft for this page's lifetime.
   - **Show on my display** (World clock, Countdown, Note, Reminder and Calendar, the
     latter two for Reminders): while that widget is off and has room, a switch, on by
