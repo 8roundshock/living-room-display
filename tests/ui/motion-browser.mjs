@@ -162,7 +162,8 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     checks.push('effective data-animation per level; reduced motion reports Off, runs nothing and still relocates through black');
 
     // (2) Inventory: Off/Subtle never loop; Lively loops only on hero-glyph layers, ≤3, each ≥1.2 s.
-    const conditions = { sun: [0, true], moon: [0, false], cloud: [3, true], rain: [61, true], snow: [71, true], storm: [95, true] };
+    // #251 adds partly cloudy by day and night, fog and drizzle; each keeps at most three loops on its own parts.
+    const conditions = { sun: [0, true], moon: [0, false], suncloud: [1, true], mooncloud: [2, false], cloud: [3, true], fog: [45, true], drizzle: [53, true], rain: [61, true], snow: [71, true], storm: [95, true] };
     for (const animation of LEVELS) for (const [glyph, [code, isDay]] of Object.entries(conditions)) {
       const view = await displayPage({ state: scenario(state => { level(animation)(state); state.weather.current.weatherCode = code; state.weather.current.isDay = isDay; }) });
       const { page } = view;
@@ -245,7 +246,8 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       if (status === 'offline') { view.served.offline = true; await view.page.clock.runFor(30_000); await until(view.page, () => /Offline/.test(document.querySelector('.ambient-weather')?.textContent ?? ''), 'offline weather'); }
       await view.page.clock.runFor(2_500);
       const glyph = view.page.locator('.weather-symbol');
-      if (status === 'unavailable') assert.equal(await glyph.count(), 0);
+      // Unavailable weather (#362) shows the widget's own dim cloud, still and never a hero.
+      if (status === 'unavailable') assert.deepEqual(await glyph.evaluate(element => [element.dataset.glyph, element.dataset.glyphStill, element.hasAttribute('data-glyph-hero')]), ['cloud', 'true', false]);
       else assert.equal(await glyph.getAttribute('data-glyph-still'), 'true', status);
       const glyphMotion = (await inventory(view.page)).filter(item => item.part);
       assert.equal(glyphMotion.length, 0, `${status}: no running glyph animation ${JSON.stringify(glyphMotion)}`);
@@ -470,9 +472,25 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
           assert.ok(copy.length > 0 && copy.every(name => name === 'transition:opacity'), `${label}: the rain copy crossfades (${copy})`);
           const opacities = await page.locator('.rain-bar').evaluateAll(elements => elements.map(element => ({ opacity: Number(getComputedStyle(element).opacity), spell: element.classList.contains('rain-bar-spell') })));
           for (const bar of opacities) assert.ok(bar.opacity <= (bar.spell ? 0.65 : 0.35) + 0.001, `${label}: a fading bar stays at or below its resting opacity (${JSON.stringify(bar)})`);
+          // #161: existing bars ease to new chances by translate alone (composited), never by height.
+          // CSS transitions run on real time: let the entrance fades finish, then watch only the bars that already
+          // exist (a thirteenth may join, fading in, as the clock passes the hour).
+          await page.clock.runFor(2_000);
+          await until(page, () => [...document.querySelectorAll('.rain-bar')].every(bar => !bar.getAnimations().length), 'the new bars to settle');
+          await page.evaluate(() => { window.__settledBars = [...document.querySelectorAll('.rain-bar')]; });
+          view.served.state.weather.hourly = structuredClone(source.weather.hourly).map((hour, index) => ({ ...hour, precipitationProbability: 20 + index % 5 * 15 }));
+          await page.clock.runFor(30_000);
+          await until(page, () => window.__settledBars.some(bar => bar.getAnimations().length), 'the bars ease to the new chances');
+          const eased = await page.evaluate(() => window.__settledBars.filter(bar => bar.isConnected).flatMap(bar => bar.getAnimations().map(animation => animation.animationName ?? `transition:${animation.transitionProperty}`)));
+          assert.ok(eased.length > 0 && eased.every(name => name === 'transition:translate'), `${label}: changed bars ease by translate only (${eased})`);
+          // #161: the stale label takes the status tone at once with its words; nothing animates its colour.
+          view.served.state.weather.status = 'stale';
+          await page.clock.runFor(30_000);
+          await until(page, () => document.querySelector('.weather-age')?.classList.contains('stale'), 'the stale label');
+          assert.deepEqual(await motionIn(page, '.weather-age, .weather-age *'), [], `${label}: the stale label changes colour without a transition`);
         }
         if (animation === 'lively' && !still) {
-          await page.clock.runFor(140_000);
+          await page.clock.runFor(140_000 - 62_000); // the #161 steps above already ran 62 s of the composition
           await untilRevealing(page);
           const grow = await motionIn(page, '.rain-bars > .rain-bar');
           assert.ok(grow.includes('lrd-bar-grow'), `the Lively entrance grows the rain bars (${grow})`);
@@ -480,7 +498,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
         await view.close();
       }
     }
-    checks.push('adaptive Weather: the hero glyph takes its CSS size (no inline size); calm → elevated fades the new rain bars in (never above their 0.35/0.65 resting opacity) and crossfades the rain timing, detail and hours at Subtle and Lively; the Lively entrance grows the bars; Off and reduced motion run nothing');
+    checks.push('adaptive Weather: the hero glyph takes its CSS size (no inline size); calm → elevated fades the new rain bars in (never above their 0.35/0.65 resting opacity) and crossfades the rain timing, detail and hours at Subtle and Lively; changed chances ease the bars by translate only and the stale label changes colour without a transition (#161); the Lively entrance grows the bars; Off and reduced motion run nothing');
 
     // (13) Reminders (#73's measured list): only a newly pending reminder fades, by opacity alone; a
     // re-sorted row (#172), a row that stops overflowing and a remeasurement replay nothing. The

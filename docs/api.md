@@ -126,8 +126,8 @@ Other widgets reject a span (`<Name> does not support custom sizes`); too-small 
 too-wide spans return 400 with a clear message. In a placement PATCH, `span: null`
 clears a custom size, and so does a `size` without `span` (a family choice); a
 move keeps it. The editor sends a changed placement whole, with `span: null` when
-it has none. The previous installed release (`3446400`) and the earlier `3fee844`
-read a saved span; `bedca44` does not, so a downgrade that far needs the
+it has none. The previous installed release (`d66832b`) and the earlier releases back
+to `3fee844` read a saved span; `bedca44` does not, so a downgrade that far needs the
 [strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
 Legacy version-one settings acquire the safe default grid while preserving old
 widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
@@ -144,7 +144,7 @@ unchanged until Native is chosen. `color` tints every widget's accent elements w
 A stored retired swatch value (Sand `#b8a17a`, retuned in #224) renders as that
 swatch's current value and is never rewritten.
 At rest `color` is omitted and `native` is written. The previous installed release
-(`3446400`) and `3fee844` read `native`
+(`d66832b`) and the earlier releases back to `3fee844` read `native`
 ([rollback compatibility](install.md#additive-data-and-rollback-compatibility-84));
 it is a rollback exception only for [`bedca44`](install.md#earlier-rollback-target-bedca44).
 
@@ -158,6 +158,14 @@ saved. Relocation through black is unaffected, and Drift and fade between moves
 it as an ordinary draft field; built-in styles keep it and saved styles store it.
 Built-in styles are looks (#153, #110, #226): they write only `brightness`,
 `accentMode`, `accentColor`, `textColor`, `fontFamily`, `layout` and `preset`.
+`appearance.preset` (`phone`, `room`, `night` or `custom`) is a label that follows the
+look (#277): every appearance edit in the editor, applying a saved style and Reset
+appearance write the built-in style whose look is showing (`matchingBuiltinPreset()`
+in `src/client/model.ts`; the legacy `layout` does not count), else `custom`. It is not
+part of the effective settings, so the label alone never makes a draft dirty and is never
+sent by itself; data saved before #277 may still carry a stale label until the next
+appearance edit. Rendering must not depend on it: use `matchingBuiltinPreset()` (#150).
+The four values are the ones the previous release requires, so no stored shape changes.
 
 Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
 `accentMode` or `animation` keeps its saved value (#83). Only the persisted reader
@@ -256,19 +264,23 @@ coverage gap ends it. In precedence order:
 | Kind | When | Weather mode | Example |
 | --- | --- | --- | --- |
 | `unknown` | No future intervals | hint | “Rain outlook unavailable” |
-| `now` | A spell includes now | elevated | “Rain likely until 6 PM”; open end “Rain likely beyond 1 AM”; later spells too “on and off until 4 PM” (small: “Rain likely now” for an open end or later spells) |
-| `soon` | A spell starts within 6 hours (inclusive) | elevated | “Rain likely 3–6 PM”; open end or several spells “from 3 PM” (medium/large: “on and off from 3 PM”) |
-| `later` | A spell starts in 6–12 hours | hint | “Rain likely from 9 PM” (medium/large add the day when it differs: “from Tomorrow 7 AM”) |
+| `now` | A spell includes now | elevated | “Rain likely until 6 PM”; open end “Rain likely beyond 1 AM”; later spells too “on and off until 4 PM” (small: “Rain likely now” for an open end or later spells; “Rain possible now, likely later” when only a later spell is likely) |
+| `soon` | A spell starts within 6 hours (inclusive) | elevated | “Rain likely 3–6 PM”; open end or several spells “from 3 PM” (medium/large: “on and off from 3 PM”; small: “Rain possible from 3 PM, likely later” when only a later spell is likely) |
+| `later` | A spell starts in 6–12 hours | hint | “Rain likely from 9 PM” (medium/large add the day when it differs: “from Tomorrow 7 AM”); “Rain possible from 9 PM, likely later” when only a later spell is likely |
 | `unknown` | No spell, but some rain amounts are missing | hint | “Rain timing unavailable” |
 | `possible` | Some hour has at least 30% chance, or precipitation without rain (for example snow) | hint | “Precipitation possible · 40%” |
 | `unknown` | Partial, gapped or null coverage | hint | “Rain outlook partial” |
 | `calm` | Otherwise: the 12-hour forecast is complete and dry | calm | nothing about rain |
 
-The headline, its qualifier, the detail's peak and the amount all cover the same spells:
-every spell in the window (#167). “Likely” means the highest known peak hourly chance
-of those spells is at least 60%; otherwise, or when no chance is known, “possible”. So
-a 40% spell followed by an 80% one reads “Rain likely on and off from 10 AM” beside
-“Peak 80%”. A headline names an end only when no spell follows it (“until 11 AM”);
+The detail's peak and the amount cover every spell in the window (#167), and so does
+the qualifier of a headline that covers them all: “Likely” means the highest known peak
+hourly chance of those spells is at least 60%; otherwise, or when no chance is known,
+“possible”. So a 40% spell followed by an 80% one reads “Rain likely on and off from
+10 AM” beside “Peak 80%”. A headline that names only the first spell (small's “now” and
+“from 10 AM”, and every `later` headline) takes that spell's own qualifier instead, and
+adds “, likely later” when a later spell is likely and the first is not: “Rain possible
+now, likely later” (#319). So “likely” never describes a spell that peaks below 60%.
+A headline names an end only when no spell follows it (“until 11 AM”);
 with later spells it reads “on and off until 2 PM” (medium/large) or names no end
 (small). Probability covers all precipitation, so the wording never says it is or
 will be raining. The elevated detail reads “Peak 60% · 4 mm rain” (imperial “0.16 in
@@ -283,7 +295,11 @@ or the second end of a range; “Precipitation possible · 40%” keeps “· 40
 words (#197). Hours are real instants, so a DST change shows wall-clock times.
 The large family's hourly chance bars are one image whose accessible name summarises
 them: “Hourly precipitation chance, 9 AM to 9 PM: peak 60% at 10 AM, 1 hour unknown”
-(#166). The window and thresholds are defined once, in `weather-outlook.ts` (#147).
+(#166). There is a bar for each interval overlapping the window: 12 on the hour, 13 when
+the window starts mid-hour. Its axis reads “Now” under the bar covering now and the
+window's end at the right edge, in compact hours (“9 PM”, “21:00”); Air quality's chart
+shares the same `chartAxisLabels` helper (#261). The window and thresholds are defined
+once, in `weather-outlook.ts` (#147).
 
 ### Forecast normalization and caching
 
@@ -575,7 +591,7 @@ weather, snapshot pixels, and native tokens are excluded. Store backups privatel
 At rest, `state.json`, `state.backup.json` and exports omit additive values while
 they equal the current read default: `appearance.accentMode` `color`,
 `appearance.animation` `subtle`, default `widgetData` sections, and disabled widget
-ids the previous installed release does not know. The previous release (`3446400`)
+ids the previous installed release does not know. The previous release (`d66832b`)
 reads every one of these keys and knows every widget id before Dynamic (#437), so those
 ids are written and omitting the other values is optional for them. Dynamic is the id
 it lacks: while off, its visibility and hidden placement are omitted, and so are its

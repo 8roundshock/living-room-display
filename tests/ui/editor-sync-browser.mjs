@@ -213,13 +213,17 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     await app.store.patchSettings({ widgets: { note: true }, widgetGrid: { placements: { note: { column: 2, row: 4, size: 'small' } } } });
     await layoutTab.clock.runFor(30_000);
     const noRoom = 'Note was added in another window; there is no room for it in this layout';
-    await layoutTab.locator('.widget-list .inline-message').filter({ hasText: noRoom }).waitFor();
+    // A poll's message is not an edit made in the Widgets list, so the canvas line shows it once and the
+    // one layout announcer speaks it (#311, #341).
+    await layoutTab.locator('.canvas-messages .grid-status').filter({ hasText: noRoom }).waitFor();
+    assert.equal(await layoutTab.locator('.widget-list .inline-message').filter({ hasText: noRoom }).count(), 0, 'shown once, in the canvas line');
+    assert.equal(await layoutTab.locator('[role="status"], [aria-live], [role="alert"]').evaluateAll((nodes, text) => nodes.filter(node => node.textContent.includes(text)).length, noRoom), 1, 'one live region speaks it');
     assert.equal(await canvasWidget(layoutTab, 'note').count(), 0);
     if (capture) images.push({ name: 'no-room-message', bytes: await layoutTab.screenshot() });
     await button(layoutTab, 'Save changes').click(); await layoutTab.locator('.studio-savebar').waitFor({ state: 'detached' });
     saved = app.store.snapshot().settings;
     assert.equal(saved.widgets.countdown, true); assert.equal(saved.widgets.note, false, 'the announced draft wins');
-    checks.push('#350: a widget saved elsewhere with no room on this layout is named in the layout message and the draft wins');
+    checks.push('#350: a widget saved elsewhere with no room on this layout is named once, in the canvas line, by one live region, and the draft wins');
 
     // 10. #289: Save keeps focus while a held request runs, and a second Enter sends nothing.
     await tab(layoutTab, 'Style');

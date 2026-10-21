@@ -103,6 +103,28 @@ test('history rows show the completion time and the earlier due date', () => {
   });
 });
 
+test('labels for hundreds of dated reminders build no Intl formatter once the formats are cached (#354)', () => {
+  inToronto(() => {
+    const now = new Date('2026-11-01T16:00:00Z');
+    const dated = Array.from({ length: 500 }, (_, index) => item(new Date(now.getTime() + (index - 250) * 3_600_000 * 7).toISOString()));
+    const label = () => dated.map(reminder => [reminderDueLabel(reminder, now, '12h'), reminderDueLabel(reminder, now, '24h'), reminderCompletedLabel({ ...reminder, completed: true }, now, '12h'), historyDayHeading(reminder.dueAt!, now)]);
+    const first = label();
+    const Original = Intl.DateTimeFormat;
+    let constructed = 0;
+    const Counted = function (this: unknown, ...values: ConstructorParameters<typeof Intl.DateTimeFormat>) { constructed++; return new Original(...values); } as unknown as typeof Intl.DateTimeFormat;
+    Counted.prototype = Original.prototype;
+    Intl.DateTimeFormat = Counted;
+    try {
+      assert.deepEqual(label(), first, 'the same labels');
+      assert.equal(constructed, 0, 'no formatter is built per row or per render');
+    } finally {
+      Intl.DateTimeFormat = Original;
+    }
+    const dues = first.map(([due]) => due!);
+    assert.ok(dues.some(due => /^Overdue · [A-Z][a-z]{2} \d{1,2} · /.test(due)) && dues.some(due => /, 2027 · /.test(due)) && dues.some(due => due.startsWith('Today')), 'the sample covers dates, another year and relative days');
+  });
+});
+
 test('history day headings use the computer timezone across the daylight-saving change', () => {
   inToronto(() => {
     const now = new Date('2026-11-01T22:00:00Z');
@@ -114,4 +136,22 @@ test('history day headings use the computer timezone across the daylight-saving 
     assert.equal(historyDayHeading('2026-10-12T16:00:00.000Z', now), 'Mon, Oct 12');
     assert.equal(historyDayHeading('2025-10-12T16:00:00.000Z', now), 'Oct 12, 2025');
   });
+});
+
+test('a changed computer time zone reaches the labels within a minute, although formatters are cached (#354)', t => {
+  const previous = process.env.TZ;
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-01T16:00:00Z') });
+  try {
+    const at = new Date('2026-11-01T16:00:00Z');
+    process.env.TZ = 'America/Toronto';
+    assert.equal(reminderTime(at, '24h'), '11:00');
+    process.env.TZ = 'Europe/London';
+    t.mock.timers.tick(30_000);
+    assert.equal(reminderTime(at, '24h'), '11:00', 'the zone is looked up at most once a minute');
+    t.mock.timers.tick(31_000);
+    assert.equal(reminderTime(at, '24h'), '16:00', 'then the new zone applies');
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
 });

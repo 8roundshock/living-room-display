@@ -59,16 +59,18 @@ desktop capture permission. Keep the thumbnail dim, adjustable, movable, and
 toggleable. Do not save screenshots. Actual native capture and rendered preview
 were inspected in RAM on the current 3840x2160 Windows 10 setup on 2026-10-18;
 normal exit cleared the image to 404 without capture files. That native preview
-evidence predates the later web rollouts: clean `7e654fd` (PR #57 studio
-refinement) and then clean `bedca44` (PR #70) on 2026-10-18; see [STATUS.md](../STATUS.md)
-for the current baseline. The `7e654fd` [rollout evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)
-verifies served assets and unchanged private data without a new native launch.
+evidence predates every later web rollout, from clean `7e654fd` (PR #57 studio
+refinement) on 2026-10-18 to the installed revision that [STATUS.md](../STATUS.md)
+records. Those rollouts, such as the `7e654fd` one
+([evidence](https://github.com/8roundshock/living-room-display/pull/57#issuecomment-6253029701)),
+verify served assets and unchanged private data without a new native launch.
 Recheck current provenance through installed CLI
 `Status` or `installation.json`; see [installation](install.md). This does
 not establish live capture, locked/protected desktop access, another account or
-across-room comfort. The cursor replacement in
-[draft PR51](https://github.com/8roundshock/living-room-display/pull/51) remains
-candidate-only and uninstalled despite code review/CI success. See [API](api.md)
+across-room comfort. The cursor replacement from
+[PR51](https://github.com/8roundshock/living-room-display/pull/51) still needs
+native acceptance on an installed helper; code review and CI do not establish it.
+See [API](api.md)
 and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 
 ## Current decisions
@@ -82,7 +84,7 @@ and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 | Air quality data | Keyless Open-Meteo air-quality API (Copernicus CAMS model, US or European AQI), requested by the local server only while a saved widget shows it (Air quality, or Dynamic with Air & UV, #437) or the editor previews it (#78). Open-Meteo's free tier is for non-commercial use; revisit the provider and terms before any commercial use. Sun & moon is calculated locally and works offline. |
 | Official weather alerts | Decided 2026-10-20 on #437, adopting #106 for Canada and the US through the Dynamic widget: Environment and Climate Change Canada (MSC GeoMet, matched to the place's public forecast zones; "Data Source: Environment and Climate Change Canada", names kept verbatim apart from the first capital) and the US National Weather Service (by point, with a User-Agent). Requested by the local server only while Dynamic and its alerts are saved on, with the location rounded to 0.01° sent only to the provider whose region contains it; API-only, never stored. Elsewhere it reads as not covered, never "no alerts". Remaining: the official line inside the Weather widget (#456), MeteoAlarm for Europe (#451) and the NWS possibly requiring a key (#457). See [API](api.md#official-weather-alerts). |
 | Data | Per-user JSON with serialized atomic writes, prior backup, and export/import; no kiosk-storage dependency. |
-| Visual controls | Reviewed Studio/grid, optional modules, outline/digital/analog clocks and presets were installed in the last verified 2026-10-18 baseline; actual 4K preview is accepted, while across-room comfort and compatibility gates remain. |
+| Visual controls | Reviewed Studio/grid, optional modules, outline/digital/analog clocks, Native colours, animation levels and presets are installed on the owner's PC (revision and evidence in [STATUS.md](../STATUS.md)); actual 4K preview is accepted, while across-room comfort and compatibility gates remain. |
 | Preview | Last-desktop snapshot in RAM only; live app preview deferred. |
 | Local photo | Explicit selected raster is normalized in-browser, validated and atomically saved with settings in private local state; exports/imports exclude its bytes. Prior recovery backup may retain an older image. |
 | Activation | Manual use first; Windows idle activation remains off until verification and explicit enablement. |

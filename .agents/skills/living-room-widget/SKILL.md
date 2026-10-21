@@ -65,8 +65,11 @@ code and tests for actual symbols and commands; the documentation is not a schem
   which Native mode turns into the widget's catalog tone. Never hard-code a hue,
   fill or frame anything for colour, or tint an image. Mark a glyph icon `data-glyph`
   (a `WEATHER_GLYPH_TONE` name) so it paints its own sub-tone, or wrap a subtree in
-  `tone-<role>`. Stale, offline and overdue cues use the one status tone,
-  `--ambient-caution`. A face of primary text only is allowed (Note).
+  `tone-<role>`. A stale or offline line takes the shared `.status-caution` class
+  (`widgets.css`): it paints the one status tone, `--ambient-caution`, at full opacity,
+  so a dimmed parent never fades the cue. Do not write a separate colour rule for it
+  (#322). The Overdue word keeps its own rule in the same tone. A face of primary text
+  only is allowed (Note).
 - A free-size widget uses the optional `freeSize` catalog rule (#73) rather than
   its own geometry.
 - Never delete a catalog id the previous release knows: mark it `retired` with

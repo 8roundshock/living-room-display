@@ -16,15 +16,19 @@ uses the [recorded HIG-inspired design choices](docs/design.md). The display stu
 puts one focused Style, Widgets, Weather or Reminders inspector beside its live
 preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
-The owner's PC runs the installed feature wave (`3fee844`); later polish on `main`
-waits for the next coordinated install, and native screensaver acceptance and wider
-release compatibility checks remain. See [STATUS.md](STATUS.md).
+The owner's PC runs a verified install of `main` with the new widgets and the first
+polish wave; later changes on `main` wait for the next coordinated install, and native
+screensaver acceptance and wider release compatibility checks remain.
+[STATUS.md](STATUS.md) records the installed revision and what is still pending.
 
-This is the independent private
+This is the independent
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)
 repository. Its code, branches, pull requests, documentation, and future local
-data belong here, separate from personal-memory repositories. The owner has
-chosen to keep it private until a usable release; there is no public release yet.
+data belong here, separate from personal-memory repositories. The repository is
+public (owner decision, 2026-10-20,
+[#441](https://github.com/8roundshock/living-room-display/issues/441)); there is
+no published release yet. Never commit or post secrets or private data; see the
+[privacy rule](AGENTS.md#change-and-verify).
 
 ## Install on Windows
 
@@ -43,7 +47,7 @@ plain words: choosing your city, showing the display full screen on the TV and
 leaving it, reminders, looks, why things move, animation levels, backups, updating
 and uninstalling.
 
-There's no public download yet: Setup is a private, unsigned prerelease built
+There's no published download yet: Setup is an unsigned prerelease built
 by CI, so Windows SmartScreen will warn before it runs. See
 [installation](docs/install.md#install-with-setup-recommended) for the details,
 messages and rollback, and the source-clone install for development.

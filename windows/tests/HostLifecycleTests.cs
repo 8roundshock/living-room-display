@@ -90,6 +90,26 @@ internal static class HostLifecycleTests
             Check(!startup.Start(), "Session end inside browser creation was ignored.");
         Check(browser.Disposed && preview.Clears > 0, "Cancellation leaked a just-created browser/image.");
     }
+    private static void BlockedBrowser()
+    {
+        Signals signals = new Signals(); Preview preview = new Preview();
+        bool? started = null; Exception failure = null;
+        using (var entered = new ManualResetEvent(false))
+        using (var abort = new ManualResetEvent(false))
+        using (SessionStartup startup = new SessionStartup(signals, delegate { }, delegate { return preview; },
+            delegate(CancellationToken token) {
+                using (token.Register(delegate { abort.Set(); })) {
+                    entered.Set(); Check(abort.WaitOne(3000), "Delayed browser creation was not cancelled."); token.ThrowIfCancellationRequested();
+                }
+                return new Browser();
+            }))
+        {
+            var worker = new Thread(delegate() { try { started = startup.Start(); } catch (Exception error) { failure = error; } });
+            worker.Start(); Check(entered.WaitOne(3000), "Delayed browser fixture not entered."); signals.End();
+            Check(worker.Join(3000) && failure == null && started == false && preview.Clears > 0 && signals.Disposed,
+                "Cancelled delayed browser creation retained startup resources.");
+        }
+    }
     private static void FailureAndNormalCleanup()
     {
         Signals signals = new Signals(); Preview preview = new Preview();
@@ -113,9 +133,10 @@ internal static class HostLifecycleTests
         {
             BlockedStage(true);
             BlockedStage(false);
+            BlockedBrowser();
             BetweenStages();
             FailureAndNormalCleanup();
-            Console.WriteLine("7 native lifecycle scenarios passed with fake transport/session/browser; no capture, UI or registry.");
+            Console.WriteLine("8 native lifecycle scenarios passed with fake transport/session/browser; no capture, UI or registry.");
             return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }

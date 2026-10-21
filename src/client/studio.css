@@ -114,6 +114,41 @@ html.studio-editor {
   font-weight: 650;
   letter-spacing: -1.2px;
 }
+/* #360: one dim line beside Open display says where the full-screen display is. */
+.open-display-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  min-width: 0;
+}
+.studio .open-display-hint {
+  min-width: 0;
+  color: #a39cad;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: right;
+  text-wrap: balance;
+}
+@media (max-width: 700px) {
+  /* Narrow headers put the hint on its own line under the name and Open display. */
+  .studio .studio-header {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 72px;
+    padding-block: 12px;
+    row-gap: 6px;
+  }
+  .open-display-group {
+    display: contents;
+  }
+  .studio .open-display-hint {
+    order: 3;
+    flex-basis: 100%;
+    text-align: left;
+    font-size: 11px;
+  }
+}
 .brand-symbol {
   width: 34px;
   height: 34px;
@@ -276,7 +311,7 @@ html.studio-editor {
 .first-run-card {
   flex: none;
   margin: 14px 16px 0;
-  padding: 7px 8px 9px 12px;
+  padding: 6px 8px 6px 12px;
   border: 1px solid #ffffff12;
   border-radius: 14px;
   background: #ffffff05;
@@ -301,11 +336,12 @@ html.studio-editor {
   line-height: 1.35;
   letter-spacing: 0;
 }
+/* #349: a 44 px target whose negative margins keep the heading row as tall as before. */
 .studio .icon-button.first-run-dismiss {
-  width: 34px;
-  min-width: 34px;
-  height: 34px;
-  margin: -5px -3px -5px 0;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  margin: -10px -8px -10px -5px;
   border-radius: 10px;
 }
 .studio .first-run-status {
@@ -325,7 +361,7 @@ html.studio-editor {
 }
 .studio .first-run-actions .button.small {
   flex: 1 1 auto;
-  min-height: 34px;
+  min-height: 44px;
   padding: 5px 12px;
 }
 @media (min-width: 701px) {
@@ -798,6 +834,15 @@ html.studio-editor {
   margin-top: 12px;
   flex-wrap: wrap;
 }
+/* Saved styles (#344): one hint line on top, and a duplicate name refused under the name field. */
+.studio .hint.preset-hint {
+  margin: 0 0 12px;
+}
+.studio .inline-message.preset-name-error {
+  min-height: 0;
+  margin: 6px 0 0;
+  color: #e2b4a8;
+}
 .disclosure-body > label + label {
   display: block;
   margin-top: 15px;
@@ -849,6 +894,37 @@ html.studio-editor {
 }
 .studio .inline-message.data-status.error {
   color: #e2b4a8;
+}
+/* The question's title takes focus when it appears (#302); it is not a control. */
+.studio .data-confirm-title:focus {
+  outline: none;
+}
+.studio .data-confirm-title:focus-visible {
+  outline: 2px solid #a8a1f4;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+/* A refused backup's technical reason stays one tap away (#302). */
+.studio .data-detail {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #aca5b5;
+}
+.studio .data-detail > summary {
+  min-height: 32px;
+  font-size: 12px;
+  color: #b9b1c4;
+}
+.studio .data-detail > summary::after {
+  margin-left: 4px;
+  font-size: 16px;
+}
+.studio .data-detail > p {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.5;
 }
 .widget-list {
   margin: 0 -9px;
@@ -1103,8 +1179,27 @@ html.studio-editor {
   font-size: 12px;
   color: #b0a5ba;
 }
-.studio .weather-status-row.stale .status-dot {
+.studio .weather-status-row.stale .status-dot,
+.studio .weather-status-row.unavailable .status-dot {
   background: #b89776;
+}
+/* #347: the server's reason sits on the visible status line, in the caution tone. */
+.studio .weather-status-row:has(.weather-status-error) {
+  align-items: flex-start;
+}
+.studio .weather-status-row:has(.weather-status-error) .status-dot {
+  margin-top: 6px;
+}
+.studio .weather-status-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.studio .weather-status-error {
+  color: #c9a782;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 .weather-credit {
   font-size: 12px;
@@ -1287,12 +1382,48 @@ html.studio-editor {
   color: #fff0f3;
   background: #ffffff10;
 }
-/* Layout messages and the weather note share one reserved line under the canvas actions. */
+/* #312: on narrow layouts an action's error whose row is out of view floats at the top of the
+   viewport, above the content, until its row is in view again. */
+@media (max-width: 700px) {
+  .studio-error.studio-error-floating {
+    position: fixed;
+    z-index: 13;
+    left: 12px;
+    right: 12px;
+    top: max(12px, env(safe-area-inset-top));
+    margin: 0;
+    max-height: 40vh;
+    overflow: auto;
+    background: #34202a;
+    border-color: #a16d78a8;
+    box-shadow: 0 10px 40px #000a;
+  }
+}
+/* Layout messages, the Edit layout how-to and the weather note share one reserved line under the canvas actions. */
 .canvas-messages {
   min-height: 18px;
 }
 .studio .canvas-messages .grid-status {
   min-height: 0;
+}
+/* #345: the how-to stays quieter than a real message, which replaces it. */
+.canvas-hint {
+  margin: 0 2px;
+  color: #9d96a9;
+  font-size: 12px;
+}
+@media (pointer: coarse) {
+  .canvas-hint-keys {
+    display: none;
+  }
+}
+/* #346: a refused grid density's one draft fix sits at the end of its message. */
+.studio .grid-status .density-fix {
+  min-height: 40px;
+  margin-left: 8px;
+  padding-inline: 4px;
+  font-size: inherit;
+  vertical-align: middle;
 }
 /* The editor's loading page explains a failure as well as offering Try again (#232). */
 .fallback-message {
@@ -1632,7 +1763,7 @@ html.studio-editor {
     flex: none;
   }
   .canvas-toolbar > span { display: none; }
-  .canvas-note, .grid-status { flex: none; font-size: 11px; }
+  .canvas-note, .grid-status, .canvas-hint { flex: none; font-size: 11px; }
   .canvas-messages { flex: none; }
   /*
    * A Save bar taller than the reserved bottom padding (82px, plus the 24px the clearance adds)
@@ -1752,4 +1883,66 @@ html.studio-editor {
   .canvas-column { position: static; }
   .canvas-toolbar { flex-wrap: wrap; }
   .inspector-panel { min-height: 0; }
+}
+
+/*
+ * Widget picker samples (#361). Each family fills the stage width, at most twice the canvas scale
+ * (100 px per cell), with a fixed 9 px text and 10.5 px data floor in place of the display's own
+ * floors, which scale with its screen. Content the floor makes overfull zooms out as a whole,
+ * as on the display. A small map under the sample shows the family's footprint on the board.
+ */
+.studio .widget-picker .sample-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  container-type: size;
+  overflow: hidden;
+}
+.studio .widget-picker .sample-area {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+.studio .widget-picker .picker-sample.ambient {
+  --ambient-min-text: 9px;
+  --ambient-min-data: 10.5px;
+  width: min(100cqw, calc(100cqh * var(--sample-ratio)), calc(var(--sample-columns) * 100px));
+}
+.studio .widget-picker .picker-sample .widget-content {
+  max-height: none;
+}
+.studio .sample-footprint {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: #a39cad;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.studio .footprint-map {
+  display: grid;
+  grid-template-columns: repeat(var(--board-columns), 3px);
+  grid-auto-rows: 3px;
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid #ffffff17;
+  border-radius: 3px;
+}
+.studio .footprint-map > i {
+  background: #ffffff14;
+}
+.studio .footprint-map > i[data-on] {
+  background: #b9b2edc0;
+}
+/* A short stage keeps the sample and drops the map before the words. */
+@container (max-height: 150px) {
+  .studio .footprint-map { display: none; }
+}
+@media (max-width: 700px) {
+  .studio .widget-picker .sample-stage { height: 190px; }
 }

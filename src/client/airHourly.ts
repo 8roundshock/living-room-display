@@ -1,5 +1,6 @@
 import type { AirQualityReading, AirQualityState, Settings } from '../shared/contracts.ts';
-import { civilDateKey, formatTime, zoneFormatter } from './astronomy.ts';
+import { civilDateKey, zoneFormatter } from './astronomy.ts';
+import { chartAxisLabels, compactWeatherTime, LAST_KNOWN_AFTER_MS, lastKnownLabel } from './format.ts';
 
 const HOUR = 3600_000;
 /** With fewer upcoming hours than this the large family says the hourly estimate is unavailable. */
@@ -52,12 +53,15 @@ export function uvPeakLabel(upcoming: readonly AirQualityReading[], now: number,
 
 /**
  * The large family's bars, hour labels, chart summary and UV peak, built from upcoming readings
- * only. Callers memoize it per minute; null when fewer than MIN_AIR_HOURS readings remain.
+ * only. Callers memoize it per minute; null when fewer than MIN_AIR_HOURS readings remain. Each
+ * reading's bar draws its hour (from the reading time to an hour later, as `currentHourReading`
+ * reads it), so the axis follows Weather's rain chart (#261): “Now” under the current hour's bar
+ * and the end of the last hour at the right edge, in compact hours.
  */
 export function airHourly(hourly: readonly AirQualityReading[], now: number, scale: AirQualityState['scale'], scaleLabel: string, timeZone: string, clockFormat: Settings['clockFormat']): AirHourly | null {
   const upcoming = upcomingAirHours(hourly, now);
   if (upcoming.length < MIN_AIR_HOURS) return null;
-  const time = (iso: string) => formatTime(new Date(iso), timeZone, clockFormat);
+  const time = (iso: string) => compactWeatherTime(iso, timeZone, clockFormat);
   const known = upcoming.flatMap(reading => reading.aqi === null ? [] : [Math.round(reading.aqi)]);
   // Bars are relative to the top of the "Moderate" band, or to the highest hour when worse.
   const top = Math.max(scale === 'us' ? 100 : 60, ...known);
@@ -69,14 +73,9 @@ export function airHourly(hourly: readonly AirQualityReading[], now: number, sca
   const low = Math.min(...known), high = Math.max(...known), unknown = upcoming.length - known.length;
   const range = !known.length ? 'unknown' : low === high ? String(low) : `${low} to ${high}`;
   const summary = `${scaleLabel} estimate for the next ${upcoming.length} hours: ${range}${known.length && unknown ? `, ${unknown} unknown` : ''}`;
-  return { bars, start: time(upcoming[0]!.time), end: time(upcoming[upcoming.length - 1]!.time), summary, uvPeak: uvPeakLabel(upcoming, now, timeZone, clockFormat) };
+  const axis = chartAxisLabels(upcoming.map(reading => ({ start: reading.time, end: new Date(Date.parse(reading.time) + HOUR).toISOString() })), now, timeZone, clockFormat)!;
+  return { bars, start: axis.start, end: axis.end, summary, uvPeak: uvPeakLabel(upcoming, now, timeZone, clockFormat) };
 }
-
-/**
- * Saved current values older than this stop reading as current (#188). Weather qualifies an old
- * temperature after the same 3 hours (#243), so both widgets age alike.
- */
-export const AIR_CURRENT_MAX_AGE = 3 * HOUR;
 
 type AirCurrent = NonNullable<AirQualityState['current']>;
 export interface AirReadingView {
@@ -112,23 +111,23 @@ export function currentHourReading(hourly: readonly AirQualityReading[], now: nu
 }
 
 /**
- * What the reading row shows (#188). Within 3 hours of the update the fetched values stand. Older
- * values never read as current: the saved hourly estimate for this hour replaces the AQI and UV
- * ("Saved estimate"), or, without one, the old AQI reads "Last known · <time>" and UV is hidden; the
- * time is the hour the AQI describes ("9 AM", or "Sat 9 AM" when not today).
+ * What the reading row shows (#188). Within 3 hours of the update (`LAST_KNOWN_AFTER_MS`, the one
+ * threshold Weather uses too, #329) the fetched values stand. Older values never read as current,
+ * whatever the status: unlike Weather's temperature, the saved series can stand in for them. The
+ * saved hourly estimate for this hour replaces the AQI and UV ("Saved estimate"), or, without one,
+ * the old AQI reads "Last known · <time>" (the shared `lastKnownLabel`) and UV is hidden; the time
+ * is the hour the AQI describes ("9 AM", or "Sat 9 AM" when not today).
  * Nothing is invented; an age that cannot be read keeps the fetched values (the footer then says
  * the update time is unknown).
  */
 export function airReadingView(air: Pick<AirQualityState, 'updatedAt' | 'hourly'>, current: AirCurrent, now: number, timeZone: string, clockFormat: Settings['clockFormat']): AirReadingView {
   const updated = instant(air.updatedAt) ?? instant(current.time);
-  if (updated === null || now - updated <= AIR_CURRENT_MAX_AGE) return { kind: 'current', aqi: current.aqi, uvIndex: current.uvIndex, showUv: true, showPollutant: true, qualifier: null };
+  if (updated === null || now - updated <= LAST_KNOWN_AFTER_MS) return { kind: 'current', aqi: current.aqi, uvIndex: current.uvIndex, showUv: true, showPollutant: true, qualifier: null };
   const hour = currentHourReading(air.hourly, now);
   if (hour && hour.aqi !== null) return { kind: 'estimate', aqi: hour.aqi, uvIndex: hour.uvIndex, showUv: true, showPollutant: false, qualifier: 'Saved estimate' };
-  const at = new Date(instant(current.time) ?? updated);
-  const day = civilDateKey(at, timeZone) === civilDateKey(new Date(now), timeZone) ? '' : `${zoneFormatter(timeZone, { weekday: 'short' }).format(at)} `;
   // Model hours fall on the local hour: "9 AM" rather than "9:00 AM" (the 24-hour "09:00" stays).
-  const time = formatTime(at, timeZone, clockFormat).replace(/:00(?= )/, '');
-  return { kind: 'lastKnown', aqi: current.aqi, uvIndex: null, showUv: false, showPollutant: false, qualifier: `Last known · ${day}${time}` };
+  const at = instant(current.time) ?? updated;
+  return { kind: 'lastKnown', aqi: current.aqi, uvIndex: null, showUv: false, showPollutant: false, qualifier: `Last known · ${lastKnownLabel(at, now, timeZone, clockFormat)}` };
 }
 
 /**

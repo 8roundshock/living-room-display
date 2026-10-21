@@ -227,7 +227,7 @@ test('custom spans compose with the #74 Rain merge and the #93 reflection fallba
   }
   // A stale editor re-enabling Rain over the saved Column board merges back to the same settings.
   assert.deepEqual(mergeSettings(merged, { widgets: { rain: true } }), merged);
-  // Rollback: the previous release (3446400) reads the span; stripping it also leaves a board it reads.
+  // Rollback: the previous release (d66832b) reads the span; stripping it also leaves a board it reads.
   assertPreviousReaderAccepts('data', { version: 1, settings: persistableSettings(merged), reminders: [], photoAsset: null }, 'merged board with a span');
   const stripped = stripSpans(merged);
   assert.equal(gridProblem(stripped.widgetGrid, stripped.widgets), null);
@@ -260,7 +260,7 @@ test('custom spans compose with the #74 Rain merge and the #93 reflection fallba
 const CATALOG_78: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
 
 test('containment: boards with spans are readable by the previous release, and deleting every span keeps a valid layout it reads', () => {
-  // The previous release (3446400) knows the span (#211) and every active widget except Dynamic (#437),
+  // The previous release (d66832b) knows the span (#211) and every active widget except Dynamic (#437),
   // whose enabled state is a documented rollback exception: it stays off here, so each acceptance below is
   // about the span and the board around it.
   const known = (id: WidgetId) => (PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id);

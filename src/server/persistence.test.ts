@@ -16,7 +16,7 @@ import type { Settings, VisualSettings, WidgetId } from '../shared/contracts.ts'
 const previous: ReadonlySet<string> = new Set(PREVIOUS_RELEASE.widgetIds);
 /**
  * Catalog ids the previous release does not know, written out so the omission checks below cannot go
- * silently vacuous. 3446400 (#367) knows the 13 ids before Dynamic (#437). A new catalog id belongs here
+ * silently vacuous. d66832b (#497) knows the 13 ids before Dynamic (#437). A new catalog id belongs here
  * until the baseline knows it: while off it is omitted at rest, and its transform never is written (#135).
  */
 const NOT_IN_PREVIOUS: WidgetId[] = ['dynamic'];

@@ -56,12 +56,12 @@ so Native adds hue, not light. Status cues keep their own tones in both modes.
 
 | Role | Tone | Hex | OKLCH (L C h) | Meaning |
 | --- | --- | --- | --- | --- |
-| time | Lilac | `#aaa0ca` | 0.729 0.061 296 | Time and night (Clock, World clocks, Calendar, moon) |
+| time | Lilac | `#aaa0ca` | 0.729 0.061 296 | Time and night (Clock, World clocks, Calendar, moon, partly cloudy night's moon) |
 | sky | Mist | `#8aa8c2` | 0.718 0.050 245 | Sky and conditions (Weather, Forecast, Air quality, snow) |
-| water | Sea glass | `#73b1ab` | 0.717 0.065 188 | Precipitation (rain chance, rain and storm glyphs) |
-| sun | Gold | `#b3a774` | 0.726 0.070 96 | Clear daytime (Sun & moon, clear-day glyph) |
+| water | Sea glass | `#73b1ab` | 0.717 0.065 188 | Precipitation (rain chance and its droplet, drizzle, rain and storm glyphs) |
+| sun | Gold | `#b3a774` | 0.726 0.070 96 | Clear daytime (Sun & moon, clear-day glyph, partly cloudy day's sun) |
 | personal | Rose | `#c99695` | 0.721 0.062 20 | Your own items (Reminders, Countdown, Note) |
-| stone | Stone | `#a9a49c` | 0.721 0.013 80 | Images, clouds and neutral (Last screen, Photo, cloud glyph) |
+| stone | Stone | `#a9a49c` | 0.721 0.013 80 | Images, clouds and neutral (Last screen, Photo, cloud, partly cloudy and fog glyphs) |
 
 There is one status tone: stale and offline both use the amber `#b0926b`
 (`--ambient-caution`), as Weather and Air quality already showed (#223). The unused
@@ -101,6 +101,28 @@ Sources: [Apple Widgets: accented rendering](https://developer.apple.com/design/
 [Material dark theme](https://m2.material.io/design/color/dark-theme.html) (desaturated
 tones on dark surfaces), and [OKLab](https://bottosson.github.io/posts/oklab/) for
 perceptual lightness and distance.
+
+## Weather symbols and unavailable weather
+
+The weather symbols are original outline drawings on one 24-unit grid with a 1.5-unit
+round stroke (`GLYPH_PARTS` in `src/client/icons.tsx`), so a symbol never contradicts
+its condition text (#251): clear (sun by day, crescent by night), partly cloudy (WMO
+codes 1–2: a smaller front cloud with the sun's visible arc and rays, or a crescent,
+above and to its left), overcast (3), fog (45, 48: a cloud over two lines of mist),
+drizzle (51–57: the rain cloud with short, staggered drops), rain, snow and storm. A code
+the provider does not document draws a plain cloud. Each symbol is separate parts, so the
+Lively loops and settles move a part on the compositor, and a two-tone symbol paints its
+sun or moon part with that glyph's own sub-tone while the cloud stays Stone. Forecast
+marks its precipitation chance with a small droplet rather than repeating a weather
+symbol. Glyph boxes keep their CSS sizes (#128).
+
+Unavailable weather is never louder than the weather it replaces (#362). Weather and
+Forecast keep their footprint with a dim (35%), still cloud, the widget's own icon rather
+than a condition, beside a dim “—°”, and say so once in the status tone at the family's
+label size: “Weather unavailable · retrying”, or “· offline” while the display cannot
+reach the computer. The age shows only when an update time is known, and the credit goes
+while no forecast is shown. Nothing is invented; there is no option to hide the widget
+when unavailable.
 
 ## Primary guidance and adaptation
 
@@ -178,14 +200,19 @@ TV that is Windows Settings → Accessibility → Visual effects → Animation e
   Air quality, Calendar, Countdown, Note, Sun & moon and World clocks), as do newly
   pending reminders (by opacity alone, so the measured list keeps its geometry), new
   rain and air-quality bars (to their resting opacity) and new images. Existing bars
-  ease to new heights, analog hands ease clockwise, and the current-weather glyph
-  settles once (at most 1 s) on a reveal or a condition change.
+  ease to new heights (by `translate` from their baseline, #161), analog hands ease
+  clockwise, and the current-weather glyph settles once (at most 1 s) on a reveal or a
+  condition change. A stale or offline weather label takes the status tone at once,
+  with its words, rather than fading its colour.
 - **Lively** adds richer reveal choreography (forecast days, rain and air-quality bars
-  growing from their baseline, weather metrics, reminder rows fading in place) and
+  rising from their baseline, weather metrics, reminder rows fading in place) and
   the only loops, all on the current-weather glyph: sun rays
   turn once in 90 s while the core dims to 82% every 8 s, the moon rocks ±4°, clouds
-  drift ±2.5%, rain drops fall and fade every 1.8 s, snow turns once in 40 s, and the
-  storm bolt dims once for 1.2 s every 9 s. Loops pause during the black rest.
+  drift ±2.5%, rain and drizzle drops fall and fade every 1.8 s, snow turns once in
+  40 s, and the storm bolt dims once for 1.2 s every 9 s. Partly cloudy's partial rays
+  stay still (they would turn into the cloud) while its sun dims or its moon rocks around
+  its own centre and the cloud drifts; fog's mist drifts against its cloud. Loops pause
+  during the black rest.
 
 Rules for every level: only transform (translate, rotate, scale) and opacity
 animate; opacity never rises above its resting value, so nothing flashes or

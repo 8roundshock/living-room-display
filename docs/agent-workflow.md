@@ -91,9 +91,9 @@ other workers' changes into a feature commit.
    the log from the chosen base (`origin/main..HEAD` for owner maintenance,
    `upstream/main..HEAD` for fork contributions) for unintended commits.
 5. Verify identity and remotes before a push. Owner maintenance must verify
-   `8roundshock`, exact original origin, and private visibility with the project
-   helper. Contributors verify their own account and fork; never run the owner's
-   helper or broaden shared-account credentials. Push only the topic branch to
+   `8roundshock`, the exact original origin and the exact repository with the
+   project helper. Contributors verify their own account and fork; never run the
+   owner's helper or broaden shared-account credentials. Push only the topic branch to
    the intended repository. Create the PR against the original repository with
    explicit `--base main` and `--head` (for forks, `<your-login>:<branch>`), the
    exact ticket/title format above, and a reviewed multiline `--body-file` in

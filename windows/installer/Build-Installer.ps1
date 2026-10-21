@@ -247,7 +247,6 @@ try {
         if (-not (Test-Path -LiteralPath $setup)) { throw 'Inno Setup did not produce the expected setup file.' }
         $setupSha = Get-Sha256 $setup
         [IO.File]::WriteAllText("$setup.sha256", "$setupSha  $BaseName.exe`n", (New-Object Text.UTF8Encoding($false)))
-        Copy-Item -LiteralPath $Archive.ReleaseJson -Destination $Destination -Force
         return [pscustomobject]@{Path=$setup;Sha256=$setupSha}
     }
 
@@ -281,15 +280,26 @@ try {
         # server reports on /api/health. It no longer matches release.json, so
         # the new version fails its health check and Setup must roll back.
         $packageFile = Join-Path $appPayload 'package.json'
+        $packageBytes = [IO.File]::ReadAllBytes($packageFile)
         $packageText = [IO.File]::ReadAllText($packageFile)
         $patched = ([regex]'"version"\s*:\s*"[^"]*"').Replace($packageText, ('"version": "' + $version + '-rollback-test"'), 1)
         if ($patched -eq $packageText) { throw 'Could not change the version in app/package.json for the rollback-test Setup.' }
         [IO.File]::WriteAllText($packageFile, $patched, (New-Object Text.UTF8Encoding($false)))
-        $variant = Invoke-SetupCompile (New-PayloadArchive (Join-Path $work 'rollback-test')) $RollbackTestOutputDirectory "LivingRoomDisplaySetup-$version-rollback-test" $false
+        try {
+            $variantArchive = New-PayloadArchive (Join-Path $work 'rollback-test')
+            $variant = Invoke-SetupCompile $variantArchive $RollbackTestOutputDirectory "LivingRoomDisplaySetup-$version-rollback-test" $false
+            # The smoke test compares app.failed with this variant's own manifest.
+            Copy-Item -LiteralPath $variantArchive.ReleaseJson -Destination $RollbackTestOutputDirectory -Force
+        } finally {
+            # Put the release's own file back, so a payload kept with -KeepWork
+            # still matches the release's release.json (#208).
+            [IO.File]::WriteAllBytes($packageFile, $packageBytes)
+        }
         Write-Step "Rollback-test Setup ready (never distribute it): $($variant.Path)"
-    }} finally {
+    }
+} finally {
     $env:PATH = $oldPath
-    if ($KeepWork) { Write-Step "Work folder kept: $work" }
+    if ($KeepWork) { Write-Step "Work folder kept: $work (its payload folder is the release's; the rollback-test variant lives only in its own payload.zip)" }
     elseif (Test-Path -LiteralPath $work) {
         if (-not ([IO.Path]::GetFullPath($work)).StartsWith($localRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Refusing to remove a work folder outside .local.' }
         Remove-Item -LiteralPath $work -Recurse -Force

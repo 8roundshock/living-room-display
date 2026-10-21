@@ -12,7 +12,7 @@ import {
 
 /**
  * The six ids #78 appended after the foundation ones, whatever their current status. Written out, not
- * derived from PREVIOUS_RELEASE: every baseline since 3fee844 (#263; 3446400 since #367) knows them
+ * derived from PREVIOUS_RELEASE: every baseline since 3fee844 (#263; d66832b since #497) knows them
  * all, and a derived list would have gone silently empty.
  */
 const CATALOG_78: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];

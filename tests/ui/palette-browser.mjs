@@ -320,21 +320,31 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     current = state({ mode: 'color' }); current.settings.appearance.accentColor = LEGACY_SAND; current.settings.widgets.photo = false; await open();
     assert.equal(await page.locator('.ambient').first().evaluate((el) => getComputedStyle(el).getPropertyValue('--ambient-accent').trim().toLowerCase()), SAND, 'the ambient root renders the retuned Sand');
     for (const section of await sections(page)) await assertSection(section, 'color', 'stored retired Sand', page.locator(`[data-widget-id="${section.id}"]`));
-    const glyphs = [[0, true, 'sun', 'sun'], [0, false, 'moon', 'time'], [3, true, 'cloud', 'stone'], [63, true, 'rain', 'water'], [73, true, 'snow', 'sky'], [95, true, 'storm', 'water']];
+    // #251: partly cloudy is its cloud's Stone with a Gold sun or Lilac moon part; fog Stone; drizzle Sea glass.
+    const glyphs = [[0, true, 'sun', 'sun'], [0, false, 'moon', 'time'], [1, true, 'suncloud', 'stone'], [2, false, 'mooncloud', 'stone'], [3, true, 'cloud', 'stone'], [45, true, 'fog', 'stone'], [53, true, 'drizzle', 'water'], [63, true, 'rain', 'water'], [73, true, 'snow', 'sky'], [95, true, 'storm', 'water']];
+    const PART_TONES = { suncloud: { core: 'sun', rays: 'sun', cloud: 'stone' }, mooncloud: { moon: 'time', cloud: 'stone' } };
     for (const mode of ['native', 'color']) {
       for (const [code, isDay, glyph, role] of glyphs) {
         current = state({ mode, only: 'weather' }); current.weather.current = { ...current.weather.current, weatherCode: code, isDay };
         await open();
         assert.equal(await page.locator('.weather-symbol').getAttribute('data-glyph'), glyph);
         assert.equal(await colorOf('.weather-symbol'), expected(mode, role), `${mode} weather code ${code} ${isDay ? 'day' : 'night'} glyph`);
+        // Each part paints with its own sub-tone; the strokes follow it.
+        const parts = await page.locator('.weather-symbol > .glyph-part').evaluateAll((els) => els.map((el) => [el.dataset.glyphPart, getComputedStyle(el).color, getComputedStyle(el.querySelector('svg > *')).stroke]));
+        for (const [part, color, stroke] of parts) {
+          const want = expected(mode, PART_TONES[glyph]?.[part] ?? role);
+          assert.equal(color, want, `${mode} code ${code} ${glyph} part ${part}`); assert.equal(stroke, want, `${mode} code ${code} ${glyph} part ${part} stroke`);
+        }
         // The label stays Mist (sky) while the glyph takes its own tone.
         assert.equal(await colorOf('.ambient-weather .ambient-label'), expected(mode, 'sky'));
       }
-      current = state({ mode, only: 'forecast' }); current.weather.daily = current.weather.daily.map((day, index) => ({ ...day, weatherCode: [0, 3, 63, 73, 95, 0, 3][index] }));
+      current = state({ mode, only: 'forecast' }); current.weather.daily = current.weather.daily.map((day, index) => ({ ...day, weatherCode: [0, 1, 45, 53, 63, 73, 95][index] }));
       await open();
-      const forecast = await page.locator('.forecast-day [data-glyph]').evaluateAll((els) => els.map((el) => [el.dataset.glyph, getComputedStyle(el).color]));
+      const forecast = await page.locator('.forecast-day > .weather-glyph').evaluateAll((els) => els.map((el) => [el.dataset.glyph, getComputedStyle(el).color]));
       assert.ok(forecast.length >= 5);
-      for (const [glyph, color] of forecast) assert.equal(color, expected(mode, { sun: 'sun', cloud: 'stone', rain: 'water', snow: 'sky', storm: 'water' }[glyph]), `${mode} forecast ${glyph}`);
+      for (const [glyph, color] of forecast) assert.equal(color, expected(mode, { sun: 'sun', suncloud: 'stone', cloud: 'stone', fog: 'stone', drizzle: 'water', rain: 'water', snow: 'sky', storm: 'water' }[glyph]), `${mode} forecast ${glyph}`);
+      // The chance droplet is Sea glass, like the rest of the precipitation chance.
+      for (const color of await page.locator('.forecast-rain svg').evaluateAll((els) => els.map((el) => getComputedStyle(el).stroke))) assert.equal(color, expected(mode, 'water'), `${mode} forecast chance droplet`);
       current = state({ mode, only: 'weather' }); current.weather.status = 'stale'; current.weather.updatedAt = new Date(now - 3 * 3600000).toISOString();
       await open();
       assert.match(await page.locator('.weather-age').innerText(), /Saved forecast/);
@@ -343,7 +353,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       stateStatus = 503; await page.clock.runFor(30001); await page.locator('.weather-age').filter({ hasText: 'Offline' }).waitFor(); stateStatus = 200;
       assert.equal(await colorOf('.weather-age.stale'), rgb(STATUS_TONES.caution), `${mode} offline age keeps the status tone`);
     }
-    checks.push('Weather glyphs by code (clear day Gold, clear night Lilac, cloud Stone, rain/storm Sea glass, snow Mist) in Weather and Forecast; stale and offline ages stay amber; photos are never tinted and the synthetic photo and snapshot actually paint (#217); color mode keeps the single accent everywhere, and a stored retired Sand renders the retuned Sand (#224)');
+    checks.push('Weather glyphs by code (clear day Gold, clear night Lilac, partly cloudy Stone with a Gold sun or Lilac moon part, cloud and fog Stone, drizzle/rain/storm Sea glass, snow Mist; #251) in Weather and Forecast, with a Sea glass chance droplet; stale and offline ages stay amber; photos are never tinted and the synthetic photo and snapshot actually paint (#217); color mode keeps the single accent everywhere, and a stored retired Sand renders the retuned Sand (#224)');
 
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       await page.setViewportSize(viewport);
@@ -401,31 +411,31 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     assert.equal(await pressed(p, 'Sand'), true); assert.equal(await pressed(p, 'Native colours'), false); assert.equal(await heading(p), 'Sand'); assert.equal(await canvasMode(p), 'color');
     await save(p); assert.equal(appearance().accentMode, 'color'); assert.equal(appearance().accentColor, SAND);
     await nativeSwatch.click(); await save(p);
-    await p.locator('input[aria-label="Custom accent color"]').fill('#123456');
+    await p.locator('input[aria-label="Choose a custom colour"]').fill('#123456');
     assert.equal(await heading(p), 'Custom'); assert.equal(await pressed(p, 'Native colours'), false); assert.equal(await canvasMode(p), 'color');
     await save(p); assert.equal(appearance().accentMode, 'color'); assert.equal(appearance().accentColor, '#123456');
     checks.push('Cancel restores Native; a swatch after Native selects color with that swatch; the custom colour input switches to color');
 
     // #151: the kept custom colour is a pressed swatch. After Native, one activation (no colour input,
     // so nothing relies on fill() of an unchanged value) restores it; the Save bar follows the saved state.
-    const custom = () => swatch(p, 'Custom colour');
-    assert.equal(await pressed(p, 'Custom colour'), true, 'the saved custom colour shows as a pressed swatch');
-    assert.equal(await custom().getAttribute('title'), 'Custom colour #123456');
+    const CUSTOM = 'Custom colour #123456', custom = () => swatch(p, CUSTOM);
+    assert.equal(await pressed(p, CUSTOM), true, 'the saved custom colour shows as a pressed swatch');
+    assert.equal(await custom().getAttribute('title'), CUSTOM);
     await nativeSwatch.click(); await saveBar(p).waitFor();
-    assert.equal(await pressed(p, 'Custom colour'), false); assert.equal(await heading(p), 'Native');
+    assert.equal(await pressed(p, CUSTOM), false); assert.equal(await heading(p), 'Native');
     await custom().click();
-    assert.equal(await pressed(p, 'Custom colour'), true); assert.equal(await heading(p), 'Custom'); assert.equal(await canvasMode(p), 'color');
+    assert.equal(await pressed(p, CUSTOM), true); assert.equal(await heading(p), 'Custom'); assert.equal(await canvasMode(p), 'color');
     await saveBar(p).waitFor({ state: 'detached' });
     await nativeSwatch.click(); await save(p);
     assert.deepEqual([appearance().accentMode, appearance().accentColor], ['native', '#123456'], 'Native keeps the custom colour');
     await p.reload(); await p.getByRole('tab', { name: 'Style', exact: true }).click();
-    assert.equal(await pressed(p, 'Custom colour'), false); assert.equal(await pressed(p, 'Native colours'), true);
+    assert.equal(await pressed(p, CUSTOM), false); assert.equal(await pressed(p, 'Native colours'), true);
     await custom().click(); await saveBar(p).waitFor();
     assert.equal(await p.locator('.preview-surface .ambient-clock .ambient-label').evaluate((el) => getComputedStyle(el).color), rgb('#123456'), 'the canvas shows the restored custom colour');
     await save(p); assert.deepEqual([appearance().accentMode, appearance().accentColor], ['color', '#123456']);
     // A swatch replaces the colour in the draft; the saved custom colour stays one activation away until another colour is saved.
     await swatch(p, 'Mist').click(); await saveBar(p).waitFor();
-    assert.equal(await pressed(p, 'Custom colour'), false, 'the saved custom colour is still offered');
+    assert.equal(await pressed(p, CUSTOM), false, 'the saved custom colour is still offered');
     await custom().click(); await saveBar(p).waitFor({ state: 'detached' });
     checks.push('#151 a kept custom colour is a named, pressed swatch; from Native (also after reload) one activation restores it, the Save bar appears only while the restored state differs, and it stays offered while a swatch is only a draft');
 
@@ -437,7 +447,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     }
     await save(p);
     assert.deepEqual({ preset: appearance().preset, accentMode: appearance().accentMode, brightness: appearance().brightness, accentColor: appearance().accentColor }, { preset: 'night', accentMode: 'native', brightness: 0.28, accentColor: '#9990b7' });
-    assert.equal(await swatch(p, 'Custom colour').count(), 0, "a built-in style's own single colour is not offered as a custom colour (#151)");
+    assert.equal(await p.getByRole('button', { name: /^Custom colour/ }).count(), 0, "a built-in style's own single colour is not offered as a custom colour (#151)");
     checks.push('Phone, Room and Night apply Native with their own brightness and accent colour; miniatures show Lilac, Mist and Rose bars');
 
     await p.getByText('Saved styles', { exact: true }).click();
@@ -465,7 +475,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     await app.store.update((data) => { data.settings.appearance.accentMode = 'color'; data.settings.appearance.accentColor = LEGACY_SAND; });
     ({ studio, page: p } = await editor());
     assert.equal(await pressed(p, 'Sand'), true); assert.equal(await heading(p), 'Sand');
-    assert.equal(await swatch(p, 'Custom colour').count(), 0, 'the retired Sand is not a custom colour');
+    assert.equal(await p.getByRole('button', { name: /^Custom colour/ }).count(), 0, 'the retired Sand is not a custom colour');
     assert.equal(await saveBar(p).count(), 0, 'reading it is not an edit');
     assert.equal(await p.locator('.preview-surface .ambient-clock .ambient-label').evaluate((el) => getComputedStyle(el).color), rgb(SAND), 'the canvas renders the retuned Sand');
     await swatch(p, 'Native colours').click(); await saveBar(p).waitFor();
@@ -475,6 +485,25 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     assert.equal(appearance().accentColor, LEGACY_SAND, 'the stored value is unchanged');
     await studio.close();
     checks.push('#224 a stored retired Sand is selected as Sand (no custom swatch) and renders the retuned value; Native or Mist and back to Sand is not an edit; the stored value is unchanged');
+
+    // #303: data saved by Night before Native colours (#75) has Night's own colour as a single accent.
+    // It is the accent, so it stays offered as the Custom colour swatch: after Native one activation
+    // restores it (no edit), and it goes only once another colour is saved.
+    await app.store.update((data) => { data.settings = defaultSettings(); data.settings.appearance = { ...data.settings.appearance, accentMode: 'color', accentColor: '#9990b7', preset: 'night' }; });
+    ({ studio, page: p } = await editor());
+    const NIGHT = 'Custom colour #9990b7';
+    assert.equal(await pressed(p, NIGHT), true, 'older colour-mode Night data shows its colour as a pressed swatch');
+    assert.equal(await heading(p), 'Custom');
+    await swatch(p, 'Native colours').click(); await saveBar(p).waitFor();
+    assert.equal(await pressed(p, NIGHT), false, 'after Native the saved colour is still offered');
+    await swatch(p, NIGHT).click(); await saveBar(p).waitFor({ state: 'detached' });
+    assert.equal(await pressed(p, NIGHT), true, 'one activation restores it, which is not an edit');
+    await swatch(p, 'Mist').click(); await saveBar(p).waitFor();
+    assert.equal(await pressed(p, NIGHT), false, 'a swatch only in the draft keeps it offered');
+    await save(p);
+    assert.equal(await p.getByRole('button', { name: /^Custom colour/ }).count(), 0, 'once another colour is saved it is gone');
+    await studio.close();
+    checks.push("#303 older colour-mode data with Night's own colour as the accent offers it as \"Custom colour #9990b7\" (pressed); after Native one activation restores it without an edit, a draft swatch keeps it offered and saving another colour removes it; the picker is \"Choose a custom colour\"");
 
     // #137: every accent control (Native, the five colours, a kept custom colour and the picker on the
     // heading line) keeps a 44 x 44 hit area with no overlap. At 1280 x 720 the row stays one line and
@@ -499,7 +528,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
         ({ studio, page: p } = await editor(viewport));
         const label = viewport.width + 'x' + viewport.height + (kept ? ' with a kept custom colour' : '');
         const targets = await accentTargets();
-        assert.deepEqual(targets.boxes.map((box) => box.name), ['Native colours', ...ACCENT_SWATCHES.map((item) => item.name), ...(kept ? ['Custom colour'] : []), 'Custom accent color'], label);
+        assert.deepEqual(targets.boxes.map((box) => box.name), ['Native colours', ...ACCENT_SWATCHES.map((item) => item.name), ...(kept ? ['Custom colour #123456'] : []), 'Choose a custom colour'], label);
         for (const box of targets.boxes) assert.ok(box.width >= 43.99 && box.height >= 43.99, label + ': ' + box.name + ' hit area ' + box.width + 'x' + box.height);
         assert.deepEqual(targets.overlaps, [], label + ': hit areas do not overlap');
         assert.ok(targets.overflow <= 0 && targets.outside === 0 && targets.pageOverflow <= 0, label + ': ' + JSON.stringify(targets));

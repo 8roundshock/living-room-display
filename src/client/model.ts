@@ -85,15 +85,68 @@ export function matchingBuiltinPreset(
 }
 
 /**
+ * The stored `appearance.preset` label follows the look (#277): the built-in style whose look the
+ * appearance shows, else `custom`. Every appearance edit writes it, so the saved label never
+ * disagrees with the card the editor shows as chosen. The label is not part of the effective
+ * settings (`sameEffectiveSettings` ignores it), so it never makes a draft dirty by itself, and its
+ * values stay the four the previous release accepts.
+ */
+export function labelLook(appearance: Settings['appearance']): Settings['appearance'] {
+  const preset = matchingBuiltinPreset(appearance) ?? 'custom';
+  return appearance.preset === preset ? appearance : { ...appearance, preset };
+}
+
+/** Applies an appearance edit and keeps the stored style label in step with the look (#277). */
+export function withAppearance(
+  settings: Settings,
+  update: Partial<Settings['appearance']>,
+): Settings {
+  return { ...settings, appearance: labelLook({ ...settings.appearance, ...update }) };
+}
+
+/**
  * Reset appearance (#234): every Style tab value returns to its default (the Room look, Text size,
  * Animation and the movement settings). Widgets, their layout and options, the clock style (a
  * Clock widget option), saved styles and personal data stay.
  */
 export function resetAppearance(settings: Settings): Settings {
   const next = structuredClone(settings);
-  next.appearance = {
+  next.appearance = labelLook({
     ...defaultSettings().appearance,
     clockStyle: settings.appearance.clockStyle,
-  };
+  });
   return next;
+}
+
+/**
+ * Saved styles (#344): a name is refused when another style already uses it, compared without
+ * case and surrounding spaces. Returns the existing style's name, or null when the name is free.
+ */
+export function duplicateStyleName(
+  styles: readonly { id: string; name: string }[],
+  name: string,
+  except?: string,
+): string | null {
+  const wanted = name.trim().toLocaleLowerCase();
+  if (!wanted) return null;
+  return (
+    styles.find((style) => style.id !== except && style.name.trim().toLocaleLowerCase() === wanted)
+      ?.name ?? null
+  );
+}
+
+/** The most saved styles the server accepts (`savedPresets` in src/server/validation.ts). */
+export const MAX_SAVED_STYLES = 12;
+
+/** "1 second", "2 seconds": a slider's value as it is read aloud (#342). */
+export function spokenSeconds(seconds: number): string {
+  return `${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
+}
+
+/** The move interval read aloud (#342): "30 seconds", "3 minutes", "1 minute 30 seconds". */
+export function spokenInterval(seconds: number): string {
+  const minutes = Math.floor(seconds / 60), rest = seconds % 60;
+  if (!minutes) return spokenSeconds(rest);
+  const whole = `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  return rest ? `${whole} ${spokenSeconds(rest)}` : whole;
 }

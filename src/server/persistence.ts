@@ -8,14 +8,14 @@ import { WIDGET_IDS } from '../shared/widgets.ts';
  * Bump it, with src/server/compat/, after each coordinated install (#130).
  */
 export const PREVIOUS_RELEASE = {
-  revision: '34464001af41af0e2ea67fb090734b296f72c1c2',
+  revision: 'd66832b39920b3df7ea0d67e3584289539957cc8',
   widgetIds: ['clock', 'weather', 'rain', 'forecast', 'reminders', 'preview', 'photo', 'worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'],
 } as const;
 
 /**
  * Additive fields omitted at rest while equal to the value the current reader restores, as are
  * default widgetData sections. validation.ts reads its defaults from here (single source).
- * The omission began so bedca44 could read the files (#84). Every baseline since 3fee844, 3446400
+ * The omission began so bedca44 could read the files (#84). Every baseline since 3fee844, d66832b
  * included, reads these keys, so for them it is optional: #272 kept it to avoid a data-format change
  * in a reader bump. It stays the mechanism for a future additive key or widget id that the previous
  * release does not know: list the key here, or leave the id out of PREVIOUS_RELEASE.widgetIds.

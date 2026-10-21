@@ -10,7 +10,7 @@
 }
 .studio .reminder-view {
   flex: 1;
-  min-height: 40px;
+  min-height: 44px;
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -64,6 +64,28 @@
 .studio .reminder-actions .icon-button:disabled {
   opacity: 0.35;
 }
+/*
+ * Compact rows (#366): Edit and Delete sit side by side at full 44 px targets, so a one-line reminder
+ * with its due line is about 60 px tall and at least five fit the 1280 × 720 inspector. The circle and
+ * the actions centre on the row; the focus order stays circle, Edit, Delete.
+ */
+.studio .reminders-panel .editor-reminder {
+  align-items: center;
+  padding: 6px 0;
+}
+.studio .reminders-panel .reminder-copy {
+  padding: 4px 6px;
+}
+.studio .reminders-panel .reminder-copy > span {
+  margin-top: 3px;
+}
+.studio .reminders-panel .reminder-actions {
+  flex: none;
+  flex-direction: row;
+}
+.studio .reminders-panel .reminder-actions .icon-button {
+  height: 44px;
+}
 .studio .history-heading {
   margin: 20px 0 2px;
   font-size: 11px;
@@ -77,6 +99,7 @@
 .studio .history-more,
 .studio .clear-history {
   display: flex;
+  min-height: 44px;
   margin-top: 10px;
   font-size: 12px;
 }
@@ -128,7 +151,7 @@
   bottom: 10px;
   z-index: 2;
   min-height: 46px;
-  padding: 4px 6px 4px 14px;
+  padding: 0 4px 0 14px;
   border: 1px solid #ffffff17;
   border-radius: 13px;
   background: #2a2730f7;
@@ -137,7 +160,9 @@
   font-size: 13px;
 }
 .studio .reminder-undo {
-  min-height: 38px;
+  min-height: 44px;
+  min-width: 44px;
+  justify-content: center;
   padding-inline: 8px;
   font-size: 13px;
   font-weight: 600;

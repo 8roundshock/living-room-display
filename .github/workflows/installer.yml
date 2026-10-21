@@ -1,8 +1,11 @@
 name: Windows installer
 # Builds LivingRoomDisplaySetup-<version>.exe and smoke-tests install, repair
 # and uninstall on clean runners. Only installer-related paths trigger it on
-# pull requests (checks.yml already builds and tests the app) to keep the
-# private repository's Actions minutes low.
+# pull requests (checks.yml already builds and tests the app) to keep
+# Actions time low. A pull request from a fork builds and checks the
+# installer but uploads nothing and skips the smoke job, so an installer
+# built from unreviewed fork code is never offered as this repository's
+# artifact; the push to main after merge runs everything.
 on:
   pull_request:
     paths:
@@ -79,6 +82,7 @@ jobs:
         shell: pwsh
         run: ./windows/installer/tests/Test-InstallerPayload.ps1 -ArchivePath "$env:RUNNER_TEMP/installer/payload.zip" -ReleaseJson "$env:RUNNER_TEMP/installer/release.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           name: living-room-display-setup
           path: |
@@ -89,6 +93,7 @@ jobs:
           retention-days: 14
       # Never distributed: its server fails the health check on purpose.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           name: living-room-display-rollback-test
           path: |
@@ -99,6 +104,8 @@ jobs:
           retention-days: 1
   smoke:
     needs: build
+    # A fork's pull request uploads no Setup to test (see the header).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:

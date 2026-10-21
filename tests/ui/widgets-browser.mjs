@@ -16,11 +16,11 @@ import { WIDGET_CHECKS } from './widget-checks/index.mjs';
 /** Renderers that read the weather or air-quality status or the connection; the others render the same when stale or offline. */
 const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'offline'], airQuality: ['stale', 'offline'], reminders: ['offline'], dynamic: ['stale', 'offline'] };
 /**
- * #221: at Text 100% a family with an element on a readability floor must render at fit 1. These families
- * still zoom out below it; each allowance names the ticket fixing it. An allowance no longer needed fails,
- * so it is removed when that work lands.
+ * #221, #283: at Text 100% every family must render at fit 1 (a zoom-out shrinks its labels and values
+ * whether or not one sits exactly on a floor). These families still zoom out; each allowance names the
+ * ticket fixing it. An allowance no longer needed fails, so it is removed when that work lands.
  */
-const FLOOR_FIT_ALLOWANCES = { 'weather/small': '#283', 'weather/medium': '#283', 'note/small': '#291' };
+const FLOOR_FIT_ALLOWANCES = { 'note/small': '#291' };
 /**
  * #99: widgets that still construct Intl formatters on a one-second tick within the same minute, each with
  * the ticket caching them. An allowance no longer needed fails; with none left the full board must
@@ -144,7 +144,8 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       await statusPage.setViewportSize(viewport);
       // An offline display has loaded once and then failed its 30 s refresh.
       await statusPage.clock.setSystemTime(new Date(status === 'offline' ? now - 30_000 : now));
-      await statusPage.goto(base + '/display'); await statusPage.locator('.display-page').waitFor(); await statusPage.clock.runFor(100);
+      // #306: on a machine shared with other suites a display load has exceeded the default 30 s here; allow its real cost.
+      await statusPage.goto(base + '/display', { timeout: 90_000 }); await statusPage.locator('.display-page').waitFor({ timeout: 90_000 }); await statusPage.clock.runFor(100);
       const widget = statusPage.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
       if (status === 'offline') {
         mode = 'error'; await statusPage.clock.runFor(30_000);
@@ -154,17 +155,22 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       return floorReport(widget);
     }
     const floorFailures = [], allowancesUsed = new Set(), allowedCases = []; let floorCases = 0, flooredCases = 0;
-    /** Fit within half a percent of 1 is the fit search resolving a sub-pixel overflow, not a zoom-out. */
+    /**
+     * Fit within half a percent of 1 is the fit search resolving a sub-pixel overflow, not a zoom-out. Every
+     * zoom-out at Text 100% counts, whether or not an element sits exactly on a floor (#283): a family whose
+     * smallest text is above the floor still shrinks every label and value when it zooms out.
+     */
     const floorCheck = (id, size, density, viewport, status, report) => {
       floorCases++;
-      if (!report.floored.length) return;
-      flooredCases++;
+      if (report.floored.length) flooredCases++;
       if (report.fit >= 0.995) return;
-      const detail = `${id}/${size} ${density} ${viewport.width}×${viewport.height} ${status}: fit ${report.fit.toFixed(3)} with ${report.floored.slice(0, 3).join(', ')} (floors ${report.text.toFixed(2)}/${report.data.toFixed(2)} px)`;
+      const detail = `${id}/${size} ${density} ${viewport.width}×${viewport.height} ${status}: fit ${report.fit.toFixed(3)} with ${report.floored.slice(0, 3).join(', ') || 'no element on a floor'} (floors ${report.text.toFixed(2)}/${report.data.toFixed(2)} px)`;
       if (FLOOR_FIT_ALLOWANCES[`${id}/${size}`]) { allowancesUsed.add(`${id}/${size}`); allowedCases.push(detail); return; }
       floorFailures.push(detail);
     };
-    for (const viewport of [{ width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
+    // The family sweep includes the owner's 1280×720 TV (#283); the per-viewport sweeps below cover 720p from
+    // their 1080p pass, so they run at 1080p and 4K only.
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       await page.setViewportSize(viewport);
       for (const density of Object.keys(GRID_DENSITIES)) for (const id of ACTIVE_WIDGET_IDS) for (const size of widgetSizes(id)) {
         current = familyState(id, size, density);
@@ -188,18 +194,18 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
         for (const status of STATUS_WIDGETS[id] ?? []) floorCheck(id, size, density, viewport, status, await statusReport(id, size, density, viewport, status));
       }
       // Checks beyond the families (tests/ui/widget-checks sweep hooks) run once per viewport.
-      for (const check of Object.values(WIDGET_CHECKS)) if (check.sweep) {
+      if (viewport.width !== 1280) for (const check of Object.values(WIDGET_CHECKS)) if (check.sweep) {
         current = structuredClone(source);
         const summary = await check.sweep({ page, viewport, state: current, base, now });
         if (summary && !checks.includes(summary)) checks.push(summary);
       }
     }
     assert.ok(clockFonts.large > clockFonts.medium * 1.4, `Large clock should be visibly larger: ${JSON.stringify(clockFonts)}`);
-    checks.push(`All ${familyCount} widget families × 3 densities × 1080p/4K: bounds, useful content, no frames/fills, tone classes, photo crops, whole-screen snapshot`);
+    checks.push(`All ${familyCount} widget families × 3 densities × 720p/1080p/4K: bounds, useful content, no frames/fills, tone classes, photo crops, whole-screen snapshot`);
     await statusPage.close();
-    assert.deepEqual(floorFailures, [], '#221: a family with an element on a floor renders at fit 1 at Text 100% (a tracked exception needs its own ticket and an allowance)');
-    assert.deepEqual(Object.entries(FLOOR_FIT_ALLOWANCES).filter(([key]) => !allowancesUsed.has(key)).map(([key, ticket]) => `${key} (${ticket})`), [], 'these families now render at fit 1 whenever an element sits on a floor: remove their allowances');
-    checks.push(`#221 floors at Text 100%: ${floorCases} family × density × 1080p/4K × fresh/stale/offline cases; all ${flooredCases} with an element on a floor render at fit 1, except ${allowedCases.length} tracked cases: ${allowedCases.join('; ')}`);
+    assert.deepEqual(floorFailures, [], '#221, #283: every family renders at fit 1 at Text 100% (a tracked exception needs its own ticket and an allowance)');
+    assert.deepEqual(Object.entries(FLOOR_FIT_ALLOWANCES).filter(([key]) => !allowancesUsed.has(key)).map(([key, ticket]) => `${key} (${ticket})`), [], 'these families now render at fit 1 at Text 100%: remove their allowances');
+    checks.push(`#221/#283 fit at Text 100%: ${floorCases} family × density × 720p/1080p/4K × fresh/stale/offline cases (${flooredCases} with an element on a floor) render at fit 1, except ${allowedCases.length} tracked cases: ${allowedCases.join('; ')}`);
     // Every #78 id has shipped (#157, #171), so the inactive ids are retired ones (Rain, #74) plus any
     // future planned entry; the catalog contract says neither is ever rendered.
     const inactiveIds = WIDGET_IDS.filter(id => !isActiveWidget(id));
