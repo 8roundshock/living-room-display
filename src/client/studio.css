@@ -106,6 +106,13 @@ html.studio-editor {
   justify-content: space-between;
   border-bottom: 1px solid #ffffff0b;
 }
+/* #436: Open display (Show display while its window is open) with Close display beside it. */
+.display-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .studio .brand {
   display: flex;
   align-items: center;
@@ -1582,6 +1589,15 @@ html.studio-editor {
     gap: 7px;
   }
   .open-display > svg:last-child {
+    display: none;
+  }
+  /* Icon only beside the brand and Show display on a phone; the button keeps its name. */
+  .studio .close-display {
+    min-height: 40px;
+    min-width: 40px;
+    padding: 9px 11px;
+  }
+  .studio .close-display-label {
     display: none;
   }
   .studio-workspace {

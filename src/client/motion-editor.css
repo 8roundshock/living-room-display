@@ -146,3 +146,27 @@
 .studio:is([data-animation='subtle'], [data-animation='lively']) .studio-savebar {
   animation: lrd-savebar-in 200ms var(--motion-ease) backwards;
 }
+
+/* #436: the live movement sentence and the Screen part (Keep the screen on, Windows power facts). */
+.studio .motion-sentence {
+  color: #c9c3d3;
+}
+.studio .screen-settings {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #ffffff0d;
+}
+.studio .screen-settings > .field-label {
+  display: block;
+  margin-bottom: 4px;
+}
+.studio .power-warning {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #b0926b55;
+  border-radius: 8px;
+  background: #3a2f2033;
+  color: #e3c9a6;
+  font-size: 12px;
+  line-height: 1.5;
+}

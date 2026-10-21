@@ -39,6 +39,7 @@ const appearanceFields = {
   clockStyle: z.enum(['outline', 'digital', 'analog']),
   accentMode: z.enum(ACCENT_MODES),
   animation: z.enum(ANIMATION_LEVELS),
+  rearrange: z.boolean(),
 };
 /** Persisted settings, saved styles and imports: additive fields read as their defaults. */
 const appearance = z.object({
@@ -46,6 +47,7 @@ const appearance = z.object({
   clockStyle: appearanceFields.clockStyle.default('outline'),
   accentMode: appearanceFields.accentMode.default(AT_REST.appearance.accentMode),
   animation: appearanceFields.animation.default(AT_REST.appearance.animation),
+  rearrange: appearanceFields.rearrange.default(AT_REST.appearance.rearrange),
 }).strict();
 /** PATCH: exactly the supplied keys, never a default. */
 const appearancePatch = z.object(appearanceFields).strict().partial();
@@ -78,6 +80,9 @@ const widgetBehavior = z.object({ reminders: reminderBehavior.default({ hideWhen
   .default({ reminders: { hideWhenEmpty: true } });
 const preview = z.object({ enabled: z.boolean(), opacity: z.number().min(0.02).max(0.3), widthPercent: z.number().min(12).max(35) }).strict();
 const idle = z.object({ enabled: z.boolean(), idleMinutes: z.number().int().min(1).max(120) }).strict();
+/** #436 Keep the screen on: persisted settings and imports only, never part of visualShape, so saved styles never carry it. */
+const screen = z.object({ keepAwake: z.boolean().default(true) }).strict().default(() => defaultSettings().screen);
+const screenPatch = z.object({ keepAwake: z.boolean() }).strict().partial();
 const visualShape = { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview };
 
 // #78 widget content. Field schemas carry no defaults; only the persisted reader fills them.
@@ -131,7 +136,7 @@ const savedPresets = z.array(z.object({ id: z.string().min(1).max(80), name: z.s
 export const settingsSchema = z.object({ ...visualShape, version: z.literal(1), location,
   // Missing source means legacy/manual, so upgrades cannot replace an existing city.
   locationSource: z.enum(['device', 'manual', 'fallback']).default('manual'),
-  units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets, widgetData,
+  units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets, widgetData, screen,
 }).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(absorbRetiredWidgets).transform(value => {
   if (value.locationSource === 'fallback') return { ...value, location: defaultSettings().location };
   if (value.locationSource === 'device') return { ...value, location: {
@@ -163,6 +168,7 @@ export const settingsPatchSchema = z.object({
   widgetBehavior: z.object({ reminders: z.object({ hideWhenEmpty: z.boolean().optional() }).strict().optional() }).strict().optional(),
   preview: preview.partial().optional(), idle: idle.partial().optional(), savedPresets: savedPresets.optional(),
   widgetData: widgetDataPatch.optional(),
+  screen: screenPatch.optional(),
 }).strict();
 const dueAt = z.iso.datetime({ offset: true }).nullable();
 export const reminderInputSchema = z.object({ text: z.string().trim().min(1).max(240), dueAt: dueAt.optional() }).strict();
@@ -200,6 +206,7 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
       calendar: { ...current.widgetData.calendar, ...patch.widgetData?.calendar },
       note: { ...current.widgetData.note, ...patch.widgetData?.note },
       airQuality: { ...current.widgetData.airQuality, ...patch.widgetData?.airQuality } },
+    screen: { ...current.screen, ...patch.screen },
   };
   // Existing API callers that explicitly edit a city are manual overrides too.
   if (changes.location && changes.locationSource === undefined) next.locationSource = 'manual';

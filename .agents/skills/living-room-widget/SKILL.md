@@ -25,13 +25,19 @@ code and tests for actual symbols and commands; the documentation is not a schem
 - Route placement and resizing through shared grid helpers. Preserve collision,
   bounds, migration, export/import and preset behavior. Provide a keyboard/control
   alternative to dragging; never persist an intermediate drag frame.
-- Reuse ambient type/color/motion tokens and the centralized relocation wrapper.
+- Reuse ambient type/color/motion tokens and the centralized movement wrapper
+  (the float timer and Swap places in `Display.tsx`).
   Avoid a bright card, fixed frame, separator or permanent header. For large time
   numerals favor a legible dim outline treatment; do not add a stationary clock
   face or hide meaningful data merely to make a size fit.
 - Keep the entire widget, including labels and attribution, inside its movable
-  group. Spatial relocation and black intervals must continue when motion effects
-  are reduced. Dimness or movement does not guarantee prevention of OLED burn-in.
+  group. There is no black rest (#436): the board floats and each widget's content
+  floats inside its own box by translating the section (`--float-x`/`--float-y`),
+  so a widget must tolerate a translated section: lay out inside the content box,
+  never depend on the section's screen position, and keep content left-anchored
+  so the shared fit can measure its slack. Movement continues in steps when motion
+  effects are reduced. Dimness or movement does not guarantee prevention of OLED
+  burn-in.
 - Use honest loading, unavailable, stale and empty states. An empty widget can
   disappear according to its option; a failed request must not imply no content.
   Ambient widgets are silent and passive; configuration/actions belong in the editor.
@@ -81,12 +87,13 @@ independent autosave path for a new widget's settings.
 ## Verify and hand off
 
 Use isolated synthetic data. Run relevant build/tests and inspect actual rendering
-for each supported family, grid and relocation phase, including reduced motion,
+for each supported family and grid, floating (a translated section) and with Swap
+places on, including reduced motion,
 long content and no-data states. Run the palette harness,
 `tests/ui/palette-browser.mjs`: add a newly active widget to its `FULL_BOARD`, and
 to `ACCENT_SELECTOR` when its accent element is a new kind or to `TEXT_ONLY` when
 it has none. It fails for any painted colour other than the element's accent, the
-text colour or the status tone. Check black transition intervals, clipping,
+text colour or the status tone. Check a swap's glide and dim, clipping,
 overlap, pointer isolation and mobile/keyboard editing. Keep captures in memory.
 Report actual evidence and what still needs physical-display acceptance; a browser
 image cannot establish long-term OLED behavior.

@@ -1,22 +1,20 @@
 import { useMemo, useState, type CSSProperties } from 'react';
-import { advanceClockHands, rebaseClockHands, type HandAngles } from '../../shared/motion.ts';
+import { advanceClockHands, type HandAngles } from '../../shared/motion.ts';
 import type { Settings } from '../../shared/contracts.ts';
 import type { WidgetSize } from '../../shared/widgets.ts';
-import { useMotion } from '../useMotion.ts';
 import { TransitionText } from './TransitionText.tsx';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
 
 /**
  * Hand angles that accumulate clockwise for small forward steps (59 → 00 and 12 → 1 move
- * forward), snap for jumps, and return to [0, 360) only while the display is fully black (#174):
- * a minute's ease that is still running when the fade-out starts finishes in view.
+ * forward) and snap for jumps. #436: the display never goes black, so they keep accumulating
+ * for the whole session (#174's re-base on black is gone) and a hand never turns backwards.
  */
-function useHands(hours: number, minutes: number, black: boolean): HandAngles & { key: string } {
+function useHands(hours: number, minutes: number): HandAngles & { key: string } {
   const key = `${hours}:${minutes}`;
   const [hands, setHands] = useState(() => ({ ...advanceClockHands(null, hours, minutes), key }));
   let next = hands;
   if (hands.key !== key) next = { ...advanceClockHands(hands, hours, minutes), key };
-  if (black && (next.hour >= 360 || next.minute >= 360 || next.animate)) next = { ...rebaseClockHands(next), key };
   // Adjusting state while rendering (React's "store information from previous renders" pattern).
   if (next !== hands) setHands(next);
   return next;
@@ -66,11 +64,10 @@ function AnalogClock({ hour, minute, snap, label }: { hour: number; minute: numb
 }
 
 function Clock({ settings, now, size }: WidgetContentProps) {
-  const { black } = useMotion();
   const minute = Math.floor(now.getTime() / 60_000);
   // `now` is a new Date every second; the labels change only with the minute.
   const labels = useMemo(() => clockLabels(new Date(minute * 60_000), settings.clockFormat, size), [minute, settings.clockFormat, size]);
-  const hands = useHands(now.getHours(), now.getMinutes(), black);
+  const hands = useHands(now.getHours(), now.getMinutes());
   const style = settings.appearance.clockStyle;
   return <div className={`clock-face clock-family-${size} clock-style-${style}`}>
     <div className="clock-calendar"><div className="ambient-label"><TransitionText value={labels.weekday} /></div><div className="clock-date"><TransitionText value={labels.date} /></div></div>

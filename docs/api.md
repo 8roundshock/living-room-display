@@ -25,7 +25,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `GET /api/preview`             | None                                                                   | Availability, capture timestamp, dimensions.                                 |
 | `GET`/`HEAD /api/preview/image` | None                                                                  | RAM-only PNG, `no-store`, or 404; HEAD answers the same without a body.      |
 | `GET /api/photo/image?id=hash` | Current photo hash                                                     | Selected local PNG, `no-store`, or 404.                                      |
-| `GET /api/windows/status`      | None                                                                   | Actual screensaver registry state; unavailable on other systems.             |
+| `GET /api/windows/status`      | None                                                                   | Actual screensaver registry state and power plan timeouts (read-only).       |
 
 Mutating JSON requests require `Content-Type: application/json`. Errors use
 `{ "error": "message" }` and appropriate 4xx/5xx codes. Unknown settings fields
@@ -105,7 +105,28 @@ unchanged, so the previous release reads re-created reminders.
 
 Settings `idle.enabled` is a preference, not proof Windows idle activation is
 installed. Only the Windows host's explicit activation command changes that
-configuration. `/api/windows/status` reads existing settings without changing them.
+configuration. `/api/windows/status` reads existing settings without changing them:
+`available`, `selectedScreenSaver`, `active`, `timeoutSeconds`, `secure`,
+`isLivingRoomDisplay` and `error?` from `reg query HKCU\Control Panel\Desktop`, and
+(#436, additive) `power: { available, scheme, displayOffSeconds, sleepSeconds, error? }`.
+`displayOffSeconds` and `sleepSeconds` are `{ ac, dc }` in seconds (0 means Never) or
+null when Windows would not report them, read with `powercfg.exe /query SCHEME_CURRENT
+SUB_VIDEO VIDEOIDLE` and `... SUB_SLEEP STANDBYIDLE` (no administrator rights, 2 s
+timeout, hidden window). Parsing is locale-independent: the last two `0x…` values are
+the current AC and DC indexes. `scheme` is the active plan's name from `powercfg
+/getactivescheme` (translated by Windows). Off Windows, `power.available` is false.
+Nothing here ever changes a power setting; the editor shows the AC values.
+
+`settings.screen` (#436) is `{ keepAwake: boolean }`, default `{ keepAwake: true }`:
+**Keep the screen on while the display shows**. While it is true, the display holds a
+Screen Wake Lock (`navigator.wakeLock.request('screen')`) only while it is visible and
+either the native screensaver page (`native=1`) or full screen; a windowed tab never
+holds one, because Edge's request also blocks the Windows screensaver and display-off.
+The display reports `data-wake-lock` (`held`, `unsupported`, `denied` or `off`) on
+`.grid-ambient` and shows nothing. `screen` is not part of saved styles (`visualShape`);
+PATCH accepts `screen.keepAwake`, and `screen` is omitted at rest while it equals the
+default, like the default `widgetData` sections. Turning it off is a
+[rollback exception](install.md#additive-data-and-rollback-compatibility-84) for 3446400.
 
 ## Grid and widget contracts
 
@@ -150,11 +171,19 @@ it is a rollback exception only for [`bedca44`](install.md#earlier-rollback-targ
 
 `appearance.animation` is `off`, `subtle` or `lively`; data without it reads as
 `subtle`, and `subtle` is omitted at rest. It governs motion inside widgets and the
-editor (#76): Off keeps widgets still, Subtle animates changes and the reveal after
-a black rest, and Lively adds reveal choreography and the current-weather glyph's
+editor (#76): Off keeps widgets still, Subtle animates changes and the first-load
+entrance, and Lively adds entrance choreography and the current-weather glyph's
 slow loops. Each screen shows Off while it prefers reduced motion, whatever is
-saved. Relocation through black is unaffected, and Drift and fade between moves
-(`motionEnabled`) stays separate. The Style tab's Motion → Animation control edits
+saved. Moving the board is separate (#436): `motionEnabled` (**Float gently**) floats
+the board and each widget's content, or, when false or under reduced motion, steps
+once per `motionIntervalSeconds` (30–1800, unchanged); the screen never goes dark.
+`appearance.rearrange` (**Swap places**) is a boolean, default `false`, omitted at rest
+while false; data without it reads as false. When true, widgets also trade cells every
+interval, gliding for `clamp(fadeSeconds × 1.5, 1.2, 6)` s; `fadeSeconds` (0–10,
+unchanged in schema) now only times that glide. Built-in styles keep `rearrange`, like
+the other motion choices (#268); saved styles store it; Reset appearance returns it to
+false. Swap places on is a [rollback exception](install.md#additive-data-and-rollback-compatibility-84)
+for 3446400. The Style tab's Motion → Animation control edits
 it as an ordinary draft field; built-in styles keep it and saved styles store it.
 Built-in styles are looks (#153, #110, #226): they write only `brightness`,
 `accentMode`, `accentColor`, `textColor`, `fontFamily`, `layout` and `preset`.
@@ -168,7 +197,7 @@ appearance edit. Rendering must not depend on it: use `matchingBuiltinPreset()` 
 The four values are the ones the previous release requires, so no stored shape changes.
 
 Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
-`accentMode` or `animation` keeps its saved value (#83). Only the persisted reader
+`accentMode`, `animation` or `rearrange` keeps its saved value (#83). Only the persisted reader
 fills defaults.
 
 Planned catalog ids (entries with `status: 'planned'` in `src/shared/widgets.ts`;

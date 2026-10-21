@@ -25,18 +25,14 @@ export interface MotionState {
   revealEpoch: number;
   /** A reveal (entrance) is in progress. */
   revealing: boolean;
-  /** The arrangement is fading out or resting on black. */
-  resting: boolean;
-  /** The arrangement is fully black: from the end of the fade-out until the next reveal (#174). */
-  black: boolean;
 }
+// #436: the display never fades out or rests on black, so there is no resting or black state; loops
+// never pause and analog hands accumulate instead of re-basing on black.
 
 export const STILL_MOTION: MotionState = {
   plan: motionPlan({ level: 'off', reducedMotion: true, softMotion: false, fadeSeconds: 0, surface: 'sample' }),
   revealEpoch: 0,
   revealing: false,
-  resting: false,
-  black: false,
 };
 
 export const MotionContext = createContext<MotionState>(STILL_MOTION);

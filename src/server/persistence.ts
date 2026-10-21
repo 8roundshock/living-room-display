@@ -19,8 +19,16 @@ export const PREVIOUS_RELEASE = {
  * included, reads these keys, so for them it is optional: #272 kept it to avoid a data-format change
  * in a reader bump. It stays the mechanism for a future additive key or widget id that the previous
  * release does not know: list the key here, or leave the id out of PREVIOUS_RELEASE.widgetIds.
+ * `rearrange` (#436, Swap places) is such a key: 3446400 does not know it, so its omission while off
+ * is required, and Swap places on is a documented rollback exception (docs/install.md).
  */
-export const AT_REST = { appearance: { accentMode: 'color', animation: 'subtle' } } as const;
+export const AT_REST = { appearance: { accentMode: 'color', animation: 'subtle', rearrange: false } } as const;
+/**
+ * Top-level settings sections omitted at rest while they equal their defaults, like the widgetData
+ * sections. `screen` (#436, Keep the screen on) is unknown to 3446400, so turning it off is a
+ * documented rollback exception (docs/install.md).
+ */
+export const DEFAULT_SECTIONS_AT_REST = ['screen'] as const;
 
 /** Settings as written to state.json, state.backup.json and exports: additive defaults omitted. */
 export type PersistableSettings = Record<string, unknown>;
@@ -43,8 +51,8 @@ function omitVisual(visual: Loose): void {
 }
 
 /**
- * Returns a new object (never mutates its input). Omits only AT_REST values and default widgetData
- * sections, and for widget ids the previous release does not know (none since #263) an off
+ * Returns a new object (never mutates its input). Omits only AT_REST values, default widgetData
+ * sections and the default DEFAULT_SECTIONS_AT_REST sections, and for widget ids the previous release does not know (none since #263) an off
  * visibility, an identity transform and a hidden placement; every other key (for example rain) is
  * always written.
  * Apply only where data reaches disk or an export: never to snapshots, API responses or in-memory
@@ -60,6 +68,8 @@ export function persistableSettings(settings: Settings): PersistableSettings {
     for (const key of Object.keys(widgetData)) if (isDeepStrictEqual(widgetData[key], defaults[key])) delete widgetData[key];
     if (!Object.keys(widgetData).length) delete result.widgetData;
   }
+  const defaults = defaultSettings() as unknown as Loose;
+  for (const key of DEFAULT_SECTIONS_AT_REST) if (isDeepStrictEqual(result[key], defaults[key])) delete result[key];
   return result;
 }
 

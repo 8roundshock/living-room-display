@@ -380,6 +380,17 @@ policy is not overridden. If you select a different screensaver yourself,
 `DisableIdle` preserves your new choice, including None or an empty/missing
 selection, and retains the backup for inspection.
 
+**Keep the screen on** (Style › Motion › Screen, on by default, #436) holds a Screen Wake
+Lock while the display shows as the screensaver (`native=1`) or full screen, so
+Windows does not turn the screen off or sleep during the session; Windows' own
+power settings apply the rest of the time, and a windowed display tab never holds
+it. It cannot help when Windows turns the screen off or sleeps *before* the
+screensaver starts: the editor's Screen part reads the power plan's display-off
+and sleep timeouts (`powercfg /query`, read-only) and warns when either is shorter
+than the screensaver wait. Change them in Settings › System › Power & sleep, or
+choose a shorter wait. The native host's own hold (`SetThreadExecutionState`) is
+[#442](https://github.com/8roundshock/living-room-display/issues/442).
+
 ## Data, updates, recovery and removal
 
 | Below `%LOCALAPPDATA%\LivingRoomDisplay` | Purpose |
@@ -460,23 +471,32 @@ exports while they equal the value the current reader restores (see
 omission is optional for those keys. It was kept to avoid a data-format change
 ([#272](https://github.com/8roundshock/living-room-display/issues/272)) and remains
 the mechanism for a future additive key or widget id that the previous release does
-not know.
+not know. Swap places' `rearrange` and the `screen` section (#436) are the first
+such keys since `3446400`: both are omitted while they hold their defaults (Swap
+places off, Keep the screen on on), which is required for them, and a non-default
+choice is a documented exception below.
 
 `src/server/rollback.test.ts` (part of `npm test`) proves this with a byte-for-byte
 copy of the `d66832b` reader: fresh Native data, previous-release data after unrelated
 saves, saved styles, a photo, a revision-one legacy file, the export, each former
 `bedca44` exception and every value omitted at rest written out in full, in
 `state.json`, `state.backup.json` and the export, all parse. Its negative controls
-show that an unknown key and invalid values are still rejected. After each
+show that an unknown key and invalid values are still rejected, and the two #436
+exceptions below are rejected while written and readable again once switched back. After each
 coordinated install, the baseline moves to the newly installed revision (#130).
 
-A non-default choice that `d66832b` cannot read would be listed here. Before rolling
-back after using one, follow the [revision 2 procedure](#widget-geometry-revision-2-update-and-rollback):
-keep the newer data directory and restore the matching pre-upgrade data copy.
+A non-default choice that `d66832b` cannot read is listed here. Before rolling back
+after using one, either switch it back and save (then save once more, so
+`state.backup.json` holds the switched-back settings too), or follow the
+[revision 2 procedure](#widget-geometry-revision-2-update-and-rollback): keep the
+newer data directory and restore the matching pre-upgrade data copy.
 
 | Feature | Data the previous release (`d66832b`) cannot read |
 | --- | --- |
 | Everything up to `d66832b` (#73, #74, #75, #76, #78 and the polish since) | None. |
+| #436 **Swap places** on (`appearance.rearrange: true`, also inside a saved style) | The settings, the backup after the next save, and exports. Switch **Swap places** off (and re-save or delete a saved style that has it on), Save, then roll back; or restore the pre-update copy. |
+| #436 **Keep the screen on** off (`screen: { keepAwake: false }`) | The settings, the backup after the next save, and exports. Switch **Keep the screen on** back on, Save, then roll back; or restore the pre-update copy. |
+| #436 float (the default: no swap, keep the screen on) | None: both keys are omitted at rest. |
 
 <a id="rolling-back-the-installed-3446400"></a>
 
