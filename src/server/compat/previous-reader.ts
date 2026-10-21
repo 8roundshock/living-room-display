@@ -2,16 +2,16 @@
  * Test-only frozen reader of the previous installed release (#84 item 2). Never built or shipped:
  * tsconfig.server.json excludes src/server/compat/**.
  *
- * Provenance: ./3446400/server/{validation,photo,persistence}.ts and
- * ./3446400/shared/{widgets,defaults,contracts,palette,motion}.ts are byte-for-byte copies of those
- * paths at 34464001af41af0e2ea67fb090734b296f72c1c2 (the merge of PR #286, installed on 2026-10-19),
+ * Provenance: ./d66832b/server/{validation,photo,persistence}.ts and
+ * ./d66832b/shared/{widgets,defaults,contracts,palette,motion}.ts are byte-for-byte copies of those
+ * paths at d66832b39920b3df7ea0d67e3584289539957cc8 (the merge of PR #491, installed on 2026-10-20),
  * made with `git show <sha>:<path>`: its validation.ts and every module it imports, transitively,
  * and nothing else. Never edit them; their relative imports resolve inside the copy and zod resolves
  * from the repository root. .gitattributes exempts src/server/compat/<sha>/ from whitespace checks
- * (#219), so upstream whitespace stays as it is. The installed 3446400 keeps 4cb7dc1 (PR #327) as
- * app.previous; `git ls-tree` gives 4cb7dc1 the same eight blobs, so this copy is its reader too.
- * Until #367 the reader was 3fee844's (#263, PR #278); npm test at 3446400 proved that 3fee844
- * reads what 3446400 writes.
+ * (#219), so upstream whitespace stays as it is. The installed d66832b keeps 3446400 (PR #286) as
+ * app.previous. Until #497 the reader was 3446400's (#367, PR #376): npm test at d66832b passes
+ * against it, so 3446400 reads what d66832b writes, and also against a temporary 3fee844 copy
+ * (checked for #497). 4cb7dc1 (PR #327), installed between them, has 3446400's eight reader blobs.
  *
  * ./bedca44/ is an earlier reader (bedca44e18bcdc23f33a4ac887e3f2a57d5d41c8, same `git show`
  * copies), kept unedited as a legacy-data fixture: weather-merge.test.ts, native-accent.test.ts and
@@ -27,11 +27,11 @@
  * reads; #272 kept it for accentMode, animation and widgetData, and it stays the mechanism for keys
  * and widget ids the baseline does not know yet.
  */
-import { dataSchema, importSchema } from './3446400/server/validation.ts';
-import { WIDGET_IDS } from './3446400/shared/widgets.ts';
+import { dataSchema, importSchema } from './d66832b/server/validation.ts';
+import { WIDGET_IDS } from './d66832b/shared/widgets.ts';
 
 export const PREVIOUS_READER = {
-  revision: '34464001af41af0e2ea67fb090734b296f72c1c2',
+  revision: 'd66832b39920b3df7ea0d67e3584289539957cc8',
   dataSchema,
   importSchema,
   widgetIds: [...WIDGET_IDS] as string[],
@@ -39,14 +39,14 @@ export const PREVIOUS_READER = {
 
 /** Git blob ids of the vendored reader at PREVIOUS_READER.revision; rollback.test.ts proves the copy is unedited. */
 export const VENDORED_BLOBS: Record<string, string> = {
-  '3446400/server/validation.ts': '0effea25374bdc684e3fc7cee3cdecb7be8bc578',
-  '3446400/server/photo.ts': 'f90dfd9900bbf3beeaa4b6a8647ad58e08b5a2d4',
-  '3446400/server/persistence.ts': 'c587827a0369072d8cc40f5b01e80554a83ee733',
-  '3446400/shared/widgets.ts': '50f2415ad5bec2d49bbaa91e368c768b9d017a7e',
-  '3446400/shared/defaults.ts': 'a291e6a6423b61dcd795aae77bb06f036066d21f',
-  '3446400/shared/contracts.ts': '2cdcd4f316921b52591b9cd16019965dce424ede',
-  '3446400/shared/palette.ts': '904260564bb4f4c9282b152ee78c100327ef1bef',
-  '3446400/shared/motion.ts': '0bd47c05b38daa5182754cf8f995c2ddb91b5867',
+  'd66832b/server/validation.ts': '0effea25374bdc684e3fc7cee3cdecb7be8bc578',
+  'd66832b/server/photo.ts': 'f90dfd9900bbf3beeaa4b6a8647ad58e08b5a2d4',
+  'd66832b/server/persistence.ts': 'aeb0bffa992f691fcd87d7bf3fe74761c176c6f6',
+  'd66832b/shared/widgets.ts': '2ed993f45b665a6caaf157c2ecec786758bc0f67',
+  'd66832b/shared/defaults.ts': 'a291e6a6423b61dcd795aae77bb06f036066d21f',
+  'd66832b/shared/contracts.ts': '3509c65ec7c8c0845895cc1e7b50be2d146bab9d',
+  'd66832b/shared/palette.ts': '7a9e16ff089aa9f167f5bd86b3ea15464bfe0e4b',
+  'd66832b/shared/motion.ts': '003d5eb5914c915c2c80c213e8639ebb781a9e2c',
 };
 
 /** The bedca44 legacy-data fixture (not a reader any more): its revision and git blob ids. */

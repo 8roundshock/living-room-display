@@ -16,7 +16,7 @@ import type { Settings, VisualSettings, WidgetId } from '../shared/contracts.ts'
 const previous: ReadonlySet<string> = new Set(PREVIOUS_RELEASE.widgetIds);
 /**
  * Catalog ids the previous release does not know, written out so the omission checks below cannot go
- * silently vacuous. Empty since the 3fee844 baseline (#263); 3446400 (#367) also knows all 13 ids.
+ * silently vacuous. Empty since the 3fee844 baseline (#263); d66832b (#497) also knows all 13 ids.
  * A new catalog id belongs here until the baseline knows it: while off and at its defaults it is
  * omitted at rest.
  */
