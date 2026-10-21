@@ -506,9 +506,11 @@ event's last word (Warning, Watch or Advisory; anything else is a statement), `n
 `onset ?? effective` and `endsAt` is `ends ?? expires`.
 
 **Requests** send `User-Agent: LivingRoomDisplay/<version> (local ambient display)`, use an
-8-second timeout and `redirect: 'error'`, read at most 1 MiB of body and send no no-cache
-header. Retry-After on 429 or 503 pauses that provider (up to an hour), and each provider
-gets at most 12 requests an hour whatever the number of places. Each feature is checked on
+8-second timeout and `redirect: 'error'`, enforce a 1 MiB body limit and send no no-cache
+header. The same limit applies to HTTP 400 error text before checking for "out of bounds";
+oversized errors fail the check rather than establishing unsupported coverage. Other
+error bodies are released unread. Retry-After on 429 or 503 pauses that provider (up to an
+hour), and each provider gets at most 12 requests an hour whatever the number of places. Each feature is checked on
 its own (#246): a malformed one is skipped, not the list. At most 10 alerts are kept,
 warnings first.
 

@@ -270,3 +270,48 @@ test('a failed answer whose body is a teed stream (a cloned Response) never hold
     assert.equal(state.status, 'unavailable'); assert.equal(state.refreshing, undefined, 'the check finished');
   }
 });
+
+test('a streamed HTTP 400 body stops at the provider byte limit and cannot establish unsupported coverage', async () => {
+  const chunkBytes = 64 * 1024, totalChunks = 20;
+  let pulled = 0, cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (pulled === totalChunks) return controller.close();
+      const chunk = new Uint8Array(chunkBytes).fill(32);
+      if (pulled === 0) chunk.set(new TextEncoder().encode('out of bounds'));
+      pulled++;
+      controller.enqueue(chunk);
+    },
+    cancel() {
+      cancelled = true;
+      // A teed body may never settle cancellation while its other branch remains open.
+      return new Promise<void>(() => {});
+    },
+  }, { highWaterMark: 0 });
+  const clock = harness(() => new Response(body, { status: 400 }));
+  const state = await clock.service.get(MEXICO_CITY);
+  assert.equal(state.status, 'unavailable', 'an oversized error is a failed check, not proof that this location is unsupported');
+  assert.equal(state.refreshing, undefined, 'cancellation is not awaited');
+  assert.equal(cancelled, true, 'reading stops and releases the oversized response');
+  assert.equal(pulled, Math.floor(ALERTS_BODY_LIMIT / chunkBytes) + 1, 'only the first chunk crossing the limit is read');
+});
+
+test('a declared oversized HTTP 400 body is released without reading', async () => {
+  let pulled = 0, cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulled++;
+      controller.enqueue(new TextEncoder().encode('out of bounds'));
+      controller.close();
+    },
+    cancel() { cancelled = true; },
+  }, { highWaterMark: 0 });
+  const clock = harness(() => new Response(body, {
+    status: 400, headers: { 'Content-Length': String(ALERTS_BODY_LIMIT + 1) },
+  }));
+  const state = await clock.service.get(MEXICO_CITY);
+  assert.equal(state.status, 'unavailable');
+  assert.equal(state.refreshing, undefined);
+  assert.equal(pulled, 0, 'the declared size rejects the response before reading');
+  assert.equal(cancelled, true);
+});
