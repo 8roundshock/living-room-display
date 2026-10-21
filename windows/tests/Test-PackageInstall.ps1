@@ -242,7 +242,7 @@ try {
     function Invoke-ChildScript([string]$Arguments) {
         $launch = New-Object Diagnostics.ProcessStartInfo
         $launch.FileName = $shell
-        $launch.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $controlScript + '" ' + $Arguments
+        $launch.Arguments = '-NoProfile -NonInteractive -File "' + $controlScript + '" ' + $Arguments
         $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true
         $launch.RedirectStandardError = $true; $launch.RedirectStandardOutput = $true
         $process = [Diagnostics.Process]::Start($launch)
@@ -1021,7 +1021,7 @@ try {
     function Assert-OldReaderReads([string]$Revision) {
         $launch = New-Object Diagnostics.ProcessStartInfo
         $launch.FileName = $shell
-        $launch.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { $r = & ''' + $oldScript + ''' Status -InstallRoot ''' + $testRoot + '''; if ($r.InstallRoot -ne ''' + $testRoot + ''' -or $r.SourceRevision -ne ''' + $Revision + ''' -or $r.SourceState -ne ''clean'') { exit 3 }; . ''' + $oldScript + ''' -InstallRoot ''' + $testRoot + ''' -FunctionsOnly; Assert-Installed; exit 0 }"'
+        $launch.Arguments = '-NoProfile -NonInteractive -Command "& { $r = & ''' + $oldScript + ''' Status -InstallRoot ''' + $testRoot + '''; if ($r.InstallRoot -ne ''' + $testRoot + ''' -or $r.SourceRevision -ne ''' + $Revision + ''' -or $r.SourceState -ne ''clean'') { exit 3 }; . ''' + $oldScript + ''' -InstallRoot ''' + $testRoot + ''' -FunctionsOnly; Assert-Installed; exit 0 }"'
         $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true; $launch.RedirectStandardError = $true; $launch.RedirectStandardOutput = $true
         $process = [Diagnostics.Process]::Start($launch)
         try {

@@ -58,6 +58,29 @@ Timers use their own sidecar and do not enter settings exports.
 
 ## Verification in this continuation
 
+### Native runtime follow-up (#117, #505)
+
+The native helper now starts, stops and checks its exact owned backend without
+PowerShell. It shares the existing script's process record and operation lock,
+checks the listener's process identity before accepting health, and preserves
+ownership on cancellation. Browser cleanup no longer waits behind preview cleanup.
+
+The complete `windows/Test-Windows.ps1 -NodeExe <existing Node 24>` passed all
+**19 groups** with installed PowerShell 7 and no execution-policy override. This
+includes 32 runtime contract scenarios, the blocked-preview cleanup regression,
+and an isolated real Node fixture using a non-production loopback port: native
+start to PowerShell recognition/stop, then PowerShell start to native recognition/stop.
+Native cold startup in that fixture took **1,065 ms**. The old native bootstrap's
+before-time remains unmeasured because it invokes an execution-policy override;
+no performance improvement is claimed. Console transcript:
+`.local/native-final-windows.log`. These checks used synthetic data and did not
+launch the ambient display, update the installation, or select a screensaver.
+
+The earlier Windows-subset limitation below describes its original checkpoint;
+the full follow-up above removes the test children's policy override. Native
+painting, physical-input dismissal, cursor restoration, exact installed assets,
+and activation still require the separate coordinated rollout verification.
+
 Final browser code/test checkpoint: `d58980a3697181e0e5c85aa73369912153a70f1f`.
 Product implementation is unchanged since `58431495ee879c6f5d63f740d29cfcc1d16e6ea7`.
 The combined features first passed build/unit at `fe7006e`. Subsequent product

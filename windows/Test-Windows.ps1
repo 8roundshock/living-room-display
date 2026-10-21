@@ -17,7 +17,7 @@ function Expect-Failure([scriptblock]$Action, [string]$Message) {
     Assert-True $failed $Message
 }
 try {
-    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1','tests\Test-InstallLifecycle.ps1','tests\Test-SourceProvenance.ps1','tests\Test-PackageInstall.ps1','installer\Build-Installer.ps1','installer\New-InstallerArt.ps1','installer\tests\Test-InstallerPolicy.ps1','installer\tests\Test-InstallerPayload.ps1','installer\tests\Test-InstallerSmoke.ps1')) {
+    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1','tests\Test-InstallLifecycle.ps1','tests\Test-SourceProvenance.ps1','tests\Test-PackageInstall.ps1','tests\Test-ServerRuntime.ps1','installer\Build-Installer.ps1','installer\New-InstallerArt.ps1','installer\tests\Test-InstallerPolicy.ps1','installer\tests\Test-InstallerPayload.ps1','installer\tests\Test-InstallerSmoke.ps1')) {
         $parseErrors = $null
         $null = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $file),[ref]$null,[ref]$parseErrors)
         Assert-True ($parseErrors.Count -eq 0) "PowerShell syntax failed: $file"
@@ -46,7 +46,7 @@ try {
     # Missing install should reach the ownership guard, not fail a parameter default.
     $controlInvocation = New-Object Diagnostics.ProcessStartInfo
     $controlInvocation.FileName = (Get-Process -Id $PID).Path
-    $controlInvocation.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'LivingRoomDisplay.ps1') + '" Status -InstallRoot "' + $fixture + '"'
+    $controlInvocation.Arguments = '-NoProfile -File "' + (Join-Path $PSScriptRoot 'LivingRoomDisplay.ps1') + '" Status -InstallRoot "' + $fixture + '"'
     $controlInvocation.UseShellExecute = $false
     $controlInvocation.CreateNoWindow = $true
     $controlInvocation.RedirectStandardError = $true
@@ -66,6 +66,16 @@ try {
     & $lifecycleTest
     if ($LASTEXITCODE -ne 0) { throw 'Lifecycle regression failed.' }
     $passed++
+    $runtimeTest = Join-Path $compiled 'ServerRuntimeTests.exe'
+    & $compiler /nologo /target:exe /platform:anycpu "/out:$runtimeTest" /reference:System.Management.dll /reference:System.Web.Extensions.dll (Join-Path $PSScriptRoot 'ServerRuntime.cs') (Join-Path $PSScriptRoot 'tests\ServerRuntimeTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Server runtime regression compilation failed.' }
+    & $runtimeTest
+    if ($LASTEXITCODE -ne 0) { throw 'Server runtime regression failed.' }
+    $passed++
+    if ($NodeExe) {
+        & (Join-Path $PSScriptRoot 'tests\Test-ServerRuntime.ps1') -NodeExe $NodeExe
+        $passed++
+    }
     foreach($testName in @('ActiveInputTests','SurfacePolicyTests')) {
         $target=Join-Path $compiled ($testName+'.exe')
         $sources=if($testName -eq 'ActiveInputTests'){@((Join-Path $PSScriptRoot 'SessionStartup.cs'))}else{@((Join-Path $PSScriptRoot 'SurfacePolicy.cs'))}
@@ -176,4 +186,4 @@ try {
     }
     Remove-Item -LiteralPath $scratchFull -Recurse -Force
 }
-Write-Output "$passed Windows checks passed, including cleanup. No capture, kiosk, install, port listener, or screensaver setting was used."
+Write-Output "$passed Windows checks passed, including cleanup. Only isolated test processes/listeners; no capture, kiosk, live install, or screensaver setting was used."

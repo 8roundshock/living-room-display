@@ -351,6 +351,17 @@ The installed script also lives at
 `%LOCALAPPDATA%\LivingRoomDisplay\app\windows\LivingRoomDisplay.ps1`. Controls can
 run there; run `Install`/`Update` from the source clone supplying build sources.
 
+Everyday native launches no longer run PowerShell (#117). The installed
+`app\windows\LivingRoomDisplay.scr` also accepts `--start`, `--stop` and `--status`
+for backend-only control without opening a window. It uses the app-owned Node,
+fixed loopback port and the same ownership record as the script; it refuses a
+different process on that port. `--stop` stops only the backend. Use the script's
+`Stop` for a full display-and-backend shutdown before an update. Installation,
+updates and screensaver registration still use the supported PowerShell script;
+an installed PowerShell 7 can run it without an execution-policy override when
+the effective policy permits local scripts. No command changes machine or user
+execution policy.
+
 Move the mouse or press a key to dismiss ambient mode after its short launch
 grace period. `Stop` also dismisses it. The host owns an isolated Edge profile/job;
 it does not close normal browser windows. Closing ambient clears the snapshot
