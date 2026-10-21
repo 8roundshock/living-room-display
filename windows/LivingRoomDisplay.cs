@@ -21,6 +21,7 @@ internal static class Program
     {
         try
         {
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException, true);
             Native.SetProcessDPIAware();
             string mode = args.Length == 0 ? "/c" : args[0].ToLowerInvariant();
             if (mode == "--check")
@@ -43,9 +44,15 @@ internal static class Program
                 if (!owned) return 0;
                 try
                 {
-                    Application.EnableVisualStyles();
-                    using (AmbientSession session = new AmbientSession(mode == "--test-display"))
-                        if (session.Ready) Application.Run(session);
+                    IntPtr previousDpi = DisplayNative.SetThreadDpiAwarenessContext(new IntPtr(-4));
+                    if (previousDpi == IntPtr.Zero) throw new InvalidOperationException("Per-monitor DPI context is required for the ambient display.");
+                    try
+                    {
+                        Application.EnableVisualStyles();
+                        using (AmbientSession session = new AmbientSession(mode == "--test-display"))
+                            if (session.Ready) Application.Run(session);
+                    }
+                    finally { DisplayNative.SetThreadDpiAwarenessContext(previousDpi); }
                 }
                 finally { single.ReleaseMutex(); }
             }
@@ -114,67 +121,6 @@ internal static class Program
             }
         }
         return 0;
-    }
-}
-
-internal sealed class AmbientSession : ApplicationContext
-{
-    private readonly SessionStartup startup;
-    private readonly System.Windows.Forms.Timer timer;
-    private readonly Stopwatch age = Stopwatch.StartNew();
-    private uint baseline;
-    private bool closed;
-    private readonly bool test;
-    private readonly EventWaitHandle stop = new EventWaitHandle(false, EventResetMode.ManualReset, Native.StopEventName());
-    internal bool Ready { get; private set; }
-
-    internal AmbientSession(bool testDisplay)
-    {
-        test = testDisplay;
-        stop.Reset();
-        try
-        {
-            startup = new SessionStartup(new WindowsSessionSignals(),
-                token => Program.EnsureServer(token), token => new NativeApi(token),
-                token => new OwnedBrowser(Program.FindEdge(), Program.BaseUrl + "/display?native=1", token));
-            Ready = startup.Start();
-            if (!Ready) return;
-            age.Restart();
-            baseline = Native.LastInputTick();
-            timer = new System.Windows.Forms.Timer { Interval = 100 };
-            timer.Tick += OnTick;
-            timer.Start();
-        }
-        catch { Cleanup(); throw; }
-    }
-
-    private void OnTick(object sender, EventArgs e)
-    {
-        uint input = Native.LastInputTick();
-        if (age.ElapsedMilliseconds < 1200) baseline = input;
-        if (startup.IsCancelled || stop.WaitOne(0) || age.ElapsedMilliseconds >= 1200 && input != baseline ||
-            age.ElapsedMilliseconds > 3000 && startup.BrowserIsEmpty ||
-            test && age.ElapsedMilliseconds > 8000)
-            ExitThread();
-    }
-
-    protected override void ExitThreadCore()
-    {
-        Cleanup();
-        base.ExitThreadCore();
-    }
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing) Cleanup();
-        base.Dispose(disposing);
-    }
-    private void Cleanup()
-    {
-        if (closed) return;
-        closed = true;
-        if (timer != null) timer.Dispose();
-        if (startup != null) startup.Dispose();
-        stop.Dispose();
     }
 }
 
@@ -275,62 +221,6 @@ internal sealed class NativeApi : IPreviewSession
     }
 }
 
-internal sealed class OwnedBrowser : IAmbientBrowser
-{
-    private IntPtr job;
-    private CancellationTokenRegistration cancellationRegistration;
-    internal OwnedBrowser(string executable, string url, CancellationToken cancellation)
-    {
-        cancellation.ThrowIfCancellationRequested();
-        job = Native.CreateJobObject(IntPtr.Zero, null);
-        if (job == IntPtr.Zero) throw new System.ComponentModel.Win32Exception();
-        try
-        {
-            cancellationRegistration = cancellation.Register(CloseJob);
-            cancellation.ThrowIfCancellationRequested();
-            Native.JobLimits limits = new Native.JobLimits();
-            limits.BasicLimitInformation.LimitFlags = 0x2000; // KILL_ON_JOB_CLOSE
-            if (!Native.SetInformationJobObject(job, 9, ref limits, (uint)Marshal.SizeOf(limits)))
-                throw new System.ComponentModel.Win32Exception();
-            string profile = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "edge-profile"));
-            string arguments = Native.Quote(executable) + " --kiosk " + Native.Quote(url) +
-                " --edge-kiosk-type=fullscreen --no-first-run --no-default-browser-check --disable-background-mode --inprivate --user-data-dir=" + Native.Quote(profile);
-            Native.StartupInfo startup = new Native.StartupInfo();
-            startup.cb = Marshal.SizeOf(startup);
-            Native.ProcessInformation process;
-            if (!Native.CreateProcess(executable, new StringBuilder(arguments), IntPtr.Zero, IntPtr.Zero, false, 4, IntPtr.Zero, null, ref startup, out process))
-                throw new System.ComponentModel.Win32Exception();
-            try
-            {
-                if (!Native.AssignProcessToJobObject(job, process.hProcess))
-                {
-                    Native.TerminateProcess(process.hProcess, 1);
-                    throw new System.ComponentModel.Win32Exception();
-                }
-                cancellation.ThrowIfCancellationRequested();
-                if (Native.ResumeThread(process.hThread) == uint.MaxValue)
-                    throw new System.ComponentModel.Win32Exception();
-            }
-            finally { Native.CloseHandle(process.hThread); Native.CloseHandle(process.hProcess); }
-        }
-        catch { Dispose(); cancellation.ThrowIfCancellationRequested(); throw; }
-    }
-    public bool IsEmpty
-    {
-        get
-        {
-            Native.JobAccounting account;
-            return Native.QueryInformationJobObject(job, 1, out account, (uint)Marshal.SizeOf(typeof(Native.JobAccounting)), IntPtr.Zero) && account.ActiveProcesses == 0;
-        }
-    }
-    private void CloseJob()
-    {
-        IntPtr ownedJob = Interlocked.Exchange(ref job, IntPtr.Zero);
-        if (ownedJob != IntPtr.Zero) Native.CloseHandle(ownedJob);
-    }
-    public void Dispose() { cancellationRegistration.Dispose(); CloseJob(); }
-}
-
 internal static class Native
 {
     internal static string StopEventName()
@@ -340,7 +230,7 @@ internal static class Native
             return "Local\\LivingRoomDisplay.Stop." + BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(path))).Replace("-", "").Substring(0, 12);
     }
     internal static string Quote(string value) { return "\"" + value.Replace("\"", "\\\"") + "\""; }
-    internal static uint LastInputTick() { LastInput info = new LastInput(); info.cbSize = (uint)Marshal.SizeOf(info); return GetLastInputInfo(ref info) ? info.dwTime : 0; }
+    internal static InputStamp ReadInput() { LastInput info = new LastInput(); info.cbSize = (uint)Marshal.SizeOf(info); bool success = GetLastInputInfo(ref info); return new InputStamp { Success = success, Tick = info.dwTime }; }
     [StructLayout(LayoutKind.Sequential)] internal struct LastInput { internal uint cbSize, dwTime; }
     [StructLayout(LayoutKind.Sequential)] internal struct Rect { internal int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] internal struct StartupInfo { internal int cb; internal string lpReserved, lpDesktop, lpTitle; internal uint dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags; internal short wShowWindow, cbReserved2; internal IntPtr lpReserved2, hStdInput, hStdOutput, hStdError; }

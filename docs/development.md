@@ -43,7 +43,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Test-Windows.p
 ```
 
 Pass `-NodeExe '<Node24 node.exe>'` to also test exact owned-process/start-time
-recognition. Native capture/fullscreen/lock acceptance remains separate. Follow
+recognition. Native capture/fullscreen/lock acceptance remains separate. The native
+surface and active-session input-baseline regressions (`SurfacePolicyTests`,
+`ActiveInputTests`) run without a window or real input; the Windows installer
+workflow runs them under both PowerShell 5.1 and 7 when `windows/` changes. Follow
 [CONTRIBUTING.md](../CONTRIBUTING.md) and the [agent runbook](agent-runbook.md) for
 self-service issue/fork/fix handoff; neither enables automatic reporting.
 

@@ -279,9 +279,9 @@ motion or the Off animation level.
 
 Only explicit `native=1` presentation hides the document cursor and omits browser
 controls. Browser loading/failure/display and editor/embedded previews retain
-normal pointers. The host URL flag selects that presentation; held native cursor
-surface/lifecycle changes remain in draft PR #51 and require combined-source
-acceptance. Appearance saves do not enable Windows idle.
+normal pointers. The host URL flag selects that presentation; the native host's
+own cursor surface and input lifecycle (PR #51, [Windows host](windows.md)) still
+require combined-source acceptance. Appearance saves do not enable Windows idle.
 
 ## Calendar, Countdown and Note
 

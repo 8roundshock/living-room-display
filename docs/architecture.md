@@ -67,9 +67,10 @@ verify served assets and unchanged private data without a new native launch.
 Recheck current provenance through installed CLI
 `Status` or `installation.json`; see [installation](install.md). This does
 not establish live capture, locked/protected desktop access, another account or
-across-room comfort. The cursor replacement in
-[draft PR51](https://github.com/8roundshock/living-room-display/pull/51) remains
-candidate-only and uninstalled despite code review/CI success. See [API](api.md)
+across-room comfort. The cursor replacement from
+[PR51](https://github.com/8roundshock/living-room-display/pull/51) still needs
+native acceptance on an installed helper; code review and CI do not establish it.
+See [API](api.md)
 and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 
 ## Current decisions
