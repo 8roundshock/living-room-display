@@ -475,7 +475,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     const styleSelect = page.getByRole('combobox', { name: 'Saved style', exact: true });
     assert.equal(
       await page.locator('.preset-hint').innerText(),
-      'Saves the current look and widgets so you can switch back later.',
+      'Saves your look and layout.',
     );
     assert.equal(await styleName.inputValue(), '', 'the name field clears after an add');
     assert.equal(
@@ -531,7 +531,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.locator('.preset-hint').filter({ hasText: /^Up to 12 styles\. / }).waitFor();
     assert.equal(
       await page.locator('.preset-hint').innerText(),
-      'Up to 12 styles. Saves the current look and widgets so you can switch back later.',
+      'Up to 12 styles. Saves your look and layout.',
     );
     await styleName.fill('Thirteenth');
     assert.equal(await addStyle.isDisabled(), true, 'no thirteenth style');
@@ -1118,9 +1118,11 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await motionBody.getByRole('checkbox', { name: 'Float gently', exact: true }).waitFor();
     await motionBody.getByRole('slider', { name: 'Move every', exact: true }).waitFor();
     await motionBody.getByRole('checkbox', { name: 'Swap places', exact: true }).waitFor();
-    assert.match(await motionBody.locator('.motion-hint').innerText(), /^With Animation effects off in Windows Settings › Accessibility › Visual effects on the display PC, the display moves without animation.$/);
+    await motionBody.getByRole('button', { name: 'About animation' }).focus();
+    assert.match(await page.getByRole('tooltip').innerText(), /Reduced motion follows this screen's system setting/);
+    await page.keyboard.press('Escape');
     assert.equal(await page.getByText(/Soft motion|New arrangement|Reduced motion removes|Drift and fade|through black/).count(), 0, 'the old wording is gone');
-    checks.push('#240/#436 Motion reads "Float gently", "Move every", "Swap places" and a hint naming Windows Animation effects');
+    checks.push('#240/#436 Motion reads "Float gently", "Move every", "Swap places" and on-demand animation help');
 
     // #342: every slider speaks its value with the unit, and the visible copy is not a second live region.
     const spoken = (name) => page.getByRole('slider', { name, exact: true }).getAttribute('aria-valuetext');
@@ -1143,26 +1145,22 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.deepEqual([...new Set(await outputs())], ['true'], 'Snapshot opacity shows its value once');
     checks.push('#342 Brightness, Text size, Move every, Swap glide and Snapshot opacity speak "70%", "125%", "3 minutes" ("3 minutes 30 seconds"), "2 seconds" ("1 second") and "24%"; every visible <output> is aria-hidden');
 
-    // #360: one line beside Open display says where the full-screen display is, within the header.
-    const hint = 'For full screen on this PC: Start › Living Room Display - Show display, or press F on the display';
+    // Full-screen instructions are available on demand, including source installs without Start shortcuts.
     for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }, { width: 320, height: 844 }]) {
       await page.setViewportSize(viewport);
-      const layout = await page.evaluate(() => {
-        const header = document.querySelector('.studio-header').getBoundingClientRect(), text = document.querySelector('.open-display-hint');
-        const box = text.getBoundingClientRect(), link = document.querySelector('.open-display');
-        return { header: header.height, top: box.top, bottom: box.bottom, lines: Math.round(box.height / parseFloat(getComputedStyle(text).lineHeight)), text: text.textContent.replace(/\s+/g, ' ').trim(), describedBy: link.getAttribute('aria-describedby'), overflow: document.documentElement.scrollWidth - innerWidth, fontSize: parseFloat(getComputedStyle(text).fontSize) };
-      });
-      assert.equal(layout.text, hint);
-      assert.equal(layout.describedBy, 'open-display-hint');
-      assert.ok(layout.overflow <= 0, `${viewport.width} px: no horizontal scroll`);
-      assert.ok(layout.fontSize >= 11, `${viewport.width} px: the hint is at least 11 px`);
-      if (viewport.width === 1280) {
-        assert.equal(layout.header, 64, 'the 1280×720 header keeps its 64 px');
-        assert.equal(layout.lines, 1, 'one line at 1280×720');
-      } else assert.ok(layout.top >= 0 && layout.bottom <= layout.header, `${viewport.width} px: the hint sits inside the header ${JSON.stringify(layout)}`);
+      const help = page.getByRole('button', { name: 'About full screen' });
+      await help.focus();
+      assert.equal(await page.getByRole('tooltip').innerText(), 'Open the display, then press F for full screen.');
+      assert.equal(await help.getAttribute('aria-describedby'), await page.getByRole('tooltip').getAttribute('id'));
+      const box = await help.boundingBox();
+      assert.ok(box.width >= 44 && box.height >= 44 && box.x >= 0 && box.x + box.width <= viewport.width);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      if (viewport.width === 1280) assert.equal((await page.locator('.studio-header').boundingBox()).height, 64);
+      await page.keyboard.press('Escape');
+      await help.evaluate(element => element.blur());
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
-    checks.push('#360 the Open display hint reads "For full screen on this PC: Start › Living Room Display - Show display, or press F on the display", describes the link, takes one line in the unchanged 64 px header at 1280×720 and its own line at 390 and 320 px without horizontal scroll');
+    checks.push('Full-screen context help is keyboard accessible with a 44 px target at 1280, 390 and 320 px, without permanent directions or horizontal scroll');
     await context.close();
 
     // #347: the Weather tab's visible status line carries the server's reason, a failing provider's

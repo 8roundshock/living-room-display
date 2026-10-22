@@ -1,5 +1,11 @@
 # Development
 
+The `context-help` browser suite covers compact Home/editor help with synthetic
+data: hover persistence, keyboard focus and Escape, first-tap toggling, outside
+actions, picker dismissal, narrow layouts and unsaved-draft preservation. It is
+in the pull-request set. Its optional `capture` export returns images in RAM for
+visual review; it does not write captures or inspect an installed profile.
+
 Use Node 24 LTS and npm. Application dependencies are pinned in `package.json`
 and `package-lock.json`. The React display/editor, local backend and native host
 sources are implemented. Current-PC install, data lifecycle and native preview

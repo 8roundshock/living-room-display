@@ -92,6 +92,7 @@ import { GridEditor, type LayoutEdit } from './GridEditor';
 import { WidgetInspector, useHeldPointers, widgetListOrder, type InspectorReveal } from './WidgetInspector';
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
 import { MotionSentence, ScreenSettings } from './ScreenSettings';
+import { InfoTip } from './InfoTip';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel, reminderFormPending } from './RemindersPanel';
@@ -1516,7 +1517,7 @@ export function Editor({
           </div>
           </div>
           <div className="canvas-toolbar">
-            {!layoutEditing && <span>Your saved arrangement</span>}
+            {!layoutEditing && <span>Layout preview</span>}
             {layoutEditing ? (
               <label className="grid-density-control">
                 {/* #345: a short visible label; the select keeps its full accessible name. */}
@@ -1580,6 +1581,7 @@ export function Editor({
                 </>}
               </>
             )}
+            {layoutEditing && <InfoTip label="About editing the layout">Drag a widget to move it or its corner to resize. Arrow keys work too; Escape cancels a drag.</InfoTip>}
           </div>
           {/* One reserved line for layout messages and the weather note (#231). */}
           <div className="canvas-messages">
@@ -1595,12 +1597,6 @@ export function Editor({
                 </button>
               )}
             </p>
-            {/* #345: how to edit, in the reserved line while nothing else needs it. */}
-            {layoutEditing && !canvasMessage && !weatherNote && (
-              <p className="canvas-hint">
-                Drag a widget to move it · drag its corner to resize<span className="canvas-hint-keys"> · arrow keys work too</span>
-              </p>
-            )}
             {/* Always mounted, so a screen reader announces the note when it appears. */}
             <p className="canvas-note" role="status">
               {weatherNote}
@@ -1972,7 +1968,7 @@ export function Editor({
                   </summary>
                   <div className="disclosure-body">
                     <div className="animation-setting">
-                      <span className="field-label">Animation</span>
+                      <div className="field-label-with-help"><span className="field-label">Animation</span><InfoTip label="About animation">Off keeps content still. Subtle animates changes; Lively adds weather motion. Floating is controlled separately. Reduced motion follows this screen's system setting.</InfoTip></div>
                       <div
                         className="animation-options"
                         role="group"
@@ -1993,10 +1989,6 @@ export function Editor({
                           </button>
                         ))}
                       </div>
-                      <p className="animation-hint">
-                        Off keeps the content of widgets still; movement is set below.
-                        Subtle animates changes. Lively adds gentle weather motion.
-                      </p>
                       {editorReducedMotion && (
                         <p className="animation-hint">
                           This screen asks for reduced motion, so animation stays off
@@ -2039,7 +2031,7 @@ export function Editor({
                       }
                     />
                     <p className="hint swap-hint">
-                      Widgets sometimes trade places. Your arrangement stays saved.
+                      Your saved layout stays unchanged.
                     </p>
                     {draft.appearance.rearrange && (
                       <Range
@@ -2052,11 +2044,6 @@ export function Editor({
                         onChange={(value) => appearance('fadeSeconds', value)}
                       />
                     )}
-                    <p className="hint motion-hint">
-                      With Animation effects off in Windows Settings › Accessibility
-                      › Visual effects on the display PC, the display moves without
-                      animation.
-                    </p>
                     <ScreenSettings
                       keepAwake={draft.screen.keepAwake}
                       active={motionOpened}
@@ -2114,7 +2101,7 @@ export function Editor({
                     {/* #344: what a saved style is, and the limit once it is reached. */}
                     <p className="hint preset-hint" id="preset-hint">
                       {draft.savedPresets.length >= MAX_SAVED_STYLES ? `Up to ${MAX_SAVED_STYLES} styles. ` : ''}
-                      Saves the current look and widgets so you can switch back later.
+                      Saves your look and layout.
                     </p>
                     <label>
                       <span className="field-label">Saved style</span>

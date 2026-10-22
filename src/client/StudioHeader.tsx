@@ -1,3 +1,4 @@
+import { InfoTip } from './InfoTip';
 import { Icon } from './icons';
 import { DISPLAY_WINDOW, type DisplayWindowControls } from './displayWindow';
 
@@ -36,17 +37,14 @@ export function StudioHeader({ page, displayControls }: { page: 'home' | 'edit';
         ))}
       </nav>
       <div className="open-display-group">
-        <p className="open-display-hint" id="open-display-hint">
-          For full screen on this PC: Start › Living Room Display - Show display, or press F
-          on the display
-        </p>
         <div className="display-window-actions">
           {displayOpen && <button className="button close-display" onClick={closeDisplay} aria-label="Close display" title="Close display"><Icon name="close" size={15} /><span className="close-display-label">Close display</span></button>}
-        <a className="button open-display" href="/display" target={DISPLAY_WINDOW} onClick={openDisplay} aria-label={displayOpen ? 'Show display' : 'Open display'} aria-describedby="open-display-hint">
+        <a className="button open-display" href="/display" target={DISPLAY_WINDOW} onClick={openDisplay} aria-label={displayOpen ? 'Show display' : 'Open display'}>
           <Icon name="monitor" size={17} />
           <span className="open-display-label">{displayOpen ? 'Show display' : 'Open display'}</span>
           <Icon name="arrow" size={15} />
         </a>
+        <InfoTip label="About full screen">Open the display, then press F for full screen.</InfoTip>
         </div>
       </div>
     </header>

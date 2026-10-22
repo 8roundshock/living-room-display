@@ -977,7 +977,9 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       assert.match(await summary.textContent(), /Subtle/);
       await summary.click();
       assert.equal(await pressed('Subtle').getAttribute('aria-pressed'), 'true');
-      assert.equal(await page.getByText('Off keeps the content of widgets still; movement is set below. Subtle animates changes. Lively adds gentle weather motion.').count(), 1);
+      await page.getByRole('button', { name: 'About animation' }).focus();
+      assert.match(await page.getByRole('tooltip').innerText(), /Off keeps content still/);
+      await page.keyboard.press('Escape');
       assert.equal(await page.getByText(/asks for reduced motion/).count(), 0);
       const canvas = page.locator('.preview-surface .ambient');
       await pressed('Lively').click();

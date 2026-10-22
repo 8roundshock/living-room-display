@@ -1,5 +1,26 @@
 # Project status
 
+## Compact context help (local checkpoint)
+
+The local `codex/tighter-ux-copy` branch starts from reviewed integration `3f79e9b`.
+Home and Edit display now keep secondary directions behind four contextual info
+controls: full screen, layout editing, animation and keeping the screen awake.
+Each supports hover, keyboard focus and tap/click, with Escape and outside dismissal.
+Home's display caption, movement summary, saved-style hint and picker footer are
+shorter. Errors, reduced-motion status, power conflicts, privacy and destructive
+action consequences remain visible.
+
+The full-screen help uses the universal display shortcut instead of assuming a
+Start-menu entry exists, addressing the copy problem in [#422](https://github.com/8roundshock/living-room-display/issues/422).
+It does not change native behavior, Windows settings, presets or saved data.
+This is a local source checkpoint; installation and publication are separate steps.
+
+Verification on this source: production build passed; Screen (8 groups), Studio
+(29), Workspace (17) and context-help (3) browser checks passed with synthetic
+data. Desktop and narrow Home/editor renders were inspected in RAM. The Motion
+suite's copy assertion now opens the same help exercised by the focused checks;
+its performance run was not repeated for this UI-only change.
+
 ## Published continuation
 
 The integration is published in [PR #507](https://github.com/8roundshock/living-room-display/pull/507)

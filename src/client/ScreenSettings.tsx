@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AppearanceSettings, WindowsStatus } from '../shared/contracts';
+import { InfoTip } from './InfoTip';
 import { api } from './api';
 
 /** "30 s", "3 min", "1 min 30 s" for the movement interval. */
@@ -21,11 +22,11 @@ export function motionSentence(appearance: Pick<AppearanceSettings, 'motionEnabl
   const every = intervalLabel(appearance.motionIntervalSeconds);
   if (appearance.rearrange)
     return appearance.motionEnabled
-      ? `Your widgets float slowly and swap places every ${every}, gliding without going dark.`
-      : `Your widgets swap places every ${every} without animation, dimming briefly instead of going dark.`;
+      ? `Floats and swaps places every ${every}.`
+      : `Swaps places every ${every}, without animation.`;
   return appearance.motionEnabled
-    ? `Your widgets stay where you put them and float slowly, reaching a new spot every ${every}, to protect your TV. The screen never goes dark to move.`
-    : `Your widgets stay where you put them and shift a little every ${every}, without animation, to protect your TV. The screen never goes dark to move.`;
+    ? `Floats within your layout, reaching a new spot every ${every}.`
+    : `Shifts within your layout every ${every}, without animation.`;
 }
 
 export function MotionSentence({ appearance }: { appearance: AppearanceSettings }) {
@@ -72,15 +73,11 @@ export function ScreenSettings({ keepAwake, onKeepAwake, active }: { keepAwake: 
   const line = powerLine(status), warning = powerWarning(status);
   return (
     <div className="screen-settings" role="group" aria-labelledby="screen-settings-label">
-      <span className="field-label" id="screen-settings-label">Screen</span>
+      <div className="field-label-with-help"><span className="field-label" id="screen-settings-label">Screen</span><InfoTip label="About keeping the screen on">Keeps the screen awake in full screen or screensaver mode. Windows power settings apply otherwise.</InfoTip></div>
         <label className="toggle-row">
-          <span>Keep the screen on while the display shows</span>
+          <span>Keep the screen on</span>
           <input className="toggle" type="checkbox" checked={keepAwake} onChange={(event) => onKeepAwake(event.target.checked)} />
         </label>
-        <p className="hint keep-awake-hint">
-          When the display is full screen or running as your screensaver, Windows won't turn the
-          screen off. Windows' own power settings apply the rest of the time.
-        </p>
         {!supported && (
           <p className="hint keep-awake-unsupported">
             This browser can't keep the screen on. The screensaver display uses Microsoft Edge, which can.
