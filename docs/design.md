@@ -1,5 +1,27 @@
 # Display studio design
 
+## Widget discovery (#516, 2026-10-22)
+
+The picker keeps its grouped rail and one actual synthetic preview, adding catalog
+search and a native availability filter. A full thumbnail gallery would crowd the
+compact inspector; extra category tabs would add navigation while making cross-category
+search less useful. Independent concept review chose the compact direction. Empty
+results never keep an actionable stale Add. Current draft state supplies added checks,
+filters and counts; search never reads private widget content.
+
+The existing room solver supplies pre-add guidance and explicit draft fixes (#448).
+Selecting a fix is the only action that changes the board. Preview families retain
+their shared geometry, and accessible descriptions expose cell footprints (#430).
+
+Primary guidance checked 2026-10-22: [W3C APG keyboard interface](https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/)
+for predictable focus, Tab between components and arrow keys within the rail;
+[APG button pattern](https://www.w3.org/WAI/ARIA/apg/patterns/button/) for native button
+activation, stable names and descriptions. The native search and select keep their
+own keys. Recheck this adaptation when catalog navigation, filtering or panel sizing
+changes; a browser test does not establish assistive-technology usability on every device.
+
+## Studio foundation
+
 Reviewed 2026-10-18 for [#56](https://github.com/8roundshock/living-room-display/issues/56),
 following the earlier [#39](https://github.com/8roundshock/living-room-display/issues/39) studio.
 Primary Apple HIG and W3C APG pages, including Apple's live Markdown, were checked

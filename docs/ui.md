@@ -453,9 +453,13 @@ motion or the Off animation level.
   scrolled into view inside the rail (#154). Rail items already on the display are
   named with that state (“Preview Clock, on your display”); their Add button keeps
   its visible name as its accessible name (“Add Clock”, disabled) under “Clock is on
-  your display” (#241). An add with no room is reported once, in the picker's own
-  live region (“No room for Countdown at medium size.”), and cleared by another size
-  or widget or by closing the picker. Up to two fixes apply as one draft edit that
+  your display" (#241). Search matches catalog names, descriptions and categories;
+  **All widgets**, **Not added** and **On display** filter the current draft (#516).
+  Empty results remove the preview and Add action and offer **Show all widgets**.
+  A size with no room is reported before Add, in the picker's own live region
+  ("No room for Countdown at medium size.", #448). The same shared solver recomputes
+  guidance when the widget, size or board changes; closing the picker clears it.
+  Up to two fixes explicitly make room and add the widget as one draft edit that
   Cancel restores: **Try small** (a smaller family of the same widget), **Switch the
   grid to Fine** (a finer grid that changes no family) or **Make room: Weather
   medium** (#238). The default board (#435) fills the grid, so every add there is
@@ -509,8 +513,15 @@ and names at least 11 px, #195);
 narrow screens show three buttons per row under each label. Up/Down move through the
 whole list (across groups) and preview the focused widget (Left/Right do the same, matching
 the narrow three-column layout); Home/End jump to the first or last. The rail is one tab
-stop (#348): only the previewed widget takes Tab, so Tab goes from Close to the rail, then
-the size buttons, Add and any room fixes (Add is at most five presses from Close). Samples are the
+stop (#348): only the previewed widget takes Tab. Tab goes from Close through Search,
+its Clear button when present, the availability filter, the rail, size choices, Add
+and any room fixes (seven presses from Close to Add with an empty search). Search
+keeps its native text-editing keys. A rail description explains the arrow keys,
+Home/End and Tab; every size describes its columns and rows on the current grid
+outside the hidden sample (#430). Filtering keeps the selected widget when visible,
+otherwise the first result, and retains chosen sizes for this picker session.
+Desktop uses one bounded detail scroller when room guidance needs extra space;
+mobile retains natural page scrolling. Samples are the
 actual renderers with synthetic content (“Weekend trip”, “Birthday” and “Holiday”, “Dinner
 at seven”); only the date and time are real, so the Clock shows this computer's time, the
 Calendar marks today and Countdown's days count from today (#361). Each sample fills the

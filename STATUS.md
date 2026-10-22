@@ -1,5 +1,19 @@
 # Project status
 
+## Widget discovery continuation (#516)
+
+The isolated picker change adds catalog search, All widgets / Not added / On display
+filters, result counts and an empty-result reset while preserving the grouped rail
+and one real synthetic sample. Size choices survive filtering; added states follow
+the current draft. Rail keyboard help and accessible family footprints address #430.
+The shared room solver now explains unavailable sizes and offers explicit draft fixes
+before Add (#448), without changing the board during browsing.
+
+At the first local checkpoint, build/typecheck and all 486 unit tests passed (four
+new catalog tests). Extended catalog-time browser checks and actual rendered review
+remain pending the activation candidate's exclusive browser run. No publication,
+merge, installation or activation is implied by these local picker results.
+
 ## Published continuation
 
 The integration is published in [PR #507](https://github.com/8roundshock/living-room-display/pull/507)

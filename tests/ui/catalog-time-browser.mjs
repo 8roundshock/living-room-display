@@ -131,15 +131,16 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await page.keyboard.press('Tab'); assert.equal(await focused(), `${nextName} ${widgetSizes(GROUPED[groupBoundary])[0]}`, 'Tab goes from the rail to the size buttons');
     await page.keyboard.press('Shift+Tab'); assert.equal(await focused(), order[groupBoundary], 'Shift+Tab returns to the previewed widget');
     assert.equal(await page.locator('.catalog-item[data-widget-id]').count(), 0, 'rail items carry no data-widget-id (#310)');
-    // From Close, Add is at most five Tab presses away: Close → rail → sizes → Add (a widget not yet
+    // Search and the availability filter add two stops before the one-stop rail and size choices.
+    // From Close, Add is at most seven Tab presses away (a widget not yet
     // on the display, so Add is enabled).
     await button(itemName(firstUnadded, defaults)).click();
     await button('Close widget picker').focus();
     const path = [];
     const named = () => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent.trim());
-    for (let press = 0; press < 5 && !path.at(-1)?.startsWith('Add '); press++) { await page.keyboard.press('Tab'); path.push(await named()); }
-    assert.equal(path.at(-1), `Add ${WIDGET_CATALOG[firstUnadded].name}`, `Add is reached in at most five Tab presses: ${path.join(' → ')}`);
-    assert.equal(path[0], itemName(firstUnadded, defaults), 'the first Tab enters the rail at the previewed widget');
+    for (let press = 0; press < 7 && !path.at(-1)?.startsWith('Add '); press++) { await page.keyboard.press('Tab'); path.push(await named()); }
+    assert.equal(path.at(-1), `Add ${WIDGET_CATALOG[firstUnadded].name}`, `Add is reached in at most seven Tab presses: ${path.join(' > ')}`);
+    assert.deepEqual(path.slice(0, 3), ['Search widgets', 'Filter widgets', itemName(firstUnadded, defaults)], 'search and filter precede the one rail tab stop');
     await button(itemName('preview', defaults)).click();
     assert.equal(await page.locator('.picker-detail-heading p').innerText(), 'A dim picture of your screen from just before the display starts', 'plain Last screen description (#281)');
     await button(itemName('calendar', defaults)).click(); assert.equal(await button('Calendar medium').getAttribute('aria-pressed'), 'true', 'Calendar is added at medium');
@@ -165,6 +166,9 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     // each applied as one draft edit that Cancel restores.
     await reset(() => {}, defaultSettings); await open();
     await tab('Widgets'); await button('Add widget').click();
+    assert.match(await page.locator('.widget-picker .room-message').innerText(), /No room/, 'the full default board is explained before Add (#448)');
+    assert.match(await page.locator('#picker-room-help').innerText(), /make room and add this widget to your draft/);
+    assert.equal(await savebar().count(), 0, 'preflight never changes the draft');
     await button('Preview Countdown').click(); await button('Countdown small').click(); await button('Add Countdown').click(); await page.clock.runFor(100);
     assert.equal(await page.getByText('No room for Countdown at small size.', { exact: true }).count(), 1, 'the full board is explained once');
     assert.deepEqual(await page.locator('.widget-picker .room-fix').allInnerTexts(), ['Switch the grid to Fine', 'Make room: Reminders small']);
@@ -188,6 +192,105 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await cancel();
     assert.equal(await page.getByRole('combobox', { name: 'Grid density' }).inputValue(), 'balanced');
     checks.push('#435 default board: adding Countdown small says “No room for Countdown at small size.” once with Switch the grid to Fine and Make room: Reminders small; the reduction adds it as one draft (“Reminders is now small. Countdown added.”) that Cancel restores; a large Note offers Fine or Make room: Clock medium, and Fine keeps every large family');
+
+    // #516 / #430: discovery is local to this picker and never changes widget data or the draft.
+    await reset(() => {}, defaultSettings); await open({ viewport: { width: 1280, height: 720 } });
+    await tab('Widgets'); await button('Add widget').click();
+    const search = () => page.getByRole('searchbox', { name: 'Search widgets' });
+    const filter = () => page.getByRole('combobox', { name: 'Filter widgets' });
+    const names = () => page.locator('.catalog-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label')));
+    await page.locator('.picker-detail').evaluate(element => { element.scrollTop = element.scrollHeight; });
+    await button('Preview Note').click();
+    assert.equal(await page.locator('.picker-detail').evaluate(element => element.scrollTop), 0, 'selecting another widget returns its title/sample to the top');
+    await search().fill('Pictures');
+    assert.deepEqual(await names(), [itemName('preview', defaults), itemName('photo', defaults)], 'category text is searchable');
+    assert.equal(await search().evaluate(element => element === document.activeElement), true, 'filtering keeps typing focus');
+    assert.deepEqual(await tabStops(), [itemName('preview', defaults)], 'a filtered-away selection falls back to the first result');
+    await search().press('Home'); await search().press('ArrowRight'); await search().press('End');
+    assert.equal(await search().evaluate(element => element === document.activeElement), true, 'text editing keys never enter the rail');
+    assert.deepEqual(await tabStops(), [itemName('preview', defaults)]);
+    await filter().selectOption('not-added');
+    assert.deepEqual(await names(), ['Preview Photo']);
+    assert.equal(await page.locator('.picker-results [role="status"]').innerText(), '1 widget');
+    await button('Photo large').click();
+    const sizeDescription = await button('Photo large').getAttribute('aria-describedby');
+    assert.equal(await page.locator(`#${sizeDescription}`).innerText(), '4 columns by 4 rows on the 12 by 8 grid.');
+    assert.equal(await page.locator(`#${sizeDescription}`).evaluate(element => element.closest('[aria-hidden="true"]') === null), true, 'family footprints are accessible outside the hidden sample');
+    assert.match(await page.locator('#picker-keyboard-help').innerText(), /arrow keys.*Home and End.*Tab/s);
+    assert.equal(await button('Preview Photo').getAttribute('aria-describedby'), 'picker-keyboard-help');
+    await search().fill('no such widget');
+    assert.equal(await page.locator('.picker-detail').count(), 0, 'zero results remove the stale Add action');
+    assert.equal(await page.locator('.picker-add').count(), 0);
+    assert.equal(await page.getByRole('heading', { name: 'No matching widgets' }).count(), 1);
+    assert.equal(await page.locator('.picker-results [role="status"]').innerText(), '0 widgets');
+    if (capture) images.push({ name: 'picker-empty-1280', bytes: await page.screenshot() });
+    await button('Show all widgets').click();
+    assert.equal(await search().inputValue(), ''); assert.equal(await filter().inputValue(), 'all');
+    assert.equal(await search().evaluate(element => element === document.activeElement), true, 'reset leaves focus on search');
+    await button('Preview Photo').click();
+    assert.equal(await button('Photo large').getAttribute('aria-pressed'), 'true', 'size choices survive filtering');
+    await filter().selectOption('on-display');
+    assert.deepEqual(await names(), GROUPED.filter(id => defaults[id]).map(id => itemName(id, defaults)));
+    assert.equal(await page.locator('.picker-add').isDisabled(), true, 'added widgets cannot be added again');
+    assert.equal(await page.locator('.widget-picker .room-fix').count(), 0, 'added widgets have no add fixes');
+    await search().fill('clock'); await button('Clear widget search').click();
+    assert.equal(await search().evaluate(element => element === document.activeElement), true, 'clear returns focus to the input');
+    assert.equal(await savebar().count(), 0, 'search, filters, sizes and preflight leave settings unchanged');
+    await page.keyboard.press('Escape'); await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    assert.equal(await button('Add widget').evaluate(element => element === document.activeElement), true);
+    await button('Add widget').click();
+    assert.equal(await search().inputValue(), ''); assert.equal(await filter().inputValue(), 'all', 'reopening starts a fresh catalog');
+    await button('Preview Countdown').click(); await button('Countdown small').click();
+    await button('Make room: Reminders small').click(); // No failed Add is needed first.
+    await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    assert.equal(await canvas('countdown').getAttribute('data-widget-size'), 'small');
+    await button('Add widget').click(); await filter().selectOption('on-display');
+    assert.ok((await names()).includes('Preview Countdown, on your display'), 'filters use the unsaved draft');
+    await button('Preview Countdown, on your display').click();
+    assert.equal(await button('Add Countdown').isDisabled(), true);
+    await button('Close widget picker').click(); await cancel();
+    await button('Add widget').click(); await filter().selectOption('not-added');
+    assert.ok((await names()).includes('Preview Countdown'), 'Cancel restores the available widget');
+    await button('Close widget picker').click();
+    assert.deepEqual(snapshot(), defaultSettings(), 'discovery and cancelled room fixes preserve saved data');
+    await button('Add widget').click(); await button('Preview Note').click(); await button('Note large').click();
+    assert.match(await page.locator('.widget-picker .room-message').innerText(), /No room/);
+    await search().focus();
+    await app.store.patchSettings({ widgets: { clock: false } });
+    await page.clock.runFor(30_000);
+    await page.locator('.widget-picker .room-fix').first().waitFor({ state: 'detached' });
+    assert.equal(await page.locator('.widget-picker .room-message').innerText(), '', 'newly available room clears stale preflight guidance');
+    assert.equal(await search().evaluate(element => element === document.activeElement), true, 'a board refresh preserves typing focus');
+    await reset(settings => {
+      settings.widgetGrid.density = 'fine';
+      for (const id of ACTIVE_WIDGET_IDS) settings.widgets[id] = false;
+      for (const id of ACTIVE_WIDGET_IDS) {
+        settings.widgetGrid = addToGrid(settings.widgetGrid, id, 'small', settings.widgets);
+        assert.ok(settings.widgetGrid, `${id} fits the all-added synthetic board`);
+        settings.widgets[id] = true;
+      }
+    });
+    await open(); await tab('Widgets'); await button('Add widget').click();
+    await filter().selectOption('not-added');
+    assert.equal(await page.getByRole('heading', { name: 'Every widget is on your display' }).count(), 1);
+    assert.equal(await page.locator('.picker-add').count(), 0);
+    await button('Show all widgets').click();
+    assert.equal(await page.locator('.catalog-item').count(), ACTIVE_WIDGET_IDS.length);
+    assert.equal(await page.locator('.picker-add').isDisabled(), true);
+    await filter().selectOption('on-display'); await button('Preview Clock, on your display').click();
+    await button('Preview Clock, on your display').focus();
+    await app.store.patchSettings({ widgets: { clock: false } });
+    await page.clock.runFor(30_000);
+    await button('Preview Clock, on your display').waitFor({ state: 'detached' });
+    assert.equal(await page.evaluate(() => document.activeElement?.classList.contains('catalog-item')), true, 'a removed filtered item returns focus to the remaining rail');
+    assert.equal(await page.locator('.catalog-item[tabindex="0"]').count(), 1);
+    await search().fill('Calendar');
+    await button('Calendar medium').focus();
+    await app.store.patchSettings({ widgets: { calendar: false } });
+    await page.clock.runFor(30_000);
+    await page.locator('.picker-detail').waitFor({ state: 'detached' });
+    assert.equal(await search().evaluate(element => element === document.activeElement), true, 'removing the last result while a size has focus returns to search');
+    checks.push('#516/#430/#448: search names/descriptions/categories, draft availability filters and counts, retained size, typed Home/End/arrows, one visible rail stop, accessible keyboard help and family footprints, no-results/reset/clear focus, duplicate prevention, Escape/reopen, pure preflight and direct draft fix with Cancel');
 
     // 1b. "No room" (#238): one live region, cleared on close, and fixes that apply as draft edits.
     await reset(qaBoard); await open();
@@ -522,6 +625,10 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
         const item = button(itemName(name.toLowerCase(), defaultSettings().widgets)); await item.scrollIntoViewIfNeeded(); await item.click();
         const add = button(`Add ${name}`); await add.scrollIntoViewIfNeeded(); await inView(add, `${viewport.width}×${viewport.height} Add ${name}`);
       }
+      for (const control of [search(), filter(), page.locator('.family-previews button').first(), page.locator('.widget-picker .room-fix').first()]) {
+        if (await control.count()) assert.ok((await control.boundingBox()).height >= 44, `${viewport.width}x${viewport.height} picker controls have 44 px targets`);
+      }
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.width}x${viewport.height} picker has no horizontal overflow`);
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
     }
     checks.push('Grouped picker fits 1280×720, 1280×600, 1024×600, 760×600, 390×700, 390×480 and 640×300 with visible group labels, rail text of at least 11 px on desktop widths (#195), the initial selection in view (#154) and reachable Add actions');
