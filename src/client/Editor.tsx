@@ -92,6 +92,7 @@ import { GridEditor, type LayoutEdit } from './GridEditor';
 import { WidgetInspector, useHeldPointers, widgetListOrder, type InspectorReveal } from './WidgetInspector';
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
 import { MotionSentence, ScreenSettings } from './ScreenSettings';
+import { ScheduleSettings, useScheduleDraft } from './ScheduleSettings';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel, reminderFormPending } from './RemindersPanel';
@@ -390,6 +391,7 @@ export function Editor({
     photoDraft !== undefined &&
     (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
   const dirty = !sameEffectiveSettings(saved, draft) || photoChanged;
+  const scheduleEditor = useScheduleDraft(state.schedule);
   const airPreview = useAirQualityPreview(draft, state.airQuality);
   // A widget module, or a merged list over its limit (#288), can block Save with a reason shown in the save bar.
   const draftProblem = saveProblem(draft);
@@ -2184,12 +2186,13 @@ export function Editor({
                     </div>
                   </div>
                 </details>
+                <ScheduleSettings snapshot={state.schedule} presets={saved.savedPresets} editor={scheduleEditor} visualDirty={!same(getVisual(saved), getVisual(draft))} setState={setState} reload={reload} />
                 <details className="disclosure data-disclosure">
                   <summary>Data & recovery</summary>
                   <div className="disclosure-body">
                     <p className="hint data-hint">
                       A backup holds your saved settings, styles and reminders.
-                      Your photo isn't included.
+                      Your photo isn't included. Schedules stay on this computer; download their separate backup in Schedule.
                     </p>
                     <div className="data-actions">
                       <a
@@ -2238,7 +2241,7 @@ export function Editor({
                         <p>
                           It replaces your saved settings, styles and reminders
                           with the backup's: {backupContents(backup)}. Your
-                          photo stays as it is.
+                          photo and schedule stay as they are. Scheduled styles missing from this backup are skipped.
                         </p>
                         {/* #301: state.backup.json is rewritten by every change, including any
                             reminder change, and is read only by automatic recovery. */}

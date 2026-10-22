@@ -1,5 +1,37 @@
 # Using Living Room Display
 
+## Use different styles through the week
+
+Save the looks and widgets you want under **Edit display → Style → Saved styles**,
+then save those editor changes. In **Schedule → Edit schedule**, add a row, choose
+a saved style, the days it starts, and its From/Until times. Choose a fallback
+style (or your manual appearance) for the rest of the week, enable the schedule,
+and choose **Save schedule**. Nothing is scheduled until you choose and save it.
+
+Times follow this computer's local clock, shown beside the controls. An evening
+range ending in the morning continues into the next day. Equal times mean until
+that time the next day. During daylight-saving changes, skipped times never run
+and repeated times follow the same schedule both times. If rows overlap, the first
+matching row wins; move it Up or Down to choose priority.
+
+The status names what's on the display and why. Home also shows that current look.
+The editor canvas continues to show your manual appearance. Applying or saving a
+manual style does not pause the schedule: save any visual edits, then choose
+**Use manual appearance for 1 hour**. It resumes automatically at the time shown,
+or choose **Return to schedule now**. Scheduling never changes Windows lock settings.
+
+Schedule editing has its own Save/Cancel and retains a draft when you change
+inspector tabs. A deleted style stays marked as missing and is skipped; choose
+another style or remove that row. The next matching row, fallback, or manual
+appearance keeps the display usable.
+
+To back everything up, download your saved-data backup under **Data & recovery**
+and **Download saved schedule** under Schedule. The schedule file refers to style
+IDs but does not include the styles themselves. Restore saved data first, then
+**Restore schedule…**. Restoring a schedule asks before replacing it and ends any
+temporary override. Restoring saved data alone, Reset appearance and Reset layout
+keep your local schedule. Disable scheduling and save to return to manual use.
+
 This guide is for you if Living Room Display is already installed on your Windows
 PC. It covers everyday use in plain words. For installing it, and for technical
 details, see [installation](install.md).

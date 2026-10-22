@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { AppState, Settings, Timer, WidgetId } from '../shared/contracts';
+import { scheduledSettings } from '../shared/schedule';
+import { scheduleStatus } from './ScheduleSettings';
 import { orderTimers, timerDoneAt, timerName, timerPhase, timerRemaining, visibleTimers, KEEP_DONE_MS } from '../shared/timers';
 import { showPlacement } from '../shared/show';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG } from '../shared/widgets';
@@ -100,6 +102,10 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
     }));
   }, []);
   const show = useCallback(async (id: WidgetId, saved = 'Saved.') => {
+    if (state.schedule?.visual) {
+      announce({ text: 'The schedule controls the widgets currently shown. Edit its saved style or use your manual appearance for 1 hour in Style.', link: { href: '/editor', label: 'Edit display' } });
+      return false;
+    }
     try {
       applySettings(await api<Settings>(`/api/widgets/${id}/show`, { method: 'POST' }));
       return true;
@@ -108,7 +114,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
       else announce({ text: caught instanceof ApiError && caught.network ? NETWORK_ERROR_MESSAGE : caught instanceof Error ? caught.message : 'Could not show it.', tone: 'error' });
       return false;
     }
-  }, [announce, applySettings]);
+  }, [announce, applySettings, state.schedule?.visual]);
   const context: HomeContext = { state, settings, now, offline, setState, reload, announce, run, applySettings, show, focusLater };
 
   // A finished timer is announced once, and the tab title says so until it is dismissed (#438).
@@ -147,12 +153,13 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
   const time = timeOfDay(new Date(now), settings.clockFormat);
   const groups = useMemo(() => todayGroups(state.reminders, settings.widgetData.countdowns, now), [state.reminders, settings.widgetData.countdowns, now]);
   const warning = state.timersWarning && state.timersWarning !== dismissedWarning ? state.timersWarning : null;
-  const showing = ACTIVE_WIDGET_IDS.filter(id => settings.widgets[id] && (id !== 'preview' || settings.preview.enabled));
+  const displaySettings = scheduledSettings(settings, state.schedule);
+  const showing = ACTIVE_WIDGET_IDS.filter(id => displaySettings.widgets[id] && (id !== 'preview' || displaySettings.preview.enabled));
   // Off widgets that Home feeds and that have something to show.
-  const waiting = HOME_WIDGETS.filter(id => !settings.widgets[id] && (
+  const waiting = HOME_WIDGETS.filter(id => !displaySettings.widgets[id] && (
     id === 'clock' ? homeTimers.length > 0 : id === 'reminders' ? groups.pending > 0 : id === 'worldClocks' ? settings.widgetData.worldClocks.length > 0
       : id === 'countdown' ? settings.widgetData.countdowns.length > 0 : id === 'note' ? settings.widgetData.note.text.length > 0 : false));
-  const waitingWithoutRoom = waiting.filter(id => !showPlacement(settings, id));
+  const waitingWithoutRoom = waiting.filter(id => !showPlacement(displaySettings, id));
 
   const actions: { kind: SheetKind; label: string; description: string; icon: IconName }[] = [
     { kind: 'timer', label: 'Timer', description: "Counts down on your display's clock", icon: 'timer' },
@@ -241,10 +248,11 @@ function DisplayCard({ state, showing, waiting, waitingWithoutRoom, disconnected
       {/* The saved arrangement, still (#438): inert and hidden from assistive technology; a click opens Edit display. */}
       <a className="home-preview" href="/editor" tabIndex={-1} aria-hidden="true">
         <div className="home-preview-screen" inert>
-          <AmbientDisplay state={state} embedded disconnected={disconnected} compositionOverride={0} layoutEditing motionSurface="preview" />
+          <AmbientDisplay state={state} settings={scheduledSettings(state.settings, state.schedule)} embedded disconnected={disconnected} compositionOverride={0} layoutEditing motionSurface="preview" />
         </div>
       </a>
       <p className="home-card-caption">Your saved arrangement. The display moves it around to protect the screen.</p>
+      {state.schedule?.config.enabled && <p className="home-card-caption">{scheduleStatus(state.schedule, state.settings.savedPresets)} <a href="/editor" className="home-link">Manage schedule in Style</a></p>}
       <div className="home-card-actions">
         <a className="button primary home-edit-display" href="/editor"><Icon name="edit" size={16} />Edit display</a>
         <a className="button home-open-display" href="/display" target={DISPLAY_WINDOW} onClick={displayControls.openDisplay}><Icon name="monitor" size={16} />{displayControls.displayOpen ? 'Show display' : 'Open display'}</a>

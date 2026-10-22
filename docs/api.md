@@ -4,6 +4,54 @@ Source of truth: [shared types](../src/shared/contracts.ts) and
 [validation](../src/server/validation.ts). The server binds only to `127.0.0.1`,
 port 4318 by default (`LRD_PORT` may select another unprivileged port).
 
+## Saved-style schedule (#514)
+
+`GET /api/state` includes an API-only `schedule` snapshot: config, override expiry,
+active selection/reason, missing style IDs, effective visual, schedule revision,
+desktop timezone and storage warning. Its `settings` and settings ETag remain
+the canonical manual values. The effective visual overlays only visual settings
+for live display/Home and native host session; content, location, timers,
+idle/security and saved styles are unaffected. Provider demand follows effective
+widgets. The existing opaque four-part `/api/changes` marker advances for schedule
+selection changes and override expiry without writing settings or sidecar files.
+
+- `GET /api/schedule`: snapshot plus schedule ETag.
+- `PUT /api/schedule`: complete `{ enabled, fallbackPresetId: string|null, rules }`.
+  Each rule is `{ id: UUID, presetId: string, days: number[], start: 'HH:MM', end:
+  'HH:MM' }`; days are unique 0=Sunday through 6=Saturday, at least one; at most
+  24 rows, unique row IDs. Existing style IDs remain nonempty strings up to 80
+  characters, including legacy non-UUID IDs. Unknown fields are rejected.
+- `POST /api/schedule/override`: `{ manual: true }` selects saved manual visuals
+  for one elapsed hour; `{ manual: false }` resumes immediately. Pausing an off
+  schedule returns 409. Manual settings saves do not implicitly pause scheduling.
+- `GET /api/schedule/export`: `{ version: 1, kind: 'still-schedule', config }`;
+  contains style references, never visual snapshots or temporary overrides.
+- `POST /api/schedule/import`: validates that backup before replacing the
+  schedule and clearing its override. It never imports or edits styles.
+
+Writes accept the separate strong schedule `If-Match`; stale requests return 409
+without writing, and concurrent writes serialize. Successful writes return the
+snapshot and current ETag. Ranges are local civil `[start,end)`; overnight days
+name the start day, equal times end at that local time next day. First matching
+row whose style exists wins; deleted styles are skipped, followed by fallback or
+manual visuals. Each read recomputes selection for restart/wake catchup. DST
+skipped minutes never occur; repeated clock minutes both match the same rows.
+
+`schedule.json` is an optional private sidecar (`version`, `config`, `overrideUntil`).
+Missing means off; opening/reading/automatic transitions never create it or write
+an empty file. Explicit saves are atomic, preserve previous data in
+`schedule.backup.json`, and never modify canonical state, its backup, or its export.
+Invalid files are left untouched with scheduling off and a visible warning; a
+deliberate replacement preserves the original under a unique `schedule.corrupt-*`
+name. Ordinary saved-settings import and appearance/layout reset leave schedules
+in place; missing referenced styles are skipped. To reset scheduling, disable it
+or remove its rows and save. Full data-directory backups include all sidecars;
+ordinary JSON backup does not, and the UI points to the separate schedule backup.
+Install upgrades/uninstall-with-data-kept preserve it; explicit removal of the
+whole private data directory removes it with the other user data. Older app
+versions ignore this sidecar, so rollback-compatible settings/export formats stay
+unchanged. Temporary-file cleanup recognizes only exact schedule atomic-save names.
+
 ## Browser API
 
 | Method/path                    | Request                                                                | Response                                                                     |

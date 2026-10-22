@@ -1,0 +1,35 @@
+.schedule-settings { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border, #343944); }
+.schedule-settings h3 { margin: 0 0 8px; }
+.schedule-status { font-size: 13px; line-height: 1.5; margin: 8px 0; }
+.schedule-settings .hint, .schedule-warning { font-size: 12px; line-height: 1.5; margin: 8px 0; }
+.schedule-warning { color: var(--warning, #d5bd8c); }
+.schedule-fields, .schedule-weekdays { border: 0; margin: 0; padding: 0; min-width: 0; }
+.schedule-fields > label { display: block; margin: 10px 0; }
+.schedule-settings select, .schedule-settings input[type='time'] { width: 100%; min-width: 0; min-height: 44px; }
+.schedule-row { border: 1px solid var(--border, #343944); border-radius: 8px; padding: 10px; margin: 12px 0; min-width: 0; }
+.schedule-row > legend { padding: 0 6px; font-size: 12px; }
+.schedule-weekdays { display: grid; grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); gap: 2px; margin-top: 8px; }
+.schedule-weekdays > legend { font-size: 12px; padding: 0; margin-bottom: 4px; }
+.schedule-weekdays > label { position: relative; display: flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 6px; cursor: pointer; }
+.schedule-weekdays input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.schedule-weekdays span { pointer-events: none; font-size: 12px; }
+.schedule-weekdays label:has(input:checked) { background: var(--accent, #9eb7cd); color: #13181f; }
+.schedule-weekdays label:has(input:focus-visible) { outline: 2px solid var(--accent, #9eb7cd); outline-offset: 2px; }
+.schedule-weekdays label:has(input:disabled) { opacity: .5; }
+.schedule-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.schedule-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.schedule-settings .button { min-height: 44px; white-space: normal; }
+.schedule-override, .schedule-restore { margin-bottom: 10px; }
+/* A scheduled look changes colour and brightness gently without fading the whole screen or
+   mounting a second display (which would duplicate motion, timers and native controls). */
+@property --ambient-accent { syntax: '<color>'; inherits: true; initial-value: #8aa8c2; }
+@property --ambient-text { syntax: '<color>'; inherits: true; initial-value: #b8c1ca; }
+@property --tone-time { syntax: '<color>'; inherits: true; initial-value: #aaa0ca; }
+@property --tone-sky { syntax: '<color>'; inherits: true; initial-value: #8aa8c2; }
+@property --tone-water { syntax: '<color>'; inherits: true; initial-value: #73b1ab; }
+@property --tone-sun { syntax: '<color>'; inherits: true; initial-value: #b3a774; }
+@property --tone-personal { syntax: '<color>'; inherits: true; initial-value: #c99695; }
+@property --tone-stone { syntax: '<color>'; inherits: true; initial-value: #a9a49c; }
+.schedule-display { width: 100%; height: 100%; }
+.schedule-display .ambient { transition: --ambient-accent 12s linear, --ambient-text 12s linear, --tone-time 12s linear, --tone-sky 12s linear, --tone-water 12s linear, --tone-sun 12s linear, --tone-personal 12s linear, --tone-stone 12s linear; }
+.schedule-display .grid-ambient > .ambient-content { transition: filter var(--brightness-transition, 12s) ease-in-out; }
