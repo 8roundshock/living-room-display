@@ -330,14 +330,14 @@ export async function runScreenQa({ playwright, edge } = {}) {
       assert.equal(await swap.isChecked(), false, 'Swap places is off by default');
       assert.equal(await body.locator('.swap-hint').innerText(), 'Widgets sometimes trade places. Your arrangement stays saved.');
       assert.equal(await body.getByRole('slider', { name: 'Swap glide', exact: true }).count(), 0, 'Swap glide only with Swap places on');
-      // The canvas preview offers numbered arrangements only when widgets swap.
+      // #515: one timeline inspects float and optional swaps without changing the saved arrangement.
       await page.locator('.movement-preview').click();
-      assert.equal(await page.locator('.composition-picker').count(), 0);
+      assert.equal(await page.locator('.motion-preview-controls').getAttribute('data-swaps'), 'false');
       assert.equal(await page.locator('.preview-surface .grid-ambient').getAttribute('data-float'), 'float', 'Preview movement shows the draft float');
       await swap.check();
       assert.equal(await sentence(), 'Your widgets float slowly and swap places every 30 s, gliding without going dark.');
       await body.getByRole('slider', { name: 'Swap glide', exact: true }).waitFor();
-      assert.equal(await page.locator('.composition-picker').count(), 1);
+      assert.equal(await page.locator('.motion-preview-controls').getAttribute('data-swaps'), 'true');
       await body.getByRole('checkbox', { name: 'Float gently', exact: true }).uncheck();
       assert.equal(await sentence(), 'Your widgets swap places every 30 s without animation, dimming briefly instead of going dark.');
       await swap.uncheck();

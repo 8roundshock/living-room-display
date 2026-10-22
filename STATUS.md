@@ -1,5 +1,19 @@
 # Project status
 
+## Motion preview timeline (#515)
+
+The isolated feature adds a paused editor timeline for content float and widget
+swaps, using shared runtime float targets and glide keyframes, with deterministic
+replay of arrangement history. Windows of 4, 12 or 24 intervals include the final
+transition and explicitly do not claim a short repeating cycle. Preview time is
+local to the editor; saved settings and an open display are unaffected.
+
+At this implementation checkpoint, all 15 focused float/timeline unit tests pass.
+The initial implementation built successfully; the latest extraction and browser
+test additions still require final build and browser/visual verification. The new
+`motion-preview` browser suite awaits central runner registration during feature
+integration. No native installation or activation is established by this feature.
+
 ## Published continuation
 
 The integration is published in [PR #507](https://github.com/8roundshock/living-room-display/pull/507)

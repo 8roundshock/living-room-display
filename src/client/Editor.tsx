@@ -36,9 +36,9 @@ import {
   type BackupFile,
 } from './backup';
 import { AmbientDisplay } from './Display';
+import { MotionPreviewControls, useMotionPreview } from './MotionPreviewControls';
 import {
   ageLabel,
-  nextComposition,
 } from './format';
 import { Icon } from './icons';
 import {
@@ -312,7 +312,6 @@ export function Editor({
       message === null ? null : { text: message, network, at: performance.now() },
     );
   }
-  const [composition, setComposition] = useState<number | undefined>(0);
   const [movementPreview, setMovementPreview] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState<WidgetId | null>(null);
   const selectedRef = useRef<WidgetId | null>(null);
@@ -382,6 +381,8 @@ export function Editor({
   // #76: the editor's own reduced-motion preference turns its animation off; the canvas replays
   // the entrance once after a level is chosen.
   const editorReducedMotion = usePrefersReducedMotion();
+  const previewTiming = { interval: draft.appearance.motionIntervalSeconds, swaps: draft.appearance.rearrange, floating: draft.appearance.motionEnabled && !editorReducedMotion, glide: draft.appearance.motionEnabled && !editorReducedMotion && draft.appearance.fadeSeconds > 0, fade: draft.appearance.fadeSeconds };
+  const movementClock = useMotionPreview(movementPreview && !layoutEditing, previewTiming, JSON.stringify([previewTiming, draft.widgetGrid, draft.widgets, draft.preview.enabled]));
   const displayControls = useDisplayWindow();
   const [revealNonce, setRevealNonce] = useState(0);
   // Style > Motion reads the Windows power status only once opened (#436).
@@ -1484,7 +1485,7 @@ export function Editor({
                 }
                 embedded
                 disconnected={connectionError !== null}
-                compositionOverride={composition}
+                previewSeconds={movementPreview && !layoutEditing ? movementClock.seconds : undefined}
                 layoutEditing={layoutEditing || !movementPreview}
                 gesture={gridGesture}
                 motionSurface={layoutEditing ? 'editing' : 'preview'}
@@ -1516,7 +1517,7 @@ export function Editor({
           </div>
           </div>
           <div className="canvas-toolbar">
-            {!layoutEditing && <span>Your saved arrangement</span>}
+            {!layoutEditing && <span>{movementPreview ? 'Movement preview' : 'Your saved arrangement'}</span>}
             {layoutEditing ? (
               <label className="grid-density-control">
                 {/* #345: a short visible label; the select keeps its full accessible name. */}
@@ -1541,46 +1542,10 @@ export function Editor({
                 <button className={`button small movement-preview ${movementPreview ? 'active' : ''}`} aria-pressed={movementPreview} onClick={() => { setMovementPreview(value => !value); setError(null); }}>
                   <Icon name={movementPreview ? 'check' : 'refresh'} size={15} />{movementPreview ? 'Back to layout' : 'Preview movement'}
                 </button>
-                {movementPreview && draft.appearance.rearrange && <>
-                <div
-                  className="composition-picker"
-                  aria-label="Preview arrangement"
-                >
-                  {[0, 1, 2, 3].map((index) => (
-                    <button
-                      key={index}
-                      aria-label={`Arrangement ${index + 1}`}
-                      aria-pressed={composition === index}
-                      onClick={() => setComposition(index)}
-                    >
-                      {index + 1}
-                    </button>
-                  ))}
-                  <button
-                    className={
-                      composition === undefined
-                        ? 'automatic active'
-                        : 'automatic'
-                    }
-                    aria-pressed={composition === undefined}
-                    onClick={() => setComposition(undefined)}
-                  >
-                    Automatic
-                  </button>
-                </div>
-                <button
-                  className="icon-button"
-                  aria-label="Next arrangement"
-                  onClick={() =>
-                    setComposition((previous) => nextComposition(previous ?? 0))
-                  }
-                >
-                  <Icon name="refresh" size={16} />
-                </button>
-                </>}
               </>
             )}
           </div>
+          {movementPreview && !layoutEditing && <MotionPreviewControls clock={movementClock} timing={previewTiming} reducedMotion={editorReducedMotion} />}
           {/* One reserved line for layout messages and the weather note (#231). */}
           <div className="canvas-messages">
             {/* The one live region for layout messages, mounted before any text arrives (#311, #341). */}

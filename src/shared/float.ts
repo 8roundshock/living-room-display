@@ -25,6 +25,30 @@ const GOLDEN = 0.61803398875, SILVER = 0.41421356237;
 export interface Point { x: number; y: number }
 /** CSS pixels of free space around a widget's drawn content. */
 export interface FloatSlack { left: number; right: number; top: number; bottom: number }
+export interface FloatRange { lo: Point; hi: Point }
+/** Same measured travel budget for live playback and a seeked editor frame. */
+export function floatRange(slack: FloatSlack, width: number, height: number, dpr: number): FloatRange | null {
+  const axis = (before: number, after: number, display: number) => {
+    let lo = -before, hi = after;
+    const cap = 0.06 * display;
+    if (hi - lo > cap) { const shrink = cap / (hi - lo); lo *= shrink; hi *= shrink; }
+    return (hi - lo) * dpr < 2 ? [0, 0] : [lo, hi];
+  };
+  const [loX, hiX] = axis(slack.left, slack.right, width), [loY, hiY] = axis(slack.top, slack.bottom, height);
+  if (loX === hiX && loY === hiY) return null;
+  return { lo: { x: loX!, y: loY! }, hi: { x: hiX!, y: hiY! } };
+}
+
+/** A track's target inside measured content slack; the live timer approaches it in device pixels. */
+export function widgetFloatTarget(seconds: number, interval: number, floating: boolean, track: FloatTrack, range: FloatRange | null, slack: FloatSlack, dpr: number): Point {
+  let target = { x: 0, y: 0 };
+  if (range && (floating || seconds >= interval)) {
+    const position = floating ? floatPath(seconds, interval, track) : stepPath(seconds, interval, track);
+    const snap = (value: number) => Math.round(value * dpr) / dpr;
+    target = { x: snap((range.lo.x + range.hi.x) / 2 + (range.hi.x - range.lo.x) / 2 * position.x), y: snap((range.lo.y + range.hi.y) / 2 + (range.hi.y - range.lo.y) / 2 * position.y) };
+  }
+  return clampFloatOffset(target, slack, dpr);
+}
 /**
  * Keep an already drawn offset inside newly measured slack (#479). Round bounds inward so a
  * whole-device-pixel translation cannot overshoot a fractional CSS-pixel edge. A content change
