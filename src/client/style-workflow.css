@@ -1,0 +1,74 @@
+.editor-style-bar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 24px;
+  border-bottom: 1px solid #ffffff0b;
+  background: #111216;
+}
+.style-choice-row, .style-name-row, .style-question { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.style-choice-label, .style-name-row label { color: var(--studio-muted); font-size: 12px; }
+.studio .style-choice { width: 210px; max-width: 100%; min-height: 44px; }
+.style-modified { color: #b9b2ed; font-size: 12px; }
+.style-name-row { flex-basis: 100%; }
+.studio .style-name-row input { width: 240px; max-width: 100%; }
+.style-management { position: relative; }
+.style-management > summary { list-style: none; cursor: pointer; }
+.style-management > div { position: absolute; z-index: 22; right: 0; top: calc(100% + 4px); display: flex; gap: 6px; padding: 8px; border-radius: 12px; background: #28262f; box-shadow: 0 8px 20px #0008; width: max-content; max-width: calc(100vw - 32px); }
+.style-question { flex-basis: 100%; }
+.style-limit, .style-notice, .editor-style-bar .inline-message { flex-basis: 100%; margin: 0; font-size: 12px; }
+.editor-style-bar .studio-savebar {
+  position: static;
+  transform: none;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.style-save-scope { color: var(--studio-muted); font-size: 12px; }
+.studio.editor-with-styles .editor-style-bar button { min-height: 44px; }
+@media (min-width: 701px) {
+  .studio.editor-with-styles { display: flex; flex-direction: column; }
+  .editor-with-styles > .studio-header { width: 100%; flex: none; }
+  .editor-style-bar { flex: none; }
+  .editor-with-styles > .studio-workspace { width: 100%; flex: 1; min-height: 0; height: auto; padding-bottom: 18px; }
+  .editor-with-styles .studio-workspace > .inspector { height: 100%; }
+  .editor-with-styles .canvas-column { padding-bottom: 0; }
+  .editor-with-styles .picker-detail-content { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+}
+@media (min-width: 701px) and (max-width: 1050px) {
+  .editor-style-bar { padding-inline: 14px; gap: 8px; }
+  .studio .style-choice { width: 140px; }
+}
+@media (max-width: 700px) {
+  .studio.editor-with-styles { padding-bottom: 24px; }
+  .editor-style-bar { position: sticky; top: 0; padding: 8px 16px; gap: 6px; }
+  .style-choice-row { width: 100%; }
+  .studio .style-choice { flex: 1 1 140px; min-width: 140px; width: 170px; }
+  .style-choice-row .context-help { margin-left: auto; }
+  .editor-style-bar .studio-savebar { justify-content: space-between; gap: 6px; }
+  .style-save-scope { flex-basis: 100%; }
+  /* An inline action message is never wider than its floating candidate, keeping
+     height checks stable when a long message moves between the two positions. */
+  .editor-with-styles .studio-error-action { max-width: 420px; }
+  .editor-with-styles .studio-error-floating {
+    top: var(--studio-alert-top, calc(var(--studio-toolbar-bottom, 0px) + 8px));
+    left: var(--studio-alert-left, 12px);
+    right: auto;
+    width: min(420px, calc(100% - 24px));
+    max-height: calc(100dvh - var(--studio-toolbar-bottom, 0px) - 20px);
+  }
+  html.studio-editor { scroll-padding-top: calc(var(--studio-toolbar-height, 0px) + 16px); }
+  .editor-with-styles :is(input, select, button, a, summary, [tabindex]) { scroll-margin-top: calc(var(--studio-toolbar-height, 0px) + 16px); }
+}

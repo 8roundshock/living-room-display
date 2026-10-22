@@ -235,10 +235,14 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     await button('Follow daylight').click(); await page.clock.runFor(200);
     assert.deepEqual([await slider('Dimmest').inputValue(), await slider('Brightest').inputValue()], ['25', '75'], 'the last range comes back');
     // Built-in styles keep the mode.
-    await button('Night').click(); await page.clock.runFor(200);
+    await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night');
+    await page.getByRole('group', { name: 'Switch style', exact: true }).getByRole('button', { name: 'Save and switch', exact: true }).click();
+    await page.getByRole('group', { name: 'Switch style', exact: true }).waitFor({ state: 'detached' }); await page.clock.runFor(200);
     assert.equal(await slider('Dimmest').inputValue(), '25', 'Night keeps Follow daylight');
     assert.equal((await canvas()).value, 0.75, 'and the daylight value');
-    await button('Room').click(); await page.clock.runFor(200);
+    await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:room');
+    await page.getByRole('group', { name: 'Switch style', exact: true }).getByRole('button', { name: 'Save and switch', exact: true }).click();
+    await page.getByRole('group', { name: 'Switch style', exact: true }).waitFor({ state: 'detached' }); await page.clock.runFor(200);
     await button('Save changes').click(); await savebar().waitFor({ state: 'detached' });
     assert.deepEqual(app.store.snapshot().settings.appearance.daylightBrightness, { dimmest: 0.25, brightest: 0.75 });
     assert.deepEqual(JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')).settings.appearance.daylightBrightness, { dimmest: 0.25, brightest: 0.75 });

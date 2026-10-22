@@ -151,16 +151,16 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
 
     // Built-in and saved styles change visuals only; the cities stay.
     await tab(page, 'Style');
-    await page.getByRole('button', { name: 'Night', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night');
     await save(page).click(); await clean(page);
     assert.equal(app.store.snapshot().settings.widgetData.worldClocks.length, 3, 'a built-in style keeps world clocks');
-    await page.locator('summary', { hasText: 'Saved styles' }).click();
-    await page.getByRole('textbox', { name: 'Style name' }).fill('Synthetic evening');
-    await page.getByRole('button', { name: 'Add style', exact: true }).click();
+    await page.getByRole('button', { name: /^Save as new/ }).click();
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic evening');
+    await page.getByRole('button', { name: 'Save new style', exact: true }).click(); await clean(page);
+    await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:room');
     await save(page).click(); await clean(page);
-    await page.getByRole('combobox', { name: 'Saved style' }).selectOption({ label: 'Synthetic evening' });
-    await page.getByRole('button', { name: 'Room', exact: true }).click();
-    if (await page.locator('.studio-savebar').count()) { await save(page).click(); await clean(page); }
+    await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption({ label: 'Synthetic evening' });
+    await save(page).click(); await clean(page);
     assert.equal(app.store.snapshot().settings.widgetData.worldClocks.length, 3, 'saved styles keep world clocks');
     assert.equal(JSON.stringify(app.store.snapshot().settings.savedPresets).includes('Tokyo'), false, 'styles never contain world clock content');
     checks.push('Built-in and saved styles do not erase or capture world clocks');
@@ -207,7 +207,7 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     checks.push('Sun & moon: settings hint with the weather location and a calculated next event');
     await context.close();
 
-    // Phone widths: reflow and focused fields clear of the fixed Save bar.
+    // Phone widths: reflow and focused fields below the sticky Style and Save toolbar.
     await reset(settings => { settings.widgets.worldClocks = true; settings.widgetData.worldClocks = structuredClone(CITIES.slice(0, 2)); });
     for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 844 }, { width: 320, height: 480 }]) {
       ({ context, page } = await open({ viewport }));
@@ -219,17 +219,18 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
         await page.getByRole('button', { name: from, exact: true }).focus();
         await page.keyboard.press('Tab'); await page.clock.runFor(100);
         const position = await page.evaluate(name => {
-          const element = document.activeElement, rect = element.getBoundingClientRect(), bar = document.querySelector('.studio-savebar').getBoundingClientRect();
-          return { name: element.getAttribute('aria-label'), bottom: rect.bottom, top: rect.top, barTop: bar.top, overflow: document.documentElement.scrollWidth - innerWidth, expected: name };
+          const element = document.activeElement, rect = element.getBoundingClientRect(), toolbar = document.querySelector('.editor-style-bar').getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return { name: element.getAttribute('aria-label'), bottom: rect.bottom, top: rect.top, toolbarBottom: Math.max(0, toolbar.bottom), viewportBottom: innerHeight, hit: hit === element || element.contains(hit), overflow: document.documentElement.scrollWidth - innerWidth, expected: name };
         }, target);
         assert.equal(position.name, target, JSON.stringify(position));
-        assert.ok(position.bottom <= position.barTop - 4 && position.top >= 0, JSON.stringify({ viewport, ...position }));
+        assert.ok(position.top >= position.toolbarBottom + 4 && position.bottom <= position.viewportBottom && position.hit, JSON.stringify({ viewport, ...position }));
         assert.ok(position.overflow <= 1, `no horizontal overflow at ${viewport.width}px`);
       }
       images.push({ label: `World clocks panel ${viewport.width}×${viewport.height}`, bytes: await page.screenshot({ type: 'png', animations: 'disabled' }) });
       await context.close();
     }
-    checks.push('390/320 px reflow: keyboard-focused World clocks fields stay above the fixed Save bar with no horizontal overflow');
+    checks.push('390/320 px reflow: keyboard-focused World clocks fields stay visible below the top Style and Save toolbar, receive clicks and have no horizontal overflow');
 
     // #417/#436 every active widget at small size with Swap places on: the board floats, every swap's new cells stay
     // collision-free and inside the screen, nothing fades, and swaps continue with reduced motion (dimmed, no glide).

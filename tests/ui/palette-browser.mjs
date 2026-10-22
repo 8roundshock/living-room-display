@@ -457,22 +457,24 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     checks.push('#151 a kept custom colour is a named, pressed swatch; from Native (also after reload) one activation restores it, the Save bar appears only while the restored state differs, and it stays offered while a swatch is only a draft');
 
     for (const preset of ['Phone', 'Room', 'Night']) {
-      await p.getByRole('button', { name: preset, exact: true }).click();
+      await p.getByRole('combobox', { name: 'Style', exact: true }).selectOption(`builtin:${preset.toLowerCase()}`);
       assert.equal(await pressed(p, 'Native colours'), true, `${preset} applies Native`); assert.equal(await canvasMode(p), 'native');
-      const bars = await p.locator(`.miniature-${preset.toLowerCase()} i`).evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
-      assert.deepEqual(bars, [NATIVE_PALETTE.time.hex, NATIVE_PALETTE.sky.hex, NATIVE_PALETTE.personal.hex].map(rgb), `${preset} miniature bars`);
+      const tones = await p.locator('.preview-surface .ambient').evaluate(element => ['time', 'sky', 'personal'].map(role => getComputedStyle(element).getPropertyValue(`--tone-${role}`).trim()));
+      assert.deepEqual(tones, [NATIVE_PALETTE.time.hex, NATIVE_PALETTE.sky.hex, NATIVE_PALETTE.personal.hex], `${preset} canvas tones`);
+      await save(p);
     }
-    await save(p);
     assert.deepEqual({ preset: appearance().preset, accentMode: appearance().accentMode, brightness: appearance().brightness, accentColor: appearance().accentColor }, { preset: 'night', accentMode: 'native', brightness: 0.28, accentColor: '#9990b7' });
     assert.equal(await p.getByRole('button', { name: /^Custom colour/ }).count(), 0, "a built-in style's own single colour is not offered as a custom colour (#151)");
-    checks.push('Phone, Room and Night apply Native with their own brightness and accent colour; miniatures show Lilac, Mist and Rose bars');
+    checks.push('Phone, Room and Night apply and save Native with their own brightness and accent colour; the canvas resolves Lilac, Mist and Rose tones');
 
-    await p.getByText('Saved styles', { exact: true }).click();
-    await p.getByPlaceholder('Evening').fill('Synthetic native');
-    await p.getByRole('button', { name: 'Add style', exact: true }).click(); await save(p);
+    await p.getByRole('button', { name: /^Save as new/ }).click();
+    await p.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic native');
+    await p.getByRole('button', { name: 'Save new style', exact: true }).click(); await saveBar(p).waitFor({ state: 'detached' });
     assert.equal(app.store.snapshot().settings.savedPresets[0].visual.appearance.accentMode, 'native');
+    // Edit Current display so saving Sage does not update the selected saved style in place.
+    await p.getByRole('combobox', { name: 'Style', exact: true }).selectOption('');
     await swatch(p, 'Sage').click(); await save(p); assert.equal(appearance().accentMode, 'color');
-    await p.locator('.disclosure select').filter({ has: p.locator('option', { hasText: 'Synthetic native' }) }).selectOption({ label: 'Synthetic native' });
+    await p.getByRole('combobox', { name: 'Style', exact: true }).selectOption({ label: 'Synthetic native' });
     assert.equal(await pressed(p, 'Native colours'), true); await save(p);
     assert.equal(appearance().accentMode, 'native');
     checks.push('A saved style stores and restores Native');

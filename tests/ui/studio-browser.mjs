@@ -174,6 +174,10 @@ export async function runStudioQa({ playwright, edge } = {}) {
     page.getByRole('button', { name: 'Save changes', exact: true });
   const cancel = (page) =>
     page.getByRole('button', { name: 'Cancel', exact: true });
+  const styleSelect = (page) => page.getByRole('combobox', { name: 'Style', exact: true });
+  const chooseStarter = (page, name) => styleSelect(page).selectOption(`builtin:${name}`);
+  const beginNewStyle = (page) => page.getByRole('button', { name: /^Save as new/ }).click();
+  const saveNewStyle = (page) => page.getByRole('button', { name: 'Save new style', exact: true });
   async function saved(page) {
     await page.locator('.studio-savebar').waitFor({ state: 'detached' });
   }
@@ -199,12 +203,12 @@ export async function runStudioQa({ playwright, edge } = {}) {
     const input = page.getByRole('combobox', { name: 'City', exact: true });
     await input.fill('Lon');
     await page.clock.runFor(300);
-    await page.getByRole('option').first().waitFor();
+    await page.getByRole('listbox', { name: 'Cities', exact: true }).getByRole('option').first().waitFor();
     await input.press('ArrowDown');
     // Option ids are unique per combobox instance (useId); the first option is active.
     assert.equal(
       await input.getAttribute('aria-activedescendant'),
-      await page.getByRole('option').first().getAttribute('id'),
+      await page.getByRole('listbox', { name: 'Cities', exact: true }).getByRole('option').first().getAttribute('id'),
     );
     assert.equal(
       await input.evaluate((e) => document.activeElement === e),
@@ -272,7 +276,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.equal(await save(page).count(), 0);
     assert.equal(await cancel(page).count(), 0);
     await tab(page, 'Style');
-    await page.getByRole('button', { name: 'Night', exact: true }).click();
+    await chooseStarter(page, 'night');
     await selectCity(page);
     assert.equal(app.store.snapshot().settings.location.name, 'Toronto');
     assert.match(
@@ -305,7 +309,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     const input = page.getByRole('combobox', { name: 'City', exact: true });
     await input.fill('Lon');
     await page.clock.runFor(300);
-    await page.getByRole('option').first().waitFor();
+    await page.getByRole('listbox', { name: 'Cities', exact: true }).getByRole('option').first().waitFor();
     await input.press('ArrowDown');
     await input.press('Escape');
     assert.equal(await input.getAttribute('aria-expanded'), 'false');
@@ -452,74 +456,70 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await cancel(page).click();
     checks.push('poll rebases untouched fields without erasing local changes');
 
-    await page.getByText('Saved styles', { exact: true }).click();
-    await page
-      .getByLabel('Style name', { exact: true })
-      .fill('Synthetic style');
-    await page.getByRole('button', { name: 'Add style', exact: true }).click();
+    await beginNewStyle(page);
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic style');
     await cancel(page).click();
     assert.equal(app.store.snapshot().settings.savedPresets.length, 0);
-    await page
-      .getByLabel('Style name', { exact: true })
-      .fill('Synthetic style');
-    await page.getByRole('button', { name: 'Add style', exact: true }).click();
-    await save(page).click();
+    await beginNewStyle(page);
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic style');
+    await saveNewStyle(page).click();
     await saved(page);
     assert.equal(app.store.snapshot().settings.savedPresets.length, 1);
     checks.push('saved-style edits participate in global Save and Cancel');
 
-    // #344: one hint line, the name clears after an add, a duplicate name is refused inline
-    // (without case and surrounding spaces) and the limit is named; #343: focus after Add and Delete.
-    const styleName = page.getByLabel('Style name', { exact: true });
-    const addStyle = page.getByRole('button', { name: 'Add style', exact: true });
-    const styleSelect = page.getByRole('combobox', { name: 'Saved style', exact: true });
+    // #344/#343: the top workflow preserves name validation, limits, focus and identity.
+    const styleName = page.getByRole('textbox', { name: 'New style', exact: true });
+    const savedOptions = () => styleSelect(page).locator('optgroup[label="Saved styles"] option');
+    await page.getByRole('button', { name: 'About styles', exact: true }).focus();
+    assert.match(await page.getByRole('tooltip').innerText(), /Saved styles include your look and layout/);
+    await page.keyboard.press('Escape');
+    assert.equal(await styleName.count(), 0, 'the new-name form closes after saving');
     assert.equal(
-      await page.locator('.preset-hint').innerText(),
-      'Saves your look and layout.',
-    );
-    assert.equal(await styleName.inputValue(), '', 'the name field clears after an add');
-    assert.equal(
-      await styleSelect.locator('option:checked').innerText(),
+      await styleSelect(page).locator('option:checked').innerText(),
       'Synthetic style',
       'the new style is the chosen one',
     );
-    await styleName.fill('  synthetic STYLE ');
+    await beginNewStyle(page); await styleName.fill('  synthetic STYLE ');
     await page
-      .getByText('A style named Synthetic style already exists', { exact: true })
+      .getByText('A style named Synthetic style already exists.', { exact: true })
       .waitFor();
-    assert.equal(await addStyle.isDisabled(), true, 'a duplicate name cannot be added');
+    assert.equal(await saveNewStyle(page).getAttribute('aria-disabled'), 'true', 'a duplicate name cannot be saved');
     assert.equal(await styleName.getAttribute('aria-invalid'), 'true');
     assert.equal(await styleName.getAttribute('aria-describedby'), 'preset-name-error');
     await styleName.fill('Second synthetic');
     assert.equal(await page.locator('.preset-name-error').count(), 0, 'a new name clears the refusal');
-    await addStyle.focus();
+    await saveNewStyle(page).focus();
     await page.keyboard.press('Enter');
-    await page.locator('.studio-savebar').waitFor();
-    assert.equal(await styleName.inputValue(), '');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'saved-style-select', 'Add style moves focus to the Saved style select');
+    await saved(page);
+    assert.equal(await styleName.count(), 0);
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'saved-style-select', 'saving a new style moves focus to the top Style select');
     assert.deepEqual(
-      (await styleSelect.locator('option').allInnerTexts()).slice(1),
+      await savedOptions().allInnerTexts(),
       ['Synthetic style', 'Second synthetic'],
     );
-    await page
-      .getByRole('button', { name: 'Delete selected style', exact: true })
-      .focus();
+    await page.locator('.style-management summary').click();
+    await page.getByRole('button', { name: /^Delete style/ }).click();
+    await page.getByRole('button', { name: 'Delete from styles', exact: true }).focus();
     await page.keyboard.press('Enter');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'saved-style-select', 'Delete selected style moves focus to the Saved style select (#343)');
-    assert.deepEqual((await styleSelect.locator('option').allInnerTexts()).slice(1), ['Synthetic style']);
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'saved-style-select', 'deleting a style moves focus to Style (#343)');
+    assert.deepEqual(await savedOptions().allInnerTexts(), ['Synthetic style']);
+    assert.equal(app.store.snapshot().settings.savedPresets.length, 2, 'deletion stays in the draft until Save');
+    await save(page).click();
     await saved(page);
-    // Choosing a style leaves the name field for a new name; Update keeps the style's name.
-    await styleSelect.selectOption({ label: 'Synthetic style' });
-    assert.equal(await styleName.inputValue(), '');
+    // Editing the selected style updates its existing record without another Update step.
+    await styleSelect(page).selectOption({ label: 'Synthetic style' });
+    const originalStyleId = app.store.snapshot().settings.savedPresets[0].id;
+    assert.equal(await styleName.count(), 0);
     await range(page, 'Brightness');
-    await page.getByRole('button', { name: 'Update', exact: true }).click();
     await save(page).click();
     await saved(page);
     assert.deepEqual(
       app.store.snapshot().settings.savedPresets.map((style) => style.name),
       ['Synthetic style'],
-      'Update keeps the name when none is typed',
+      'Save changes keeps the selected style name',
     );
+    assert.equal(app.store.snapshot().settings.savedPresets[0].id, originalStyleId, 'Save updates the same style identity');
+    assert.equal(app.store.snapshot().settings.savedPresets[0].visual.appearance.brightness, app.store.snapshot().settings.appearance.brightness);
     await app.store.patchSettings({
       savedPresets: Array.from({ length: 12 }, (_, index) => ({
         id: `limit-${index}`,
@@ -528,19 +528,20 @@ export async function runStudioQa({ playwright, edge } = {}) {
       })),
     });
     await page.clock.runFor(30001);
-    await page.locator('.preset-hint').filter({ hasText: /^Up to 12 styles\. / }).waitFor();
+    await page.locator('.style-limit').waitFor();
     assert.equal(
-      await page.locator('.preset-hint').innerText(),
-      'Up to 12 styles. Saves your look and layout.',
+      await page.locator('.style-limit').innerText(),
+      'Up to 12 styles.',
     );
-    await styleName.fill('Thirteenth');
-    assert.equal(await addStyle.isDisabled(), true, 'no thirteenth style');
-    await styleName.fill('');
+    assert.equal(await page.getByRole('button', { name: /^Save as new/ }).isDisabled(), true, 'no thirteenth style');
+    assert.equal(await savedOptions().count(), 12, 'starter looks do not consume saved style slots');
     await app.store.patchSettings({ savedPresets: [] });
     await page.clock.runFor(30001);
-    await page.locator('.preset-hint').filter({ hasText: /^Saves/ }).waitFor();
+    await page.locator('.style-limit').waitFor({ state: 'detached' });
+    assert.equal(await page.getByRole('button', { name: /^Save as new/ }).isEnabled(), true);
+    await styleSelect(page).selectOption('');
     checks.push(
-      '#344 saved styles: one hint line, the name clears after Add, a duplicate (any case, spaces trimmed) is refused inline with aria-invalid, "Up to 12 styles." at the limit, Update keeps the name; #343 Add style and Delete selected style move focus to the Saved style select',
+      '#344/#343 top styles: contextual scope help, new-name form clears on Save, duplicate names (case/trim) are refused inline with aria-invalid, 12 saved styles exclude starters, selected Save preserves identity/name, and new/delete actions return focus to Style; deletion remains a draft until Save',
     );
 
     await tab(page, 'Widgets');
@@ -948,7 +949,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     ]) {
       ({ page, context } = await open({ viewport }));
       await tab(page, 'Style');
-      await page.getByRole('button', { name: 'Night', exact: true }).click();
+      await chooseStarter(page, 'night');
       await tab(page, 'Reminders');
       await page
         .getByRole('button', { name: 'Add reminder', exact: true })
@@ -971,15 +972,16 @@ export async function runStudioQa({ playwright, edge } = {}) {
           fieldTop: field.top,
           fieldBottom: field.bottom,
           labelTop: label.top,
-          barTop: bar.top,
+          barBottom: bar.bottom,
+          viewportBottom: innerHeight,
         };
       });
       assert.equal(focus.active, true);
       assert.ok(
-        focus.fieldBottom <= focus.barTop - 8,
+        focus.fieldTop >= focus.barBottom + 8 && focus.fieldBottom <= focus.viewportBottom,
         JSON.stringify({ viewport, ...focus }),
       );
-      assert.ok(focus.labelTop >= 0, JSON.stringify({ viewport, ...focus }));
+      assert.ok(focus.labelTop >= focus.barBottom, JSON.stringify({ viewport, ...focus }));
       images.push({
         label: `Focused reminder field ${viewport.width}×${viewport.height}`,
         bytes: await page.screenshot({ type: 'png', animations: 'disabled' }),
@@ -987,12 +989,12 @@ export async function runStudioQa({ playwright, edge } = {}) {
       await context.close();
     }
     checks.push(
-      'keyboard-focused reminder field and label stay above fixed Save bar at 390/320px and compact keyboard heights',
+      'keyboard-focused reminder field and label stay below the top Save controls and within the viewport at 390/320px and compact keyboard heights',
     );
 
     // #83: a later Style save must not reset the saved clock style.
-    // #277: a Clock style edit is an appearance edit, so it stores the label of the built-in look
-    // that is showing (Room on the default board), never Custom.
+    // #277: a Clock style edit keeps the legacy built-in appearance label (Room on the default
+    // board), independently of the top selector's explicit saved-style identity.
     await reset();
     ({ page, context } = await open());
     await tab(page, 'Widgets');
@@ -1011,13 +1013,9 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.equal(app.store.snapshot().settings.appearance.clockStyle, 'analog');
     assert.equal(app.store.snapshot().settings.appearance.preset, 'room', 'Analog keeps the Room label (#277)');
     await tab(page, 'Style');
-    assert.deepEqual(
-      await page
-        .locator('.preset-button[aria-pressed="true"] .preset-label')
-        .evaluateAll((els) => els.map((el) => el.textContent.trim())),
-      ['Room'],
-      'the Style tab shows the stored label as chosen (#277)',
-    );
+    assert.equal(await styleSelect(page).inputValue(), '', 'unspecified style identity stays Current display even when the stored look is Room');
+    assert.equal(await styleSelect(page).locator('option[value="builtin:room"]').innerText(), 'Room', 'Room remains available as a starter look');
+    assert.equal(await page.locator('.preset-button').count(), 0, 'the duplicate built-in cards are removed');
     await range(page, 'Brightness');
     await save(page).click();
     await saved(page);
@@ -1036,17 +1034,13 @@ export async function runStudioQa({ playwright, edge } = {}) {
     );
     await context.close();
     checks.push(
-      '#83 clock style Analog survives a later Brightness save and reload; #277 Clock → Digital and Analog saves store the Room label the Style tab shows',
+      '#83 clock style Analog survives a later Brightness save and reload; #277 Clock → Digital and Analog saves retain the Room appearance label while the top Style selector identifies Current display',
     );
 
     // #153, #110, #226: built-in styles are looks only. A personal board (Note added, Drift and
     // fade off, Analog, Text size 125%) survives Night, Room and Phone; Save follows effective changes.
     await reset();
     ({ page, context } = await open());
-    const pressedPreset = () =>
-      page.locator('.preset-button[aria-pressed="true"]').evaluateAll((els) =>
-        els.map((el) => el.querySelector('.preset-label').textContent.trim()),
-      );
     await tab(page, 'Widgets');
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     await page.getByRole('button', { name: 'Preview Note', exact: true }).click();
@@ -1072,25 +1066,26 @@ export async function runStudioQa({ playwright, edge } = {}) {
       [board.widgets.note, board.appearance.clockStyle, board.appearance.fontScale, board.appearance.motionEnabled, board.appearance.rearrange],
       [true, 'analog', 1.25, false, true],
     );
-    assert.deepEqual(await pressedPreset(), ['Room'], 'the default look shows Room pressed');
-    await page.getByRole('button', { name: 'Night', exact: true }).click();
+    assert.equal(await styleSelect(page).inputValue(), '', 'the unlabelled personal board is Current display');
+    await chooseStarter(page, 'night');
     await page.locator('.studio-savebar').waitFor();
-    assert.deepEqual(await pressedPreset(), ['Night']);
+    assert.equal(await styleSelect(page).inputValue(), 'builtin:night');
     assert.equal(await page.locator('.preview-frame [data-widget-id="note"]').count(), 1, 'Night keeps the added Note on the canvas');
     assert.equal(await page.locator('.preview-frame .analog-clock').count(), 1, 'Night keeps Analog');
     assert.equal(await page.getByRole('slider', { name: 'Text size', exact: true }).inputValue(), '125', 'Night keeps Text size');
     assert.equal(await page.getByRole('checkbox', { name: 'Float gently', exact: true }).isChecked(), false, 'Night keeps Float gently off');
     assert.equal(await page.getByRole('checkbox', { name: 'Swap places', exact: true }).isChecked(), true, 'Night keeps Swap places on (#436)');
-    await page.getByRole('button', { name: 'Room', exact: true }).click();
+    await chooseStarter(page, 'room');
+    await page.getByRole('group', { name: 'Switch style', exact: true }).getByRole('button', { name: 'Discard and switch', exact: true }).click();
     await saved(page);
-    assert.deepEqual(await pressedPreset(), ['Room'], 'back to the saved look: no Save bar');
+    assert.equal(await styleSelect(page).inputValue(), 'builtin:room', 'back to the saved look: no Save bar');
     await range(page, 'Brightness');
     await page.locator('.studio-savebar').waitFor();
-    assert.deepEqual(await pressedPreset(), [], 'a different brightness is no built-in look');
+    assert.notEqual(await page.getByRole('slider', { name: 'Brightness', exact: true }).inputValue(), '55', 'a brightness edit differs from the saved starter look');
     await range(page, 'Brightness', 'ArrowLeft');
     await saved(page);
-    assert.deepEqual(await pressedPreset(), ['Room'], 'reverting the brightness presses Room again');
-    await page.getByRole('button', { name: 'Phone', exact: true }).click();
+    assert.equal(await styleSelect(page).inputValue(), 'builtin:room', 'reverting brightness keeps the selected starter and clears the draft');
+    await chooseStarter(page, 'phone');
     await save(page).click();
     await saved(page);
     const phone = app.store.snapshot().settings;
@@ -1107,9 +1102,10 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.reload();
     await page.locator('.clock-time, .analog-clock').first().waitFor();
     await tab(page, 'Style');
-    assert.deepEqual(await pressedPreset(), ['Phone'], 'the saved look shows Phone pressed after reload');
+    assert.equal(await styleSelect(page).inputValue(), '', 'reload without a saved-style identity shows Current display');
+    assert.equal(app.store.snapshot().settings.appearance.preset, 'phone', 'the Phone appearance label survives reload');
     checks.push(
-      '#153 #110 #226 built-in styles change only the look: Note, Analog, Text size 125%, Float gently off and Swap places on survive Night, Room and Phone; the card pressed follows the look (also after a reverted brightness nudge and reload); Save appears only for effective changes; Phone keeps the 3-minute interval',
+      '#153 #110 #226 starter looks change only appearance: Note, Analog, Text size 125%, Float gently off and Swap places on survive Night, Room and Phone; a dirty switch is explicit, reverting brightness clears Save, reload preserves the Phone look without inventing a saved-style identity, and Phone keeps the 3-minute interval',
     );
 
     // #240, #436: plain Motion wording, with the stable structure other suites rely on.
@@ -1250,7 +1246,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
       dropAborted();
       // Save changes.
       await tab(page, 'Style');
-      await page.getByRole('button', { name: 'Night', exact: true }).click();
+      await chooseStarter(page, 'night');
       await page.route('**/api/**', (route) => route.abort());
       await save(page).click();
       const second = await visibleAlert(NETWORK, 'failed Save changes');

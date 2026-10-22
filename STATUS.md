@@ -1,5 +1,38 @@
 # Project status
 
+## Editor style workflow (local checkpoint)
+
+The top Style toolbar now holds saved styles, virtual Phone/Room/Night starter
+looks, and one Save/Cancel group. Save changes updates the selected style under
+its existing ID; Save as new creates a separate record without changing the
+original. Rename/delete management stays beside the selector. No schema migration,
+default-style seeding or changes to native installation are involved.
+
+Switching with visual/naming drafts asks whether to keep editing, discard or save
+before switching. Save retains the existing atomic all-editor-drafts transaction,
+with a concise scope line for weather/photo/other settings. Captured requests keep
+their target, late edits survive acknowledgement, and generated style snapshots
+never become hidden draft edits after a failed save. Changed/deleted targets and
+new duplicate names are checked against refreshed data before retry. Reload style
+offers explicit recovery without discarding unrelated drafts. Related existing
+reports: #428 (save status/name validation), #488 (style labels after rebase), and
+#472 (starter looks preserve Follow daylight).
+
+Production build and 487 unit tests passed. On the final UI revision, Styles
+(15 groups), Studio (29), Workspace (18) and context-help (3) passed. The style
+suite covers failed-save recovery, concurrent changes, stable identity, reload,
+reset, keyboard controls and a readable selector at 320 px. The original Motion
+editor block also passed its three checks; the full performance suite was not rerun.
+
+Before the last selector-width and short-window alert fixes, Catalog sky (7),
+Catalog time (12), Daylight (7), Reminders (24), Palette (17), Editor sync (10) and
+Screen (8) passed. That combined run retained a Workspace failure; the final
+focused run verified its correction. A polling test's clock was moved before app
+startup to remove a real-timer deadline race, preserving its recovery assertions.
+Final synthetic desktop/mobile renders were inspected in RAM. Short windows keep
+action errors in their normal, announced and dismissible row. This is a local
+checkpoint, not a publication or installation claim.
+
 ## Compact context help (local checkpoint)
 
 The local `codex/tighter-ux-copy` branch starts from reviewed integration `3f79e9b`.

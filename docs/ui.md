@@ -154,19 +154,15 @@ Style, Widgets, Weather and Reminders share one settings draft. Desktop keeps th
 preview beside a height-bounded inspector with fixed tabs and contained scrolling
 above 700 CSS pixels. Canvas actions remain visible at compact desktop heights;
 the 16:9 preview takes the height left after the heading, the canvas actions, one
-reserved message line (layout messages and the weather note) and any alert, so none
-of them reaches the Save bar's reserved space (#231). Narrow windows stack a normally scrolling
-inspector below a nonsticky preview, leaving room for the keyboard.
-Above 1050 CSS pixels the Save bar centers under the canvas, so the inspector always
-uses the full height; at 1280×720 each tab's default, collapsed contents fit without
-scrolling, including the Widgets tab with the first-run location card
-([Weather and location](#weather-and-location)). Whenever settings
-remain below, the inspector's bottom edge fades (scroll-linked, kept with reduced
-motion). Focus scrolling reserves the measured Save bar height so fields and labels remain
-visible above it, including narrow screens and compact keyboard-height windows.
+reserved message line (layout messages and the weather note) and any alert. A single
+Style toolbar below the page header holds the selector, management and Save/Cancel.
+Narrow windows stack a normally scrolling inspector below a nonsticky preview;
+the Style toolbar stays at the top. Focus scrolling accounts for its measured height.
+Whenever settings remain below, the inspector's bottom edge fades (scroll-linked,
+kept with reduced motion).
 Selecting a widget on the canvas or in the Widgets list, or adding one, scrolls its settings
-into view (`block: 'nearest'`: the whole settings when they fit, else their top, above the
-Save bar's reserved height) once: closing the picker or returning to the Widgets tab never
+into view (`block: 'nearest'`: the whole settings when they fit, else their top)
+once: closing the picker or returning to the Widgets tab never
 scrolls to it again (#339). Selecting never moves keyboard focus. Closing the picker moves focus
 only when focus was in it: after an add to the new widget's row, shown with its settings, after
 Escape or Close to **Add widget**; a canvas widget focused while the picker is open keeps focus,
@@ -186,7 +182,10 @@ motion or the Off animation level.
   them meanwhile (#242): additions and removals from both are kept, an item changed
   on both keeps each side's changed fields (this editor wins only on a field both
   changed; a saved style's look counts as one field), and an item removed elsewhere
-  but edited here stays. This editor's order wins only when it moved items; otherwise
+  but edited here stays. The explicitly selected style has an additional guard: a
+  changed/deleted record cannot be overwritten or recreated by saving an old look.
+  **Reload style** (when it still exists) or **Save as new** provides recovery.
+  This editor's order wins only when it moved items; otherwise
   the saved order stays and its own additions follow. A layout edit keeps its whole
   arrangement, but widgets merge too (#350): one removed elsewhere and untouched here is
   removed, and one added elsewhere joins at its saved place when that is free on this
@@ -236,19 +235,28 @@ motion or the Off animation level.
   gently, Swap places, the move interval and the swap glide, as well as location,
   units, Keep the screen on, reminders and saved styles. Room brightness is 55%, Phone 70% and Night 28%.
   Phone no longer sets its own 2-minute interval, and no built-in style lowers Text
-  size, so labels keep the readability floors. A style's card shows as chosen
-  whenever its look is showing (also after an edit is reverted), and choosing a look
-  is an ordinary draft change, so Save appears only for effective changes. Their
-  miniatures show Lilac, Mist and Rose bars. New installs use the Room look. Up to
-  twelve saved styles include visual/widget/empty-reminder settings, the accent mode
-  and the Animation level; applying one restores its whole board. **Saved styles** opens
-  with one hint (“Saves the current look and widgets so you can switch back later.”),
-  prefixed with “Up to 12 styles.” once there are twelve (#344). **Style name** is only
-  for a new name: choosing a style leaves it empty, **Add style** clears it, and
-  **Update** keeps the chosen style's name unless another is typed. A name another style
-  already uses, ignoring case and surrounding spaces, is refused inline (“A style named
-  Evening already exists”). After Add style or **Delete selected style**, focus moves to
-  the **Saved style** select (#343).
+  size, so labels keep the readability floors. These are virtual **Starter looks**
+  in the top **Style** selector, not separate cards or records in the twelve saved
+  slots. New installs use the Room look. Choosing one changes the visual draft;
+  **Save as new** can turn it into a normal saved style.
+- The same selector lists **Saved styles** and **Current display**. Saved styles
+  include visual/widget/empty-reminder settings, accent mode and animation; selecting
+  one restores its whole board. Editing it shows **Modified**, and the single
+  **Save changes** action updates that exact ID while saving all editor drafts.
+  **Save as new** opens an inline name, then **Save new style** creates a new ID and
+  leaves the original untouched. **Manage style** contains Rename and a confirmed
+  deletion staged until Save. New/renamed names are validated for case/space-insensitive
+  duplicates; existing imported duplicate names and arbitrary IDs are preserved.
+  The active selection is restored only from an explicitly remembered ID whose look
+  still matches, never guessed from the first matching record.
+- Switching with unsaved visual, naming or list edits asks **Keep editing**,
+  **Discard and switch** or **Save and switch**. Discard affects visual/list drafts,
+  retaining unrelated weather/photo edits. Save commits all current drafts atomically;
+  a short scope line names weather/photo/other settings when present. Failed saves
+  retain the draft and target, and edits made while Save-and-switch runs prevent the
+  switch until resolved. Generated style snapshots enter the request only; failures
+  cannot leave hidden list mutations. The revision retry rebuilds the snapshot from
+  merged values and revalidates the target, duplicate name and twelve-style limit.
 - **Brightness** (#439) has two modes, chosen on its label line with **Fixed** and
   **Follow daylight** (pressed buttons in a group named “Brightness mode”, each with a
   hit area reaching into the space above the line, never over the slider). **Fixed**,
@@ -261,7 +269,7 @@ motion or the Off animation level.
   time follows the Time format and the location's time zone (a device area uses the
   forecast's). It starts at Night's 28% and Phone's 70%, widened to include the Fixed
   level, and returns to the last range chosen in this editor after Fixed. Like Animation,
-  the mode is not part of a look: choosing it keeps the style card, Phone, Room and Night
+  the mode is not part of a look: choosing it keeps the selected starter look; Phone, Room and Night
   set only the Fixed level, and focus stays on the pressed mode button. The canvas shows
   the current value at once; the display page glides to each minute's value over 10 s,
   also with reduced motion or Drift and fade off, since a brightness change is not
