@@ -66,9 +66,6 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       await page.clock.runFor(32);
       const name = await control.evaluate(element => element.getAttribute('aria-label') || element.textContent.trim());
       const box = await control.boundingBox(), alertBox = await alert.boundingBox();
-      if (viewport.width <= 700 && viewport.height > 360 && await alert.evaluate(element => element.classList.contains('studio-error-action'))) {
-        assert.equal(await alert.evaluate(element => element.classList.contains('studio-error-floating')), false, `${label}: a visible canvas action keeps the error in its reserved row`);
-      }
       assert.ok(!overlaps(box, alertBox), `${label}: the alert must not overlap ${name}: ${JSON.stringify({ box, alertBox })}`);
       assert.equal(await control.evaluate(element => { const r = element.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return element === hit || element.contains(hit); }), true, `${label}: ${name} must be the topmost element at its centre`);
     }

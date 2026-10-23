@@ -15,6 +15,14 @@ Explicit idle disable still stops the child and revokes its private capability.
 Preview fields belong to saved visual styles; idle enablement and Windows
 selection remain independent global gates.
 
+PR #522's compatibility repairs are tracked in #527. Mobile action errors update
+their placement on scroll, focus and layout changes, and an empty location
+status no longer consumes Weather's available space. Free-size focus checks now
+use the top Style/Save toolbar; Home's keyboard order includes its contextual
+help. The first-run checks select city results from their listbox and budget
+only the measured persistent toolbar height beyond the earlier internal-scroll
+contract. All 44 px row targets, center hit tests and body-overflow checks remain.
+
 The backend integration passes 64 targeted tests, including clearing active bytes
 after a missed off interval or an unreconstructable clock gap. Production build
 and both TypeScript checks pass. All 554 combined unit tests pass with no skips.
@@ -36,6 +44,14 @@ dialog's Escape during its blur grace period. Help now consumes Escape only
 while its own trigger/tip owns focus. A controlled-clock regression fails with
 the old handler and passes with the correction; all three context-help groups
 pass, including the existing trigger-focused parent-preservation checks.
+
+The first integrated CI run passed 18/19 browser suites and exposed an
+over-conservative alert-row rule hiding a short-window Save failure. The alert
+keeps its floating visibility behavior while placement follows synchronous
+captured scroll events and observed canvas/toolbar resizes. The unchanged Studio
+visibility and Workspace control-clearance checks cover both requirements.
+The corrected source passes Studio (29 groups, 59 s), Workspace (18, 52 s) and
+Styles (15, 20 s) together, including long errors without a floating/inline loop.
 
 The following entries retain their historical checkpoint scope.
 
