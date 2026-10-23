@@ -372,6 +372,30 @@ export function Editor({
   const [pendingStyle, setPendingStyle] = useState<string | null>(null);
   const [styleNotice, setStyleNotice] = useState('');
   const [confirmStyleDelete, setConfirmStyleDelete] = useState(false);
+  const styleManagement = useRef<HTMLDetailsElement>(null);
+  function closeStyleManagement(returnFocus = false) {
+    const panel = styleManagement.current;
+    if (!panel?.open) return;
+    panel.open = false;
+    if (returnFocus) panel.querySelector('summary')?.focus({ preventScroll: true });
+  }
+  useEffect(() => {
+    const outside = (event: Event) => {
+      const panel = styleManagement.current;
+      if (!panel?.open || panel.contains(event.target as Node)) return;
+      // Restore a hidden action's focus before pointer defaults run; a clicked
+      // control still receives its normal focus, and keyboard focus is never stolen.
+      closeStyleManagement(panel.contains(document.activeElement));
+    };
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('click', outside, true);
+    document.addEventListener('focusin', outside);
+    return () => {
+      document.removeEventListener('pointerdown', outside, true);
+      document.removeEventListener('click', outside, true);
+      document.removeEventListener('focusin', outside);
+    };
+  }, []);
   // Style → Data & recovery (#234): a checked backup awaiting confirmation, the section's status
   // line, an import in flight and the inline Reset appearance and Reset layout (#435) questions.
   const [backup, setBackup] = useState<BackupFile | null>(null),
@@ -1271,6 +1295,7 @@ export function Editor({
   }
   function renameStyle() {
     if (!presetOriginal) return;
+    closeStyleManagement();
     setPresetName(presetOriginal.name); setStyleMode('rename'); setConfirmStyleDelete(false);
     setStyleFocus({ target: '#style-name', edit: true });
   }
@@ -1553,10 +1578,14 @@ export function Editor({
           {styleModified && styleMode === 'update' && <span className="style-modified">Modified</span>}
           <InfoTip label="About styles">Saved styles include your look and layout. Starter looks change appearance and keep widgets, motion and Follow daylight.</InfoTip>
           {styleMode !== 'new' && <button className="button small" disabled={saving || draft.savedPresets.length >= MAX_SAVED_STYLES} onClick={beginNewStyle}>Save as new…</button>}
-          {presetId && styleMode === 'update' && <details className="style-management">
-            <summary className="button small">Manage style</summary>
+          {presetId && styleMode === 'update' && <details ref={styleManagement} className="style-management"
+            onKeyDown={event => {
+              if (event.key !== 'Escape' || event.defaultPrevented || !event.currentTarget.open) return;
+              event.preventDefault(); event.stopPropagation(); closeStyleManagement(true);
+            }}>
+            <summary id="manage-style-trigger" className="button small">Manage style</summary>
             <div><button className="button small" disabled={saving} onClick={renameStyle}>Rename</button>
-              <button className="button small" disabled={saving} onClick={() => setConfirmStyleDelete(true)}>Delete style…</button></div>
+              <button className="button small" disabled={saving} onClick={() => { closeStyleManagement(); setConfirmStyleDelete(true); setStyleFocus({ target: '#keep-style' }); }}>Delete style…</button></div>
           </details>}
         </div>
         {styleMode !== 'update' && <div className="style-name-row">
@@ -1570,9 +1599,16 @@ export function Editor({
         {styleProblem && (styleMode === 'update' || presetName.trim()) && <p className="inline-message error preset-name-error" id="preset-name-error" role="alert">{styleProblem}</p>}
         {presetOriginal && selectedStyle && !same(presetOriginal, selectedStyle) &&
           <button className="button small" disabled={saving} onClick={() => chooseStyle(`saved:${selectedStyle.id}`)}>Reload style</button>}
-        {confirmStyleDelete && <div className="style-question" role="group" aria-label="Delete style">
+        {confirmStyleDelete && <div className="style-question" role="group" aria-label="Delete style"
+          onKeyDown={event => {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            event.preventDefault(); event.stopPropagation(); setConfirmStyleDelete(false);
+            setStyleFocus({ target: '#manage-style-trigger' });
+          }}>
           <span>Delete {selectedStyle?.name}? Your current display stays.</span>
-            <button className="button small" disabled={saving} onClick={() => setConfirmStyleDelete(false)}>Keep style</button>
+            <button id="keep-style" className="button small" disabled={saving} onClick={() => {
+              setConfirmStyleDelete(false); setStyleFocus({ target: '#manage-style-trigger' });
+            }}>Keep style</button>
             <button className="button small" disabled={saving} onClick={deletePreset}>Delete from styles</button>
         </div>}
         {pendingStyle !== null && <div className="style-question" role="group" aria-label="Switch style">

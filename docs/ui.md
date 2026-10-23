@@ -245,7 +245,10 @@ motion or the Off animation level.
   **Save changes** action updates that exact ID while saving all editor drafts.
   **Save as new** opens an inline name, then **Save new style** creates a new ID and
   leaves the original untouched. **Manage style** contains Rename and a confirmed
-  deletion staged until Save. New/renamed names are validated for case/space-insensitive
+  deletion staged until Save. It closes when a click or keyboard focus moves outside;
+  Escape closes it and returns focus to its trigger. Rename and Delete hand focus to
+  their input or confirmation, whose cancellation returns to Manage style.
+  New/renamed names are validated for case/space-insensitive
   duplicates; existing imported duplicate names and arbitrary IDs are preserved.
   The active selection is restored only from an explicitly remembered ID whose look
   still matches, never guessed from the first matching record.

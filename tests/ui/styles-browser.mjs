@@ -50,6 +50,68 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
   }
   async function select(id) { await choice().selectOption(`saved:${id}`); }
   try {
+    await open(); await select('alpha:imported/id');
+    const manage = () => page.locator('.style-management');
+    const manageTrigger = () => page.locator('#manage-style-trigger');
+    const isManaged = () => manage().evaluate(element => element.open);
+    for (let cycle = 0; cycle < 3; cycle++) {
+      await manageTrigger().click(); assert.equal(await isManaged(), true);
+      await page.locator('.style-management > div').click({ position: { x: 4, y: 20 } });
+      assert.equal(await isManaged(), true, 'inside padding does not dismiss the panel');
+      await button('Rename').focus(); await page.keyboard.press('Tab');
+      assert.equal(await button('Delete style…').evaluate(element => element === document.activeElement), true);
+      assert.equal(await isManaged(), true, 'internal keyboard navigation stays open');
+      await page.getByRole('heading', { name: 'Your display', exact: true }).click();
+      assert.equal(await isManaged(), false, 'outside non-control clicks dismiss repeatedly');
+    }
+    await manageTrigger().click(); await brightness().click();
+    assert.equal(await isManaged(), false);
+    assert.equal(await brightness().evaluate(element => element === document.activeElement), true, 'outside pointer dismissal preserves destination focus');
+    await manageTrigger().click(); await button('Delete style…').focus(); await page.keyboard.press('Tab');
+    assert.equal(await isManaged(), false, 'tabbing to the next control dismisses');
+    assert.equal(await manageTrigger().evaluate(element => element === document.activeElement), false, 'focus leaving the panel is not redirected');
+    await manageTrigger().focus(); await page.keyboard.press('Enter'); await page.keyboard.press('Tab');
+    assert.equal(await button('Rename').evaluate(element => element === document.activeElement), true);
+    await page.keyboard.press('Escape'); assert.equal(await isManaged(), false);
+    assert.equal(await manageTrigger().evaluate(element => element === document.activeElement), true, 'Escape returns to the disclosure trigger');
+    await page.keyboard.press('Space'); await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
+    assert.equal(await isManaged(), true, 'returning to the summary stays inside the disclosure');
+    await page.keyboard.press('Shift+Tab'); assert.equal(await isManaged(), false, 'backward tabbing out dismisses');
+    checks.push('Manage style repeatedly dismisses on outside clicks or focus changes, preserves internal navigation and destination focus, and returns focus on Escape');
+
+    await manageTrigger().click(); await button('About styles').click();
+    assert.equal(await isManaged(), false); await page.getByRole('tooltip').waitFor();
+    await page.keyboard.press('Escape'); await page.getByRole('tooltip').waitFor({ state: 'detached' });
+    assert.equal(await button('About styles').evaluate(element => element === document.activeElement), true);
+    await manageTrigger().click(); await button('Rename').click();
+    await page.getByRole('textbox', { name: 'Style name', exact: true }).waitFor();
+    assert.equal(await page.getByRole('textbox', { name: 'Style name', exact: true }).evaluate(element => element === document.activeElement), true);
+    await button('Keep editing').click();
+    await manageTrigger().click(); await button('Delete style…').click();
+    assert.equal(await isManaged(), false);
+    assert.equal(await button('Keep style').evaluate(element => element === document.activeElement), true);
+    await manageTrigger().click(); await page.keyboard.press('Escape');
+    assert.equal(await isManaged(), false);
+    assert.equal(await page.getByRole('group', { name: 'Delete style', exact: true }).count(), 1, 'menu Escape does not dismiss the separate confirmation');
+    await button('Keep style').focus(); await page.keyboard.press('Escape');
+    assert.equal(await page.getByRole('group', { name: 'Delete style', exact: true }).count(), 0);
+    assert.equal(await manageTrigger().evaluate(element => element === document.activeElement), true);
+    await manageTrigger().click(); await button('Delete style…').click(); await button('Keep style').click();
+    assert.equal(await manageTrigger().evaluate(element => element === document.activeElement), true);
+    assert.equal(saved().savedPresets.length, 2, 'dismissal and cancelled confirmation never delete a style');
+    checks.push('Manage actions retain rename focus and safe delete confirmation; Escape is scoped to the active disclosure, confirmation or help');
+
+    await open(settings(), { viewport: { width: 390, height: 700 }, hasTouch: true }); await select('alpha:imported/id');
+    await manageTrigger().tap(); assert.equal(await isManaged(), true);
+    await page.getByRole('tab', { name: 'Widgets', exact: true }).tap(); assert.equal(await isManaged(), false);
+    await manageTrigger().tap(); assert.equal(await isManaged(), true);
+    await button('Add widget to display').tap(); assert.equal(await isManaged(), false);
+    await page.keyboard.press('Escape');
+    await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Add widget to display');
+    assert.equal(await button('Add widget to display').evaluate(element => element === document.activeElement), true, 'picker keeps its own Escape/focus behavior');
+    checks.push('Touch dismissal permits switching editor controls and opening a picker whose Escape behavior remains independent');
+
     await open();
     assert.equal(await choice().inputValue(), '');
     assert.equal(await page.locator('.preset-list').count(), 0);
