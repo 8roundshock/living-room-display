@@ -1,5 +1,23 @@
 # Project status
 
+## Pre-idle snapshot source work (#525)
+
+Work is in progress on one private RAM-only snapshot attempt per eligible input
+epoch, 30 seconds before the configured Windows idle threshold. A prepared image
+expires after 90 seconds unless an authenticated native activation claims it.
+Cold/replacement workers establish a baseline and wait for new input; early,
+late, expired or uncertain activation is unavailable. This is an earlier-frame
+feature, not proof of the remaining black-thumbnail cause in #519.
+
+The first source checkpoint contains a private backend pending store/supervisor,
+separate non-display native preparer and pure one-shot/order policy. The policy's
+21 synthetic assertions and native preparer compilation pass; backend focused
+tests pass (43 assertions/subtests) with server typechecking. Native claim/build/
+package integration, wider synthetic checks, CI and independent final-head review
+are still pending. No installed app/data/settings or sealed native artifacts have
+changed; no watcher, desktop capture or native display was launched. Installed
+and actual automatic-screen-content acceptance remain separate under #519.
+
 ## Last screen encoding correction (#519)
 
 The native snapshot now uses an opaque RGB capture surface and RGB thumbnail.

@@ -19,6 +19,7 @@ import { TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts'
 import { WIDGET_CATALOG, isActiveWidget } from '../shared/widgets.ts';
 import { HOME_SHOWABLE_WIDGETS, showPlacement } from '../shared/show.ts';
 import type { ChangeMarker, Settings, TimersResult, WidgetId } from '../shared/contracts.ts';
+import { PreparationController, type PreparationOptions } from './preidle.ts';
 
 // Read once at module load. src/server and the built dist/server both sit two
 // levels below the package.json shipped with the app, so health matches it.
@@ -42,6 +43,10 @@ export interface ApplicationOptions {
   dataDirectory: string; clientDirectory?: string; fetcher?: FetchLike; now?: () => number; development?: boolean;
   /** How long a request waits for a due weather, air-quality or alerts refresh before answering (#351). */
   refreshWaitMs?: number;
+  /** Only the installed entrypoint supplies this factory; fixtures/source starts have no worker. */
+  preparation?: PreparationOptions;
+  /** Synthetic clock seam for preparation expiry/clock-discontinuity regressions. */
+  preparationMonotonic?: () => number;
 }
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 
@@ -94,7 +99,7 @@ export async function createApplication(options: ApplicationOptions) {
     // Invalidate uploads that began before this clear, even if preview is later enabled again.
     previewGeneration++;
     if (preview.available || image) previewChanges++;
-    image = null; preview = { available: false, capturedAt: null, width: null, height: null };
+    image?.fill(0); image = null; preview = { available: false, capturedAt: null, width: null, height: null };
   }
   function previewState(): PreviewState {
     if (preview.capturedAt && now() - Date.parse(preview.capturedAt) > 12 * 3600_000) clearPreview();
@@ -108,6 +113,12 @@ export async function createApplication(options: ApplicationOptions) {
       const token = request.headers['x-lrd-token'];
       if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token) || !timingSafeEqual(Buffer.from(token), Buffer.from(hostToken))) throw new HttpError(403, 'Invalid helper token');
     }
+  }
+  const preparation = new PreparationController(options.preparation, () => store.view(), clearPreview, now, options.preparationMonotonic);
+  function preparationRequest(request: IncomingMessage) {
+    // A browser cannot use this endpoint, and the random secret exists only in one owned child's stdin.
+    if (request.headers.origin || Object.keys(request.headers).some(key => key.startsWith('sec-fetch-')) ||
+        !preparation.authorized(request.headers['x-lrd-preparation'])) throw new HttpError(403, 'Preparation helper access only');
   }
 
   const server = createServer((request, response) => {
@@ -123,6 +134,11 @@ export async function createApplication(options: ApplicationOptions) {
     });
   });
   server.on('close', clearPreview);
+  server.on('close', () => preparation.close());
+  server.on('listening', () => {
+    const address = server.address();
+    if (address && typeof address === 'object') preparation.listening(address.port);
+  });
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
 
@@ -169,6 +185,7 @@ export async function createApplication(options: ApplicationOptions) {
         json(response, 409, { error: error.message, settings: error.settings, revision: error.settingsRevision }, etag(error.settingsRevision)); return;
       }
       if (!saved.settings.preview.enabled || !saved.settings.widgets.preview) clearPreview();
+      preparation.refresh();
       json(response, 200, saved.settings, etag(saved.settingsRevision)); return;
     }
     if (method === 'POST' && path === '/api/location') {
@@ -321,11 +338,68 @@ export async function createApplication(options: ApplicationOptions) {
     if (method === 'POST' && path === '/api/import') {
       const imported = importSchema.parse(await jsonBody(request));
       await store.update(data => { data.settings = imported.settings; data.reminders = imported.reminders; });
-      clearPreview(); json(response, 200, { status: 'imported' }); return;
+      preparation.invalidate(); clearPreview(); preparation.refresh(); json(response, 200, { status: 'imported' }); return;
     }
     if (method === 'GET' && path === '/api/host/session') {
       nativeRequest(request, false);
-      json(response, 200, { token: hostToken, settings: store.view().settings, displayUrl: `http://127.0.0.1:${port}/` }); return;
+      json(response, 200, { token: hostToken, settings: store.view().settings, displayUrl: `http://127.0.0.1:${port}/`, preparationPipe: preparation.pipeName }); return;
+    }
+    if (path === '/api/preview/preparation' && ['GET', 'POST', 'DELETE'].includes(method)) {
+      preparationRequest(request);
+      if (method === 'GET') { json(response, 200, preparation.config()); return; }
+      if (method === 'DELETE') {
+        preparation.invalidate(request.headers['x-invalidate-active'] === '1'); json(response, 204); return;
+      }
+      if (request.headers['content-type'] !== 'image/png') throw new HttpError(415, 'Use image/png');
+      const integerHeader = (name: string, max = Number.MAX_SAFE_INTEGER) => z.coerce.number().int().min(0).max(max).parse(request.headers[name]);
+      const stamp = {
+        generation: integerHeader('x-preparation-generation'), configuration: z.string().min(1).max(100).parse(request.headers['x-preparation-configuration']),
+        inputTick: integerHeader('x-input-tick', 0xffffffff), sessionId: integerHeader('x-session-id', 0x7fffffff),
+        desktopId: z.literal('Default').parse(request.headers['x-desktop-id']), capturedAt: z.iso.datetime({ offset: true }).parse(request.headers['x-captured-at']),
+        completedAt: z.iso.datetime({ offset: true }).parse(request.headers['x-completed-at']), completedMonotonicMs: integerHeader('x-completed-monotonic-ms'),
+      };
+      // Unlike the active preview, this slot is never reachable by state, image, export or Home polls.
+      let content: Buffer | undefined;
+      const chunks: Buffer[] = [];
+      try {
+        let total = 0;
+        for await (const chunk of request) {
+          total += chunk.length;
+          if (total > 4 * 1024 * 1024) throw new HttpError(413, 'Request body is too large');
+          chunks.push(Buffer.from(chunk));
+        }
+        content = Buffer.concat(chunks);
+        if (content.length < 33 || !content.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+            content.toString('ascii', 12, 16) !== 'IHDR') throw new HttpError(400, 'Invalid PNG');
+        const width = content.readUInt32BE(16), height = content.readUInt32BE(20);
+        if (width < 1 || height < 1 || width > 640 || height > 360) throw new HttpError(400, 'Snapshot dimensions are too large');
+        preparationRequest(request);
+        const config = preparation.config();
+        if (!preparation.snapshot.receive({ content, capturedAt: stamp.capturedAt, width, height }, stamp, config.enabled)) throw new HttpError(409, 'Preparation was invalidated');
+        content = undefined; // Ownership moved to the one private RAM slot.
+        json(response, 201, { prepared: true }); return;
+      } finally { for (const chunk of chunks) chunk.fill(0); content?.fill(0); }
+    }
+    if (method === 'POST' && path === '/api/preview/preparation/claim') {
+      preparationRequest(request);
+      const uint = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+      let claimed = false;
+      try {
+        const claim = z.object({
+          generation: uint, configuration: z.string().min(1).max(100), processId: uint.min(1).max(0x7fffffff),
+          processStartedAt: z.iso.datetime({ offset: true }), startedMonotonicMs: uint,
+          inputTick: uint.max(0xffffffff), sessionId: uint.max(0x7fffffff), desktopId: z.literal('Default'),
+        }).strict().parse(await jsonBody(request));
+        preparationRequest(request);
+        const config = preparation.config();
+        const prepared = preparation.snapshot.claim(claim, config.enabled);
+        clearPreview();
+        if (prepared) {
+          image = prepared.content; preview = { available: true, capturedAt: prepared.capturedAt, width: prepared.width, height: prepared.height };
+          previewChanges++; claimed = true;
+        }
+      } catch (error) { preparation.invalidate(true); throw error; }
+      json(response, 200, { claimed }); return;
     }
     if (method === 'GET' && path === '/api/preview') { json(response, 200, previewState()); return; }
     if (method === 'GET' && path === '/api/photo/image') {
@@ -341,7 +415,7 @@ export async function createApplication(options: ApplicationOptions) {
     }
     if (path === '/api/preview' && (method === 'POST' || method === 'DELETE')) {
       nativeRequest(request, true);
-      if (method === 'DELETE') { clearPreview(); json(response, 204); return; }
+      if (method === 'DELETE') { preparation.invalidate(); clearPreview(); json(response, 204); return; }
       const settings = store.view().settings;
       if (!settings.preview.enabled || !settings.widgets.preview) throw new HttpError(409, 'Preview is disabled');
       if (request.headers['content-type'] !== 'image/png') throw new HttpError(415, 'Use image/png');
@@ -374,5 +448,5 @@ export async function createApplication(options: ApplicationOptions) {
     response.writeHead(200, { 'Content-Type': MIME[extname(file)] ?? 'application/octet-stream', 'Cache-Control': extname(file) === '.html' ? 'no-store' : 'public, max-age=3600' });
     response.end(method === 'HEAD' ? undefined : content);
   }
-  return { server, store, weather };
+  return { server, store, weather, closePreparation: () => preparation.close() };
 }
