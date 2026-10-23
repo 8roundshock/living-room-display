@@ -37,6 +37,7 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
     viewport: { width: 1920, height: 1080 },
     reducedMotion: 'reduce',
   });
+  await context.route('**/api/windows/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ available: false, selectedScreenSaver: null, active: null, timeoutSeconds: null, secure: null, isLivingRoomDisplay: false, power: { available: false, scheme: null, displayOffSeconds: null, sleepSeconds: null } }) }));
   const page = await context.newPage(),
     errors = [],
     checks = [],

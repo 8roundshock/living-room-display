@@ -2,8 +2,6 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
@@ -151,21 +149,12 @@ internal sealed class NativeApi : IPreviewSession
         {
             cancellation.ThrowIfCancellationRequested();
             Rectangle bounds = Screen.PrimaryScreen.Bounds;
-            double scale = Math.Min(1, Math.Min(640.0 / bounds.Width, 360.0 / bounds.Height));
-            using (Bitmap screen = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb))
-            using (Graphics capture = Graphics.FromImage(screen))
-            using (Bitmap small = new Bitmap(Math.Max(1, (int)(bounds.Width * scale)), Math.Max(1, (int)(bounds.Height * scale))))
-            using (Graphics resize = Graphics.FromImage(small))
-            using (MemoryStream png = new MemoryStream())
+            byte[] png = DesktopSnapshot.Create(bounds.Size, delegate(Bitmap screen)
             {
-                cancellation.ThrowIfCancellationRequested();
-                capture.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
-                resize.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                resize.DrawImage(screen, new Rectangle(0, 0, small.Width, small.Height));
-                small.Save(png, ImageFormat.Png);
-                cancellation.ThrowIfCancellationRequested();
-                Request("POST", "/api/preview", png.ToArray(), cancellation, 5000);
-            }
+                using (Graphics capture = Graphics.FromImage(screen))
+                    capture.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
+            }, cancellation);
+            Request("POST", "/api/preview", png, cancellation, 5000);
         }
         catch (Exception ex)
         {

@@ -133,8 +133,11 @@ export function reminderFormPending(): boolean {
 }
 
 /** Focus moves within the mounted Reminders panel only; after a switch to another tab nothing is taken. */
-function focusRow(selector: string, target: string | undefined, fallback: string) {
+function focusRow(selector: string, target: string | undefined, fallback: string, previousFocus?: Element | null) {
   window.requestAnimationFrame(() => {
+    // A queued next-row handoff must not take focus back from a newer choice (#521).
+    const active = document.activeElement;
+    if (previousFocus && active !== previousFocus && active !== document.body && active?.isConnected) return;
     const root = document.querySelector('.reminders-panel');
     const element = (target && root?.querySelector<HTMLElement>(`${selector}[data-reminder-id="${target}"]`)) || root?.querySelector<HTMLElement>(fallback);
     element?.focus();
@@ -146,7 +149,7 @@ function focusControl(selector: string) {
 }
 function focusAfter(selector: string, ids: string[], index: number, fallback: string) {
   // Next row, else the previous one, else a stable control, so keyboard users can keep going.
-  focusRow(selector, ids[index + 1] ?? ids[index - 1], fallback);
+  focusRow(selector, ids[index + 1] ?? ids[index - 1], fallback, document.activeElement);
 }
 /** Saving or discarding returns focus to that row's Edit button, or to Add after a new reminder (#230). */
 function closeForm(focusId: string | null) {

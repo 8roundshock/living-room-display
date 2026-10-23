@@ -54,6 +54,39 @@ data. Desktop and narrow Home/editor renders were inspected in RAM. The Motion
 suite's copy assertion now opens the same help exercised by the focused checks;
 its performance run was not repeated for this UI-only change.
 
+## Last screen encoding correction (#519)
+
+The native snapshot now uses an opaque RGB capture surface and RGB thumbnail.
+The previous ARGB surface let zero high bytes in GDI color data become transparency
+during scaling, erasing otherwise valid RGB. A synthetic regression through the
+production encoding helper failed with the previous formats and passes with the
+correction, preserving black and colored pixels with decoded alpha 255. Four
+size/scaling cases and two cancellation cases pass; host compilation, eight fake
+startup/lifecycle scenarios and the active-input regressions also pass.
+
+These are source checks only: no desktop capture, native display activation or
+installed files changed. The reported blank/unavailable automatic screensaver
+scene remains unverified; a secure screensaver's desktop context is a separate
+possible cause, and this correction does not open or switch desktops. Session
+exit still clears the RAM-only snapshot. Review and runtime acceptance remain
+tracked in [#519](https://github.com/8roundshock/living-room-display/issues/519).
+
+### Reminder focus follow-up (#521)
+
+A queued next-row focus move now respects a newer focus choice. The deterministic
+regression holds the delete callback until the new Undo is focused; the previous
+source moved focus back to a reminder row, so expiry could not hand it to Up next.
+With the correction, Undo keeps focus and expiry still moves it to the list switch
+within the unchanged timing budget. Ordinary row handoffs and explicit Undo
+restoration remain covered by the full reminders suite.
+
+Build/typecheck, nine pure reminder unit tests, all 24 reminders browser groups
+(43 s) and all six preview groups (14 s) pass. Browser checks use temporary
+synthetic data, ephemeral loopback servers and mocked Windows status, with images
+in RAM only. The earlier failed CI run is retained as evidence; the corrected head
+still requires fresh independent review and CI before merge. This does not establish
+installation or native screensaver acceptance.
+
 ## Published continuation
 
 The integration is published in [PR #507](https://github.com/8roundshock/living-room-display/pull/507)

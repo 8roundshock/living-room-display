@@ -692,7 +692,9 @@ a computer whose clock ran ahead) is left out, and retried without when the serv
 clock is behind, so the reminder still returns, perhaps a place away, and no schema text
 shows (#296). Plain messages (“Reminder saved”, “Restored …”) also go after about 8 s,
 even while another tab is open (#295). A focused Undo that expires, or gives way to a
-plain message, hands focus to the Up next switch rather than the page (#297). A
+plain message, hands focus to the Up next switch rather than the page (#297).
+A queued move to the next row respects another control focused before it runs,
+so a newly focused Undo keeps focus until expiry (#521). A
 shown message sticks to the bottom of the visible panel (above the Save bar on narrow
 screens), and the focused row scrolls clear of it; with no message the empty line stays
 at the end of the list and covers no row. The message, its Undo and any row
