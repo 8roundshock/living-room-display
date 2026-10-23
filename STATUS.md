@@ -65,7 +65,18 @@ The timeline now restores only the CSS loops it borrowed, including their prior
 clock and running/paused state; cancelled or replaced glyphs release their
 ownership entry on the next draw and are not revived.
 The real-browser regression fails before the correction and passes afterward;
-movement preview and context help pass together (6 s and 7 s).
+movement preview and context help pass together (6 s and 7 s); the replacement
+ownership extension passes movement preview again (7 s).
+
+The frozen aggregate also exposed Home focus reaching browser chrome after a
+complete Tab cycle in an open modal. Home sheets now wrap ordinary forward and
+reverse Tab at their current visible, enabled boundary controls, retaining native
+modal dismissal and browser modifier shortcuts. A bounded real-browser probe
+fails at Tab 12 before the change and passes 30 Tabs in each direction plus
+Escape focus return afterward. Motion's tab-indicator check now changes away
+from the editor's default Widgets tab before measuring the Widgets transition;
+a bounded probe confirms the former no-op and the corrected left/right slides.
+The full affected Home and Motion continuations remain validation gates.
 
 The following entries retain their historical checkpoint scope.
 

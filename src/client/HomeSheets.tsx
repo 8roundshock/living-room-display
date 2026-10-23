@@ -85,6 +85,14 @@ export function HomeSheet({ kind, context, status, onClose }: {
       className={`home-sheet home-sheet-${kind}`}
       aria-labelledby={titleId}
       onCancel={event => { event.preventDefault(); onClose(); }}
+      onKeyDown={event => {
+        if (event.key !== 'Tab' || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+        const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button, input:not([type="hidden"]), select, textarea, a[href], summary, [tabindex]')]
+          .filter(control => control.tabIndex >= 0 && !control.matches(':disabled') && control.checkVisibility());
+        const first = controls[0], last = controls.at(-1);
+        const target = event.shiftKey && document.activeElement === first ? last : !event.shiftKey && document.activeElement === last ? first : null;
+        if (target) { event.preventDefault(); target.focus(); }
+      }}
       onMouseDown={event => { if (event.target === dialog.current) onClose(); }}
     >
       <div className="home-sheet-panel">

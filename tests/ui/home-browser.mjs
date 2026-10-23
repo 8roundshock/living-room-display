@@ -16,6 +16,7 @@ import { WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { checkHomeNoteSync } from './lib/home-note-sync.mjs';
 import { checkHomeDisplayCard } from './lib/home-display-card.mjs';
+import { checkHomeSheetKeyboard } from './lib/home-sheet-keyboard.mjs';
 
 /** 6:42 PM on Tuesday, October 20, 2026 in Toronto. */
 const NOW = Date.parse('2026-10-20T22:42:00.000Z');
@@ -526,8 +527,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     assert.deepEqual(order.slice(0, 5), ['Still home', 'Home', 'Edit display', 'Settings', 'Open display'], 'the three-destination header first');
     assert.deepEqual(order.slice(5), ['About full screen', 'Choose your city', 'Timer'], 'then full-screen help, the first-run line and the quick actions');
     await page.keyboard.press('Enter'); await sheet(page).waitFor();
-    for (let step = 0; step < 30; step++) await page.keyboard.press('Tab');
-    assert.equal(await page.evaluate(() => !!document.activeElement?.closest('dialog.home-sheet')), true, 'focus stays in the sheet');
+    await checkHomeSheetKeyboard(page);
     await page.keyboard.press('Escape'); await sheet(page).waitFor({ state: 'detached' });
     await page.waitForFunction(() => document.activeElement?.dataset.action === 'timer');
     assert.equal(await page.locator('.home-main > .home-status[role=status][aria-live=polite]').count(), 1, 'one always-mounted polite status region');
