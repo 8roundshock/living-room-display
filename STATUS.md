@@ -1,5 +1,27 @@
 # Project status
 
+## Current integration checkpoint (#517)
+
+PR #507 is merged as `c7c00b47b2c69514787645c8f28adfe44cbf2d75`.
+Its ten published-head checks passed; the final local aggregate was 19/20 with
+Motion's repeated renderer-task-time budget finding tracked as P3 #364. Do not
+interpret the historical local sections below as current running-test or
+installation evidence.
+
+PR #518 integrates the preserved saved-style toolbar and compact copy, predictable
+Manage style dismissal, a Home/Edit display/Settings split, scheduled styles (#514),
+deterministic movement preview (#515), and picker discovery (#516). Home keeps
+reminders/daily actions and a compact display summary. The editor has visual
+Style/Widgets controls; Settings owns weather, global preferences, schedule and
+recovery. Existing saved data is not migrated or seeded.
+
+This is source in progress: the core Settings implementation passed a production
+build, 487 units before feature integration and nine focused browser groups.
+The first responsive check caught a 40px Cancel target; the scoped 44px correction
+passed. Feature branches have their own build/unit evidence, not final integrated
+acceptance. Existing browser suites are being migrated to the actual new routes,
+then final checks and a separate independent final-head review are required.
+No installation or new native/physical acceptance is claimed by this checkpoint.
 ## Editor style workflow (local checkpoint)
 
 The top Style toolbar now holds saved styles, virtual Phone/Room/Night starter

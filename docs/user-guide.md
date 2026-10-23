@@ -42,17 +42,18 @@ reminders and a few other things you choose. It makes no sound and needs no
 account. Your settings and reminders stay on your PC. It goes online only for the
 weather and air quality where you are, and for city names when you search.
 
-There are three parts, each a page in your web browser except the last one on the TV:
+The header has three destinations. The display opens separately:
 
 - **Home**, for every day: start a timer, add a reminder or put something on a
   calendar, add a world clock, a countdown or a note, and see what is on the display;
 - **Edit display**, where you choose what to show and how it looks;
+- **Settings**, for your city, units, time format, screen preference, schedules and backups;
 - the **display**, the black full-screen view you leave on the TV.
 
 ## Home
 
 Home is the app's main page (`http://127.0.0.1:4318/`). It shows today's date and time,
-six quick actions and a **Today** list, with your saved display on the right and
+six compact actions and a **Today** list, with a display summary and
 **Edit display** one click away.
 
 - **Timer**: pick 1, 3, 5, 10, 15 or 30 minutes or 1 hour and it starts at once, or set
@@ -81,7 +82,8 @@ Open the Start menu and choose **Living Room Display**. Home opens in your brows
 Each time you choose it, it opens another browser tab, so close the ones you no longer
 need. To choose what the display shows and how it looks, click **Edit display** at the
 top (`http://127.0.0.1:4318/editor`). Use the **Home** and **Edit display** links at
-the top to move between the two pages.
+the top to move between Home, Edit display and Settings. Unsaved changes ask before
+you leave. **Settings** holds weather setup; reminders are managed from Home.
 
 You can keep Edit display open while you change things. Changes to the look, the
 widgets and the weather settings are a draft: they show at once in the preview on

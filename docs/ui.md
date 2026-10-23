@@ -11,21 +11,40 @@ acceptance are recorded separately in [STATUS](../STATUS.md).
 
 ## Pages
 
-The app has three pages (#438), chosen by `pageForPath` in `src/client/route.ts`: **Home**
-at `/` (and any other extension-less path), **Edit display** at `/editor` and the ambient
-display at `/display`. Their titles are "Still · Home", "Still · Edit display" and
-"Still · Display". Home and Edit display share one header (`StudioHeader`, 64 px from
-701 CSS px; below that it has automatic height, a 72 px minimum and room for the
-hint below the controls): the brand goes to Home ("Still home"), a **Pages** nav
-holds **Home** and **Edit display** with `aria-current="page"` on the current one
-(at 480 px or narrower only the other page's link shows). **Open display** is
-icon-only at 480 px or narrower and retains its accessible name. It uses the shared
+The app has three destinations (#517): **Home** at `/`, **Edit display** at `/editor`
+and **Settings** at `/settings`. The separate ambient view is `/display`. Unknown
+extension-less paths open Home. The shared header keeps all three labeled destination
+links, with `aria-current="page"`; narrow screens put them on a separate row rather
+than hiding the current destination. **Open display** is a distinct action,
+icon-only at 480 px or narrower with its accessible name. It uses the shared
 window helper and named window `still-display`; **Show display** reuses that tab's
 open display and **Close display** closes it. A display opened from an unrelated
 tab retires the older display through the same-origin channel, stopping its polls
 and wake lock. Page-navigation links still guard an unsaved Edit display draft;
-opening a display leaves the editor in place. Only `/editor` may ask for device location
-(`Permissions-Policy: geolocation=(self)`); Home and the display send `geolocation=()`.
+opening a display leaves its source page in place. Only `/settings` may ask for device
+location (`Permissions-Policy: geolocation=(self)`); Home, Edit display and the display
+send `geolocation=()`. Lookup happens only after the user's explicit action. Legacy
+`/editor?focus=city` links redirect to Settings with City focused.
+
+Home owns daily actions and reminder management. Its compact display summary lists
+what is shown and offers Edit/Open actions, without rendering a second ambient canvas.
+Edit display owns Style/Widgets, the visual canvas and local movement preview. Saved
+styles remain at the top with Save changes and Save as new. App-wide city, units,
+time format, screen-awake preference, schedule configuration and data recovery belong
+to Settings. Appearance/layout resets remain visual editor drafts.
+
+Settings saves only fields changed from its revision-tagged baseline. Polls preserve
+local edits; a stale Save keeps them, adopts unrelated remote fields and asks for
+review before an explicit retry. Failed saves keep their draft. Dirty page navigation
+uses the browser's leave guard; Save/Cancel only appears for effective changes.
+Schedule has its own guarded draft and Save/Cancel; restoring data is blocked while
+either settings or schedule edits are pending. No persisted data migration is needed.
+
+The grouping follows [Apple's Settings guidance](https://developer.apple.com/design/human-interface-guidelines/settings),
+[layout guidance](https://developer.apple.com/design/human-interface-guidelines/layout)
+and [W3C disclosure semantics](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/),
+reviewed 2026-10-22. Native controls and normal browser navigation provide focus and
+leave behavior; these references do not imply Apple assets or native OS controls.
 
 ## Scheduled saved styles (#514)
 

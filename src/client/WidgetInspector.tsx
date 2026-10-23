@@ -367,23 +367,7 @@ export function WidgetInspector({
                           ),
                         )}
                       </div>
-                      <label>
-                        <span className="field-label">Time format</span>
-                        <select
-                          className="select-input"
-                          value={settings.clockFormat}
-                          onChange={(event) =>
-                            onChange((previous) => ({
-                              ...previous,
-                              clockFormat: event.target
-                                .value as Settings['clockFormat'],
-                            }))
-                          }
-                        >
-                          <option value="12h">12-hour</option>
-                          <option value="24h">24-hour</option>
-                        </select>
-                      </label>
+                      <a className="text-button" href="/settings">Time format in Settings</a>
                       <p className="hint">While a timer runs, the date line shows it. Start timers from Home.</p>
                     </>
                   )}
