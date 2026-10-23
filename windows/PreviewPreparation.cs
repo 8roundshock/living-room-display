@@ -174,3 +174,14 @@ internal static class PreparationCancellation
         catch(AggregateException) { } // Cancellation remains terminal if a registered cleanup fails.
     }
 }
+
+internal static class PreparationDpi
+{
+    internal static void Run(Func<bool> processAware,Func<IntPtr> enter,Action<IntPtr> restore,Action run)
+    {
+        if(!processAware())throw new InvalidOperationException("DPI-aware preparation is required.");
+        IntPtr previous=enter();
+        if(previous==IntPtr.Zero)throw new InvalidOperationException("Per-monitor preparation coordinates are required.");
+        try { run(); } finally { restore(previous); }
+    }
+}

@@ -77,6 +77,23 @@ internal static class PreparedClaimFlowTests
         timerSource.Dispose();
         PreparationCancellation.Cancel(timerSource);
         Check(true,"queued deadline/monitor callback after disposal is safe");
+        string dpiOrder=""; int geometries=0;
+        PreparationDpi.Run(delegate { dpiOrder+="process,"; return true; },delegate { dpiOrder+="enter,"; return new IntPtr(42); },
+            delegate(IntPtr previous) { Check(previous==new IntPtr(42),"DPI restore uses exact previous context"); dpiOrder+="restore"; },
+            delegate { dpiOrder+="geometry,"; geometries++; });
+        Check(dpiOrder=="process,enter,geometry,restore" && geometries==1,"physical geometry only follows explicit process/thread DPI initialization");
+        refused=false;
+        try { PreparationDpi.Run(delegate { return false; },delegate { throw new Exception("must not enter"); },delegate(IntPtr value) { },delegate { geometries++; }); }
+        catch(InvalidOperationException) { refused=true; }
+        Check(refused && geometries==1,"unavailable process DPI awareness prevents geometry/capture");
+        refused=false;
+        try { PreparationDpi.Run(delegate { return true; },delegate { return IntPtr.Zero; },delegate(IntPtr value) { },delegate { geometries++; }); }
+        catch(InvalidOperationException) { refused=true; }
+        Check(refused && geometries==1,"unavailable PMv2 thread context prevents geometry/capture");
+        bool restored=false;
+        try { PreparationDpi.Run(delegate { return true; },delegate { return new IntPtr(42); },delegate(IntPtr value) { restored=true; },delegate { throw new IOException(); }); }
+        catch(IOException) { }
+        Check(restored,"scoped DPI context restored on capture/startup failure");
         Console.WriteLine("Prepared claim/lifetime orchestration: "+assertions+" assertions passed; injected peers/transports only.");
     }
 }

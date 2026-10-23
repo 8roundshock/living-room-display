@@ -18,10 +18,19 @@ using Microsoft.Win32.SafeHandles;
 
 internal static class PreviewPreparerProgram
 {
+    [DllImport("user32.dll")] private static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
     private static int Main()
     {
         // Deliberately no diagnostics: stdin contains a capability, never command-line arguments.
-        try { using (var preparer = new NativePreviewPreparer()) preparer.Run(); return 0; }
+        try
+        {
+            PreparationDpi.Run(SetProcessDPIAware,
+                delegate { return SetThreadDpiAwarenessContext(new IntPtr(-4)); },
+                delegate(IntPtr previous) { SetThreadDpiAwarenessContext(previous); },
+                delegate { using (var preparer = new NativePreviewPreparer()) preparer.Run(); });
+            return 0;
+        }
         catch { return 1; }
     }
 }

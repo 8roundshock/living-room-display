@@ -13,7 +13,7 @@ The source includes the private backend pending store/supervisor, separate
 non-display native preparer, OS-identified pipe claim and build/package/control
 lifetime integration. Typechecking and server/client build pass, alongside all
 505 unit tests. `windows/tests/Test-PreIdleSource.ps1` compiles both production
-binaries without running them and passes 29 preparation/order assertions, 24
+binaries without running them and passes 29 preparation/order assertions, 29
 injected claim/lifetime assertions, five scalar framing assertions, six synthetic
 encoding cases, eight fake host lifecycle cases, active-input/surface regressions,
 32 fake runtime contracts, mocked preparer lifecycle and nine static installer
