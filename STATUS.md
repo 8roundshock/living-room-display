@@ -22,6 +22,12 @@ CI remain acceptance gates. Earlier recorded failures remain diagnostic evidence
 No installed files/data/settings or sealed native artifacts changed; source checks
 do not establish actual screensaver or screenshot-content acceptance under #519.
 
+A further keyboard continuation exposed a help tooltip consuming a newly opened
+dialog's Escape during its blur grace period. Help now consumes Escape only
+while its own trigger/tip owns focus. A controlled-clock regression fails with
+the old handler and passes with the correction; all three context-help groups
+pass, including the existing trigger-focused parent-preservation checks.
+
 The following entries retain their historical checkpoint scope.
 
 ## Historical paused integration checkpoint (#517)
