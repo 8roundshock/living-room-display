@@ -236,8 +236,8 @@ test('#438 Home endpoints keep the local-only protections, and only Edit display
   const directory = await folder();
   const app = await application(directory);
   try {
-    for (const path of ['/', '/display', '/somewhere', '/api/state']) assert.equal((await fetch(`${app.url}${path}`)).headers.get('permissions-policy'), 'geolocation=()', path);
-    for (const path of ['/editor', '/editor?add=worldClocks']) assert.equal((await fetch(`${app.url}${path}`)).headers.get('permissions-policy'), 'geolocation=(self)', path);
+    for (const path of ['/', '/display', '/editor', '/editor?add=worldClocks', '/settings-extra', '/somewhere', '/api/state']) assert.equal((await fetch(`${app.url}${path}`)).headers.get('permissions-policy'), 'geolocation=()', path);
+    for (const path of ['/settings', '/settings?focus=city']) assert.equal((await fetch(`${app.url}${path}`)).headers.get('permissions-policy'), 'geolocation=(self)', path);
     const routes: [string, string, unknown][] = [
       ['POST', '/api/timers', { durationMs: 60_000 }], ['DELETE', '/api/timers/finished', undefined], ['POST', '/api/countdowns', { title: 'A', date: '2027-01-01' }],
       ['POST', '/api/world-clocks', { label: 'A', timezone: 'UTC', latitude: 0, longitude: 0 }], ['POST', '/api/widgets/calendar/show', undefined], ['GET', '/api/changes', undefined],

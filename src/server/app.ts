@@ -139,8 +139,8 @@ export async function createApplication(options: ApplicationOptions) {
     const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`);
     const method = request.method ?? 'GET';
     const path = url.pathname;
-    // Only Edit display may ask for device location; Home and the display never do (#438).
-    response.setHeader('Permissions-Policy', path.startsWith('/editor') ? 'geolocation=(self)' : 'geolocation=()');
+    // Only Settings may ask for device location; Home, the editor and display never do (#517).
+    response.setHeader('Permissions-Policy', path === '/settings' || path.startsWith('/settings/') ? 'geolocation=(self)' : 'geolocation=()');
 
     if (method === 'GET' && path === '/api/health') { json(response, 200, { status: 'ok', version: APP_VERSION, storageWarning: store.warning }); return; }
     if (method === 'GET' && path === '/api/windows/status') { json(response, 200, await windowsStatus()); return; }

@@ -129,6 +129,7 @@ export function WidgetInspector({
   pickerOpen,
   pickerInitial = null,
   onPicker,
+  pickerOpener,
   onAdd,
   onFix,
   roomProblem,
@@ -157,6 +158,7 @@ export function WidgetInspector({
   /** The widget a Home deep link asked for (#438); the picker opens on it. */
   pickerInitial?: WidgetId | null;
   onPicker: (open: boolean) => void;
+  pickerOpener?: HTMLElement | null;
   /** Adds a widget as a draft; returns the no-room explanation when it does not fit. */
   onAdd: (id: WidgetId, size: WidgetSize) => RoomProblem | null;
   /** Applies a no-room fix (an add or a resize); returns a fresh explanation if it no longer fits. */
@@ -204,6 +206,7 @@ export function WidgetInspector({
     const row = id && list.current?.querySelector<HTMLElement>(`[data-widget-option="${id}"] .widget-select`);
     if (row) return row.focus();
     if (reveal) handledReveals.add(reveal);
+    if (pickerOpener?.isConnected) return pickerOpener.focus();
     addButton.current?.focus();
   }, [pickerOpen]);
   // #339: bring the selected widget's settings (or its no-room explanation) into view without moving

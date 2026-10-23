@@ -36,6 +36,7 @@ export const SETS = {
     'home', // #438, about 70 locally
     'context-help', // Compact help: keyboard, hover, touch, responsive placement and draft isolation.
     'styles', // Top style/save transactions and responsive controls; 16 seconds locally, CI not timed yet.
+    'settings', // #517: app-wide preferences, destination/draft guards and recovery.
   ],
   scheduled: ['motion', 'weather', 'palette'], // 219, 81, 68
 };

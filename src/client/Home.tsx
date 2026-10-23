@@ -6,11 +6,11 @@ import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG } from '../shared/widgets';
 import { ApiError, NETWORK_ERROR_MESSAGE, api } from './api';
 import { localTimeZone, timeParts, zoneOffsetMinutes } from './astronomy';
 import { civilFromDate, countdownLabel, parseCivil } from './calendar';
-import { AmbientDisplay } from './Display';
 import { readFirstRunDismissed } from './FirstRunCard';
 import { HOME_WIDGETS, longDay, namesList, relativeDay, todayGroups, type ComingUpItem } from './home-model';
 import { HomeSheet, type SheetKind } from './HomeSheets';
 import { ReminderRow, makeRoomLink, type HomeContext, type StatusMessage } from './HomeParts';
+import { reminderFormPending } from './RemindersPanel';
 import { Icon, type IconName } from './icons';
 import { DISPLAY_WINDOW, useDisplayWindow, type DisplayWindowControls } from './displayWindow';
 import { StudioHeader } from './StudioHeader';
@@ -127,7 +127,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
 
   const anyDirty = useRef(false);
   useEffect(() => {
-    const leave = (event: BeforeUnloadEvent) => { if (anyDirty.current) event.preventDefault(); };
+    const leave = (event: BeforeUnloadEvent) => { if (anyDirty.current || reminderFormPending()) event.preventDefault(); };
     window.addEventListener('beforeunload', leave);
     return () => window.removeEventListener('beforeunload', leave);
   }, []);
@@ -178,7 +178,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
               <p className="home-first-run">
                 <Icon name="location" size={15} />
                 <span>Weather shows {settings.location.name} until you choose your city.</span>{' '}
-                <a className="home-link" href="/editor?focus=city">Choose your city</a>
+                <a className="home-link" href="/settings?focus=city">Choose your city</a>
               </p>
             )}
             <div className="home-actions" role="group" aria-label="Quick actions">
@@ -238,13 +238,6 @@ function DisplayCard({ state, showing, waiting, waitingWithoutRoom, disconnected
   return (
     <aside className="home-card" aria-labelledby="home-card-title">
       <h2 id="home-card-title" className="home-card-title">On your display</h2>
-      {/* The saved arrangement, still (#438): inert and hidden from assistive technology; a click opens Edit display. */}
-      <a className="home-preview" href="/editor" tabIndex={-1} aria-hidden="true">
-        <div className="home-preview-screen" inert>
-          <AmbientDisplay state={state} embedded disconnected={disconnected} compositionOverride={0} layoutEditing motionSurface="preview" />
-        </div>
-      </a>
-      <p className="home-card-caption">Saved layout</p>
       <div className="home-card-actions">
         <a className="button primary home-edit-display" href="/editor"><Icon name="edit" size={16} />Edit display</a>
         <a className="button home-open-display" href="/display" target={DISPLAY_WINDOW} onClick={displayControls.openDisplay}><Icon name="monitor" size={16} />{displayControls.displayOpen ? 'Show display' : 'Open display'}</a>

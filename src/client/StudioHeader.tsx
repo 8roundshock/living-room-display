@@ -9,11 +9,12 @@ import { DISPLAY_WINDOW, type DisplayWindowControls } from './displayWindow';
  * it would sever the window name. Plain anchors, so Edit display's `beforeunload` still guards a
  * dirty draft. At 480 px or narrower only the other page's link shows and Open display is icon-only.
  */
-export function StudioHeader({ page, displayControls }: { page: 'home' | 'edit'; displayControls: DisplayWindowControls }) {
+export function StudioHeader({ page, displayControls }: { page: 'home' | 'edit' | 'settings'; displayControls: DisplayWindowControls }) {
   const { displayOpen, openDisplay, closeDisplay } = displayControls;
   const pages = [
     { id: 'home', href: '/', label: 'Home', icon: 'home' },
     { id: 'edit', href: '/editor', label: 'Edit display', icon: 'edit' },
+    { id: 'settings', href: '/settings', label: 'Settings', icon: 'settings' },
   ] as const;
   return (
     <header className="studio-header">

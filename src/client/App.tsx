@@ -13,6 +13,7 @@ import { AmbientDisplay } from './Display';
 import { useSingleDisplay } from './displayWindow';
 import { Editor } from './Editor';
 import { Home } from './Home';
+import { SettingsPage } from './SettingsPage';
 import { PAGE_TITLES, pageForPath } from './route';
 
 /** Home and the display pick up a change made elsewhere within about this long, while visible (#438). */
@@ -49,7 +50,9 @@ export function App() {
     },
     [],
   );
-  const page = pageForPath(window.location.pathname);
+  const legacyCity = pageForPath(window.location.pathname) === 'edit' && new URLSearchParams(window.location.search).get('focus') === 'city';
+  const page = legacyCity ? 'settings' : pageForPath(window.location.pathname);
+  useEffect(() => { if (legacyCity) window.location.replace('/settings?focus=city'); }, [legacyCity]);
   const display = page === 'display';
   const nativeDisplay = display && window.self === window.top && new URLSearchParams(window.location.search).get('native') === '1';
   // #436 one display window: a newer browser display retires this one (it closes, or shows a card and
@@ -172,7 +175,7 @@ export function App() {
                     {error.network
                       ? page === 'home'
                         ? 'Home needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.'
-                        : 'The editor needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.'
+                        : 'The app needs the display server that runs on this computer. Try again in a moment; if it keeps failing, restart the app.'
                       : 'The display server answered but could not open your settings. Try again in a moment.'}
                   </p>
                 </div>
@@ -210,6 +213,7 @@ export function App() {
         reload={reload}
       />
     );
+  if (page === 'settings') return <SettingsPage state={state} setState={updateState} connectionError={error?.message ?? null} reload={reload} />;
   return (
     <Editor
       state={state}

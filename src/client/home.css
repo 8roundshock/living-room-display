@@ -851,3 +851,10 @@
     translate: 0 8px;
   }
 }
+/* #517: Home is a daily workspace; the visual preview belongs to Edit display. */
+.home-columns { grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; }
+.studio .home-action { min-height: 64px; padding: 10px 12px; border-radius: 14px; column-gap: 9px; }
+.home-action-icon { width: 30px; height: 30px; }
+.home-action-description { font-size: 11px; }
+.home-actions { gap: 8px; margin: 20px 0 24px; }
+@media (max-width: 950px) { .home-columns { grid-template-columns: minmax(0, 1fr); } .home-card { order: -1; } }
