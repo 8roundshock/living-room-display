@@ -262,12 +262,14 @@ function Start-App {
     $entry = Join-Path $app 'dist\server\index.js'
     $oldData = $env:LRD_DATA_DIR
     $oldPort = $env:LRD_PORT
+    $oldPreparer = $env:LRD_PREVIEW_PREPARER
     try {
         $env:LRD_DATA_DIR = $data
         $env:LRD_PORT = '4318'
+        $env:LRD_PREVIEW_PREPARER = if ($env:LRD_PREVIEW_PREPARER_DISABLED -eq '1') { '0' } else { '1' }
         $process = Start-Process -FilePath $script:node -ArgumentList ('"' + $entry + '"') -WorkingDirectory $app -WindowStyle Hidden -PassThru
         Write-Json (Join-Path $run 'server.json') @{processId=$process.Id;startedAt=$process.StartTime.ToUniversalTime().ToString('o')}
-    } finally { $env:LRD_DATA_DIR = $oldData; $env:LRD_PORT = $oldPort }
+    } finally { $env:LRD_DATA_DIR = $oldData; $env:LRD_PORT = $oldPort; $env:LRD_PREVIEW_PREPARER = $oldPreparer }
     for ($attempt=0; $attempt -lt 40; $attempt++) {
         Start-Sleep -Milliseconds 250
         if ($process.HasExited) { throw 'Server exited during startup. Check prerequisites and port 4318.' }
@@ -287,6 +289,26 @@ function Test-OwnedBrowserCommandLine([string]$CommandLine) {
     # The display host starts Edge with this install's own profile folder.
     if (-not $CommandLine) { return $false }
     return ($CommandLine -match ('--user-data-dir="?' + [regex]::Escape((Join-Path $InstallRoot 'edge-profile')) + '("|\s|$)'))
+}
+function Get-OwnedPreparers($Server) {
+    # Pin exact child handles before stopping Node. Never adopt an orphan by name.
+    if (-not $Server -or $Server.HasExited) { return }
+    $expected = Join-Path $app 'windows\LivingRoomDisplay.Preview.exe'
+    foreach ($candidate in @(Get-CimInstance Win32_Process -Filter "Name='LivingRoomDisplay.Preview.exe' AND ParentProcessId=$([int]$Server.Id)" -ErrorAction SilentlyContinue)) {
+        if ($candidate.ExecutablePath -ne $expected) { continue }
+        $child = Get-Process -Id $candidate.ProcessId -ErrorAction SilentlyContinue
+        if (-not $child) { continue }
+        $accepted = $false
+        try {
+            $null = $child.Handle
+            # Re-query after pinning: a recycled PID cannot inherit the first record's parent.
+            $current = Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$child.Id)" -ErrorAction SilentlyContinue
+            if ($current -and $current.ExecutablePath -eq $expected -and $current.ParentProcessId -eq $Server.Id -and -not $Server.HasExited -and -not $child.HasExited -and $child.Path -eq $expected -and $child.StartTime.ToUniversalTime().Ticks -ge $Server.StartTime.ToUniversalTime().Ticks) {
+                $accepted = $true
+                $child
+            }
+        } catch { } finally { if (-not $accepted) { $child.Dispose() } }
+    }
 }
 function Stop-App {
     Assert-Installed
@@ -309,9 +331,16 @@ function Stop-App {
     }
     $owned = Get-OwnedServer
     if ($owned) {
+        $preparers = @(Get-OwnedPreparers $owned)
         # The server's hidden console host ends just after it; give it a moment too.
         $consoles = @(foreach ($item in @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$([int]$owned.Id) AND Name='conhost.exe'" -ErrorAction SilentlyContinue)) { Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue })
-        Stop-OwnedProcess $owned 'The Living Room Display server'
+        try {
+            Stop-OwnedProcess $owned 'The Living Room Display server'
+            foreach ($preparer in $preparers) {
+                # Stdin EOF and the pinned parent handle normally end this child.
+                if (-not $preparer.WaitForExit($script:processExitTimeoutMs)) { Stop-OwnedProcess $preparer 'The Living Room Display preview preparer' }
+            }
+        } finally { foreach ($preparer in $preparers) { $preparer.Dispose() } }
         foreach ($console in $consoles) { $null = $console.WaitForExit($script:processExitTimeoutMs) }
     }
     $pidFile = Join-Path $run 'server.json'
@@ -807,7 +836,7 @@ function Assert-PackageManifest($Manifest, [hashtable]$Entries) {
         if ([int64]$Entries[$path] -ne [int64]$file.size) { throw "LRD-E13: Size mismatch for $path" }
     }
     foreach ($path in $Entries.Keys) { if (-not $listed.Contains($path)) { throw "LRD-E13: The package has an unlisted file: $path" } }
-    foreach ($required in @('app/package.json','app/dist/server/index.js','app/dist/client/index.html','app/windows/LivingRoomDisplay.ps1','app/windows/LivingRoomDisplay.scr','runtime/node.exe')) {
+    foreach ($required in @('app/package.json','app/dist/server/index.js','app/dist/client/index.html','app/windows/LivingRoomDisplay.ps1','app/windows/LivingRoomDisplay.scr','app/windows/LivingRoomDisplay.Preview.exe','runtime/node.exe')) {
         if (-not $listed.Contains($required)) { throw "LRD-E13: The package is missing $required" }
     }
 }

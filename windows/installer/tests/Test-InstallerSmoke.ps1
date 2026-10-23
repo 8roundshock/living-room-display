@@ -30,6 +30,7 @@ function Test-Port4318 {
 
 # ---- hard guards -----------------------------------------------------------
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Refusing to run: this smoke test only runs on GitHub Actions runners.' }
+if ($env:LRD_PREVIEW_PREPARER_DISABLED -ne '1') { throw 'Refusing to run: desktop preparation must be disabled for synthetic installer lifecycle checks.' }
 if (Test-Path -LiteralPath (Join-Path $defaultRoot 'installation.json')) { throw 'Refusing to run: a Living Room Display installation.json already exists for this account.' }
 if (Test-Port4318) { throw 'Refusing to run: something is listening on 127.0.0.1:4318.' }
 if (Test-Path -LiteralPath $appIdKey) { throw 'Refusing to run: the Living Room Display Setup registration already exists.' }
@@ -93,7 +94,8 @@ function Get-TreeState([string]$Path) {
 function Get-Http([string]$Path) { return Invoke-WebRequest -Uri ('http://127.0.0.1:4318' + $Path) -UseBasicParsing -TimeoutSec 10 }
 function Get-OwnedProcesses {
     $runtimeNode = Join-Path $installRoot 'runtime\node.exe'
-    return @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -eq $runtimeNode -or $_.ExecutablePath -eq $scr) })
+    $preparer = Join-Path $installRoot 'app\windows\LivingRoomDisplay.Preview.exe'
+    return @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -eq $runtimeNode -or $_.ExecutablePath -eq $scr -or $_.ExecutablePath -eq $preparer) })
 }
 function Get-BeforeState {
     $desktopValues = Get-ItemProperty 'HKCU:\Control Panel\Desktop'

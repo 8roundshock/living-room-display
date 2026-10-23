@@ -127,6 +127,9 @@ jobs:
           path: ${{ runner.temp }}/rollback-test
       - name: Install, repair, rollback and uninstall smoke test
         shell: pwsh
+        # Transaction/lifecycle QA must never capture a runner desktop.
+        env:
+          LRD_PREVIEW_PREPARER_DISABLED: '1'
         run: |
           function Get-CheckedSetup([string]$Folder, [string]$Filter) {
             $file = @(Get-ChildItem -LiteralPath $Folder -File | Where-Object { $_.Name -like $Filter })
