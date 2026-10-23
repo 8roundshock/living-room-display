@@ -1059,5 +1059,6 @@ budget additionally allows only that measured toolbar height; all 44 px row
 targets and the no-body-overflow check remain. At 1280×720 the common Weather form
 fits without scrolling. An empty location status keeps its live region mounted
 without reserving a blank row. Mobile action errors return to their reserved
-canvas row whenever canvas controls are visible; floating is for a scrolled-away
-canvas, where it must still avoid the current control.
+canvas row while it fits in view; otherwise floating placement follows scroll,
+focus and layout changes and must still avoid every canvas action and the current
+control. A visible canvas action alone does not suppress an off-screen error.
