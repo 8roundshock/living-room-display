@@ -6,13 +6,19 @@ import { extname, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import type { AppState, ClearCompletedResult, PreviewState, Reminder } from '../shared/contracts.ts';
 import { REMINDER_HISTORY_LIMIT, REMINDER_LIMIT, RESTORE_BEFORE_EDITING, historyReminders, pruneHistory } from '../shared/reminders.ts';
-import { needsForecast } from '../shared/widgets.ts';
+import { needsAirQuality, needsAlerts, needsForecast } from '../shared/widgets.ts';
 import { DataStore, SettingsConflict } from './store.ts';
 import { persistableSettings } from './persistence.ts';
 import { REFRESH_WAIT_MS, WeatherService, type FetchLike } from './weather.ts';
 import { AirQualityService, offAirQuality } from './air.ts';
+import { AlertsService, offAlerts } from './alerts.ts';
 import { windowsStatus } from './windows.ts';
-import { automaticLocationSchema, importSchema, mergeSettings, reminderCreateSchema, reminderPatchSchema, settingsPatchSchema, validationMessage } from './validation.ts';
+import { automaticLocationSchema, countdownCreateSchema, importSchema, mergeSettings, reminderCreateSchema, reminderPatchSchema, settingsPatchSchema, timerCreateSchema, timerPatchSchema, validationMessage, worldClockCreateSchema } from './validation.ts';
+import { TimerError, TimerStore } from './timers.ts';
+import { TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts';
+import { WIDGET_CATALOG, isActiveWidget } from '../shared/widgets.ts';
+import { HOME_SHOWABLE_WIDGETS, showPlacement } from '../shared/show.ts';
+import type { ChangeMarker, Settings, TimersResult, WidgetId } from '../shared/contracts.ts';
 
 // Read once at module load. src/server and the built dist/server both sit two
 // levels below the package.json shipped with the app, so health matches it.
@@ -27,9 +33,14 @@ class UnchangedReminder extends Error {
   reminder: Reminder;
   constructor(reminder: Reminder) { super('Reminder unchanged'); this.reminder = reminder; }
 }
+/** Aborts a serialized settings update that would change nothing (a widget already shown, an Undo already applied). */
+class UnchangedSettings extends Error {
+  settings: Settings;
+  constructor(settings: Settings) { super('Settings unchanged'); this.settings = settings; }
+}
 export interface ApplicationOptions {
   dataDirectory: string; clientDirectory?: string; fetcher?: FetchLike; now?: () => number; development?: boolean;
-  /** How long a request waits for a due weather or air-quality refresh before answering (#351). */
+  /** How long a request waits for a due weather, air-quality or alerts refresh before answering (#351). */
   refreshWaitMs?: number;
 }
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
@@ -67,8 +78,14 @@ function ifMatch(request: IncomingMessage): string[] | null {
 export async function createApplication(options: ApplicationOptions) {
   const store = await DataStore.open(options.dataDirectory);
   const now = options.now ?? Date.now;
+  // Opened after the data store, whose startup removes stale timers.json temporary files (#438).
+  const timers = await TimerStore.open(options.dataDirectory, now());
+  // GET /api/changes (#438): this process, then the settings/reminder writes, the timer writes and the preview changes.
+  const bootId = randomBytes(6).toString('hex');
+  let previewChanges = 0;
   const weather = new WeatherService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   const air = new AirQualityService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
+  const alerts = new AlertsService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   const hostToken = randomBytes(32).toString('hex');
   let image: Buffer | null = null;
   let previewGeneration = 0;
@@ -76,6 +93,7 @@ export async function createApplication(options: ApplicationOptions) {
   function clearPreview() {
     // Invalidate uploads that began before this clear, even if preview is later enabled again.
     previewGeneration++;
+    if (preview.available || image) previewChanges++;
     image = null; preview = { available: false, capturedAt: null, width: null, height: null };
   }
   function previewState(): PreviewState {
@@ -99,7 +117,7 @@ export async function createApplication(options: ApplicationOptions) {
     response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     void route(request, response).catch(error => {
       if (response.headersSent) { response.end(); return; }
-      if (error instanceof HttpError) json(response, error.status, { error: error.message });
+      if (error instanceof HttpError || error instanceof TimerError) json(response, error.status, { error: error.message });
       else if (error instanceof z.ZodError) json(response, 400, { error: validationMessage(error) });
       else json(response, 500, { error: 'The request could not be completed. Existing saved data has been preserved.' });
     });
@@ -121,20 +139,24 @@ export async function createApplication(options: ApplicationOptions) {
     const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`);
     const method = request.method ?? 'GET';
     const path = url.pathname;
-    response.setHeader('Permissions-Policy', path.startsWith('/display') ? 'geolocation=()' : 'geolocation=(self)');
+    // Only Edit display may ask for device location; Home and the display never do (#438).
+    response.setHeader('Permissions-Policy', path.startsWith('/editor') ? 'geolocation=(self)' : 'geolocation=()');
 
     if (method === 'GET' && path === '/api/health') { json(response, 200, { status: 'ok', version: APP_VERSION, storageWarning: store.warning }); return; }
     if (method === 'GET' && path === '/api/windows/status') { json(response, 200, await windowsStatus()); return; }
     if (method === 'GET' && path === '/api/state') {
       // Metadata only: the photo bytes are not copied for a poll (#353).
       const { settings, reminders, photo, settingsRevision } = store.view();
-      // The forecast is refreshed only while a saved widget needs it (#352) and air quality only while
-      // its widget is saved enabled; each waits for a due refresh at most briefly (#351).
-      const [weatherState, airQuality] = await Promise.all([
+      // The forecast is refreshed only while a saved widget needs it (#352); air quality only while a saved
+      // widget shows it (Air quality, or Dynamic with Air & UV, #437); official alerts only while Dynamic
+      // shows them (#437). Each waits for a due refresh at most briefly (#351). Alerts are API-only: never
+      // stored, exported or logged.
+      const [weatherState, airQuality, alertsState] = await Promise.all([
         needsForecast(settings) ? weather.get(settings) : weather.peek(settings),
-        settings.widgets.airQuality ? air.get(settings) : offAirQuality(settings),
+        needsAirQuality(settings) ? air.get(settings) : offAirQuality(settings),
+        needsAlerts(settings) ? alerts.get(settings) : offAlerts(),
       ]);
-      const state: AppState = { settings, reminders, weather: weatherState, preview: previewState(), airQuality,
+      const state: AppState = { settings, reminders, weather: weatherState, preview: previewState(), airQuality, alerts: alertsState, timers: timers.list(now()), timersWarning: timers.warning,
         photo: photo ? { available: true, ...photo } : { available: false, id: null, width: null, height: null, updatedAt: null } };
       json(response, 200, { ...state, storageWarning: store.warning }, etag(settingsRevision)); return;
     }
@@ -223,6 +245,73 @@ export async function createApplication(options: ApplicationOptions) {
       }
       json(response, patch ? 200 : 204, changed); return;
     }
+    // Home (#438) -------------------------------------------------------------------------------------
+    if (method === 'GET' && path === '/api/changes') {
+      json(response, 200, { change: `${bootId}.${store.changes}.${timers.changes}.${previewChanges}` } satisfies ChangeMarker); return;
+    }
+    if (method === 'GET' && path === '/api/timers') { json(response, 200, { timers: timers.list(now()), warning: timers.warning } satisfies TimersResult); return; }
+    if (method === 'POST' && path === '/api/timers') {
+      const input = await jsonBody(request);
+      // A length outside 1 s – 24 h gets the sentence Home shows as is.
+      const length = (input as { durationMs?: unknown } | null)?.durationMs;
+      if (typeof length !== 'number' || !Number.isInteger(length) || length < TIMER_MIN_MS || length > TIMER_MAX_MS) throw new HttpError(400, TIMER_MESSAGES.range);
+      json(response, 201, await timers.create(timerCreateSchema(now()).parse(input), now())); return;
+    }
+    if (method === 'DELETE' && path === '/api/timers/finished') { json(response, 200, { deleted: await timers.removeFinished(now()) } satisfies ClearCompletedResult); return; }
+    const timerMatch = /^\/api\/timers\/([0-9a-f-]{36})$/i.exec(path);
+    if (timerMatch && method === 'PATCH') { json(response, 200, await timers.patch(timerMatch[1]!, timerPatchSchema.parse(await jsonBody(request)), now())); return; }
+    if (timerMatch && method === 'DELETE') { await timers.remove(timerMatch[1]!, now()); json(response, 204); return; }
+    // One countdown or world clock at a time, inside the serialized write, so two pages never drop
+    // each other's items (#287). Undo passes the removed item's id and index back.
+    if (method === 'POST' && (path === '/api/countdowns' || path === '/api/world-clocks')) {
+      const countdown = path === '/api/countdowns';
+      const { id, index, ...fields } = countdown ? countdownCreateSchema.parse(await jsonBody(request)) : worldClockCreateSchema.parse(await jsonBody(request));
+      const key = countdown ? 'countdowns' : 'worldClocks', limit = countdown ? 12 : 4;
+      let saved: Settings;
+      try {
+        saved = (await store.update(data => {
+          const list = data.settings.widgetData[key] as { id: string }[];
+          if (id && list.some(item => item.id === id)) throw new UnchangedSettings(data.settings);
+          if (list.length >= limit) throw new HttpError(409, countdown ? 'Up to 12 countdowns. Remove one to add another.' : 'Up to 4 cities. Remove one to add another.');
+          const item = { id: id ?? randomUUID(), ...fields };
+          list.splice(Math.min(index ?? list.length, list.length), 0, item);
+          data.settings = mergeSettings(data.settings, { widgetData: { [key]: list } });
+        })).settings;
+      } catch (error) {
+        if (!(error instanceof UnchangedSettings)) throw error;
+        json(response, 200, error.settings); return;
+      }
+      json(response, 201, saved); return;
+    }
+    const itemMatch = /^\/api\/(countdowns|world-clocks)\/([0-9a-f-]{36})$/i.exec(path);
+    if (itemMatch && method === 'DELETE') {
+      const key = itemMatch[1] === 'countdowns' ? 'countdowns' : 'worldClocks';
+      const saved = await store.update(data => {
+        const list = data.settings.widgetData[key] as { id: string }[];
+        if (!list.some(item => item.id === itemMatch[2])) throw new HttpError(404, key === 'countdowns' ? 'Countdown not found' : 'City not found');
+        data.settings = mergeSettings(data.settings, { widgetData: { [key]: list.filter(item => item.id !== itemMatch[2]) } });
+      });
+      json(response, 200, saved.settings); return;
+    }
+    // "Show on my display" (#438): free cells only, never moving another widget; Edit display makes room.
+    const showMatch = /^\/api\/widgets\/([A-Za-z]+)\/show$/.exec(path);
+    if (showMatch && method === 'POST') {
+      const id = showMatch[1] as WidgetId;
+      if (!HOME_SHOWABLE_WIDGETS.includes(id) || !isActiveWidget(id)) throw new HttpError(400, 'Home can only show Clock, World clocks, Calendar, Reminders, Countdown and Note');
+      let saved: Settings;
+      try {
+        saved = (await store.update(data => {
+          if (data.settings.widgets[id]) throw new UnchangedSettings(data.settings);
+          const placement = showPlacement(data.settings, id);
+          if (!placement) throw new HttpError(409, `No room for ${WIDGET_CATALOG[id].name} on your display.`);
+          data.settings = mergeSettings(data.settings, { widgets: { [id]: true }, widgetGrid: { placements: { [id]: { ...placement, span: placement.span ?? null } } } });
+        })).settings;
+      } catch (error) {
+        if (!(error instanceof UnchangedSettings)) throw error;
+        saved = error.settings;
+      }
+      json(response, 200, saved); return;
+    }
     if (method === 'GET' && path === '/api/export') {
       response.setHeader('Content-Disposition', 'attachment; filename="living-room-display-backup.json"');
       const { version, settings, reminders } = store.view();
@@ -268,7 +357,7 @@ export async function createApplication(options: ApplicationOptions) {
       if (uploadGeneration !== previewGeneration || !currentSettings.preview.enabled || !currentSettings.widgets.preview) {
         throw new HttpError(409, 'Snapshot upload was cleared or preview is disabled');
       }
-      image = content; preview = { available: true, capturedAt, width, height };
+      image = content; preview = { available: true, capturedAt, width, height }; previewChanges++;
       json(response, 201, previewState()); return;
     }
     if (path.startsWith('/api/')) throw new HttpError(404, 'API endpoint not found');

@@ -37,6 +37,17 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     await page.clock.install({ time: new Date(now) });
     await page.goto(base + '/editor'); await button('Edit layout').waitFor();
   }
+  /**
+   * Adds the previewed Photo. The #435 default board fills the grid, so the add is explained with room
+   * fixes; the first (Switch the grid to Fine) adds it as the same single draft edit.
+   */
+  async function addPhoto() {
+    await button('Add Photo').click();
+    await page.locator('.studio-savebar, .widget-picker .room-fix').first().waitFor();
+    const fix = page.locator('.widget-picker .room-fix').first();
+    if (await fix.count()) { assert.equal(await fix.innerText(), 'Switch the grid to Fine'); await fix.scrollIntoViewIfNeeded(); await fix.click(); }
+    await button('Save changes').waitFor();
+  }
   async function inView(locator, label) {
     const box = await locator.boundingBox(); const viewport = page.viewportSize();
     assert.ok(box && box.x >= -1 && box.y >= -1 && box.x + box.width <= viewport.width + 1 && box.y + box.height <= viewport.height + 1, `${label} must fit the viewport: ${JSON.stringify(box)}`);
@@ -89,7 +100,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     // A rejected photo, with the Save bar showing for the added Photo widget.
     await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click();
     if (viewport.width <= 700) await button('Photo large').click();
-    await button('Add Photo').scrollIntoViewIfNeeded(); await button('Add Photo').click(); await button('Save changes').waitFor();
+    await button('Add Photo').scrollIntoViewIfNeeded(); await addPhoto();
     await page.getByLabel('Choose local photo').setInputFiles({ name: 'bad.png', mimeType: 'text/plain', buffer: Buffer.from('not an image') });
     await page.getByRole('alert').filter({ hasText: 'Choose a JPEG, PNG or WebP image' }).waitFor();
     await alertClear(viewport, `${viewport.width}x${viewport.height} rejected photo`);
@@ -357,6 +368,11 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1280, height: 600 }, { width: 1024, height: 600 }, { width: 760, height: 600 }]) {
       await open(viewport);
       const before = await frame();
+      // #438: the shared header keeps its 64 px height, and the canvas starts below it as before.
+      const header = await page.locator('.studio-header').boundingBox();
+      assert.equal(header.height, 64, `${viewport.width}x${viewport.height}: the header keeps 64 px`);
+      assert.ok(before.y >= header.y + header.height, 'the canvas starts below the header');
+      assert.equal(await page.getByRole('navigation', { name: 'Pages' }).getByRole('link').count(), 2, 'Home and Edit display links');
       for (const name of ['Style', 'Widgets', 'Weather', 'Reminders']) {
         await tab(name);
         assert.equal(await page.evaluate(() => `${document.documentElement.scrollWidth},${document.documentElement.scrollHeight}`), `${viewport.width},${viewport.height}`, `desktop ${name} must use contained scrolling`);
@@ -400,10 +416,33 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     }
     for (const viewport of [{ width: 390, height: 700 }, { width: 390, height: 480 }, { width: 640, height: 300 }]) {
       await open(viewport);
+      // #360 keeps the hint on its own row below 700 px; #438 adds the Pages nav to the 44 px control row.
+      // Pin that two-row geometry instead of the pre-hint fixed header height.
+      const header = await page.locator('.studio-header').evaluate(element => {
+        const box = element.getBoundingClientRect(), hint = element.querySelector('.open-display-hint').getBoundingClientRect();
+        const controls = [...element.querySelectorAll('.brand, .studio-page-link, .open-display, .close-display')].filter(control => control.checkVisibility()).map(control => {
+          const rect = control.getBoundingClientRect();
+          return { name: control.getAttribute('aria-label') ?? control.textContent.trim(), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height };
+        });
+        return { top: box.top, bottom: box.bottom, height: box.height, hint: { top: hint.top, bottom: hint.bottom, height: hint.height }, controls };
+      });
+      for (const control of header.controls) {
+        assert.ok(control.width >= 44 && control.height >= 44, `${control.name}: 44 px header target`);
+        assert.ok(control.left >= 0 && control.right <= viewport.width, `${control.name}: inside the viewport`);
+        assert.ok(Math.abs(control.top - header.top - 12) <= 1, `${control.name}: control row starts after 12 px padding`);
+      }
+      const controlBottom = Math.max(...header.controls.map(control => control.bottom));
+      assert.ok(Math.abs(header.hint.top - controlBottom - 6) <= 1, 'the hint has its own row, 6 px below the controls');
+      assert.ok(Math.abs(header.height - (24 + 44 + 6 + header.hint.height + 1)) <= 1, 'header contains both rows, 12 px vertical padding and 1 px border without extra space');
+      assert.ok(Math.abs(header.bottom - header.hint.bottom - 13) <= 1, 'the hint clears the bottom padding and border');
+      if (viewport.width <= 480) {
+        assert.deepEqual(await page.getByRole('navigation', { name: 'Pages' }).getByRole('link').allInnerTexts(), ['Home']);
+        assert.equal(await page.locator('.open-display-label').isVisible(), false); await inView(page.getByRole('link', { name: 'Open display' }), 'icon-only Open display');
+      }
       for (const name of ['Widgets', 'Style', 'Weather', 'Reminders']) { await tab(name); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'narrow/200% equivalent must not scroll horizontally'); }
       await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click(); await button('Photo large').click(); await button('Add Photo').scrollIntoViewIfNeeded(); await inView(button('Add Photo'), 'Mobile Add');
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
-      await button('Add Photo').click(); await button('Save changes').waitFor();
+      await addPhoto();
       const upload = page.locator('.photo-upload-control'); await upload.scrollIntoViewIfNeeded();
       const icon = await upload.locator('svg').boundingBox(); assert.ok(icon.width === 16 && icon.height === 16, 'upload icon keeps explicit geometry');
       await tab('Weather'); const input = page.getByRole('combobox', { name: 'City', exact: true }); await input.focus();

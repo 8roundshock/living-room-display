@@ -25,13 +25,19 @@ code and tests for actual symbols and commands; the documentation is not a schem
 - Route placement and resizing through shared grid helpers. Preserve collision,
   bounds, migration, export/import and preset behavior. Provide a keyboard/control
   alternative to dragging; never persist an intermediate drag frame.
-- Reuse ambient type/color/motion tokens and the centralized relocation wrapper.
+- Reuse ambient type/color/motion tokens and the centralized movement wrapper
+  (the float timer and Swap places in `Display.tsx`).
   Avoid a bright card, fixed frame, separator or permanent header. For large time
   numerals favor a legible dim outline treatment; do not add a stationary clock
   face or hide meaningful data merely to make a size fit.
 - Keep the entire widget, including labels and attribution, inside its movable
-  group. Spatial relocation and black intervals must continue when motion effects
-  are reduced. Dimness or movement does not guarantee prevention of OLED burn-in.
+  group. There is no black rest (#436): the board floats and each widget's content
+  floats inside its own box by translating the section (`--float-x`/`--float-y`),
+  so a widget must tolerate a translated section: lay out inside the content box,
+  never depend on the section's screen position, and keep content left-anchored
+  so the shared fit can measure its slack. Movement continues in steps when motion
+  effects are reduced. Dimness or movement does not guarantee prevention of OLED
+  burn-in.
 - Use honest loading, unavailable, stale and empty states. An empty widget can
   disappear according to its option; a failed request must not imply no content.
   Ambient widgets are silent and passive; configuration/actions belong in the editor.
@@ -43,12 +49,19 @@ code and tests for actual symbols and commands; the documentation is not a schem
 - Declare a `category` and an existing palette `tone` on the catalog entry, one
   line per entry, appended after existing ones. Activate a reserved `planned` entry
   by deleting its `status`; do not add a second id for it.
+- A new widget is off in the catalog (`defaultEnabled: false`), which is also how
+  older saved data reads it. The board new installs start with is the separate
+  `DEFAULT_BOARD` (#435), which fills the grid; change it only on an owner decision,
+  never by changing catalog defaults.
 - Implement a `WidgetModule` in its own file under `src/client/widgets/`, with its
   own CSS file imported from that module. Register it on its line in
   `WIDGET_MODULES`. Use `Settings`, `draftProblem` and `sample` hooks instead of
   editing the inspector, editor or picker.
 - Use `WeatherGlyph` for weather symbols and `TransitionText` for changing values.
-  Add no per-widget animation loop.
+  Add no per-widget animation loop. Content that rotates (Dynamic, #437) picks its card
+  with `rotationSlot` from `src/client/dynamic.ts` (wall-clock slots; slot 0 on the editor
+  canvas and picker samples) and starts no timer of its own: the display's one-second tick
+  re-renders it.
 - Know when the shared fit reruns (#314): on a box or content-size change, a text or
   structure change, a `class` change inside the content, and a Text size or typeface
   change, never on a `style` or `data-*` change alone. Restyle through a class when the
@@ -81,12 +94,13 @@ independent autosave path for a new widget's settings.
 ## Verify and hand off
 
 Use isolated synthetic data. Run relevant build/tests and inspect actual rendering
-for each supported family, grid and relocation phase, including reduced motion,
+for each supported family and grid, floating (a translated section) and with Swap
+places on, including reduced motion,
 long content and no-data states. Run the palette harness,
 `tests/ui/palette-browser.mjs`: add a newly active widget to its `FULL_BOARD`, and
 to `ACCENT_SELECTOR` when its accent element is a new kind or to `TEXT_ONLY` when
 it has none. It fails for any painted colour other than the element's accent, the
-text colour or the status tone. Check black transition intervals, clipping,
+text colour or the status tone. Check a swap's glide and dim, clipping,
 overlap, pointer isolation and mobile/keyboard editing. Keep captures in memory.
 Report actual evidence and what still needs physical-display acceptance; a browser
 image cannot establish long-term OLED behavior.

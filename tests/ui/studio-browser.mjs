@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
-import { forecastFixture } from '../../src/server/fixtures.ts';
+import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { BACKUP_REJECTED, RESTORE_UNREACHABLE } from '../../src/client/backup.ts';
 import { NETWORK_ERROR_MESSAGE as NETWORK } from '../../src/client/api.ts';
@@ -92,9 +92,10 @@ export async function runStudioQa({ playwright, edge } = {}) {
   const errors = [],
     images = [],
     checks = [];
-  async function reset() {
+  /** Fresh data on the #435 default board, or on another board such as the catalog board. */
+  async function reset(board = defaultSettings) {
     await app.store.update((data) => {
-      data.settings = defaultSettings();
+      data.settings = board();
       data.reminders = [];
     });
   }
@@ -223,8 +224,11 @@ export async function runStudioQa({ playwright, edge } = {}) {
           return { l: r.left, t: r.top, r: r.right, b: r.bottom };
         };
       for (const widget of document.querySelectorAll('.ambient-widget')) {
-        const outer = box(widget),
-          content = box(widget.querySelector('.widget-content'));
+        // The cell without the #436 float translation; the content floats inside it.
+        const [x, y] = getComputedStyle(widget).translate.split(' ').map((value) => parseFloat(value) || 0),
+          shift = (r) => ({ l: r.l - (x ?? 0), t: r.t - (y ?? 0), r: r.r - (x ?? 0), b: r.b - (y ?? 0) });
+        const outer = shift(box(widget)),
+          content = shift(box(widget.querySelector('.widget-content')));
         if (
           outer.l < -1 ||
           outer.t < -1 ||
@@ -254,6 +258,17 @@ export async function runStudioQa({ playwright, edge } = {}) {
   try {
     await reset();
     let { page, context } = await open();
+    // #438: the shared header: the brand goes Home, the Pages nav marks Edit display, and Open
+    // display targets the one still-display window (no rel=noreferrer, which would drop its name).
+    const header = await page.locator('.studio-header').evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      brand: element.querySelector('.brand').getAttribute('href'),
+      pages: [...element.querySelectorAll('nav[aria-label="Pages"] a')].map((link) => [link.textContent.trim(), link.getAttribute('href'), link.getAttribute('aria-current')]),
+      display: [element.querySelector('a.open-display').getAttribute('target'), element.querySelector('a.open-display').getAttribute('rel'), element.querySelector('a.open-display').getAttribute('aria-label')],
+    }));
+    assert.deepEqual(header, { height: 64, brand: '/', pages: [['Home', '/', null], ['Edit display', '/editor', 'page']], display: ['still-display', null, 'Open display'] });
+    assert.equal(await page.title(), 'Still · Edit display');
+    checks.push('#438 header at 1440×1000: 64 px, the brand links Home, Pages nav with Edit display current, Open display targets still-display; title "Still · Edit display"');
     assert.equal(await save(page).count(), 0);
     assert.equal(await cancel(page).count(), 0);
     await tab(page, 'Style');
@@ -747,8 +762,9 @@ export async function runStudioQa({ playwright, edge } = {}) {
     );
 
     await reset();
+    // #436: compositions change only with Swap places on (opt-in); the board floats either way.
     await app.store.patchSettings({
-      appearance: { motionIntervalSeconds: 30, fadeSeconds: 0.2 },
+      appearance: { motionIntervalSeconds: 30, fadeSeconds: 0.2, rearrange: true },
     });
     for (const viewport of [
       { width: 1920, height: 1080 },
@@ -776,7 +792,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
       await context.close();
     }
     checks.push(
-      'four timed compositions fit 1080p and 4K; true black, no audio or ambient geolocation, visible browser cursor',
+      'four timed Swap places compositions fit 1080p and 4K; true black, no audio or ambient geolocation, visible browser cursor',
     );
     ({ page, context } = await open({
       route: '/display',
@@ -794,12 +810,16 @@ export async function runStudioQa({ playwright, edge } = {}) {
         .evaluate((e) => getComputedStyle(e).animationName),
       'none',
     );
+    const planeAt = () =>
+      page.locator('.widget-grid-plane').evaluate((e) => e.style.transform);
+    const planeBefore = await planeAt();
     await page.clock.runFor(90000);
     assert.ok(
       Number(await page.locator('.ambient').getAttribute('data-composition')) >
         0,
-      'Reduced motion retains discrete relocation',
+      'Reduced motion still swaps places without animation (#436)',
     );
+    assert.notEqual(await planeAt(), planeBefore, 'and the board still moves, in steps');
     await context.close();
     for (const width of [390, 320]) {
       ({ page, context } = await open({
@@ -1031,6 +1051,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     await page.getByRole('button', { name: 'Preview Note', exact: true }).click();
     await page.getByRole('button', { name: 'Add Note', exact: true }).click();
+    // The #435 default board fills the grid: the small Note goes in with its room fix, one draft edit.
+    await page.getByRole('button', { name: 'Make room: Reminders small', exact: true }).click();
     await page.locator('.widget-picker').waitFor({ state: 'detached' });
     await page.getByRole('button', { name: 'Clock', exact: true }).click();
     await page.getByRole('button', { name: 'Analog', exact: true }).click();
@@ -1038,14 +1060,17 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.getByRole('slider', { name: 'Text size', exact: true }).fill('125');
     await page.locator('summary', { hasText: 'Motion' }).click();
     await page
-      .getByRole('checkbox', { name: 'Drift and fade between moves', exact: true })
+      .getByRole('checkbox', { name: 'Float gently', exact: true })
       .uncheck();
+    await page
+      .getByRole('checkbox', { name: 'Swap places', exact: true })
+      .check();
     await save(page).click();
     await saved(page);
     const board = structuredClone(app.store.snapshot().settings);
     assert.deepEqual(
-      [board.widgets.note, board.appearance.clockStyle, board.appearance.fontScale, board.appearance.motionEnabled],
-      [true, 'analog', 1.25, false],
+      [board.widgets.note, board.appearance.clockStyle, board.appearance.fontScale, board.appearance.motionEnabled, board.appearance.rearrange],
+      [true, 'analog', 1.25, false, true],
     );
     assert.deepEqual(await pressedPreset(), ['Room'], 'the default look shows Room pressed');
     await page.getByRole('button', { name: 'Night', exact: true }).click();
@@ -1054,7 +1079,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.equal(await page.locator('.preview-frame [data-widget-id="note"]').count(), 1, 'Night keeps the added Note on the canvas');
     assert.equal(await page.locator('.preview-frame .analog-clock').count(), 1, 'Night keeps Analog');
     assert.equal(await page.getByRole('slider', { name: 'Text size', exact: true }).inputValue(), '125', 'Night keeps Text size');
-    assert.equal(await page.getByRole('checkbox', { name: 'Drift and fade between moves', exact: true }).isChecked(), false, 'Night keeps Drift and fade off');
+    assert.equal(await page.getByRole('checkbox', { name: 'Float gently', exact: true }).isChecked(), false, 'Night keeps Float gently off');
+    assert.equal(await page.getByRole('checkbox', { name: 'Swap places', exact: true }).isChecked(), true, 'Night keeps Swap places on (#436)');
     await page.getByRole('button', { name: 'Room', exact: true }).click();
     await saved(page);
     assert.deepEqual(await pressedPreset(), ['Room'], 'back to the saved look: no Save bar');
@@ -1083,28 +1109,29 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await tab(page, 'Style');
     assert.deepEqual(await pressedPreset(), ['Phone'], 'the saved look shows Phone pressed after reload');
     checks.push(
-      '#153 #110 #226 built-in styles change only the look: Note, Analog, Text size 125% and Drift and fade off survive Night, Room and Phone; the card pressed follows the look (also after a reverted brightness nudge and reload); Save appears only for effective changes; Phone keeps the 3-minute interval',
+      '#153 #110 #226 built-in styles change only the look: Note, Analog, Text size 125%, Float gently off and Swap places on survive Night, Room and Phone; the card pressed follows the look (also after a reverted brightness nudge and reload); Save appears only for effective changes; Phone keeps the 3-minute interval',
     );
 
-    // #240: plain Motion wording, with the stable structure other suites rely on.
+    // #240, #436: plain Motion wording, with the stable structure other suites rely on.
     await page.locator('summary', { hasText: 'Motion' }).click();
     const motionBody = page.locator('.motion-disclosure .disclosure-body');
-    await motionBody.getByRole('checkbox', { name: 'Drift and fade between moves', exact: true }).waitFor();
-    await motionBody.getByRole('slider', { name: 'Move widgets every', exact: true }).waitFor();
-    assert.match(await motionBody.locator('.motion-hint').innerText(), /^Widgets always move to a new place through black\. With Drift and fade off, or with Animation effects off in Windows Settings › Accessibility › Visual effects on the display PC, they appear without a fade and nothing drifts\.$/);
-    assert.equal(await page.getByText(/Soft motion|New arrangement|Reduced motion removes/).count(), 0, 'the old wording is gone');
-    checks.push('#240 Motion reads "Drift and fade between moves", "Move widgets every" and a hint naming Windows Animation effects');
+    await motionBody.getByRole('checkbox', { name: 'Float gently', exact: true }).waitFor();
+    await motionBody.getByRole('slider', { name: 'Move every', exact: true }).waitFor();
+    await motionBody.getByRole('checkbox', { name: 'Swap places', exact: true }).waitFor();
+    assert.match(await motionBody.locator('.motion-hint').innerText(), /^With Animation effects off in Windows Settings › Accessibility › Visual effects on the display PC, the display moves without animation.$/);
+    assert.equal(await page.getByText(/Soft motion|New arrangement|Reduced motion removes|Drift and fade|through black/).count(), 0, 'the old wording is gone');
+    checks.push('#240/#436 Motion reads "Float gently", "Move every", "Swap places" and a hint naming Windows Animation effects');
 
     // #342: every slider speaks its value with the unit, and the visible copy is not a second live region.
     const spoken = (name) => page.getByRole('slider', { name, exact: true }).getAttribute('aria-valuetext');
     assert.equal(await spoken('Brightness'), '70%');
     assert.equal(await spoken('Text size'), '125%');
-    assert.equal(await spoken('Move widgets every'), '3 minutes');
-    assert.equal(await spoken('Fade duration'), '2 seconds');
-    await range(page, 'Move widgets every');
-    assert.equal(await spoken('Move widgets every'), '3 minutes 30 seconds');
-    await range(page, 'Fade duration', 'ArrowLeft');
-    assert.equal(await spoken('Fade duration'), '1 second');
+    assert.equal(await spoken('Move every'), '3 minutes');
+    assert.equal(await spoken('Swap glide'), '2 seconds');
+    await range(page, 'Move every');
+    assert.equal(await spoken('Move every'), '3 minutes 30 seconds');
+    await range(page, 'Swap glide', 'ArrowLeft');
+    assert.equal(await spoken('Swap glide'), '1 second');
     await cancel(page).click();
     await saved(page);
     const outputs = () => page.locator('.control-label output').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-hidden')));
@@ -1114,7 +1141,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page.getByRole('button', { name: 'Last screen', exact: true }).click();
     assert.equal(await spoken('Snapshot opacity'), '24%');
     assert.deepEqual([...new Set(await outputs())], ['true'], 'Snapshot opacity shows its value once');
-    checks.push('#342 Brightness, Text size, Move widgets every, Fade duration and Snapshot opacity speak "70%", "125%", "3 minutes" ("3 minutes 30 seconds"), "2 seconds" ("1 second") and "24%"; every visible <output> is aria-hidden');
+    checks.push('#342 Brightness, Text size, Move every, Swap glide and Snapshot opacity speak "70%", "125%", "3 minutes" ("3 minutes 30 seconds"), "2 seconds" ("1 second") and "24%"; every visible <output> is aria-hidden');
 
     // #360: one line beside Open display says where the full-screen display is, within the header.
     const hint = 'For full screen on this PC: Start › Living Room Display - Show display, or press F on the display';
@@ -1191,7 +1218,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
     // happened (a failed Save reminder and Save changes with /api/** aborted, a rejected photo),
     // focus stays put, the alert covers neither the control used nor the Save bar, and dismiss works.
     for (const viewport of [{ width: 390, height: 700 }, { width: 390, height: 480 }]) {
-      await reset();
+      // The catalog board has room to add Photo (#435: the default board fills the grid).
+      await reset(catalogBoardDefaults);
       ({ page, context } = await open({ viewport }));
       const label = `${viewport.width}×${viewport.height}`;
       const visibleAlert = async (text, what) => {
@@ -1433,6 +1461,120 @@ export async function runStudioQa({ playwright, edge } = {}) {
       "#234 Restore from backup: refused with unsaved edits (no file picker), an invalid file and a server-rejected file change nothing, the summary names the date and contents, Don't restore changes nothing, Restore replaces data and reminders, refreshes a clean draft and keeps the replaced state.json as state.backup.json; Reset appearance asks inline and Keep changes nothing",
       "#301 the restore question names the recovery backup's exact lifetime (until the next change, including any reminder change; automatic recovery only); #302 a refused file reads in plain words with the server's text under Technical details, an unanswered restore says nothing was restored and keeps the question, the question takes focus and Don't restore, a refused file and a finished restore return it to Restore from backup…",
       '#343 Reset appearance focuses Keep my appearance and Keep or Reset return focus to Reset appearance…; #300 Cancel clears the reset status and Save reads "Appearance reset and saved.", each in the update that removes the Save bar (#499); #304 the Export link and Restore button share the flex layout and an 8 px icon gap at 1280×720, 390 and 320 px',
+    );
+
+    // #435: Reset layout puts the default board back as a draft. An existing user's catalog board
+    // with a Note, a Digital clock, Reminders shown when empty and a custom snapshot opacity.
+    const defaults = defaultSettings();
+    await app.store.update((data) => {
+      const board = catalogBoardDefaults();
+      board.widgets.note = true; board.widgets.preview = false; board.preview.enabled = false; board.preview.opacity = 0.15;
+      board.widgetGrid.placements.note = { column: 8, row: 4, size: 'small' };
+      board.appearance.clockStyle = 'digital'; board.widgetBehavior.reminders.hideWhenEmpty = false;
+      board.widgetData.note.text = 'Synthetic note';
+      data.settings = board; data.reminders = [];
+    });
+    const layoutBefore = current();
+    ({ page, context } = await open({ viewport: { width: 1280, height: 720 } }));
+    await tab(page, 'Style');
+    await page.locator('summary', { hasText: 'Data & recovery' }).click();
+    const layoutStatus = page.locator('.data-status');
+    const resetLayoutButton = page.getByRole('button', { name: 'Reset layout…', exact: true });
+    const focusedName = () => page.evaluate(() => document.activeElement?.textContent?.trim() ?? '');
+    // Origins as percentages of the canvas, rounded: the style attribute keeps fewer digits.
+    const percent = (value) => Math.round(Number.parseFloat(value) * 100) / 100;
+    const canvasBoard = () => page.locator('.preview-surface [data-widget-id]').evaluateAll((sections) => sections.map((section) => [section.getAttribute('data-widget-id'), section.getAttribute('data-widget-span'), section.style.left, section.style.top]).sort())
+      .then((rows) => rows.map(([id, span, left, top]) => [id, span, percent(left), percent(top)]));
+    const spans = { calendar: '4x4', clock: '8x4', weather: '4x4', forecast: '8x2', preview: '4x2', reminders: '4x2' };
+    // Every widget of the default board, Last screen as its editor placeholder.
+    const expectedCanvas = Object.keys(spans).map((id) => {
+      const placement = defaults.widgetGrid.placements[id];
+      return [id, spans[id], percent(placement.column / 12 * 100), percent(placement.row / 8 * 100)];
+    }).sort();
+    // Keep: nothing changes, focus returns to the button.
+    await resetLayoutButton.click();
+    const reset435 = page.getByRole('group', { name: 'Reset layout' });
+    await reset435.waitFor();
+    assert.equal(await reset435.locator('p').innerText().then((text) => text.replace(/\s+/g, ' ').trim()), 'Reset the layout to Calendar, Clock, Weather, Forecast, Last screen and Reminders on the Balanced grid? Other widgets leave the display. Widget settings, the clock style, appearance and reminders stay.');
+    await page.waitForFunction(() => document.activeElement?.textContent?.trim() === 'Keep my layout');
+    await reset435.getByRole('button', { name: 'Keep my layout', exact: true }).click();
+    await reset435.waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.activeElement?.textContent?.trim() === 'Reset layout…');
+    assert.equal(await page.locator('.studio-savebar').count(), 0, 'Keep changes nothing');
+    // Reset: the default board on the canvas as a draft; Cancel restores the saved board.
+    await resetLayoutButton.click();
+    await reset435.getByRole('button', { name: 'Reset', exact: true }).click();
+    await page.locator('.studio-savebar').waitFor();
+    await layoutStatus.filter({ hasText: 'Layout reset. Save changes to keep it.' }).waitFor();
+    assert.equal(await focusedName(), 'Reset layout…', 'focus returns to Reset layout…');
+    await page.clock.runFor(600);
+    assert.deepEqual(await canvasBoard(), expectedCanvas, 'the canvas shows the default board');
+    assert.equal(await page.locator('.preview-surface [data-widget-id="note"]').count(), 0, 'Note leaves the display');
+    await watchResetStatus();
+    await cancel(page).click();
+    await saved(page);
+    assert.deepEqual(current(), layoutBefore, 'Cancel restores the saved board');
+    assert.equal(await page.locator('.preview-surface [data-widget-id="note"]').count(), 1);
+    // #300 for Reset layout: Cancel clears its status in the update that removes the Save bar (#499).
+    assert.equal(await layoutStatus.innerText(), '', 'Cancel clears the layout reset status');
+    assert.equal(await staleResetStatus(), 0, 'Cancel clears the layout reset status in the update that removes the Save bar');
+    assert.equal(await focusedName(), 'Reset layout…', 'Cancel returns focus to Reset layout…');
+    const openReset = async () => {
+      if (!(await resetLayoutButton.isVisible())) {
+        await tab(page, 'Style');
+        if (!(await resetLayoutButton.isVisible())) await page.locator('summary', { hasText: 'Data & recovery' }).click();
+      }
+      await resetLayoutButton.click();
+      await reset435.getByRole('button', { name: 'Reset', exact: true }).click();
+    };
+    // Reset and Save: the default board is saved; options and content stay.
+    await openReset();
+    await page.locator('.studio-savebar').waitFor();
+    await layoutStatus.filter({ hasText: 'Layout reset. Save changes to keep it.' }).waitFor();
+    await watchResetStatus();
+    await save(page).click();
+    await saved(page);
+    await layoutStatus.filter({ hasText: 'Layout reset and saved.' }).waitFor();
+    assert.equal(await staleResetStatus(), 0, 'Save replaces the layout reset status in the update that removes the Save bar (#499)');
+    const afterLayout = app.store.snapshot().settings;
+    assert.deepEqual(afterLayout.widgets, defaults.widgets, "the default board's widgets are saved");
+    for (const id of Object.keys(spans)) assert.deepEqual(afterLayout.widgetGrid.placements[id], defaults.widgetGrid.placements[id], `${id} is saved in its default place`);
+    assert.equal(afterLayout.widgetGrid.density, 'balanced');
+    assert.equal(afterLayout.preview.enabled, true, 'Last screen is shown again');
+    assert.equal(afterLayout.preview.opacity, 0.15, 'its opacity stays');
+    assert.equal(afterLayout.appearance.clockStyle, 'digital', 'the clock style stays');
+    assert.equal(afterLayout.widgetBehavior.reminders.hideWhenEmpty, false, 'Hide when empty stays');
+    assert.equal(afterLayout.widgetData.note.text, 'Synthetic note', 'widget content stays');
+    // Resetting the default board again changes nothing.
+    await openReset();
+    await layoutStatus.filter({ hasText: 'Layout is back to the default.' }).waitFor();
+    assert.equal(await page.locator('.studio-savebar').count(), 0, 'no Save bar for an unchanged board');
+    // #474: an unrelated unsaved edit does not make an unchanged board ask to be saved.
+    await page.getByRole('slider', { name: 'Brightness', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    await page.locator('.studio-savebar').waitFor();
+    await openReset();
+    await layoutStatus.filter({ hasText: 'Layout is back to the default.' }).waitFor();
+    assert.equal(await page.locator('.studio-savebar').count(), 1, 'the Brightness edit keeps its Save bar');
+    await cancel(page).click();
+    await saved(page);
+    // Both reset buttons share one row at 1280 × 720 and wrap without overflow at 390 px.
+    const resetRow = () => page.locator('.reset-actions').evaluate((row) => {
+      const [a, b] = row.querySelectorAll('button'), ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      return { sameRow: Math.abs(ra.top - rb.top) < 2, overflow: document.documentElement.scrollWidth > window.innerWidth, height: Math.min(ra.height, rb.height) };
+    });
+    const wide = await resetRow();
+    assert.equal(wide.sameRow, true, 'one row at 1280 × 720'); assert.equal(wide.overflow, false); assert.ok(wide.height >= 40, `reset buttons keep a ${wide.height} px target`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.clock.runFor(300);
+    assert.equal((await resetRow()).overflow, false, 'no horizontal scroll at 390 px');
+    await resetLayoutButton.click();
+    await reset435.waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, 'the question fits 390 px');
+    await reset435.getByRole('button', { name: 'Keep my layout', exact: true }).click();
+    await context.close();
+    checks.push(
+      '#435 Reset layout… beside Reset appearance asks inline with focus on Keep my layout; Keep changes nothing; Reset shows the default board on the canvas as a draft (all six widgets in their default cells, Last screen as its placeholder, Note gone) that Cancel restores, clearing its status line (#300, #499); Save reads “Layout reset and saved.” and keeps the clock style, Hide when empty, snapshot opacity and the note; an unchanged board says “Layout is back to the default.” with no Save bar, and still does beside an unrelated unsaved edit (#474); focus returns to Reset layout…; the row fits 1280 × 720 and 390 px',
     );
     assert.deepEqual(errors, []);
     return { checks, images };

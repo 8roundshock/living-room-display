@@ -7,7 +7,7 @@ short note, air quality, sun and moon times, and an optional dim screen preview.
 All modules are optional. Drag and resize widgets on a snapping grid, choose
 adaptive sizes and outline/digital/analog clocks, or add a dim local photo.
 
-**Current state: local display/editor and current-PC source install verified.**
+**Current state: Home/display/editor integration verified locally.**
 The selected approach is a custom local web dashboard plus a Windows helper.
 The React UI, local API, persistence, weather and RAM-only snapshot handoff are implemented.
 Device-area weather with a Toronto fallback, editable presets and reminders,
@@ -16,10 +16,11 @@ uses the [recorded HIG-inspired design choices](docs/design.md). The display stu
 puts one focused Style, Widgets, Weather or Reminders inspector beside its live
 preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
-The owner's PC runs a verified install of `main` with the new widgets and the first
-polish wave; later changes on `main` wait for the next coordinated install, and native
-screensaver acceptance and wider release compatibility checks remain.
-[STATUS.md](STATUS.md) records the installed revision and what is still pending.
+The latest read-only installation marker observation identifies `f85be29`, installed
+2026-10-21 at 04:50:32 UTC. The verified source checkpoint is being
+published for review and CI; that is separate from an installed candidate or a
+release package. Native screensaver acceptance and wider release compatibility
+checks remain. [STATUS.md](STATUS.md) separates source checks from installation evidence.
 
 This is the independent
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)
@@ -35,10 +36,10 @@ no published release yet. Never commit or post secrets or private data; see the
 For Windows 10 and 11 (x64), the simplest route is Setup:
 `LivingRoomDisplaySetup-<version>.exe` installs just for your account, with no
 administrator rights, no developer tools and no account. Double-click it, click
-**Install**, and it opens the editor when it's done. Find it again in the Start
-menu as **Living Room Display** (editor) and **Living Room Display - Show
-display**. It doesn't start with Windows or change your screen saver. To update,
-run a newer Setup: your settings, reminders and photo stay, and a backup copy is
+**Install**, and it opens Home when it's done, with **Edit display** a click away.
+Find it again in the Start menu as **Living Room Display** (Home) and **Living Room
+Display - Show display**. It doesn't start with Windows or change your screen saver.
+To update, run a newer Setup: your settings, reminders and photo stay, and a backup copy is
 saved first. To remove it, use **Settings > Apps** (or right-click the Start
 entry) and choose whether to keep your data.
 

@@ -15,6 +15,7 @@ import { CountdownWidget } from './Countdown.tsx';
 import { NoteWidget } from './Note.tsx';
 import { AirQualityWidget } from './AirQuality.tsx';
 import { SunMoonWidget } from './SunMoon.tsx';
+import { DynamicWidget } from './Dynamic.tsx';
 import { guardedRenderer, reportWidgetError } from './WidgetBoundary.tsx';
 
 export type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
@@ -34,6 +35,7 @@ const MODULES: Record<WidgetId, WidgetModule> = {
   note: NoteWidget,
   airQuality: AirQualityWidget,
   sunMoon: SunMoonWidget,
+  dynamic: DynamicWidget,
 };
 /**
  * The modules every surface uses. Each renderer runs inside its own error boundary (#318), so the ambient

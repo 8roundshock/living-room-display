@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../dist/server/app.js';
 import { defaultSettings } from '../../dist/shared/defaults.js';
+import { defaultWidgetGrid, defaultWidgetVisibility } from '../../dist/shared/widgets.js';
 
 const NETWORK = "Can't reach the display server on this computer. Your changes are kept — try again.";
 
@@ -49,12 +50,18 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     await page.route('**/api/**', route => route.abort());
     await page.goto(base + '/editor');
     await page.getByText("Can't reach the display server on this computer.", { exact: true }).waitFor();
-    assert.match(await page.locator('.fallback-hint').innerText(), /may still be starting, or it may have stopped/);
+    assert.equal(await page.locator('.fallback-hint').innerText(), 'The editor needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.');
     await noRawFetch(page, 'loading page');
     if (capture) images.push({ name: 'offline-loading', bytes: await page.screenshot() });
+    // #438: Home's loading page names Home.
+    await page.goto(base + '/');
+    await page.getByText("Can't reach the display server on this computer.", { exact: true }).waitFor();
+    assert.equal(await page.locator('.fallback-hint').innerText(), 'Home needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.');
+    await page.goto(base + '/editor'); await page.getByText("Can't reach the display server on this computer.", { exact: true }).waitFor();
     await page.unroute('**/api/**');
     await button(page, 'Try again').click(); await button(page, 'Edit layout').waitFor();
-    checks.push('loading page: clear explanation without the raw browser error, Try again recovers');
+    assert.equal(await page.title(), 'Still · Edit display');
+    checks.push('loading page: clear explanation without the raw browser error (Edit display\'s and Home\'s own hints), Try again recovers; the title is "Still · Edit display"');
 
     // 2. Save while the server is unreachable keeps the draft, shows the clear message, hands the
     //    Retry offer to the next failed poll and clears everything once a poll succeeds.
@@ -126,7 +133,8 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     checks.push('reminder edit conflict recognised by 409 status with different wording; a new reminder 409 keeps its own message');
 
     // 5. #242: two tabs add a countdown each; the second keeps both after its poll and saves both.
-    await reset();
+    // The catalog board (the default before #435) has room for Countdown; the #435 default board is full.
+    await reset(data => { data.settings.widgets = defaultWidgetVisibility(); data.settings.widgetGrid = defaultWidgetGrid(); });
     const first = await open();
     await tab(first, 'Widgets'); await button(first, 'Add widget').click(); await button(first, 'Preview Countdown').click(); await button(first, 'Add Countdown').click();
     await button(first, 'Save changes').click(); await first.locator('.studio-savebar').waitFor({ state: 'detached' });
@@ -154,7 +162,7 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     checks.push('two editor tabs: a countdown added in each ends with both on the server and in both tabs');
 
     // 6. #287: the same, but B saves before its poll. Its stale Save is refused, merged and sent again.
-    await reset(data => { data.settings.widgets.countdown = true; data.settings.widgetGrid.placements.countdown = { column: 2, row: 4, size: 'small' }; });
+    await reset(data => { data.settings.widgets = defaultWidgetVisibility(); data.settings.widgetGrid = defaultWidgetGrid(); data.settings.widgets.countdown = true; data.settings.widgetGrid.placements.countdown = { column: 2, row: 4, size: 'small' }; });
     const tabA = await open(), tabB = await open();
     const patches = [];
     tabB.on('response', response => { if (response.url().endsWith('/api/settings') && response.request().method() === 'PATCH') patches.push(response.status()); });
@@ -190,7 +198,8 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     checks.push('#287: the same value changed in both tabs keeps B’s draft with “Settings changed in another window”, and B’s next Save wins');
 
     // 8. #350: an unsaved Countdown in B, Note saved elsewhere, a poll, then Save: Note stays enabled.
-    await reset();
+    // Like #242/#287 above, these two scenarios require the old catalog board's free cells.
+    await reset(data => { data.settings.widgets = defaultWidgetVisibility(); data.settings.widgetGrid = defaultWidgetGrid(); });
     const layoutTab = await open();
     await tab(layoutTab, 'Widgets'); await button(layoutTab, 'Add widget').click(); await button(layoutTab, 'Preview Countdown').click(); await button(layoutTab, 'Add Countdown').click();
     await app.store.patchSettings({ widgets: { note: true }, widgetGrid: { placements: { note: { column: 10, row: 6, size: 'small' } } } });
@@ -205,7 +214,7 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     checks.push('#350: an unsaved Countdown, Note saved elsewhere, a poll and Save keep Note enabled at its saved place');
 
     // 9. #350: with no room for it on this layout, the draft wins and the editor says so.
-    await reset();
+    await reset(data => { data.settings.widgets = defaultWidgetVisibility(); data.settings.widgetGrid = defaultWidgetGrid(); });
     await layoutTab.reload(); await button(layoutTab, 'Edit layout').waitFor();
     await tab(layoutTab, 'Widgets'); await button(layoutTab, 'Add widget').click(); await button(layoutTab, 'Preview Countdown').click(); await button(layoutTab, 'Add Countdown').click();
     // The other window gives Note the very cells this draft gave Countdown (the first free ones).

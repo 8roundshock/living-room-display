@@ -63,16 +63,17 @@ installs for your account only (no administrator rights) into
   bundled Node runtime against its pinned SHA-256;
 - installs the app;
 - starts the local server and confirms it answers before it reports success;
-- finishes with **Open Living Room Display** checked, which opens
-  <http://127.0.0.1:4318/editor>.
+- finishes with **Open Living Room Display** checked, which opens Home at
+  <http://127.0.0.1:4318/> (#438), with **Edit display** (`/editor`) a click away.
 
 It never adds startup entries, services, scheduled tasks or Run keys, and it
 never changes your screen saver. There's no firewall prompt because the server
 listens only on 127.0.0.1. No account and no cloud are involved.
 
-**Start menu.** **Living Room Display** opens the editor (it starts the server if
-needed). **Living Room Display - Show display** shows the ambient display now;
-move the mouse or press a key to close it. There's no Uninstall shortcut:
+**Start menu.** **Living Room Display** opens Home in a new browser tab (it starts the
+server if needed); **Edit display** is the link at the top. **Living Room Display -
+Show display** shows the ambient display now; move the mouse or press a key to close
+it. There's no Uninstall shortcut:
 right-click the Start entry, or use **Settings > Apps**.
 
 **Updating.** Download and run the newer Setup. The Ready page says
@@ -350,6 +351,17 @@ The installed script also lives at
 `%LOCALAPPDATA%\LivingRoomDisplay\app\windows\LivingRoomDisplay.ps1`. Controls can
 run there; run `Install`/`Update` from the source clone supplying build sources.
 
+Everyday native launches no longer run PowerShell (#117). The installed
+`app\windows\LivingRoomDisplay.scr` also accepts `--start`, `--stop` and `--status`
+for backend-only control without opening a window. It uses the app-owned Node,
+fixed loopback port and the same ownership record as the script; it refuses a
+different process on that port. `--stop` stops only the backend. Use the script's
+`Stop` for a full display-and-backend shutdown before an update. Installation,
+updates and screensaver registration still use the supported PowerShell script;
+an installed PowerShell 7 can run it without an execution-policy override when
+the effective policy permits local scripts. No command changes machine or user
+execution policy.
+
 Move the mouse or press a key to dismiss ambient mode after its short launch
 grace period. `Stop` also dismisses it. The host owns an isolated Edge profile/job;
 it does not close normal browser windows. Closing ambient clears the snapshot
@@ -379,6 +391,17 @@ tested for inhibition; see [Windows behavior and limits](windows.md). Managed
 policy is not overridden. If you select a different screensaver yourself,
 `DisableIdle` preserves your new choice, including None or an empty/missing
 selection, and retains the backup for inspection.
+
+**Keep the screen on** (Style › Motion › Screen, on by default, #436) holds a Screen Wake
+Lock while the display shows as the screensaver (`native=1`) or full screen, so
+Windows does not turn the screen off or sleep during the session; Windows' own
+power settings apply the rest of the time, and a windowed display tab never holds
+it. It cannot help when Windows turns the screen off or sleeps *before* the
+screensaver starts: the editor's Screen part reads the power plan's display-off
+and sleep timeouts (`powercfg /query`, read-only) and warns when either is shorter
+than the screensaver wait. Change them in Settings › System › Power & sleep, or
+choose a shorter wait. The native host's own hold (`SetThreadExecutionState`) is
+[#442](https://github.com/8roundshock/living-room-display/issues/442).
 
 ## Data, updates, recovery and removal
 
@@ -448,42 +471,59 @@ No automatic geometry downgrade is provided.
 
 ### Additive data and rollback compatibility (#84)
 
-The previous installed release is `d66832b` (the merge of PR #491). Its reader
+The frozen rollback reader is `d66832b` (the merge of PR #491). Its reader
 rejects unknown keys, so an additive key written to disk would make `state.json`,
 and after the next save `state.backup.json`, unreadable by it. `d66832b` reads
-everything this build writes, including every choice that was an exception for
-`bedca44` (custom Reminders sizes, Native colours, Animation Off or Lively, and the
-new widgets of #78 with their content), so `app.previous` remains a working rollback
-after the next update. This build still omits a few additive values from files and
+default data with Fixed brightness and Dynamic off with all sources on, including
+every choice that was
+an exception for `bedca44` (custom Reminders sizes, Native colours, Animation Off or
+Lively, and the new widgets of #78 with their content), so that revision remains a
+data-compatible rollback target unless a choice in the table below was used. This build still omits a few additive values from files and
 exports while they equal the value the current reader restores (see
-[API](api.md#persistence-and-recovery)). `d66832b` reads them either way, so the
-omission is optional for those keys. It was kept to avoid a data-format change
-([#272](https://github.com/8roundshock/living-room-display/issues/272)) and remains
-the mechanism for a future additive key or widget id that the previous release does
-not know.
+[API](api.md#persistence-and-recovery)). `d66832b` reads `accentMode`, `animation`
+and pre-Dynamic `widgetData` either way, so their omission is optional. It was kept to avoid a
+data-format change ([#272](https://github.com/8roundshock/living-room-display/issues/272)).
+`d66832b` does not know `daylightBrightness`, so omitting its Fixed value (`null`) is
+required: that is what keeps Fixed data readable.
+Swap places' `rearrange` and the `screen` section (#436) are also unknown to
+`d66832b`: both are omitted while they hold their defaults (Swap places off, Keep
+the screen on on); a non-default choice is a documented exception below.
 
 `src/server/rollback.test.ts` (part of `npm test`) proves this with a byte-for-byte
 copy of the `d66832b` reader: fresh Native data, previous-release data after unrelated
 saves, saved styles, a photo, a revision-one legacy file, the export, each former
-`bedca44` exception and every value omitted at rest written out in full, in
-`state.json`, `state.backup.json` and the export, all parse. Its negative controls
-show that an unknown key and invalid values are still rejected. After each
+`bedca44` exception, Reset layout to the #435 default board (which `d66832b` reads as
+the same board, Calendar included), and every optional omitted value written out in full, in
+`state.json`, `state.backup.json` and the export, all parse. Fixed brightness is
+omitted at rest and parses; a Follow daylight range in the settings, a saved style or
+the export is rejected until Fixed is saved again or the key is stripped. The default
+board adds no key: it only changes which widgets a fresh data folder shows and where. Its negative
+controls show that an unknown key and invalid values are still rejected. After each
 coordinated install, the baseline moves to the newly installed revision (#130).
 
-A non-default choice that `d66832b` cannot read would be listed here. Before rolling
-back after using one, follow the [revision 2 procedure](#widget-geometry-revision-2-update-and-rollback):
-keep the newer data directory and restore the matching pre-upgrade data copy.
+A non-default choice that `d66832b` cannot read is listed here. Before rolling back
+after using one, either switch it back and save (then save once more, so
+`state.backup.json` holds the switched-back settings too), or follow the
+[revision 2 procedure](#widget-geometry-revision-2-update-and-rollback): keep the
+newer data directory and restore the matching pre-upgrade data copy.
 
 | Feature | Data the previous release (`d66832b`) cannot read |
 | --- | --- |
 | Everything up to `d66832b` (#73, #74, #75, #76, #78 and the polish since) | None. |
+| Brightness → Follow daylight (#439) | `appearance.daylightBrightness` in the settings and in saved styles made while it was on. Fixed, the default, writes no key, so Fixed data stays readable. See [removing Follow daylight before a downgrade](#removing-follow-daylight-before-a-downgrade). |
+| #437 Dynamic | An enabled Dynamic widget, a saved style made while it was on, or Dynamic sources other than all on. Before rolling back to `d66832b`, turn all sources on, remove Dynamic, delete or re-save styles that include it, then Save; or restore the pre-upgrade data copy. The next reader bump (#130) removes this exception. Dynamic off with its sources all on is omitted at rest, and its transform is never written (#135), so that data reads. |
+| #436 **Swap places** on (`appearance.rearrange: true`, also inside a saved style) | The settings, the backup after the next save, and exports. Switch **Swap places** off (and re-save or delete a saved style that has it on), Save, then roll back; or restore the pre-update copy. |
+| #436 **Keep the screen on** off (`screen: { keepAwake: false }`) | The settings, the backup after the next save, and exports. Switch **Keep the screen on** back on, Save, then roll back; or restore the pre-update copy. |
+| #436 float (the default: no swap, keep the screen on) | None: both keys are omitted at rest. |
 
 <a id="rolling-back-the-installed-3446400"></a>
 
-#### Rolling back the installed d66832b
+#### Historical rollback pair for d66832b
 
-The installed `d66832b` keeps `3446400` (the merge of PR #286) as `app.previous`
-until the next update, and this table stays valid while it does. `3446400` was
+At the `d66832b` installation, `3446400` (the merge of PR #286) was recorded as
+`app.previous`. This is historical evidence; recheck the current installation and
+recovery pair before using it. [STATUS.md](../STATUS.md) records the latest marker
+observation, which does not establish the current backup directory contents. `3446400` was
 installed on 2026-10-19 over `4cb7dc1` (the merge of PR #327), which had replaced
 `3fee844` the same day.
 
@@ -564,6 +604,33 @@ folder keeps the original files; keep it private. An export that contains spans
 must be stripped the same way (delete `settings.widgetGrid.placements.*.span` and
 `settings.savedPresets[].visual.widgetGrid.placements.*.span`) before importing it
 into the older app.
+
+#### Removing Follow daylight before a downgrade
+
+Follow daylight (#439) is stored as `appearance.daylightBrightness`; `brightness`
+beside it keeps the Fixed level. Deleting the key therefore leaves Fixed brightness at
+that level, which `d66832b` reads (`src/server/rollback.test.ts` proves this for
+`state.json` and the export). Prefer doing it in the newer app before the rollback:
+choose Style → Brightness → **Fixed** and Save, then save once more (any settings or
+reminder change) so `state.backup.json` no longer holds the range either. A saved
+style made while Follow daylight was on still carries it: apply it, choose Fixed and
+update it, or delete it, and export again afterwards if you want a backup the older
+app can import.
+
+If the older app is already restored, use the procedure above for custom sizes with
+one change: in `$stripCode`, replace the `grids` and `for` lines with
+
+```powershell
+  const looks=[data.settings?.appearance,...(data.settings?.savedPresets??[]).map(preset=>preset?.visual?.appearance)];
+  for(const look of looks) if(look&&typeof look==='object') delete look.daylightBrightness;
+```
+
+and name the candidate `strip-daylight-…` instead of `strip-spans-…`. It validates
+with the older app's own reader before it preserves the data folder and replaces
+anything. An export taken while Follow daylight was on needs the same deletion
+(`settings.appearance.daylightBrightness` and
+`settings.savedPresets[].visual.appearance.daylightBrightness`) before the older app
+imports it.
 
 ### Runtime updates and installed provenance
 

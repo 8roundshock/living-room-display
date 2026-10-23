@@ -17,8 +17,9 @@ npm test
 npm start
 ```
 
-The production app serves the editor at `http://127.0.0.1:4318/editor` and ambient
-view at `http://127.0.0.1:4318/display`; `/api/health` verifies server readiness.
+The production app serves Home at `http://127.0.0.1:4318/`, Edit display (the editor) at
+`http://127.0.0.1:4318/editor` and the ambient view at `http://127.0.0.1:4318/display`;
+`/api/health` verifies server readiness.
 It stores data in the per-user directory documented in [API](api.md), not Git or
 browser storage. Set `LRD_DATA_DIR` to an isolated test folder before integration
 experiments: a source run without it uses the installed app's data folder (on Windows
@@ -49,6 +50,16 @@ surface and active-session input-baseline regressions (`SurfacePolicyTests`,
 workflow runs them under both PowerShell 5.1 and 7 when `windows/` changes. Follow
 [CONTRIBUTING.md](../CONTRIBUTING.md) and the [agent runbook](agent-runbook.md) for
 self-service issue/fork/fix handoff; neither enables automatic reporting.
+
+When an installed PowerShell 7 permits local scripts, `pwsh -NoProfile -File
+.\windows\Test-Windows.ps1` runs the same checks without a policy override. Child
+PowerShell checks inherit that host's effective policy instead of overriding it.
+The native `ServerRuntimeTests` cover ownership, foreign listeners and cancellation
+without a display window; native everyday startup itself uses no PowerShell (#117).
+With `-NodeExe`, a second runtime check uses a copied Node and synthetic data on an
+ephemeral loopback port to verify cold startup, actual process/listener ownership,
+and PowerShell/native recognition and stop in both directions. It never contacts
+the installed server on 4318.
 
 Optional production cursor regression, using an already available Playwright
 module and Edge plus an isolated source server:
@@ -83,7 +94,9 @@ A newly active widget also joins `FULL_BOARD` in `tests/ui/palette-browser.mjs`,
 plus `ACCENT_SELECTOR` (a new kind of accent element) or `TEXT_ONLY` (no accent
 element), so the palette harness checks its colours (#214), and the shared
 `FULL_BOARD` in `tests/ui/lib/boards.mjs`, which the canvas scope harness uses to
-check that no studio rule reaches it on the editor canvas (#313). The motion and
+check that no studio rule reaches it on the editor canvas (#313). The `home` suite
+(`tests/ui/home-browser.mjs`, #438) drives Home end to end with the display beside it: its
+server follows the pages' fake clock, so timers end on cue. The motion and
 widgets suites keep their own copies of that board until
 [#388](https://github.com/8roundshock/living-room-display/issues/388).
 The widgets suite is the longest: 10–12 minutes on the owner's PC on 2026-10-19 with
@@ -129,7 +142,9 @@ CI runs the pull-request set took about 11 minutes of suites (widgets about 6) p
 about a minute of setup, and the scheduled set about 6; every run still takes runner
 time and delays a PR's checks, so weigh adding a slow suite to the pull-request set
 against that
-([#384](https://github.com/8roundshock/living-room-display/issues/384)). The runner
+([#384](https://github.com/8roundshock/living-room-display/issues/384)). The Dynamic
+suite (#437) joined the pull-request set at about 50 seconds locally; its runner time is
+not measured yet. The runner
 has no GPU, so CI passes `--no-gpu` to the motion suite: its resting glyph pixel
 parity and #248 frame budget depend on GPU rasterising and stay local checks. A new
 suite fails the runner until it is placed in one set in

@@ -1,4 +1,4 @@
-import type { Settings, WidgetGrid, WidgetId } from '../shared/contracts';
+import type { AppState, Settings, WidgetGrid, WidgetId } from '../shared/contracts';
 import { useEffect, useRef } from 'react';
 import {
   WIDGET_CATALOG,
@@ -127,6 +127,7 @@ export function WidgetInspector({
   onSelect,
   reveal,
   pickerOpen,
+  pickerInitial = null,
   onPicker,
   onAdd,
   onFix,
@@ -144,6 +145,8 @@ export function WidgetInspector({
   onPhotoCancel,
   saving,
   message,
+  appState,
+  saved,
 }: {
   settings: Settings;
   selected: WidgetId | null;
@@ -151,6 +154,8 @@ export function WidgetInspector({
   /** Scroll this into view once it renders (a new object per request). */
   reveal: InspectorReveal | null;
   pickerOpen: boolean;
+  /** The widget a Home deep link asked for (#438); the picker opens on it. */
+  pickerInitial?: WidgetId | null;
   onPicker: (open: boolean) => void;
   /** Adds a widget as a draft; returns the no-room explanation when it does not fit. */
   onAdd: (id: WidgetId, size: WidgetSize) => RoomProblem | null;
@@ -177,6 +182,9 @@ export function WidgetInspector({
    * always-mounted layout announcer speaks it, so this copy is not a live region (#311).
    */
   message: string;
+  /** The last server state and the saved settings, for widget panels that report them (#437). */
+  appState?: AppState;
+  saved?: Settings;
 }) {
   const addButton = useRef<HTMLButtonElement>(null),
     wasOpen = useRef(false),
@@ -222,6 +230,7 @@ export function WidgetInspector({
     return (
       <WidgetPicker
         settings={settings}
+        initial={pickerInitial}
         onAdd={(id, size) => {
           const problem = onAdd(id, size);
           if (!problem) added.current = id;
@@ -372,6 +381,7 @@ export function WidgetInspector({
                           <option value="24h">24-hour</option>
                         </select>
                       </label>
+                      <p className="hint">While a timer runs, the date line shows it. Start timers from Home.</p>
                     </>
                   )}
                   {id === 'reminders' && (
@@ -473,6 +483,8 @@ export function WidgetInspector({
                       settings={settings}
                       onChange={onChange}
                       saving={saving}
+                      state={appState}
+                      saved={saved}
                     />
                   )}
                 </div>

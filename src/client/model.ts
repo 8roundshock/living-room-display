@@ -10,9 +10,12 @@ export function getVisual(settings: Settings): VisualSettings {
   return structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview });
 }
 
-/** Rain is retired into Weather (#74), so it never carries the credit. */
-export function weatherAttributionWidget(settings: Settings): 'forecast' | 'weather' | null {
-  return settings.widgets.forecast ? 'forecast' : settings.widgets.weather ? 'weather' : null;
+/**
+ * The one widget that carries the “Forecast by Open-Meteo” credit: Forecast, else Weather, else Dynamic
+ * (#437) while both are off. Rain is retired into Weather (#74), so it never carries the credit.
+ */
+export function weatherAttributionWidget(settings: Settings): 'forecast' | 'weather' | 'dynamic' | null {
+  return settings.widgets.forecast ? 'forecast' : settings.widgets.weather ? 'weather' : settings.widgets.dynamic ? 'dynamic' : null;
 }
 
 export function reminderPresentation(
@@ -99,6 +102,20 @@ export function withAppearance(
   update: Partial<Settings['appearance']>,
 ): Settings {
   return { ...settings, appearance: labelLook({ ...settings.appearance, ...update }) };
+}
+
+/**
+ * Reset layout (#435): which widgets are shown, where, at what size, and the grid density return to
+ * the default board. Widget options (clock style, Hide when empty, snapshot opacity), widget content
+ * (cities, dates, the note), the appearance, saved styles and personal data stay. Last screen's
+ * `preview.enabled` follows its widget, as when it is added or removed.
+ */
+export function resetLayout(settings: Settings): Settings {
+  const next = structuredClone(settings), defaults = defaultSettings();
+  next.widgets = defaults.widgets;
+  next.widgetGrid = defaults.widgetGrid;
+  next.preview = { ...next.preview, enabled: defaults.widgets.preview };
+  return next;
 }
 
 /**

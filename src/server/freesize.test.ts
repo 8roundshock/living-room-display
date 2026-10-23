@@ -7,14 +7,13 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Settings, WidgetGrid, WidgetId } from '../shared/contracts.ts';
-import { defaultSettings } from '../shared/defaults.ts';
 import {
   ACTIVE_WIDGET_IDS, GRID_DENSITIES, WIDGET_IDS, composeWidgetGrid, familyForSpan, fitGridDensity, fitWidgetFamily, freeSpanLimits,
   getWidgetRect, gridProblem, intersects, isFreeSize, normalizePlacement, placementFits, placementLabel, placementSpan, reflowWidget,
   repackGrid, resizeWidgetSpan, switchGridDensity, type GridDensity,
 } from '../shared/widgets.ts';
 import { createApplication } from './app.ts';
-import { colorAccentDefaults, forecastFixture, seedColorAccentData } from './fixtures.ts';
+import { catalogBoardDefaults, colorAccentDefaults, forecastFixture, seedColorAccentData } from './fixtures.ts';
 import { mergeSettings, settingsSchema } from './validation.ts';
 import { PREVIOUS_RELEASE, persistableSettings } from './persistence.ts';
 import { assertPreviousReaderAccepts, assertPreviousReaderRejects } from './compat/previous-reader.ts';
@@ -42,12 +41,13 @@ function random(seed: number) {
   return () => { state = (state * 1664525 + 1013904223) >>> 0; return state / 2 ** 32; };
 }
 /**
- * The default board with Last screen off and a medium Weather (for example a pre-#74 board whose
- * Rain was hidden). The post-#74 default large Weather leaves no room for a 2 × 8 column beside the
- * large Clock and Forecast (#183), so column fixtures start from this board.
+ * The catalog board (the default before #435; older data backfills from it) with Last screen off and
+ * a medium Weather (for example a pre-#74 board whose Rain was hidden). Its post-#74 large Weather
+ * leaves no room for a 2 × 8 column beside the large Clock and Forecast (#183), so column fixtures
+ * start from this board. Every geometry below is written for the catalog board.
  */
 function roomyDefaults(): Settings {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   settings.widgets.preview = false; settings.preview.enabled = false;
   settings.widgetGrid.placements.weather = { ...settings.widgetGrid.placements.weather, size: 'medium' };
   return settings;
@@ -77,7 +77,7 @@ test('catalog limits, families and labels for free-size widgets', () => {
 });
 
 test('placementFits and gridProblem validate custom spans with the shared rule', () => {
-  const settings = defaultSettings(), grid = settings.widgetGrid, enabled = only('reminders');
+  const settings = catalogBoardDefaults(), grid = settings.widgetGrid, enabled = only('reminders');
   const check = (id: WidgetId, placement: WidgetGrid['placements'][WidgetId], target = grid) => {
     const next = { ...target, placements: { ...target.placements, [id]: placement } };
     return { fits: placementFits(next, id, placement, enabled), problem: gridProblem(next, { ...enabled, [id]: true }) };
@@ -113,10 +113,10 @@ test('reflow and resize move neighbours for a full-height column or keep the boa
   assert.equal(Object.hasOwn(back.placements.reminders, 'span'), false, 'a family-equal span is dropped');
   assert.equal(back.placements.reminders.size, 'small');
 
-  // Every default widget plus a 5 × 8 Reminders cannot fit in Balanced: no partial board.
-  const defaults = defaultSettings();
+  // Every catalog-board widget plus a 5 × 8 Reminders cannot fit in Balanced: no partial board.
+  const defaults = catalogBoardDefaults();
   assert.equal(resizeWidgetSpan(defaults.widgetGrid, 'reminders', { columns: 8, rows: 8 }, defaults.widgets), null);
-  // After #74 the default large Weather leaves no room for a column even without Last screen (#183).
+  // After #74 the catalog board's large Weather leaves no room for a column even without Last screen (#183).
   assert.equal(resizeWidgetSpan(defaults.widgetGrid, 'reminders', { columns: 2, rows: 8 }, { ...defaults.widgets, preview: false }), null);
   assert.equal(resizeWidgetSpan(defaults.widgetGrid, 'reminders', { columns: 9, rows: 2 }, defaults.widgets), null, 'beyond the width limit');
   assert.equal(resizeWidgetSpan(defaults.widgetGrid, 'reminders', { columns: 1, rows: 2 }, defaults.widgets), null, 'below the minimum');
@@ -129,7 +129,7 @@ test('reflow and resize move neighbours for a full-height column or keep the boa
 
 test('density changes scale spans, keep full height, clamp width and fall back to a family', () => {
   const enabled = only('reminders', 'clock');
-  const grid = defaultSettings().widgetGrid;
+  const grid = catalogBoardDefaults().widgetGrid;
   grid.placements.clock = { column: 0, row: 0, size: 'small' };
   grid.placements.reminders = { column: 4, row: 0, size: 'large', span: { columns: 8, rows: 8 } };
   assert.equal(gridProblem(grid, enabled), null);
@@ -139,7 +139,7 @@ test('density changes scale spans, keep full height, clamp width and fall back t
   const spacious = repackGrid(grid, 'spacious', enabled); assert.ok(spacious);
   assert.deepEqual(spacious.placements.reminders.span, { columns: 5, rows: 6 }, 'full height stays full height');
 
-  const column = defaultSettings().widgetGrid;
+  const column = catalogBoardDefaults().widgetGrid;
   column.placements.reminders = { column: 0, row: 0, size: 'small', span: { columns: 2, rows: 8 } };
   column.placements.clock = { column: 2, row: 0, size: 'large' };
   assert.equal(gridProblem(column, enabled), null);
@@ -167,7 +167,7 @@ test('density changes scale spans, keep full height, clamp width and fall back t
 test('a minimum-width Column stays a Column in every density where it fits (#152)', () => {
   const enabled = only('reminders', 'clock');
   for (const from of Object.keys(GRID_DENSITIES) as GridDensity[]) {
-    const grid = structuredClone(fitGridDensity(defaultSettings().widgetGrid, from, enabled)!.grid);
+    const grid = structuredClone(fitGridDensity(catalogBoardDefaults().widgetGrid, from, enabled)!.grid);
     grid.placements = { ...grid.placements, clock: { column: 4, row: 0, size: 'small' }, reminders: { column: 0, row: 0, size: 'small', span: { columns: 2, rows: GRID_DENSITIES[from].rows } } };
     assert.equal(gridProblem(grid, enabled), null, from);
     for (const to of Object.keys(GRID_DENSITIES) as GridDensity[]) {
@@ -179,7 +179,7 @@ test('a minimum-width Column stays a Column in every density where it fits (#152
     }
   }
   // A minimum-height span keeps its two rows too, while other axes still scale physically.
-  const wide = defaultSettings().widgetGrid;
+  const wide = catalogBoardDefaults().widgetGrid;
   wide.placements = { ...wide.placements, clock: { column: 0, row: 4, size: 'small' }, reminders: { column: 0, row: 0, size: 'medium', span: { columns: 6, rows: 2 } } };
   const fine = repackGrid(wide, 'fine', enabled); assert.ok(fine);
   assert.deepEqual(fine.placements.reminders.span, { columns: 8, rows: 2 }, '6 × 16/12 = 8 columns, rows stay at the minimum');
@@ -198,7 +198,7 @@ test('ambient composition keeps spans, stays disjoint and moves a full-height co
   }
   assert.ok(columns.size >= 3, `the column visits several columns (${[...columns].join(', ')})`);
 
-  const lone = defaultSettings().widgetGrid, solo = only('reminders', 'clock');
+  const lone = catalogBoardDefaults().widgetGrid, solo = only('reminders', 'clock');
   lone.placements.reminders = { column: 0, row: 0, size: 'small', span: { columns: 2, rows: 8 } };
   lone.placements.clock = { column: 4, row: 0, size: 'small' };
   const moved = composeWidgetGrid(lone, solo, 1, lone);
@@ -235,7 +235,7 @@ test('custom spans compose with the #74 Rain merge and the #93 reflection fallba
 
   // A hidden Weather takes an enabled Rain's cells on a 100% full board with a 4 × 8 span, which then keeps
   // relocating through the reflection fallback without losing the span or overlapping.
-  const full = defaultSettings();
+  const full = catalogBoardDefaults();
   full.widgets = { ...full.widgets, weather: false, rain: true, preview: true, photo: false }; full.preview.enabled = true;
   Object.assign(full.widgetGrid.placements, {
     reminders: { column: 0, row: 0, size: 'large', span: { columns: 4, rows: 8 } }, clock: { column: 4, row: 0, size: 'large' },
@@ -260,14 +260,16 @@ test('custom spans compose with the #74 Rain merge and the #93 reflection fallba
 const CATALOG_78: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
 
 test('containment: boards with spans are readable by the previous release, and deleting every span keeps a valid layout it reads', () => {
-  // The previous release (d66832b) knows every active widget and the span (#211): no widget has to be
-  // turned off before reading, so each acceptance below is about the span and the board around it.
-  assert.deepEqual(ACTIVE_WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id)), [], 'the previous release knows every active widget: turn the ids it lacks off before the acceptance checks, as before #263');
+  // The previous release (d66832b) knows the span (#211) and every active widget except Dynamic (#437),
+  // whose enabled state is a documented rollback exception: it stays off here, so each acceptance below is
+  // about the span and the board around it.
+  const known = (id: WidgetId) => (PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id);
+  assert.deepEqual(ACTIVE_WIDGET_IDS.filter(id => !known(id)), ['dynamic'], 'the ids the previous release lacks are turned off before the acceptance checks');
   assert.deepEqual(CATALOG_78.filter(id => !ACTIVE_WIDGET_IDS.includes(id)), [], 'every #78 widget is active and takes part');
   const next = random(73); let withSpans = 0, besideNewWidgets = 0;
   for (let iteration = 0; iteration < 60; iteration++) {
     const settings = colorAccentDefaults(), density = (['spacious', 'balanced', 'fine'] as GridDensity[])[Math.floor(next() * 3)]!;
-    for (const id of ACTIVE_WIDGET_IDS) settings.widgets[id] = id === 'reminders' || next() < 0.6;
+    for (const id of ACTIVE_WIDGET_IDS) settings.widgets[id] = id === 'reminders' || (next() < 0.6 && known(id));
     settings.preview.enabled = settings.widgets.preview;
     const fitted = fitGridDensity(settings.widgetGrid, density, settings.widgets); if (!fitted) continue;
     settings.widgetGrid = fitted.grid;
@@ -390,7 +392,7 @@ test('settings PATCH saves, normalizes and clears spans atomically', async () =>
 
 test('composition stays fast on the densest free-size boards', () => {
   for (const density of Object.keys(GRID_DENSITIES) as GridDensity[]) {
-    const settings = defaultSettings(); const enabled: Visibility = { ...settings.widgets, photo: true };
+    const settings = catalogBoardDefaults(); const enabled: Visibility = { ...settings.widgets, photo: true };
     const fitted = fitGridDensity(settings.widgetGrid, density, enabled); assert.ok(fitted);
     const limits = freeSpanLimits('reminders', density)!;
     // The tallest column that still fits beside every other enabled widget.

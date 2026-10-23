@@ -4,6 +4,7 @@ import { defaultSettings } from '../shared/defaults.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, absorbRetiredWidgets, absorbableGridProblem, defaultWidgetGrid, firstPlacement, fitGridDensity, isPlannedWidget, normalizePlacement, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
 import { ACCENT_MODES } from '../shared/palette.ts';
 import { ANIMATION_LEVELS } from '../shared/motion.ts';
+import { KEEP_DONE_MS, TIMER_ADD_MAX_MS, TIMER_LABEL_MAX, TIMER_LIMIT, TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts';
 import { checkPhotoUpload, photoAssetSchema, photoAssetShape } from './photo.ts';
 import { AT_REST } from './persistence.ts';
 
@@ -28,17 +29,24 @@ export const location = z.object({
   longitude: z.number().min(-180).max(180), timezone: z.union([timezone, z.literal('auto')]),
 }).strict();
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex color');
+const brightnessLevel = z.number().min(0.1).max(1);
+/** Follow daylight (#439): a whole range, replaced whole by PATCH; null is Fixed. */
+const daylightBrightness = z.object({ dimmest: brightnessLevel, brightest: brightnessLevel }).strict()
+  .refine(range => range.dimmest <= range.brightest, { message: 'Dimmest must not be brighter than Brightest', path: ['dimmest'] })
+  .nullable();
 // Field schemas carry no defaults: zod applies .default() inside .partial(), which made a
 // brightness-only PATCH reset a saved clock style (#83). Only the persisted reader fills defaults.
 const appearanceFields = {
   preset: z.enum(['phone', 'room', 'night', 'custom']), accentColor: color, textColor: color,
-  brightness: z.number().min(0.1).max(1), fontScale: z.number().min(0.7).max(1.5),
+  brightness: brightnessLevel, fontScale: z.number().min(0.7).max(1.5),
   fontFamily: z.enum(['sans', 'serif', 'mono']), layout: z.enum(['balanced', 'minimal', 'weather-first']),
   motionEnabled: z.boolean(), motionIntervalSeconds: z.number().int().min(30).max(1800),
   fadeSeconds: z.number().min(0).max(10),
   clockStyle: z.enum(['outline', 'digital', 'analog']),
   accentMode: z.enum(ACCENT_MODES),
   animation: z.enum(ANIMATION_LEVELS),
+  daylightBrightness,
+  rearrange: z.boolean(),
 };
 /** Persisted settings, saved styles and imports: additive fields read as their defaults. */
 const appearance = z.object({
@@ -46,6 +54,8 @@ const appearance = z.object({
   clockStyle: appearanceFields.clockStyle.default('outline'),
   accentMode: appearanceFields.accentMode.default(AT_REST.appearance.accentMode),
   animation: appearanceFields.animation.default(AT_REST.appearance.animation),
+  daylightBrightness: appearanceFields.daylightBrightness.default(AT_REST.appearance.daylightBrightness),
+  rearrange: appearanceFields.rearrange.default(AT_REST.appearance.rearrange),
 }).strict();
 /** PATCH: exactly the supplied keys, never a default. */
 const appearancePatch = z.object(appearanceFields).strict().partial();
@@ -78,6 +88,9 @@ const widgetBehavior = z.object({ reminders: reminderBehavior.default({ hideWhen
   .default({ reminders: { hideWhenEmpty: true } });
 const preview = z.object({ enabled: z.boolean(), opacity: z.number().min(0.02).max(0.3), widthPercent: z.number().min(12).max(35) }).strict();
 const idle = z.object({ enabled: z.boolean(), idleMinutes: z.number().int().min(1).max(120) }).strict();
+/** #436 Keep the screen on: persisted settings and imports only, never part of visualShape, so saved styles never carry it. */
+const screen = z.object({ keepAwake: z.boolean().default(true) }).strict().default(() => defaultSettings().screen);
+const screenPatch = z.object({ keepAwake: z.boolean() }).strict().partial();
 const visualShape = { appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview };
 
 // #78 widget content. Field schemas carry no defaults; only the persisted reader fills them.
@@ -98,6 +111,14 @@ const worldClocks = z.array(worldClock).max(4).refine(uniqueIds, 'World clock ID
 const countdowns = z.array(countdown).max(12).refine(uniqueIds, 'Countdown IDs must be unique');
 const weekStart = z.enum(['locale', 'sunday', 'monday']);
 const airQualityScale = z.enum(['us', 'european']);
+/** Dynamic's sources (#437): each reads as on when missing, and a saved section keeps at least one on. */
+export const DYNAMIC_SOURCES_PROBLEM = 'Dynamic needs at least one source';
+const dynamicSources = z.object({
+  weather: z.boolean().default(true), alerts: z.boolean().default(true), air: z.boolean().default(true),
+  sky: z.boolean().default(true), personal: z.boolean().default(true),
+}).strict().refine(value => Object.values(value).some(Boolean), DYNAMIC_SOURCES_PROBLEM)
+  .default(() => ({ weather: true, alerts: true, air: true, sky: true, personal: true }));
+const dynamicSourcesPatch = z.object({ weather: z.boolean(), alerts: z.boolean(), air: z.boolean(), sky: z.boolean(), personal: z.boolean() }).strict().partial();
 /** Persisted settings and imports only: never part of visualShape, so saved styles never contain it. */
 const widgetData = z.object({
   worldClocks: worldClocks.default(() => []),
@@ -105,6 +126,7 @@ const widgetData = z.object({
   countdowns: countdowns.default(() => []),
   note: z.object({ text: noteText.default('') }).strict().default(() => ({ text: '' })),
   airQuality: z.object({ scale: airQualityScale.default('us') }).strict().default(() => ({ scale: 'us' as const })),
+  dynamic: dynamicSources,
 }).strict().default(() => defaultSettings().widgetData);
 /** PATCH: exactly the supplied keys, never a default; arrays replace whole. */
 const widgetDataPatch = z.object({
@@ -113,6 +135,7 @@ const widgetDataPatch = z.object({
   countdowns: countdowns.optional(),
   note: z.object({ text: noteText }).strict().partial().optional(),
   airQuality: z.object({ scale: airQualityScale }).strict().partial().optional(),
+  dynamic: dynamicSourcesPatch.optional(),
 }).strict();
 function checkGrid(value: Pick<Settings, 'widgetGrid' | 'widgets'>, context: z.RefinementCtx) {
   // Strict, except that an enabled retired widget may overlap the target absorbing it (#74).
@@ -131,7 +154,7 @@ const savedPresets = z.array(z.object({ id: z.string().min(1).max(80), name: z.s
 export const settingsSchema = z.object({ ...visualShape, version: z.literal(1), location,
   // Missing source means legacy/manual, so upgrades cannot replace an existing city.
   locationSource: z.enum(['device', 'manual', 'fallback']).default('manual'),
-  units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets, widgetData,
+  units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets, widgetData, screen,
 }).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(absorbRetiredWidgets).transform(value => {
   if (value.locationSource === 'fallback') return { ...value, location: defaultSettings().location };
   if (value.locationSource === 'device') return { ...value, location: {
@@ -163,6 +186,7 @@ export const settingsPatchSchema = z.object({
   widgetBehavior: z.object({ reminders: z.object({ hideWhenEmpty: z.boolean().optional() }).strict().optional() }).strict().optional(),
   preview: preview.partial().optional(), idle: idle.partial().optional(), savedPresets: savedPresets.optional(),
   widgetData: widgetDataPatch.optional(),
+  screen: screenPatch.optional(),
 }).strict();
 const dueAt = z.iso.datetime({ offset: true }).nullable();
 export const reminderInputSchema = z.object({ text: z.string().trim().min(1).max(240), dueAt: dueAt.optional() }).strict();
@@ -185,6 +209,53 @@ export const checkedPhotoDataSchema = z.object({ version: z.literal(1), settings
   .refine(uniqueReminders, 'Reminder IDs must be unique');
 export const importSchema = z.object({ version: z.literal(1), exportedAt: z.iso.datetime(), settings: settingsSchema, reminders: z.array(reminderSchema).max(1000) }).strict();
 
+// Home's item endpoints (#438) reuse the persisted field schemas; Undo may pass the removed id and its index.
+export const countdownCreateSchema = countdown.omit({ id: true }).extend({
+  repeatsYearly: z.boolean().default(false), id: z.uuid().optional(), index: z.number().int().min(0).max(11).optional(),
+}).strict();
+export const worldClockCreateSchema = worldClock.omit({ id: true }).extend({
+  id: z.uuid().optional(), index: z.number().int().min(0).max(3).optional(),
+}).strict();
+
+// Timers (#438) live in the timers.json sidecar, never in the settings data above.
+const timerLabel = z.string().trim().max(TIMER_LABEL_MAX, `Use at most ${TIMER_LABEL_MAX} characters`);
+const timerLength = z.number().int(TIMER_MESSAGES.range).min(TIMER_MIN_MS, TIMER_MESSAGES.range).max(TIMER_MAX_MS, TIMER_MESSAGES.range);
+const timerInstant = z.iso.datetime({ offset: true }).transform(value => new Date(value).toISOString());
+/** The persisted form: exactly one of `endsAt` and `remainingMs`, a paused remainder up to 24 hours. */
+export const timerSchema = z.object({
+  id: z.uuid(), label: timerLabel, durationMs: timerLength,
+  endsAt: z.iso.datetime().nullable(), remainingMs: z.number().int().min(1).max(TIMER_MAX_MS).nullable(),
+  createdAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
+}).strict().refine(timer => (timer.endsAt === null) !== (timer.remainingMs === null), 'A timer is either running (endsAt) or paused (remainingMs)');
+export const timersFileSchema = z.object({
+  version: z.literal(1),
+  timers: z.array(timerSchema).max(TIMER_LIMIT).refine(uniqueIds, 'Timer IDs must be unique'),
+}).strict();
+/**
+ * POST: a label and a length. Undo re-creates a cancelled timer as it was, with its end (from an hour
+ * ago, so a recently finished one can come back, up to 24 hours ahead) or, for a paused one, what was left.
+ */
+export function timerCreateSchema(now: number) {
+  return z.object({
+    label: timerLabel.optional(), durationMs: timerLength,
+    endsAt: timerInstant.optional(), remainingMs: z.number().int().min(1).max(TIMER_MAX_MS).optional(),
+  }).strict().superRefine((value, context) => {
+    if (value.endsAt !== undefined && value.remainingMs !== undefined) context.addIssue({ code: 'custom', message: 'Send endsAt or remainingMs, not both' });
+    if (value.endsAt !== undefined) {
+      const at = Date.parse(value.endsAt);
+      if (at < now - KEEP_DONE_MS || at > now + TIMER_MAX_MS) context.addIssue({ code: 'custom', path: ['endsAt'], message: 'Use an end within the last hour or the next 24 hours' });
+    }
+    // +1 min can extend a paused timer beyond its original restart length (#487). The field's
+    // 24-hour bound matches timerSchema and TimerStore.patch, so Undo can restore that valid state.
+  });
+}
+/** PATCH: exactly one action. */
+export const timerPatchSchema = z.union([
+  z.object({ paused: z.boolean() }).strict(),
+  z.object({ addMs: z.number().int().min(TIMER_MIN_MS).max(TIMER_ADD_MAX_MS) }).strict(),
+  z.object({ restart: z.literal(true) }).strict(),
+], { error: 'Send exactly one of paused, addMs or restart' });
+
 export function mergeSettings(current: Settings, patch: SettingsPatch): Settings {
   const { automaticLocation, photoChange: _photoChange, ...changes } = patch;
   if (automaticLocation && current.locationSource === 'manual') {
@@ -199,7 +270,9 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
     widgetData: { ...current.widgetData, ...patch.widgetData,
       calendar: { ...current.widgetData.calendar, ...patch.widgetData?.calendar },
       note: { ...current.widgetData.note, ...patch.widgetData?.note },
-      airQuality: { ...current.widgetData.airQuality, ...patch.widgetData?.airQuality } },
+      airQuality: { ...current.widgetData.airQuality, ...patch.widgetData?.airQuality },
+      dynamic: { ...current.widgetData.dynamic, ...patch.widgetData?.dynamic } },
+    screen: { ...current.screen, ...patch.screen },
   };
   // Existing API callers that explicitly edit a city are manual overrides too.
   if (changes.location && changes.locationSource === undefined) next.locationSource = 'manual';

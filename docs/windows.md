@@ -18,10 +18,16 @@ this helper is still pending (see [verification](#verification)).
 
 - `/s` or `--display`: ensure the installed backend is owned/ready, capture one
   last-desktop thumbnail if enabled, then launch the isolated Edge kiosk.
-- `/c` (also `/c:<handle>`) or no argument: start the backend and open `/editor`.
+- `/c` (also `/c:<handle>`) or no argument: start the backend and open `/editor`
+  (Edit display); `--editor` (the Start menu, desktop and Setup-finish shortcuts)
+  opens Home (`/`, #438).
 - `/p <parent HWND>` (also `/p:<handle>`): draw a dim, capture-free placeholder
   in the Windows screensaver preview; no Edge/backend is launched.
 - `--check`: verify Edge can be found; no display or capture.
+- `--start`, `--stop`, `--status`: control only this installation's backend without
+  PowerShell (#117). Start opens no browser; Status writes `ServerRunning` and
+  `Healthy` JSON. Stop leaves any display host alone; the control script's `Stop`
+  remains the full display-and-backend shutdown used during updates.
 - `--test-display`: display with automatic dismissal after eight seconds, for
   bounded integration verification. Capture still follows the preview setting.
 
@@ -30,7 +36,9 @@ activate. One fixed input baseline is captured before startup and never replaced
 genuine input cancels startup or dismisses the display, including its first
 second. Manual `--display` launches follow the same rule
 ([#502](https://github.com/8roundshock/living-room-display/issues/502) tracks
-checking that against the launching click). A per-user mutex prevents simultaneous ambient sessions. Session lock,
+checking that against the launching click). A per-user mutex (`Local\LivingRoomDisplay.Ambient`) prevents simultaneous
+ambient sessions: `/s`, `--display` and `--test-display` exit at once when it is
+already held, so the native host never starts a second display (#436). Session lock,
 logoff and disconnect close the display. A named event scoped to the installed
 helper path lets `Stop` ask it to exit normally.
 Session observation starts before cold server startup and handshake. A cancelled
@@ -42,8 +50,15 @@ Edge is atomically assigned to an owned Windows job at suspended creation, then
 resumes after a cancellation check. The job uses `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, so dismissal and helper crashes
 terminate only that browser process tree. No global Edge/node kill, window input
 injection, audio change or media key is used. The backend lives independently.
-Scripts validate PID, executable path, command line and process start time before
-stopping it. Source runs and other apps are not adopted.
+The native runtime and control script validate PID, executable path, command line
+and process start time before using or stopping it. Source runs and other apps are
+not adopted. Native startup runs the app-owned Node executable directly, with the
+installed data directory and fixed loopback port 4318; it never invokes a shell,
+looks up Node on PATH, or changes an execution policy. It shares the control script's
+operation mutex and `run/server.json` format, so either path can recognize and stop
+the other's server. Health is accepted only with the loopback listener owned by
+that exact process. A foreign listener is refused; cancelled or failed cold startup
+stops only its newly launched, pinned child and removes only its matching record.
 
 Ordinary browser `/display`, including fullscreen, keeps its visible pointer and
 F fullscreen toggle. Explicit `native=1` presentation hides the document cursor
@@ -60,7 +75,9 @@ and a fresh ownership check permit alpha1 reveal; alpha0, color-key transparency
 and WS_EX_TRANSPARENT are not used. Loading that never becomes ready closes after
 15 seconds. Renderer loss, foreign/NULL foreground, visible cursor, input, stop
 or cancellation hide the surface and end its exact browser job. No timer repairs
-cursor state or forces focus. HTTP cleanup follows hiding/disposal of the surface.
+cursor state or forces focus. UI-thread cleanup hides/disposes the surface before
+waiting for HTTP cleanup. Monitor cancellation may already have started HTTP clear;
+disposal ends the owned browser job before waiting for that clear (#505).
 Readiness matches the owned Edge window by the display document's title
 (`Still · Display`), so a change to that title in `src/client/App.tsx` must also
 change `windows/NativeDisplay.cs` until
@@ -77,6 +94,39 @@ retention/destruction, pointer movement, input injection, global hook or registr
 setting. Natural desktop cursor restoration needs actual measurement. The editor
 and its embedded preview keep their normal pointer. Unexpected UI-thread errors
 close instead of displaying a modal dialog.
+
+## One display window and keeping the screen on (#436)
+
+Browser displays are kept to one window by the web app, not the host: the editor's
+**Open display** reuses and focuses a window named `still-display`, and a display
+opened any other way announces itself on a BroadcastChannel so older browser displays
+close themselves, or show a card and stop polling (see [UI](ui.md)). The native
+kiosk runs in its own Edge profile and job and takes no part; its mutex already keeps
+it single. On the owner's PC the seven "Still · Display" windows of 2026-10-20 were
+browser tabs: the earlier `target="_blank" rel="noreferrer"` link opened a new tab
+on every click, and Esc turned each into another editor.
+
+**Keep the screen on** (`screen.keepAwake`, on by default) is a Screen Wake Lock
+requested by the display page itself (`useWakeLock.ts`), so the host needs no
+change: it is held while the page is visible and either the native kiosk
+(`native=1`) or full screen, re-requested after the browser releases it (for
+example when the page is hidden) and on full-screen changes, retried at most every
+10 s after a refusal, and released on dismissal, when the page is hidden or when
+the setting is off. Edge implements it as a display-required power request, which
+also blocks the Windows screensaver and display-off, so it is never held in a
+windowed tab, where a forgotten display would keep the screen on. Headless Edge on
+loopback (a secure context) grants it; the native host's own
+`SetThreadExecutionState(ES_DISPLAY_REQUIRED | ES_CONTINUOUS)` hold for the whole
+session is [#442](https://github.com/8roundshock/living-room-display/issues/442).
+A wake lock cannot help when Windows turns the screen off or sleeps before the
+screensaver starts, so `/api/windows/status` adds the active power plan's
+display-off and sleep timeouts, read with `powercfg.exe /query SCHEME_CURRENT
+SUB_VIDEO VIDEOIDLE` and `SUB_SLEEP STANDBYIDLE` (read-only, no administrator
+rights, 2 s timeout; the last two `0x…` values are AC then DC whatever the display
+language) and the plan name from `powercfg /getactivescheme`. The editor shows them
+and warns when either comes before the screensaver wait. Verified read-only on a
+Windows 10 PC on 2026-10-20: the plan name and both timeouts matched `powercfg`'s
+own output.
 
 ## Preview and privacy
 
@@ -138,7 +188,7 @@ Constrained Language Mode can still block it; Setup then shows a plain message
 | `.scr` screensaver | Windows 11 still selects `.scr` files per user (`HKCU\Control Panel\Desktop`) through **Settings > Personalization > Lock screen > Screen saver**. Setup never selects it; `EnableIdle` stays opt-in. | Unchanged code path; idle opt-in after review: [#118](https://github.com/8roundshock/living-room-display/issues/118). |
 | Edge kiosk | Edge is built in; `--kiosk --edge-kiosk-type=fullscreen` with an isolated profile and job object is unchanged. Setup warns if Edge is missing. | `--check` passes in CI. Kiosk use on a Windows 11 desktop is part of #116. Edge-free fallback: [#119](https://github.com/8roundshock/living-room-display/issues/119). |
 | .NET Framework | 4.8.1 is built into Windows 11 and runs the AnyCPU helper. | CI runs `--check` on every smoke runner. |
-| Windows PowerShell 5.1 | Present on Windows 10 and 11; used only by Setup, the uninstaller and the helper's Start. | CI runs `Test-Windows.ps1` under 5.1 and 7. |
+| Windows PowerShell 5.1 | Present on Windows 10 and 11; used by Setup and the uninstaller. Native everyday startup uses no PowerShell. | CI runs `Test-Windows.ps1` under 5.1 and 7. |
 | Port 4318 | Bound to 127.0.0.1 only, so there's no firewall prompt. A port already in use stops Setup with E11. | The CI smoke asserts a loopback-only listener and the E11 refusal; alternate port: [#121](https://github.com/8roundshock/living-room-display/issues/121). |
 | Windows on Arm | `x64compatible`: the x64 Node runs under emulation; the AnyCPU helper runs natively. | Non-gating CI on windows-11-arm, recorded under [#122](https://github.com/8roundshock/living-room-display/issues/122). |
 | Path length | Windows PowerShell 5.1 file APIs stop at 259 characters. Every payload path stays within 115 characters, so install folders of up to 130 characters always fit; InstallPackage refuses a folder too long for the payload before writing anything (E21). Both numbers come from `packagePathBudget` in the control script. | `Test-InstallerPayload.ps1` fails a payload over the budget; `Test-InstallerPolicy.ps1` checks that both docs quote the same limit; E21 unit test in `Test-PackageInstall.ps1`. |

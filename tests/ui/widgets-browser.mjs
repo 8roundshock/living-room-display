@@ -12,9 +12,10 @@ import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, isActiveWidget, widgetSizes } from '../../src/shared/widgets.ts';
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
+import { waitForWidgetFit } from './lib/fit-readiness.mjs';
 
 /** Renderers that read the weather or air-quality status or the connection; the others render the same when stale or offline. */
-const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'offline'], airQuality: ['stale', 'offline'], reminders: ['offline'] };
+const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'offline'], airQuality: ['stale', 'offline'], reminders: ['offline'], dynamic: ['stale', 'offline'] };
 /**
  * #221, #283: at Text 100% every family must render at fit 1 (a zoom-out shrinks its labels and values
  * whether or not one sits exactly on a floor). These families still zoom out; each allowance names the
@@ -30,7 +31,7 @@ const INTL_TICK_ALLOWANCES = {};
 /** Every active widget on one Balanced 12 x 8 board (as in motion-browser.mjs). */
 const FULL_BOARD = {
   clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
-  sunMoon: { column: 0, row: 2, size: 'large' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
+  sunMoon: { column: 0, row: 2, size: 'medium' }, dynamic: { column: 0, row: 4, size: 'medium' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
   reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
   note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
 };
@@ -175,6 +176,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       for (const density of Object.keys(GRID_DENSITIES)) for (const id of ACTIVE_WIDGET_IDS) for (const size of widgetSizes(id)) {
         current = familyState(id, size, density);
         await open(); const widget = page.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
+        await waitForWidgetFit(page, `[data-widget-id="${id}"]`, { label: `${id}/${size}/${density}/${viewport.width}x${viewport.height}` });
         const bounds = await widget.evaluate(el => { const r = el.getBoundingClientRect(); const content = el.querySelector('.widget-content'); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, scale: new DOMMatrix(getComputedStyle(content).transform).a, border: getComputedStyle(el).borderWidth, background: getComputedStyle(el).backgroundColor, tone: [...el.classList].filter(name => name.startsWith('tone-')), accentMode: el.closest('.ambient')?.getAttribute('data-accent-mode') }; });
         assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.right <= viewport.width + 1 && bounds.bottom <= viewport.height + 1, `${id}/${size}/${density} stays inside display`);
         assert.ok(bounds.scale >= 0.75, `${id}/${size}/${density} should fit by design, scale=${bounds.scale}`);
@@ -373,10 +375,17 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       await page.setViewportSize({ width: 1280, height: 720 });
       current = structuredClone(source); current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD]));
       current.settings.preview.enabled = true; current.settings.widgetGrid.density = 'balanced';
+      // #436: widgets change cells only with Swap places on (opt-in).
+      current.settings.appearance.rearrange = true;
       Object.assign(current.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
       await open();
       const clock = page.locator('[data-widget-id="clock"]');
-      const footprint = () => clock.evaluate(section => { const r = section.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
+      // The cell: the section's box without the #436 float translation, once any swap glide has finished.
+      const footprint = () => clock.evaluate(section => {
+        for (const animation of document.getAnimations()) if (animation.id === 'lrd-glide') animation.finish();
+        const r = section.getBoundingClientRect(), [x, y] = getComputedStyle(section).translate.split(' ').map(value => parseFloat(value) || 0);
+        return { left: r.left - (x ?? 0), top: r.top - (y ?? 0), width: r.width, height: r.height };
+      });
       const composition = async () => Number(await page.locator('.ambient').getAttribute('data-composition'));
       const before = { footprint: await footprint(), composition: await composition() };
       await page.evaluate(() => { window.__lrdWidgetFault = 'clock'; });
@@ -394,7 +403,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       assert.equal(board.length, Object.keys(FULL_BOARD).length, '#318: the full board still shows every widget');
       for (const item of board) if (item.id !== 'clock') assert.ok(!item.failed && item.content > 0, `#318: ${item.id} still renders`);
       await page.clock.runFor(181_000); await page.clock.runFor(1_500);
-      assert.ok(await composition() > before.composition, '#318: the board keeps relocating');
+      assert.ok(await composition() > before.composition, '#318: the board keeps swapping places');
       const moved = await footprint();
       assert.ok(Math.abs(moved.left - before.footprint.left) > 1 || Math.abs(moved.top - before.footprint.top) > 1, '#318: the failed widget relocates with the board');
       assert.equal((await clock.innerText()).trim(), 'Clock unavailable', '#318: still unavailable while the fault lasts (each new minute retries)');

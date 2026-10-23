@@ -16,6 +16,10 @@ test('weather attribution follows the first enabled weather module and can all b
   // Rain is retired into Weather (#74): even an injected enabled Rain never carries the credit.
   settings.widgets.weather = false; settings.widgets.rain = true; assert.equal(weatherAttributionWidget(settings), null);
   settings.widgets.rain = false; assert.equal(weatherAttributionWidget(settings), null);
+  // Dynamic (#437) carries it only while Forecast and Weather are both off.
+  settings.widgets.dynamic = true; assert.equal(weatherAttributionWidget(settings), 'dynamic');
+  settings.widgets.weather = true; assert.equal(weatherAttributionWidget(settings), 'weather');
+  settings.widgets.weather = false; settings.widgets.forecast = true; assert.equal(weatherAttributionWidget(settings), 'forecast');
 });
 import {
   ageLabel,
@@ -302,11 +306,14 @@ import {
   labelLook,
   matchingBuiltinPreset,
   resetAppearance,
+  resetLayout,
   spokenInterval,
   spokenSeconds,
   withAppearance,
 } from './model.ts';
 import { sameEffectiveSettings, settingsChanges } from './draft.ts';
+import { catalogBoardDefaults } from '../server/fixtures.ts';
+import { gridProblem } from '../shared/widgets.ts';
 
 /** Someone's own board and preferences: an added Note, Last screen removed, motion and clock choices, Text size. */
 function personalised() {
@@ -317,7 +324,8 @@ function personalised() {
   source.widgets.preview = false;
   source.preview.enabled = false;
   source.preview.opacity = 0.4;
-  source.widgetGrid.placements.note = { column: 10, row: 6, size: 'small' };
+  // Last screen's cells on the default board (#435), freed by removing it.
+  source.widgetGrid.placements.note = { column: 4, row: 6, size: 'small' };
   source.widgetGrid.density = 'balanced';
   source.widgetOverrides.clock.offsetX = 25;
   source.widgetBehavior.reminders.hideWhenEmpty = false;
@@ -382,6 +390,28 @@ test('Reset appearance returns every Style tab value to its default and keeps th
   assert.deepEqual(rest, before, 'widgets, layout, widget options, location, saved styles and widget content stay');
   assert.equal(matchingBuiltinPreset(reset.appearance), 'room');
   assert.notEqual(reset.widgets, source.widgets, 'an independent copy');
+});
+
+test('Reset layout returns the widgets, their places and sizes and the grid to the default board and keeps everything else (#435)', () => {
+  const defaults = defaultSettings();
+  for (const [label, source] of [['a personalised board', personalised()], ['the catalog board in Fine', (() => {
+    const board = catalogBoardDefaults(); board.widgetGrid.density = 'fine'; board.widgets.preview = false; board.preview.enabled = false; return board;
+  })()]] as const) {
+    assert.equal(gridProblem(source.widgetGrid, source.widgets), null, `${label} is a valid board`);
+    const before = structuredClone(source), reset = resetLayout(source);
+    assert.deepEqual(reset.widgets, defaults.widgets, `${label}: the default board's widgets are shown, every other one hidden`);
+    assert.deepEqual(reset.widgetGrid, defaults.widgetGrid, `${label}: the default board's places, sizes and density`);
+    assert.equal(reset.preview.enabled, true, `${label}: Last screen is shown again`);
+    assert.equal(reset.preview.opacity, source.preview.opacity, `${label}: its opacity is a widget option and stays`);
+    const { widgets: _w, widgetGrid: _g, preview: { enabled: _e, ...previewRest }, ...rest } = reset;
+    const { widgets: _bw, widgetGrid: _bg, preview: { enabled: _be, ...beforePreview }, ...beforeRest } = before;
+    assert.deepEqual(rest, beforeRest, `${label}: appearance (clock style included), widget options, transforms, widget content, location, units and saved styles stay`);
+    assert.deepEqual(previewRest, beforePreview);
+    assert.deepEqual(source, before, `${label}: the input is not mutated`);
+    reset.widgetGrid.placements.clock.column = 0;
+    assert.equal(defaultSettings().widgetGrid.placements.clock.column, 4, 'an independent copy of the defaults');
+  }
+  assert.deepEqual(resetLayout(defaults), defaults, 'resetting the default board changes nothing');
 });
 
 test('the stored style label follows the look on every appearance edit and never makes a draft dirty by itself (#277)', () => {

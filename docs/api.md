@@ -9,7 +9,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | Method/path                    | Request                                                                | Response                                                                     |
 | ------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `GET /api/health`              | None                                                                   | Status, version (read once at startup from the shipped `package.json`), storage recovery warning. |
-| `GET /api/state`               | None                                                                   | Settings, reminders, weather (refreshed only while a saved widget needs it), air quality (`off` unless enabled), preview metadata, storage warning; the [settings revision](#settings-revision) as `ETag`. |
+| `GET /api/state`               | None                                                                   | Settings, reminders, weather (refreshed only while a saved widget needs it), air quality (`off` unless a saved widget shows it), [official weather alerts](#official-weather-alerts) (`off` unless Dynamic shows them), preview metadata, storage warning, timers and timersWarning; the [settings revision](#settings-revision) as `ETag`. |
 | `PATCH /api/settings`          | Validated nested partial settings; optional `If-Match`                 | Full saved settings with the new revision as `ETag`; 409 with the current settings when `If-Match` is stale. |
 | `POST /api/location`           | Device/fallback source, rounded coordinates for device, automatic flag | Saved settings; preserves manual overrides against automatic/failed results. |
 | `GET /api/reminders`           | None                                                                   | Reminder array.                                                              |
@@ -25,7 +25,18 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `GET /api/preview`             | None                                                                   | Availability, capture timestamp, dimensions.                                 |
 | `GET`/`HEAD /api/preview/image` | None                                                                  | RAM-only PNG, `no-store`, or 404; HEAD answers the same without a body.      |
 | `GET /api/photo/image?id=hash` | Current photo hash                                                     | Selected local PNG, `no-store`, or 404.                                      |
-| `GET /api/windows/status`      | None                                                                   | Actual screensaver registry state; unavailable on other systems.             |
+| `GET /api/windows/status`      | None                                                                   | Actual screensaver registry state and power plan timeouts (read-only).       |
+| `GET /api/changes`             | None                                                                   | `{ "change": "<boot>.<store>.<timers>.<preview>" }`, `no-store` ([change marker](#change-marker), #438). |
+| `GET /api/timers`              | None                                                                   | `{ timers, warning }` ([timers](#timers), #438).                             |
+| `POST /api/timers`             | `durationMs`, optional `label`; Undo adds `endsAt` or `remainingMs`     | Created timer (201).                                                         |
+| `PATCH /api/timers/:id`        | Exactly one of `paused`, `addMs`, `restart: true`                      | Updated timer.                                                               |
+| `DELETE /api/timers/:id`       | None                                                                   | Empty 204, or 404.                                                           |
+| `DELETE /api/timers/finished`  | None                                                                   | `{ "deleted": n }`.                                                          |
+| `POST /api/countdowns`         | `title`, `date`, optional `repeatsYearly`; Undo adds `id` and `index`  | Saved settings (201) ([Home items](#home-item-endpoints), #438).             |
+| `DELETE /api/countdowns/:id`   | None                                                                   | Saved settings, or 404.                                                      |
+| `POST /api/world-clocks`       | `label`, `timezone`, `latitude`, `longitude`; Undo adds `id`, `index`  | Saved settings (201).                                                        |
+| `DELETE /api/world-clocks/:id` | None                                                                   | Saved settings, or 404.                                                      |
+| `POST /api/widgets/:id/show`   | None                                                                   | Saved settings; 409 when no free cells ([Show on my display](#show-on-my-display)). |
 
 Mutating JSON requests require `Content-Type: application/json`. Errors use
 `{ "error": "message" }` and appropriate 4xx/5xx codes. Unknown settings fields
@@ -105,7 +116,28 @@ unchanged, so the previous release reads re-created reminders.
 
 Settings `idle.enabled` is a preference, not proof Windows idle activation is
 installed. Only the Windows host's explicit activation command changes that
-configuration. `/api/windows/status` reads existing settings without changing them.
+configuration. `/api/windows/status` reads existing settings without changing them:
+`available`, `selectedScreenSaver`, `active`, `timeoutSeconds`, `secure`,
+`isLivingRoomDisplay` and `error?` from `reg query HKCU\Control Panel\Desktop`, and
+(#436, additive) `power: { available, scheme, displayOffSeconds, sleepSeconds, error? }`.
+`displayOffSeconds` and `sleepSeconds` are `{ ac, dc }` in seconds (0 means Never) or
+null when Windows would not report them, read with `powercfg.exe /query SCHEME_CURRENT
+SUB_VIDEO VIDEOIDLE` and `... SUB_SLEEP STANDBYIDLE` (no administrator rights, 2 s
+timeout, hidden window). Parsing is locale-independent: the last two `0x…` values are
+the current AC and DC indexes. `scheme` is the active plan's name from `powercfg
+/getactivescheme` (translated by Windows). Off Windows, `power.available` is false.
+Nothing here ever changes a power setting; the editor shows the AC values.
+
+`settings.screen` (#436) is `{ keepAwake: boolean }`, default `{ keepAwake: true }`:
+**Keep the screen on while the display shows**. While it is true, the display holds a
+Screen Wake Lock (`navigator.wakeLock.request('screen')`) only while it is visible and
+either the native screensaver page (`native=1`) or full screen; a windowed tab never
+holds one, because Edge's request also blocks the Windows screensaver and display-off.
+The display reports `data-wake-lock` (`held`, `unsupported`, `denied` or `off`) on
+`.grid-ambient` and shows nothing. `screen` is not part of saved styles (`visualShape`);
+PATCH accepts `screen.keepAwake`, and `screen` is omitted at rest while it equals the
+default, like the default `widgetData` sections. Turning it off is a
+[rollback exception](install.md#additive-data-and-rollback-compatibility-84) for 3446400.
 
 ## Grid and widget contracts
 
@@ -129,8 +161,10 @@ move keeps it. The editor sends a changed placement whole, with `span: null` whe
 it has none. The previous installed release (`d66832b`) and the earlier releases back
 to `3fee844` read a saved span; `bedca44` does not, so a downgrade that far needs the
 [strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
-Legacy version-one settings acquire the safe default grid while preserving old
-widget visibility and manual location. Legacy `widgetOverrides` offsets/scale
+Legacy version-one settings acquire the safe catalog default grid while preserving old
+widget visibility and manual location. That backfill never uses the default board
+that new installs and Reset layout start with ([#435](widgets.md#default-board-435)),
+and a widget id missing from saved data reads as its catalog default (Calendar off). Legacy `widgetOverrides` offsets/scale
 and `appearance.layout` remain parseable data but no longer affect rendering;
 old manual visual positions are not converted to cells. The same applies to
 legacy presets/imports. `appearance.clockStyle` is `outline` (default), `digital` or `analog`.
@@ -150,11 +184,19 @@ it is a rollback exception only for [`bedca44`](install.md#earlier-rollback-targ
 
 `appearance.animation` is `off`, `subtle` or `lively`; data without it reads as
 `subtle`, and `subtle` is omitted at rest. It governs motion inside widgets and the
-editor (#76): Off keeps widgets still, Subtle animates changes and the reveal after
-a black rest, and Lively adds reveal choreography and the current-weather glyph's
+editor (#76): Off keeps widgets still, Subtle animates changes and the first-load
+entrance, and Lively adds entrance choreography and the current-weather glyph's
 slow loops. Each screen shows Off while it prefers reduced motion, whatever is
-saved. Relocation through black is unaffected, and Drift and fade between moves
-(`motionEnabled`) stays separate. The Style tab's Motion → Animation control edits
+saved. Moving the board is separate (#436): `motionEnabled` (**Float gently**) floats
+the board and each widget's content, or, when false or under reduced motion, steps
+once per `motionIntervalSeconds` (30–1800, unchanged); the screen never goes dark.
+`appearance.rearrange` (**Swap places**) is a boolean, default `false`, omitted at rest
+while false; data without it reads as false. When true, widgets also trade cells every
+interval, gliding for `clamp(fadeSeconds × 1.5, 1.2, 6)` s; `fadeSeconds` (0–10,
+unchanged in schema) now only times that glide. Built-in styles keep `rearrange`, like
+the other motion choices (#268); saved styles store it; Reset appearance returns it to
+false. Swap places on is a [rollback exception](install.md#additive-data-and-rollback-compatibility-84)
+for 3446400. The Style tab's Motion → Animation control edits
 it as an ordinary draft field; built-in styles keep it and saved styles store it.
 Built-in styles are looks (#153, #110, #226): they write only `brightness`,
 `accentMode`, `accentColor`, `textColor`, `fontFamily`, `layout` and `preset`.
@@ -167,9 +209,32 @@ sent by itself; data saved before #277 may still carry a stale label until the n
 appearance edit. Rendering must not depend on it: use `matchingBuiltinPreset()` (#150).
 The four values are the ones the previous release requires, so no stored shape changes.
 
+`appearance.daylightBrightness` is the brightness mode (#439). `null`, the default
+and what data without the key reads as, is **Fixed**: the display shows `brightness`,
+exactly as before. `{ "dimmest": 0.2, "brightest": 0.8 }` is **Follow daylight**:
+both values in `brightness`'s 0.1–1 range, with `dimmest` ≤ `brightest` (equal is a
+flat line). A PATCH sends the whole range or `null`; a partial range, Dimmest above
+Brightest, a value out of range or an unknown key returns 400. `brightness` stays
+the Fixed level in both modes, so returning to Fixed restores it. The browser computes
+the value; the API and the server never do. For the start of each minute it takes the
+sun's elevation at the saved `location` (with [astronomy.ts](../src/client/astronomy.ts),
+no network) and shows
+`dimmest + (brightest − dimmest) · max(0, sin(elevation)) / sin(elevation at solar noon)`,
+using the solar noon of the current solar day and a noon elevation of at least 5°.
+So it is Dimmest from sunset to sunrise and through a polar night, Brightest at local
+solar noon, above Dimmest all through a polar day, and a minute never changes it by
+more than about 1% of the range; around midwinter beyond about 61° latitude, where the
+noon sun stays under 5°, it peaks lower ([src/client/daylight.ts](../src/client/daylight.ts)).
+The ambient page glides to each new value over 10 seconds; editor canvases follow the
+draft at once. Night, Native colours and per-element opacity all scale from that one
+value through the same `--ambient-brightness` cap. Built-in styles keep the mode (they
+set only the Fixed level), Reset appearance returns to Fixed, and saved styles store
+it. At rest `null` is omitted; the previous installed release (`d66832b`) does not know
+the key, so a saved range is a [rollback exception](install.md#additive-data-and-rollback-compatibility-84).
+
 Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
-`accentMode` or `animation` keeps its saved value (#83). Only the persisted reader
-fills defaults.
+`accentMode`, `animation` `daylightBrightness` or `rearrange` keeps its saved value (#83). Only
+the persisted reader fills defaults.
 
 Planned catalog ids (entries with `status: 'planned'` in `src/shared/widgets.ts`;
 none since #157 and #171 activated all six #78 ids) appear in `widgets`, `widgetOverrides` and `widgetGrid.placements` but
@@ -183,9 +248,12 @@ uuid `id`, `label` 1–40 characters, IANA `timezone` other than `auto`, `latitu
 `longitude`), `calendar.weekStart` (`locale` default, `sunday`, `monday`),
 `countdowns` (≤12: uuid `id`, `title` 1–60 characters, civil `date` `YYYY-MM-DD`
 in 1900–2200, `repeatsYearly`), `note.text` (≤200 characters and ≤4 lines, trimmed,
-CRLF stored as LF) and `airQuality.scale` (`us` default or `european`). IDs within a
-list are unique and unknown keys are rejected. Missing sections read as defaults.
-PATCH merges `calendar`, `note` and `airQuality` and replaces either list whole.
+CRLF stored as LF), `airQuality.scale` (`us` default or `european`) and, for Dynamic
+(#437), `dynamic`: five booleans `weather`, `alerts`, `air`, `sky` and `personal`, each
+`true` when missing, with at least one on (all off is a 400 "Dynamic needs at least one
+source"). IDs within a list are unique and unknown keys are rejected. Missing sections
+read as defaults. PATCH merges `calendar`, `note`, `airQuality` and `dynamic` and
+replaces either list whole.
 `widgetData` is not part of saved styles, so applying a style or built-in preset
 leaves it unchanged. It is included in exports and imports like reminders. Note
 text, countdown titles and world-clock labels are private user content: never put
@@ -234,8 +302,9 @@ An explicit successful device action can replace a manual selection.
 
 The editor performs only one automatic lookup per open, only for nonmanual
 settings and already-granted permission. Otherwise the user must press the device
-button. No permission/position request occurs in `/display`; its response carries
-`Permissions-Policy: geolocation=()`, while editor responses permit only self.
+button. No permission/position request occurs in `/display` or on Home: every response
+carries `Permissions-Policy: geolocation=()` except those for `/editor` paths, which permit
+only self (#438).
 There is no background watch or IP geolocation service.
 Device/fallback results remain local drafts until Save. Cancel invalidates pending
 callbacks; choosing a city invalidates earlier device work. The request-only
@@ -317,8 +386,8 @@ offset boundaries; hourly epoch instants retain unambiguous timing across DST.
 [Open-Meteo parameter definitions](https://open-meteo.com/en/docs).
 
 `GET /api/state` refreshes the forecast only while a saved, enabled widget needs it
-(#352): Weather or Forecast, or Sun & moon or Air quality while the saved location's
-timezone is still `auto`, which only the forecast resolves. Otherwise it returns the
+(#352): Weather, Forecast or Dynamic (#437), or Sun & moon or Air quality while the saved
+location's timezone is still `auto`, which only the forecast resolves. Otherwise it returns the
 cached forecast for the saved location and units, or the empty `unavailable` state with
 no error, and contacts no provider. `GET /api/weather` refreshes it whenever it is due; the
 editor requests it while its Weather tab is open, and while the draft shows a widget that
@@ -354,9 +423,10 @@ No IP/address auto-location is used.
 `AppState.airQuality` (`AirQualityState` in `src/shared/contracts.ts`) comes from
 the keyless [Open-Meteo air-quality API](https://open-meteo.com/en/docs/air-quality-api),
 which serves the Copernicus Atmosphere Monitoring Service (CAMS) model. The server
-requests it only while the Air quality widget is saved enabled (`GET /api/state`,
-in parallel with the forecast) or while the editor previews an unsaved enable or
-scale change (`GET /api/air-quality`). Otherwise the state is `off` and no request
+requests it only while a saved widget shows it (`GET /api/state`, in parallel with the
+forecast): the Air quality widget, or Dynamic with its Air & UV source (#437,
+`needsAirQuality` in `src/shared/widgets.ts`); or while the editor previews an unsaved
+change that shows it, or a scale change (`GET /api/air-quality`). Otherwise the state is `off` and no request
 is made. The browser never contacts the provider (`connect-src 'self'`).
 
 The request uses the saved weather location's `latitude`, `longitude` and
@@ -391,9 +461,233 @@ stand for 3 hours after `updatedAt` (#188, the same rule as Weather's temperatur
 ("Saved estimate"), or the AQI is qualified "Last known · <hour>" with UV hidden. The
 server keeps serving a `stale` reading's series unchanged: the widget already drops
 past hours at render time each minute, which a display that has lost the computer
-needs anyway, so trimming on the server would add nothing. Official alerts are a separate decision (#106).
+needs anyway, so trimming on the server would add nothing. Official alerts come only
+through Dynamic ([official weather alerts](#official-weather-alerts), #437).
 Open-Meteo's free API is for non-commercial use; see
 [architecture](architecture.md#current-decisions).
+
+## Official weather alerts
+
+`AppState.alerts` (`AlertsState` in `src/shared/contracts.ts`, `src/server/alerts.ts`) lists
+the official alerts in effect for the saved weather location (#437, adopting #106 for
+Canada and the US). It is requested only while Dynamic and its alerts source are saved on
+(`needsAlerts`); otherwise it is `off` and no request is made. It is API-only: never
+written to `state.json`, its backup or an export, and never logged. There is no separate
+endpoint: an unsaved change is checked after Save (an editor preview is #455).
+
+**Providers.** Canada: Environment and Climate Change Canada through MSC GeoMet
+(`api.weather.gc.ca`, "Data Source: Environment and Climate Change Canada"; the licence
+forbids altering content or intent, so names keep their wording and only their first
+letter is capitalised). The United States: the National Weather Service
+(`api.weather.gov`, US government data). Both are keyless; the NWS may require a key one
+day (#457). Europe (MeteoAlarm) is #451.
+
+**Location and privacy.** The key is the saved location rounded to 0.01°, the only
+precision that leaves this computer, and only to the provider whose box contains it. The
+browser contacts no provider (`connect-src 'self'` is unchanged). At most 8 places are
+kept in memory.
+
+**Coverage** (cached 24 hours per place; a failed lookup is retried after 5 minutes):
+
+1. Inside the Canada box (latitude 41.6–83.2, longitude −141.1 to −52.5):
+   `GET https://api.weather.gc.ca/collections/public-standard-forecast-zones/items?f=json&skipGeometry=true&limit=10&bbox=<point ± 0.005°>`.
+   One or more zones make ECCC the provider; the area is the first zone's `NAME` and the
+   zone set their `FEATURE_ID`s.
+2. Otherwise, inside the US box (latitude 17.5–71.6, longitude −180 to −64.5): the NWS.
+   Its first answer confirms it: 200 is covered, 400 "out of bounds" is `unsupported` for
+   24 hours, any other failure is a failure.
+3. Anywhere else: `unsupported`, with no request. The display then says nothing about
+   alerts (never "no alerts"); the editor explains the coverage.
+
+**ECCC alerts:** `GET https://api.weather.gc.ca/collections/weather-alerts/items?f=json&lang=en&skipGeometry=true&limit=100&bbox=<same>`.
+Only features whose `feature_id` is in the zone set count, so a neighbouring zone's
+alert that the small box also touches is left out. `status_en` matching ended or
+cancelled, and anything whose expiration or event end has passed, is dropped; one alert
+covering several of the place's zones (`<alert id>_<zone id>`) counts once. `level` is
+`alert_type`, `name` is `alert_name_en` (only its first letter capitalised), `area` is
+`feature_name_en`, `issuedAt` is `publication_datetime`, `startsAt` is
+`validity_datetime` (when the alert's weather is expected to begin; publication without
+it), `endsAt` is `event_end_datetime` and `expiresAt` is `expiration_datetime`.
+`risk_colour_en` is ignored: no colour coding.
+
+**NWS alerts:** `GET https://api.weather.gov/alerts/active?point=LAT,LON&status=actual&message_type=alert,update`
+with `Accept: application/geo+json`. Status other than Actual, the event "Test Message",
+urgency Past, messageType Cancel and expired alerts are dropped. The level comes from the
+event's last word (Warning, Watch or Advisory; anything else is a statement), `name` is
+`event` verbatim, `area` is the first segment of `areaDesc`, `startsAt` is
+`onset ?? effective` and `endsAt` is `ends ?? expires`.
+
+**Requests** send `User-Agent: LivingRoomDisplay/<version> (local ambient display)`, use an
+8-second timeout and `redirect: 'error'`, enforce a 1 MiB body limit and send no no-cache
+header. The same limit applies to HTTP 400 error text before checking for "out of bounds";
+oversized errors fail the check rather than establishing unsupported coverage. Other
+error bodies are released unread. Retry-After on 429 or 503 pauses that provider (up to an
+hour), and each provider gets at most 12 requests an hour whatever the number of places. Each feature is checked on
+its own (#246): a malformed one is skipped, not the list. At most 10 alerts are kept,
+warnings first.
+
+**Cadence and states.** A success is repeated after 5 minutes and a failure retried after
+2, by the forecast's monotonic-and-wall timing (#244); a request waits for a due check at
+most about one second and says `refreshing` meanwhile (#351). `fresh` until the last
+success is 15 minutes old, then `stale`: the retained alerts stay, each until its own end.
+`unavailable` when there has never been a success, or none for 2 hours with nothing still
+in effect. `unsupported` as above; `off` when not requested.
+
+## Dynamic signals
+
+Dynamic (#437) ranks what the display already knows; [`src/client/dynamic.ts`](../src/client/dynamic.ts)
+is the single home of every constant below and is exported for Home (#438). The browser
+computes it from `/api/state` once per minute and data change; nothing is stored. Every
+threshold is a product default, not an official criterion, and no forecast, model or
+personal card uses the words warning, alert, watch or advisory (a unit test checks).
+
+| Threshold | Metric | Imperial |
+| --- | --- | --- |
+| Hot today (until 18:00 in the weather city) / tomorrow: daily high | 32 °C | 90 °F |
+| Feels very cold now | −27 °C | −17 °F |
+| Very cold tomorrow: daily low | −20 °C | −4 °F |
+| Strong wind / windy now | 50 / 39 km/h | 31 / 24 mph |
+| AQI focus / notable | US 151 / 101; European 81 / 61 | |
+| UV among today's upcoming readings | 6 | |
+| Reminder due soon / recently overdue | 60 / 120 min (at most 3 reminder cards) | |
+| Sunrise or sunset soon / full moon "tonight" from | 60 min / 180 min before sunset | |
+
+A rest of today is wet when a remaining hourly interval of the weather city's civil today
+has a 30% chance or a measurable amount (0.1 mm or 0.004 in). Hazard families by WMO code:
+hail 96/99, storm 95, freezing 56/57/66/67, heavy snow 75/86, heavy rain 65/82.
+
+| Tier | Score: card |
+| --- | --- |
+| Alert | 1100: an official warning (several take turns, one per minute, "1 of 2") |
+| Focus (the top one stays) | 1010 official watch; 1000 hail now; 990 thunderstorms now; 985 freezing rain or drizzle now; 980 heavy snow now; 970 / 960 / 955 / 950 hail, storms, freezing, heavy snow in today's forecast (wet rest of today, no "now" card of that family); 945 official advisory; 940 rain likely now; 930 rain likely within 6 hours; 925 heavy rain today (no rain now or soon card); 920 unhealthy air; 915 strong wind; 910 feels very cold; 905 hot today; 900 a reminder due within the hour or overdue by up to two |
+| Notable (rotates first) | 885 official statement; 880 rain possible now or soon; 870 rain later (6–12 hours); 865 today's hazard without hourly timing ("Timing unavailable"); 860 severe weather tomorrow; 850 air unhealthy for sensitive groups; 840 high UV; 830 windy; 825 hot or very cold tomorrow; 820 / 815 a countdown today / tomorrow; 810 a reminder later today; 805 a reminder overdue by more than two hours; 800 sunrise or sunset within the hour; 790 full moon tonight; 780 precipitation possible |
+| Calm (fixed order) | conditions; today's high and low; dry for 12 hours (fresh, connected and complete only); the next sunrise or sunset (or the polar day or night); the next full or new moon; the next countdown at least 2 days away; good or moderate air. Each is skipped while the widget that already shows it is on the board (Weather; Weather or Forecast; Weather; Sun & moon; Sun & moon; Countdown; Air quality), unless that would leave nothing |
+
+Ties go to the earlier start, then the id. Card ids stay stable (`alert:<id>`,
+`weather:hazard`, `weather:rain`, `reminder:<id>`, `countdown:<id>`, `sky:sun`, …), so a swap
+follows the thing, not its wording.
+
+**Selection** (`chooseDynamic`). Warnings first; otherwise the top focus card stays put with
+"+N more" counting the other focus and notable cards; otherwise notable then calm cards
+rotate on wall-clock slots of `DYNAMIC_ROTATE_MS` (60 s; a setting is #454): slot
+`floor(now / 60 s)`, card `slot mod n`, and a card shown earlier in the same slot stays
+(the latch), so data arriving mid-minute never jumps the rotation. A new warning or focus
+card takes the lead at once. The editor canvas and picker samples hold slot 0. With no
+card at all Dynamic is `unavailable` when a source is degraded (shown, saying which) and
+`empty` otherwise (hidden on the display, a placeholder in the editor).
+
+**Honest states.**
+
+| Situation | What Dynamic shows |
+| --- | --- |
+| Forecast stale | Weather cards with "Saved forecast · Updated 2 hr ago" in the status tone; current-based cards only while the reading is up to 3 hours old (the shared last-known rule), with "As of 9 AM", never "Now"; no Dry card |
+| Display offline | "Offline · …"; reminder and countdown cards say "Saved reminders · offline" (or "Saved dates"); alerts are kept until their own end; glyphs are still |
+| Forecast unavailable | No weather cards; "Weather unavailable" in the status tone |
+| Alerts off / unsupported | Nothing from alerts; never "no alerts" (the editor explains coverage) |
+| Alerts fresh, none in effect | Small and medium say nothing; large: "No alerts · checked 9:41 PM" |
+| Alerts stale | Retained alerts until their end, and "Saved alerts · checked 9:10 PM" in the status tone; no "No alerts" claim |
+| Alerts unavailable | "Weather alerts unavailable" in the status tone |
+| Air on, not loaded / unavailable / saved | No air cards and "Air quality not loaded yet" (medium and large) / "Air quality unavailable" / an air card aged "Saved reading · …", "Saved estimate" over 3 hours, or no air card and "Saved air reading" when only the last-known value is left |
+| Reminders not readable | "Reminders unavailable" |
+| Location timezone `auto` | This computer's zone, as Sun & moon |
+
+When no usable card remains but a source has saved data that cannot be refreshed, Dynamic
+stays visible with that saved-source status instead of hiding as empty (#511). This includes
+an exhausted forecast, stale empty alerts and a last-known air reading. A successful empty
+alert list may still hide, and usable cards from other sources continue to render.
+
+Status phrases sit in the footer and leave out the lead card's own source; the small family
+shows one, in this order: Offline, Weather alerts unavailable, Weather unavailable, Saved
+forecast, Air quality unavailable, Reminders unavailable. Forecast cards say "Forecast
+estimate" (rain cards their confidence) with the forecast's age; air cards their age and
+"CAMS · Open-Meteo"; sun and moon cards the place; official cards the provider's name in
+full (the small family may say "Environment Canada") and when they were checked. Dynamic
+carries the "Forecast by Open-Meteo" credit only while Forecast and Weather are both off.
+
+## Home (#438)
+
+These endpoints keep the Host/Origin and Fetch Metadata checks, the JSON content type (415),
+the 4 MiB body limit (413) and the `{ "error": "message" }` shape; unknown fields return 400.
+
+### Timers
+
+Silent timers live in their own sidecar, `timers.json` in the data folder:
+`{ "version": 1, "timers": Timer[] }`, validated strictly (at most 6, unique ids). A `Timer`
+(`src/shared/contracts.ts`) is `{ id, label, durationMs, endsAt, remainingMs, createdAt,
+updatedAt }`: `label` is 0–40 characters (empty shows "5 min timer"), `durationMs` the length
+it was started with (whole milliseconds, 1 s to 24 h), and exactly one of `endsAt` (an ISO
+UTC instant while running, and once it has passed, done) and `remainingMs` (paused). Done is
+derived from `endsAt` and never written. `src/shared/timers.ts` holds the phases, the order
+and the windows: the display shows a finished timer for 10 minutes and Home lists it for 60.
+
+- `POST /api/timers` `{ label?, durationMs }` returns 201 with the timer, 409 "Up to 6 timers at
+  once. Dismiss or cancel one first." or 400 "Choose a time between 1 second and 24 hours.".
+  Undo re-creates a cancelled timer with its `endsAt` (from an hour ago up to 24 hours ahead) or
+  its `remainingMs` (1 ms to 24 hours), never both. Added time can take a paused remainder
+  beyond its original `durationMs`; Undo keeps both that remainder and the starting length
+  used by Restart (#487).
+- `PATCH /api/timers/:id` takes exactly one of `paused` (true keeps what is left; false resumes
+  with `endsAt = now + remaining`), `addMs` (1 s to 1 hour; on a finished timer it runs again
+  for that long) or `restart: true` (`endsAt = now + durationMs`). A request that changes
+  nothing returns 200 and writes nothing. Pausing or resuming a finished timer returns 409 "This
+  timer has finished. Restart it instead."; a total over 24 hours returns 400; an unknown id 404
+  "Timer not found".
+- `DELETE /api/timers/:id` returns 204 or 404; `DELETE /api/timers/finished` dismisses every
+  finished timer and returns `{ deleted }`.
+- `GET /api/timers` and `GET /api/state` (`timers`, `timersWarning`) list the timers Home
+  shows, pruned in memory: a read never writes.
+
+`TimerStore` (`src/server/timers.ts`) serializes its writes on its own queue, so a slow
+settings save never delays a timer tap, and writes through the store's `atomicWrite` (mode
+0600) with no backup copy: timer churn never rotates `state.backup.json`. Startup removes stale
+`timers.json.<uuid>.tmp` files with the state's, prunes finished timers older than an hour
+(writing only when that removed something) and, if the file cannot be read, moves it to
+`timers.corrupt.json`, starts empty and reports `timersWarning` "Timers couldn't be read after
+the app restarted, so they were cleared." until the next timer write. `state.json` is never
+touched. Labels are private user content: never logged or put in diagnostics.
+
+Timers are never in `state.json`, `state.backup.json` or exports, and an import leaves them
+alone. The frozen previous-release reader (`d66832b`) never opens `timers.json`, so timers need no
+rollback exception; its reader rejects every in-file shape (a top-level `timers` key,
+`widgetData.timers`, a `timer` widget id), which `src/server/rollback.test.ts` proves along with
+a "Home day-to-day use" scenario whose state files and export it accepts. Setup's copy of the
+data folder may include `timers.json`; that release ignores it.
+
+### Home item endpoints
+
+Countdowns and world clocks change one item at a time inside the serialized store write, so two
+pages never drop each other's items (#287). `POST /api/countdowns` takes the countdown fields
+(`title` 1–60, a civil `date` in 1900–2200, `repeatsYearly` default false) and appends one with a
+server uuid: 201 with the saved settings, or 409 "Up to 12 countdowns. Remove one to add
+another.". `POST /api/world-clocks` takes `label` (1–40), an IANA `timezone` (not `auto`),
+`latitude` and `longitude`: 201, or 409 "Up to 4 cities. Remove one to add another.". Undo after
+a removal sends the removed `id` and its `index`, which put the item back in its place; a
+repeated Undo of an id that is already there returns 200 and writes nothing. `DELETE
+/api/countdowns/:id` and `DELETE /api/world-clocks/:id` return the saved settings, or 404. The
+note keeps using `PATCH /api/settings` with `{ "widgetData": { "note": { "text": … } } }`. Item and show
+writes, like any settings write, move the [settings revision](#settings-revision): an Edit display
+draft computed from earlier settings gets 409 with the current ones and rebases, so nothing Home
+added is lost. Timer writes change no settings and leave the revision alone.
+
+### Show on my display
+
+`POST /api/widgets/:id/show` turns on Clock, World clocks, Calendar, Reminders, Countdown or Note
+(other, planned, retired and unknown ids return 400). Home never rearranges the board: inside the
+serialized write the widget keeps its saved placement (with a free-size custom size) when those
+cells are free, else takes the first free cells for its default family, then for each smaller
+family, with no custom size; no other widget moves. With no room it returns 409 "No room for
+{Name} on your display." and writes nothing; an enabled widget returns 200 and writes nothing.
+There is no hide endpoint, and Home has no control that turns a widget off. Edit display does that:
+its save is a `PATCH /api/settings` whose `widgets` map has `"<id>": false`, which keeps the
+widget's placement. `showPlacement` in `src/shared/show.ts` is the rule both sides use.
+
+### Change marker
+
+`GET /api/changes` returns `{ "change": "<boot>.<store>.<timers>.<preview>" }` with
+`Cache-Control: no-store`: a random id for this server process, then counts of successful
+settings/reminder writes, timer writes, and snapshot uploads or clears. It moves after every
+saved change (and on a restart) and never on a read, so Home and the display ask for it every
+5 s while visible and reload `/api/state` only when it moved. Nothing about it is persisted.
 
 ## Native snapshot handoff
 
@@ -454,11 +748,17 @@ weather, snapshot pixels, and native tokens are excluded. Store backups privatel
 
 At rest, `state.json`, `state.backup.json` and exports omit additive values while
 they equal the current read default: `appearance.accentMode` `color`,
-`appearance.animation` `subtle`, default `widgetData` sections, and disabled widget
-ids the previous installed release does not know. The previous release (`d66832b`)
-reads every one of these keys and knows every widget id, so all widget ids are
-written and omitting the other values is optional. It is kept unchanged (#272) so a
-reader bump does not change the data format, and it remains the mechanism for a
-future additive key or new widget id that the previous release does not know. API
+`appearance.animation` `subtle`, `appearance.daylightBrightness` `null` (Fixed,
+#439), default `widgetData` sections, and disabled widget ids the previous installed
+release does not know. The previous release (`d66832b`) reads `accentMode`, `animation`
+and pre-Dynamic `widgetData`, so omitting those values is optional (#272). It does
+not know `daylightBrightness`: omitting `null` keeps Fixed brightness readable, while
+a saved range is a rollback exception. It also lacks Dynamic (#437): while off, its
+visibility and hidden placement are omitted, as are its default sources (all on).
+Under the #135 rule no transform is ever written for an unknown id, whatever its
+value; transforms no longer render, so dropping one loses nothing. An enabled
+Dynamic, sources other than all on, or a saved style made while it was on are a
+[rollback exception](install.md#additive-data-and-rollback-compatibility-84) until
+the next reader bump (#130). API
 responses (`/api/state`, the `PATCH /api/settings` response and the native session)
 always include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).

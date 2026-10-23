@@ -19,19 +19,23 @@ busy dashboards. The application must produce no audio.
 
 | Area | Intended behavior |
 | --- | --- |
+| Home | The main page (`/`, #438) for day-to-day use beside the display rather than setting it up: the date and time, six quick actions (Timer, Reminder, Calendar, World clock, Countdown, Note) that feed the display, a Today list (timers, reminders due today, anytime and coming up) and the saved arrangement with **Edit display** one click away. Loopback only; phone or LAN access is a separate decision (#465). |
+| Edit display | The editor at `/editor` (#438): layout, widgets, looks, weather and reminders, every flow as before. |
+| Timers | Silent countdown timers started from Home (presets or a custom time, an optional name): pause, add a minute, cancel with Undo, restart and dismiss. While one runs, the display Clock's date line shows it ("Pasta 8 min"); a finished one reads Done in the status colour for 10 minutes. No sound, no flashing (#438). |
 | Time and date | Optional clock with outline numerals by default, solid digital or minimal analog hands, and 12/24-hour format. |
 | Weather | Conditions with a clear place label, units, and update age; when rain is near it adds the chance and estimated timing of upcoming rain inside the same widget, with uncertainty visible (#74). |
 | Forecast | Readable seven-day outlook. |
-| Reminders | Add, edit, delete and one-tap check off one-time/undated reminders in the local editor, with Undo and a local history (restore, delete, clear; the latest 500 kept on this computer). The display shows as many pending reminders as fit, soonest first, with an honest “+N more”. The widget can be any whole-cell size from 2 × 2 up to the full grid height and two-thirds of the width; a taller box lists more (#73, #203). |
-| Appearance | User-editable layout, colors, typography, motion, and saved presets. The accent is one colour or Native, where each widget uses its own tone from one harmonious dim palette (default for new installs and built-in styles). |
+| Reminders | Add, edit, delete and one-tap check off one-time/undated reminders in the local editor (and add and check off from Home, whose calendar turns a picked day into a dated reminder, #438), with Undo and a local history (restore, delete, clear; the latest 500 kept on this computer). The display shows as many pending reminders as fit, soonest first, with an honest “+N more”. The widget can be any whole-cell size from 2 × 2 up to the full grid height and two-thirds of the width; a taller box lists more (#73, #203). |
+| Appearance | User-editable layout, colors, typography, motion, brightness (one fixed level, or following daylight between a chosen dimmest and brightest level and peaking at local solar noon, #439), and saved presets. The accent is one colour or Native, where each widget uses its own tone from one harmonious dim palette (default for new installs and built-in styles). |
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 | Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |
 | World clocks | Time in up to four other cities. |
-| Calendar | This month at a glance. |
+| Calendar | This month at a glance; on the default board (#435). |
 | Countdown | Days until dates you choose. |
 | Note | A short message on screen. |
 | Air quality | Air quality and UV index. |
 | Sun & moon | Daylight and moon phase. |
+| Dynamic | What matters now (an official weather warning for Canada or the US, a storm or rain starting soon, a reminder due within the hour), or else one calm card each minute; its sources are chosen in the editor (#437). |
 
 Distinguish forecast probability, expected precipitation amount, and estimated
 rain windows. Label times and intervals correctly. Show stale or unavailable
@@ -40,12 +44,16 @@ uses Open-Meteo and an editable Toronto city default selected by the coordinator
 the default is not a claim about the user's location. Probability covers all
 precipitation; rain amount is separate so snow does not become a false rain warning.
 
-Editing should not require changing source code. Keep the editor separate from
+Editing should not require changing source code. Keep Home and Edit display (the editor) separate from
 the sparse display experience. Personal reminders and settings persist in a local
 per-user store with a previous-state backup and export/import
 ([persistence and recovery](api.md#persistence-and-recovery)); private user content
 does not belong in Git. A local editor does not imply public or LAN exposure.
 Every information module is independently optional, including clock and weather.
+New installs start on the owner's board (#435): a large Calendar and Clock across
+the top, a large Weather and Forecast below, and a medium Last screen and Reminders,
+filling the Balanced grid with every other widget off. **Reset layout** returns to
+it; older saved boards are never changed by it.
 Use a shared catalog and supported small/medium/large content families. The live
 canvas offers direct drag, selected/focused resize handles, reversible fitted
 grid density choices and keyboard alternatives. Reflow neighbors when possible;
@@ -75,14 +83,26 @@ separately with the Windows host.
 
 ## Movement and OLED considerations
 
-Move whole widget groups through substantially different screen areas. Allow
-periodic recomposition and gentle fades so content does not remain anchored to
-one location. Motion inside an otherwise fixed widget is insufficient. Motion
-style and cadence remain user-editable choices. Recompose collision-free layouts
-with varied legal origins and offsets, fully black between compositions. Turning
-off Drift and fade between moves (called Soft motion before #240), or a
-reduced-motion preference, removes travel/effects while protective discrete
-relocation continues. No fixed decorative frame, footer or source credit remains.
+Owner decision, 2026-10-20 (#436): "i want this to just always be on when the
+computer is in screen saver mode" and "i want the actual widgets to move around
+(like the text kinda float around, in order to avoid burn in), not for the widgets
+to swap spaces". The screen never goes dark or fades out to move. By default the
+user's arrangement stays as placed: the whole board floats slowly and continuously
+(up to ±3.5% of the display on each axis, reaching a new spot every interval) and
+each widget's content floats inside its own box, so edges keep moving across
+nearby pixels. **Swap places** is opt-in: widgets then also trade cells every
+interval, gliding to their new places with a brief dim, never through black.
+**Float gently** off (called Drift and fade between moves from #240 until #436, and
+Soft motion before that), or a reduced-motion preference, moves the board and the
+content in one step each interval instead, without animation. Motion style and
+cadence remain user-editable choices. No fixed decorative frame, footer or source
+credit remains.
+
+Floating in place smears edges across about 270 × 150 device pixels at 4K, but it
+does not even out wear between screen regions the way swapping does: a bright
+widget keeps lighting roughly the same area. Swap places spreads it further for
+those who want it. Keep the screen on (#436) holds the screen awake only while the
+display is full screen or running as the screensaver.
 
 Keep transitions calm, avoid flashes, and provide a reduced-motion option in the
 design. Dim colors, black backgrounds, and movement do not guarantee protection

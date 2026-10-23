@@ -1,22 +1,21 @@
 import { useMemo, useState, type CSSProperties } from 'react';
-import { advanceClockHands, rebaseClockHands, type HandAngles } from '../../shared/motion.ts';
+import { advanceClockHands, type HandAngles } from '../../shared/motion.ts';
 import type { Settings } from '../../shared/contracts.ts';
 import type { WidgetSize } from '../../shared/widgets.ts';
-import { useMotion } from '../useMotion.ts';
 import { TransitionText } from './TransitionText.tsx';
+import { clockTimer, type ClockTimer } from '../timer.ts';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
 
 /**
  * Hand angles that accumulate clockwise for small forward steps (59 → 00 and 12 → 1 move
- * forward), snap for jumps, and return to [0, 360) only while the display is fully black (#174):
- * a minute's ease that is still running when the fade-out starts finishes in view.
+ * forward) and snap for jumps. #436: the display never goes black, so they keep accumulating
+ * for the whole session (#174's re-base on black is gone) and a hand never turns backwards.
  */
-function useHands(hours: number, minutes: number, black: boolean): HandAngles & { key: string } {
+function useHands(hours: number, minutes: number): HandAngles & { key: string } {
   const key = `${hours}:${minutes}`;
   const [hands, setHands] = useState(() => ({ ...advanceClockHands(null, hours, minutes), key }));
   let next = hands;
   if (hands.key !== key) next = { ...advanceClockHands(hands, hours, minutes), key };
-  if (black && (next.hour >= 360 || next.minute >= 360 || next.animate)) next = { ...rebaseClockHands(next), key };
   // Adjusting state while rendering (React's "store information from previous renders" pattern).
   if (next !== hands) setHands(next);
   return next;
@@ -65,15 +64,34 @@ function AnalogClock({ hour, minute, snap, label }: { hour: number; minute: numb
   </div>;
 }
 
-function Clock({ settings, now, size }: WidgetContentProps) {
-  const { black } = useMotion();
+/**
+ * The timer slot (#438): while a timer is visible, the date line shows it in the same elements and
+ * fonts as the date, so the clock's fit is unchanged and the date returns afterwards. The name and
+ * the minute-rounded value change at most once a minute through TransitionText; only a timer's last
+ * minute counts every second, as plain tabular text (#99). Silent: no sound and no flashing.
+ */
+function ClockTimerSlot({ timer }: { timer: ClockTimer }) {
+  return <>
+    <div className="ambient-label clock-timer-label" data-timer-phase={timer.phase}>
+      <span className="clock-timer-name"><TransitionText value={timer.label} /></span>
+      {timer.more > 0 && <span className="clock-timer-more">+{timer.more}</span>}
+    </div>
+    <div className="clock-date clock-timer-value" data-timer-phase={timer.phase}>
+      {timer.phase === 'paused' && <span className="clock-timer-paused" aria-hidden="true"><i /><i /></span>}
+      {timer.ticking ? <span className="clock-timer-digits">{timer.value}</span> : <TransitionText value={timer.value} />}
+    </div>
+  </>;
+}
+
+function Clock({ state, settings, now, size, disconnected }: WidgetContentProps) {
   const minute = Math.floor(now.getTime() / 60_000);
   // `now` is a new Date every second; the labels change only with the minute.
   const labels = useMemo(() => clockLabels(new Date(minute * 60_000), settings.clockFormat, size), [minute, settings.clockFormat, size]);
-  const hands = useHands(now.getHours(), now.getMinutes(), black);
+  const hands = useHands(now.getHours(), now.getMinutes());
   const style = settings.appearance.clockStyle;
+  const timer = clockTimer(state.timers, now.getTime(), settings.clockFormat, size, disconnected);
   return <div className={`clock-face clock-family-${size} clock-style-${style}`}>
-    <div className="clock-calendar"><div className="ambient-label"><TransitionText value={labels.weekday} /></div><div className="clock-date"><TransitionText value={labels.date} /></div></div>
+    <div className={timer ? 'clock-calendar clock-timer' : 'clock-calendar'}>{timer ? <ClockTimerSlot timer={timer} /> : <><div className="ambient-label"><TransitionText value={labels.weekday} /></div><div className="clock-date"><TransitionText value={labels.date} /></div></>}</div>
     {style === 'analog'
       ? <AnalogClock hour={hands.hour} minute={hands.minute} snap={!hands.animate} label={labels.spoken} />
       : <div className={`clock-time clock-${style}`}><ClockCharacters text={labels.clock} />{labels.period && <span className="clock-period" aria-hidden="true"><TransitionText value={labels.period} /></span>}<span className="sr-only">{labels.spoken}</span></div>}

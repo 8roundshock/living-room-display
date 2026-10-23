@@ -6,7 +6,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApplication } from './app.ts';
-import { forecastFixture } from './fixtures.ts';
+import { catalogBoardDefaults, forecastFixture } from './fixtures.ts';
 import { PREVIOUS_RELEASE } from './persistence.ts';
 import { importSchema, mergeSettings, settingsPatchSchema, settingsSchema } from './validation.ts';
 import { defaultSettings } from '../shared/defaults.ts';
@@ -24,6 +24,8 @@ import type { Settings, WidgetId } from '../shared/contracts.ts';
 const FOUNDATION_IDS = ['clock', 'weather', 'rain', 'forecast', 'reminders', 'preview', 'photo'] as WidgetId[];
 /** The six #78 ids, appended after the foundation ids in this order; each unit activated its own (deleted `status`). */
 const NEW_IDS = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'] as WidgetId[];
+/** Ids appended after the #78 ones, each by its own ticket: Dynamic (#437). */
+const LATER_IDS = ['dynamic'] as WidgetId[];
 /** Ids still reserved; computed so that activating an entry (deleting its status) needs no edit here. */
 const PLANNED = WIDGET_IDS.filter(isPlannedWidget);
 const definition = (id: WidgetId): WidgetDefinition => WIDGET_CATALOG[id];
@@ -44,12 +46,12 @@ test('every catalog entry declares a valid category, tone, status and supported 
 });
 
 test('planned entries reserve the #78 ids after the shipped ones and are never active', () => {
-  assert.deepEqual(WIDGET_IDS, [...FOUNDATION_IDS, ...NEW_IDS]);
+  assert.deepEqual(WIDGET_IDS, [...FOUNDATION_IDS, ...NEW_IDS, ...LATER_IDS]);
   // New ids are appended: the previous installed release's ids (all 13 since 3fee844, #263; d66832b since #497) stay a prefix.
   assert.deepEqual(WIDGET_IDS.slice(0, PREVIOUS_RELEASE.widgetIds.length), [...PREVIOUS_RELEASE.widgetIds]);
   // Rain is retired into Weather (#74); every other foundation id stays active, and each #78 id is
   // active once its unit deletes `status`.
-  assert.deepEqual(ACTIVE_WIDGET_IDS, [...FOUNDATION_IDS.filter(id => id !== 'rain'), ...NEW_IDS.filter(id => !PLANNED.includes(id))]);
+  assert.deepEqual(ACTIVE_WIDGET_IDS, [...FOUNDATION_IDS.filter(id => id !== 'rain'), ...NEW_IDS.filter(id => !PLANNED.includes(id)), ...LATER_IDS]);
   // Both #78 units (#157 Calendar/Countdown/Note, #171 World clocks/Air quality/Sun & moon) have shipped.
   assert.deepEqual(NEW_IDS.filter(id => !isActiveWidget(id)), [], 'every #78 id is active after both catalog units');
   assert.ok(PLANNED.every(id => NEW_IDS.includes(id)), 'only reserved #78 ids are planned');
@@ -58,6 +60,21 @@ test('planned entries reserve the #78 ids after the shipped ones and are never a
     assert.equal(isPlannedWidget(id), true); assert.equal(isActiveWidget(id), false, `${id}: widgetVisible starts with isActiveWidget`);
   }
   for (const id of ACTIVE_WIDGET_IDS) { assert.equal(isActiveWidget(id), true); assert.equal(isPlannedWidget(id), false); }
+});
+
+test('#437 Dynamic is an active, optional Weather & sky widget with standard families and no legacy placement', () => {
+  const dynamic = definition('dynamic');
+  assert.equal(isActiveWidget('dynamic'), true);
+  assert.deepEqual({ name: dynamic.name, description: dynamic.description, icon: dynamic.icon, category: dynamic.category, tone: dynamic.tone, defaultSize: dynamic.defaultSize, defaultEnabled: dynamic.defaultEnabled, defaultPlacement: dynamic.defaultPlacement },
+    { name: 'Dynamic', description: 'What matters now, or a calm rotation', icon: 'sparkles', category: 'weather', tone: 'sky', defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 } });
+  assert.deepEqual(widgetSizes('dynamic'), ['small', 'medium', 'large']);
+  assert.equal(dynamic.legacyPlacement, undefined, 'no revision-one board ever held Dynamic');
+  assert.equal(dynamic.legacyEnabledFrom, undefined);
+  assert.equal(defaultWidgetVisibility().dynamic, false, 'off by default');
+  for (const revision of [1, 2] as const) assert.equal(gridProblem(defaultWidgetGrid(revision), { dynamic: true }), null, `its default placement is in bounds at revision ${revision}`);
+  // The catalog's icons stay distinct: Dynamic takes sparkles, which no other entry uses.
+  const icons = ACTIVE_WIDGET_IDS.map(id => definition(id).icon);
+  assert.equal(new Set(icons).size, icons.length, `every active widget has its own picker icon: ${icons.join(', ')}`);
 });
 
 /** A retired entry must name an active id whose families include every retired family. */
@@ -139,7 +156,7 @@ test('a PATCH enabling a planned id is rejected with a clear message', async () 
         assert.equal(response.status, 400);
         assert.match((await response.json()).error, new RegExp(`${definition(id).name} is not available yet`));
       }
-      assert.equal(Object.values(app.store.snapshot().settings.widgets).filter(Boolean).length, 5, 'the five default widgets (Rain is part of Weather since #74)');
+      assert.equal(Object.values(app.store.snapshot().settings.widgets).filter(Boolean).length, 6, 'the six widgets of the default board (#435; Rain is part of Weather since #74)');
     } finally { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }
   } finally { if (probeStatus === undefined) delete definition(probe).status; else definition(probe).status = probeStatus; }
 });
@@ -147,11 +164,13 @@ test('a PATCH enabling a planned id is rejected with a clear message', async () 
 // The same computation recorded on main 88e58b0 before the planned entries were appended; only
 // the foundation ids are compared, so appending must leave every existing layout identical.
 // #74 deliberately changed the default board (large Weather, Rain merged): the pre-#74 board still
-// hashes to 322f8665…, and the value below is recorded after that change.
-function layoutGoldens(boardDefaults: () => Settings = defaultSettings): string {
+// hashes to 322f8665…, and the value below is recorded after that change. #435 gave new installs
+// their own default board and left the catalog board, which older data backfills from, as it was,
+// so these goldens are computed on the catalog board and are unchanged.
+function layoutGoldens(boardDefaults: () => Settings = catalogBoardDefaults): string {
   const ids = FOUNDATION_IDS;
   const pick = (grid: ReturnType<typeof defaultWidgetGrid>) => ({ revision: grid.revision, density: grid.density, placements: Object.fromEntries(ids.map(id => [id, grid.placements[id]])) });
-  const legacy = JSON.parse(JSON.stringify(defaultSettings())); delete legacy.widgetGrid.revision;
+  const legacy = JSON.parse(JSON.stringify(catalogBoardDefaults())); delete legacy.widgetGrid.revision;
   const positions: Record<string, [number, number]> = { clock: [0, 0], weather: [8, 0], rain: [0, 3], forecast: [2, 6], reminders: [5, 3], preview: [8, 3], photo: [4, 3] };
   for (const id of ids) { const [column, row] = positions[id]!; legacy.widgetGrid.placements[id] = { ...legacy.widgetGrid.placements[id], column, row }; }
   // Legacy boards predate #74: a medium Weather and an enabled Rain.
@@ -177,10 +196,10 @@ test('appending planned entries keeps the default board, packing, density fits a
   const rain = definition('rain'), weather = definition('weather'), saved = { status: rain.status, mergedInto: rain.mergedInto, enabled: rain.defaultEnabled, size: weather.defaultSize };
   try {
     delete rain.status; delete rain.mergedInto; rain.defaultEnabled = true; weather.defaultSize = 'medium';
-    const preMerge = () => { const board = defaultSettings(); board.widgetGrid.placements.weather.size = 'medium'; board.widgets.rain = true; return board; };
+    const preMerge = () => { const board = catalogBoardDefaults(); board.widgetGrid.placements.weather.size = 'medium'; board.widgets.rain = true; return board; };
     assert.equal(createHash('sha256').update(layoutGoldens(preMerge)).digest('hex'), '322f86655a6725bcdf839a59aa6df64e38e349c8b14d392998897333ffb03b61', 'the shared layout helpers are unchanged for the pre-#74 board');
   } finally { Object.assign(rain, { status: saved.status, mergedInto: saved.mergedInto, defaultEnabled: saved.enabled }); weather.defaultSize = saved.size; }
-  const settings = defaultSettings(); settings.widgets.photo = true;
+  const settings = catalogBoardDefaults(); settings.widgets.photo = true;
   const original = structuredClone(settings.widgetGrid);
   const compact = switchGridDensity(original, 'spacious', settings.widgets); assert.ok(compact);
   const fine = switchGridDensity(compact.grid, 'fine', settings.widgets, compact.history); assert.ok(fine);

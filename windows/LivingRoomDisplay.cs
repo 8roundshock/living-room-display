@@ -29,15 +29,23 @@ internal static class Program
                 Console.WriteLine("Windows helper ready; Edge: " + FindEdge());
                 return 0;
             }
+            if (mode == "--start" || mode == "--stop" || mode == "--status")
+            {
+                var runtime = Server();
+                if (mode == "--start") runtime.Start(CancellationToken.None);
+                else if (mode == "--stop") runtime.Stop(CancellationToken.None);
+                else Console.WriteLine(new JavaScriptSerializer().Serialize(runtime.Status(CancellationToken.None)));
+                return 0;
+            }
             if (mode == "/p" || mode.StartsWith("/p:")) return Preview(args);
             if (mode == "/c" || mode.StartsWith("/c:") || mode == "--editor")
             {
                 EnsureServer();
-                Process.Start(BaseUrl + "/editor");
+                Process.Start(BaseUrl + (mode == "--editor" ? "/" : "/editor"));
                 return 0;
             }
             if (mode != "/s" && mode != "--display" && mode != "--test-display")
-                throw new ArgumentException("Use /s, /c, /p <window>, --display, or --check.");
+                throw new ArgumentException("Use /s, /c, /p <window>, --display, --start, --stop, --status or --check.");
             bool owned;
             using (Mutex single = new Mutex(true, "Local\\LivingRoomDisplay.Ambient", out owned))
             {
@@ -77,23 +85,10 @@ internal static class Program
         throw new FileNotFoundException("Microsoft Edge is required. Install Edge from Microsoft, then retry.");
     }
 
-    internal static void EnsureServer(CancellationToken cancellation = default(CancellationToken))
-    {
-        cancellation.ThrowIfCancellationRequested();
-        string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LivingRoomDisplay.ps1");
-        if (!File.Exists(script)) throw new FileNotFoundException("Install the app before running its screensaver.");
-        string shell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
-        using (Process starter = Process.Start(new ProcessStartInfo(shell,
-            "-NoProfile -ExecutionPolicy Bypass -File " + Native.Quote(script) + " Start -NoBrowser") {
-                UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden
-            }))
-        {
-            if (!starter.WaitForExit(20000)) { starter.Kill(); throw new TimeoutException("Local server startup timed out."); }
-            if (starter.ExitCode != 0) throw new InvalidOperationException("Local server could not start; run the Status command.");
-        }
-        cancellation.ThrowIfCancellationRequested();
-        if (!NativeApi.IsReady()) throw new InvalidOperationException("Local server did not become ready.");
+    private static ServerRuntime Server() {
+        return new ServerRuntime(new WindowsServerEnvironment(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".."))));
     }
+    internal static void EnsureServer(CancellationToken cancellation = default(CancellationToken)) { Server().Start(cancellation); }
 
     private static int Preview(string[] args)
     {

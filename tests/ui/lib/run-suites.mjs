@@ -30,6 +30,10 @@ export const SETS = {
     'widgets', // 371
     'canvas-scope', 'grid', 'studio', 'workspace', 'catalog-sky', 'reminders', 'catalog-time', 'freesize', // 22, 45, 41, 38, 34, 34, 31, 29
     'preview', 'first-run', 'editor-sync', 'display-controls', // 19, 9, 8, 3
+    'daylight', // #439: not yet timed on the runner; 25 to 70 locally under load, where catalog-time took 59
+    'dynamic', // #437: its own Dynamic scenarios, timed locally (see docs/development.md)
+    'screen', // #436, about 40 locally
+    'home', // #438, about 70 locally
   ],
   scheduled: ['motion', 'weather', 'palette'], // 219, 81, 68
 };

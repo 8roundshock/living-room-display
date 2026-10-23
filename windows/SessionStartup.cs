@@ -41,7 +41,6 @@ internal sealed class SessionStartup : IDisposable
     }
     internal bool IsCancelled { get { return cancellation.IsCancellationRequested; } }
     internal CancellationToken Token { get { return cancellation.Token; } }
-    internal bool BrowserIsEmpty { get { return browser != null && browser.IsEmpty; } }
     internal IAmbientBrowser Browser { get { return browser; } }
     internal bool Start()
     {
@@ -92,9 +91,11 @@ internal sealed class SessionStartup : IDisposable
             cancellation.Cancel();
         }
         signals.Dispose();
+        // Stop the exact owned browser job before waiting for an earlier HTTP clear.
+        // Disposal still waits for that clear, so this session cannot clear a replacement.
+        if (browser != null) browser.Dispose();
         lock (cleanupGate)
         {
-            if (browser != null) browser.Dispose();
             if (preview != null) preview.Clear();
         }
         // Keep the source valid for callbacks already dispatched by SystemEvents.

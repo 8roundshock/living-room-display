@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { boardGeometry, assertBoardGeometry } from '../lib/board-geometry.mjs';
+import { catalogBoardDefaults } from '../../../src/server/fixtures.ts';
 import { GRID_DENSITIES, WIDGET_IDS, familyForSpan, freeSpanLimits, getWidgetRect, normalizePlacement, resizeWidgetSpan } from '../../../src/shared/widgets.ts';
 
 // Free-size Reminders (#73). Runs through the `sweep` hook, once per viewport after the family sweep:
@@ -127,7 +129,7 @@ function single(state, density, span) {
 
 export async function sweep({ page, viewport, state, base, now }) {
   const widget = page.locator('[data-widget-id="reminders"]');
-  const fourK = viewport.width > 2000, authored = structuredClone(state.settings.widgetGrid);
+  const fourK = viewport.width > 2000;
   // Every shape × density × 1, 5 and 30 pending at this viewport.
   for (const density of Object.keys(GRID_DENSITIES)) {
     const counts = {};
@@ -206,7 +208,8 @@ export async function sweep({ page, viewport, state, base, now }) {
   // Timed compositions on the display: a lone full-height column moves sideways and alternates its anchor.
   for (const count of [1, 30]) {
     single(state, 'balanced', { columns: 2, rows: 8 }); state.reminders = reminders(count, now);
-    state.settings.appearance.motionIntervalSeconds = 30;
+    // #436: compositions change only with Swap places on (opt-in).
+    state.settings.appearance.motionIntervalSeconds = 30; state.settings.appearance.rearrange = true;
     await reopen(page);
     const lefts = new Set(), seen = [];
     for (let composition = 0; composition < 4; composition++) {
@@ -218,7 +221,8 @@ export async function sweep({ page, viewport, state, base, now }) {
       assertAnchor(result, composition % 2 === 1, label);
       assert.equal(result.justify, composition % 2 ? 'safe flex-end' : 'flex-start', label);
       if (count === 1 && composition % 2) assert.ok(result.top > 100, `${label}: one reminder visibly sits at the bottom (${result.top}px)`);
-      const rect = await widget.evaluate(element => { const r = element.getBoundingClientRect(), plane = element.closest('.widget-grid-plane').getBoundingClientRect(); return { left: r.left - plane.left, top: r.top - plane.top, height: r.height, plane: plane.height }; });
+      // The cell: the box without the #436 float translation (its content floats inside it).
+      const rect = await widget.evaluate(element => { const r = element.getBoundingClientRect(), plane = element.closest('.widget-grid-plane').getBoundingClientRect(), [x, y] = getComputedStyle(element).translate.split(' ').map(value => parseFloat(value) || 0); return { left: r.left - (x ?? 0) - plane.left, top: r.top - (y ?? 0) - plane.top, height: r.height, plane: plane.height }; });
       assert.ok(Math.abs(rect.top) <= 1 && Math.abs(rect.height - rect.plane) <= 1, `${label}: stays full height`);
       lefts.add(Math.round(rect.left)); seen.push(result.visible);
     }
@@ -233,7 +237,7 @@ export async function sweep({ page, viewport, state, base, now }) {
   for (const [density, span, alternates] of [['balanced', { columns: 2, rows: 7 }, true], ['fine', { columns: 2, rows: 9 }, true], ['balanced', { columns: 2, rows: 5 }, false]]) {
     for (const count of alternates ? [1, 30] : [1]) {
       board(state, density, span); state.reminders = reminders(count, now);
-      state.settings.appearance.motionIntervalSeconds = 30;
+      state.settings.appearance.motionIntervalSeconds = 30; state.settings.appearance.rearrange = true;
       await reopen(page);
       const seen = [];
       for (let composition = 0; composition < 4; composition++) {
@@ -248,13 +252,39 @@ export async function sweep({ page, viewport, state, base, now }) {
         assertAnchor(result, bottom, label);
         assert.equal(result.justify, bottom ? 'safe flex-end' : 'flex-start', label);
         if (count === 1 && bottom) assert.ok(result.top > 100, `${label}: one reminder visibly sits at the bottom (${result.top}px)`);
-        const rects = await page.locator('.ambient [data-widget-id]').evaluateAll(elements => elements.map(element => { const r = element.getBoundingClientRect(); return { id: element.getAttribute('data-widget-id'), left: r.left, top: r.top, right: r.right, bottom: r.bottom }; }));
-        assert.equal(rects.length, 4, `${label}: every enabled widget renders`);
-        for (const a of rects) for (const b of rects) if (a.id < b.id) assert.ok(a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5, `${label}: ${a.id} and ${b.id} are disjoint`);
+        assertBoardGeometry(await boardGeometry(page, '.ambient [data-widget-id]'), 4, label);
+        if (!fourK && density === 'balanced' && span.rows === 7 && count === 1 && composition === 1) {
+          // The cell normalization must not hide a genuine paint escape: force one, detect it, restore.
+          const before = await boardGeometry(page, '.ambient [data-widget-id]');
+          const previous = await tall.evaluate(element => { const value = element.style.getPropertyValue('--float-y'); element.style.setProperty('--float-y', '10000px'); return value; });
+          try {
+            const forced = await boardGeometry(page, '.ambient [data-widget-id]');
+            for (let index = 0; index < forced.length; index++) for (const edge of ['left', 'top', 'right', 'bottom']) assert.ok(Math.abs(forced[index].cell[edge] - before[index].cell[edge]) <= 0.5, 'forcing float leaves authored cell geometry unchanged');
+            assert.throws(() => assertBoardGeometry(forced, 4, 'excessive-offset negative control'), /content bounds stay inside its authored cell/);
+          } finally { await tall.evaluate((element, value) => { if (value) element.style.setProperty('--float-y', value); else element.style.removeProperty('--float-y'); }, previous); }
+          assertBoardGeometry(await boardGeometry(page, '.ambient [data-widget-id]'), 4, `${label} restored`);
+        }
         seen.push(result.visible);
       }
       assert.equal(new Set(seen).size, 1, `#175 ${span.columns}x${span.rows}/${density} × ${count}: anchoring never changes the fitted count (${seen.join(', ')})`);
     }
+  }
+
+  // Position-only anchor changes also clamp in continuous float mode, through both directions.
+  if (!fourK) {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    try {
+      board(state, 'balanced', { columns: 2, rows: 7 }); state.reminders = reminders(1, now);
+      Object.assign(state.settings.appearance, { motionEnabled: true, rearrange: true, motionIntervalSeconds: 30, fadeSeconds: 0 });
+      await reopen(page);
+      for (let composition = 0; composition < 4; composition++) {
+        if (composition) { await page.clock.runFor(30_000); await page.clock.runFor(1_200); }
+        await page.locator(`.ambient.composition-${composition}`).waitFor();
+        const label = `floating anchor change ${composition}`;
+        assertBoardGeometry(await boardGeometry(page, '.ambient [data-widget-id]'), 4, label);
+        const result = await inspect(widget); assertMeasured(result, 1, label); assertAnchor(result, composition % 2 === 1, label);
+      }
+    } finally { await page.emulateMedia({ reducedMotion: 'reduce' }); }
   }
 
   // compositionOverride 0–3 through the editor's arrangement preview, beside the default widgets. Rain is
@@ -262,7 +292,9 @@ export async function sweep({ page, viewport, state, base, now }) {
   // because the default large Weather leaves no room for a column beside Clock and Forecast (#183).
   if (!fourK) {
     state.settings.appearance.motionEnabled = false; state.reminders = reminders(30, now);
-    state.settings.widgetGrid = structuredClone(authored);
+    state.settings.appearance.rearrange = true; // the arrangement buttons show only with Swap places on (#436)
+    // This #183 arrangement deliberately uses the catalog geometry from before #435.
+    state.settings.widgetGrid = catalogBoardDefaults().widgetGrid;
     state.settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' };
     state.settings.widgetGrid.placements.photo = { column: 8, row: 2, size: 'medium' };
     state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, ['clock', 'weather', 'photo', 'forecast', 'reminders'].includes(key)]));
@@ -278,16 +310,15 @@ export async function sweep({ page, viewport, state, base, now }) {
       await page.getByRole('button', { name: `Arrangement ${composition + 1}`, exact: true }).click();
       await preview.locator(`.ambient.composition-${composition}`).waitFor(); await page.clock.runFor(100);
       const label = `editor arrangement ${composition + 1}`;
-      const rects = await preview.locator('[data-widget-id]').evaluateAll(elements => elements.map(element => { const r = element.getBoundingClientRect(); return { id: element.getAttribute('data-widget-id'), left: r.left, top: r.top, right: r.right, bottom: r.bottom }; }));
-      assert.equal(rects.length, 5, `${label}: every enabled widget renders`);
-      for (const a of rects) for (const b of rects) if (a.id < b.id) assert.ok(a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5, `${label}: ${a.id} and ${b.id} are disjoint`);
+      const rects = await boardGeometry(page, '.preview-surface [data-widget-id]');
+      assertBoardGeometry(rects, 5, label);
       const result = await inspect(preview.locator('[data-widget-id="reminders"]'));
       assert.equal(result.composition, String(composition), label);
       assert.equal(result.fullHeight, true, label);
       assertMeasured(result, 30, label);
       assert.ok(result.visible >= 4, `${label}: the editor canvas lists several reminders in the column (${result.visible})`);
       assertAnchor(result, composition % 2 === 1, label);
-      lefts.add(Math.round(rects.find(rect => rect.id === 'reminders').left));
+      lefts.add(Math.round(rects.find(rect => rect.id === 'reminders').cell.left));
     }
     assert.ok(lefts.size >= 2, `editor arrangements move the column horizontally (${[...lefts].join(', ')})`);
     // The shared rect helper agrees with the authored column.

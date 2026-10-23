@@ -9,7 +9,7 @@ export const WIDGET_CATEGORIES: Record<WidgetCategory, string> = { time: 'Time',
 export type WidgetStatus = 'active' | 'planned' | 'retired';
 export interface WidgetDefinition {
   name: string; description: string;
-  icon: 'clock' | 'cloud' | 'rain' | 'calendar' | 'check' | 'monitor' | 'photo' | 'globe' | 'hourglass' | 'note' | 'air' | 'sunrise' | 'forecast';
+  icon: 'clock' | 'cloud' | 'rain' | 'calendar' | 'check' | 'monitor' | 'photo' | 'globe' | 'hourglass' | 'note' | 'air' | 'sunrise' | 'forecast' | 'sparkles';
   category: WidgetCategory;
   /** Palette role used by native accent colours (#75). */
   tone: PaletteRole;
@@ -51,6 +51,8 @@ export const WIDGET_CATALOG = {
   note: { name: 'Note', description: 'A short message on screen', icon: 'note', category: 'personal', tone: 'personal', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 } },
   airQuality: { name: 'Air quality', description: 'Air quality and UV index', icon: 'air', category: 'weather', tone: 'sky', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 10, row: 6 } },
   sunMoon: { name: 'Sun & moon', description: 'Daylight and moon phase', icon: 'sunrise', category: 'weather', tone: 'sun', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 8, row: 6 } },
+  // #437 (docs/widgets.md "Dynamic (#437)"): optional and off by default.
+  dynamic: { name: 'Dynamic', description: 'What matters now, or a calm rotation', icon: 'sparkles', category: 'weather', tone: 'sky', sizes: standard, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 } },
 } satisfies Record<string, WidgetDefinition>;
 export type WidgetKind = keyof typeof WIDGET_CATALOG;
 /** Every id, including planned and retired ones: schemas and geometry need them all. */
@@ -75,6 +77,38 @@ export function defaultWidgetGrid(revision: 1 | 2 = 2): WidgetGrid {
   })) as Record<WidgetId, WidgetPlacement> };
 }
 export function defaultWidgetVisibility(): Record<WidgetId, boolean> { return Object.fromEntries(WIDGET_IDS.map(id => [id, WIDGET_CATALOG[id].defaultEnabled])) as Record<WidgetId, boolean>; }
+/**
+ * The board a new install starts with and Reset layout returns to (#435): the owner's Balanced
+ * 12 × 8 board, which fills the grid. Only these widgets are shown. The catalog's `defaultEnabled`,
+ * `defaultPlacement` and `defaultSize` stay the backfill for older saved data (validation.ts), so
+ * changing this board never changes how an older file reads. Every other widget is hidden at its
+ * catalog placement, where the picker's add and room guidance start, except the retired Rain: as
+ * in the catalog it sits inside Weather, so a stale editor that still enables it merges into
+ * Weather (#74) instead of overlapping another widget.
+ */
+export const DEFAULT_BOARD = {
+  density: 'balanced',
+  placements: {
+    calendar: { column: 0, row: 0, size: 'large' },
+    clock: { column: 4, row: 0, size: 'large' },
+    weather: { column: 0, row: 4, size: 'large' },
+    forecast: { column: 4, row: 4, size: 'large' },
+    preview: { column: 4, row: 6, size: 'medium' },
+    reminders: { column: 8, row: 6, size: 'medium' },
+  },
+  hidden: { rain: { column: 0, row: 6, size: 'medium' } },
+} as const satisfies { density: GridDensity; placements: Partial<Record<WidgetId, WidgetPlacement>>; hidden: Partial<Record<WidgetId, WidgetPlacement>> };
+/** The grid of DEFAULT_BOARD (geometry revision 2). */
+export function defaultBoardGrid(): WidgetGrid {
+  const grid = defaultWidgetGrid(2);
+  grid.density = DEFAULT_BOARD.density;
+  for (const [id, placement] of Object.entries({ ...DEFAULT_BOARD.hidden, ...DEFAULT_BOARD.placements }) as [WidgetId, WidgetPlacement][]) grid.placements[id] = { ...placement };
+  return grid;
+}
+/** DEFAULT_BOARD's widgets shown, every other widget hidden. */
+export function defaultBoardVisibility(): Record<WidgetId, boolean> {
+  return Object.fromEntries(WIDGET_IDS.map(id => [id, Object.hasOwn(DEFAULT_BOARD.placements, id)])) as Record<WidgetId, boolean>;
+}
 function retiredTarget(id: WidgetId): WidgetId | null {
   const definition: WidgetDefinition = WIDGET_CATALOG[id];
   return definition.status === 'retired' && definition.mergedInto && Object.hasOwn(WIDGET_CATALOG, definition.mergedInto) ? definition.mergedInto as WidgetId : null;
@@ -370,15 +404,11 @@ export function switchGridDensity(grid: WidgetGrid, density: GridDensity, enable
   return { ...fit, history: { current: structuredClone(fit.grid), enabled: { ...enabled }, layouts: { ...prior, [grid.density]: structuredClone(grid), [density]: structuredClone(fit.grid) } } };
 }
 
-/** Reflections plus a non-repeating low-discrepancy offset keep successive cycles varied. */
+/** A whole-board reflection of one placement (the #93/#182 fallback of composeWidgetGrid). */
 export function displayPlacement(grid: WidgetGrid, id: WidgetId, cycle: number): WidgetPlacement {
   const original = grid.placements[id]; const span = placementSpan(id, original, grid.revision); const limits = GRID_DENSITIES[grid.density];
   return { ...original, column: cycle % 2 ? limits.columns - original.column - span.columns : original.column,
     row: Math.floor(cycle / 2) % 2 ? limits.rows - original.row - span.rows : original.row };
-}
-export function motionOffset(cycle: number): { x: number; y: number } {
-  if (cycle === 0) return { x: 0, y: 0 };
-  return { x: ((cycle * 0.61803398875) % 1 - 0.5) * 4, y: ((cycle * 0.41421356237) % 1 - 0.5) * 4 };
 }
 /** Reveal choreography order (#76): visible widgets in reading order (row, then column); ties keep catalog order. */
 export function widgetRevealOrder(grid: WidgetGrid, ids: readonly WidgetId[]): WidgetId[] {
@@ -452,7 +482,7 @@ function keptShare(span: WidgetSpan, from: { column: number; row: number }, to: 
 export const RELOCATION_KEEP_LIMIT = 0.5;
 const SEARCH_ATTEMPTS = 20_000, TILE_ATTEMPTS = 5_000, EXCHANGE_ATTEMPTS = 4_000;
 /**
- * Keep the edited layout at rest, then choose distant legal cells during a black interval.
+ * Keep the edited layout at rest, then (Swap places, #436) choose distant legal cells for the next swap.
  * `earlier` holds the compositions before `previous`, most recent first (the display passes the one
  * from two cycles back, #317). A widget "stays" when it covers more than half of its previous cells
  * again, or more than the least that any legal origin of its span allows (#338). In order of preference:
@@ -461,8 +491,8 @@ const SEARCH_ATTEMPTS = 20_000, TILE_ATTEMPTS = 5_000, EXCHANGE_ATTEMPTS = 4_000
  * 2. a whole-board reflection of the previous composition (#93; the #182 choice first) in which no widget
  *    stays: a widget that stays trades places with a same-size clean region elsewhere (its own cells or
  *    its row or column band), and widgets of the same span may exchange cells. A reflection alone cannot
- *    move a widget centred on its axis, and the whole-plane offset (motionOffset, at most 2% of the plane
- *    each way) cannot move one by a large share of its size. An earlier composition may return only when
+ *    move a widget centred on its axis, and the board's float (#436, src/shared/float.ts, at most 3.5% of
+ *    the display each way) cannot move one by a large share of its size. An earlier composition may return only when
  *    no such reflection avoids it;
  * 3. a searched composition that moves every widget to other cells and recreates no earlier one,
  *    improved the same way where it can be;
@@ -677,9 +707,23 @@ export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<Widg
 /**
  * Whether a board needs the forecast (#352): Weather or Forecast, or Sun & moon or Air quality while
  * the weather location's timezone is still `auto`, which only the forecast resolves. The server
- * refreshes the forecast for /api/state only then; the editor asks for it itself otherwise.
+ * refreshes the forecast for /api/state only then; the editor asks for it itself otherwise. Dynamic
+ * (#437) always needs it: its weather cards, and the place and zone its sun and moon use.
  */
 export function needsForecast(settings: Pick<VisualSettings, 'widgets'> & { location: { timezone: string } }): boolean {
   const on = (id: WidgetId) => !!settings.widgets[id] && isActiveWidget(id);
-  return on('weather') || on('forecast') || (settings.location.timezone === 'auto' && (on('sunMoon') || on('airQuality')));
+  return on('weather') || on('forecast') || on('dynamic') || (settings.location.timezone === 'auto' && (on('sunMoon') || on('airQuality')));
+}
+
+/**
+ * Whether a board needs air quality (#437): the Air quality widget, or Dynamic with its Air & UV source.
+ * The server requests the CAMS reading for /api/state only then; the editor previews it for a draft.
+ */
+export function needsAirQuality(settings: Pick<VisualSettings, 'widgets'> & { widgetData: { dynamic: { air: boolean } } }): boolean {
+  const on = (id: WidgetId) => !!settings.widgets[id] && isActiveWidget(id);
+  return on('airQuality') || (on('dynamic') && settings.widgetData.dynamic.air);
+}
+/** Whether a board needs official weather alerts (#437): Dynamic with its alerts source, as saved. */
+export function needsAlerts(settings: Pick<VisualSettings, 'widgets'> & { widgetData: { dynamic: { alerts: boolean } } }): boolean {
+  return !!settings.widgets.dynamic && isActiveWidget('dynamic') && settings.widgetData.dynamic.alerts;
 }

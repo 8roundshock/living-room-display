@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request as httpRequest } from 'node:http';
 import { createApplication } from './app.ts';
-import { forecastFixture, photoFixture } from './fixtures.ts';
+import { catalogBoardDefaults, forecastFixture, photoFixture } from './fixtures.ts';
 
 async function fixture(now?: () => number) {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-api-'));
@@ -296,6 +296,8 @@ test('/api/state, /api/weather and /api/air-quality answer within the refresh wa
   const provider = heldProvider();
   const app = await serve({ fetcher: provider.fetcher });
   try {
+    // The catalog board has room for Air quality (#435: the default board fills the grid).
+    await app.store.update(data => { data.settings = catalogBoardDefaults(); });
     assert.equal((await app.patch({ widgets: { airQuality: true } })).status, 200);
     const first = await timed(app.state);
     assert.ok(first.ms < 1000 + 250, `answered after the 1 s wait, not the provider: ${Math.round(first.ms)} ms`);
@@ -352,6 +354,8 @@ test('/api/state requests the forecast only while a saved widget needs it (#352)
   const app = await serve({ now: () => current, fetcher: async input => { requests.push(new URL(input)); return Response.json(forecastFixture()); } });
   const forecasts = () => requests.filter(url => url.hostname === 'api.open-meteo.com').length;
   try {
+    // From the catalog board, which has room for these widgets (#435: the default board fills the grid).
+    await app.store.update(data => { data.settings = catalogBoardDefaults(); });
     // Clock, Note, Calendar and Sun & moon with a resolved city zone: no widget needs the forecast.
     assert.equal((await app.patch({ widgets: { weather: false, forecast: false, sunMoon: true, note: true, calendar: true }, widgetGrid: { placements: { sunMoon: { column: 0, row: 6, size: 'small' } } } })).status, 200);
     for (let poll = 0; poll < 12; poll++) {

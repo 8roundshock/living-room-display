@@ -10,6 +10,10 @@ export interface WidgetSettingsProps {
   settings: Settings;
   onChange: (update: (settings: Settings) => Settings) => void;
   saving: boolean;
+  /** The last state from the server (saved settings' data), for panels that report it (#437). */
+  state?: AppState;
+  /** The saved settings, so a panel can tell an unsaved change from what the server already uses. */
+  saved?: Settings;
 }
 
 /** One widget's client implementation; the catalog supplies its platform metadata. */

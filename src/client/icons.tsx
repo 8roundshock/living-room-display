@@ -23,6 +23,7 @@ export type IconName =
   | 'trash'
   | 'edit'
   | 'sparkles'
+  | 'alert'
   | 'download'
   | 'globe'
   | 'hourglass'
@@ -31,6 +32,12 @@ export type IconName =
   | 'sunrise'
   | 'forecast'
   | 'undo'
+  | 'home'
+  | 'timer'
+  | 'pause'
+  | 'play'
+  | 'chevronLeft'
+  | 'chevronRight'
   | 'droplet';
 export type WeatherIconName = 'sun' | 'moon' | 'suncloud' | 'mooncloud' | 'cloud' | 'fog' | 'drizzle' | 'rain' | 'snow' | 'storm';
 /**
@@ -176,6 +183,13 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5ZM20 2v4m-2-2h4" />
     </>
   ),
+  // Official alerts only (#437): an outline triangle with an exclamation mark, the standard 1.5 stroke.
+  alert: (
+    <>
+      <path d="M10.3 4.2 2.6 17.6A2 2 0 0 0 4.3 20.6h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9.5v4.5m0 3h.01" />
+    </>
+  ),
   download: (
     <>
       <path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" />
@@ -222,6 +236,18 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
     </>
   ),
+  // Home (#438).
+  home: <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1Z" />,
+  timer: (
+    <>
+      <circle cx="12" cy="13.5" r="7.5" />
+      <path d="M12 13.5V9.5M9.5 2.5h5M18.5 6.5l1.5-1.5" />
+    </>
+  ),
+  pause: <path d="M9 5v14m6-14v14" />,
+  play: <path d="M8 5.5v13l10.5-6.5Z" />,
+  chevronLeft: <path d="m15 5-7 7 7 7" />,
+  chevronRight: <path d="m9 5 7 7-7 7" />,
 };
 
 /** `size={null}` omits width, height and inline size so CSS controls it; other SVG attributes (for example data-glyph) pass through. */

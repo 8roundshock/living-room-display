@@ -12,6 +12,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
+import { defaultWidgetGrid, defaultWidgetVisibility } from '../../src/shared/widgets.ts';
 
 const CITIES = { results: [{ id: 201, name: 'London', latitude: 51.5, longitude: -0.1, timezone: 'Europe/London', admin1: 'England', country: 'United Kingdom' }] };
 
@@ -116,6 +117,14 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
 
     // 4. Dismissal lives in this browser only; the saved data gains no key.
     await reset(); await open();
+    // #438: Home says the same in one line, whose link opens Edit display's Weather tab with City focused.
+    await page.goto(base + '/'); await page.locator('.home-page').waitFor();
+    const homeLine = page.locator('.home-first-run');
+    assert.equal((await homeLine.textContent()).replace(/\s+/g, ' ').trim(), 'Weather shows Toronto until you choose your city. Choose your city');
+    await homeLine.getByRole('link', { name: 'Choose your city' }).click();
+    await page.waitForURL(`${base}/editor`); await page.waitForFunction(() => document.activeElement?.id === 'city-search');
+    assert.equal(await page.getByRole('tab', { name: 'Weather', exact: true }).getAttribute('aria-selected'), 'true');
+    await tab('Widgets');
     const before = JSON.stringify(app.store.snapshot().settings);
     await button('Hide location tip').click();
     assert.equal(await card().count(), 0);
@@ -123,13 +132,16 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
     assert.equal(JSON.stringify(app.store.snapshot().settings), before, 'no persisted key');
     await page.reload(); await button('Edit layout').waitFor(); await page.clock.runFor(300);
     assert.equal(await card().count(), 0, 'dismissal survives a reload in this browser');
+    await page.goto(base + '/'); await page.locator('.home-page').waitFor();
+    assert.equal(await page.locator('.home-first-run').count(), 0, 'Home shares the dismissal');
+    await page.goto(base + '/editor'); await button('Edit layout').waitFor(); await page.clock.runFor(300);
     for (const name of ['Style', 'Widgets', 'Weather', 'Reminders']) {
       await tab(name); fit = await panelFit();
       assert.ok(fit.scroll <= fit.client + 1, `${name} fits at 1280×720 without the card: ${JSON.stringify(fit)}`);
     }
     await open(); // A new browser profile has no dismissal.
     await card().waitFor();
-    checks.push('“Hide location tip” is stored in browser storage only (saved settings byte-identical, no Save bar), survives reload, and a new browser profile shows the card; every tab fits at 1280×720 without it');
+    checks.push('“Hide location tip” is stored in browser storage only (saved settings byte-identical, no Save bar), survives reload, and a new browser profile shows the card; every tab fits at 1280×720 without it; Home shows the same tip as one line whose link opens Weather with City focused, and shares the dismissal (#438)');
 
     // 5. #349: every card control is a 44 px target (Hide location tip 44 × 44) at 1280×720 and 390 px,
     // where the card stacks above the tabs without horizontal overflow.
@@ -149,19 +161,40 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
     }
     checks.push('1280×720 and 390×844: the card’s controls are 44 px targets (Hide location tip 44 × 44) and fit the width with no horizontal scroll (#349)');
 
-    // 6. #310: at 1280×600 the default Widgets tab still fits beside the card. At 1024×600 and 760×600 the
-    // card's height makes it scroll by less than the card's own height; it fits once the tip is hidden
-    // (the trade-off recorded in docs/ui.md).
-    for (const viewport of [{ width: 1280, height: 600 }, { width: 1024, height: 600 }, { width: 760, height: 600 }]) {
-      await open({ viewport });
-      fit = await panelFit();
-      const height = (await card().boundingBox()).height;
-      if (viewport.width === 1280) assert.ok(fit.scroll <= fit.client + 1, `the Widgets tab fits at 1280×600 with the card: ${JSON.stringify(fit)}`);
-      else assert.ok(fit.scroll - fit.client < height, `${viewport.width}×600 scrolls by less than the ${height}px card: ${JSON.stringify(fit)}`);
-      await button('Hide location tip').click(); fit = await panelFit();
-      assert.ok(fit.scroll <= fit.client + 1, `${viewport.width}×600 fits without the card: ${JSON.stringify(fit)}`);
+    // 6. #435 adds Calendar to the old five-row default. Keep #310's original compact-board
+    // guarantees, and bound the six-row board's extra scroll to that one row without smaller targets.
+    for (const currentBoard of [true, false]) {
+      await reset(settings => {
+        if (!currentBoard) { settings.widgets = defaultWidgetVisibility(); settings.widgetGrid = defaultWidgetGrid(); }
+      });
+      for (const viewport of [{ width: 1280, height: 600 }, { width: 1024, height: 600 }, { width: 760, height: 600 }]) {
+        await open({ viewport });
+        fit = await panelFit();
+        const height = (await card().boundingBox()).height;
+        const rows = page.locator('.widget-option');
+        assert.equal(await rows.count(), currentBoard ? 6 : 5);
+        const rowPitch = await rows.evaluateAll(elements => elements[1].getBoundingClientRect().top - elements[0].getBoundingClientRect().top);
+        if (viewport.width === 1280) assert.ok(fit.scroll <= fit.client + (currentBoard ? rowPitch : 0) + 1, `${currentBoard ? 'six' : 'five'}-row Widgets at 1280x600 with the card: ${JSON.stringify(fit)}`);
+        else assert.ok(fit.scroll - fit.client < height + (currentBoard ? rowPitch : 0), `${viewport.width}x600 stays within the card${currentBoard ? ' plus one added row' : ''}: ${JSON.stringify(fit)}`);
+        // The scroll stays inside the panel; every select/remove action can be focused and hit.
+        const reachable = async () => {
+          for (const control of await page.locator('.widget-row button, .add-widget').all()) {
+            await control.focus(); await control.scrollIntoViewIfNeeded();
+            const box = await control.boundingBox(), panel = await page.locator('.inspector-panel').boundingBox();
+            // Add widget has an established 40px compact button; row actions retain 44px targets.
+            const minimum = await control.evaluate(element => element.classList.contains('add-widget') ? 40 : 44);
+            assert.ok(box.width >= minimum && box.height >= minimum && box.y >= panel.y - 1 && box.y + box.height <= panel.y + panel.height + 1, `${viewport.width}: control is reachable: ${JSON.stringify({ box, panel })}`);
+            assert.equal(await control.evaluate(element => { const r = element.getBoundingClientRect(); return element === document.activeElement && element.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), true, 'the control has keyboard focus and an unobscured pointer target');
+          }
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollHeight <= innerHeight + 1), true, 'scroll remains inside the inspector, without body overflow');
+        };
+        await reachable();
+        await button('Hide location tip').click(); fit = await panelFit();
+        assert.ok(fit.scroll <= fit.client + (currentBoard ? rowPitch : 0) + 1, `${viewport.width}x600 ${currentBoard ? 'has at most one row of scroll' : 'fits'} without the card: ${JSON.stringify(fit)}`);
+        await reachable();
+      }
     }
-    checks.push('the default Widgets tab fits beside the card at 1280×720 and 1280×600; at 1024×600 and 760×600 it scrolls by less than the card and fits once the tip is hidden (#310 trade-off)');
+    checks.push('at 600px high, the six-row default adds at most one row of internal scroll to the five-row #310 contract; all row controls remain 44px, focusable, unobscured and reachable at 1280/1024/760px; hiding the tip leaves at most one row of scroll; the original five-row no-scroll/less-than-card checks still pass');
 
     // 7. #235 and #241: Time format beside Units with the Clock off; the Reminders tab names its count.
     await reset(settings => { settings.widgets.clock = false; settings.locationSource = 'manual'; });

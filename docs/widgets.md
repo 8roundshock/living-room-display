@@ -9,7 +9,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 
 | Authority | Responsibility |
 | --- | --- |
-| [`src/shared/widgets.ts`](../src/shared/widgets.ts) | The catalog (category, tone, status), supported families, grid definitions, placement and layout helpers. |
+| [`src/shared/widgets.ts`](../src/shared/widgets.ts) | The catalog (category, tone, status), supported families, grid definitions, placement and layout helpers, and `DEFAULT_BOARD`, the board new installs start with (#435). |
 | [`src/shared/palette.ts`](../src/shared/palette.ts) | Accent modes and the palette roles a catalog entry declares as its `tone`. |
 | [`src/shared/motion.ts`](../src/shared/motion.ts) | Animation levels and their labels. |
 | [`src/shared/contracts.ts`](../src/shared/contracts.ts) and [`defaults.ts`](../src/shared/defaults.ts) | Persisted types, `widgetData` and catalog-derived initial settings. |
@@ -18,10 +18,11 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/server/compat/previous-reader.ts`](../src/server/compat/previous-reader.ts) | Test-only frozen reader of the previous release and its assertion helpers ([rollback compatibility](development.md#rollback-compatibility-check)). |
 | [`src/server/photo.ts`](../src/server/photo.ts) | Strict normalized PNG ingestion and private selected-image validation. |
 | [`src/server/air.ts`](../src/server/air.ts) | Keyless CAMS air quality via Open-Meteo: request, normalization, 30-minute cache and the `off` state; [`src/client/airHourly.ts`](../src/client/airHourly.ts) rebuilds the widget's upcoming-hour bars and UV peak each minute and decides whether saved current values still stand (3 hours, #188); [`src/client/astronomy.ts`](../src/client/astronomy.ts) holds the local sun, moon and time-zone calculations. |
+| [`src/client/dynamic.ts`](../src/client/dynamic.ts) and [`src/server/alerts.ts`](../src/server/alerts.ts) | Dynamic (#437): the pure engine (every Dynamic threshold, score, card, the calm rotation, `rotationSlot` and `chooseDynamic`, exported for Home, #438), and the server-only official alerts from ECCC and the NWS ([API](api.md#official-weather-alerts)). |
 | [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
 | [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
-| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157). |
+| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), and `Dynamic` (#437), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157). |
 | [`src/client/Display.tsx`](../src/client/Display.tsx) | Ambient state and the shared movement/composition boundary. |
 | [`src/client/Editor.tsx`](../src/client/Editor.tsx) | Picker, grid interactions and settings draft integration. |
 
@@ -77,11 +78,45 @@ Start with `WIDGET_CATALOG`, `GRID_DENSITIES` and `widgetSpan`; use
 packing rule. `composeWidgetGrid` and `motionOffset` own ambient placement variation.
 Schema/default changes belong at these authorities with their tests.
 Legacy settings/presets without a grid receive the safe catalog default grid.
+The catalog's `defaultEnabled`, `defaultPlacement` and `defaultSize` are that
+backfill; new installs and Reset layout use the separate default board below, so
+changing one never changes the other.
 Their visibility/location choices survive; old offsets/scale and
 `appearance.layout` are retained data, not converted or applied to the grid.
 Grid revision 2 gives the large clock real height. Revision 1 is validated against
 its original geometry before migration; enabled widgets remain present, with
 family reduction only when needed to fit. Current invalid layouts are rejected.
+
+### Default board (#435)
+
+New installs and **Reset layout** start on the owner's board, `DEFAULT_BOARD`
+(`defaultBoardGrid()` and `defaultBoardVisibility()`, used by `DEFAULT_SETTINGS`).
+On Balanced 12 × 8 it fills every cell:
+
+| Widget | Column, row | Family (cells) |
+| --- | --- | --- |
+| Calendar | 0, 0 | Large (4 × 4) |
+| Clock | 4, 0 | Large (8 × 4) |
+| Weather | 0, 4 | Large (4 × 4) |
+| Forecast | 4, 4 | Large (8 × 2) |
+| Last screen | 4, 6 | Medium (4 × 2) |
+| Reminders | 8, 6 | Medium (4 × 2) |
+
+Every other widget is off, and every widget stays optional. Hidden widgets wait at
+their catalog placement, except the retired Rain, which sits inside Weather as in the
+catalog board, so a stale editor that enables it merges into Weather (#74). The
+catalog itself is unchanged: Calendar's `defaultEnabled` stays `false`, so older data
+without a Calendar key still reads it as off, and a settings object without a grid
+still receives the catalog board (Clock, Weather, Forecast, Reminders and Last screen).
+`src/server/default-board.test.ts` proves both, and that the catalog's backfill
+fields equal the installed `d66832b` catalog (#497). Because the board is full, adding a
+widget always goes through room guidance: every hidden widget, in every family,
+gets “No room for … at … size.” with **Switch the grid to Fine** and one reduction
+(**Make room: Reminders small** for a small widget, **Weather medium** for a medium
+one, **Clock medium** for a large one), each one valid draft. A full-height Reminders
+column names Clock, and **Make room: Clock medium** fits it. Every widget of the full
+board moves in every relocation cycle (`relocation.test.ts`). Style defaults are
+not part of the board.
 
 ## Families and editing
 
@@ -130,7 +165,7 @@ The renderer families have deliberate visual roles:
 
 | Widget | Small | Medium | Large |
 | --- | --- | --- | --- |
-| Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition |
+| Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date. While a timer is visible, the date line shows it ("8 min", "Done") | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height; a timer shows as in small, Done adds "· 2 min ago" | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition; a timer reads "8 min left · ends 6:51 PM" ([timer slot](#clock-timer-slot)) |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”, “Rain possible now, likely later”); confidence only when partial. One footer row of short phrases, wrapping only between them: “Saved forecast · 5 hr ago · Open-Meteo” (#283) | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and an hourly chance bar for each hour overlapping the next 12 (12 on the hour, 13 otherwise; spell hours brighter, unknown hours a dotted baseline) over “Now” and the window's end (#261). Unavailable in every family: a dim, still cloud, a dim “—°” and one status-tone line at the label size, “Weather unavailable · retrying” (“· offline” while the display cannot reach the computer), with the age only when known and no credit (#362) |
 | Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362) |
 | Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row. When not every reminder fits, more rows win over bigger titles: rows after the first may take one line with an ellipsis and titles step down to about small's width-based size, so medium shows at least as many as small and a wider box never fewer (#359) | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
@@ -142,9 +177,47 @@ The renderer families have deliberate visual roles:
 | Note | The text at the largest size that fits the box (measured from its lines and wrapping, #194), up to a family cap | The same, wider | The same, generous; only a note that cannot fit at the text floor zooms out through the shared fit |
 | Air quality | AQI and category word with place and scale; the age ("Model est. · 12 min ago" with a reading) and "CAMS · Open-Meteo" as two short footer rows where the box is narrow; values over 3 hours old read "Saved estimate" or "Last known · 9 AM" on their own line under the reading (#309) | Adds the main pollutant and UV with its WHO category (both hidden once the values are over 3 hours old, UV then from the saved estimate); one footer row | Adds AQI bars for the current and up to 23 following hours (unknown hours a dotted baseline) over "Now" and the last hour's end, as Weather's chart (#261), and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
 | Sun & moon | Next sunrise or sunset, its time and the place | Sunrise, sunset, daylight length and change from yesterday, moon glyph and phase | Dim dotted day arc with the sun's position, times, daylight, phase with illumination and the next full (or new) moon |
+| Dynamic (#437) | One card: the kicker (source word, or an official level word with the alert icon, "· +2 more" or "· 1 of 2"), the glyph or a value beside a short headline (up to three lines), a one-line detail and one footer phrase | A glyph or value column of about 30% beside the headline (two lines) and detail; one footer run of provenance · age · status · credit | A hero row and the detail, then up to three whole rows (source word, short headline, time right-aligned) measured from layout boxes like the large Countdown, an exact "+N more", and the footer; one card alone is centred with no list |
 
 The large clock requires actual vertical room in the central catalog; do not
 recreate a giant option by scaling within the previous short large family.
+
+### Clock timer slot
+
+Timers started from Home (#438) show on the display in the Clock's date line, so they
+need no new widget id or layout change and work on a full board (the frozen previous
+release rejects a new widget id). `clockTimer` in [`src/client/timer.ts`](../src/client/timer.ts)
+takes the first of `orderTimers(visibleTimers(timers, now, true))` from
+[`src/shared/timers.ts`](../src/shared/timers.ts) (done newest first, then running by end,
+then paused by what is left); with none visible the date returns. It renders in the same
+`.clock-calendar` elements and fonts as the date, so the fit does not change:
+`.ambient-label.clock-timer-label` holds the name in the accent colour (a label, or "5 min
+timer"), on one line ending in an ellipsis and at most 60% of a large clock's width, with a
+dim "+N" for more visible timers; `.clock-date.clock-timer-value` holds the time in the text
+colour, and Done uses the shared status tone (`--ambient-caution`). Both carry
+`data-timer-phase`. Every analog family uses the same slot.
+
+| Phase | Small | Medium | Large |
+| --- | --- | --- | --- |
+| Running, over a minute left | "8 min" or "1 h 5 min" (whole minutes rounded up) | the same | "8 min left · ends 6:51 PM" (24-hour "ends 18:51", another day "ends tomorrow 1:10 AM") |
+| Running, the last minute | "45 s" | "45 s" | "45 s left" |
+| Paused | a pause mark and "8 min" | the same | a pause mark and "8 min left · paused" |
+| Done, for 10 minutes | "Done" | "Done · 2 min ago" | "Done · 2 min ago" |
+| Display offline | keeps counting from the saved end | the same | adds " · offline" |
+
+The name and the minute-rounded value change at most once a minute through
+`TransitionText`; only the last minute counts every second, as plain tabular text, which
+bounds the per-second refit (#99) to that minute. "ends" uses the cached `dateTimeFormat`,
+so a running timer builds no `Intl` formatter on the tick. No sound and no flashing. At
+1280 × 720 on the Balanced grid the large Clock measures 785 × 331 px with date-line text of
+about 27.5 px (measured, #438), so "Pasta 8 min left · ends 6:51 PM" fits on one line; when a
+long name and value do not both fit, the name gives way first (an ellipsis) and the time stays
+whole on the same line. Edit display's canvas and Home's
+preview show the slot live, and the Clock panel says "While a timer runs, the date line
+shows it. Start timers from Home." The widgets suite's Clock sweep checks every phase,
+offline included, in every family, style and density at 720p, 1080p and 4K with a
+40-character name and "+5": fit 1 at Text 100%, nothing clipped, the readability floor
+kept, Done in the status tone, and no `Intl` formatter per tick.
 All families use the same renderer in ambient view, authored editor canvas and
 synthetic picker preview. Picker fixtures never become user data.
 The editor canvas renders inside `.studio`, so renderer class names must not reuse
@@ -189,9 +262,9 @@ Cancel restores the saved configuration, including grid, styles and selected
 images. Show Save/Cancel only while there are actual unsaved changes, preserving
 the existing async race and concurrent-draft behavior. Reminder records retain
 their documented independent immediate-save behavior.
-The authored editor canvas stays still. Ambient relocation runs only in the
-display or an explicitly requested movement preview, so layout editing never
-competes with the ambient scheduler.
+The authored editor canvas stays still. Ambient movement (float, steps and swaps)
+runs only in the display or an explicitly requested movement preview, so layout
+editing never competes with the ambient scheduler.
 
 Legacy backfill uses revision-one catalog origins before strict validation and
 central migration. An absent additive module is different from an explicitly
@@ -207,8 +280,9 @@ The catalog has twelve active widgets now that Weather has absorbed Rain (#74), 
 in the picker by `WIDGET_CATEGORIES`: **Time** (Clock, World clocks, Calendar),
 **Weather & sky** (Weather, Forecast, Air quality, Sun & moon), **Personal**
 (Reminders, Countdown, Note) and **Pictures** (Photo, Last screen). Every new widget
-is optional, off by default and appended after `photo`, so existing packing and
-composition stay identical.
+is optional, off in the catalog and appended after `photo`, so existing packing and
+composition stay identical. Since #435 the default board for new installs shows
+Calendar (large); older data still reads it as off.
 
 - **Kept as is:** Clock, Forecast, Last screen and Photo. Weather and Rain belong to
   #74 and Reminders to #73.
@@ -221,10 +295,13 @@ composition stay identical.
   Countdown or Note is hidden on the display and shows a placeholder in the editor.
   World clocks, Sun & moon and Air quality shipped in the parallel unit of the same
   ticket (PR #171).
-  The three use fixed families and sit beside a free-size Reminders span; fuller
-  boards keep relocating through the #93 reflection fallback described below.
-- **Rejected, with reasons:** timers and alarms (they need audio and on-screen
-  interaction); news, stocks and sports (noise, feeds and keys); commute (keys and
+  The three use fixed families and sit beside a free-size Reminders span; with Swap
+  places on, fuller boards keep relocating through the #93 reflection fallback
+  described below.
+- **Timers (#438):** silent, started from Home and shown in the Clock's date line
+  ([timer slot](#clock-timer-slot)); a Timer widget or a spot the user chooses is #461.
+  Alarms with sound stay rejected.
+- **Rejected, with reasons:** alarms (they need audio); news, stocks and sports (noise, feeds and keys); commute (keys and
   personal addresses); account calendars, fitness and cloud smart home (accounts and
   privacy); quotes (licensing and novelty clutter); PC battery and stats (not useful
   ambiently); pollen (Open-Meteo coverage is Europe only); ticking seconds (OLED
@@ -234,6 +311,36 @@ composition stay identical.
   (#96), several instances of one widget (#97) and reminder dots on the calendar
   (#98). The per-second re-fit cost (#99) is fixed: the shared fit no longer reruns
   on every render (see [Families and editing](#families-and-editing)).
+
+### Dynamic (#437)
+
+Decided 2026-10-20 on [#437](https://github.com/8roundshock/living-room-display/issues/437)
+(the full spec and the three proposals it was chosen from are on the ticket). Dynamic is
+optional, off by default and appended after Sun & moon in Weather & sky: "What matters now,
+or a calm rotation", standard families, the sparkles icon and the sky tone. It shows one
+card at a time from data the app already has (the forecast, CAMS air and UV, the sun and
+moon calculated locally, reminders and countdowns) plus official alerts from Environment
+and Climate Change Canada and the US National Weather Service, which adopts #106 for
+Canada and the US through Dynamic ([API](api.md#official-weather-alerts)). It stays on
+what matters most (an official warning, a storm or rain starting soon, a reminder due
+within the hour) and otherwise rotates one calm card per wall-clock minute, skipping cards
+another widget on the board already shows. The ranking, thresholds and honest states are
+in [Dynamic signals](api.md#dynamic-signals).
+
+- Its five sources (Weather, Official weather alerts, Air & UV, Sun & moon, Reminders &
+  countdowns) are `widgetData.dynamic`, all on by default and omitted at rest then; at
+  least one stays on. An enabled Dynamic is a documented d66832b rollback exception
+  ([install](install.md#additive-data-and-rollback-compatibility-84)) until #130.
+- Rotation uses wall-clock slots (`rotationSlot`, `DYNAMIC_ROTATE_MS` = 60 s) with no timer
+  of its own: the display's one-second tick re-renders, and the editor canvas and picker
+  samples hold slot 0. It touches neither `Display.tsx` nor `WidgetContentProps`, so it
+  survives #436 removing black rests.
+- Urgency is carried by words, rank and size, never by added light ([design](design.md#dynamic-emphasis)).
+- News is still deferred, to #450, so the #78 rejection of news stands until then. Also
+  deferred: MeteoAlarm for Europe (#451), hourly severe timing and gusts (#452), Canada's
+  AQHI (#453), a "Change every" setting (#454), an alerts preview before Save (#455), the
+  official line inside Weather (#456), the NWS key risk (#457), public holidays (#458) and
+  "Hide when quiet" (#459). Home (#438) reuses the exported engine.
 
 ## Ambient appearance and recurring exposure
 
@@ -257,7 +364,11 @@ marked `tone-<role>` takes that role (Sun & moon's moon is `tone-time`), and
 Weather's rain visuals use the `--weather-rain` hook (Sea glass). A two-tone weather
 symbol paints each part with its own sub-tone: partly cloudy's sun is Gold and its moon
 Lilac while its cloud is Stone (#251). A widget whose
-face is only primary text (a Note, a "Today" countdown) has nothing to tint. Status
+face is only primary text (a Note, a "Today" countdown) has nothing to tint. Dynamic's card
+carries its own role (`tone-water` for rain and storms, `sun` for heat, UV and sun moments,
+`time` for the moon, `personal` for reminders and countdowns, `sky` for alerts, snow, cold,
+wind and air), which reaches only its glyph and detail: its kicker, rows and footer keep
+the catalog tone (sky), so the palette harness needs no exception. Status
 cues never change: a stale or offline line uses the shared `.status-caution` class
 (`widgets.css`), which paints the one amber status tone, `--ambient-caution`, at full
 opacity, so a dimmed parent never fades the cue (#322; Weather's “Last known”,
@@ -293,24 +404,32 @@ minute ease runs on the compositor (#161), and the square clips so a turned wrap
 never adds overflow to the widget fit. At rest the geometry is the same at every
 Animation level. The owner's couch check remains the acceptance gate for #222.
 
-Move the complete layout through substantially different valid locations, with
-varying offsets or routes over time instead of forever repeating identical
-anchors. Small jitter inside fixed widget bounds is insufficient. Keep module
-rectangles disjoint at each visible phase; fade the old composition fully to
-black before revealing a new one, so crossfades cannot overlay bright layouts.
-Include a black rest interval and avoid flashes or synchronized bright accents.
-Use the centralized scheduler/wrapper, not a new per-widget motion loop. A change to
-the move interval, the fade length, Drift and fade between moves or the screen's
-reduced-motion preference that arrives during a fade-out or the black rest finishes
-that step (the running fade keeps its length; a fade switched off is already black),
-so the next arrangement appears within one fade plus the 1.1 s rest and the next move
-comes one new interval later (#357). Renderers learn that the arrangement is fully
-black from the motion context's `black` flag (from the end of the fade-out to the
-reveal); the analog clock re-bases its accumulated hand angles only then, so a minute's
-ease that starts just before a fade-out finishes in view (#174).
+The display never goes dark to move (#436, owner decision 2026-10-20; it replaces the
+black rest of #357 and #395). By default the arrangement stays as placed and floats:
+the centralized timer in `Display.tsx` moves the whole plane along low-discrepancy
+waypoints (`src/shared/float.ts`, up to ±3.5% of the display, a new spot every
+interval) one device pixel at a time, and floats each widget's content inside its
+own slack by translating the section (`--float-x`/`--float-y`, the individual
+`translate` property). A widget must therefore tolerate a translated section: lay
+content out inside the content box, never depend on the section's screen position,
+and let the shared fit measure the slack (what the content leaves free; horizontal
+slack is to the right because content is left-anchored, vertical slack is centred).
+When content grows, that measurement immediately clamps its existing translation
+inside the new slack (#479); ordinary floating still advances one device pixel at a time.
+The widget's cell is its section box without that translation. Without animation
+(Float gently off or reduced motion) the same timer steps once per interval. Use the
+centralized scheduler/wrapper, not a new per-widget motion loop, and avoid flashes or
+synchronized bright accents. **Swap places** (opt-in, `appearance.rearrange`) also moves
+the complete layout through substantially different valid locations each interval,
+with module rectangles disjoint in every composition: moved widgets glide there
+(opacity never below 0.4, never the whole board at once) or, without animation, dim
+to 0.4 briefly while they move. The plane itself always stays at opacity 1. There is
+no fully black state, so renderers get no `black` or `resting` flag: the analog
+clock's hand angles accumulate for the whole session and never re-base (#174), so a
+hand only ever turns forward.
 
-Each composition moves every widget off at least half of its previous cells where it
-can (#338): `composeWidgetGrid` treats a widget that covers more than half of its own
+With Swap places on, each composition moves every widget off at least half of its
+previous cells where it can (#338): `composeWidgetGrid` treats a widget that covers more than half of its own
 previous cells again (or more than the least any legal origin of its span allows) as
 staying, and prefers compositions where none stays. The display also passes the
 composition from two cycles back, and a composition that recreates it is used only
@@ -318,16 +437,16 @@ when nothing else qualifies (#317). The bounded search first places widget by wi
 distant cells first; boards with few or no spare cells, where that rarely completes,
 are then packed cell by cell, which never leaves an unfillable hole.
 
-Dense boards keep relocating (#93). When the search finds no such composition, the
+Dense boards keep relocating when they swap (#93). When the search finds no such composition, the
 previous composition is reflected horizontally, vertically or both (`displayPlacement`,
 span-aware). The #182 choice comes first: reflections that tie for the most widgets
 moved rotate with the cycle, and a unique best one (usually both at once, when a widget
 is centred on one axis) alternates on odd cycles with the best of the others.
 Reflections commute, so a board's reflected arrangements are A, hA, vA and hvA (one,
 two or four of them distinct), and a run of reflections on a board with four visits
-all four. A reflection cannot move a widget centred on its axis, and the whole-plane
-offset (`motionOffset`, at most 2% of the plane each way) cannot move a widget by a large
-share of its size, so a widget that a reflection would leave in place trades places
+all four. A reflection cannot move a widget centred on its axis, and the board's
+float (at most 3.5% of the display each way) cannot move a widget by a large share of
+its size, so a widget that a reflection would leave in place trades places
 with a same-size clean region elsewhere (its own cells, or the row or column band it
 sits in, whose widgets all lie inside it), and widgets of the same span may exchange
 cells. These moves keep the reflection's cells or swap whole clean regions, so every
@@ -338,7 +457,7 @@ the one from two cycles earlier from 85 to none of 7,164; on the suites' full 12
 board no widget keeps more than half of its cells between compositions (a 4 × 4 widget,
 Sun & moon or Weather, used to stay put on 38 of 200). Only a board that every reflection maps onto itself
 falls through to the search that allows widgets to stay. A full-height span can only travel
-sideways; any span relocates as one whole group through the black rest. Its
+sideways; any span relocates as one whole group in one swap. Its
 content therefore also alternates vertically: a full-height Reminders column
 (`data-full-height`) anchors its list to the top on even compositions (the authored
 layout included) and to the bottom on odd ones (`composition-1`/`composition-3`).
@@ -349,9 +468,9 @@ rows are fewer than a third of the grid's (5 or more rows in Spacious, 6 in Bala
 renderer marks its body `data-alternate-anchor` for the same `composition-N` rule.
 
 Reduced motion removes travel, zoom and decorative animation while preserving
-periodic spatial relocation through a black interval and an instant reveal (or a
-brief opacity transition when permitted). It must not freeze the ambient display
-at one permanent position. Missing or hidden widgets must not leave a fixed frame.
+periodic movement: the board and widget content jump to the next spot each interval,
+and swaps dim and move without a glide. It must not freeze the ambient display at one
+permanent position. Missing or hidden widgets must not leave a fixed frame.
 
 Motion inside widgets follows the Animation level (#76; Off, Subtle or Lively, see
 [motion levels](design.md#motion-levels)), which `motionPlan()` in
@@ -408,7 +527,7 @@ One widget's failure stays inside that widget (#318). The registry wraps every r
 in its own error boundary ([`WidgetBoundary.tsx`](../src/client/widgets/WidgetBoundary.tsx)),
 so the ambient display, the editor canvas and the picker samples are all covered. A
 renderer that throws shows "<Widget> unavailable" in the status tone inside its own
-footprint, keeps relocating with the board, and is written to the console once per
+footprint, keeps moving with the board (and swapping places when that is on), and is written to the console once per
 widget and message; the rest of the board and the editor keep working. The boundary
 tries the widget again with new state or settings, another family or the next minute,
 so it recovers once the data that broke it changes. A `visible` rule that throws leaves
@@ -434,6 +553,12 @@ Both widgets share one threshold, `LAST_KNOWN_AFTER_MS`, and one time label,
 still cloud (the widget's icon, not a condition), a dim “—°” and one status-tone line at
 the label size, with no credit while nothing is shown (#362).
 
+Timers (#438) are private, short-lived content kept in their own `timers.json` beside the
+settings data, never in `state.json`, `state.backup.json` or exports, so the previous
+release never meets them (see [API](api.md#timers)). Their labels are never logged or put in
+diagnostics. The display counts from absolute instants, so a display that has lost the
+computer keeps counting and says " · offline" in a large Clock.
+
 A photo widget uses a user-selected local image, remains optional, and follows
 the shared size/brightness/motion rules. Retain its image only in the documented
 local user-data path and treat it as private user content; no external feed,
@@ -455,12 +580,13 @@ to personal photo folders merely to implement a widget.
 ## Verification for a widget change
 
 - Check every supported family on every supported grid, smallest bounds and long
-  content, all relocation phases and black intervals. Inspect actual images for
+  content, a floating (translated) section and, with Swap places on, every swap.
+  Inspect actual images for
   density, clipping, collisions and stale/error/empty states using synthetic data.
 - Exercise add/remove, drag/drop, resize, keyboard alternatives, invalid placement,
   grid changes, Save/Cancel, clean/dirty save-bar visibility, persistence,
   presets and legacy import/migration. Retain edits made while Save is pending.
-- Check reduced motion still relocates, whole-group bounds remain valid, and
+- Check reduced motion still moves the board in steps, whole-group bounds remain valid, and
   pointer hiding stays limited to explicit native presentation. Browser display
   and browser fullscreen retain their pointer; unmodified F toggles fullscreen
   outside editable controls. Keep captures in
@@ -482,7 +608,7 @@ assets, fonts, frameworks, platform integration or certification.
 | --- | --- |
 | [HIG Widgets](https://developer.apple.com/design/human-interface-guidelines/widgets) | Focused glanceable content, family-specific detail and restrained color. StandBy enlarges widgets for distant use; this app has its own grid and does not copy iOS point sizes. |
 | [WidgetFamily](https://developer.apple.com/documentation/widgetkit/widgetfamily) | Declare supported size/shape families and adapt content flexibly. WidgetKit APIs are inspiration, not app dependencies. |
-| [HIG Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Dim secondary content and reduce visual noise. Apple's preference for stable layouts differs from this app's required periodic relocation on a TV. |
+| [HIG Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Dim secondary content and reduce visual noise. Apple's preference for stable layouts differs from this app's continuous float (and optional swaps) on a TV. |
 | [HIG Typography](https://developer.apple.com/design/human-interface-guidelines/typography) | System type, clear size/weight hierarchy and viewing-distance checks. Small supporting text uses regular/medium weight; enlarged outlined time remains a deliberate sparse treatment. |
-| [HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion) | Purposeful, brief editor feedback; fade before relocation when travel conveys no useful information. Reduced motion removes effects while the ambient relocation contract still applies. No audio or haptic feedback is introduced. |
+| [HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion) | Purposeful, brief editor feedback; the board floats slowly and never fades out to move (#436), and a swap glides with a brief dim. Reduced motion removes effects while the board still moves in steps. No audio or haptic feedback is introduced. |
 | [Designing your app for the Always On state](https://developer.apple.com/documentation/watchos-apps/designing-your-app-for-the-always-on-state) | The watchOS example replaces large numeral fills with outlines/dim interiors. It supports the clock treatment, not a claim that this TV inherits Apple luminance or panel controls. |

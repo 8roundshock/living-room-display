@@ -29,7 +29,7 @@ const TEXT_ONLY = new Set(['note']);
 /** Every active widget on one Balanced 12 x 8 board, every cell used; a newly activated widget must be added here. */
 const FULL_BOARD = {
   clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
-  sunMoon: { column: 0, row: 2, size: 'large' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
+  sunMoon: { column: 0, row: 2, size: 'medium' }, dynamic: { column: 0, row: 4, size: 'medium' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
   reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
   note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
 };
@@ -296,7 +296,24 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       assert.equal(await colorOf('.ambient-reminder-dot', 'borderTopColor'), expected(mode, 'personal'));
       assert.equal(await colorOf('.ambient-reminder-date'), expected(mode, 'personal'));
       assert.equal(await colorOf('.ambient-reminder-overdue'), rgb(STATUS_TONES.caution), `${mode} Overdue stays amber`);
+      // #438: the Clock's timer slot: the name (and a dim "+N") in the accent, the time in the text colour,
+      // a paused mark in the text colour, and Done in the one status tone; nothing else is painted.
+      for (const [kind, size] of [['running', 'large'], ['paused', 'medium'], ['done', 'small'], ['done', 'large']]) {
+        current = state({ mode, only: 'clock', size });
+        const at = (offset) => new Date(now + offset).toISOString();
+        current.timers = [{ id: '00000000-0000-4000-8000-000000000001', label: 'Synthetic tea', durationMs: 600_000, endsAt: kind === 'paused' ? null : at(kind === 'done' ? -60_000 : 480_000), remainingMs: kind === 'paused' ? 480_000 : null, createdAt: at(-120_000), updatedAt: at(-120_000) },
+          // A second timer of the same kind that sorts after the first, so the slot also shows "+1".
+          { id: '00000000-0000-4000-8000-000000000002', label: '', durationMs: 600_000, endsAt: kind === 'paused' ? null : at(590_000), remainingMs: kind === 'paused' ? 590_000 : null, createdAt: at(-120_000), updatedAt: at(-120_000) }];
+        await open();
+        const [section] = await sections(page);
+        await assertSection(section, mode, `${mode} Clock ${size} with a ${kind} timer`, page.locator('[data-widget-id="clock"]'));
+        assert.equal(await colorOf('.clock-timer-label'), expected(mode, 'time'), `${mode} ${kind} timer name in the accent`);
+        assert.equal(await colorOf('.clock-timer-more'), expected(mode, 'time'), `${mode} "+1" in the accent`);
+        assert.equal(await colorOf('.clock-timer-value'), kind === 'done' ? rgb(STATUS_TONES.caution) : text, `${mode} ${kind} timer value`);
+        if (kind === 'paused') assert.equal(await colorOf('.clock-timer-paused i', 'backgroundColor'), text, `${mode} paused mark in the text colour`);
+      }
     }
+    checks.push("#438 Clock timer slot in both modes: running, paused and done (small and large) audit clean; the name and \"+1\" use the Clock's accent, the time the text colour, the paused mark the text colour and Done the amber status tone");
     checks.push("Merged renderers in both modes: Weather's --weather-rain hook, rain bars, unknown hours, detail, hours and hints in Sea glass with primary timing, and only there (#213: a rain-hook mutation on Weather's unit and metric labels fails the audit); Sun & moon Gold with a Lilac moon subtree; World clocks day/night icons Gold/Lilac; Air quality Mist bars with no category colour; Calendar weekday label, heads and today ring Lilac with a primary date; Countdown unit Rose and a primary Today word; Note text primary; Reminders dots and dates Rose with an amber Overdue");
 
     await page.setViewportSize({ width: 1920, height: 1080 });

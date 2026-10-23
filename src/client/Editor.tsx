@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type {
   AppState,
+  DaylightBrightness,
   LocationResult,
   Settings,
   WeatherState,
@@ -51,11 +52,14 @@ import {
   matchingBuiltinPreset,
   reminderPresentation,
   resetAppearance,
+  resetLayout,
   spokenInterval,
   spokenSeconds,
   withAppearance,
 } from './model';
 import { browserLocationPlatform, getDeviceLocation } from './location';
+import { defaultDaylightRange } from './daylight';
+import { DaylightStatus } from './DaylightStatus';
 import {
   crowdedOutMessage,
   keepsSavedChanges,
@@ -69,6 +73,7 @@ import {
 import { CitySearch } from './CitySearch';
 import { useAirQualityPreview } from './airPreview';
 import {
+  ACTIVE_WIDGET_IDS,
   GRID_DENSITIES,
   WIDGET_CATALOG,
   WIDGET_IDS,
@@ -86,10 +91,13 @@ import {
 import { GridEditor, type LayoutEdit } from './GridEditor';
 import { WidgetInspector, useHeldPointers, widgetListOrder, type InspectorReveal } from './WidgetInspector';
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
+import { MotionSentence, ScreenSettings } from './ScreenSettings';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel, reminderFormPending } from './RemindersPanel';
 import { FirstRunCard, readFirstRunDismissed, rememberFirstRunDismissed } from './FirstRunCard';
+import { StudioHeader } from './StudioHeader';
+import { useDisplayWindow } from './displayWindow';
 import {
   addToGrid,
   applyRoomFix,
@@ -155,6 +163,21 @@ function forecastMatches(settings: Settings, weather: WeatherState): boolean {
   );
 }
 
+/**
+ * Home's deep links into Edit display (#438), read once when the editor opens: `?add=<id>` opens the
+ * Widgets tab with Edit layout on and the picker on that widget (with its Make-room fixes), for an active
+ * widget that is off; `?focus=city` opens the Weather tab with City focused.
+ */
+function readDeepLink(widgets: Settings['widgets']): { add: WidgetId | null; focusCity: boolean; present: boolean } {
+  const params = new URLSearchParams(window.location.search);
+  const add = params.get('add') as WidgetId | null;
+  return {
+    add: add && (ACTIVE_WIDGET_IDS as readonly string[]).includes(add) && !widgets[add] ? add : null,
+    focusCity: params.get('focus') === 'city',
+    present: params.has('add') || params.has('focus'),
+  };
+}
+
 /** Focus the first selector that matches a connected, enabled, rendered element. */
 function focusFirst(candidates: (string | HTMLElement | null | undefined)[]): boolean {
   for (const candidate of candidates) {
@@ -204,6 +227,7 @@ function Range({
   onChange,
   display,
   spoken,
+  extra,
 }: {
   label: string;
   value: number;
@@ -214,11 +238,17 @@ function Range({
   display?: string;
   /** The value in words with its unit (#342); defaults to the visible text. */
   spoken?: string;
+  /** A control on the label line, before the value (Brightness's mode, #439). */
+  extra?: React.ReactNode;
 }) {
+  // A label names its first labelable descendant, so a block with its own control on the label line
+  // is a div; the slider keeps its aria-label name (#466 review).
+  const Block = extra ? 'div' : 'label';
   return (
-    <label className="control-block">
+    <Block className="control-block">
       <span className="control-label">
         <span>{label}</span>
+        {extra}
         {/* The slider speaks its own value (aria-valuetext); the visible copy is not announced again. */}
         <output aria-hidden="true">{display ?? value}</output>
       </span>
@@ -238,7 +268,7 @@ function Range({
           } as React.CSSProperties
         }
       />
-    </label>
+    </Block>
   );
 }
 
@@ -264,7 +294,8 @@ export function Editor({
   const savedRevision = useRef(revisionOf(state.settings));
   // Guards Save against a second activation before the first one's state has rendered (#289).
   const savingNow = useRef(false);
-  const [section, setSection] = useState<Section>('Widgets');
+  const [deepLink] = useState(() => readDeepLink(state.settings.widgets));
+  const [section, setSection] = useState<Section>(deepLink.add ? 'Widgets' : deepLink.focusCity ? 'Weather' : 'Widgets');
   const [saving, setSaving] = useState(false),
     [error, setErrorState] = useState<ActionError | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
@@ -288,8 +319,8 @@ export function Editor({
   useHeldPointers();
   // #339: what the Widgets tab scrolls into view after a selection, an add or a no-room explanation.
   const [reveal, setReveal] = useState<InspectorReveal | null>(null);
-  const [layoutEditing, setLayoutEditing] = useState(false),
-    [pickerOpen, setPickerOpen] = useState(false);
+  const [layoutEditing, setLayoutEditing] = useState(deepLink.add !== null),
+    [pickerOpen, setPickerOpen] = useState(deepLink.add !== null);
   const [gridPreview, setGridPreview] = useState<WidgetGrid | null>(null);
   // Layout messages (#311, #341): one visible copy (the canvas line, or the Widgets list for an edit
   // made there) and one always-mounted announcer. Each message gets a new id, so the announcer
@@ -309,7 +340,11 @@ export function Editor({
   const resizeExploration = useRef<{ id: WidgetId; base: WidgetGrid; widgets: Settings['widgets']; result: WidgetGrid } | null>(null);
   // #252: the first-run location card; dismissal lives in this browser only.
   const [firstRunDismissed, setFirstRunDismissed] = useState(readFirstRunDismissed);
-  const [cityFocus, setCityFocus] = useState(0);
+  const [cityFocus, setCityFocus] = useState(deepLink.focusCity ? 1 : 0);
+  useEffect(() => {
+    // A deep link is read once; the address goes back to /editor so a reload starts plainly.
+    if (deepLink.present) window.history.replaceState(null, '', '/editor');
+  }, [deepLink]);
   useEffect(() => {
     // "Choose a city" opens the Weather tab with the city field focused.
     if (cityFocus) document.getElementById('city-search')?.focus();
@@ -324,7 +359,7 @@ export function Editor({
   const [presetName, setPresetName] = useState(''),
     [presetId, setPresetId] = useState('');
   // Style → Data & recovery (#234): a checked backup awaiting confirmation, the section's status
-  // line, an import in flight and the inline Reset appearance question.
+  // line, an import in flight and the inline Reset appearance and Reset layout (#435) questions.
   const [backup, setBackup] = useState<BackupFile | null>(null),
     [dataMessage, setDataMessage] = useState<{
       text: string;
@@ -333,7 +368,8 @@ export function Editor({
       detail?: string | null;
     } | null>(null),
     [restoring, setRestoring] = useState(false),
-    [confirmReset, setConfirmReset] = useState(false);
+    [confirmReset, setConfirmReset] = useState(false),
+    [confirmLayoutReset, setConfirmLayoutReset] = useState(false);
   const backupInput = useRef<HTMLInputElement>(null);
   const [locationQuery, setLocationQuery] = useState(''),
     [locationMessage, setLocationMessage] = useState('');
@@ -346,7 +382,10 @@ export function Editor({
   // #76: the editor's own reduced-motion preference turns its animation off; the canvas replays
   // the entrance once after a level is chosen.
   const editorReducedMotion = usePrefersReducedMotion();
+  const displayControls = useDisplayWindow();
   const [revealNonce, setRevealNonce] = useState(0);
+  // Style > Motion reads the Windows power status only once opened (#436).
+  const [motionOpened, setMotionOpened] = useState(false);
   const photoChanged =
     photoDraft !== undefined &&
     (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
@@ -876,6 +915,54 @@ export function Editor({
   ) {
     change((previous) => withAppearance(previous, { [key]: value }));
   }
+  // Brightness mode (#439). Like Animation it is not part of a look, so the style label stays.
+  // Fixed ↔ Follow daylight in one session returns to the last range chosen here.
+  const lastDaylight = useRef<DaylightBrightness | null>(
+    state.settings.appearance.daylightBrightness,
+  );
+  const brightnessModeFocus = useRef(false);
+  function setDaylightBrightness(range: DaylightBrightness | null) {
+    change((previous) => ({
+      ...previous,
+      appearance: { ...previous.appearance, daylightBrightness: range },
+    }));
+  }
+  function brightnessMode(daylight: boolean) {
+    const current = draftRef.current.appearance.daylightBrightness;
+    if (daylight === !!current) return;
+    if (current) lastDaylight.current = current;
+    brightnessModeFocus.current = true;
+    setDaylightBrightness(
+      daylight
+        ? (lastDaylight.current ??
+            defaultDaylightRange(draftRef.current.appearance.brightness))
+        : null,
+    );
+  }
+  /** Moving one end past the other carries the other along, so Dimmest never exceeds Brightest. */
+  function daylightEnd(end: keyof DaylightBrightness, value: number) {
+    const range = draftRef.current.appearance.daylightBrightness;
+    if (!range) return;
+    setDaylightBrightness(
+      end === 'dimmest'
+        ? { dimmest: value, brightest: Math.max(value, range.brightest) }
+        : { dimmest: Math.min(value, range.dimmest), brightest: value },
+    );
+  }
+  const followDaylight = draft.appearance.daylightBrightness !== null;
+  // The mode buttons move between the Fixed slider's label line and the daylight group; keep focus
+  // on the pressed one, and let Save or Cancel return to it (#229).
+  useLayoutEffect(() => {
+    if (!brightnessModeFocus.current) return;
+    brightnessModeFocus.current = false;
+    const pressed = document.getElementById(
+      followDaylight ? 'brightness-mode-daylight' : 'brightness-mode-fixed',
+    );
+    if (pressed) {
+      pressed.focus();
+      lastEdited.current = pressed;
+    }
+  }, [followDaylight]);
   async function deviceLocation(automatic: boolean) {
     if (saving || locationBusy) return;
     const epoch = ++locationEpoch.current;
@@ -1149,15 +1236,34 @@ export function Editor({
       : same(lookOf(draft.appearance), lookOf(resetLook))
         ? 'unsaved'
         : 'undone';
+  // #435, #474: Reset layout's line follows the same rule for the board it put on the canvas (the
+  // widgets shown, the grid, where they sit and Last screen's capture). Each reset button ends the
+  // other reset's tracking.
+  const [resetBoard, setResetBoard] = useState<Settings | null>(null);
+  const boardOf = (settings: Settings) => ({
+    widgets: settings.widgets,
+    density: settings.widgetGrid.density,
+    placements: WIDGET_IDS.filter((id) => settings.widgets[id]).map((id) => settings.widgetGrid.placements[id]),
+    preview: !!settings.widgets.preview && settings.preview.enabled,
+  });
+  const layoutResetOutcome = !resetBoard
+    ? null
+    : same(boardOf(saved), boardOf(resetBoard))
+      ? 'saved'
+      : same(boardOf(draft), boardOf(resetBoard))
+        ? 'unsaved'
+        : 'undone';
   // #499: the line shown follows the outcome in the same render, like a room notice (#310). An
   // effect's update renders a task later, so after Cancel the save bar had gone while the line still
-  // asked to save, for a painted frame. The effect only records the outcome.
+  // asked to save, for a painted frame. The effects only record the outcomes.
   const shownDataMessage: typeof dataMessage =
     resetOutcome === 'saved'
       ? { text: 'Appearance reset and saved.' }
-      : resetOutcome === 'undone'
-        ? null
-        : dataMessage;
+      : layoutResetOutcome === 'saved'
+        ? { text: 'Layout reset and saved.' }
+        : resetOutcome === 'undone' || layoutResetOutcome === 'undone'
+          ? null
+          : dataMessage;
   useEffect(() => {
     if (resetOutcome === 'saved') {
       setResetLook(null);
@@ -1167,18 +1273,30 @@ export function Editor({
       setDataMessage(null);
     }
   }, [resetOutcome]);
+  useEffect(() => {
+    if (layoutResetOutcome === 'saved') {
+      setResetBoard(null);
+      setDataMessage({ text: 'Layout reset and saved.' });
+    } else if (layoutResetOutcome === 'undone') {
+      setResetBoard(null);
+      setDataMessage(null);
+    }
+  }, [layoutResetOutcome]);
   // Data & recovery questions belong to the Style tab; leaving it drops them.
   useEffect(() => {
     if (section === 'Style') return;
     setBackup(null);
     setConfirmReset(false);
+    setConfirmLayoutReset(false);
     setDataMessage(null);
     setResetLook(null);
+    setResetBoard(null);
   }, [section]);
   const unsavedBeforeRestore = 'Save or cancel your changes before restoring a backup.';
   /** Restore from backup (#234): refused while edits are unsaved, which a restore would otherwise mix in. */
   function chooseBackup() {
     setConfirmReset(false);
+    setConfirmLayoutReset(false);
     setBackup(null);
     if (dirty || saving) {
       setDataMessage({ text: unsavedBeforeRestore, error: true });
@@ -1258,6 +1376,26 @@ export function Editor({
     });
     setStyleFocus({ target: '.reset-appearance', edit: true });
   }
+  /** Reset layout (#435): the default board as an ordinary draft change; Save keeps it, Cancel restores the saved board. */
+  function confirmResetLayout() {
+    const after = resetLayout(draftRef.current);
+    const unchanged = same(boardOf(savedRef.current), boardOf(after));
+    setConfirmLayoutReset(false);
+    // As when Photo is removed: a photo chosen in this draft for an unsaved Photo widget is dropped.
+    if (draftRef.current.widgets.photo && !after.widgets.photo) forgetUnsavedPhoto('photo');
+    densityHistory.current = undefined;
+    resizeExploration.current = null;
+    selectWidget(null);
+    setRoomNotice(null);
+    setDensityNotice(null);
+    say('');
+    change(() => after);
+    setResetBoard(unchanged ? null : after);
+    setDataMessage({
+      text: unchanged ? 'Layout is back to the default.' : 'Layout reset. Save changes to keep it.',
+    });
+    setStyleFocus({ target: '.reset-layout', edit: true });
+  }
   const pendingCount = state.reminders.filter((item) => !item.completed).length;
   // The built-in style whose look is showing (#153): pressed whenever applying it changes nothing.
   const lookPreset = matchingBuiltinPreset(draft.appearance);
@@ -1308,32 +1446,7 @@ export function Editor({
       className="studio"
       data-animation={editorReducedMotion ? 'off' : draft.appearance.animation}
     >
-      <header className="studio-header">
-        <a className="brand" href="/editor" aria-label="Still editor">
-          <span className="brand-symbol">
-            <Icon name="moon" size={20} />
-          </span>
-          still
-        </a>
-        {/* #360: Open display is an ordinary browser tab; say where the full-screen display is. */}
-        <div className="open-display-group">
-          <p className="open-display-hint" id="open-display-hint">
-            For full screen on this PC: Start › Living Room Display - Show display, or press F
-            on the display
-          </p>
-          <a
-            className="button open-display"
-            href="/display"
-            target="_blank"
-            rel="noreferrer"
-            aria-describedby="open-display-hint"
-          >
-            <Icon name="monitor" size={17} />
-            Open display
-            <Icon name="arrow" size={15} />
-          </a>
-        </div>
-      </header>
+      <StudioHeader page="edit" displayControls={displayControls} />
       <main className="studio-workspace">
         <section className="canvas-column" aria-label="Display preview">
           <div className="canvas-heading">
@@ -1428,7 +1541,7 @@ export function Editor({
                 <button className={`button small movement-preview ${movementPreview ? 'active' : ''}`} aria-pressed={movementPreview} onClick={() => { setMovementPreview(value => !value); setError(null); }}>
                   <Icon name={movementPreview ? 'check' : 'refresh'} size={15} />{movementPreview ? 'Back to layout' : 'Preview movement'}
                 </button>
-                {movementPreview && <>
+                {movementPreview && draft.appearance.rearrange && <>
                 <div
                   className="composition-picker"
                   aria-label="Preview arrangement"
@@ -1641,14 +1754,86 @@ export function Editor({
                     </button>
                   ))}
                 </div>
-                <Range
-                  label="Brightness"
-                  min={10}
-                  max={100}
-                  value={Math.round(draft.appearance.brightness * 100)}
-                  display={`${Math.round(draft.appearance.brightness * 100)}%`}
-                  onChange={(value) => appearance('brightness', value / 100)}
-                />
+                {/* #439: Fixed (one level) or Follow daylight (Dimmest to Brightest, peaking at
+                    solar noon). The mode sits on the label line, so the default Fixed tab keeps
+                    its height at 1280×720. */}
+                {(() => {
+                  const modes = (
+                    <span
+                      className="brightness-mode"
+                      role="group"
+                      aria-label="Brightness mode"
+                    >
+                      <button
+                        type="button"
+                        id="brightness-mode-fixed"
+                        aria-pressed={!followDaylight}
+                        onClick={() => brightnessMode(false)}
+                      >
+                        Fixed
+                      </button>
+                      <button
+                        type="button"
+                        id="brightness-mode-daylight"
+                        aria-pressed={followDaylight}
+                        onClick={() => brightnessMode(true)}
+                      >
+                        Follow daylight
+                      </button>
+                    </span>
+                  );
+                  const range = draft.appearance.daylightBrightness;
+                  if (!range)
+                    return (
+                      <Range
+                        label="Brightness"
+                        min={10}
+                        max={100}
+                        value={Math.round(draft.appearance.brightness * 100)}
+                        display={`${Math.round(draft.appearance.brightness * 100)}%`}
+                        onChange={(value) => appearance('brightness', value / 100)}
+                        extra={modes}
+                      />
+                    );
+                  const dimmest = Math.round(range.dimmest * 100),
+                    brightest = Math.round(range.brightest * 100);
+                  return (
+                    <div
+                      className="control-block brightness-daylight"
+                      role="group"
+                      aria-labelledby="brightness-daylight-label"
+                    >
+                      <span className="control-label">
+                        <span id="brightness-daylight-label">Brightness</span>
+                        {modes}
+                        <output>
+                          {dimmest === brightest ? `${dimmest}%` : `${dimmest}–${brightest}%`}
+                        </output>
+                      </span>
+                      <Range
+                        label="Dimmest"
+                        min={10}
+                        max={100}
+                        value={dimmest}
+                        display={`${dimmest}%`}
+                        onChange={(value) => daylightEnd('dimmest', value / 100)}
+                      />
+                      <Range
+                        label="Brightest"
+                        min={10}
+                        max={100}
+                        value={brightest}
+                        display={`${brightest}%`}
+                        onChange={(value) => daylightEnd('brightest', value / 100)}
+                      />
+                      <DaylightStatus
+                        range={range}
+                        settings={draft}
+                        weatherZone={state.weather.location.timezone}
+                      />
+                    </div>
+                  );
+                })()}
                 <Range
                   label="Text size"
                   min={70}
@@ -1775,7 +1960,12 @@ export function Editor({
                     )}
                   </div>
                 </div>
-                <details className="disclosure motion-disclosure">
+                <details
+                  className="disclosure motion-disclosure"
+                  onToggle={(event) => {
+                    if (event.currentTarget.open) setMotionOpened(true);
+                  }}
+                >
                   <summary>
                     Motion
                     <span>{ANIMATION_LABELS[draft.appearance.animation]}</span>
@@ -1804,8 +1994,8 @@ export function Editor({
                         ))}
                       </div>
                       <p className="animation-hint">
-                        Off keeps widgets still. Subtle animates changes. Lively adds
-                        gentle weather motion.
+                        Off keeps the content of widgets still; movement is set below.
+                        Subtle animates changes. Lively adds gentle weather motion.
                       </p>
                       {editorReducedMotion && (
                         <p className="animation-hint">
@@ -1814,14 +2004,14 @@ export function Editor({
                         </p>
                       )}
                     </div>
-                    {/* #240: plain names for motionEnabled and motionIntervalSeconds. */}
+                    {/* #240, #436: plain names for motionEnabled, motionIntervalSeconds, rearrange and fadeSeconds. */}
                     <Toggle
-                      label="Drift and fade between moves"
+                      label="Float gently"
                       checked={draft.appearance.motionEnabled}
                       onChange={(value) => appearance('motionEnabled', value)}
                     />
                     <Range
-                      label="Move widgets every"
+                      label="Move every"
                       min={30}
                       max={1800}
                       step={30}
@@ -1836,21 +2026,47 @@ export function Editor({
                         appearance('motionIntervalSeconds', value)
                       }
                     />
-                    <Range
-                      label="Fade duration"
-                      min={0}
-                      max={10}
-                      value={draft.appearance.fadeSeconds}
-                      display={`${draft.appearance.fadeSeconds}s`}
-                      spoken={spokenSeconds(draft.appearance.fadeSeconds)}
-                      onChange={(value) => appearance('fadeSeconds', value)}
+                    <MotionSentence appearance={draft.appearance} />
+                    <Toggle
+                      label="Swap places"
+                      checked={draft.appearance.rearrange}
+                      onChange={(value) =>
+                        // A motion preference, not a look: the style preset stays as it is.
+                        change((previous) => ({
+                          ...previous,
+                          appearance: { ...previous.appearance, rearrange: value },
+                        }))
+                      }
                     />
-                    <p className="hint motion-hint">
-                      Widgets always move to a new place through black. With
-                      Drift and fade off, or with Animation effects off in
-                      Windows Settings › Accessibility › Visual effects on the
-                      display PC, they appear without a fade and nothing drifts.
+                    <p className="hint swap-hint">
+                      Widgets sometimes trade places. Your arrangement stays saved.
                     </p>
+                    {draft.appearance.rearrange && (
+                      <Range
+                        label="Swap glide"
+                        min={0}
+                        max={10}
+                        value={draft.appearance.fadeSeconds}
+                        display={`${draft.appearance.fadeSeconds}s`}
+                        spoken={spokenSeconds(draft.appearance.fadeSeconds)}
+                        onChange={(value) => appearance('fadeSeconds', value)}
+                      />
+                    )}
+                    <p className="hint motion-hint">
+                      With Animation effects off in Windows Settings › Accessibility
+                      › Visual effects on the display PC, the display moves without
+                      animation.
+                    </p>
+                    <ScreenSettings
+                      keepAwake={draft.screen.keepAwake}
+                      active={motionOpened}
+                      onKeepAwake={(value) =>
+                        change((previous) => ({
+                          ...previous,
+                          screen: { ...previous.screen, keepAwake: value },
+                        }))
+                      }
+                    />
                   </div>
                 </details>
                 <details className="disclosure">
@@ -2085,20 +2301,68 @@ export function Editor({
                           </button>
                         </div>
                       </div>
-                    ) : (
-                      <button
-                        className="text-button reset-appearance"
-                        onClick={() => {
-                          setBackup(null);
-                          setDataMessage(null);
-                          setResetLook(null);
-                          setConfirmReset(true);
-                          // #343: the question replaces this button; the safe answer takes focus.
-                          setStyleFocus({ target: '.reset-confirm .keep-appearance' });
-                        }}
+                    ) : confirmLayoutReset ? (
+                      <div
+                        className="data-confirm reset-layout-confirm"
+                        role="group"
+                        aria-label="Reset layout"
                       >
-                        Reset appearance…
-                      </button>
+                        <p>
+                          Reset the layout to Calendar, Clock, Weather,
+                          Forecast, Last screen and Reminders on the Balanced
+                          grid? Other widgets leave the display. Widget
+                          settings, the clock style, appearance and reminders
+                          stay.
+                        </p>
+                        <div className="data-confirm-actions">
+                          <button
+                            className="button small primary"
+                            onClick={confirmResetLayout}
+                          >
+                            Reset
+                          </button>
+                          <button
+                            className="button small reset-layout-keep"
+                            onClick={() => {
+                              setConfirmLayoutReset(false);
+                              setStyleFocus({ target: '.reset-layout' });
+                            }}
+                          >
+                            Keep my layout
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="reset-actions">
+                        <button
+                          className="text-button reset-appearance"
+                          onClick={() => {
+                            setBackup(null);
+                            setDataMessage(null);
+                            setResetLook(null);
+                            setResetBoard(null);
+                            setConfirmReset(true);
+                            // #343: the question replaces this button; the safe answer takes focus.
+                            setStyleFocus({ target: '.reset-confirm .keep-appearance' });
+                          }}
+                        >
+                          Reset appearance…
+                        </button>
+                        <button
+                          className="text-button reset-layout"
+                          onClick={() => {
+                            setBackup(null);
+                            setDataMessage(null);
+                            setResetLook(null);
+                            setResetBoard(null);
+                            setConfirmLayoutReset(true);
+                            // As for Reset appearance (#343): the safe answer takes focus.
+                            setStyleFocus({ target: '.reset-layout-confirm .reset-layout-keep' });
+                          }}
+                        >
+                          Reset layout…
+                        </button>
+                      </div>
                     )}
                     <p
                       className={`inline-message data-status ${shownDataMessage?.error ? 'error' : ''}`}
@@ -2121,10 +2385,13 @@ export function Editor({
               <WidgetInspector
                 message={layoutMessage?.where === 'list' ? layoutMessage.text : ''}
                 settings={draft}
+                appState={state}
+                saved={saved}
                 selected={selectedWidget}
                 onSelect={(id) => selectWidget(id, true)}
                 reveal={reveal}
                 pickerOpen={pickerOpen}
+                pickerInitial={deepLink.add}
                 onPicker={setPickerOpen}
                 onAdd={addWidget}
                 onFix={applyFix}

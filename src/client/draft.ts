@@ -231,6 +231,15 @@ export function rebaseSettingsReport(
     result.location = structuredClone(draft.location);
     result.locationSource = draft.locationSource;
   }
+  if (
+    !same(base.appearance.daylightBrightness, draft.appearance.daylightBrightness)
+  ) {
+    // A Follow daylight range is one choice (#439): mixing a local Dimmest with another
+    // editor's Brightest could put Dimmest above Brightest.
+    result.appearance.daylightBrightness = structuredClone(
+      draft.appearance.daylightBrightness,
+    );
+  }
   return { settings: result, crowdedOut };
 }
 
@@ -334,6 +343,11 @@ export function settingsChanges(
     )
   )
     delete patch.appearance;
+  if (patch.appearance && 'daylightBrightness' in patch.appearance)
+    // The server replaces the range whole (#439), so send all of it, or null for Fixed.
+    patch.appearance.daylightBrightness = structuredClone(
+      draft.appearance.daylightBrightness,
+    );
   if (patch.widgetGrid?.placements && !patch.widgetGrid.density) {
     for (const id of Object.keys(
       patch.widgetGrid.placements,

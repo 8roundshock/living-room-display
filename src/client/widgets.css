@@ -12,12 +12,18 @@
    (fine grid: ~1.07%/1.26%), rather than letting the fit scale shrink everything. */
 .grid-ambient .ambient-widget { --min-text: var(--ambient-min-text, 0px); --min-data: var(--ambient-min-data, 0px); }
 .grid-ambient .ambient-forecast.widget-size-small { --min-text: min(var(--ambient-min-text, 0px), 7.25cqh); --min-data: min(var(--ambient-min-data, 0px), 8.5cqh); }
-.grid-ambient .ambient-content { display: block; width: auto; height: auto; padding: 0; gap: 0; transform: translate(var(--motion-x, 0), var(--motion-y, 0)); }
-.grid-ambient.layout-editing .ambient-content { transform: none; }
+/* #436: the plane rests where the user put it; Display.tsx's float timer writes its translation inline. */
+.grid-ambient .ambient-content { display: block; width: auto; height: auto; padding: 0; gap: 0; transform: none; transition: none; }
 .grid-ambient .ambient-widget { position: absolute; grid-area: auto; padding: min(1.2cqw, 1.8cqh); container-type: size; animation: none; transform: none; }
 .grid-ambient .ambient-widget .widget-content { animation: none; width: 100%; height: auto; }
-/* The drift of Drift and fade between moves (±0.5% of the plane in 36 discrete steps, one about every 2 s) is a timer in Display.tsx
-   rather than an animation, so the display draws a frame only when the plane moves (#248). */
+/* #436 float (replacing #248's drift, keeping its principle): one timer in Display.tsx moves the plane up to ±3.5%
+   of the display, one device pixel at a time, and each widget's content inside its own slack through --float-x and
+   --float-y, applied with the individual translate property. No animation or transition runs, nothing changes
+   layout, fit or the reveal keyframes on .widget-content, and the display draws a frame only when something moves.
+   Registered without inheritance, so a step restyles only the section. */
+@property --float-x { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --float-y { syntax: '<length>'; inherits: false; initial-value: 0px; }
+.grid-ambient[data-float] > .widget-grid-plane > .ambient-widget { translate: var(--float-x) var(--float-y); }
 .grid-ambient .widget-body { width: 100%; min-height: 100cqh; height: auto; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .grid-ambient .widget-body > * { flex-shrink: 0; }
 .grid-ambient .ambient-label { display: flex; align-items: center; gap: 2cqw; font-size: calc(max(var(--min-text), min(6.4cqw, 8cqh)) * var(--font-scale)); line-height: 1.2; margin: 0 0 3cqh; font-weight: 500; color: var(--ambient-accent); overflow-wrap: anywhere; }
@@ -51,6 +57,27 @@
 .grid-ambient .clock-family-large .clock-time { font-size: calc(min(31cqw, 66cqh) * var(--font-scale)); }
 .grid-ambient .clock-family-large .clock-calendar { display: flex; align-items: baseline; gap: 2cqw; }
 .grid-ambient .clock-family-large .clock-calendar .ambient-label, .grid-ambient .clock-family-large .clock-date { font-size: calc(max(var(--min-text), min(4cqw, 9cqh)) * var(--font-scale)); margin: 0; }
+/* The timer slot (#438) reuses the date line's elements and fonts: the name in the accent colour (one line,
+   ending in an ellipsis, at most 60% of a large clock's width) with a dim "+N", and the time in the text
+   colour; Done uses the shared status tone. Large keeps one line, where the name gives way before the
+   time. The last minute's seconds are tabular, so the line keeps its width while it counts. */
+/* A one-line name's min-content is its whole width; the slot is capped at the clock's width so the name
+   ends in an ellipsis rather than widening the clock (and zooming it out). */
+.grid-ambient .clock-calendar.clock-timer { min-width: 0; max-width: 100%; }
+.grid-ambient .clock-timer-label { gap: 0.4em; min-width: 0; max-width: 100%; white-space: nowrap; overflow-wrap: normal; }
+.grid-ambient .clock-timer-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.grid-ambient .clock-timer-more { flex: none; opacity: 0.6; }
+.grid-ambient .clock-timer-value { display: flex; align-items: center; gap: 0.35em; }
+.grid-ambient .clock-timer-value[data-timer-phase="done"] { color: var(--ambient-caution); }
+.grid-ambient .clock-timer-digits { font-variant-numeric: lining-nums tabular-nums; }
+.grid-ambient .clock-timer-paused { flex: none; display: inline-flex; gap: 0.16em; height: 0.72em; }
+.grid-ambient .clock-timer-paused i { width: 0.17em; border-radius: 0.05em; background: currentColor; }
+/* Large keeps one line: the time never shrinks, and the name gives way first (at most 60% of the clock). */
+.grid-ambient .clock-family-large .clock-timer { flex-wrap: nowrap; justify-content: center; max-width: 100%; }
+.grid-ambient .clock-family-large .clock-timer-label { flex: 0 1 auto; max-width: 60%; }
+.grid-ambient .clock-family-large .clock-timer-value { flex: none; white-space: nowrap; }
+/* Analog small and medium keep the hands beside the slot; the slot takes at most 60% of the row. */
+.grid-ambient .clock-style-analog:is(.clock-family-small, .clock-family-medium) .clock-calendar.clock-timer { flex: 0 1 auto; min-width: 0; max-width: 60%; }
 /* Analog (#222): hands only, no face, bezel or tick ring. Small and medium size the graphic to the cell
    height with the date beside it (the graphic gives way when the date needs the width); large keeps
    its centred composition. Hands are HTML bars on full-box wrappers whose rotation composites (#161).
@@ -267,3 +294,8 @@
 .grid-ambient .image-placeholder .ambient-label, .grid-ambient .image-placeholder .ambient-description { margin: 0; }
 .grid-ambient[data-motion-surface='canvas-editing'] .ambient-widget, .grid-ambient[data-motion-surface='canvas-editing'] .widget-content { animation: none; }
 .grid-ambient.reduce-motion .ambient-content, .grid-ambient.static .ambient-content { transition: none; }
+/* Follow daylight (#439): the ambient page glides to each minute's brightness (Display.tsx sets
+   --brightness-transition only there). A brightness glide is not motion, so it stays with reduced
+   motion and with Drift and fade off; Fixed changes stay immediate. */
+.grid-ambient[data-brightness='daylight'] > .ambient-content { transition: opacity var(--fade-duration, 1800ms) ease-in-out, filter var(--brightness-transition, 0s) ease-in-out; }
+.grid-ambient[data-brightness='daylight']:is(.reduce-motion, .static) > .ambient-content { transition: filter var(--brightness-transition, 0s) ease-in-out; }

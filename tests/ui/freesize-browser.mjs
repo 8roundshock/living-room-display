@@ -9,13 +9,15 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
-import { forecastFixture } from '../../src/server/fixtures.ts';
+import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { resizeWidgetSpan } from '../../src/shared/widgets.ts';
 
+// The fixtures below start from the catalog board (the default before #435), which has free cells;
+// the #435 default board, which fills the grid, has its own steps.
 /** Clock, Weather, Forecast and a small Reminders with free cells to its right and below. */
 function roomy() {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   settings.widgets.rain = false; settings.widgets.preview = false; settings.preview.enabled = false;
   settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' };
   settings.widgetGrid.placements.reminders = { column: 8, row: 2, size: 'small' };
@@ -27,18 +29,18 @@ function roomy() {
  * Weather. (Rain is retired into Weather by #74; this is the merged form of the earlier Rain fixture.)
  */
 function crowded() {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   settings.widgets.preview = false; settings.preview.enabled = false;
   settings.widgetGrid.placements.weather = { column: 8, row: 2, size: 'medium' };
   settings.widgetGrid.placements.reminders = { column: 10, row: 0, size: 'small' };
   return settings;
 }
 /**
- * The default board with Last screen off and a medium Weather: the post-#74 default large Weather
- * leaves no room for a 2 × 8 column beside the large Clock and Forecast (#183).
+ * The catalog board with Last screen off and a medium Weather: its post-#74 large Weather leaves no
+ * room for a 2 × 8 column beside the large Clock and Forecast (#183).
  */
 function columnReady() {
-  const settings = defaultSettings();
+  const settings = catalogBoardDefaults();
   settings.widgets.preview = false; settings.preview.enabled = false;
   settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' };
   return settings;
@@ -203,7 +205,7 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
 
     // An impossible size keeps the board. During the drag the canvas says "No room for that size"; when
     // it ends, the inspector explains it once, beside the Reminders size controls (#285).
-    await open(defaultSettings()); await layout(); await clean();
+    await open(catalogBoardDefaults()); await layout(); await clean();
     const board = await page.locator('.grid-widget-frame').evaluateAll(elements => elements.map(element => element.getAttribute('style')));
     await resizeBy(6.4, 3.4, {
       during: async () => {
@@ -221,10 +223,10 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     assert.deepEqual(await page.locator('.grid-widget-frame').evaluateAll(elements => elements.map(element => element.getAttribute('style'))), board, 'every placement is unchanged');
     checks.push(`an impossible resize keeps the previous board, marks the widget and says “No room for that size” while dragging; on release one live region explains it beside the size controls (#285): “${explained[0]}”`);
 
-    // #183: on the default board a full-height column has no room. The Column preset says so before it
+    // #183: on the catalog board a full-height column has no room. The Column preset says so before it
     // is chosen; choosing it names what takes the space and offers one draft fix; nothing changes until then.
-    const fresh = defaultSettings();
-    assert.equal(resizeWidgetSpan(fresh.widgetGrid, 'reminders', { columns: 2, rows: 8 }, fresh.widgets), null, 'the default board has no room for a column');
+    const fresh = catalogBoardDefaults();
+    assert.equal(resizeWidgetSpan(fresh.widgetGrid, 'reminders', { columns: 2, rows: 8 }, fresh.widgets), null, 'the catalog board has no room for a column');
     await open(fresh); await clean();
     await selectReminders();
     const before = await shapes();
@@ -266,8 +268,8 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     await densitySelect.selectOption('balanced'); await clean();
     assert.deepEqual(await announcing(), [], 'the same board again does not bring it back');
     assert.deepEqual(await page.locator('.room-message').allTextContents(), [''], 'nothing is shown either');
-    // A stepper with no room explains itself the same way: from 2 × 6 on the default board, 2 × 7 has none.
-    const tall = defaultSettings();
+    // A stepper with no room explains itself the same way: from 2 × 6 on the catalog board, 2 × 7 has none.
+    const tall = catalogBoardDefaults();
     tall.widgetGrid = resizeWidgetSpan(tall.widgetGrid, 'reminders', { columns: 2, rows: 6 }, tall.widgets);
     assert.ok(tall.widgetGrid);
     await open(tall); await clean(); await selectReminders();
@@ -282,7 +284,30 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     assert.equal(await page.getByRole('group', { name: 'Reminders height' }).locator('output').textContent(), '7 rows');
     assert.equal(await taller().evaluate(element => element === document.activeElement), true, 'focus moves to the stepper that was used');
     await cancel().click(); await clean();
-    checks.push('default board (#183): Column is aria-disabled with its reason; choosing it names Clock, Weather and Forecast in one live region and changes nothing; “Make room: Weather medium” makes the column as one draft that Cancel restores, and a keyboard fix leaves focus on the pressed Column preset or the stepper used (#310); a density round trip never re-shows a stale explanation (#310); a stepper with no room explains itself too');
+    checks.push('catalog board (#183): Column is aria-disabled with its reason; choosing it names Clock, Weather and Forecast in one live region and changes nothing; “Make room: Weather medium” makes the column as one draft that Cancel restores, and a keyboard fix leaves focus on the pressed Column preset or the stepper used (#310); a density round trip never re-shows a stale explanation (#310); a stepper with no room explains itself too');
+
+    // #435: the default board fills the grid, so its medium Reminders has room for Small only. Large and
+    // Column say so; choosing Column names Clock, and Make room: Clock medium makes the column as one draft.
+    const board435 = defaultSettings();
+    await open(board435); await clean();
+    await selectReminders();
+    const before435 = await shapes();
+    assert.equal(await subtitle().textContent(), 'Medium');
+    for (const name of ['large', 'column']) assert.equal(await preset(name).getAttribute('aria-disabled'), 'true', `${name} is unavailable on the default board`);
+    for (const name of ['small', 'medium']) assert.equal(await preset(name).getAttribute('aria-disabled'), null, `${name} fits`);
+    assert.equal(await page.locator(`[id="${await preset('column').getAttribute('aria-describedby')}"]`).textContent(), 'Large and Column need more room on this board.');
+    await preset('column').focus(); await page.keyboard.press('Enter'); await page.clock.runFor(100);
+    assert.deepEqual(await announcing(), ['No room for a full-height Reminders column beside Clock.'], 'one live region names Clock');
+    assert.deepEqual(await shapes(), before435, 'nothing changes before the fix');
+    await page.getByRole('button', { name: 'Make room: Clock medium', exact: true }).click(); await page.clock.runFor(200);
+    await dirty();
+    assert.equal(await page.locator('.preview-screen [data-widget-id="clock"]').getAttribute('data-widget-size'), 'medium');
+    assert.equal(await ambient().getAttribute('data-widget-span'), '2x8');
+    assert.equal(await subtitle().textContent(), 'Column');
+    assert.equal(await page.locator('.widget-list .inline-message').textContent(), 'Clock is now medium. Reminders is now a full-height column.');
+    await cancel().click(); await clean();
+    assert.deepEqual(await shapes(), before435, 'Cancel restores the default board');
+    checks.push('#435 default board: Large and Column are aria-disabled (“Large and Column need more room on this board.”); choosing Column names Clock; “Make room: Clock medium” makes the column as one draft that Cancel restores');
 
     // #285: on the canvas, a handle Down from 2 × 6 has no room either. The inspector names Clock, Weather
     // and Forecast and offers the same fix, worked out once for the key press; nothing changes until chosen.
@@ -299,11 +324,11 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     assert.equal(await page.locator('.preview-screen [data-widget-id="weather"]').getAttribute('data-widget-size'), 'medium');
     assert.equal(await taller().evaluate(element => element === document.activeElement), true, 'focus moves to the size control that shows the change');
     await cancel().click(); await clean();
-    checks.push('canvas handle Down from 2 × 6 on the default board (#285): the inspector names Clock, Weather and Forecast in one live region with “Make room: Weather medium”; nothing changes until it is chosen, then it applies as one draft');
+    checks.push('canvas handle Down from 2 × 6 on the catalog board (#285): the inspector names Clock, Weather and Forecast in one live region with “Make room: Weather medium”; nothing changes until it is chosen, then it applies as one draft');
 
     // #340: resize steps of one widget form one exploration from the board before it began, so a pushed
     // neighbour returns and resizing back is clean; each push and return is named.
-    await open(defaultSettings()); await layout(); await clean(); await selectReminders();
+    await open(catalogBoardDefaults()); await layout(); await clean(); await selectReminders();
     const frames = () => page.locator('.grid-widget-frame').evaluateAll(elements => elements.map(element => `${element.dataset.frameId} ${element.getAttribute('style')}`));
     const initial = await frames();
     const shorter = () => page.getByRole('group', { name: 'Reminders height' }).getByRole('button', { name: 'Shorter' });
@@ -329,8 +354,8 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     assert.equal((await frames()).find(frame => frame.startsWith('forecast ')), pushed, 'a move ended the exploration');
     await cancel().click(); await clean();
     assert.deepEqual(await frames(), initial);
-    assert.deepEqual(app.store.snapshot().settings.widgetGrid.placements, defaultSettings().widgetGrid.placements, 'the saved placements never changed');
-    checks.push('#340: Taller → Shorter and Large → Small on the default board (inspector and canvas handle) return Forecast and leave no Save bar; pushes and returns are named (“Forecast moved right to make room”, “Forecast moved back”); a move ends the exploration');
+    assert.deepEqual(app.store.snapshot().settings.widgetGrid.placements, catalogBoardDefaults().widgetGrid.placements, 'the saved placements never changed');
+    checks.push('#340: Taller → Shorter and Large → Small on the catalog board (inspector and canvas handle) return Forecast and leave no Save bar; pushes and returns are named (“Forecast moved right to make room”, “Forecast moved back”); a move ends the exploration');
 
     // #233: the list subtitle says when the display hides an empty Reminders.
     await open(roomy(), {}, []); await clean();
@@ -427,7 +452,8 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     await page.getByRole('button', { name: 'Preview Reminders', exact: true }).click();
     for (const family of ['small', 'medium', 'large']) assert.equal(await page.getByRole('button', { name: `Reminders ${family}`, exact: true }).count(), 1);
-    assert.equal(await page.getByText('Resize freely after adding. Full height needs room first: make Clock, Weather or Forecast smaller.', { exact: true }).count(), 1);
+    // On the #435 default board without Reminders, a column would need Clock to be smaller.
+    assert.equal(await page.getByText('Resize freely after adding. Full height needs room first: make Clock smaller.', { exact: true }).count(), 1);
     await page.getByRole('button', { name: 'Preview Clock, on your display', exact: true }).click();
     assert.equal(await page.locator('.picker-free-size').count(), 0, 'only free-size widgets show the caption');
     await page.getByRole('button', { name: 'Preview Reminders', exact: true }).click();

@@ -78,9 +78,10 @@ saved file keeps the old value until another colour is saved.
 Method. Every tone sits in one OKLCH lightness band (0.72–0.73) with low chroma
 (0.05–0.07; stone ≤ 0.02), so relative luminance stays within 6% of the Mist
 default and no tone is brighter than the brightest single-accent swatch. Each has
-more than 8:1 contrast on true black at full brightness; the saved brightness cap
-then dims every mode alike, and a browser luminance check keeps the native
-composition within 5% of colour mode at Room and Night brightness. Hues are spread
+more than 8:1 contrast on true black at full brightness; the brightness cap (the
+Fixed level, or Follow daylight's value for the minute, #439) then dims every mode
+alike, and a browser luminance check keeps the native composition within 5% of
+colour mode at Room and Night brightness. Hues are spread
 so any two tones that can share a screen, every tone against the status tone, and
 every colour swatch against the status tone, are at least ΔE_ok 0.05 apart. Gold
 was chosen over the old Sand because it sat too close to the stale amber.
@@ -143,13 +144,14 @@ copied Apple assets or platform point sizes.
 
 Inspector content stays stable in the bounded desktop panel; controls transition
 around 180ms and neighboring widgets ease briefly into a legal reflow. The dragged
-widget follows the pointer continuously. Reduced motion removes effects and ambient travel while discrete
-relocation through black continues. Information never
+widget follows the pointer continuously. Reduced motion removes effects and ambient travel while the
+board still moves in one step each interval, never through black (#436). Information never
 depends on animation or tint alone. No audio or haptics are introduced.
 
-The owner's relocation requirement deliberately differs from Apple's stable
-Always On layout advice: varied collision-free compositions remain with a black
-rest between them. The grid editor exposes one layout-editing mode, a catalog
+The owner's movement requirement deliberately differs from Apple's stable
+Always On layout advice: the arrangement stays as placed but floats slowly, and
+each widget's content floats inside its own box; varied collision-free compositions
+(Swap places) are opt-in and glide. The screen never goes dark to move (#436). The grid editor exposes one layout-editing mode, a catalog
 picker with synthetic family content, selected handles and keyboard alternatives.
 Outline clock numerals, minimal analog hands and dim local photos reuse the same
 protected grid/motion boundary. See the [widget contract](widgets.md) for Apple
@@ -163,23 +165,42 @@ a 720-CSS-pixel-tall display such as a 4K TV at 300% scaling, instead of shrinki
 with each widget. See [UI contracts](ui.md), [API](api.md)
 and the [UX role guide](roles/ux.md) for verification and future work.
 
+## Dynamic emphasis
+
+Dynamic (#437) must make an official warning or a storm starting soon noticeable from the
+couch without adding light. Urgency comes from words, rank and size only: the warning or
+focus card leads, its headline takes the elevated step (`min(8cqw, 11cqh)` in small and
+large, `min(6.2cqw, 14cqh)` in medium; rotation one step smaller), and "Warning" alone uses
+the status tone (`--ambient-caution`), as "Overdue" does. No weight above 500, no fill,
+frame, underline, inverse text, glow, pulse, blink or loop; opacity never rises above its
+resting value; colour is never the only signal, and the official provider's colour code is
+ignored. Its weather glyph is never the hero glyph (no loops) and is still while the data is
+saved or the display is offline. There is no audio and no live region. One card shows at a
+time: a new card is a new element (the old one leaves at once), fading in with the
+value-change fade at Subtle and Lively (Lively adds a settle from above, within the padding,
+under 1.3 s); Off and reduced motion swap instantly, and the first card after the widget
+appears never animates.
+
 ## Motion levels
 
 Style → Motion → **Animation** offers Off, Subtle (default) and Lively (#76). It is
-separate from **Drift and fade between moves** (called Soft motion before #240),
-which still controls whole-arrangement fades, drift and travel. The drift moves the
-whole arrangement within ±0.5% of the plane in 36 discrete steps, one about every
-2 s (roughly one device pixel across a 4K panel), with nothing animating in between,
-so the display draws a frame only when the plane moves instead of every frame (#248).
-Relocation through black always continues, at every level and under reduced
-motion. A screen that asks for reduced motion shows Off whatever is saved; on the
-TV that is Windows Settings → Accessibility → Visual effects → Animation effects.
+separate from moving the board (#436): **Float gently** (`motionEnabled`; called Drift
+and fade between moves from #240, and Soft motion before that) floats the whole board
+within ±3.5% of the display and each widget's content inside its own slack, one device
+pixel at a time and at most 30 steps a second, with nothing animating in between, so
+the display draws a frame only when something moves (#248's principle, which replaced
+a continuous drift that drew about 120 frames a second). **Swap places** (opt-in) also
+trades cells every interval with a glide. The screen never fades out or rests on
+black. Animation level does not control the board's float. Float gently off or
+reduced motion replaces continuous float with one step each interval. A screen that asks for reduced motion shows Off whatever is saved; on
+the TV that is Windows Settings → Accessibility → Visual effects → Animation effects.
 
-- **Off** keeps widgets still: no value, digit, glyph or entrance motion. The editor
+- **Off** keeps widget content animations still: no value, digit, glyph or entrance motion. The editor
   keeps its existing brief transitions.
-- **Subtle** moves only when something changes and never loops. After a black rest
-  (Drift and fade on, fade above 0) each widget settles from about 1.5% of the display
-  height above over 700 ms, 70 ms apart in reading order (capped at six steps).
+- **Subtle** animates content only when something changes and has no glyph loops. When the display first
+  loads (Float gently on, swap glide above 0) each widget settles from about 1.5% of
+  the display height above over 700 ms, 70 ms apart in reading order (capped at six
+  steps).
   Changed clock characters and values fade in (weather and rain timing, forecast,
   Air quality, Calendar, Countdown, Note, Sun & moon and World clocks), as do newly
   pending reminders (by opacity alone, so the measured list keeps its geometry), new
@@ -190,21 +211,23 @@ TV that is Windows Settings → Accessibility → Visual effects → Animation e
   with its words, rather than fading its colour.
 - **Lively** adds richer reveal choreography (forecast days, rain and air-quality bars
   rising from their baseline, weather metrics, reminder rows fading in place) and
-  the only loops, all on the current-weather glyph: sun rays
+  content loops on the current-weather glyph: sun rays
   turn once in 90 s while the core dims to 82% every 8 s, the moon rocks ±4°, clouds
   drift ±2.5%, rain and drizzle drops fall and fade every 1.8 s, snow turns once in
   40 s, and the storm bolt dims once for 1.2 s every 9 s. Partly cloudy's partial rays
   stay still (they would turn into the cloud) while its sun dims or its moon rocks around
-  its own centre and the cloud drifts; fog's mist drifts against its cloud. Loops pause
-  during the black rest.
+  its own centre and the cloud drifts; fog's mist drifts against its cloud. Loops never
+  pause: nothing goes black (#436).
 
 Rules for every level: only transform (translate, rotate, scale) and opacity
 animate; opacity never rises above its resting value, so nothing flashes or
 brightens; offsets come from above or the left, or stay inside the glyph box, and
 never exceed the widget padding, so content stays inside its rectangle and the fit
 scale never changes; numbers are never tweened through invented values; stale,
-offline or unavailable weather keeps its glyph still; age and attribution never
-move; every animation lasts at most 2 s except the Lively glyph loops. Editor
+offline or unavailable weather keeps its glyph still; age and attribution have no
+independent animation. The whole widget still participates in the shared float.
+Content transitions last at most 2 s except the Lively glyph loops; board float and
+optional swap glides follow the separate movement contract (#436, #481). Editor
 micro-interactions (sliding tab indicator, disclosures, picker, drag pickup and
 settle, new-widget drop-in, Save bar entrance) last at most 240 ms and never bounce.
 
@@ -212,8 +235,8 @@ settle, new-widget drop-in, Save bar entrance) last at most 240 ms and never bou
 | --- | --- |
 | [Apple Motion](https://developer.apple.com/design/human-interface-guidelines/motion) | Purposeful, brief, optional motion that never blocks; respect Reduce Motion. |
 | [WidgetKit: Animating data updates](https://developer.apple.com/documentation/widgetkit/animating-data-updates-in-widgets-and-live-activities) | Animate a change rather than continuously; each widget animation is capped at 2 s. |
-| [Apple Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Always-On widgets do not animate; here only Lively's one hero glyph loops, and only when chosen. |
-| [WCAG 2.2.2 Pause, Stop, Hide](https://www.w3.org/WAI/WCAG22/Understanding/pause-stop-hide.html) | Perpetual motion is opt-in (Lively); Off or the system setting stops it. |
+| [Apple Always On](https://developer.apple.com/design/human-interface-guidelines/always-on) | Always-On widgets do not animate; here Lively adds a chosen hero-glyph loop, while the owner-requested shared float is independent of content animation. |
+| [WCAG 2.2.2 Pause, Stop, Hide](https://www.w3.org/WAI/WCAG22/Understanding/pause-stop-hide.html) | Lively glyph loops are opt-in and Off stops them. Float gently is separately enabled by default; turning it off or requesting reduced motion replaces continuous float with periodic steps. |
 | [WCAG 2.3.3 Animation from Interactions](https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html) | `prefers-reduced-motion: reduce` turns all animation off on that screen. |
 | [WCAG 2.3.1 Three Flashes](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html) | No flashes: opacity only dims, and the bolt pulse is one 1.2 s dip in 9 s. |
 | [Chrome compositing](https://developer.chrome.com/docs/lighthouse/performance/non-composited-animations) | Transform and opacity on HTML boxes run on the compositor. Chromium does not composite them on SVG roots (verified in Edge 155), so glyph loops move HTML wrappers. |
@@ -221,8 +244,9 @@ settle, new-widget drop-in, Save bar entrance) last at most 240 ms and never bou
 `tests/ui/motion-browser.mjs` checks the levels, reduced motion, the reveal
 sequence, rectangles and fit at 50% of an entrance for the whole merged catalog,
 the loop inventory, glyph pixel parity, adaptive Weather, the measured Reminders
-list, value changes in every widget unit, the discrete drift steps, a 15 s CDP budget
-at 1280×720 ×3 for the default board and a full board of every widget, and a frame
-budget (at most a few drawn frames per second at Off with Drift and fade on, at 1280×720
-×3 and 3840×2160 ×1). Browser checks do not establish TV
+list, value changes in every widget unit, the float acceptance (#436: plane at opacity
+1, one device pixel per step, no layout), steps, swaps, analog hands that only turn
+forward, a 15 s CDP budget at 1280×720 ×3 for the default board and a full board of
+every widget, and a frame budget (at Off with Float gently on, at most 30 drawn frames
+a second and only when something steps, at 1280×720 ×3 and 3840×2160 ×1). Browser checks do not establish TV
 smoothness, comfort or long-term OLED behaviour; physical acceptance is #111.

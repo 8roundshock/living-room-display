@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { GRID_DENSITIES, WIDGET_IDS } from '../../../src/shared/widgets.ts';
+import { waitForWidgetFit } from '../lib/fit-readiness.mjs';
 
 // The longest note the server accepts: four lines, 200 characters, with an unbroken long word.
 export const FULL_NOTE = [
@@ -14,10 +15,11 @@ export const id = 'note';
 export const selectors = ['.note-text'];
 export function prepare(state) { state.settings.widgetData.note = { text: FULL_NOTE }; }
 
-async function reopen(page) {
+async function reopen(page, label) {
   await page.reload();
   await page.locator('.display-page').waitFor();
   await page.clock.runFor(100);
+  await waitForWidgetFit(page, '[data-widget-id="note"]', { label });
 }
 
 /** The note's box against the widget's: completeness, the share of the height it fills, scale and size. */
@@ -59,13 +61,13 @@ export async function family({ page, widget, size, density, viewport, state }) {
   const text = state.settings.widgetData.note.text;
   state.settings.widgetData.note = { text: SHORT_NOTE };
   try {
-    await reopen(page);
+    await reopen(page, `${size}/${density}/${viewport.width}x${viewport.height} short note`);
     const short = await noteFacts(widget);
     assertShort(short, size, `${size}/${density}/${viewport.width}p short note`);
     assert.ok(short.size > full.size, `${size}/${density}: the short note is set larger than the full one`);
   } finally {
     state.settings.widgetData.note = { text };
-    await reopen(page);
+    await reopen(page, `${size}/${density}/${viewport.width}x${viewport.height} full note restored`);
   }
 }
 
@@ -81,6 +83,7 @@ export async function sweep({ page, viewport, state, base }) {
       state.settings.widgetGrid.placements.note = { column: 0, row: 0, size };
       state.settings.widgetData.note = { text };
       await page.goto(`${base}/display`); await page.locator('.display-page').waitFor(); await page.clock.runFor(100);
+      await waitForWidgetFit(page, '[data-widget-id="note"]', { label: `${size}/${density}/1280p ${name} note` });
       const facts = await noteFacts(widget), label = `${size}/${density}/1280p ${name} note`;
       if (name === 'short') assertShort(facts, size, label);
       else assert.ok(facts.inside && facts.size >= facts.floor - 0.01, `${label}: fits at or above the floor ${JSON.stringify(facts)}`);

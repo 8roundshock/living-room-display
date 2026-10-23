@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { WidgetGrid, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
+import { catalogBoardDefaults } from './fixtures.ts';
 import {
   GRID_DENSITIES, RELOCATION_KEEP_LIMIT, WIDGET_IDS, WIDGET_SIZES, composeWidgetGrid, displayPlacement, firstPlacement, fitGridDensity, freeSpanLimits,
   gridProblem, placementSpan, reflectedComposition, reflowWidget, resizeWidgetSpan, widgetSizes, type GridDensity,
@@ -165,7 +166,8 @@ test('dense boards move each widget off at least half of its previous cells (#33
   // widget on more than half of its previous cells (all of them when a reflection kept a widget centred on its
   // axis). Now 7 do, on boards whose largest widgets found no such cells within the bounded search. Over 200
   // cycles of the same boards, 72 of 73,600 moves do (1,553 at 3446400), and no composition repeats the one from
-  // two cycles earlier (85 of 7,164 at 3446400).
+  // two cycles earlier (85 of 7,164 at 3446400). The boards are drawn from every catalog id, so Dynamic (#437)
+  // changed them: 9,000 widget moves, of which 2 keep more than half of their cells (measured 2026-10-20).
   let moves = 0; const staying: string[] = [];
   for (const density of Object.keys(GRID_DENSITIES) as GridDensity[]) {
     for (const [index, run] of denseRunsFor(density).entries()) {
@@ -173,7 +175,7 @@ test('dense boards move each widget off at least half of its previous cells (#33
       staying.push(...stayers(run).map(item => `${density} board ${index} cycle ${item.cycle}: ${item.id} keeps ${item.share.toFixed(2)}`));
     }
   }
-  assert.equal(moves, 8_832);
+  assert.equal(moves, 9_000);
   assert.ok(staying.length <= 10, `${staying.length} of ${moves} moves keep more than half of a widget's cells: ${staying.join('; ')}`);
 });
 
@@ -263,8 +265,9 @@ test('the Fine board that settled into a two-arrangement loop keeps varying over
   assert.ok(late >= 4, `${late} arrangements in cycles 101–200`);
 });
 
-test('the #93 probe board (default plus a medium Photo) never stalls', () => {
-  const settings = defaultSettings(); const enabled: Visibility = { ...settings.widgets, photo: true };
+test('the #93 probe board (the catalog board plus a medium Photo) never stalls', () => {
+  // The catalog board, the default when #93 was found (before #435).
+  const settings = catalogBoardDefaults(); const enabled: Visibility = { ...settings.widgets, photo: true };
   const placed = reflowWidget(settings.widgetGrid, 'photo', firstPlacement(settings.widgetGrid, 'photo', 'medium', enabled)!, enabled);
   assert.ok(placed); assert.equal(fill(placed, enabled), 84 / 96);
   const ids = WIDGET_IDS.filter(id => enabled[id]); let previous = placed, stalls = 0;
@@ -275,6 +278,24 @@ test('the #93 probe board (default plus a medium Photo) never stalls', () => {
     previous = next;
   }
   assert.equal(stalls, 0);
+});
+
+test('#435 the full default board relocates as a whole: every widget moves in every cycle', () => {
+  const settings = defaultSettings(), enabled: Visibility = { ...settings.widgets };
+  assert.equal(fill(settings.widgetGrid, enabled), 1, 'the default board uses every Balanced cell');
+  const ids = WIDGET_IDS.filter(id => enabled[id]); let previous = settings.widgetGrid;
+  const origins = Object.fromEntries(ids.map(id => [id, new Set<string>()])) as Record<WidgetId, Set<string>>;
+  for (let cycle = 1; cycle <= 40; cycle++) {
+    const next = composeWidgetGrid(settings.widgetGrid, enabled, cycle, previous);
+    assert.equal(gridProblem(next, enabled), null, `cycle ${cycle}`);
+    for (const id of ids) {
+      assert.deepEqual(placementSpan(id, next.placements[id]), placementSpan(id, settings.widgetGrid.placements[id]), `cycle ${cycle}: ${id} keeps its size`);
+      assert.ok(next.placements[id].column !== previous.placements[id].column || next.placements[id].row !== previous.placements[id].row, `cycle ${cycle}: ${id} moves`);
+      origins[id].add(`${next.placements[id].column},${next.placements[id].row}`);
+    }
+    previous = next;
+  }
+  for (const id of ids) assert.ok(origins[id].size >= 3, `${id} visits ${origins[id].size} places`);
 });
 
 test('a 100% full board relocates, and a two-thirds-wide full-height span always has room to travel', () => {

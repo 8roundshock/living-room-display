@@ -1,4 +1,4 @@
-/** Motion inside widgets and the editor (#76). Relocation through black is unaffected. */
+/** Motion inside widgets and the editor (#76). Moving the board (float and swaps, #436) is separate. */
 export const ANIMATION_LEVELS = ['off', 'subtle', 'lively'] as const;
 export type AnimationLevel = typeof ANIMATION_LEVELS[number];
 export const DEFAULT_ANIMATION_LEVEL: AnimationLevel = 'subtle';
@@ -22,7 +22,7 @@ export interface MotionPlan {
   glyphOneShot: boolean;
   /** The only perpetual loops: the hero weather glyph at Lively. */
   glyphLoops: boolean;
-  /** Widget content settles in after a black rest (or an editor replay). */
+  /** Widget content settles in when the display first loads (or on an editor replay). */
   entrance: EntranceLevel;
   /** Lively in-widget reveal choreography (forecast days, rain bars, metrics, reminders). */
   choreography: boolean;
@@ -33,7 +33,7 @@ export interface MotionPlan {
 export interface MotionInput {
   level: AnimationLevel;
   reducedMotion: boolean;
-  /** Style → Drift and fade between moves (`motionEnabled`): whole-arrangement fades, drift and travel. */
+  /** Style → Float gently (`motionEnabled`): the board floats and swaps glide (#436). */
   softMotion: boolean;
   fadeSeconds: number;
   surface: MotionSurface;
@@ -58,7 +58,7 @@ export function motionPlan({ level: saved, reducedMotion, softMotion, fadeSecond
   if (surface === 'sample') return { level: 'off', ...STILL };
   const editorPolish = level !== 'off' && (surface === 'canvas' || surface === 'canvas-editing');
   if (level === 'off' || surface === 'canvas-editing') return { level, ...STILL, editorPolish };
-  // The display reveals after each black rest only when the arrangement itself fades in; the
+  // The display reveals once when it loads, only with Float gently on and a swap glide above 0; the
   // editor canvas plays it only when explicitly replayed.
   const entrance: EntranceLevel = replay || (surface === 'display' && softMotion && fadeSeconds > 0) ? level : 'none';
   return {
@@ -100,7 +100,8 @@ export function normalizeAngle(angle: number): number {
 /**
  * Next rotation for a clock hand. A small forward step accumulates clockwise past 360 (so 59 → 00
  * and the 12 → 1 wrap move forward); anything else, including backwards and large jumps, snaps
- * to the target without animation.
+ * to the target without animation. The display never goes dark any more (#436), so angles keep
+ * accumulating for the whole session and never re-base: a hand never turns backwards.
  */
 export function advanceAngle(previous: number | null, target: number, maxForwardStep = 90): { angle: number; animate: boolean } {
   const goal = normalizeAngle(target);
@@ -126,9 +127,4 @@ export function advanceClockHands(previous: Pick<HandAngles, 'hour' | 'minute'> 
   const jumped = (!hour.animate && hour.angle !== previous.hour) || (!minute.animate && minute.angle !== previous.minute);
   if (jumped) return { hour: normalizeAngle(hourTarget), minute: normalizeAngle(minuteTarget), animate: false };
   return { hour: hour.angle, minute: minute.angle, animate: hour.animate || minute.animate };
-}
-
-/** During a black rest, accumulated angles return to [0, 360) without a visible change. */
-export function rebaseClockHands(hands: Pick<HandAngles, 'hour' | 'minute'>): HandAngles {
-  return { hour: normalizeAngle(hands.hour), minute: normalizeAngle(hands.minute), animate: false };
 }
