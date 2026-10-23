@@ -7,6 +7,8 @@
 // that allows none, although the app did nothing wrong (#315). The app itself never loads anything from
 // another origin (its CSP is default-src 'self').
 
+import { mockWindowsStatus } from './windows-fixture.mjs';
+
 const EMPTY = { script: 'text/javascript', stylesheet: 'text/css' };
 
 /**
@@ -15,6 +17,8 @@ const EMPTY = { script: 'text/javascript', stylesheet: 'text/css' };
  * path only) for the suite's output.
  */
 export async function keepPagesLocal(context, base) {
+  // Install before suite-specific overrides. No source-browser test reads this host's device facts.
+  await mockWindowsStatus(context);
   const origin = new URL(base).origin, outside = [];
   await context.route(url => url.origin !== origin, route => {
     const request = route.request(), url = new URL(request.url());

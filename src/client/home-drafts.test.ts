@@ -37,3 +37,10 @@ test('saving/discarding one cached form preserves another pending form; Note com
   assert.equal(hasHomeDrafts({ 'calendar.selected': '2027-01-01' }, { 'calendar.selected': '2026-10-29' }, ''), false);
   assert.equal(hasHomeDrafts({ 'calendar.text': 'Remember a day', 'calendar.selected': '2027-01-01' }, { 'calendar.text': '', 'calendar.selected': '2026-10-29' }, ''), true);
 });
+
+test('Calendar browsing is clean but an explicit time choice is pending until reverted', () => {
+  const bases = { 'calendar.text': '', 'calendar.selected': '2026-10-29', 'calendar.time': '14:00' };
+  assert.equal(hasHomeDrafts({ 'calendar.selected': '2027-01-01', 'calendar.time': '14:00' }, bases, ''), false);
+  assert.equal(hasHomeDrafts({ 'calendar.selected': '2027-01-01', 'calendar.time': '15:00' }, bases, ''), true);
+  assert.equal(hasHomeDrafts({ 'calendar.selected': '2027-01-01', 'calendar.time': '14:00' }, bases, ''), false);
+});

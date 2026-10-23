@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Isolated production renderer QA. Synthetic weather/images; screenshots remain RAM buffers.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -76,7 +77,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], images = [], errors = [];
   try {
-    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
     const source = await (await fetch(`${base}/api/state`)).json();
     // Every active widget has a check module (tests/ui/widget-checks); their prepare hooks give it content.
     for (const id of ACTIVE_WIDGET_IDS) assert.ok(WIDGET_CHECKS[id], `${id} needs a tests/ui/widget-checks module`);
@@ -266,7 +267,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     // no widget re-creates an observer, refits or writes its style, and nothing extends beyond its box.
     const fitMetrics = {};
     for (const [label, viewport, deviceScaleFactor, fontScale] of [['1280×720 ×3, Text 125%', { width: 1280, height: 720 }, 3, 1.25], ['3840×2160 ×1, Text 100%', { width: 3840, height: 2160 }, 1, 1], ['3840×2160 ×1, Text 125%', { width: 3840, height: 2160 }, 1, 1.25]]) {
-      const restContext = await browser.newContext({ viewport, deviceScaleFactor, timezoneId: 'America/Toronto' });
+      const restContext = await browser.newContext({ viewport, deviceScaleFactor, timezoneId: 'America/Toronto' }); await mockWindowsStatus(restContext);
       try {
         const state = structuredClone(source); state.settings.appearance.fontScale = fontScale;
         state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD])); state.settings.preview.enabled = true; state.settings.widgetGrid.density = 'balanced';
@@ -304,7 +305,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
 
     // #99: Intl formatter constructions per one-second tick with the minute unchanged, each widget alone at
     // its largest family (Clock medium), then the full board.
-    const intlContext = await browser.newContext({ viewport: { width: 1280, height: 720 }, timezoneId: 'America/Toronto' });
+    const intlContext = await browser.newContext({ viewport: { width: 1280, height: 720 }, timezoneId: 'America/Toronto' }); await mockWindowsStatus(intlContext);
     const intlPerTick = {};
     try {
       let state;

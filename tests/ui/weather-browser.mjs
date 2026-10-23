@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Adaptive Weather (#74), ambient glyph sizing (#128) and the #264 polish (unbroken times, chart name,
 // past days, last-known readings, formatter caching, an unresolved device zone) in production Edge. Synthetic weather only;
 // screenshots stay in RAM unless --capture names a temporary folder for manual inspection.
@@ -142,7 +143,7 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
   const checks = [], errors = [], shots = [];
   let migration;
   try {
-    const context = await browser.newContext({ viewport: VIEWPORTS[1], timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: VIEWPORTS[1], timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
     const source = await (await fetch(`${base}/api/state`)).json();
     assert.equal(source.weather.location.timezone, 'America/Toronto');
     let current = structuredClone(source), failing = false;
@@ -555,7 +556,7 @@ async function migrationCheck({ browser, clientDirectory, errors }) {
   const app = await createApplication({ dataDirectory: directory, clientDirectory, now: () => NOW, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
   const shots = [];
   try {
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
@@ -570,7 +571,7 @@ async function migrationCheck({ browser, clientDirectory, errors }) {
     assert.equal(await readFile(join(directory, 'state.json'), 'utf8'), bytes, 'opening the editor does not write');
     // The display gets its own context (#202): the editor page has already advanced its context's fake clock, so
     // installing and pausing that shared clock again at NOW raced it ("Cannot fast-forward to the past").
-    const displayContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+    const displayContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(displayContext);
     try {
       const display = await displayContext.newPage(); display.on('pageerror', error => errors.push(error.message));
       await display.clock.setFixedTime(new Date(NOW));
@@ -611,7 +612,7 @@ export async function unresolvedZoneCheck({ browser, clientDirectory, errors, ca
   const app = await createApplication({ dataDirectory: directory, clientDirectory, now: () => serverNow, fetcher });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const context = await browser.newContext({ viewport: VIEWPORTS[0], timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+  const context = await browser.newContext({ viewport: VIEWPORTS[0], timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
   const shots = [], before = errors.length;
   try {
     // The real server state, not an injected one: the failing fetch leaves the device zone unresolved.

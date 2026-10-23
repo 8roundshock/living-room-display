@@ -3,11 +3,11 @@ import { Icon } from './icons';
 import { DISPLAY_WINDOW, type DisplayWindowControls } from './displayWindow';
 
 /**
- * The header Home and Edit display share (#438): the brand goes Home, the Pages nav switches between
- * the two pages, and Open display targets one named window (`still-display`, shared with #436), so
+ * The shared header: the brand goes Home, Pages links Home/Edit display/Settings, and Open display
+ * targets one named window (`still-display`, shared with #436), so
  * repeated clicks reuse that window instead of opening another tab each time. No `rel="noreferrer"`:
  * it would sever the window name. Plain anchors, so Edit display's `beforeunload` still guards a
- * dirty draft. At 480 px or narrower only the other page's link shows and Open display is icon-only.
+ * dirty draft. Narrow layouts keep three labeled destinations on their own row.
  */
 export function StudioHeader({ page, displayControls }: { page: 'home' | 'edit' | 'settings'; displayControls: DisplayWindowControls }) {
   const { displayOpen, openDisplay, closeDisplay } = displayControls;

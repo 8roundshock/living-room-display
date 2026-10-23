@@ -15,14 +15,20 @@ reminders/daily actions and a compact display summary. The editor has visual
 Style/Widgets controls; Settings owns weather, global preferences, schedule and
 recovery. Existing saved data is not migrated or seeded.
 
-This is source in progress: the core Settings implementation passed a production
-build, 487 units before feature integration and nine focused browser groups.
-The first responsive check caught a 40px Cancel target; the scoped 44px correction
-passed. Feature branches have their own build/unit evidence, not final integrated
-acceptance. Existing browser suites are being migrated to the actual new routes,
-then final checks and a separate independent final-head review are required.
-No installation or new native/physical acceptance is claimed by this checkpoint.
-## Editor style workflow (local checkpoint)
+The integration also keeps failed drafts and recovery confirmations, restores an
+enabled retry control without stealing another chosen control, guards meaningful
+Home drafts across close/reopen and navigation, and requests manual-editor weather
+without activating hidden providers for ordinary scheduled-display reads. Browser
+suites target the actual destinations and use synthetic device-status responses;
+their real geometry, focus, touch, concurrency and performance assertions remain.
+
+PR #518 records exact pushed-head validation, failed diagnostic runs, independent
+review and merge status. A production build, full units, the complete applicable
+browser aggregate, independent final-head review and applicable CI are required
+before source acceptance. Local installation and physical/native acceptance are
+separate evidence; this source checkpoint makes no new claim about either.
+
+## Editor style workflow (historical local checkpoint before #517)
 
 The top Style toolbar now holds saved styles, virtual Phone/Room/Night starter
 looks, and one Save/Cancel group. Save changes updates the selected style under

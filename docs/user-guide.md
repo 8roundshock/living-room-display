@@ -75,6 +75,11 @@ reminders without a date and what is coming up in the next week; tick the circle
 something is done. **All reminders** opens the full list. Changes you make on Home
 reach the display within a few seconds.
 
+Closing a quick-action dialog keeps what you typed. Leaving Home warns about
+unsaved choices; returning a field to its original value clears that draft.
+Calendar browsing alone does not create a draft, while a time you explicitly
+change is kept even before you type the reminder.
+
 ## Open Home and Edit display
 
 Open the Start menu and choose **Living Room Display**. Home opens in your browser

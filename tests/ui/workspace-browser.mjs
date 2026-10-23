@@ -210,7 +210,6 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   async function layoutEditing(viewport) {
     const label = `${viewport.width}x${viewport.height}`, stacked = viewport.width <= 700;
     await open(viewport, 'reduce', fullBoard());
-    await button('Hide location tip').click();
     if (viewport.width === 1280) assert.deepEqual(await listRows(), GROUPED, 'the list follows the picker groups (#365)');
     await button('Edit layout').click();
     // Layout directions are available on demand without occupying the message line.
@@ -281,7 +280,6 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   async function pickerFocus(viewport) {
     const label = `${viewport.width}x${viewport.height}`, picker = () => page.locator('.widget-picker');
     await open(viewport, 'reduce', fullBoard());
-    await button('Hide location tip').click();
     // Escape with the last row selected: focus returns to Add widget, which no replayed scroll hides.
     await button('Photo').click();
     await button('Add widget').focus(); await page.keyboard.press('Enter'); await picker().waitFor();
@@ -336,7 +334,6 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   async function canvasTaps(viewport, reducedMotion, settings, how) {
     const label = `${viewport.width}x${viewport.height} ${how}`;
     await open(viewport, reducedMotion, settings, { hasTouch: true });
-    await button('Hide location tip').tap();
     await button('Edit layout').tap(); await page.locator('.grid-editor').waitFor();
     for (const name of GROUPED) {
       const id = WIDGET_ID[name];

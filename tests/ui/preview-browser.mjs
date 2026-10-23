@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Production preview optics and lifecycle: synthetic desktop PNG, RAM screenshots only.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -36,7 +37,7 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
   const context = await browser.newContext({
     viewport: { width: 1920, height: 1080 },
     reducedMotion: 'reduce',
-  });
+  }); await mockWindowsStatus(context);
   const page = await context.newPage(),
     errors = [],
     checks = [],

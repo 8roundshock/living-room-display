@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Free-size Reminders (#73) editing in production Edge: pointer/touch/keyboard resize, presets and
 // steppers, Save/Cancel, density round trips and narrow layouts. Synthetic data, own server on port 0.
 import assert from 'node:assert/strict';
@@ -66,7 +67,7 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
   async function open(settings, options = {}, items = reminders()) {
     await context?.close();
     await app.store.update(data => { data.settings = structuredClone(settings); data.reminders = structuredClone(items); data.photoAsset = null; });
-    context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'America/Toronto', ...options });
+    context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'America/Toronto', ...options }); await mockWindowsStatus(context);
     page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error' && !message.text().includes('500')) errors.push(message.text()); });

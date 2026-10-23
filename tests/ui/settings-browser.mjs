@@ -136,10 +136,15 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
     await context.close();
     const manual = defaultSettings(); manual.preview.enabled = false;
     manual.location = { name: 'Synthetic manual area', latitude: 48.1, longitude: -78.1, timezone: 'America/Toronto' };
+    manual.locationSource = 'manual';
     for (const id of Object.keys(manual.widgets)) manual.widgets[id] = id === 'weather';
     const visual = getVisual(manual); visual.widgets.weather = false; visual.widgets.clock = true;
     manual.savedPresets = [{ id: 'no-weather', name: 'Clock only', visual }];
     await app.store.update(data => { data.settings = manual; });
+    assert.equal(saved().location.name, 'Synthetic manual area', 'the uncached manual location is retained');
+    assert.equal(saved().widgets.weather, true, 'the manual board still needs weather after making the independent saved visual');
+    assert.equal(saved().widgets.clock, false);
+    assert.equal(saved().savedPresets[0].visual.widgets.weather, false);
     assert.equal((await fetch(base + '/api/schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true, fallbackPresetId: 'no-weather', rules: [] }) })).status, 200);
     context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' }); await keepPagesLocal(context, base);
     page = await context.newPage(); const beforeProviders = providerCalls;

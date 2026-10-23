@@ -110,15 +110,17 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
     assert.equal((await snapshot()).schedule.selection.source, 'rule');
     checks.push('A minute boundary updates the live display and Home status without blanking or changing manual settings; Home override/Return and one-hour expiry work.');
 
+    assert.equal(await schedule.locator('.schedule-row').count(), 1, 'the saved schedule still has its first row');
     await schedule.getByRole('button', { name: 'Add schedule row', exact: true }).click();
+    await settingsPage.waitForFunction(() => document.querySelectorAll('.schedule-row').length === 2, undefined, { timeout: 3000 });
     const second = schedule.locator('.schedule-row').nth(1);
-    await second.getByLabel('Saved style', { exact: true }).selectOption('legacy-evening');
+    await second.getByRole('combobox', { name: 'Saved style', exact: true }).selectOption('legacy-evening');
     await second.getByRole('checkbox', { name: 'Monday', exact: true }).check();
     await second.getByLabel('From', { exact: true }).fill('08:00'); await second.getByLabel('Until', { exact: true }).fill('12:00');
     assert.match(await schedule.innerText(), /Overlapping rows: 1 and 2/);
     await second.getByRole('button', { name: 'Move row 2 up', exact: true }).focus(); await second.getByRole('button', { name: 'Move row 2 up', exact: true }).press('Enter');
-    assert.equal(await schedule.locator('.schedule-row').first().getByLabel('Saved style', { exact: true }).inputValue(), 'legacy-evening');
-    assert.equal(await schedule.locator('.schedule-row').first().getByLabel('Saved style', { exact: true }).evaluate(element => element === document.activeElement), true);
+    assert.equal(await schedule.locator('.schedule-row').first().getByRole('combobox', { name: 'Saved style', exact: true }).inputValue(), 'legacy-evening');
+    assert.equal(await schedule.locator('.schedule-row').first().getByRole('combobox', { name: 'Saved style', exact: true }).evaluate(element => element === document.activeElement), true);
     await schedule.getByRole('button', { name: 'Cancel schedule edits', exact: true }).click();
     const clean = await request('/api/schedule');
     await row.getByLabel('Until', { exact: true }).fill('13:00');
@@ -148,7 +150,7 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
     await schedule.getByText(/A scheduled style was deleted or is missing/).waitFor();
     assert.match(await schedule.locator('.schedule-status').innerText(), /Synthetic evening.*outside scheduled times/);
     assert.equal((await snapshot()).schedule.selection.source, 'fallback');
-    assert.match(await row.getByLabel('Saved style', { exact: true }).innerText(), /Missing saved style/);
+    assert.match(await row.getByRole('combobox', { name: 'Saved style', exact: true }).innerText(), /Missing saved style/);
     const savedSchedule = await readFile(join(directory, 'schedule.json'), 'utf8');
     app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); app = await start(port);
     await advance(6000);
@@ -199,6 +201,13 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
     checks.push('Home reminder/timer results use effective scheduled visibility in both directions; manual layout is preserved and already-shown widgets cause no Show write.');
     assert.deepEqual(errors, []);
     return { checks, images, outside };
+  } catch (error) {
+    const settingsPage = context.pages().find(page => new URL(page.url()).pathname === '/settings');
+    console.log(JSON.stringify({ checksCompleted: checks.length,
+      schedule: await settingsPage?.locator('.schedule-settings').innerText().catch(() => '(unavailable)'),
+      savedSchedule: await request('/api/schedule').catch(() => '(unavailable)'),
+    }));
+    throw error;
   } finally {
     await context.close(); await browser.close();
     app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close');

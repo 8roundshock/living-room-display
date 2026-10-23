@@ -399,13 +399,22 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
       await field.fill(initial); assert.equal(await pendingDraft(), false, `${kind}: reverting to the original value is clean`);
       await sheet(page).locator('.home-sheet-close').click(); await sheet(page).waitFor({ state: 'detached' });
     }
+    // An hour crossing must not change the baseline of the time already displayed to the user.
+    await action(page, 'reminder').click(); const reminderTime = sheet(page).getByLabel('Time', { exact: true });
+    const displayedTime = await reminderTime.inputValue(); offset += 3_600_000; await context.clock.fastForward(3_600_000);
+    await reminderTime.fill('10:22'); assert.equal(await pendingDraft(), true);
+    await reminderTime.fill(displayedTime); assert.equal(await pendingDraft(), false, 'revert uses the displayed default before the clock boundary');
+    await sheet(page).locator('.home-sheet-close').click(); await sheet(page).waitFor({ state: 'detached' });
     await action(page, 'calendar').click(); const calendarText = sheet(page).getByRole('textbox', { name: 'What', exact: true });
-    await calendarText.fill('Synthetic calendar draft'); const calendarTime = sheet(page).getByLabel('Time', { exact: true }); await calendarTime.fill('10:22');
+    const calendarTime = sheet(page).getByLabel('Time', { exact: true }), calendarDefault = await calendarTime.inputValue();
+    assert.equal(await pendingDraft(), false, 'merely opening Calendar stays clean');
+    await calendarText.fill('Synthetic calendar draft'); await calendarTime.fill('10:22');
     const selectedDay = await sheet(page).locator('[role="gridcell"][aria-selected="true"]').getAttribute('data-day');
     await sheet(page).locator('.home-sheet-close').click(); await sheet(page).waitFor({ state: 'detached' }); assert.equal(await pendingDraft(), true);
     await action(page, 'calendar').click(); assert.equal(await calendarText.inputValue(), 'Synthetic calendar draft'); assert.equal(await calendarTime.inputValue(), '10:22');
     assert.equal(await sheet(page).locator('[role="gridcell"][aria-selected="true"]').getAttribute('data-day'), selectedDay);
-    await calendarText.fill(''); assert.equal(await pendingDraft(), false, 'browsing a calendar day without a typed reminder is clean');
+    await calendarText.fill(''); assert.equal(await pendingDraft(), true, 'an explicit time choice remains guarded before any reminder text');
+    await calendarTime.fill(calendarDefault); assert.equal(await pendingDraft(), false, 'reverting to the displayed Calendar default clears its draft');
     await sheet(page).locator('.home-sheet-close').click(); await sheet(page).waitFor({ state: 'detached' });
     await action(page, 'reminder').click(); await sheet(page).getByLabel('What', { exact: true }).fill('Keep this reminder draft'); await sheet(page).locator('.home-sheet-close').click();
     await action(page, 'note').click(); await note.fill('Discard this note only'); await sheet(page).getByRole('button', { name: 'Discard', exact: true }).click();

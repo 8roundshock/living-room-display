@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Native colours (#75) in production Edge: own ephemeral loopback server and data, synthetic
 // state only. Screenshots stay RAM buffers unless --capture names a temporary directory.
 import assert from 'node:assert/strict';
@@ -131,7 +132,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     for (let row = 0; row < 200; row++) { pixels[row * (320 * 4 + 1)] = 0; for (let x = 0; x < 320; x++) pixels[row * (320 * 4 + 1) + 1 + x * 4 + 3] = 255; }
     const image = photoFixture(320, 200, pixels);
     let current = structuredClone(source), stateStatus = 200, photoMissing = false;
-    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
     await context.route('**/api/state', (route) => route.fulfill(stateStatus === 200 ? { contentType: 'application/json', body: JSON.stringify(current) } : { status: stateStatus, contentType: 'application/json', body: '{"error":"Synthetic outage"}' }));
     await context.route('**/api/photo/image?*', (route) => route.fulfill(photoMissing ? { status: 404, body: 'Synthetic missing image' } : { contentType: 'image/png', body: image }));
     await context.route('**/api/preview/image?*', (route) => route.fulfill({ contentType: 'image/png', body: image }));
@@ -387,7 +388,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       await app.store.update((data) => { data.settings = defaultSettings(); data.settings.appearance.accentMode = 'color'; data.reminders = []; });
     }
     async function editor(viewport = { width: 1280, height: 720 }) {
-      const studio = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+      const studio = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(studio);
       const editorPage = await studio.newPage();
       editorPage.on('pageerror', (error) => errors.push(error.message));
       await editorPage.clock.install({ time: new Date(now) });

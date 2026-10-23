@@ -1,6 +1,6 @@
 .motion-preview-controls { flex: none; min-width: 0; padding: 0 0 10px; color: var(--studio-muted); font-size: 12px; }
 .motion-preview-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.studio .motion-preview-controls .button, .studio .motion-preview-controls .icon-button { min-height: 44px; }
+.studio .motion-preview-controls .button.small, .studio .motion-preview-controls .icon-button { min-height: 44px; }
 .studio .motion-preview-controls .icon-button { width: 44px; min-width: 44px; }
 .motion-preview-time { color: var(--studio-text); font-variant-numeric: lining-nums tabular-nums; white-space: nowrap; }
 .motion-preview-time span { color: var(--studio-muted); }

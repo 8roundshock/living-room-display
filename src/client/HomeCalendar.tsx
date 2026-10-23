@@ -43,7 +43,7 @@ export function HomeCalendar({ context }: { context: HomeContext }) {
     grid.current?.querySelector<HTMLElement>(`[data-day="${focusedKey}"]`)?.focus();
   }, [focusedKey]);
   function select(date: CivilDate, focusWhat: boolean) {
-    setFocused(date); setSelected(formatCivil(date)); setProblem(null); setTime(timeFor(formatCivil(date)));
+    setFocused(date); setSelected(formatCivil(date)); setProblem(null); setTime(timeFor(formatCivil(date)), true);
     if (focusWhat) window.requestAnimationFrame(() => (isPastDay(formatCivil(date), Date.now()) ? grid.current?.querySelector<HTMLElement>(`[data-day="${formatCivil(date)}"]`) : what.current)?.focus());
   }
   function onKey(event: KeyboardEvent<HTMLDivElement>, date: CivilDate) {
@@ -71,7 +71,7 @@ export function HomeCalendar({ context }: { context: HomeContext }) {
       const reminder = await addReminder(context, trimmed, due.iso, showWanted, due.shifted ? shiftedMessage(selected, time, due, settings.clockFormat) : '', () => form.current?.requestSubmit());
       if (!reminder) return;
       forgetHomeDrafts('calendar.selected', 'calendar.text', 'calendar.time');
-      setText(''); setTime(timeFor(selected));
+      setText(''); setTime(timeFor(selected), true);
       context.focusLater(`.home-day-list .home-check[data-reminder-id="${reminder.id}"]`);
     } finally { setBusy(false); }
   }
