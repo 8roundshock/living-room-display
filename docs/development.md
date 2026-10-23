@@ -174,6 +174,8 @@ device facts before navigation. `keepPagesLocal` installs the default fixture;
 contexts that do not use that helper call `mockWindowsStatus` directly. The
 Screen suite registers scenario-specific synthetic responses after that default.
 Headless source QA must not read the testing machine's registry or power settings.
+Unit tests likewise pass a synthetic runner and platform to `windowsStatus` and
+`powerStatus`; their ordinary application defaults continue to query the device.
 
 ## Local checkout and agent startup
 

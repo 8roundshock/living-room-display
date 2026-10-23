@@ -2,6 +2,14 @@
 
 ## Current integration checkpoint (#517)
 
+Work is paused with PR #518 still a draft. Its corrected source is checkpointed,
+but final independent approval, corrected RAM render inspection and the full
+25-suite aggregate are outstanding. The six-suite run at `494b096` passed Studio,
+Workspace, context help, movement preview and Screen; Home stopped at an obsolete
+88px action-size assertion for the intended 64px compact design. The corrected
+Home continuation was interrupted and establishes no result. Synthetic Windows
+unit fixtures passed; no new installation or native acceptance is claimed.
+
 PR #507 is merged as `c7c00b47b2c69514787645c8f28adfe44cbf2d75`.
 Its ten published-head checks passed; the final local aggregate was 19/20 with
 Motion's repeated renderer-task-time budget finding tracked as P3 #364. Do not

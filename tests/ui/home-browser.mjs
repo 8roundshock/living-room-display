@@ -118,7 +118,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     });
     assert.equal(fold.count, 6);
     for (const [name, value] of Object.entries(fold)) if (typeof value === 'number' && name !== 'count') assert.ok(value <= 720, `${name} is above the fold at 1280×720 (${value})`);
-    assert.ok(fold.actionHeights.every(height => height >= 88), `quick actions are at least 88 px tall ${fold.actionHeights}`);
+    assert.ok(fold.actionHeights.every(height => height >= 64), `compact quick actions are at least 64 px tall ${fold.actionHeights}`);
     assert.match(await page.locator('.home-chips').innerText(), /Synthetic London 11:42 PM · \+5 h/);
     if (capture) images.push({ name: 'home-1280x720', bytes: await page.screenshot() });
     for (const viewport of EDGE_VIEWPORTS) {
@@ -141,7 +141,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     await page.setViewportSize(EDGE_VIEWPORTS[0]);
     assert.match(await page.getByRole('group', { name: 'Quick actions' }).ariaSnapshot(), /button "Timer"[\s\S]*button "Reminder"[\s\S]*button "Calendar"[\s\S]*button "World clock"[\s\S]*button "Countdown"[\s\S]*button "Note"/);
     assert.equal(await action(page, 'timer').getAttribute('aria-haspopup'), 'dialog');
-    checks.push(`1280×720: the date, the six quick actions (≥ 88 px), the Today heading and first row and Edit display are above the fold; 390 and 320 px: no horizontal overflow, 44 px targets, actions 3 × 2 at 390 and 2 × 3 at 320, descriptions screen-reader only; actions named by their labels with aria-haspopup=dialog`);
+    checks.push(`1280×720: the date, the six compact quick actions (≥ 64 px), the Today heading and first row and Edit display are above the fold; 390 and 320 px: no horizontal overflow, 44 px targets, actions 3 × 2 at 390 and 2 × 3 at 320, descriptions screen-reader only; actions named by their labels with aria-haspopup=dialog`);
 
     // Timers: two activations, the display within 6 s, pause, +1 min, cancel and Undo -----------------
     const display = await context.newPage();

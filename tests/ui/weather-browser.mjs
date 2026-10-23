@@ -655,6 +655,7 @@ export async function unresolvedZoneCheck({ browser, clientDirectory, errors, ca
 async function writeMontages(browser, folder, shots) {
   await mkdir(folder, { recursive: true });
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+  await mockWindowsStatus(page.context());
   try {
     for (const group of [...new Set(shots.map(shot => shot.group))]) {
       const tiles = shots.filter(shot => shot.group === group).map(shot => `<figure><img src="data:image/png;base64,${shot.bytes.toString('base64')}"><figcaption>${shot.name}</figcaption></figure>`).join('');
