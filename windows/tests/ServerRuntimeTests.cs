@@ -123,18 +123,25 @@ internal static class ServerRuntimeTests {
                 Check(WindowsServerEnvironment.LockName(root) != WindowsServerEnvironment.LockName(root + "-other"), "separate installs share startup mutex");
             });
             Scenario("production launch targets owned Node without a shell", delegate {
-                string priorData = System.Environment.GetEnvironmentVariable("LRD_DATA_DIR"), priorPort = System.Environment.GetEnvironmentVariable("LRD_PORT");
+                string priorData = System.Environment.GetEnvironmentVariable("LRD_DATA_DIR"), priorPort = System.Environment.GetEnvironmentVariable("LRD_PORT"), priorPreparer = System.Environment.GetEnvironmentVariable("LRD_PREVIEW_PREPARER"), priorDisabled = System.Environment.GetEnvironmentVariable("LRD_PREVIEW_PREPARER_DISABLED");
                 try {
                     System.Environment.SetEnvironmentVariable("LRD_DATA_DIR", "synthetic-unrelated-data");
                     System.Environment.SetEnvironmentVariable("LRD_PORT", "12345");
+                    System.Environment.SetEnvironmentVariable("LRD_PREVIEW_PREPARER", "synthetic-parent-value");
+                    System.Environment.SetEnvironmentVariable("LRD_PREVIEW_PREPARER_DISABLED", null);
                     var start = env.CreateStartInfo();
                     Check(start.FileName == env.NodePath && start.Arguments == "\"" + env.EntryPath + "\"", "launch must use exact installed Node and quoted entry");
                     Check(!start.UseShellExecute && start.CreateNoWindow && start.WindowStyle == System.Diagnostics.ProcessWindowStyle.Hidden, "server launch must be hidden and shell-free");
                     Check(start.WorkingDirectory == app, "server working directory changed");
                     Check(start.EnvironmentVariables["LRD_DATA_DIR"] == Path.Combine(root, "data") && start.EnvironmentVariables["LRD_PORT"] == "4318", "inherited data/port escaped installation scope");
                     Check(System.Environment.GetEnvironmentVariable("LRD_PORT") == "12345", "launch preparation mutated parent environment");
+                    Check(start.EnvironmentVariables["LRD_PREVIEW_PREPARER"] == "1" && System.Environment.GetEnvironmentVariable("LRD_PREVIEW_PREPARER") == "synthetic-parent-value", "preparer opt-in escaped child environment");
+                    System.Environment.SetEnvironmentVariable("LRD_PREVIEW_PREPARER_DISABLED", "1");
+                    Check(env.CreateStartInfo().EnvironmentVariables["LRD_PREVIEW_PREPARER"] == "0", "synthetic CI opt-out failed to suppress preparer");
                 } finally {
                     System.Environment.SetEnvironmentVariable("LRD_DATA_DIR", priorData); System.Environment.SetEnvironmentVariable("LRD_PORT", priorPort);
+                    System.Environment.SetEnvironmentVariable("LRD_PREVIEW_PREPARER", priorPreparer);
+                    System.Environment.SetEnvironmentVariable("LRD_PREVIEW_PREPARER_DISABLED", priorDisabled);
                 }
             });
         } finally {

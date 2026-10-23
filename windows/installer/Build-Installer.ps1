@@ -184,9 +184,11 @@ try {
     if ($reported -ne "v$($runtimePin.version)") { throw "The packaged node.exe reports $reported." }
 
     if ($SignCommand) {
-        Write-Step 'Signing the helper'
-        $helper = Join-Path $appWindows 'LivingRoomDisplay.scr'
-        Invoke-Checked $env:ComSpec @('/d', '/c', $SignCommand.Replace('{file}', '"' + $helper + '"')) 'Helper signing'
+        Write-Step 'Signing the native helpers'
+        foreach ($name in @('LivingRoomDisplay.scr','LivingRoomDisplay.Preview.exe')) {
+            $helper = Join-Path $appWindows $name
+            Invoke-Checked $env:ComSpec @('/d', '/c', $SignCommand.Replace('{file}', '"' + $helper + '"')) 'Helper signing'
+        }
     }
 
     function New-PayloadArchive([string]$Destination) {

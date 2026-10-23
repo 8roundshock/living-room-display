@@ -254,6 +254,8 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
         var start = new ProcessStartInfo(NodePath, "\"" + EntryPath + "\"") { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = app };
         start.EnvironmentVariables["LRD_DATA_DIR"] = data;
         start.EnvironmentVariables["LRD_PORT"] = port.ToString(CultureInfo.InvariantCulture);
+        // Only installed lifecycle launches opt in. Source/test entry points stay inert.
+        start.EnvironmentVariables["LRD_PREVIEW_PREPARER"] = Environment.GetEnvironmentVariable("LRD_PREVIEW_PREPARER_DISABLED") == "1" ? "0" : "1";
         return start;
     }
     public ServerProcess Launch() {
@@ -278,12 +280,49 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
         var actual = ReadRecord();
         if (actual != null && expected != null && actual.ProcessId == expected.ProcessId && actual.StartedUtcTicks == expected.StartedUtcTicks) File.Delete(recordPath);
     }
+    private List<Process> PinOwnedPreparers(ServerProcess server) {
+        var pinned = new List<Process>();
+        string expected = Path.Combine(app, "windows", "LivingRoomDisplay.Preview.exe");
+        try {
+            using (var query = new ManagementObjectSearcher("SELECT ProcessId FROM Win32_Process WHERE Name='LivingRoomDisplay.Preview.exe' AND ParentProcessId=" + server.ProcessId.ToString(CultureInfo.InvariantCulture)))
+            using (var found = query.Get()) foreach (ManagementObject item in found) using (item) {
+                Process child = null;
+                try {
+                    child = Process.GetProcessById(Convert.ToInt32(item["ProcessId"], CultureInfo.InvariantCulture));
+                    var pin = child.Handle;
+                    // Query after pinning so PID recycling cannot inherit a stale parent's identity.
+                    bool matches = false;
+                    using (var identityQuery = new ManagementObjectSearcher("SELECT ExecutablePath, ParentProcessId FROM Win32_Process WHERE ProcessId=" + child.Id.ToString(CultureInfo.InvariantCulture)))
+                    using (var identities = identityQuery.Get()) foreach (ManagementObject identity in identities) using (identity)
+                        matches = !server.Handle.HasExited && !child.HasExited &&
+                            Convert.ToInt32(identity["ParentProcessId"], CultureInfo.InvariantCulture) == server.ProcessId &&
+                            string.Equals(identity["ExecutablePath"] as string, expected, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(child.MainModule.FileName, expected, StringComparison.OrdinalIgnoreCase) &&
+                            child.StartTime.ToUniversalTime().Ticks >= server.StartedUtcTicks;
+                    if (matches) { pinned.Add(child); child = null; }
+                } catch (ArgumentException) { }
+                catch (InvalidOperationException) { }
+                catch (System.ComponentModel.Win32Exception) { }
+                finally { if (child != null) child.Dispose(); }
+            }
+            return pinned;
+        } catch { foreach (var child in pinned) child.Dispose(); throw; }
+    }
     public void Stop(ServerProcess process) {
         if (process.Handle == null) throw new InvalidOperationException("Cannot stop a process without its ownership handle.");
         if (process.Handle.HasExited) return;
         if (process.Handle.Id != process.ProcessId || process.Handle.StartTime.ToUniversalTime().Ticks != process.StartedUtcTicks) throw new InvalidOperationException("Process ownership changed; nothing was stopped.");
-        process.Handle.Kill();
-        if (!process.Handle.WaitForExit(10000)) throw new TimeoutException("The Living Room Display server did not exit after Stop.");
+        var preparers = PinOwnedPreparers(process);
+        try {
+            process.Handle.Kill();
+            if (!process.Handle.WaitForExit(10000)) throw new TimeoutException("The Living Room Display server did not exit after Stop.");
+            foreach (var preparer in preparers) {
+                // EOF and the pinned parent guard normally end the child without intervention.
+                if (preparer.WaitForExit(10000)) continue;
+                preparer.Kill();
+                if (!preparer.WaitForExit(10000)) throw new TimeoutException("The Living Room Display preview preparer did not exit after Stop.");
+            }
+        } finally { foreach (var preparer in preparers) preparer.Dispose(); }
     }
     public void Wait(int milliseconds, CancellationToken cancellation) {
         // SessionStartup keeps its cancellation source alive for already-dispatched callbacks.

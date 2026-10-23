@@ -92,6 +92,7 @@ try {
         $spec['app/node_modules/zod/package.json'] = Get-Utf8 '{"name":"zod"}'
         $spec['app/windows/LivingRoomDisplay.ps1'] = $realScriptBytes
         $spec['app/windows/LivingRoomDisplay.scr'] = Get-Utf8 "synthetic helper $Version"
+        $spec['app/windows/LivingRoomDisplay.Preview.exe'] = Get-Utf8 "synthetic preview preparer $Version"
         $spec['app/THIRD-PARTY-NOTICES.txt'] = Get-Utf8 'synthetic notices'
         $spec['runtime/node.exe'] = Get-Utf8 "synthetic node $NodeVersion"
         $spec['runtime/LICENSE'] = Get-Utf8 'synthetic runtime license'
@@ -981,10 +982,11 @@ try {
     # rename of app that follows. Only the scripted processes below are touched.
     $script:stopEvents = New-Object 'Collections.Generic.List[string]'
     function New-FakeProcess([int]$Id, [bool[]]$Waits) {
-        $fake = [pscustomobject]@{Id=$Id;Waits=(New-Object 'Collections.Generic.Queue[bool]')}
+        $fake = [pscustomobject]@{Id=$Id;Waits=(New-Object 'Collections.Generic.Queue[bool]');StartTime=([DateTime]'2026-01-01T00:00:00Z').AddSeconds($Id);Path=(Join-Path $app 'windows\LivingRoomDisplay.Preview.exe');Handle=[IntPtr]1}
         foreach ($wait in $Waits) { $fake.Waits.Enqueue($wait) }
         $fake | Add-Member -MemberType ScriptProperty -Name HasExited -Value { $false }
         $fake | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { param($Milliseconds) $script:stopEvents.Add("wait $($this.Id) $Milliseconds"); if ($this.Waits.Count) { return $this.Waits.Dequeue() }; return $true }
+        $fake | Add-Member -MemberType ScriptMethod -Name Dispose -Value { }
         return $fake
     }
     function Invoke-RealStop([hashtable]$Processes) {
@@ -993,6 +995,8 @@ try {
             if ($Filter -eq "Name='LivingRoomDisplay.scr'") { return @([pscustomobject]@{ProcessId=11;ExecutablePath=$hostExe},[pscustomobject]@{ProcessId=98;ExecutablePath='C:\Other\LivingRoomDisplay.scr'}) }
             if ($Filter -eq "Name='msedge.exe'") { return @([pscustomobject]@{ProcessId=12;CommandLine=('"msedge.exe" --type=renderer --user-data-dir="' + (Join-Path $InstallRoot 'edge-profile') + '"')},[pscustomobject]@{ProcessId=99;CommandLine='"msedge.exe" --profile-directory=Default'}) }
             if ($Filter -eq "ParentProcessId=13 AND Name='conhost.exe'") { return [pscustomobject]@{ProcessId=14} }
+            if ($Filter -eq "Name='LivingRoomDisplay.Preview.exe' AND ParentProcessId=13") { if ($Processes.ContainsKey(15)) { return [pscustomobject]@{ProcessId=15;ExecutablePath=(Join-Path $app 'windows\LivingRoomDisplay.Preview.exe')} }; return @() }
+            if ($Filter -eq 'ProcessId=15') { return [pscustomobject]@{ParentProcessId=13;ExecutablePath=(Join-Path $app 'windows\LivingRoomDisplay.Preview.exe')} }
             throw "Unexpected process query: $Filter"
         }
         function Get-Process { param($Id, $ErrorAction) if ($Processes.ContainsKey([int]$Id)) { return $Processes[[int]$Id] }; throw "Unexpected process lookup: $Id" }
@@ -1011,6 +1015,12 @@ try {
     $stopFailure = $null
     try { Invoke-RealStop @{11=(New-FakeProcess 11 @($true));12=(New-FakeProcess 12 @($true));13=(New-FakeProcess 13 @($false));14=(New-FakeProcess 14 @($true))} } catch { $stopFailure = $_.Exception.Message }
     Assert-True ($stopFailure -match 'server \(process 13\) did not exit within 10 seconds') "Stop returned although the server had not exited: $stopFailure"
+    $script:stopEvents.Clear()
+    Invoke-RealStop @{11=(New-FakeProcess 11 @($true));12=(New-FakeProcess 12 @($true));13=(New-FakeProcess 13 @($true));14=(New-FakeProcess 14 @($true));15=(New-FakeProcess 15 @($true))}
+    Assert-True (($script:stopEvents -join ', ') -eq 'wait 11 4000, wait 12 10000, kill 13, wait 13 10000, wait 15 10000, wait 14 10000') 'Stop failed to wait for the exact preparer after backend loss.'
+    $script:stopEvents.Clear()
+    Invoke-RealStop @{11=(New-FakeProcess 11 @($true));12=(New-FakeProcess 12 @($true));13=(New-FakeProcess 13 @($true));14=(New-FakeProcess 14 @($true));15=(New-FakeProcess 15 @($false,$true))}
+    Assert-True (($script:stopEvents -join ', ') -eq 'wait 11 4000, wait 12 10000, kill 13, wait 13 10000, wait 15 10000, kill 15, wait 15 10000, wait 14 10000') 'Stop failed to end and wait for its pinned lingering preparer.'
     Complete-Check 'stop waits for stopped processes'
 
     # ---- the new marker is readable by the previous control script ----------

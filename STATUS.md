@@ -1,4 +1,19 @@
 # Project status
+## Active PR reconciliation (#519, #517)
+
+The compatible UI baseline in PR #522 is being reconciled with merged pre-idle
+source PR #526 before the newer Home/Edit/Settings workflow in PR #518. The
+pre-idle source feature was independently reviewed at `1c79c032` and merged in
+`7771b178` after all ten applicable CI checks passed. It has not been installed
+or observed on the actual native display by this source reconciliation.
+
+PR #522's prior browser run exposed alert/control overlap at a short mobile
+viewport, assumptions about the moved top Save toolbar, Weather panel fitting,
+and the new help control's keyboard order. These are being corrected with
+isolated synthetic browser checks before final review. #519 remains open for
+installed/native acceptance; no installed files or settings are changed here.
+
+The following entries retain their historical checkpoint scope.
 
 ## Editor style workflow (local checkpoint)
 
@@ -53,6 +68,29 @@ Verification on this source: production build passed; Screen (8 groups), Studio
 data. Desktop and narrow Home/editor renders were inspected in RAM. The Motion
 suite's copy assertion now opens the same help exercised by the focused checks;
 its performance run was not repeated for this UI-only change.
+## Pre-idle snapshot source work (#525)
+
+Work is in progress on one private RAM-only snapshot attempt per eligible input
+epoch, 30 seconds before the configured Windows idle threshold. A prepared image
+expires after 90 seconds unless an authenticated native activation claims it.
+Cold/replacement workers establish a baseline and wait for new input; early,
+late, expired or uncertain activation is unavailable. This is an earlier-frame
+feature, not proof of the remaining black-thumbnail cause in #519.
+
+The source includes the private backend pending store/supervisor, separate
+non-display native preparer, OS-identified pipe claim and build/package/control
+lifetime integration. Typechecking and server/client build pass, alongside all
+505 unit tests. `windows/tests/Test-PreIdleSource.ps1` compiles both production
+binaries without running them and passes 29 preparation/order assertions, 29
+injected claim/lifetime assertions, five scalar framing assertions, six synthetic
+encoding cases, eight fake host lifecycle cases, active-input/surface regressions,
+32 fake runtime contracts, mocked preparer lifecycle and nine static installer
+policy groups. CI and independent final-head review are still pending.
+
+No installed app/data/settings or sealed native artifacts have changed; no
+watcher, desktop capture or native display was launched. Installed and actual
+automatic-screen-content acceptance remain separate under #519. This source
+feature does not establish the cause or resolution of the observed black image.
 
 ## Last screen encoding correction (#519)
 
