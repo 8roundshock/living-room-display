@@ -2,8 +2,8 @@
 
 ## Use different styles through the week
 
-Save the looks and widgets you want under **Edit display → Style → Saved styles**,
-then save those editor changes. In **Schedule → Edit schedule**, add a row, choose
+Save the looks and widgets you want in **Edit display**,
+then save those editor changes. In **Settings → Schedule → Edit schedule**, add a row, choose
 a saved style, the days it starts, and its From/Until times. Choose a fallback
 style (or your manual appearance) for the rest of the week, enable the schedule,
 and choose **Save schedule**. Nothing is scheduled until you choose and save it.
@@ -14,14 +14,14 @@ that time the next day. During daylight-saving changes, skipped times never run
 and repeated times follow the same schedule both times. If rows overlap, the first
 matching row wins; move it Up or Down to choose priority.
 
-The status names what's on the display and why. Home also shows that current look.
+Home names what's on the display and why.
 The editor canvas continues to show your manual appearance. Applying or saving a
 manual style does not pause the schedule: save any visual edits, then choose
-**Use manual appearance for 1 hour**. It resumes automatically at the time shown,
-or choose **Return to schedule now**. Scheduling never changes Windows lock settings.
+Home's **Use manual style for 1 hour**. It resumes automatically at the time shown,
+or choose **Return to schedule**. Scheduling never changes Windows lock settings.
 
-Schedule editing has its own Save/Cancel and retains a draft when you change
-inspector tabs. A deleted style stays marked as missing and is skipped; choose
+Schedule editing has its own Save/Cancel in Settings. A deleted style stays marked
+as missing and is skipped; choose
 another style or remove that row. The next matching row, fallback, or manual
 appearance keeps the display usable.
 

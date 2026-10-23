@@ -1,5 +1,21 @@
 # Project status
 
+## Scheduled styles continuation (#514, #517)
+
+The sidecar model/API and Settings/Home component split are published on
+`codex/scheduled-presets`. Configuration belongs to Settings; Home's compact
+status offers a one-hour saved-manual-style override and Return to schedule.
+Manual settings remain the editor source while only the effective display gets
+the selected saved visual. Reduced motion removes scheduled colour/brightness
+transitions. No schedule or saved style is created for an existing user.
+
+The production build and all 490 unit tests pass at this feature checkpoint,
+including boundary/DST/priority/missing-style/override/restart coverage and frozen
+reader checks on canonical state, backup and export while scheduling is active.
+The original Editor-based browser suite must be adapted to the integrated Settings
+route and Home controls; final browser/rendering and independent review remain
+pending. These source checks establish no installation or native acceptance.
+
 ## Published continuation
 
 The integration is published in [PR #507](https://github.com/8roundshock/living-room-display/pull/507)

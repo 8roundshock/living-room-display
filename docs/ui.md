@@ -29,9 +29,9 @@ opening a display leaves the editor in place. Only `/editor` may ask for device 
 
 ## Scheduled saved styles (#514)
 
-Style has a **Schedule** status and explicit **Use manual appearance for 1 hour** /
-**Return to schedule now** action outside its editing disclosure. The status names
-the committed active style and rule (or fallback); the canvas continues to show
+Settings owns **Schedule** configuration. Home shows the scheduled style with
+**Use manual style for 1 hour** / **Return to schedule** actions. The status names
+the committed active style and whether it is scheduled or a fallback; the canvas continues to show
 the manual editor draft. Applying or saving a manual style does **not** pause the
 schedule. Save visual edits first, then explicitly use the saved manual appearance
 temporarily. A nonvisual save never creates an override.
@@ -39,7 +39,7 @@ temporarily. A nonvisual save never creates an override.
 **Edit schedule** uses saved-style selects, starting weekdays and local From/Until
 times, with **Up**, **Down**, **Remove**, and separate **Save schedule** / **Cancel
 schedule edits**. Rows initially need chosen days/times before saving. The schedule
-draft survives changing inspector tabs and does not save or discard the visual
+draft belongs to Settings and does not save or discard the visual
 draft. A changed schedule from another window blocks a stale overwrite; cancel
 loads that newer schedule. Override-only changes preserve a schedule draft.
 
@@ -50,8 +50,8 @@ timezone is shown. Spring-forward missing clock minutes never run; repeated autu
 minutes match twice. Missing styles remain visible and repairable, and are skipped
 before trying the next matching row, fallback, then manual appearance.
 
-Home's inert preview and Showing list reflect the effective scheduled style. Its
-status points back to Style. Home's Show-widget actions explain when a scheduled
+Home's Showing list reflects the effective scheduled style. Its
+status points back to Settings. Home's Show-widget actions explain when a scheduled
 style controls visibility instead of silently editing an invisible manual layout.
 The live display keeps one mounted display; text/accent colours and brightness
 glide to the next look without a whole-screen fade or black rest. Widget visibility

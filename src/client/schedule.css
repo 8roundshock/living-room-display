@@ -20,6 +20,8 @@
 .schedule-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .schedule-settings .button { min-height: 44px; white-space: normal; }
 .schedule-override, .schedule-restore { margin-bottom: 10px; }
+.schedule-home .schedule-actions { align-items: center; }
+.schedule-home .button { min-height: 44px; }
 /* A scheduled look changes colour and brightness gently without fading the whole screen or
    mounting a second display (which would duplicate motion, timers and native controls). */
 @property --ambient-accent { syntax: '<color>'; inherits: true; initial-value: #8aa8c2; }
@@ -33,3 +35,6 @@
 .schedule-display { width: 100%; height: 100%; }
 .schedule-display .ambient { transition: --ambient-accent 12s linear, --ambient-text 12s linear, --tone-time 12s linear, --tone-sky 12s linear, --tone-water 12s linear, --tone-sun 12s linear, --tone-personal 12s linear, --tone-stone 12s linear; }
 .schedule-display .grid-ambient > .ambient-content { transition: filter var(--brightness-transition, 12s) ease-in-out; }
+@media (prefers-reduced-motion: reduce) {
+  .schedule-display .ambient, .schedule-display .grid-ambient > .ambient-content { transition: none; }
+}

@@ -2,11 +2,14 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import type { AppState, SavedPreset } from '../shared/contracts';
 import { emptySchedule, overlappingRules, SCHEDULE_RULE_LIMIT, WEEKDAY_NAMES, type PresetSchedule, type ScheduleSnapshot } from '../shared/schedule';
 import { api } from './api';
+import { scheduleStatus } from './schedule-status';
 import './schedule.css';
+
+export { scheduleStatus } from './schedule-status';
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-/** Held by Editor, so switching inspector tabs cannot discard a schedule draft. */
+/** Held by Settings; its route guard also includes this separate schedule draft. */
 export function useScheduleDraft(snapshot: ScheduleSnapshot | undefined) {
   const [base, setBase] = useState(() => ({ config: structuredClone(snapshot?.config ?? emptySchedule()), revision: snapshot?.revision ?? '' }));
   const [draft, setDraft] = useState(() => structuredClone(base.config));
@@ -28,22 +31,10 @@ export function useScheduleDraft(snapshot: ScheduleSnapshot | undefined) {
   return { base, draft, setDraft, dirty, reset };
 }
 
-export function scheduleStatus(snapshot: ScheduleSnapshot | undefined, presets: readonly SavedPreset[]): string {
-  if (!snapshot?.config.enabled) return 'Schedule off. Your manual appearance is on the display.';
-  const { selection } = snapshot;
-  if (selection.source === 'override' && snapshot.overrideUntil) {
-    const until = new Date(snapshot.overrideUntil).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: snapshot.timeZone });
-    return `Using your saved manual appearance until ${until}. The schedule resumes automatically.`;
-  }
-  const name = presets.find(item => item.id === selection.presetId)?.name;
-  if (selection.source === 'rule') return `On your display: ${name ?? 'saved style'}, from schedule row ${snapshot.config.rules.findIndex(row => row.id === selection.ruleId) + 1}.`;
-  if (selection.source === 'fallback') return `On your display: ${name ?? 'saved style'}, the fallback outside scheduled times.`;
-  return 'Outside a usable schedule range. Your manual appearance is on the display.';
-}
-
-export function ScheduleSettings({ snapshot, presets, editor, visualDirty, setState, reload }: {
+export function ScheduleSettings({ snapshot, presets, editor, setState, reload }: {
   snapshot: ScheduleSnapshot | undefined; presets: readonly SavedPreset[]; editor: ReturnType<typeof useScheduleDraft>;
-  visualDirty: boolean; setState: Dispatch<SetStateAction<AppState | null>>; reload: () => Promise<void>;
+  /** Kept optional for the preserved checkpoint; the integrated page never supplies an editor draft. */
+  visualDirty?: boolean; setState: Dispatch<SetStateAction<AppState | null>>; reload: () => Promise<void>;
 }) {
   const { draft, setDraft, dirty, base, reset } = editor;
   const [busy, setBusy] = useState(false), busyNow = useRef(false);
@@ -81,15 +72,9 @@ export function ScheduleSettings({ snapshot, presets, editor, visualDirty, setSt
       window.requestAnimationFrame(() => document.getElementById('schedule-restore-cancel')?.focus());
     } catch (caught) { setError(caught instanceof SyntaxError ? 'This file is not readable JSON. Nothing was restored.' : caught instanceof Error ? caught.message : 'Could not read this file.'); }
   };
-  return <section className="schedule-settings" aria-labelledby="schedule-heading">
+  return <section className="schedule-settings" id="schedule" aria-labelledby="schedule-heading">
     <h3 id="schedule-heading">Schedule</h3>
     <p className="schedule-status" role="status">{scheduleStatus(snapshot, presets)}</p>
-    {snapshot?.config.enabled && <div className="schedule-override">
-      <p className="hint">The editor canvas shows your manual appearance. Saving or applying a style does not pause the schedule. {visualDirty ? 'Save your visual changes first, then use them for 1 hour.' : 'Use your saved manual appearance temporarily, then return to the schedule.'}</p>
-      {snapshot.overrideUntil
-        ? <button type="button" className="button small" disabled={busy} onClick={() => void apply('/api/schedule/override', 'POST', { manual: false }, snapshot.revision, false, 'Returned to schedule.')}>Return to schedule now</button>
-        : <button type="button" className="button small" disabled={busy || visualDirty} onClick={() => void apply('/api/schedule/override', 'POST', { manual: true }, snapshot.revision, false, 'Using your saved manual appearance for 1 hour.')}>Use manual appearance for 1 hour</button>}
-    </div>}
     {snapshot?.warning && <p className="schedule-warning" role="alert">{snapshot.warning}</p>}
     {!!snapshot?.selection.missingPresetIds.length && <p className="schedule-warning">A scheduled style was deleted or is missing. Those rows are skipped; the next matching row, fallback, or manual appearance is used.</p>}
     <details className="disclosure schedule-disclosure">
@@ -104,7 +89,7 @@ export function ScheduleSettings({ snapshot, presets, editor, visualDirty, setSt
             {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
           </select></label>
           <p className="hint">If ranges overlap, the first matching row wins. Move rows up or down to set priority. Overnight ranges continue into the next day; equal times run until that time the next day.</p>
-          {!presets.length && <p className="hint">Save a style in Saved styles, then save your editor changes before adding it to a schedule.</p>}
+          {!presets.length && <p className="hint">Save a style in Edit display before adding a schedule.</p>}
           {draft.rules.map((row, index) => <fieldset className="schedule-row" key={row.id}>
             <legend>Row {index + 1}{snapshot?.selection.ruleId === row.id ? ' · active' : ''}</legend>
             <label><span className="field-label">Saved style</span><select id={`schedule-style-${row.id}`} value={row.presetId} onChange={event => change(current => ({ ...current, rules: current.rules.map(item => item.id === row.id ? { ...item, presetId: event.target.value } : item) }))}>

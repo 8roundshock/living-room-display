@@ -9,6 +9,7 @@ import { createApplication } from './app.ts';
 import { forecastFixture } from './fixtures.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import { MANUAL_OVERRIDE_MS } from '../shared/schedule.ts';
+import { assertPreviousReaderAccepts } from './compat/previous-reader.ts';
 
 const body = (value: unknown) => ({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
 test('schedule API switches at boundaries and on wake without changing manual settings, revisions, backups or exports', async () => {
@@ -50,8 +51,11 @@ test('schedule API switches at boundaries and on wake without changing manual se
     assert.equal(session.settings.appearance.brightness, 0.25);
     assert.equal(await readFile(join(directory, 'state.json'), 'utf8'), canonical);
     assert.equal(await readFile(join(directory, 'state.backup.json'), 'utf8'), backup);
+    assertPreviousReaderAccepts('data', JSON.parse(canonical), 'scheduled manual state');
+    assertPreviousReaderAccepts('data', JSON.parse(backup), 'scheduled manual backup');
     const laterExport = await get('/api/export');
     assert.deepEqual({ ...laterExport, exportedAt: exported.exportedAt }, exported);
+    assertPreviousReaderAccepts('import', laterExport, 'scheduled manual export');
     const override = await fetch(url + '/api/schedule/override', { method: 'POST', ...body({ manual: true }), headers: { ...body(null).headers, 'If-Match': scheduleTag } });
     assert.equal(override.status, 200);
     assert.equal((await get('/api/state')).schedule.selection.source, 'override');
