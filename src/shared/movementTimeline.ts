@@ -57,7 +57,9 @@ export function compositionTimeline(authored: WidgetGrid, enabled: Partial<Recor
   return (cycle: number): WidgetGrid => {
     const target = Math.max(0, Math.floor(Number.isFinite(cycle) ? cycle : 0));
     for (let index = boards.length; index <= target; index++) {
-      boards.push(composeWidgetGrid(source, active, index, boards[index - 1]!, index > 1 ? [boards[index - 2]!] : []));
+      // Runtime records its first cloned authored board as `previous`, with the authored input as
+      // `earlier`. Include that initial history as well as the previous two later arrangements.
+      boards.push(composeWidgetGrid(source, active, index, boards[index - 1]!, [boards[Math.max(0, index - 2)]!]));
     }
     return boards[target]!;
   };

@@ -48,7 +48,10 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     return page;
   }
   async function seek(page, seconds) {
-    await page.getByRole('slider', { name: 'Movement preview time', exact: true }).fill(String(seconds));
+    await page.getByRole('slider', { name: 'Movement preview time', exact: true }).evaluate((input, value) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, String(value));
+      input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, seconds);
     await page.waitForFunction(value => document.querySelector('.grid-ambient')?.getAttribute('data-preview-seconds') === Number(value).toFixed(3), seconds);
     // Let ResizeObserver settle measurements without advancing the preview's paused clock.
     await page.clock.runFor(40);
@@ -57,7 +60,7 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     return page.locator('.grid-ambient').evaluate(ambient => {
       const bounds = ambient.getBoundingClientRect();
       return [...ambient.querySelectorAll('.ambient-widget')].map(section => {
-        const box = section.getBoundingClientRect(), x = parseFloat(section.style.getPropertyValue('--float-x')) || 0, y = parseFloat(section.style.getPropertyValue('--float-y')) || 0;
+        const box = section.getBoundingClientRect(), x = (parseFloat(section.style.getPropertyValue('--float-x')) || 0) * box.width / section.offsetWidth, y = (parseFloat(section.style.getPropertyValue('--float-y')) || 0) * box.height / section.offsetHeight;
         const rects = [...section.querySelectorAll('svg, img')].map(el => el.getBoundingClientRect());
         const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT); let node;
         while ((node = walker.nextNode())) {

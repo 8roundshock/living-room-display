@@ -35,7 +35,7 @@ test('#515 forward and backward seeks replay live composition history without mu
   const settings = defaultSettings(), original = structuredClone(settings);
   const at = compositionTimeline(settings.widgetGrid, settings.widgets), sequential = [structuredClone(settings.widgetGrid)];
   for (let cycle = 1; cycle <= 24; cycle++) {
-    sequential.push(composeWidgetGrid(settings.widgetGrid, settings.widgets, cycle, sequential[cycle - 1], cycle > 1 ? [sequential[cycle - 2]!] : []));
+    sequential.push(composeWidgetGrid(settings.widgetGrid, settings.widgets, cycle, sequential[cycle - 1], [sequential[Math.max(0, cycle - 2)]!]));
   }
   for (const cycle of [24, 0, 12, 1, 4, 24, 8, 2]) {
     assert.deepEqual(at(cycle), sequential[cycle]);
@@ -54,7 +54,7 @@ test('#515 a new layout/visibility sequence cannot reuse old preview history', (
   before(12);
   const enabled = Object.fromEntries(WIDGET_IDS.map(id => [id, id === 'clock']));
   const after = compositionTimeline(settings.widgetGrid, enabled);
-  assert.deepEqual(after(1), composeWidgetGrid(settings.widgetGrid, enabled, 1, settings.widgetGrid));
+  assert.deepEqual(after(1), composeWidgetGrid(settings.widgetGrid, enabled, 1, settings.widgetGrid, [settings.widgetGrid]));
   assert.deepEqual(after(1), compositionTimeline(settings.widgetGrid, enabled)(1));
 });
 

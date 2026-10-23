@@ -1,5 +1,15 @@
 # Project status
 
+## Movement preview continuation (#515, #517)
+
+The published `codex/motion-scrubber` checkpoint preserves the original local
+corrections: first-composition history matches the live renderer, the synthetic
+range helper dispatches real input/change events, and ink geometry accounts for
+the preview's scaled slots. The original dirty patch is retained privately under
+`.local/` before committing. Production build and 15 focused float/timeline tests
+pass. The new isolated browser suite, responsive rendering and independent final
+integration review remain pending; no installed display or native test was run.
+
 ## Motion preview timeline (#515)
 
 The isolated feature adds a paused editor timeline for content float and widget
