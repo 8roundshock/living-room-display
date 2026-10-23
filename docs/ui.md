@@ -478,9 +478,21 @@ motion or the Off animation level.
   Fine** and one reduction (**Make room: Reminders small** for a small widget,
   **Weather medium** for a medium one, **Clock medium** for a large one). The
   Reminders tab is named with its count (“Reminders, 8 pending”).
-- **Preview movement** shows the draft's float (or steps) on the canvas; with Swap
-  places on it also reveals numbered arrangements and **Automatic**, which swaps
-  like the display. Editing returns to authored placement.
+- **Preview movement** (#515) opens a paused, local timeline below the canvas.
+  **Play/Pause**, one-second backward/forward steps, a keyboard-accessible range,
+  and interval-boundary buttons inspect content float (or steps) and whole-widget
+  swaps. The window covers 4, 12 or 24 intervals from this layout, including the
+  last complete glide/dim transition. Elapsed time includes tenths of a second.
+  Seeking pauses; playback stops at the end, and Play there restarts from zero.
+  Changing motion mode, interval, layout or visibility resets the preview history.
+  The board and widget tracks visit different waypoint sequences; these windows
+  are not a claim that motion repeats in a short cycle. The preview shares runtime
+  float targets, measured content slack, history-dependent arrangement composition,
+  and glide keyframes. It samples path targets directly; runtime additionally
+  limits late-timer/startup catch-up to device-pixel steps. Reduced motion uses the
+  same stepped positions and dim transitions as the display. The paused movement
+  clock does not freeze live information or affect polling, timers, settings,
+  saved presets or an open display. Editing returns to authored placement.
 - **Open display** (#436) opens one display window, named `still-display`, and reuses
   and focuses it on later clicks (`<a href="/display" target="still-display">` without
   `rel`, same-origin loopback, is the no-script fallback). While that window is open
