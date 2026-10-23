@@ -79,14 +79,26 @@ Escape focus return afterward. Motion's tab-indicator check now changes away
 from the editor's default Widgets tab before measuring the Widgets transition;
 a bounded probe confirms the former no-op and the corrected left/right slides.
 The full affected Home continuation passes (223 s), including offline retry and
-the strengthened focus guard; context help passes (10 s). Motion remains a running
-validation gate on frozen source `27ca78d`.
+the strengthened focus guard; context help passes (10 s). Motion on frozen
+`27ca78d` fails after the corrected editor-motion checks at its unchanged
+full-board TaskDuration guard: 0.1603 s above Off, against 0.15 s. Its later GPU
+frame-budget and 70-second stages were not reached; this is not a Motion pass.
 
 Typed schedule color properties serialize the rain hook as `rgb(115, 177, 171)`
 rather than the equivalent `#73b1ab`. The palette check resolves the hook to a
 computed color and compares the same exact palette value. No expected colors,
-paint audits, geometry or timing assertions changed. Its corrected continuation
-remains a validation gate.
+paint audits, geometry or timing assertions changed. The complete corrected
+Palette continuation passes (72 s), including the equivalent root Sand and
+canvas-tone property checks; persisted hex values remain exact.
+
+One predeclared identical-fixture comparison measured main `943c54fc` at 0.1096 s
+and candidate `3f752a8` at 0.1410 s for the same full-board Lively-minus-Off
+TaskDuration delta. That candidate delta is 0.0314 s above baseline with 0.0090 s
+headroom. It does not prove causality, cost neutrality, a budget exemption or a
+Motion-suite pass. The original failed run and bounded diagnostic are tracked in
+[#528](https://github.com/8roundshock/living-room-display/issues/528), separately
+from #364's ongoing-animation decision. Motion stays in the scheduled set and
+its guard remains unchanged; the complete 25-suite aggregate is not green.
 
 The following entries retain their historical checkpoint scope.
 

@@ -36,6 +36,12 @@ const FULL_BOARD = {
 };
 const PALETTE_RGB = new Set(Object.values(NATIVE_PALETTE).map((tone) => rgb(tone.hex)));
 
+/** Typed color properties may serialize as rgb() even when authored in hex; compare their color. */
+const customColor = (locator, property) => locator.evaluate((element, name) => {
+  const probe = document.createElement('i'); probe.style.color = `var(${name})`; element.append(probe);
+  const color = getComputedStyle(probe).color; probe.remove(); return color;
+}, property);
+
 /** Each widget section under `root`: its id, resolved --ambient-accent, first accent element colour and box styling. */
 function sections(root) {
   return root.locator('.ambient-widget').evaluateAll((els, selector) => els.map((el) => {
@@ -225,10 +231,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       // Adaptive Weather (#74): the --weather-rain hook is Sea glass; timing stays primary text; the label stays Mist.
       current = weatherWith(mode, 'large', 'now-open'); await open();
       assert.equal(await page.locator('.weather-body').getAttribute('data-weather-mode'), 'elevated');
-      const rainTone = await page.locator('.ambient-weather').evaluate(el => {
-        const probe = document.createElement('i'); probe.style.color = 'var(--weather-rain)'; el.append(probe);
-        const color = getComputedStyle(probe).color; probe.remove(); return color;
-      });
+      const rainTone = await customColor(page.locator('.ambient-weather'), '--weather-rain');
       assert.equal(rainTone, expected(mode, 'water'), `${mode} --weather-rain`);
       const bars = await page.locator('.rain-bar').evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
       assert.ok(bars.length >= 12, `${bars.length} hourly bars`); for (const bar of bars) assert.equal(bar, expected(mode, 'water'), `${mode} rain bar`);
@@ -340,7 +343,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     assert.deepEqual(await decoded('.preview-image'), { width: 320, height: 200, pixel: [90, 90, 90, 255] }, 'the synthetic last screen paints');
     // #224: data that stores the retired Sand renders the retuned Sand everywhere, root included.
     current = state({ mode: 'color' }); current.settings.appearance.accentColor = LEGACY_SAND; current.settings.widgets.photo = false; await open();
-    assert.equal(await page.locator('.ambient').first().evaluate((el) => getComputedStyle(el).getPropertyValue('--ambient-accent').trim().toLowerCase()), SAND, 'the ambient root renders the retuned Sand');
+    assert.equal(await customColor(page.locator('.ambient').first(), '--ambient-accent'), rgb(SAND), 'the ambient root renders the retuned Sand');
     for (const section of await sections(page)) await assertSection(section, 'color', 'stored retired Sand', page.locator(`[data-widget-id="${section.id}"]`));
     // #251: partly cloudy is its cloud's Stone with a Gold sun or Lilac moon part; fog Stone; drizzle Sea glass.
     const glyphs = [[0, true, 'sun', 'sun'], [0, false, 'moon', 'time'], [1, true, 'suncloud', 'stone'], [2, false, 'mooncloud', 'stone'], [3, true, 'cloud', 'stone'], [45, true, 'fog', 'stone'], [53, true, 'drizzle', 'water'], [63, true, 'rain', 'water'], [73, true, 'snow', 'sky'], [95, true, 'storm', 'water']];
@@ -464,8 +467,8 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     for (const preset of ['Phone', 'Room', 'Night']) {
       await p.getByRole('combobox', { name: 'Style', exact: true }).selectOption(`builtin:${preset.toLowerCase()}`);
       assert.equal(await pressed(p, 'Native colours'), true, `${preset} applies Native`); assert.equal(await canvasMode(p), 'native');
-      const tones = await p.locator('.preview-surface .ambient').evaluate(element => ['time', 'sky', 'personal'].map(role => getComputedStyle(element).getPropertyValue(`--tone-${role}`).trim()));
-      assert.deepEqual(tones, [NATIVE_PALETTE.time.hex, NATIVE_PALETTE.sky.hex, NATIVE_PALETTE.personal.hex], `${preset} canvas tones`);
+      const tones = await Promise.all(['time', 'sky', 'personal'].map(role => customColor(p.locator('.preview-surface .ambient'), `--tone-${role}`)));
+      assert.deepEqual(tones, [NATIVE_PALETTE.time.hex, NATIVE_PALETTE.sky.hex, NATIVE_PALETTE.personal.hex].map(rgb), `${preset} canvas tones`);
       await save(p);
     }
     assert.deepEqual({ preset: appearance().preset, accentMode: appearance().accentMode, brightness: appearance().brightness, accentColor: appearance().accentColor }, { preset: 'night', accentMode: 'native', brightness: 0.28, accentColor: '#9990b7' });
