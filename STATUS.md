@@ -17,8 +17,7 @@ selection remain independent global gates.
 
 The backend integration passes 64 targeted tests, including clearing active bytes
 after a missed off interval or an unreconstructable clock gap. Production build
-and both TypeScript checks pass. An earlier combined checkpoint passed 550 unit
-tests; the new final source still requires its full unit run.
+and both TypeScript checks pass. All 554 combined unit tests pass with no skips.
 
 The editor again consumes Home's Make-room query once without losing the selected
 picker widget. Picker samples retain the existing rendered 9 px text requirement
@@ -27,7 +26,7 @@ checks use the actual movement timeline's interval controls while retaining all
 geometry, anchoring and fitted-row assertions. Home/Settings desktop and editor
 mobile renders were inspected in RAM with synthetic data.
 
-Full combined units, the full 25-suite browser aggregate, independent final-head
+The full 25-suite browser aggregate, independent final-head
 review and applicable CI remain acceptance gates. Earlier recorded failures remain diagnostic evidence.
 No installed files/data/settings or sealed native artifacts changed; source checks
 do not establish actual screensaver or screenshot-content acceptance under #519.
