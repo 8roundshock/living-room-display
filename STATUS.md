@@ -21,6 +21,12 @@ desktop/mobile editor renders were inspected in RAM. Final-head independent
 review and applicable CI remain merge gates. #519 remains open for installed/
 native acceptance; no installed files or settings are changed here.
 
+A further keyboard continuation exposed a help tooltip consuming a newly opened
+dialog's Escape during its blur grace period. Help now consumes Escape only
+while its own trigger/tip owns focus. A controlled-clock regression fails with
+the old handler and passes with the correction; all three context-help groups
+pass, including the existing trigger-focused parent-preservation checks.
+
 The following entries retain their historical checkpoint scope.
 
 ## Editor style workflow (local checkpoint)

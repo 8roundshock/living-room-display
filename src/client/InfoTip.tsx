@@ -47,8 +47,13 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
+      // A blur's grace period can outlive focus moving into a picker or dialog.
+      // Dismiss that old help without taking the new control's Escape.
+      const active = document.activeElement;
+      if (active && (button.current?.contains(active) || tip.current?.contains(active))) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
       close();
     };
     document.addEventListener('pointerdown', outside, true);

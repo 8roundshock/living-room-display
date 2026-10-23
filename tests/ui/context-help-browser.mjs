@@ -57,6 +57,23 @@ export async function runContextHelpQa({ playwright, edge, capture = false } = {
     await page.keyboard.press('Escape'); await hidden(page);
     checks.push('Hover text is persistent; focus describes the trigger; Escape dismisses without moving focus or reopening; Enter/Space activate');
 
+    // Freeze the blur grace period: a fast keyboard transition must give the
+    // newly opened sheet its own Escape rather than spending it on stale help.
+    const quick = await desktop.newPage();
+    await quick.clock.install();
+    await quick.goto(base); await quick.locator('.home-page').waitFor();
+    await quick.getByRole('button', { name: 'About full screen' }).focus();
+    await quick.getByRole('tooltip').waitFor();
+    await quick.locator('.home-action[data-action="timer"]').focus();
+    await quick.keyboard.press('Enter');
+    await quick.locator('dialog.home-sheet[open]').waitFor();
+    assert.equal(await quick.getByRole('tooltip').count(), 1, 'the blur grace period has not elapsed');
+    await quick.keyboard.press('Escape');
+    await quick.locator('dialog.home-sheet[open]').waitFor({ state: 'detached', timeout: 1500 });
+    await hidden(quick);
+    assert.equal(await quick.locator('.home-action[data-action="timer"]').evaluate(element => document.activeElement === element), true, 'the sheet returns focus to Timer');
+    await quick.close();
+
     await page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: 'Edit display', exact: true }).click();
     await page.getByRole('tab', { name: 'Style', exact: true }).click();
     const brightness = page.getByRole('slider', { name: 'Brightness', exact: true });
@@ -91,7 +108,7 @@ export async function runContextHelpQa({ playwright, edge, capture = false } = {
     assert.deepEqual(app.store.snapshot().settings, before, 'help never saves live settings');
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.locator('.studio-savebar').waitFor({ state: 'detached' });
-    checks.push('Independent help instances, outside action, parent Escape, unmount cleanup, picker reopen and draft/Cancel preservation');
+    checks.push('Independent help instances, outside action, parent Escape including an unelapsed blur timer, unmount cleanup, picker reopen and draft/Cancel preservation');
 
     const popupPromise = desktop.waitForEvent('page');
     await page.getByRole('link', { name: 'Open display', exact: true }).click();
