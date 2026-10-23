@@ -1,27 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Settings, WidgetId } from '../shared/contracts';
-import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, freeSpanLimits, widgetSizes, type WidgetCategory, type WidgetSize } from '../shared/widgets';
+import { GRID_DENSITIES, WIDGET_CATALOG, WIDGET_CATEGORIES, freeSpanLimits, widgetSizes, widgetSpan, type WidgetSize } from '../shared/widgets';
 import { same } from './draft';
 import { RoomNotice } from './FreeSizeControls';
 import { Icon } from './icons';
-import { columnOutlook, listNames, type RoomFix, type RoomProblem } from './make-room';
+import { columnOutlook, listNames, roomProblem, type RoomFix, type RoomProblem } from './make-room';
+import { filteredPickerGroups, filteredPickerSelection, firstPickerSelection, type PickerFilter } from './picker-catalog';
 import { WidgetSample } from './WidgetSample';
 import './picker-groups.css';
 
-/**
- * The picker's grouped order (#78, #154): WIDGET_CATEGORIES order, catalog order inside each group,
- * empty groups left out. The rail and the initial selection both use it, so they cannot diverge.
- */
-export function pickerGroups(): { category: WidgetCategory; ids: WidgetId[] }[] {
-  return (Object.keys(WIDGET_CATEGORIES) as WidgetCategory[])
-    .map((category) => ({ category, ids: ACTIVE_WIDGET_IDS.filter((id) => WIDGET_CATALOG[id].category === category) }))
-    .filter((group) => group.ids.length > 0);
-}
-/** The first widget not on the display, in the order the picker shows (else the first one). */
-export function firstPickerSelection(widgets: Settings['widgets']): WidgetId {
-  const order = pickerGroups().flatMap((group) => group.ids);
-  return order.find((id) => !widgets[id]) ?? order[0]!;
-}
+export { pickerGroups, firstPickerSelection } from './picker-catalog';
 
 export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }: {
   settings: Settings;
@@ -33,27 +21,50 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
   onFix: (problem: RoomProblem, fix: RoomFix) => RoomProblem | null;
   onClose: () => void;
 }) {
-  const [selected, setSelected] = useState<WidgetId>(() => initial ?? firstPickerSelection(settings.widgets));
+  const [preferred, setSelected] = useState<WidgetId>(() => initial ?? firstPickerSelection(settings.widgets));
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<PickerFilter>('all');
   const [sizes, setSizes] = useState<Partial<Record<WidgetId, WidgetSize>>>({});
   // The picker owns its "No room" message: one live region, gone when the picker closes (#238).
   const [problem, setProblem] = useState<RoomProblem | null>(null);
-  const close = useRef<HTMLButtonElement>(null), catalog = useRef<HTMLDivElement>(null);
+  const close = useRef<HTMLButtonElement>(null), catalog = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null);
+  const results = useRef<HTMLDivElement>(null), detail = useRef<HTMLDivElement>(null);
+  const resultFocus = useRef<HTMLElement | null>(null);
+  const groups = filteredPickerGroups(settings.widgets, query, filter);
+  const visibleSelection = filteredPickerSelection(groups, preferred);
+  const selected = visibleSelection ?? preferred;
+  const resultCount = groups.reduce((count, group) => count + group.ids.length, 0);
   useEffect(() => {
     close.current?.focus();
-    // Bring the initial selection into the rail's own scroll area without moving the page (#154).
+    const trackFocus = (event: FocusEvent) => { resultFocus.current = results.current?.contains(event.target as Node) ? event.target as HTMLElement : null; };
+    document.addEventListener('focusin', trackFocus);
+    return () => document.removeEventListener('focusin', trackFocus);
+  }, []);
+  useEffect(() => { if (detail.current) detail.current.scrollTop = 0; }, [visibleSelection]);
+  useEffect(() => {
+    // Initial selection and filtered results scroll only the rail, never the typing user's page.
     const rail = catalog.current, item = rail?.querySelector<HTMLElement>('.catalog-item[aria-pressed="true"]');
+    // A saved change can remove a filtered item or the entire detail. Restore focus only if its
+    // previously focused node was removed; typing, filter and outside-editor focus stay untouched.
+    const previous = resultFocus.current;
+    if (previous && !previous.isConnected && document.activeElement === document.body) {
+      (previous.classList.contains('catalog-item') ? item ?? search.current : search.current)?.focus();
+    }
     if (rail && item && rail.scrollHeight > rail.clientHeight) {
       const top = item.offsetTop - rail.offsetTop, bottom = top + item.offsetHeight;
       if (top < rail.scrollTop || bottom > rail.scrollTop + rail.clientHeight) rail.scrollTop = Math.max(0, top - (rail.clientHeight - item.offsetHeight) / 2);
     }
-  }, []);
+  }, [selected, query, filter, visibleSelection, settings.widgets]);
   const widget = WIDGET_CATALOG[selected];
   const size = sizes[selected] ?? widget.defaultSize;
   const added = settings.widgets[selected];
-  const groups = pickerGroups();
+  const board = GRID_DENSITIES[settings.widgetGrid.density];
+  const preflight = useMemo(() => visibleSelection && !added
+    ? roomProblem(settings.widgetGrid, { kind: 'add', id: selected, size }, settings.widgets) : null,
+  [visibleSelection, added, settings.widgetGrid, settings.widgets, selected, size]);
   // A stale explanation (another widget, size or board) is never shown.
   const shown = problem && problem.request.id === selected && problem.request.kind === 'add' && problem.request.size === size
-    && same(problem.grid, settings.widgetGrid) && same(problem.enabled, settings.widgets) ? problem : null;
+    && same(problem.grid, settings.widgetGrid) && same(problem.enabled, settings.widgets) ? problem : preflight;
   // Free-size widgets (#73) say how far they can grow, qualified when this board has no room for a
   // full-height column (#238, #183).
   const free = !!freeSpanLimits(selected, settings.widgetGrid.density);
@@ -72,7 +83,23 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       <h2>Add a widget</h2>
       <button className="icon-button" aria-label="Close widget picker" ref={close} onClick={onClose}><Icon name="close" size={18} /></button>
     </div>
-    <div className="picker-body"><div className="widget-catalog" ref={catalog} aria-label="Widget catalog" onKeyDown={event => {
+    <div className="picker-discovery">
+      <div className="picker-search">
+        <input ref={search} type="search" aria-label="Search widgets" placeholder="Search widgets" value={query} autoComplete="off" spellCheck={false} onChange={event => { setQuery(event.target.value); setProblem(null); }} />
+        {query && <button className="icon-button" aria-label="Clear widget search" onClick={() => { setQuery(''); search.current?.focus(); }}><Icon name="close" size={16} /></button>}
+      </div>
+      <select aria-label="Filter widgets" value={filter} onChange={event => { setFilter(event.target.value as PickerFilter); setProblem(null); }}>
+        <option value="all">All widgets</option><option value="not-added">Not added</option><option value="on-display">On display</option>
+      </select>
+    </div>
+    <div className="picker-results"><span role="status">{resultCount} {resultCount === 1 ? 'widget' : 'widgets'}</span><span aria-hidden="true">Arrow keys browse</span></div>
+    <p className="sr-only" id="picker-keyboard-help">Use arrow keys to preview other widgets. Home and End go to the first and last result. Tab moves to size choices.</p>
+    {visibleSelection === null ? <div className="picker-empty">
+      <h3>{filter === 'not-added' && !query.trim() ? 'Every widget is on your display' : 'No matching widgets'}</h3>
+      <p>{query.trim() ? 'Try a name, description or category, or change the filter.' : 'Change the filter to browse the catalog.'}</p>
+      <button className="button" onClick={() => { setQuery(''); setFilter('all'); setProblem(null); search.current?.focus(); }}>Show all widgets</button>
+    </div> : <>
+    <div className="picker-body" ref={results}><div className="widget-catalog" ref={catalog} aria-label="Widget catalog" onKeyDown={event => {
       // Up/Down (and Left/Right, for the narrow three-column layout) move through the whole list
       // across groups and preview the focused widget; Home/End jump to the ends. The rail is one
       // roving tab stop (#348), so Tab goes on to the sizes and Add.
@@ -87,7 +114,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       {groups.map(({ category, ids }) => <div key={category} className="catalog-group" role="group" aria-labelledby={`catalog-group-${category}`}>
         <span className="catalog-group-label" id={`catalog-group-${category}`}>{WIDGET_CATEGORIES[category]}</span>
         {/* #348: one tab stop for the rail (the previewed widget); the arrow keys move it. */}
-        {ids.map(id => <button key={id} className="catalog-item" tabIndex={selected === id ? 0 : -1} aria-label={`Preview ${WIDGET_CATALOG[id].name}${settings.widgets[id] ? ', on your display' : ''}`} aria-pressed={selected === id} onClick={() => { setSelected(id); setProblem(null); }}>
+        {ids.map(id => <button key={id} className="catalog-item" tabIndex={selected === id ? 0 : -1} aria-describedby="picker-keyboard-help" aria-label={`Preview ${WIDGET_CATALOG[id].name}${settings.widgets[id] ? ', on your display' : ''}`} aria-pressed={selected === id} onClick={() => { setSelected(id); setProblem(null); }}>
           <Icon name={WIDGET_CATALOG[id].icon} size={19} />
           <span>{WIDGET_CATALOG[id].name}</span>
           {settings.widgets[id] && <Icon name="check" size={12} className="catalog-added" />}
@@ -95,24 +122,29 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       </div>)}
     </div>
     <section className="picker-detail" aria-label={`${widget.name} preview`}>
-      <div className="picker-detail-content" key={selected}>
+      <div className="picker-detail-content" key={selected} ref={detail}>
       <div className="picker-detail-heading"><h3>{widget.name}</h3><p>{widget.description}</p></div>
       <WidgetSample key={`${selected}-${size}`} id={selected} size={size} appearance={settings.appearance} density={settings.widgetGrid.density} />
       <div className="family-previews" aria-label={`${widget.name} size`}>
-        {widgetSizes(selected).map(family => <button key={family} aria-label={`${widget.name} ${family}`} aria-pressed={size === family} onClick={() => { setSizes(previous => ({ ...previous, [selected]: family })); setProblem(null); }}>
+        {widgetSizes(selected).map(family => <button key={family} aria-label={`${widget.name} ${family}`} aria-describedby={`picker-footprint-${family}`} aria-pressed={size === family} onClick={() => { setSizes(previous => ({ ...previous, [selected]: family })); setProblem(null); }}>
           {family[0].toUpperCase() + family.slice(1)}
         </button>)}
       </div>
+      {widgetSizes(selected).map(family => {
+        const span = widgetSpan(selected, family, settings.widgetGrid.revision);
+        return <span className="sr-only" key={family} id={`picker-footprint-${family}`}>{span.columns} columns by {span.rows} rows on the {board.columns} by {board.rows} grid.</span>;
+      })}
       {caption && <p className="picker-free-size">{caption}</p>}
-      </div>
       {added && <p className="picker-added-note" id="picker-added-note"><Icon name="check" size={13} />{addedNote}</p>}
+      {shown && <p className="picker-room-help" id="picker-room-help">{shown.fixes.length ? 'This size needs room. Choose a fix below to make room and add this widget to your draft.' : 'Make room in your layout before adding this widget.'}</p>}
+      </div>
       {/* The visible text is the accessible name in both states (#241). */}
-      <button className="button primary picker-add" disabled={added} aria-describedby={added ? 'picker-added-note' : undefined} onClick={() => setProblem(onAdd(selected, size))}>
+      <button className="button primary picker-add" disabled={added} aria-describedby={added ? 'picker-added-note' : shown ? 'picker-room-help' : undefined} onClick={() => setProblem(onAdd(selected, size))}>
         <Icon name="plus" size={17} />
         Add {widget.name}
       </button>
       <RoomNotice problem={shown} onFix={(current, fix) => setProblem(onFix(current, fix))} />
-    </section></div>
+    </section></div></>}
     <p className="picker-footnote">Sample content · unsaved</p>
   </div>;
 }
