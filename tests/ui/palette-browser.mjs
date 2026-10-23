@@ -225,7 +225,11 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       // Adaptive Weather (#74): the --weather-rain hook is Sea glass; timing stays primary text; the label stays Mist.
       current = weatherWith(mode, 'large', 'now-open'); await open();
       assert.equal(await page.locator('.weather-body').getAttribute('data-weather-mode'), 'elevated');
-      assert.equal((await page.locator('.ambient-weather').evaluate((el) => getComputedStyle(el).getPropertyValue('--weather-rain'))).trim().toLowerCase(), mode === 'native' ? NATIVE_PALETTE.water.hex : SAND, `${mode} --weather-rain`);
+      const rainTone = await page.locator('.ambient-weather').evaluate(el => {
+        const probe = document.createElement('i'); probe.style.color = 'var(--weather-rain)'; el.append(probe);
+        const color = getComputedStyle(probe).color; probe.remove(); return color;
+      });
+      assert.equal(rainTone, expected(mode, 'water'), `${mode} --weather-rain`);
       const bars = await page.locator('.rain-bar').evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
       assert.ok(bars.length >= 12, `${bars.length} hourly bars`); for (const bar of bars) assert.equal(bar, expected(mode, 'water'), `${mode} rain bar`);
       assert.equal(await colorOf('.rain-detail'), expected(mode, 'water'), `${mode} rain detail`);

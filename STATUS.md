@@ -4,8 +4,8 @@
 PR #518 has resumed. Its integration includes PR #522's corrected toolbar source
 at `8310497` and merged pre-idle snapshot source `7771b178`, preserving the
 Home/Edit display/Settings roles and the newer reminder focus, native capture and
-teardown safeguards. PR #522's reviewed main merge remains an explicit dependency;
-final base integration, review and CI are still required.
+teardown safeguards. It includes PR #522's reviewed main merge `943c54fc`.
+Final pushed-head review and CI are still required.
 
 The scheduled preview now admits frames using the effective visual and a composite
 configuration generation. An unobserved on/off/on interval, schedule edit or
@@ -34,8 +34,10 @@ checks use the actual movement timeline's interval controls while retaining all
 geometry, anchoring and fitted-row assertions. Home/Settings desktop and editor
 mobile renders were inspected in RAM with synthetic data.
 
-The frozen full 25-suite run at `df53cf7` reproduces the earlier #527 short-window
-alert failure; it remains dated diagnostic evidence. The corrected integration
+The frozen full 25-suite run at `df53cf7` finished 21/25 in 2121 s. Its failures
+were the earlier #527 short-window alert, Home modal Tab focus, a no-op motion-tab
+transition check, and the rain color hook's equivalent hex/RGB serialization.
+It remains dated diagnostic evidence. The corrected integration
 passes Studio (29 groups, 66 s), Workspace (18, 53 s), Styles (15, 22 s) and
 Free-size (13, 33 s), with a synthetic 390-by-480 alert render inspected in RAM.
 The aggregate, independent final-head review and applicable CI remain acceptance
@@ -76,7 +78,15 @@ fails at Tab 12 before the change and passes 30 Tabs in each direction plus
 Escape focus return afterward. Motion's tab-indicator check now changes away
 from the editor's default Widgets tab before measuring the Widgets transition;
 a bounded probe confirms the former no-op and the corrected left/right slides.
-The full affected Home and Motion continuations remain validation gates.
+The full affected Home continuation passes (223 s), including offline retry and
+the strengthened focus guard; context help passes (10 s). Motion remains a running
+validation gate on frozen source `27ca78d`.
+
+Typed schedule color properties serialize the rain hook as `rgb(115, 177, 171)`
+rather than the equivalent `#73b1ab`. The palette check resolves the hook to a
+computed color and compares the same exact palette value. No expected colors,
+paint audits, geometry or timing assertions changed. Its corrected continuation
+remains a validation gate.
 
 The following entries retain their historical checkpoint scope.
 
