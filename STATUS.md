@@ -52,6 +52,8 @@ captured scroll events and observed canvas/toolbar resizes. The unchanged Studio
 visibility and Workspace control-clearance checks cover both requirements.
 The corrected source passes Studio (29 groups, 59 s), Workspace (18, 52 s) and
 Styles (15, 20 s) together, including long errors without a floating/inline loop.
+Direct geometry updates preserve any pending animation-frame ID so unmount can
+still cancel the scheduled resize/focus update.
 
 The following entries retain their historical checkpoint scope.
 

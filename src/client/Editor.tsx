@@ -486,7 +486,6 @@ export function Editor({
     const narrow = window.matchMedia('(max-width: 700px) and (min-height: 361px)');
     let frame = 0;
     const update = () => {
-      frame = 0;
       // The message line directly above the alert row marks where the row starts; the row needs
       // about 64 px of view below the sticky Style toolbar.
       const anchor = document.querySelector('.canvas-messages');
@@ -522,7 +521,7 @@ export function Editor({
       setAlertFloating(narrow.matches && !inView && position !== null);
     };
     const schedule = () => {
-      if (!frame) frame = window.requestAnimationFrame(update);
+      if (!frame) frame = window.requestAnimationFrame(() => { frame = 0; update(); });
     };
     update();
     // Scroll geometry is needed before the next paint, including nested scrolls.
