@@ -1,5 +1,22 @@
 # Project status
 
+## Last screen encoding correction (#519)
+
+The native snapshot now uses an opaque RGB capture surface and RGB thumbnail.
+The previous ARGB surface let zero high bytes in GDI color data become transparency
+during scaling, erasing otherwise valid RGB. A synthetic regression through the
+production encoding helper failed with the previous formats and passes with the
+correction, preserving black and colored pixels with decoded alpha 255. Four
+size/scaling cases and two cancellation cases pass; host compilation, eight fake
+startup/lifecycle scenarios and the active-input regressions also pass.
+
+These are source checks only: no desktop capture, native display activation or
+installed files changed. The reported blank/unavailable automatic screensaver
+scene remains unverified; a secure screensaver's desktop context is a separate
+possible cause, and this correction does not open or switch desktops. Session
+exit still clears the RAM-only snapshot. Review and runtime acceptance remain
+tracked in [#519](https://github.com/8roundshock/living-room-display/issues/519).
+
 ## Published continuation
 
 The integration is published in [PR #507](https://github.com/8roundshock/living-room-display/pull/507)
