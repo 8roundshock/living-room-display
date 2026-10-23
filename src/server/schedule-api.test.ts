@@ -10,9 +10,46 @@ import { forecastFixture } from './fixtures.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import { MANUAL_OVERRIDE_MS, scheduledSettings } from '../shared/schedule.ts';
 import { AIR_ENDPOINT } from './air.ts';
+import { ECCC_ZONES_URL, ECCC_ALERTS_URL } from './alerts.ts';
 import { assertPreviousReaderAccepts } from './compat/previous-reader.ts';
 
 const body = (value: unknown) => ({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+
+test('editor-view state includes manual Weather/Air/Alerts demand hidden by a scheduled board without changing data', async () => {
+  const now = Date.parse('2026-10-18T13:00:00Z'), hour = now / 1000;
+  for (const id of ['weather', 'airQuality', 'dynamic'] as const) {
+    const directory = await mkdtemp(join(tmpdir(), 'lrd-manual-preview-demand-')), requested: string[] = [];
+    const app = await createApplication({ dataDirectory: directory, now: () => now, fetcher: async input => {
+      const url = new URL(input), endpoint = url.origin + url.pathname; requested.push(endpoint);
+      if (endpoint === ECCC_ZONES_URL) return Response.json({ type: 'FeatureCollection', features: [{ properties: { FEATURE_ID: 'synthetic-zone', NAME: 'Synthetic area' } }] });
+      if (endpoint === ECCC_ALERTS_URL) return Response.json({ type: 'FeatureCollection', features: [] });
+      return Response.json(endpoint === AIR_ENDPOINT ? { current: { time: hour, us_aqi: 42, pm2_5: 12, pm10: 18, uv_index: 3 }, hourly: { time: [hour, hour + 3600], us_aqi: [42, 45], uv_index: [3, 4] } } : forecastFixture(hour));
+    } });
+    const manual = defaultSettings();
+    for (const widget of Object.keys(manual.widgets) as (keyof typeof manual.widgets)[]) manual.widgets[widget] = widget === id;
+    const { appearance, widgets, widgetGrid, widgetOverrides, widgetBehavior, preview } = manual;
+    manual.savedPresets = [{ id: 'clock-only', name: 'Clock only', visual: { appearance, widgets: { ...widgets, [id]: false, clock: true }, widgetGrid, widgetOverrides, widgetBehavior, preview } }];
+    await app.store.update(data => { data.settings = manual; });
+    app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
+    const address = app.server.address(); assert.ok(address && typeof address === 'object'); const base = `http://127.0.0.1:${address.port}`;
+    try {
+      assert.equal((await fetch(base + '/api/schedule', { method: 'PUT', ...body({ enabled: true, fallbackPresetId: 'clock-only', rules: [] }) })).status, 200);
+      const before = await readFile(join(directory, 'state.json'), 'utf8');
+      const ordinary = await (await fetch(base + '/api/state')).json();
+      assert.equal(requested.length, 0, `${id}: ordinary state does not activate hidden manual providers`);
+      assert.equal(ordinary.airQuality.status, 'off'); assert.equal(ordinary.alerts.status, 'off');
+      const editor = await (await fetch(base + '/api/state', { headers: { 'X-LRD-View': 'editor' } })).json();
+      assert.deepEqual(editor.settings, ordinary.settings); assert.deepEqual(editor.schedule, ordinary.schedule);
+      assert.equal(await readFile(join(directory, 'state.json'), 'utf8'), before);
+      if (id === 'weather' || id === 'dynamic') assert.equal(editor.weather.status, 'fresh');
+      if (id === 'airQuality' || id === 'dynamic') { assert.equal(editor.airQuality.status, 'fresh'); assert.equal(editor.airQuality.current.aqi, 42); }
+      if (id === 'dynamic') { assert.equal(editor.alerts.status, 'fresh'); assert.ok(requested.includes(ECCC_ZONES_URL)); assert.ok(requested.includes(ECCC_ALERTS_URL)); }
+      assert.ok(requested.length > 0, `${id}: explicit manual editor view requests its provider`);
+      const ignored = await (await fetch(base + '/api/state', { headers: { 'X-LRD-View': 'something-else' } })).json();
+      assert.equal(ignored.airQuality.status, 'off'); assert.equal(ignored.alerts.status, 'off');
+    } finally { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }
+  }
+});
 test('schedule API switches at boundaries and on wake without changing manual settings, revisions, backups or exports', async () => {
   let now = new Date(2026, 9, 19, 7, 59).getTime();
   const directory = await mkdtemp(join(tmpdir(), 'lrd-schedule-api-'));

@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // #514/#517: Settings owns schedules, Home owns overrides, Editor keeps the manual visual.
 // Synthetic data, fake clock, ephemeral loopback server; optional screenshots stay in RAM.
 import assert from 'node:assert/strict';
@@ -25,7 +26,7 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
   };
   app = await start(); const port = app.server.address().port, base = `http://127.0.0.1:${port}`;
   const browser = await chromium.launch({ executablePath: edge, headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US', reducedMotion: 'reduce' });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
   const outside = await keepPagesLocal(context, base), errors = [], images = [], checks = [];
   context.on('page', page => page.on('pageerror', error => errors.push(error.message)));
   await context.clock.install({ time: new Date(now) });
@@ -167,6 +168,35 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
       if (capture) images.push({ name: `schedule-${width}`, bytes: await settingsPage.screenshot() });
     }
     checks.push('Desktop, 390px and 320px layouts have no horizontal overflow and keep 44px form/reorder/touch targets.');
+    for (const manualOn of [true, false]) {
+      const value = defaultSettings(); value.preview.enabled = false;
+      for (const id of Object.keys(value.widgets)) value.widgets[id] = manualOn && (id === 'clock' || id === 'reminders');
+      const { appearance, widgets, widgetGrid, widgetOverrides, widgetBehavior, preview } = value;
+      value.savedPresets = [{ id: 'visibility', name: 'Synthetic visibility', visual: { appearance, widgets: { ...widgets, clock: !manualOn, reminders: !manualOn }, widgetGrid, widgetOverrides, widgetBehavior, preview } }];
+      await app.store.update(data => { data.settings = value; data.reminders = []; });
+      await request('/api/schedule', 'PUT', { enabled: true, fallbackPresetId: 'visibility', rules: [] });
+      const current = await context.newPage(); await current.goto(base + '/'); await current.locator('.home-page').waitFor();
+      let showWrites = 0; current.on('request', request => { if (/\/api\/widgets\/.*\/show$/.test(request.url())) showWrites++; });
+      await current.locator('[data-action="reminder"]').click();
+      await current.getByRole('textbox', { name: 'What', exact: true }).fill('Synthetic scheduled reminder');
+      await current.getByRole('radio', { name: 'Anytime', exact: true }).check();
+      await current.getByRole('button', { name: 'Add reminder', exact: true }).click();
+      await current.locator('.home-sheet').waitFor({ state: 'detached' });
+      const status = current.locator('.home-main > .home-status');
+      if (manualOn) {
+        await status.getByText('A scheduled style is active. Use the manual style to show this widget.', { exact: true }).waitFor();
+        assert.doesNotMatch(await status.innerText(), /in Reminders on your display/);
+      } else await status.getByText(/in Reminders on your display/).waitFor();
+      await current.locator('[data-action="timer"]').click();
+      assert.equal(await current.getByRole('button', { name: 'Show the clock', exact: true }).count(), manualOn ? 1 : 0);
+      await current.getByRole('button', { name: 'Start a 1 min timer', exact: true }).click();
+      await current.locator('.home-sheet').waitFor({ state: 'detached' });
+      await status.getByText(manualOn ? /Clock is off, so it shows here only/ : /on your display's clock/).waitFor();
+      assert.equal(showWrites, 0, 'effective visibility never causes an unnecessary manual-layout write');
+      assert.deepEqual(app.store.snapshot().settings.widgets, value.widgets);
+      await current.close();
+    }
+    checks.push('Home reminder/timer results use effective scheduled visibility in both directions; manual layout is preserved and already-shown widgets cause no Show write.');
     assert.deepEqual(errors, []);
     return { checks, images, outside };
   } finally {

@@ -265,9 +265,8 @@ export async function runScreenQa({ playwright, edge } = {}) {
       for (const [name, status] of Object.entries(statuses)) {
         const session = await context({ route: created => created.route('**/api/windows/status', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(status) })) });
         const page = await session.context.newPage();
-        await page.goto(base + '/editor'); await page.getByRole('tab', { name: 'Style', exact: true }).click();
+        await page.goto(base + '/settings'); await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
         // Keep the screen on is the Screen part of Style › Motion, so the Style tab still fits 1280 × 720.
-        await page.locator('summary', { hasText: 'Motion' }).click();
         const body = page.getByRole('group', { name: 'Screen', exact: true });
         await body.getByRole('checkbox', { name: 'Keep the screen on', exact: true }).waitFor();
         await body.getByRole('button', { name: 'About keeping the screen on' }).focus();
@@ -282,34 +281,32 @@ export async function runScreenQa({ playwright, edge } = {}) {
       assert.deepEqual(results.never, { line: 'Windows turns the screen off after Never · Sleeps after Never', warning: null });
       assert.deepEqual(results.sleep, { line: 'Windows turns the screen off after 1 hour · Sleeps after 15 min', warning: "Windows sleeps after 15 min, before your screensaver starts at 20 min, so the display won't appear. Change it in Settings › System › Power & sleep, or choose a shorter wait." });
       assert.deepEqual(results.other, { line: null, warning: null }, 'off Windows: no power line');
-      checks.push(`Style › Motion › Screen: the toggle and its hint; Windows power line and the early display-off / sleep warning from synthetic statuses: ${JSON.stringify(results)}`);
+      checks.push(`Settings › This device › Screen: the toggle and its hint; Windows power line and the early display-off / sleep warning from synthetic statuses: ${JSON.stringify(results)}`);
 
       // Saving Keep the screen on, and the unsupported-browser note.
       await useSettings();
       const session = await context();
       const page = await session.context.newPage();
-      await page.goto(base + '/editor'); await page.getByRole('tab', { name: 'Style', exact: true }).click();
-      await page.locator('summary', { hasText: 'Motion' }).click();
+      await page.goto(base + '/settings'); await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
       const toggle = page.getByRole('checkbox', { name: 'Keep the screen on', exact: true });
       assert.equal(await toggle.isChecked(), true, 'on by default');
       assert.equal(await page.locator('.keep-awake-unsupported').count(), 0, 'Edge supports it');
       await toggle.uncheck();
-      await page.locator('.studio-savebar').waitFor();
+      await page.locator('.settings-savebar').waitFor();
       await page.getByRole('button', { name: 'Save changes' }).click();
-      await page.locator('.studio-savebar').waitFor({ state: 'detached' });
+      await page.locator('.settings-savebar').waitFor({ state: 'detached' });
       assert.equal(app.store.snapshot().settings.screen.keepAwake, false);
       assert.deepEqual(JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')).settings.screen, { keepAwake: false });
-      await toggle.check(); await page.locator('.studio-savebar').waitFor();
-      await toggle.uncheck(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
+      await toggle.check(); await page.locator('.settings-savebar').waitFor();
+      await toggle.uncheck(); await page.locator('.settings-savebar').waitFor({ state: 'detached' });
       await toggle.check();
       await page.getByRole('button', { name: 'Save changes' }).click();
-      await page.locator('.studio-savebar').waitFor({ state: 'detached' });
+      await page.locator('.settings-savebar').waitFor({ state: 'detached' });
       assert.equal('screen' in JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')).settings, false, 'back on: omitted at rest');
       await session.close();
       const old = await context({ init: [removeWakeLock] });
       const oldPage = await old.context.newPage();
-      await oldPage.goto(base + '/editor'); await oldPage.getByRole('tab', { name: 'Style', exact: true }).click();
-      await oldPage.locator('summary', { hasText: 'Motion' }).click();
+      await oldPage.goto(base + '/settings');
       await oldPage.locator('.keep-awake-unsupported').waitFor();
       assert.equal(await oldPage.locator('.keep-awake-unsupported').innerText(), "This browser can't keep the screen on. The screensaver display uses Microsoft Edge, which can.");
       await old.close();

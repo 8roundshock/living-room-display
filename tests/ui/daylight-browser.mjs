@@ -253,10 +253,10 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     await button('Cancel').click(); await savebar().waitFor({ state: 'detached' });
     assert.equal(await slider('Brightest').inputValue(), '75');
     // The time follows the Time format.
-    await page.getByRole('tab', { name: /^Weather/ }).click(); await page.getByRole('combobox', { name: 'Time format', exact: true }).selectOption('24h');
-    await styleTab();
+    await app.store.update(data => { data.settings.clockFormat = '24h'; });
+    await page.clock.runFor(30_000);
     assert.match(await status(), /Now 75% · brightest at 13:02/);
-    await button('Cancel').click(); await savebar().waitFor({ state: 'detached' });
+    assert.equal(await savebar().count(), 0, 'a time format saved elsewhere is not an editor draft');
     // An hour later, in the afternoon, the status follows.
     await page.clock.fastForward(60 * 60_000); await page.clock.runFor(1000);
     const afternoon = Number((await status()).match(/Now (\d+)%/)[1]);

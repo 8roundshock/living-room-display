@@ -22,6 +22,7 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
   const base = useRef(saved), live = useRef(draft), revision = useRef(revisionOf(state.settings));
   live.current = draft;
   const [saving, setSaving] = useState(false), savingNow = useRef(false);
+  const saveTrigger = useRef<HTMLButtonElement>(null), retrySaveFocus = useRef(false);
   const [message, setMessage] = useState(''), [error, setError] = useState('');
   const [query, setQuery] = useState(''), [locationMessage, setLocationMessage] = useState('');
   const [locating, setLocating] = useState(false), lookup = useRef(0), mounted = useRef(true);
@@ -46,6 +47,12 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
     return () => { mounted.current = false; lookup.current++; };
   }, []);
   useEffect(() => {
+    if (saving || !retrySaveFocus.current) return;
+    retrySaveFocus.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body || active === saveTrigger.current) saveTrigger.current?.focus();
+  }, [saving]);
+  useEffect(() => {
     if (new URLSearchParams(window.location.search).get('focus') === 'city') document.getElementById('city-search')?.focus();
   }, []);
   useEffect(() => {
@@ -62,7 +69,11 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
     void refresh(); const timer = window.setInterval(() => void refresh(), 30_000);
     return () => { active = false; window.clearInterval(timer); };
   }, [saved.location.latitude, saved.location.longitude, saved.units, setState]);
-  function restoreFocus() { window.requestAnimationFrame(() => lastControl.current?.isConnected && lastControl.current.focus()); }
+  function restoreFocus() { window.requestAnimationFrame(() => {
+    const active = document.activeElement;
+    if (active && active !== document.body && !(active as HTMLElement).closest('.settings-savebar')) return;
+    if (lastControl.current?.isConnected) lastControl.current.focus();
+  }); }
   async function save() {
     if (savingNow.current || locating || !dirty) return;
     savingNow.current = true; setSaving(true); setError('');
@@ -77,6 +88,7 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
       setMessage('Settings saved.'); setLocationMessage(''); restoreFocus();
     } catch (caught) {
       if (!mounted.current) return;
+      retrySaveFocus.current = true;
       const conflict = settingsConflict(caught);
       if (conflict) {
         rememberRevision(conflict.settings, conflict.etag); adopt(conflict.settings, conflict.etag);
@@ -130,6 +142,6 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
       </div>
       <p className="settings-status" role="status">{message}</p>
     </main>
-    {dirty && <div className="settings-savebar"><span>Unsaved changes</span><button className="button small" disabled={saving} onClick={cancel}>Cancel</button><button className="button primary" disabled={saving || locating} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
+    {dirty && <div className="settings-savebar"><span>Unsaved changes</span><button className="button small" disabled={saving} onClick={cancel}>Cancel</button><button ref={saveTrigger} className="button primary" disabled={saving || locating} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
   </div>;
 }

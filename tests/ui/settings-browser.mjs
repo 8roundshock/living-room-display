@@ -10,12 +10,14 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
+import { getVisual } from '../../src/client/model.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 
 export async function runSettingsQa({ playwright, edge, capture = false } = {}) {
   const started = Date.now(), { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const directory = await mkdtemp(join(tmpdir(), 'lrd-settings-'));
-  const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), fetcher: async () => Response.json(forecastFixture()) });
+  let providerCalls = 0;
+  const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), fetcher: async () => { providerCalls++; return Response.json(forecastFixture()); } });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`, browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], images = [], errors = [];
@@ -71,7 +73,16 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
     await units().selectOption('metric');
     await page.route('**/api/settings', async route => route.request().method() === 'PATCH' ? route.fulfill({ status: 503, json: { error: 'Synthetic save unavailable' } }) : route.continue());
     await button('Save changes').click(); await page.getByRole('alert').filter({ hasText: 'Synthetic save unavailable' }).waitFor();
+    await page.waitForFunction(() => document.activeElement?.textContent === 'Save changes');
     assert.equal(await units().inputValue(), 'metric'); assert.equal(saved().units, 'imperial');
+    await button('Save changes').click(); await page.getByRole('alert').filter({ hasText: 'Synthetic save unavailable' }).waitFor();
+    await page.waitForFunction(() => document.activeElement?.textContent === 'Save changes');
+    await page.unroute('**/api/settings');
+    let releaseFailure; const heldFailure = new Promise(resolve => { releaseFailure = resolve; });
+    await page.route('**/api/settings', async route => { await heldFailure; await route.fulfill({ status: 503, json: { error: 'Synthetic delayed failure' } }); });
+    await button('Save changes').click(); await button('Saving…').waitFor(); await units().focus(); releaseFailure();
+    await page.getByRole('alert').filter({ hasText: 'Synthetic delayed failure' }).waitFor();
+    assert.equal(await units().evaluate(element => element === document.activeElement), true, 'failure keeps a different control deliberately chosen during the request');
     await page.unroute('**/api/settings'); await button('Save changes').click(); await clean(); assert.equal(saved().units, 'metric');
     record('Failed saves retain the exact draft and a normal retry succeeds');
 
@@ -107,7 +118,8 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
     await button("Don't restore").click(); assert.equal(saved().units, 'metric');
     await page.getByLabel('Backup file', { exact: true }).setInputFiles({ name: 'valid.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
     await button('Restore').click(); await page.getByText(/Backup restored:/).waitFor();
-    await page.waitForFunction(() => document.querySelector('.time-units') === null && document.querySelector('select')?.value !== '');
+    await page.waitForFunction(() => document.querySelector('select')?.value === 'imperial');
+    assert.equal(await units().inputValue(), 'imperial');
     assert.equal(saved().units, 'imperial');
     record('Recovery refuses dirty/invalid data, asks before replacement, supports cancellation and restores only after confirmation');
 
@@ -121,6 +133,22 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
       await button('Cancel').click(); await clean();
     }
     record('The three navigation labels and Save/Cancel remain visible, 44px high and within narrow viewports');
+    await context.close();
+    const manual = defaultSettings(); manual.preview.enabled = false;
+    manual.location = { name: 'Synthetic manual area', latitude: 48.1, longitude: -78.1, timezone: 'America/Toronto' };
+    for (const id of Object.keys(manual.widgets)) manual.widgets[id] = id === 'weather';
+    const visual = getVisual(manual); visual.widgets.weather = false; visual.widgets.clock = true;
+    manual.savedPresets = [{ id: 'no-weather', name: 'Clock only', visual }];
+    await app.store.update(data => { data.settings = manual; });
+    assert.equal((await fetch(base + '/api/schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true, fallbackPresetId: 'no-weather', rules: [] }) })).status, 200);
+    context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' }); await keepPagesLocal(context, base);
+    page = await context.newPage(); const beforeProviders = providerCalls;
+    await page.goto(base + '/'); await page.locator('.home-page').waitFor(); assert.equal(providerCalls, beforeProviders, 'Home does not fetch a provider hidden by the scheduled board');
+    let editorHint = false; page.on('request', request => { if (new URL(request.url()).pathname === '/api/state' && request.headers()['x-lrd-view'] === 'editor') editorHint = true; });
+    const beforeManual = structuredClone(saved());
+    await page.goto(base + '/editor'); await page.locator('.preview-surface .current-temperature').waitFor();
+    assert.equal(editorHint, true); assert.ok(providerCalls > beforeProviders); assert.deepEqual(saved(), beforeManual);
+    record('The manual editor explicitly requests its weather hidden by a scheduled board, while Home remains effective-only and saved settings do not change');
     assert.deepEqual(errors, []); return { checks, images, seconds: Math.round((Date.now() - started) / 1000) };
   } catch (error) { console.log(JSON.stringify({ checksCompleted: checks.length, errors, page: await page.locator('body').innerText().catch(() => '') })); throw error; }
   finally { await browser.close(); app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }

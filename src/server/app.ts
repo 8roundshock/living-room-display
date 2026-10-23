@@ -154,15 +154,19 @@ export async function createApplication(options: ApplicationOptions) {
       const { settings, reminders, photo, settingsRevision } = store.view();
       const schedule = schedules.snapshot(settings, now());
       const effective = scheduledSettings(settings, schedule);
+      // A manual editor canvas can need providers hidden by the scheduled board.
+      // This read-only hint adds canonical manual needs; regular Home/display/native
+      // requests stay effective-only, and unsaved visual needs use the explicit APIs.
+      const editorView = request.headers['x-lrd-view'] === 'editor';
       if (!effective.preview.enabled || !effective.widgets.preview) clearPreview();
       // The forecast is refreshed only while a saved widget needs it (#352); air quality only while a saved
       // widget shows it (Air quality, or Dynamic with Air & UV, #437); official alerts only while Dynamic
       // shows them (#437). Each waits for a due refresh at most briefly (#351). Alerts are API-only: never
       // stored, exported or logged.
       const [weatherState, airQuality, alertsState] = await Promise.all([
-        needsForecast(effective) ? weather.get(effective) : weather.peek(effective),
-        needsAirQuality(effective) ? air.get(effective) : offAirQuality(effective),
-        needsAlerts(effective) ? alerts.get(effective) : offAlerts(),
+        needsForecast(effective) || (editorView && needsForecast(settings)) ? weather.get(effective) : weather.peek(effective),
+        needsAirQuality(effective) || (editorView && needsAirQuality(settings)) ? air.get(effective) : offAirQuality(effective),
+        needsAlerts(effective) || (editorView && needsAlerts(settings)) ? alerts.get(effective) : offAlerts(),
       ]);
       const state: AppState = { settings, schedule, reminders, weather: weatherState, preview: previewState(), airQuality, alerts: alertsState, timers: timers.list(now()), timersWarning: timers.warning,
         photo: photo ? { available: true, ...photo } : { available: false, id: null, width: null, height: null, updatedAt: null } };
@@ -191,7 +195,7 @@ export async function createApplication(options: ApplicationOptions) {
       });
       json(response, 200, saved.settings); return;
     }
-    // The editor's Weather tab asks for the forecast whether or not a saved widget needs it (#352).
+    // Settings and unsaved visual previews can ask for the saved area's forecast (#352/#517).
     if (method === 'GET' && path === '/api/weather') { json(response, 200, await weather.get(store.view().settings)); return; }
     if (method === 'GET' && path === '/api/air-quality') {
       // Editor preview before Save: the saved location, the requested (or saved) scale, the shared cache.

@@ -65,7 +65,7 @@ unchanged. Temporary-file cleanup recognizes only exact schedule atomic-save nam
 | `PATCH /api/reminders/:id`     | Partial `text`, `completed`, `dueAt`                                   | Updated reminder.                                                            |
 | `DELETE /api/reminders/:id`    | None                                                                   | Empty 204.                                                                   |
 | `DELETE /api/reminders/completed` | None                                                                | `{ "deleted": n }`; removes only completed reminders, atomically.            |
-| `GET /api/weather`             | None                                                                   | Normalized forecast for the saved location, refreshed when due (the editor's Weather tab). |
+| `GET /api/weather`             | None                                                                   | Normalized forecast for the saved location, refreshed when due (Settings or an unsaved editor visual preview). |
 | `GET /api/air-quality`         | Optional `scale=us\|european` (defaults to the saved scale)            | Editor preview of [air quality](#air-quality) for the saved location, `no-store`. |
 | `GET /api/locations?q=Toronto` | City query, 2–100 characters                                           | Up to eight city results with coordinates/timezone.                          |
 | `GET /api/export`              | None                                                                   | Downloadable settings/reminders JSON backup.                                 |
@@ -433,13 +433,17 @@ labels without converting twice. Daily date labels follow the provider's fixed
 offset boundaries; hourly epoch instants retain unambiguous timing across DST.
 [Open-Meteo parameter definitions](https://open-meteo.com/en/docs).
 
-`GET /api/state` refreshes the forecast only while a saved, enabled widget needs it
+`GET /api/state` normally refreshes the forecast only while an effective manual/scheduled widget needs it
 (#352): Weather, Forecast or Dynamic (#437), or Sun & moon or Air quality while the saved
 location's timezone is still `auto`, which only the forecast resolves. Otherwise it returns the
 cached forecast for the saved location and units, or the empty `unavailable` state with
 no error, and contacts no provider. `GET /api/weather` refreshes it whenever it is due; the
-editor requests it while its Weather tab is open, and while the draft shows a widget that
-needs it before Save.
+Settings requests it while open, and the editor requests it for an unsaved visual widget
+that needs it before Save. Edit display adds the read-only header `X-LRD-View: editor`
+to state requests: these include canonical manual Weather/Air/Alerts demand as well as
+the effective scheduled board, because its canvas previews the manual layout. Other
+header values are ignored. The hint does not change settings, schedule, same-origin
+or loopback checks; ordinary Home/display/native requests remain effective-only.
 
 A request waits for a due refresh at most about one second (#351). After that it answers
 with the cached state, while the refresh carries on and a later request sees its result.

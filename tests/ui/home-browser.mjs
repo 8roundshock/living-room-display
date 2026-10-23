@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Home (#438): day-to-day use beside the display. An isolated loopback server with temporary synthetic
 // data and a fake clock that the server follows; screenshots stay in RAM. Build first.
 import assert from 'node:assert/strict';
@@ -64,7 +65,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     page.on('console', message => { if (message.type() === 'error' && !/\b(409|503)\b|Failed to load resource/.test(message.text())) errors.push(message.text()); });
   };
   async function newContext(viewport = EDGE_VIEWPORTS[0]) {
-    const context = await browser.newContext({ viewport, reducedMotion: 'reduce', timezoneId: 'America/Toronto', locale: 'en-US' });
+    const context = await browser.newContext({ viewport, reducedMotion: 'reduce', timezoneId: 'America/Toronto', locale: 'en-US' }); await mockWindowsStatus(context);
     contexts.push(context);
     await keepPagesLocal(context, base);
     await context.addInitScript(instrumentSilence);
@@ -385,6 +386,38 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     await checkHomeNoteSync({ page, base, advance: ms => advance(context, ms) });
     checks.push('#512 Note: clean open text follows external saves without Save or an unload prompt; real typing survives, Discard uses current saved text, and typing back to saved clears the cached draft');
 
+    const pendingDraft = () => page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; });
+    for (const [kind, label, value] of [['reminder', 'What', 'Synthetic pending reminder'], ['worldClock', 'City', 'Lon'], ['countdown', 'Title', 'Synthetic pending countdown'], ['timer', 'Name (optional)', 'Synthetic pending timer']]) {
+      await action(page, kind).click(); await sheet(page).waitFor();
+      const field = sheet(page).getByLabel(label, { exact: true }), initial = await field.inputValue();
+      assert.equal(await pendingDraft(), false, `${kind}: merely opening defaults is clean`);
+      await field.fill(value); assert.equal(await pendingDraft(), true, `${kind}: typed values are guarded`);
+      await sheet(page).locator('.home-sheet-close').click(); await sheet(page).waitFor({ state: 'detached' });
+      await action(page, 'note').click(); assert.equal(await pendingDraft(), true, `${kind}: another clean dialog cannot clear its draft guard`);
+      await sheet(page).locator('.home-sheet-close').click(); await sheet(page).waitFor({ state: 'detached' });
+      await action(page, kind).click(); assert.equal(await field.inputValue(), value, `${kind}: closing and reopening keeps typed values`);
+      await field.fill(initial); assert.equal(await pendingDraft(), false, `${kind}: reverting to the original value is clean`);
+      await sheet(page).locator('.home-sheet-close').click(); await sheet(page).waitFor({ state: 'detached' });
+    }
+    await action(page, 'calendar').click(); const calendarText = sheet(page).getByRole('textbox', { name: 'What', exact: true });
+    await calendarText.fill('Synthetic calendar draft'); const calendarTime = sheet(page).getByLabel('Time', { exact: true }); await calendarTime.fill('10:22');
+    const selectedDay = await sheet(page).locator('[role="gridcell"][aria-selected="true"]').getAttribute('data-day');
+    await sheet(page).locator('.home-sheet-close').click(); await sheet(page).waitFor({ state: 'detached' }); assert.equal(await pendingDraft(), true);
+    await action(page, 'calendar').click(); assert.equal(await calendarText.inputValue(), 'Synthetic calendar draft'); assert.equal(await calendarTime.inputValue(), '10:22');
+    assert.equal(await sheet(page).locator('[role="gridcell"][aria-selected="true"]').getAttribute('data-day'), selectedDay);
+    await calendarText.fill(''); assert.equal(await pendingDraft(), false, 'browsing a calendar day without a typed reminder is clean');
+    await sheet(page).locator('.home-sheet-close').click(); await sheet(page).waitFor({ state: 'detached' });
+    await action(page, 'reminder').click(); await sheet(page).getByLabel('What', { exact: true }).fill('Keep this reminder draft'); await sheet(page).locator('.home-sheet-close').click();
+    await action(page, 'note').click(); await note.fill('Discard this note only'); await sheet(page).getByRole('button', { name: 'Discard', exact: true }).click();
+    assert.equal(await pendingDraft(), true, 'discarding a Note does not discard another pending form'); await sheet(page).locator('.home-sheet-close').click();
+    let homeLeaveChoice = false;
+    page.once('dialog', async dialog => { homeLeaveChoice = dialog.type() === 'beforeunload'; await dialog.dismiss(); });
+    await page.getByRole('link', { name: 'Settings', exact: true }).click({ noWaitAfter: true });
+    assert.equal(homeLeaveChoice, true); assert.equal(new URL(page.url()).pathname, '/');
+    await action(page, 'reminder').click(); assert.equal(await sheet(page).getByLabel('What', { exact: true }).inputValue(), 'Keep this reminder draft');
+    await sheet(page).getByLabel('What', { exact: true }).fill(''); assert.equal(await pendingDraft(), false); await sheet(page).locator('.home-sheet-close').click();
+    checks.push('All Home quick forms guard meaningful retained drafts across close/reopen and navigation, keep Calendar text/day/time, remain clean for defaults/reverts, and scope Note discard to that form');
+
     // Show on my display: Clock off → Show the clock; a full board → Make room in Edit display; ?focus=city.
     await reset(settings => { settings.widgets.clock = false; });
     await home(page);
@@ -410,9 +443,9 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     assert.equal(new URL(page.url()).search, '', 'the deep link is read once');
     await page.goto(`${base}/editor?focus=city`); await page.locator('#city-search').waitFor();
     await page.waitForFunction(() => document.activeElement?.id === 'city-search');
-    assert.equal(await page.getByRole('tab', { name: 'Weather', exact: true }).getAttribute('aria-selected'), 'true');
-    assert.equal(new URL(page.url()).pathname + new URL(page.url()).search, '/editor');
-    checks.push('Show on my display: with the Clock off the Timer sheet offers Show the clock and turns it on; on a full board World clocks says "No room on your display · Make room in Edit display", which opens /editor with the picker on World clocks; /editor?focus=city opens Weather with City focused; both links are read once');
+    assert.equal(await page.getByRole('heading', { name: 'Settings', exact: true }).count(), 1);
+    assert.equal(new URL(page.url()).pathname + new URL(page.url()).search, '/settings?focus=city');
+    checks.push('Show on my display: with the Clock off the Timer sheet offers Show the clock and turns it on; on a full board World clocks says "No room on your display · Make room in Edit display", which opens /editor with the picker on World clocks; /editor?focus=city redirects to Settings with City focused');
 
     // Concurrency: two Home pages, and a Home add during an Edit display draft.
     await reset();

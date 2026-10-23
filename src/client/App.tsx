@@ -75,7 +75,7 @@ export function App() {
     const requestId = ++request.current;
     const sentAt = performance.now();
     try {
-      const { body: received, etag } = await apiTagged<AppState>('/api/state');
+      const { body: received, etag } = await apiTagged<AppState>('/api/state', page === 'edit' ? { headers: { 'X-LRD-View': 'editor' } } : {});
       // The settings revision travels with these settings, for the editor's If-Match (#287).
       rememberRevision(received.settings, etag);
       setReachedAt((previous) => Math.max(previous, sentAt));
@@ -105,7 +105,7 @@ export function App() {
           network: !(caught instanceof ApiError) || caught.network,
         });
     }
-  }, []);
+  }, [page]);
   useEffect(() => {
     if (retired) return;
     void reload();

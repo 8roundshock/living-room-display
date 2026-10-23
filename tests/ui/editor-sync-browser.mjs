@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Editor connection and sync (#232, #142, #242, #287, #350, #289): clear network errors that clear
 // after recovery, status-based reminder conflicts, two editor tabs keeping each other's list edits and
 // widgets (also when one saves before its poll), and Save keeping focus while it runs. Build first;
@@ -27,7 +28,7 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], images = [], errors = [], contexts = [];
   async function open(viewport = { width: 1280, height: 720 }, { wait = true } = {}) {
-    const context = await browser.newContext({ viewport, reducedMotion: 'reduce', timezoneId: 'America/Toronto', locale: 'en-US' });
+    const context = await browser.newContext({ viewport, reducedMotion: 'reduce', timezoneId: 'America/Toronto', locale: 'en-US' }); await mockWindowsStatus(context);
     contexts.push(context);
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
@@ -37,8 +38,17 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     return page;
   }
   const button = (page, name) => page.getByRole('button', { name, exact: true });
-  const tab = (page, name) => page.getByRole('tab', { name: name === 'Reminders' ? /^Reminders/ : name, exact: name !== 'Reminders' }).click();
-  const alert = (page, text) => page.getByRole('alert').filter({ hasText: text });
+  const tab = async (page, name) => {
+    if (name === 'Reminders') {
+      if (!new URL(page.url()).pathname.startsWith('/editor')) {
+        await page.getByRole('button', { name: /^All reminders/ }).click();
+        return;
+      }
+      throw new Error('Reminder actions must use a separate Home page, preserving the editor draft.');
+    }
+    await page.getByRole('tab', { name, exact: true }).click();
+  };
+  const alert = (page, text) => page.locator('[role="alert"], .home-sheet-status.error').filter({ hasText: text });
   const noRawFetch = async (page, label) => assert.doesNotMatch(await page.locator('body').innerText(), /Failed to fetch|TypeError|NetworkError/, `${label}: no raw browser error`);
   async function reset(update = () => {}) {
     await app.store.update(data => { data.settings = defaultSettings(); data.reminders = []; update(data); });
@@ -50,7 +60,7 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     await page.route('**/api/**', route => route.abort());
     await page.goto(base + '/editor');
     await page.getByText("Can't reach the display server on this computer.", { exact: true }).waitFor();
-    assert.equal(await page.locator('.fallback-hint').innerText(), 'The editor needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.');
+    assert.equal(await page.locator('.fallback-hint').innerText(), 'The app needs the display server that runs on this computer. Try again in a moment; if it keeps failing, restart the app.');
     await noRawFetch(page, 'loading page');
     if (capture) images.push({ name: 'offline-loading', bytes: await page.screenshot() });
     // #438: Home's loading page names Home.
@@ -75,25 +85,33 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
     assert.equal(await page.locator('.save-status').innerText(), 'Unsaved changes');
     assert.equal(await button(page, 'Save changes').evaluate(element => element === document.activeElement), true, 'focus returns to Save for a retry');
     await noRawFetch(page, 'failed Save');
-    // Add reminder fails the same way and keeps the form open with its text.
-    await tab(page, 'Reminders'); await button(page, 'Add reminder').click();
-    await page.getByRole('textbox', { name: 'Reminder' }).fill('Synthetic offline reminder');
-    await button(page, 'Save reminder').click();
-    await alert(page, NETWORK).waitFor();
-    assert.equal(await page.getByRole('textbox', { name: 'Reminder' }).inputValue(), 'Synthetic offline reminder', 'the reminder form stays open with its text');
     await page.clock.runFor(30_000);
     await button(page, 'Retry').waitFor();
-    assert.equal(await page.locator('.studio-error').count(), 1, 'one alert, not a repeat of the same message');
-    await noRawFetch(page, 'failed poll');
-    await page.unroute('**/api/**');
-    await page.clock.runFor(30_000);
+    assert.equal(await page.locator('.studio-error').count(), 1);
+    await page.unroute('**/api/**'); await page.clock.runFor(30_000);
     await page.locator('.studio-error').waitFor({ state: 'detached' });
-    assert.equal(await page.locator('.save-status').innerText(), 'Unsaved changes', 'recovery keeps the draft');
-    await button(page, 'Save reminder').click(); await page.getByRole('textbox', { name: 'Reminder' }).waitFor({ state: 'detached' });
+    assert.equal(await page.locator('.save-status').innerText(), 'Unsaved changes');
+    const visualBeforeHome = app.store.snapshot().settings.appearance.brightness;
+    // Home owns independently saved reminders. A failed request retains the form without joining
+    // the visual editor draft; this page is intentionally separate, not an invisible editor tab.
+    const home = await open(undefined, { wait: false });
+    await home.goto(base + '/'); await home.locator('.home-page').waitFor();
+    await tab(home, 'Reminders'); await button(home, 'Add reminder').click();
+    await home.getByRole('textbox', { name: 'Reminder' }).fill('Synthetic offline reminder');
+    await home.route('**/api/reminders', route => route.abort());
+    await button(home, 'Save reminder').click(); await alert(home, NETWORK).waitFor();
+    assert.equal(await home.getByRole('textbox', { name: 'Reminder' }).inputValue(), 'Synthetic offline reminder');
+    await noRawFetch(home, 'failed reminder Save');
+    await home.unroute('**/api/reminders'); await button(home, 'Save reminder').click();
+    await home.getByRole('textbox', { name: 'Reminder' }).waitFor({ state: 'detached' });
+    assert.deepEqual(app.store.snapshot().reminders.map(item => item.text), ['Synthetic offline reminder']);
+    await home.close();
+    assert.equal(await page.locator('.studio-savebar').count(), 1, 'Home reminder save keeps the other page’s visual draft');
+    assert.equal(await slider.inputValue(), edited, 'the typed visual value stays');
+    assert.equal(app.store.snapshot().settings.appearance.brightness, visualBeforeHome, 'Home reminder save does not persist visual settings');
     await button(page, 'Save changes').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
     assert.equal(app.store.snapshot().settings.appearance.brightness, Number(edited) / 100);
-    assert.deepEqual(app.store.snapshot().reminders.map(item => item.text), ['Synthetic offline reminder']);
-    checks.push('offline Save and Add reminder: clear message, draft/form kept, one alert with Retry after a failed poll, cleared after recovery, then both save');
+    checks.push('Editor offline Save keeps draft/one Retry alert and recovers; Home reminder failure independently keeps its form and saves on retry');
 
     // 3. A Save that failed while the server restarted clears after the next successful poll,
     //    even though no poll ever failed.
@@ -117,7 +135,7 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
 
     // 4. #142: an edit refused with 409 is recognised by status, whatever the wording.
     await reset(data => { data.reminders = [{ id: '11111111-1111-4111-8111-111111111111', text: 'Synthetic reminder', completed: false, dueAt: null, createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString() }]; });
-    await page.reload(); await button(page, 'Edit layout').waitFor();
+    await page.goto(base + '/'); await page.locator('.home-page').waitFor();
     await tab(page, 'Reminders'); await button(page, 'Edit: Synthetic reminder').click();
     await page.getByRole('textbox', { name: 'Reminder' }).fill('Synthetic reminder, edited');
     await page.route('**/api/reminders/*', route => route.request().method() === 'PATCH' ? route.fulfill({ status: 409, json: { error: 'Synthetic different wording' } }) : route.continue());

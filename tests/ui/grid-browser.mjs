@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Actual production Edge grid/photo interactions. Synthetic data and RAM images only.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -49,7 +50,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       viewport: { width: 1440, height: 1000 },
       timezoneId: 'America/Toronto',
       ...options,
-    });
+    }); await mockWindowsStatus(context);
     page = await context.newPage();
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => {
@@ -187,9 +188,9 @@ export async function runGridQa({ playwright, edge } = {}) {
         .evaluate((e) => document.activeElement === e),
       true,
     );
-    await tab('Weather');
+    await page.goto(base + '/settings');
     await page.getByRole('combobox', { name: 'City', exact: true }).fill('Tor');
-    await clean();
+    assert.equal(await page.locator('.settings-savebar').count(), 0, 'query text alone is not a settings edit');
     await open(onlyClock());
     await layout();
     await clean();

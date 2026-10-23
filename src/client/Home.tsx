@@ -11,6 +11,7 @@ import { civilFromDate, countdownLabel, parseCivil } from './calendar';
 import { readFirstRunDismissed } from './FirstRunCard';
 import { HOME_WIDGETS, longDay, namesList, relativeDay, todayGroups, type ComingUpItem } from './home-model';
 import { HomeSheet, type SheetKind } from './HomeSheets';
+import { homeDraftPending } from './home-drafts';
 import { ReminderRow, makeRoomLink, type HomeContext, type StatusMessage } from './HomeParts';
 import { reminderFormPending } from './RemindersPanel';
 import { Icon, type IconName } from './icons';
@@ -132,12 +133,11 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
   }, [done.map(timer => timer.id).join(), announce]);
   useEffect(() => { document.title = done.length ? 'Done · Still · Home' : 'Still · Home'; }, [done.length]);
 
-  const anyDirty = useRef(false);
   useEffect(() => {
-    const leave = (event: BeforeUnloadEvent) => { if (anyDirty.current || reminderFormPending()) event.preventDefault(); };
+    const leave = (event: BeforeUnloadEvent) => { if (homeDraftPending(settings) || reminderFormPending()) event.preventDefault(); };
     window.addEventListener('beforeunload', leave);
     return () => window.removeEventListener('beforeunload', leave);
-  }, []);
+  }, [settings]);
 
   const sheetRef = useRef(sheet);
   sheetRef.current = sheet;
@@ -207,7 +207,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
           {!status && offline && <span className="home-status-text home-offline">Offline · showing saved reminders</span>}
         </div>
       </main>
-      {sheet && <HomeSheet kind={sheet.kind} context={context} onClose={closeSheet} onDirty={dirty => { anyDirty.current = dirty; }} status={
+      {sheet && <HomeSheet kind={sheet.kind} context={context} onClose={closeSheet} status={
         <div className={`home-status home-sheet-status ${status ? 'shown' : ''} ${status?.tone === 'error' ? 'error' : ''}`} role="status" aria-live="polite">{status && renderStatus(status)}</div>
       } />}
     </div>

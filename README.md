@@ -7,21 +7,22 @@ short note, air quality, sun and moon times, and an optional dim screen preview.
 All modules are optional. Drag and resize widgets on a snapping grid, choose
 adaptive sizes and outline/digital/analog clocks, or add a dim local photo.
 
-**Current state: Home/display/editor integration verified locally.**
+**Current source: Home, Edit display and Settings, with integration checks in progress.**
 The selected approach is a custom local web dashboard plus a Windows helper.
 The React UI, local API, persistence, weather and RAM-only snapshot handoff are implemented.
 Device-area weather with a Toronto fallback, editable presets and reminders,
 and configurable hiding of empty reminders are implemented. The sparse interface
 uses the [recorded HIG-inspired design choices](docs/design.md). The display studio
-puts one focused Style, Widgets, Weather or Reminders inspector beside its live
-preview. The top Style selector lets you update a saved style or save the look as new;
-one Save/Cancel group commits the editor's settings and photo drafts. Cities appear as you type, and
-advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
-The latest read-only installation marker observation identifies `f85be29`, installed
-2026-10-21 at 04:50:32 UTC. The verified source checkpoint is being
-published for review and CI; that is separate from an installed candidate or a
-release package. Native screensaver acceptance and wider release compatibility
-checks remain. [STATUS.md](STATUS.md) separates source checks from installation evidence.
+puts a focused Style or Widgets inspector beside its visual preview. The top Style
+selector updates an existing look or saves it as new. Home owns daily actions and
+reminders; Settings owns weather, global preferences, schedule and recovery.
+Cities appear as you type, a finite movement timeline previews the shared motion
+model, and optional weekday/time ranges select saved styles. Each page keeps drafts
+until saved or deliberately abandoned. See [editing and checks](docs/ui.md).
+PR #518 tracks current integration and exact check/review evidence. Source, installed
+provenance and native acceptance are distinct; use the installed Status command
+to identify a local installation. Wider release compatibility remains separate.
+[STATUS.md](STATUS.md) records source checkpoints and dated historical evidence.
 
 This is the independent
 [8roundshock/living-room-display](https://github.com/8roundshock/living-room-display)

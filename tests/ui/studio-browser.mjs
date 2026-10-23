@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Production Edge interaction regressions. Own ephemeral loopback server/data;
 // synthetic provider and device responses only. Screenshots are RAM buffers.
 import assert from 'node:assert/strict';
@@ -110,7 +111,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
       viewport,
       timezoneId: 'America/Toronto',
       reducedMotion,
-    });
+    }); await mockWindowsStatus(context);
     const page = await context.newPage();
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => {
@@ -162,12 +163,23 @@ export async function runStudioQa({ playwright, edge } = {}) {
     );
     await page.clock.install({ time: new Date(now) });
     await page.goto(base + route);
-    await page.locator('.clock-time').waitFor();
+    await page.locator('.clock-time, .settings-page, .home-page').first().waitFor();
     await page.clock.runFor(2000);
     return { context, page };
   }
   async function tab(page, name) {
-    await page.getByRole('tab', { name, exact: true }).click();
+    const path = new URL(page.url()).pathname;
+    if (name === 'Weather') {
+      if (path !== '/settings') await page.goto(base + '/settings');
+      await page.locator('.settings-page').waitFor();
+    } else if (name === 'Reminders') {
+      if (path !== '/') await page.goto(base + '/');
+      await page.locator('.home-page').waitFor();
+      if (!await page.locator('.home-sheet-allReminders').count()) await page.getByRole('button', { name: /^All reminders/ }).click();
+    } else {
+      if (path !== '/editor') await page.goto(base + '/editor');
+      await page.getByRole('tab', { name, exact: true }).click();
+    }
     await page.clock.runFor(300);
   }
   const save = (page) =>
@@ -179,16 +191,20 @@ export async function runStudioQa({ playwright, edge } = {}) {
   const beginNewStyle = (page) => page.getByRole('button', { name: /^Save as new/ }).click();
   const saveNewStyle = (page) => page.getByRole('button', { name: 'Save new style', exact: true });
   async function saved(page) {
-    await page.locator('.studio-savebar').waitFor({ state: 'detached' });
+    await page.locator('.studio-savebar, .settings-savebar').waitFor({ state: 'detached' });
   }
   /** The focused control's accessible name (aria-label, else its text), or BODY when focus was lost. */
-  const focused = (page) =>
-    page.evaluate(() => {
+  const focused = async (page) => {
+    // Controls restored after asynchronous file/request work use the browser’s next frame.
+    await page.clock.runFor(50);
+    await page.waitForFunction(() => document.activeElement && document.activeElement !== document.body);
+    return page.evaluate(() => {
       const element = document.activeElement;
       return !element || element === document.body
         ? 'BODY'
         : element.getAttribute('aria-label') || element.textContent.trim();
     });
+  };
   /** Console errors the browser logs for a request a check aborted on purpose. */
   const dropAborted = () => {
     for (let index = errors.length - 1; index >= 0; index--)
@@ -270,40 +286,28 @@ export async function runStudioQa({ playwright, edge } = {}) {
       pages: [...element.querySelectorAll('nav[aria-label="Pages"] a')].map((link) => [link.textContent.trim(), link.getAttribute('href'), link.getAttribute('aria-current')]),
       display: [element.querySelector('a.open-display').getAttribute('target'), element.querySelector('a.open-display').getAttribute('rel'), element.querySelector('a.open-display').getAttribute('aria-label')],
     }));
-    assert.deepEqual(header, { height: 64, brand: '/', pages: [['Home', '/', null], ['Edit display', '/editor', 'page']], display: ['still-display', null, 'Open display'] });
+    assert.deepEqual(header, { height: 64, brand: '/', pages: [['Home', '/', null], ['Edit display', '/editor', 'page'], ['Settings', '/settings', null]], display: ['still-display', null, 'Open display'] });
     assert.equal(await page.title(), 'Still · Edit display');
     checks.push('#438 header at 1440×1000: 64 px, the brand links Home, Pages nav with Edit display current, Open display targets still-display; title "Still · Edit display"');
     assert.equal(await save(page).count(), 0);
     assert.equal(await cancel(page).count(), 0);
     await tab(page, 'Style');
     await chooseStarter(page, 'night');
+    // Browser navigation must not silently discard the visual draft.
+    const stayed = new Promise(resolve => page.once('dialog', async dialog => { assert.equal(dialog.type(), 'beforeunload'); await dialog.dismiss(); resolve(); }));
+    await page.locator('.studio-pages a[href="/settings"]').click({ noWaitAfter: true });
+    await stayed;
+    assert.equal(new URL(page.url()).pathname, '/editor');
+    assert.equal(await styleSelect(page).inputValue(), 'builtin:night');
+    await cancel(page).click(); await saved(page);
     await selectCity(page);
     assert.equal(app.store.snapshot().settings.location.name, 'Toronto');
-    assert.match(
-      await page.locator('.canvas-note').innerText(),
-      /preview still shows Toronto/,
-    );
     await cancel(page).click();
-    assert.equal(
-      await page.locator('.current-location strong').innerText(),
-      'Toronto',
-    );
-    assert.equal(
-      await page
-        .getByRole('combobox', { name: 'City', exact: true })
-        .inputValue(),
-      '',
-    );
-    await tab(page, 'Style');
-    assert.equal(
-      await page
-        .getByRole('slider', { name: 'Brightness', exact: true })
-        .inputValue(),
-      '55',
-    );
-    checks.push(
-      'global Cancel restores appearance/city and clears search without saving',
-    );
+    assert.equal(await page.locator('.current-location strong').innerText(), 'Toronto');
+    assert.equal(await page.getByRole('combobox', { name:'City', exact:true }).inputValue(), '');
+    await tab(page,'Style');
+    assert.equal(await page.getByRole('slider', { name:'Brightness', exact:true }).inputValue(),'55');
+    checks.push('Visual draft navigation asks before leaving; dismissed navigation retains it; Editor and Settings Cancel each restore their own fields');
 
     await tab(page, 'Weather');
     const input = page.getByRole('combobox', { name: 'City', exact: true });
@@ -323,7 +327,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await saved(page);
     assert.equal(app.store.snapshot().settings.location.name, 'London');
     await page.reload();
-    await page.locator('.clock-time').waitFor();
+    await page.locator('.clock-time, .settings-page, .home-page').first().waitFor();
     await tab(page, 'Weather');
     assert.equal(
       await page.locator('.current-location strong').innerText(),
@@ -577,11 +581,19 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await page
       .getByRole('button', { name: 'Save reminder', exact: true })
       .click();
+    const completionSaved = page.waitForResponse(response => response.request().method()==='PATCH' && response.url().includes('/api/reminders/') && response.ok());
     await page
       .getByRole('button', { name: 'Complete: Synthetic changed', exact: true })
       .click();
+    await completionSaved;
+    await page.getByText('Completed “Synthetic changed”', { exact:true }).waitFor();
     // The empty list hides on the display; the editor canvas keeps its placeholder (#233).
-    await page.locator('.ambient-reminders .reminders-placeholder').waitFor();
+    assert.equal(app.store.snapshot().reminders.filter(item => !item.completed).length, 0);
+    assert.equal(app.store.snapshot().settings.widgetBehavior.reminders.hideWhenEmpty, true);
+    const emptyPreview=await context.newPage();
+    await emptyPreview.goto(base+'/editor');
+    await emptyPreview.locator('.ambient-reminders .reminders-placeholder').waitFor();
+    await emptyPreview.close();
     await page
       .getByRole('button', { name: 'History (1)', exact: true })
       .click();
@@ -610,7 +622,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     }
     await context.close();
     ({ page, context } = await open());
-    await page.locator('#tab-Reminders').click();
+    await tab(page, 'Reminders');
     await page.clock.runFor(300);
     for (const reminder of dated) {
       await page.getByRole('button', { name: `Edit: ${reminder.text}`, exact: true }).click();
@@ -676,7 +688,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
       .getByRole('button', { name: 'Use device location', exact: true })
       .click();
     await page.evaluate(() => window.__finishGeo());
-    await page.getByText('Area ready to save', { exact: true }).waitFor();
+    await page.getByText('Area ready to save.', { exact: true }).waitFor();
     assert.equal(app.store.snapshot().settings.locationSource, 'fallback');
     await save(page).click();
     await saved(page);
@@ -687,80 +699,29 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await context.close();
 
     await reset();
-    ({ page, context } = await open({ permission: 'granted', geo: 'success' }));
-    await page.getByText('Unsaved changes', { exact: true }).waitFor();
-    assert.equal(await page.evaluate(() => window.__geoCalls), 1);
-    await app.store.patchSettings({
-      location: {
-        name: 'Other editor city',
-        latitude: 40,
-        longitude: 50,
-        timezone: 'UTC',
-      },
-    });
-    await save(page).click();
-    await saved(page);
-    assert.equal(
-      app.store.snapshot().settings.location.name,
-      'Other editor city',
-    );
-    checks.push(
-      'automatic device draft cannot replace a concurrent saved manual city',
-    );
+    ({ page, context } = await open({ permission:'granted', geo:'success', route:'/settings' }));
+    assert.equal(await page.evaluate(() => window.__geoCalls),0,'Even granted permission never starts an automatic location request');
+    assert.equal(await page.locator('.settings-savebar').count(),0);
+    await app.store.patchSettings({ locationSource:'manual', location:{ name:'Other editor city',latitude:40,longitude:50,timezone:'UTC' } });
+    await page.clock.runFor(30_001);
+    await page.locator('.current-location strong').filter({hasText:'Other editor city'}).waitFor();
+    assert.equal(await page.locator('.settings-savebar').count(),0);
     await context.close();
-
-    // Every failed explicit lookup must guard its fallback against another editor.
-    for (const geo of ['denied', 'unavailable']) {
+    checks.push('Entering Settings never requests GPS, including with granted permission; a concurrent manual city refreshes without creating an automatic draft');
+    for (const geo of ['denied','unavailable']) {
       await reset();
-      await app.store.patchSettings({
-        locationSource: 'device',
-        location: {
-          name: 'Device area',
-          latitude: 12.3,
-          longitude: 45.7,
-          timezone: 'auto',
-        },
-      });
-      ({ page, context } = await open({ geo }));
-      await tab(page, 'Weather');
-      await page
-        .getByRole('button', { name: 'Use device location', exact: true })
-        .click();
-      await page
-        .locator('.current-location strong')
-        .filter({ hasText: 'Toronto' })
-        .waitFor();
-      await app.store.patchSettings({
-        location: {
-          name: 'Concurrent manual city',
-          latitude: 40,
-          longitude: 50,
-          timezone: 'UTC',
-        },
-      });
-      const requestPromise = page.waitForRequest(
-        (request) =>
-          request.url().endsWith('/api/settings') &&
-          request.method() === 'PATCH',
-      );
-      await save(page).click();
-      const submitted = (await requestPromise).postDataJSON();
-      assert.equal(
-        submitted.automaticLocation,
-        true,
-        'explicit failure fallback must send guarded request intent',
-      );
-      assert.equal(submitted.locationSource, 'fallback');
-      await saved(page);
-      assert.equal(
-        app.store.snapshot().settings.location.name,
-        'Concurrent manual city',
-      );
+      await app.store.patchSettings({locationSource:'manual',location:{name:'Kept city',latitude:12.3,longitude:45.7,timezone:'UTC'}});
+      ({page,context}=await open({geo,route:'/settings'}));
+      await page.getByRole('button',{name:'Use device location',exact:true}).click();
+      assert.equal(await page.locator('.current-location strong').innerText(),'Kept city');
+      assert.equal(await page.locator('.settings-savebar').count(),0,'Failed location lookup does not stage a fallback write');
+      await app.store.patchSettings({locationSource:'manual',location:{name:'Concurrent manual city',latitude:40,longitude:50,timezone:'UTC'}});
+      await page.clock.runFor(30_001);
+      await page.locator('.current-location strong').filter({hasText:'Concurrent manual city'}).waitFor();
+      assert.equal(app.store.snapshot().settings.location.name,'Concurrent manual city');
       await context.close();
     }
-    checks.push(
-      'explicit denied/unavailable lookup fallbacks send guarded intent and preserve a concurrent manual city',
-    );
+    checks.push('Denied/unavailable explicit device lookup preserves the chosen city and never stages a fallback over a concurrent manual city');
 
     await reset();
     // #436: compositions change only with Swap places on (opt-in); the board floats either way.
@@ -827,7 +788,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
         viewport: { width, height: 844 },
         reducedMotion: 'reduce',
       }));
-      for (const name of ['Style', 'Widgets', 'Weather', 'Reminders']) {
+      for (const name of ['Style', 'Widgets']) {
         await tab(page, name);
         assert.equal(
           await page.evaluate(
@@ -949,7 +910,6 @@ export async function runStudioQa({ playwright, edge } = {}) {
     ]) {
       ({ page, context } = await open({ viewport }));
       await tab(page, 'Style');
-      await chooseStarter(page, 'night');
       await tab(page, 'Reminders');
       await page
         .getByRole('button', { name: 'Add reminder', exact: true })
@@ -965,7 +925,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
         const field = input.getBoundingClientRect(),
           label = input.closest('label').getBoundingClientRect(),
           bar = document
-            .querySelector('.studio-savebar')
+            .querySelector('.home-sheet-header')
             .getBoundingClientRect();
         return {
           active: document.activeElement === input,
@@ -989,7 +949,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
       await context.close();
     }
     checks.push(
-      'keyboard-focused reminder field and label stay below the top Save controls and within the viewport at 390/320px and compact keyboard heights',
+      'keyboard-focused reminder field and label stay below the dialog header and within the viewport at 390/320px and compact keyboard heights',
     );
 
     // #83: a later Style save must not reset the saved clock style.
@@ -1165,14 +1125,14 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await app.store.patchSettings({ locationSource: 'manual', location: { name: 'Synthetic failing city', latitude: 33.3, longitude: 44.4, timezone: 'UTC' } });
     ({ page, context } = await open());
     await tab(page, 'Weather');
-    let statusRow = page.locator('.weather-status-row');
+    let statusRow = page.locator('.settings-weather-age');
     await statusRow.locator('.weather-status-error').waitFor();
     assert.deepEqual(
       (await statusRow.innerText()).split('\n').map((line) => line.trim()),
       ['Forecast unavailable', 'Weather is unavailable. Check the connection and location settings.'],
     );
     const caution = await statusRow.locator('.weather-status-error').evaluate((element) => getComputedStyle(element).color);
-    assert.doesNotMatch(await page.locator('.disclosure', { hasText: 'Location & forecast details' }).textContent(), /Weather is unavailable/, 'the disclosure keeps only hints');
+    assert.equal(await page.getByRole('button', {name:'About weather location',exact:true}).count(),1);
     await context.close();
     await reset();
     ({ page, context } = await open());
@@ -1187,26 +1147,26 @@ export async function runStudioQa({ playwright, edge } = {}) {
       const response = await route.fetch();
       await route.fulfill({ response, json: staleWeather(await response.json()) });
     });
-    await page.reload();
-    await page.locator('.clock-time').waitFor();
     const weatherReply = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/weather');
-    await tab(page, 'Weather');
+    await page.goto(base + '/settings');
+    await page.locator('.settings-page').waitFor();
     // The status line is read after the tab's own forecast request, not only from the poll's state.
     await weatherReply;
-    statusRow = page.locator('.weather-status-row');
+    statusRow = page.locator('.settings-weather-age');
     await statusRow.locator('.weather-status-error').waitFor();
     const staleLines = (await statusRow.innerText()).split('\n').map((line) => line.trim());
     assert.match(staleLines[0], /^Saved forecast · /);
     assert.equal(staleLines[1], 'Weather update failed. Showing the last successful forecast.');
     assert.equal(await statusRow.locator('.weather-status-error').evaluate((element) => getComputedStyle(element).color), caution);
     assert.equal(caution, 'rgb(201, 167, 130)', 'the caution tone');
-    assert.equal(await statusRow.locator('.status-dot').evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(184, 151, 118)');
-    assert.doesNotMatch(await page.locator('.disclosure', { hasText: 'Location & forecast details' }).textContent(), /Weather update failed/);
-    images.push({ label: 'Weather tab stale status', bytes: await page.locator('.inspector').screenshot({ type: 'png', animations: 'disabled' }) });
+    assert.equal(await statusRow.locator('.status-dot').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(184, 151, 118)', 'stale forecast keeps the caution status dot');
+
+    assert.equal(await page.getByRole('button', {name:'About weather location',exact:true}).count(),1);
+    images.push({ label: 'Weather tab stale status', bytes: await page.locator('.settings-card').first().screenshot({ type: 'png', animations: 'disabled' }) });
     await page.unroute('**/api/state');
     await page.unroute('**/api/weather');
     await context.close();
-    checks.push('#347 the Weather tab status line shows "Weather is unavailable. Check the connection and location settings." under "Forecast unavailable" for a provider failing from the first load, and "Weather update failed. Showing the last successful forecast." under "Saved forecast · …" for a stale forecast, both in the caution tone; the details disclosure keeps only hints');
+    checks.push('#347 the Settings weather status line shows "Weather is unavailable. Check the connection and location settings." under "Forecast unavailable" for a provider failing from the first load, and "Weather update failed. Showing the last successful forecast." under "Saved forecast · …" for a stale forecast, both in the caution tone; location help remains contextual');
 
     // #312: on a phone-width editor an action's error shows inside the viewport where the action
     // happened (a failed Save reminder and Save changes with /api/** aborted, a rejected photo),
@@ -1217,12 +1177,12 @@ export async function runStudioQa({ playwright, edge } = {}) {
       ({ page, context } = await open({ viewport }));
       const label = `${viewport.width}×${viewport.height}`;
       const visibleAlert = async (text, what) => {
-        const alert = page.locator('.studio-error').filter({ hasText: text });
+        const alert = page.locator('.studio-error, .home-sheet-status.error').filter({ hasText: text });
         await alert.waitFor();
         await page.clock.runFor(50);
         const box = await alert.boundingBox();
         assert.ok(box && box.y >= 0 && box.y + box.height <= viewport.height, `${label} ${what}: the alert is inside the viewport ${JSON.stringify(box)}`);
-        assert.equal(await page.getByRole('alert').count(), 1, `${label} ${what}: one alert`);
+        assert.equal(await page.locator('.studio-error, .home-sheet-status.error').filter({visible:true}).count(), 1, `${label} ${what}: one visible error`);
         return { alert, box };
       };
       const clear = (box, other, what) =>
@@ -1239,9 +1199,28 @@ export async function runStudioQa({ playwright, edge } = {}) {
       // The alert takes no focus (the reminder form's own focus after a failure is #372's).
       assert.ok(!(await page.evaluate(() => document.activeElement?.closest('.studio-error'))), `${label}: the alert does not take focus`);
       clear(first.box, await saveReminder.boundingBox(), `${label}: the alert does not cover Save reminder`);
+      const retryGeometry = () => saveReminder.evaluate(button => {
+        const rect=button.getBoundingClientRect(), body=button.closest('.home-sheet-body').getBoundingClientRect();
+        const hit=document.elementFromPoint(rect.x+rect.width/2, rect.y+rect.height/2);
+        return { enabled:!button.disabled, focused:document.activeElement===button, height:Math.round(rect.height*1000)/1000,
+          inView:rect.top>=body.top-1 && rect.bottom<=body.bottom+1, hit:hit===button || button.contains(hit) };
+      });
+      assert.deepEqual(await retryGeometry(),{enabled:true,focused:true,height:44,inView:true,hit:true}, `${label}: failed Save leaves a visible keyboard/pointer retry`);
       await page.unroute('**/api/**');
+      let releaseRepeated;
+      const repeatedGate = new Promise(resolve => { releaseRepeated=resolve; });
+      await page.route('**/api/reminders', async route => { await repeatedGate; await route.abort(); });
+      const repeatedRequest=page.waitForRequest(request=>request.method()==='POST' && request.url().endsWith('/api/reminders'));
+      await saveReminder.press('Enter'); await repeatedRequest;
+      try {
+        assert.equal(await page.locator('.home-sheet-status.error').count(),0,'Starting another attempt clears the previous identical error');
+      } finally { releaseRepeated(); }
+      const repeated=await visibleAlert(NETWORK,'identical repeated Save reminder failure');
+      clear(repeated.box,await saveReminder.boundingBox(),`${label}: repeated error leaves retry unobscured`);
+      assert.deepEqual(await retryGeometry(),{enabled:true,focused:true,height:44,inView:true,hit:true},`${label}: identical repeated failure restores the real retry target`);
+      await page.unroute('**/api/reminders');
       await page.getByRole('button', { name: 'Dismiss message', exact: true }).click();
-      await page.locator('.studio-error').waitFor({ state: 'detached' });
+      await page.locator('.home-sheet-status.error').waitFor({ state: 'hidden' });
       await page.getByRole('button', { name: 'Discard', exact: true }).click();
       dropAborted();
       // Save changes.
@@ -1297,7 +1276,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     const stateFile = async (name) => JSON.parse(await readFile(join(directory, name), 'utf8'));
     ({ page, context } = await open());
     await tab(page, 'Style');
-    await page.locator('summary', { hasText: 'Data & recovery' }).click();
+    await tab(page, 'Weather');
     const status = page.locator('.data-status');
     const restore = page.getByRole('button', { name: 'Restore from backup…', exact: true });
     let choosers = 0;
@@ -1307,11 +1286,11 @@ export async function runStudioQa({ playwright, edge } = {}) {
       await restore.click();
       await (await chooser).setFiles({ name: 'living-room-display-backup.json', mimeType: 'application/json', buffer: Buffer.from(text) });
     };
-    await page.locator('.data-hint').waitFor();
-    assert.match(await page.locator('.data-hint').innerText(), /^A backup holds your saved settings, styles and reminders\. Your photo isn't included\.$/);
+    await page.locator('.data-disclosure .hint').first().waitFor();
+    assert.match(await page.locator('.data-disclosure .hint').first().innerText(), /saved settings, styles and reminders.*Photos stay on this device/s);
     assert.equal(await page.getByText(/idle activation|installed helper/).count(), 0, 'the idle-helper sentence is gone');
     // Unsaved edits are refused before any file is chosen.
-    await range(page, 'Brightness');
+    await page.getByRole('combobox',{name:'Units',exact:true}).selectOption('imperial');
     await restore.click();
     await status.filter({ hasText: 'Save or cancel your changes before restoring a backup.' }).waitFor();
     assert.equal(choosers, 0, 'no file picker while edits are unsaved');
@@ -1325,7 +1304,11 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await choose(backupText);
     const confirm = page.getByRole('group', { name: 'Restore backup' });
     await confirm.waitFor();
-    assert.match((await confirm.innerText()).replace(/\s+/g, ' '), /Restore the backup from Oct 18, 2026, 9:00 AM\? It replaces your saved settings, styles and reminders with the backup's: 2 reminders \(1 completed\) and 1 saved style\. Your photo stays as it is\. What's saved now stays on this computer only until the next change \(a settings save or any reminder change\), and only for automatic recovery if the saved data can't be read\. Export it first to keep a copy you can restore\./);
+    const confirmationText=(await confirm.innerText()).replace(/\s+/g,' ');
+    assert.match(confirmationText,/Restore the backup from Oct 18, 2026, 9:00 AM/);
+    assert.match(confirmationText,/Replaces saved settings, styles and reminders with 2 reminders \(1 completed\) and 1 saved style/);
+    assert.match(confirmationText,/Your photo and schedule stay/);
+    assert.match(confirmationText,/Automatic recovery retains the replaced state only until the next saved change/);
     // #302: the question takes focus when it appears, and Don't restore gives it back.
     await page.waitForFunction(() => document.activeElement?.classList.contains('data-confirm-title'));
     assert.match(await focused(page), /^Restore the backup from Oct 18, 2026/, 'the restore question is focused');
@@ -1364,6 +1347,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.equal(await status.innerText(), RESTORE_UNREACHABLE);
     assert.equal(await page.locator('.data-detail').count(), 0);
     await confirm.waitFor();
+    await page.clock.runFor(50);
     await page.waitForFunction(() => document.activeElement?.textContent.trim() === 'Restore');
     assert.deepEqual(current(), before, 'an unanswered restore changes nothing');
     await page.unroute('**/api/import');
@@ -1371,7 +1355,12 @@ export async function runStudioQa({ playwright, edge } = {}) {
     // Restore: the data, the draft and the recovery backup.
     const previousState = await stateFile('state.json');
     await choose(backupText);
-    const announcedBefore = await page.locator('.save-announcer').textContent();
+    await page.evaluate(() => {
+      const line=document.querySelector('.settings-status'), before=line.textContent, discarded=[];
+      const observer=new MutationObserver(() => { if (line.textContent !== before && /Changes discarded/.test(line.textContent)) discarded.push(line.textContent); });
+      observer.observe(line,{childList:true,subtree:true,characterData:true});
+      window.__restoreAnnouncements=()=>{observer.disconnect();return discarded;};
+    });
     await confirm.getByRole('button', { name: 'Restore', exact: true }).click();
     await status.filter({ hasText: 'Backup restored: 2 reminders (1 completed) and 1 saved style.' }).waitFor();
     const restored = app.store.snapshot(), exported = JSON.parse(backupText);
@@ -1379,11 +1368,14 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.deepEqual(restored.reminders, exported.reminders);
     assert.deepEqual(restored.settings.savedPresets.map((style) => style.name), ['Synthetic backup style']);
     assert.deepEqual(await stateFile('state.backup.json'), previousState, 'the replaced state is kept as the recovery backup');
-    await page.waitForFunction(() => document.querySelector('input[aria-label="Brightness"]')?.value === '40');
-    assert.equal(await page.locator('.studio-savebar').count(), 0, 'the refreshed draft is clean');
+    await page.waitForFunction(() => document.querySelector('.current-location strong')?.textContent === 'Toronto');
+    assert.equal(await page.locator('.settings-savebar').count(), 0, 'the refreshed Settings draft is clean');
     assert.equal(await focused(page), 'Restore from backup…', 'a finished restore returns focus to Restore from backup…');
-    assert.equal(await page.locator('.save-announcer').textContent(), announcedBefore, 'a restore discards no edits, so the Save announcer says nothing new (#229)');
-    assert.match(await page.getByRole('tab', { name: /^Reminders/ }).innerText(), /1/, 'the restored reminders reach the editor');
+    assert.deepEqual(await page.evaluate(()=>window.__restoreAnnouncements()),[], 'Restore does not announce that it discarded an unsaved draft (#229)');
+    await tab(page,'Reminders');
+    assert.equal(await page.getByRole('button',{name:'Up next (1)',exact:true}).count(),1,'Restored reminders reach Home');
+    await tab(page,'Style');
+    await page.locator('summary',{hasText:'Reset appearance & layout'}).click();
     // Reset appearance asks first and focuses the safe answer (#343); keeping changes nothing.
     const resetButton = page.getByRole('button', { name: 'Reset appearance…', exact: true });
     await resetButton.focus();
@@ -1442,6 +1434,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
       });
     for (const width of [1280, 390, 320]) {
       await page.setViewportSize({ width, height: width === 1280 ? 720 : 844 });
+      await tab(page,'Weather');
       const exportGap = await iconGap(page.getByRole('link', { name: 'Export saved data' }));
       const restoreGap = await iconGap(restore);
       assert.deepEqual(exportGap, restoreGap, `${width} px: Export and Restore space their icons alike`);
@@ -1471,7 +1464,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     const layoutBefore = current();
     ({ page, context } = await open({ viewport: { width: 1280, height: 720 } }));
     await tab(page, 'Style');
-    await page.locator('summary', { hasText: 'Data & recovery' }).click();
+    await page.locator('summary', { hasText: 'Reset appearance & layout' }).click();
     const layoutStatus = page.locator('.data-status');
     const resetLayoutButton = page.getByRole('button', { name: 'Reset layout…', exact: true });
     const focusedName = () => page.evaluate(() => document.activeElement?.textContent?.trim() ?? '');
@@ -1516,7 +1509,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     const openReset = async () => {
       if (!(await resetLayoutButton.isVisible())) {
         await tab(page, 'Style');
-        if (!(await resetLayoutButton.isVisible())) await page.locator('summary', { hasText: 'Data & recovery' }).click();
+        if (!(await resetLayoutButton.isVisible())) await page.locator('summary', { hasText: 'Reset appearance & layout' }).click();
       }
       await resetLayoutButton.click();
       await reset435.getByRole('button', { name: 'Reset', exact: true }).click();

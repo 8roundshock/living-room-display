@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Compact context help on synthetic Home/editor pages. No installed profile, native actions or disk captures.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -20,7 +21,7 @@ export async function runContextHelpQa({ playwright, edge, capture = false } = {
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], images = [], errors = [];
   async function context(options = {}) {
-    const created = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce', ...options });
+    const created = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce', ...options }); await mockWindowsStatus(created);
     await keepPagesLocal(created, base);
     await created.route('**/api/windows/status', route => route.fulfill({ json: { available: false, isLivingRoomDisplay: false, power: { available: false } } }));
     created.on('page', page => page.on('pageerror', error => errors.push(error.message)));
@@ -66,11 +67,11 @@ export async function runContextHelpQa({ playwright, edge, capture = false } = {
     await page.locator('summary', { hasText: 'Motion' }).click();
     const animation = page.getByRole('button', { name: 'About animation' });
     await animation.focus(); assert.match(await page.getByRole('tooltip').innerText(), /Subtle animates changes/);
-    const awake = page.getByRole('button', { name: 'About keeping the screen on' });
-    await awake.focus(); assert.equal(await page.getByRole('tooltip').count(), 1, 'only one tip');
-    assert.match(await page.getByRole('tooltip').innerText(), /Windows power settings apply otherwise/);
-    await page.getByRole('checkbox', { name: 'Keep the screen on', exact: true }).click(); await hidden(page);
-    assert.equal(await page.getByRole('checkbox', { name: 'Keep the screen on', exact: true }).isChecked(), false, 'outside click still performs its action');
+    await help.focus(); assert.equal(await page.getByRole('tooltip').count(), 1, 'only one tip');
+    assert.match(await page.getByRole('tooltip').innerText(), /F for full screen/);
+    const float = page.getByRole('checkbox', { name: 'Float gently', exact: true });
+    const floating = await float.isChecked(); await float.click(); await hidden(page);
+    assert.equal(await float.isChecked(), !floating, 'outside click still performs its action');
     if (capture) images.push({ name: 'editor-motion-1280', bytes: await page.screenshot() });
     await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
@@ -112,6 +113,11 @@ export async function runContextHelpQa({ playwright, edge, capture = false } = {
     if (capture) images.push({ name: 'home-help-320-display-open', bytes: await page.screenshot() });
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Close display', exact: true }).click();
+    await page.getByRole('link', { name: 'Settings', exact: true }).click();
+    const awake = page.getByRole('button', { name: 'About keeping the screen on' });
+    await awake.focus(); assert.match(await page.getByRole('tooltip').innerText(), /Windows power settings apply otherwise/);
+    await page.keyboard.press('Escape'); await hidden(page);
+    assert.equal(await awake.evaluate(element => element === document.activeElement), true);
     await desktop.close();
 
     const mobile = await context({ viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true });
