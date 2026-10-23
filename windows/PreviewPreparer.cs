@@ -34,6 +34,7 @@ internal sealed class NativePreviewPreparer : IDisposable
     private readonly Process parent;
     private readonly string hostPath, token, pipeName, baseUrl;
     private readonly PreviewPreparationPolicy policy = new PreviewPreparationPolicy();
+    private readonly PreparationLifetime lifetime;
     private readonly Timer parentTimer;
     private readonly Thread inputThread, pipeThread;
     private NamedPipeServerStream pipe;
@@ -45,7 +46,7 @@ internal sealed class NativePreviewPreparer : IDisposable
         internal long Generation, CompletedMonotonic;
         internal string Configuration;
         internal uint InputTick;
-        internal int SessionId;
+        internal int SessionId, TimeoutSeconds;
         internal DateTime CompletedUtc;
     }
     private sealed class Configuration
@@ -78,16 +79,17 @@ internal sealed class NativePreviewPreparer : IDisposable
         if (!File.Exists(Path.Combine(root,"installation.json"))) throw new InvalidDataException();
         parent = Process.GetProcessById(Convert.ToInt32(data["parentProcessId"]));
         IntPtr pin = parent.Handle;
-        if (!NativePreviewContext.ExactProcess(parent,node,entry,false)) throw new InvalidDataException();
+        lifetime = new PreparationLifetime(Cancel,delegate { Environment.Exit(0); });
         // This child owns no descendants. A pinned parent handle prevents PID reuse from extending life.
         parentTimer = new Timer(delegate {
             try { if (!parent.HasExited) return; } catch { }
             // ExitProcess releases even an in-progress native GDI call and every RAM-only buffer.
-            Environment.Exit(0);
+            lifetime.ParentObserved(false);
         },null,0,100);
+        if (!NativePreviewContext.ExactProcess(parent,node,entry,false)) throw new InvalidDataException();
         inputThread = new Thread(delegate() {
             try { while (Console.ReadLine() != null) { } } catch { }
-            Cancel();
+            lifetime.InputClosed();
         });
         inputThread.IsBackground=true; inputThread.Start();
         pipeThread = new Thread(ServeClaims); pipeThread.IsBackground=true; pipeThread.Start();
@@ -104,7 +106,8 @@ internal sealed class NativePreviewPreparer : IDisposable
                 var context=NativePreviewContext.Read(hostPath);
                 var decision=policy.Observe(new PreparationReading {
                     Readable=context.Readable, Safe=context.Safe,
-                    Enabled=config.Enabled && !context.SaverRunning && context.TimeoutSeconds==config.TimeoutSeconds,
+                    Enabled=config.Enabled && context.TimeoutSeconds==config.TimeoutSeconds,
+                    CaptureAllowed=!context.SaverRunning && !context.AmbientRunning,
                     InputTick=context.InputTick, IdleMilliseconds=context.IdleMilliseconds,
                     Configuration=config.Revision, TimeoutSeconds=config.TimeoutSeconds, LeadSeconds=config.LeadSeconds
                 });
@@ -131,11 +134,11 @@ internal sealed class NativePreviewPreparer : IDisposable
     {
         byte[] png=null;
         using (var cancellation=CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
-        using (var deadline=new Timer(delegate { cancellation.Cancel(); },null,5000,Timeout.Infinite))
+        using (var deadline=new Timer(delegate { PreparationCancellation.Cancel(cancellation); },null,5000,Timeout.Infinite))
         using (var monitor=new Timer(delegate {
             try { var current=NativePreviewContext.Read(hostPath);
-                if (!current.Readable || !current.Safe || current.SaverRunning || current.InputTick!=initial.InputTick || current.TimeoutSeconds!=initial.TimeoutSeconds) cancellation.Cancel();
-            } catch { cancellation.Cancel(); }
+                if (!current.Readable || !current.Safe || current.SaverRunning || current.AmbientRunning || current.InputTick!=initial.InputTick || current.TimeoutSeconds!=initial.TimeoutSeconds) PreparationCancellation.Cancel(cancellation);
+            } catch { PreparationCancellation.Cancel(cancellation); }
         },null,0,50))
         {
             try
@@ -149,7 +152,7 @@ internal sealed class NativePreviewPreparer : IDisposable
                 long completedMonotonic=checked((long)PreparedSnapshotClient.GetTickCount64());
                 DateTime completedUtc=DateTime.UtcNow;
                 var after=NativePreviewContext.Read(hostPath);
-                if (!after.Readable || !after.Safe || after.SaverRunning || after.InputTick!=initial.InputTick) return;
+                if (!after.Readable || !after.Safe || after.SaverRunning || after.AmbientRunning || after.InputTick!=initial.InputTick) return;
                 cancellation.Token.ThrowIfCancellationRequested();
                 var headers=new Dictionary<string,string> {
                     {"X-Preparation-Generation",config.Generation.ToString(CultureInfo.InvariantCulture)},
@@ -161,7 +164,7 @@ internal sealed class NativePreviewPreparer : IDisposable
                 Request("POST","/api/preview/preparation",png,headers,cancellation.Token);
                 cancellation.Token.ThrowIfCancellationRequested();
                 lock(gate) frame=new PreparedFrame { Generation=config.Generation, Configuration=config.Revision, InputTick=initial.InputTick,
-                    SessionId=initial.SessionId, CompletedUtc=completedUtc, CompletedMonotonic=completedMonotonic };
+                    SessionId=initial.SessionId, TimeoutSeconds=initial.TimeoutSeconds, CompletedUtc=completedUtc, CompletedMonotonic=completedMonotonic };
             }
             catch { Invalidate(true); }
             finally { if(png!=null) Array.Clear(png,0,png.Length); }
@@ -217,20 +220,20 @@ internal sealed class NativePreviewPreparer : IDisposable
         var data=json.DeserializeObject(PreparedSnapshotClient.ReadLine(server,256)) as Dictionary<string,object>;
         if(data==null || data.Count!=1) return false;
         long entered=Convert.ToInt64(data["enteredMonotonicMs"]);
-        using(var claimant=Process.GetProcessById(checked((int)processId)))
+        var context=NativePreviewContext.Read(hostPath);
+        if(!context.Readable || !context.Safe)return false;
+        using(var claimant=PreparedClaimAdmission.Pin(processId,context.SessionId,delegate(uint pid) { return new NativePreparedClaimProcess(pid,hostPath); }))
         {
-            IntPtr pin=claimant.Handle;
-            if(!NativePreviewContext.ExactProcess(claimant,hostPath,null,true)) return false;
-            DateTime created=claimant.StartTime.ToUniversalTime();
-            var context=NativePreviewContext.Read(hostPath);
+            if(claimant==null)return false;
+            DateTime created=claimant.CreatedUtc;
             PreparedFrame prepared; lock(gate) { prepared=frame; frame=null; }
-            if(prepared==null || !context.Readable || !context.Safe || context.InputTick!=prepared.InputTick ||
-                context.SessionId!=prepared.SessionId || claimant.SessionId!=prepared.SessionId ||
+            return PreparedClaimFlow.Run(delegate { return !(prepared==null || !context.Readable || !context.Safe || context.InputTick!=prepared.InputTick ||
+                context.SessionId!=prepared.SessionId || context.TimeoutSeconds!=prepared.TimeoutSeconds || claimant.SessionId!=prepared.SessionId ||
                 !PreparedSnapshotOrder.Eligible(prepared.CompletedMonotonic,entered,prepared.CompletedUtc,created,
-                    checked((long)PreparedSnapshotClient.GetTickCount64())-prepared.CompletedMonotonic,DateTime.UtcNow)) return false;
+                    checked((long)PreparedSnapshotClient.GetTickCount64())-prepared.CompletedMonotonic,DateTime.UtcNow)); },delegate {
             // Pin and recheck immediately before the secret-authenticated atomic promotion.
-            if(claimant.HasExited || claimant.StartTime.ToUniversalTime()!=created ||
-                !NativePreviewContext.Same(context,NativePreviewContext.Read(hostPath))) return false;
+            return claimant.Running && claimant.CreatedUtc==created &&
+                NativePreviewContext.Same(context,NativePreviewContext.Read(hostPath)); },delegate {
             byte[] body=Encoding.UTF8.GetBytes(json.Serialize(new {
                 generation=prepared.Generation, configuration=prepared.Configuration, processId=processId,
                 processStartedAt=created.ToString("o"), startedMonotonicMs=entered, inputTick=prepared.InputTick,
@@ -238,6 +241,7 @@ internal sealed class NativePreviewPreparer : IDisposable
             }));
             var response=json.DeserializeObject(Request("POST","/api/preview/preparation/claim",body,null,stop.Token)) as Dictionary<string,object>;
             return response!=null && response.ContainsKey("claimed") && response["claimed"] is bool && (bool)response["claimed"];
+            },stop.Token);
         }
     }
     private void Cancel() { try { stop.Cancel(); } catch { } lock(gate) { frame=null; if(pipe!=null)try { pipe.Dispose(); } catch { } } }
@@ -249,9 +253,26 @@ internal sealed class NativePreviewPreparer : IDisposable
     }
 }
 
+internal sealed class NativePreparedClaimProcess : IPreparedClaimProcess
+{
+    private readonly Process process;
+    private readonly string executable;
+    internal NativePreparedClaimProcess(uint pid,string executable)
+    {
+        this.executable=executable;
+        process=Process.GetProcessById(checked((int)pid));
+        try { IntPtr pin=process.Handle; } catch { process.Dispose(); throw; }
+    }
+    public bool OwnedAutomatic { get { return NativePreviewContext.ExactProcess(process,executable,null,true); } }
+    public bool Running { get { return !process.HasExited; } }
+    public int SessionId { get { return process.SessionId; } }
+    public DateTime CreatedUtc { get { return process.StartTime.ToUniversalTime(); } }
+    public void Dispose() { process.Dispose(); }
+}
+
 internal sealed class NativePreviewContext
 {
-    internal bool Readable, Safe, SaverRunning;
+    internal bool Readable, Safe, SaverRunning, AmbientRunning;
     internal uint InputTick;
     internal int SessionId, TimeoutSeconds;
     internal long IdleMilliseconds;
@@ -270,6 +291,21 @@ internal sealed class NativePreviewContext
     {
         uint needed; var text=new StringBuilder(256);
         return handle!=IntPtr.Zero && GetUserObjectInformation(handle,2,text,512,out needed)?text.ToString():null;
+    }
+    private static bool AmbientPresent()
+    {
+        // Observe the existing own-session mutex only; never hold it across capture/claim.
+        try
+        {
+            using(var mutex=Mutex.OpenExisting("Local\\LivingRoomDisplay.Ambient"))
+            {
+                bool acquired=false;
+                try { acquired=mutex.WaitOne(0); return !acquired; }
+                catch(AbandonedMutexException) { acquired=true; return true; }
+                finally { if(acquired)mutex.ReleaseMutex(); }
+            }
+        }
+        catch(WaitHandleCannotBeOpenedException) { return false; }
     }
     internal static NativePreviewContext Read(string hostPath)
     {
@@ -301,7 +337,7 @@ internal sealed class NativePreviewContext
                 var selected=key==null?null:key.GetValue("SCRNSAVE.EXE") as string;
                 if(active!=1 || selected==null || !String.Equals(Path.GetFullPath(selected.Trim('"')),Path.GetFullPath(hostPath),StringComparison.OrdinalIgnoreCase))return result;
             }
-            result.TimeoutSeconds=timeout; result.SaverRunning=running!=0; result.Readable=true; result.Safe=true;
+            result.TimeoutSeconds=timeout; result.SaverRunning=running!=0; result.AmbientRunning=AmbientPresent(); result.Readable=true; result.Safe=true;
         }
         catch { }
         return result;
@@ -314,6 +350,8 @@ internal sealed class NativePreviewContext
         {
             if(process.HasExited || !String.Equals(process.MainModule.FileName,executable,StringComparison.OrdinalIgnoreCase))return false;
             using(var query=new ManagementObjectSearcher("SELECT CommandLine FROM Win32_Process WHERE ProcessId="+process.Id.ToString(CultureInfo.InvariantCulture)))
+            {
+            query.Options.Timeout=TimeSpan.FromMilliseconds(1000);
             using(var matches=query.Get())
             {
                 foreach(ManagementObject item in matches)
@@ -321,10 +359,9 @@ internal sealed class NativePreviewContext
                 {
                     string command=item["CommandLine"] as string;
                     if(command==null)return false;
-                    string expected="\""+executable+"\""+(ambient?" /s":" \""+entry+"\"");
-                    string alternate=executable+(ambient?" /s":" \""+entry+"\"");
-                    return !process.HasExited && (String.Equals(command.Trim(),expected,StringComparison.OrdinalIgnoreCase) || String.Equals(command.Trim(),alternate,StringComparison.OrdinalIgnoreCase));
+                    return !process.HasExited && NativePreparationIdentity.ExactCommand(command,executable,entry,ambient);
                 }
+            }
             }
         }
         catch { }

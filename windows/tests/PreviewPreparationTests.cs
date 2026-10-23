@@ -5,7 +5,7 @@ internal static class PreviewPreparationTests
     private static void Check(bool value, string why) { if (!value) throw new Exception(why); }
     private static PreparationReading Reading(uint input, long idle)
     {
-        return new PreparationReading { Readable=true, Enabled=true, Safe=true, InputTick=input,
+        return new PreparationReading { Readable=true, Enabled=true, Safe=true, CaptureAllowed=true, InputTick=input,
             IdleMilliseconds=idle, TimeoutSeconds=600, LeadSeconds=30, Configuration="a" };
     }
     private static void Main()
@@ -19,6 +19,9 @@ internal static class PreviewPreparationTests
         Check(!policy.Observe(changed).Capture, "settings cannot authorize a second capture in an epoch");
         Check(policy.Observe(Reading(101, 100)).InvalidateActive, "input clears pending and active");
         Check(policy.Observe(Reading(101, 580000)).Capture, "new input epoch can capture");
+        changed=Reading(101,580001); changed.CaptureAllowed=false;
+        var saver=policy.Observe(changed);
+        Check(!saver.Capture && !saver.Invalidate && !saver.InvalidateActive,"legitimate saver start preserves the pending/active frame for claim");
         Check(!new PreviewPreparationPolicy().Observe(Reading(100, 600000)).Capture, "late startup unavailable");
         policy = new PreviewPreparationPolicy();
         policy.Observe(Reading(99, 100));
@@ -39,10 +42,18 @@ internal static class PreviewPreparationTests
         Check(!PreparedSnapshotOrder.Eligible(1000,31000,at,at.AddMilliseconds(1500),30000,at.AddSeconds(30)), "small backward-clock ambiguity");
         Check(!PreparedSnapshotOrder.Eligible(1000,31000,at,at.AddSeconds(-1),30000,at.AddSeconds(30)), "delayed Main/handshake cannot change actual creation");
         Check(!PreparedSnapshotOrder.Eligible(1000,31000,at,at.AddSeconds(30),30000,at.AddSeconds(40)), "clock discontinuity");
+        Check(!PreparedSnapshotOrder.Eligible(1000,51000,at,at.AddSeconds(30),30000,at.AddSeconds(30)), "future process entry is rejected");
         policy = new PreviewPreparationPolicy();
         var unreadable = Reading(100,580000); unreadable.Readable=false;
         policy.Observe(unreadable);
         Check(!policy.Observe(Reading(100,580000)).Capture,"unreadable startup cannot reopen an unestablished epoch");
-        Console.WriteLine("Preview preparation policy: 21 assertions passed; no Windows calls or pixels.");
+        const string host="C:\\Synthetic\\app\\windows\\LivingRoomDisplay.scr";
+        Check(NativePreparationIdentity.ExactCommand("\""+host+"\" /s",host,null,true),"exact automatic command");
+        Check(!NativePreparationIdentity.ExactCommand("\""+host+"\" --test-display",host,null,true),"manual test cannot claim prepared content");
+        Check(!NativePreparationIdentity.ExactCommand("\""+host+"\" /s --extra",host,null,true),"extra arguments cannot claim");
+        Check(!NativePreparationIdentity.ExactCommand("\"C:\\Other.scr\" /s",host,null,true),"wrong executable cannot claim");
+        Check(!NativePreparationIdentity.ExactCommand(null,host,null,true),"missing process command fails closed");
+        Check(NativePreparationIdentity.ExactCommand("\"C:\\Synthetic\\runtime\\node.exe\" \"C:\\Synthetic\\app\\dist\\server\\index.js\"", "C:\\Synthetic\\runtime\\node.exe", "C:\\Synthetic\\app\\dist\\server\\index.js",false),"exact parent command");
+        Console.WriteLine("Preview preparation policy: 29 assertions passed; no Windows calls or pixels.");
     }
 }

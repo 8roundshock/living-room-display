@@ -21,7 +21,7 @@ internal sealed class AmbientSession : ApplicationContext
     private int polling;
     internal bool Ready { get { return ready && !closed; } }
 
-    internal AmbientSession(bool testDisplay)
+    internal AmbientSession(bool testDisplay, bool automatic = false)
     {
         policy = new SurfacePolicy(testDisplay);
         stop.Reset();
@@ -29,7 +29,7 @@ internal sealed class AmbientSession : ApplicationContext
         {
             var signals = new ActiveSessionSignals(new WindowsSessionSignals(), Native.ReadInput, delegate { return stop.WaitOne(0); });
             startup = new SessionStartup(signals, Program.EnsureServer,
-                token => new NativeApi(token), token => new OwnedBrowser());
+                token => new NativeApi(token, automatic), token => new OwnedBrowser());
             if (!startup.Start()) return; // Cancellation already disposed startup.
             browser = (OwnedBrowser)startup.Browser;
             edgePath = Program.FindEdge();

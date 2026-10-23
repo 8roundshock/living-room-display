@@ -14,9 +14,11 @@ using Microsoft.Win32;
 internal static class Program
 {
     internal const string BaseUrl = "http://127.0.0.1:4318";
+    internal static long EnteredMonotonicMilliseconds;
     [STAThread]
     private static int Main(string[] args)
     {
+        EnteredMonotonicMilliseconds = checked((long)PreparedSnapshotClient.GetTickCount64());
         try
         {
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException, true);
@@ -55,7 +57,7 @@ internal static class Program
                     try
                     {
                         Application.EnableVisualStyles();
-                        using (AmbientSession session = new AmbientSession(mode == "--test-display"))
+                        using (AmbientSession session = new AmbientSession(mode == "--test-display", mode == "/s"))
                             if (session.Ready) Application.Run(session);
                     }
                     finally { DisplayNative.SetThreadDpiAwarenessContext(previousDpi); }
@@ -120,13 +122,17 @@ internal static class Program
 internal sealed class NativeApi : IPreviewSession
 {
     private string token;
+    private readonly bool preparedOnly;
+    private readonly string preparationPipe;
     public bool PreviewEnabled { get; private set; }
-    internal NativeApi(CancellationToken cancellation)
+    internal NativeApi(CancellationToken cancellation, bool preparedOnly = false)
     {
+            this.preparedOnly = preparedOnly;
             cancellation.ThrowIfCancellationRequested();
             string json = Request("GET", "/api/host/session", null, cancellation, 5000);
             var data = new JavaScriptSerializer().DeserializeObject(json) as System.Collections.Generic.Dictionary<string, object>;
             token = (string)data["token"];
+            preparationPipe = data.ContainsKey("preparationPipe") ? data["preparationPipe"] as string : null;
             var settings = data["settings"] as System.Collections.Generic.Dictionary<string, object>;
             var preview = settings["preview"] as System.Collections.Generic.Dictionary<string, object>;
             var widgets = settings["widgets"] as System.Collections.Generic.Dictionary<string, object>;
@@ -144,6 +150,12 @@ internal sealed class NativeApi : IPreviewSession
         catch (WebException) { return false; }
     }
     public void UploadDesktop(CancellationToken cancellation)
+    {
+        NativePreviewSelection.Run(preparedOnly,
+            delegate { return PreparedSnapshotClient.Claim(preparationPipe,Program.EnteredMonotonicMilliseconds,cancellation); },
+            delegate { UploadCurrentDesktop(cancellation); },Clear);
+    }
+    private void UploadCurrentDesktop(CancellationToken cancellation)
     {
         try
         {

@@ -9,14 +9,20 @@ Cold/replacement workers establish a baseline and wait for new input; early,
 late, expired or uncertain activation is unavailable. This is an earlier-frame
 feature, not proof of the remaining black-thumbnail cause in #519.
 
-The first source checkpoint contains a private backend pending store/supervisor,
-separate non-display native preparer and pure one-shot/order policy. The policy's
-21 synthetic assertions and native preparer compilation pass; backend focused
-tests pass (43 assertions/subtests) with server typechecking. Native claim/build/
-package integration, wider synthetic checks, CI and independent final-head review
-are still pending. No installed app/data/settings or sealed native artifacts have
-changed; no watcher, desktop capture or native display was launched. Installed
-and actual automatic-screen-content acceptance remain separate under #519.
+The source includes the private backend pending store/supervisor, separate
+non-display native preparer, OS-identified pipe claim and build/package/control
+lifetime integration. Typechecking and server/client build pass, alongside all
+505 unit tests. `windows/tests/Test-PreIdleSource.ps1` compiles both production
+binaries without running them and passes 29 preparation/order assertions, 24
+injected claim/lifetime assertions, five scalar framing assertions, six synthetic
+encoding cases, eight fake host lifecycle cases, active-input/surface regressions,
+32 fake runtime contracts, mocked preparer lifecycle and nine static installer
+policy groups. CI and independent final-head review are still pending.
+
+No installed app/data/settings or sealed native artifacts have changed; no
+watcher, desktop capture or native display was launched. Installed and actual
+automatic-screen-content acceptance remain separate under #519. This source
+feature does not establish the cause or resolution of the observed black image.
 
 ## Last screen encoding correction (#519)
 

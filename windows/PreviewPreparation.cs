@@ -1,13 +1,18 @@
 using System;
+using System.Threading;
 
 // Pure one-shot policy. No Windows calls, pixels, timers or transport live here.
 internal struct PreparationReading
 {
-    internal bool Readable, Enabled, Safe;
-    internal uint InputTick;
-    internal long IdleMilliseconds;
-    internal int TimeoutSeconds, LeadSeconds;
-    internal string Configuration;
+    internal bool Readable { get; set; }
+    internal bool Enabled { get; set; }
+    internal bool Safe { get; set; }
+    internal bool CaptureAllowed { get; set; }
+    internal uint InputTick { get; set; }
+    internal long IdleMilliseconds { get; set; }
+    internal int TimeoutSeconds { get; set; }
+    internal int LeadSeconds { get; set; }
+    internal string Configuration { get; set; }
 }
 
 internal struct PreparationDecision
@@ -46,7 +51,7 @@ internal sealed class PreviewPreparationPolicy
         configuration = reading.Configuration;
         decision.Invalidate = changed || configurationChanged || !reading.Enabled || !reading.Safe;
         decision.InvalidateActive = changed || !reading.Safe;
-        if (!reading.Enabled || !reading.Safe || attempted) return decision;
+        if (!reading.Enabled || !reading.Safe || !reading.CaptureAllowed || attempted) return decision;
         long deadline = (long)reading.TimeoutSeconds * 1000;
         long lead = (long)reading.LeadSeconds * 1000;
         if (deadline <= 0 || lead <= 0 || lead >= deadline || reading.IdleMilliseconds < 0)
@@ -75,10 +80,97 @@ internal static class PreparedSnapshotOrder
     internal static bool Eligible(long completedMonotonic, long enteredMonotonic,
         DateTime completedUtc, DateTime actualCreatedUtc, long elapsedMonotonic, DateTime nowUtc)
     {
-        if (completedMonotonic < 0 || enteredMonotonic <= completedMonotonic || elapsedMonotonic < 0) return false;
+        if (completedMonotonic < 0 || enteredMonotonic <= completedMonotonic || elapsedMonotonic < 0 ||
+            enteredMonotonic - completedMonotonic > elapsedMonotonic) return false;
         double utcElapsed = (nowUtc - completedUtc).TotalMilliseconds;
         if (Math.Abs(utcElapsed - elapsedMonotonic) > ClockUncertaintyMilliseconds) return false;
         // Ambiguous close ordering is unavailable, even within the permitted clock drift.
         return (actualCreatedUtc - completedUtc).TotalMilliseconds > ClockUncertaintyMilliseconds;
+    }
+}
+
+internal static class NativePreparationIdentity
+{
+    internal static bool ExactCommand(string command, string executable, string entry, bool ambient)
+    {
+        if (command == null || executable == null) return false;
+        string suffix = ambient ? " /s" : " \"" + entry + "\"";
+        return String.Equals(command.Trim(), "\"" + executable + "\"" + suffix, StringComparison.OrdinalIgnoreCase) ||
+            String.Equals(command.Trim(), executable + suffix, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+internal interface IPreparedClaimProcess : IDisposable
+{
+    bool OwnedAutomatic { get; }
+    bool Running { get; }
+    int SessionId { get; }
+    DateTime CreatedUtc { get; }
+}
+
+// The PID must come from the OS-created pipe handle, never from request JSON.
+internal static class PreparedClaimAdmission
+{
+    internal static IPreparedClaimProcess Pin(uint operatingSystemPeer, int sessionId, Func<uint,IPreparedClaimProcess> open)
+    {
+        if (operatingSystemPeer == 0) return null;
+        IPreparedClaimProcess process=null;
+        try
+        {
+            process=open(operatingSystemPeer);
+            if (process!=null && process.OwnedAutomatic && process.Running && process.SessionId==sessionId) return process;
+        }
+        catch { }
+        if(process!=null)process.Dispose();
+        return null;
+    }
+}
+
+internal sealed class PreparationLifetime
+{
+    private readonly Action cancel, exit;
+    private bool cancelled, exited;
+    internal PreparationLifetime(Action cancel,Action exit) { this.cancel=cancel; this.exit=exit; }
+    internal void InputClosed() { lock(this) { if(cancelled)return; cancelled=true; } cancel(); }
+    internal void ParentObserved(bool alive)
+    {
+        if(alive)return;
+        lock(this) { if(exited)return; exited=true; }
+        try { InputClosed(); } finally { exit(); }
+    }
+}
+
+internal static class NativePreviewSelection
+{
+    internal static void Run(bool automatic,Func<bool> claim,Action capture,Action clear)
+    {
+        if(!automatic) { capture(); return; }
+        try { if(!claim())clear(); }
+        catch(OperationCanceledException) { throw; }
+        catch { clear(); }
+    }
+}
+
+internal static class PreparedClaimFlow
+{
+    internal static bool Run(Func<bool> allowed,Func<bool> unchanged,Func<bool> publish,CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        if(!allowed())return false;
+        cancellation.ThrowIfCancellationRequested();
+        if(!unchanged())return false;
+        cancellation.ThrowIfCancellationRequested();
+        return publish(); // No retry; the caller consumed its one frame before entering this flow.
+    }
+}
+
+internal static class PreparationCancellation
+{
+    internal static void Cancel(CancellationTokenSource source)
+    {
+        // Timer.Dispose does not drain callbacks which were already dispatched.
+        try { source.Cancel(); }
+        catch(ObjectDisposedException) { }
+        catch(AggregateException) { } // Cancellation remains terminal if a registered cleanup fails.
     }
 }
