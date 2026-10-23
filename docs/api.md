@@ -781,9 +781,10 @@ worker retains its input-attempt history across scheduled off intervals. Explici
 idle disable still stops it and revokes the capability. `preview.enabled` and the
 preview widget toggle are saved-style visual fields, not a separate global consent
 setting; schedules never replace global idle enablement or Windows selection.
-Boundary generations protect unpublished and in-flight frames. An already active
-frame retains its separate session lifetime; current effective visibility off,
-ordinary session exit or the existing cleanup guards still clear it.
+An intervening effective off interval clears active pixels too, even if the next
+read sees the original style again. A clock reversal or gap beyond the bounded
+reconstruction window also clears them. Current-on cannot revive an older frame;
+ordinary native session exit and the existing cleanup guards remain unchanged.
 
 ## Persistence and recovery
 

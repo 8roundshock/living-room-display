@@ -113,6 +113,23 @@ test('an unobserved on-off-on interval cannot resurrect a pending frame even whe
   } finally { await app.close(); }
 });
 
+test('an active frame is cleared by a missed off interval or an unreconstructable clock gap', async t => {
+  for (const transition of ['missed off interval', 'long gap', 'clock reversal']) await t.test(transition, async () => {
+    const app = await fixture();
+    try {
+      await app.put(app.schedule()); const before = await app.config();
+      assert.equal((await app.prepare(before)).status, 201);
+      app.advance(3_100); assert.equal(await app.claim(before), true);
+      assert.equal((await fetch(app.base + '/api/preview/image')).status, 200);
+      app.advance(transition === 'missed off interval' ? 67_000 : transition === 'long gap' ? 95_000 : -1_000);
+      assert.equal((await app.config()).enabled, true, 'the current style itself is visible');
+      assert.equal((await fetch(app.base + '/api/preview/image')).status, 404, 'current-on cannot revive pre-off bytes');
+      assert.equal(await app.claim(await app.config()), false);
+      assert.equal(app.children, 1); assert.equal(app.stops, 0, 'no replacement worker or capture retry is created');
+    } finally { await app.close(); }
+  });
+});
+
 test('crossing a minute without changing the effective style preserves a valid native claim', async () => {
   const app = await fixture();
   try {

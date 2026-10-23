@@ -118,7 +118,7 @@ export async function createApplication(options: ApplicationOptions) {
     const schedule = schedules.snapshot(settings, at), marker = schedules.marker(settings, at);
     const previous = preparationObserved;
     if (previous && previous.manual === settingsRevision && previous.schedule === schedules.revision) {
-      if (at < previous.at || at - previous.at > PREPARATION_MAX_AGE_MS) preparationBoundary++;
+      if (at < previous.at || at - previous.at > PREPARATION_MAX_AGE_MS) { preparationBoundary++; clearPreview(); }
       else {
         // A hidden off interval must invalidate a pending frame even if the next poll
         // sees the original style again. Bound the scan to the frame's 90-second life.
@@ -130,6 +130,8 @@ export async function createApplication(options: ApplicationOptions) {
         for (const time of times.sort((a, b) => a - b)) {
           const next = schedules.marker(settings, time);
           if (next !== observed) preparationBoundary++;
+          const during = scheduledSettings(settings, schedules.snapshot(settings, time));
+          if (!during.preview.enabled || !during.widgets.preview) clearPreview();
           observed = next;
         }
       }

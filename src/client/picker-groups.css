@@ -67,7 +67,8 @@
   /* Preserve the current editor's content scroller and keep Add reachable outside it. */
   .widget-picker .picker-detail-content { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
   .widget-picker .room-notice:not([data-empty]) { flex: 0 1 auto; min-height: 0; max-height: 40%; overflow-y: auto; scrollbar-width: thin; }
-  .studio .widget-picker .sample-stage { flex: 1 0 145px; min-height: 145px; }
+  /* Retain the sample's 9px rendered text floor after adding discovery controls. */
+  .studio .widget-picker .sample-stage { flex: 1 0 190px; min-height: 190px; }
 }
 @media (max-width: 700px) {
   .picker-discovery { grid-template-columns: minmax(0, 1fr) 120px; }

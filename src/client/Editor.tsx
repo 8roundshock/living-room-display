@@ -158,7 +158,7 @@ function forecastMatches(settings: Settings, weather: WeatherState): boolean {
 /**
  * Home's deep links into Edit display (#438), read once when the editor opens: `?add=<id>` opens the
  * Widgets tab with Edit layout on and the picker on that widget (with its Make-room fixes), for an active
- * widget that is off; `?focus=city` opens the Weather tab with City focused.
+ * widget that is off. App owns the legacy City redirect to Settings.
  */
 function readDeepLink(widgets: Settings['widgets']): { add: WidgetId | null; focusCity: boolean; present: boolean } {
   const params = new URLSearchParams(window.location.search);
@@ -287,6 +287,13 @@ export function Editor({
   // Guards Save against a second activation before the first one's state has rendered (#289).
   const savingNow = useRef(false);
   const [deepLink] = useState(() => readDeepLink(state.settings.widgets));
+  useEffect(() => {
+    if (!deepLink.present) return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete('add'); params.delete('focus');
+    const query = params.toString();
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+  }, [deepLink.present]);
   const [section, setSection] = useState<Section>('Widgets');
   const [saving, setSaving] = useState(false),
     [error, setErrorState] = useState<ActionError | null>(null);
