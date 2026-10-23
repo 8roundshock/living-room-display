@@ -531,7 +531,8 @@ motion or the Off animation level.
   limits late-timer/startup catch-up to device-pixel steps. Reduced motion uses the
   same stepped positions and dim transitions as the display. The paused movement
   clock does not freeze live information or affect polling, timers, settings,
-  saved presets or an open display. Editing returns to authored placement.
+  saved presets or an open display. Editing returns to authored placement and
+  restores each still-mounted glyph loop's prior clock and running/paused state.
 - **Open display** (#436) opens one display window, named `still-display`, and reuses
   and focuses it on later clicks (`<a href="/display" target="still-display">` without
   `rel`, same-origin loopback, is the no-script fallback). While that window is open

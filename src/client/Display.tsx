@@ -381,6 +381,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   // #515: seek the runtime's paths and FLIP keyframes without starting its timers. The display's
   // one-pixel catch-up after a late timer/resize is intentionally not a second clock here.
   const previewAnimations = useRef<{ key: string; animations: Animation[] }>({ key: '', animations: [] });
+  const previewLoops = useRef(new Map<Animation, { time: Animation['currentTime']; running: boolean }>());
   const applyPreview = useRef<() => void>(() => undefined);
   useLayoutEffect(() => {
     if (!controlled) return;
@@ -418,7 +419,10 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       // updates normally; its one-shot value transitions are not time-travelled or replayed.
       for (const animation of root.current?.getAnimations({ subtree: true }) ?? []) {
         if (animation.id === 'lrd-preview') continue;
-        if (animation.effect?.getTiming().iterations === Infinity) { animation.pause(); animation.currentTime = previewTime * 1000; }
+        if (animation.effect?.getTiming().iterations === Infinity) {
+          if (!previewLoops.current.has(animation)) previewLoops.current.set(animation, { time: animation.currentTime, running: animation.playState === 'running' });
+          animation.pause(); animation.currentTime = previewTime * 1000;
+        }
       }
     };
     applyPreview.current = draw; kick.current = draw; draw();
@@ -436,6 +440,15 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     if (!controlled) return;
     return () => {
       for (const animation of previewAnimations.current.animations) animation.cancel();
+      // Return the borrowed CSS loops to their original clock and owner. A removed/replaced glyph
+      // has cancelled its animation; never revive it while restoring the remaining mounted loops.
+      for (const [animation, before] of previewLoops.current) {
+        const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+        if (animation.playState === 'idle' || !target?.isConnected || !root.current?.contains(target)) continue;
+        animation.currentTime = before.time;
+        if (before.running) animation.play(); else animation.pause();
+      }
+      previewLoops.current.clear();
       previewAnimations.current = { key: '', animations: [] }; applyPreview.current = () => undefined; kick.current = null;
       plane.current?.style.removeProperty('transform');
       for (const entry of registry.current.values()) { entry.offset = null; entry.section.style.removeProperty('--float-x'); entry.section.style.removeProperty('--float-y'); }

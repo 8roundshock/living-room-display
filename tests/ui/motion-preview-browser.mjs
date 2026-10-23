@@ -35,7 +35,7 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     plane: ambient.querySelector('.widget-grid-plane').style.transform,
     widgets: [...ambient.querySelectorAll('.ambient-widget')].map(el => ({ id: el.dataset.widgetId, left: el.style.left, top: el.style.top, floatX: el.style.getPropertyValue('--float-x'), floatY: el.style.getPropertyValue('--float-y'), transform: getComputedStyle(el).transform, opacity: getComputedStyle(el).opacity })),
   }));
-  async function open(path = '/editor', viewport = { width: 1280, height: 720 }, reducedMotion = 'no-preference') {
+  async function open(path = '/editor', viewport = { width: 1280, height: 720 }, reducedMotion = 'no-preference', preview = path === '/editor') {
     const context = await browser.newContext({ viewport, reducedMotion, timezoneId: 'America/Toronto' }); contexts.push(context);
     await keepPagesLocal(context, base);
     const page = await context.newPage();
@@ -44,7 +44,7 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     await page.clock.install({ time: new Date(now) }); await page.clock.pauseAt(new Date(now));
     await page.goto(base + path); await page.locator('.grid-ambient').waitFor();
     await page.evaluate(() => document.fonts.ready);
-    if (path === '/editor') await page.getByRole('button', { name: 'Preview movement', exact: true }).click();
+    if (preview) await page.getByRole('button', { name: 'Preview movement', exact: true }).click();
     return page;
   }
   async function seek(page, seconds) {
@@ -74,6 +74,33 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     });
   }
   try {
+    const lifecycle = await open('/editor', { width: 1280, height: 720 }, 'no-preference', false);
+    await lifecycle.waitForFunction(() => document.querySelector('.weather-glyph[data-glyph-hero]')?.getAnimations({ subtree: true }).some(animation => animation.effect?.getTiming().iterations === Infinity));
+    const loopCount = await lifecycle.evaluate(() => {
+      const glyph = document.querySelector('.weather-glyph[data-glyph-hero]');
+      const loops = glyph.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations === Infinity);
+      globalThis.__lrdGlyphFixture = { glyph, loops };
+      return loops.filter(animation => animation.playState === 'running').length;
+    });
+    assert.ok(loopCount > 0, 'the authored Lively weather glyph starts with a running loop');
+    await lifecycle.getByRole('button', { name: 'Preview movement', exact: true }).click();
+    await seek(lifecycle, 15);
+    assert.deepEqual(await lifecycle.evaluate(() => {
+      const { glyph, loops } = globalThis.__lrdGlyphFixture;
+      return { same: glyph === document.querySelector('.weather-glyph[data-glyph-hero]'), paused: loops.every(animation => animation.playState === 'paused' && animation.currentTime === 15_000) };
+    }), { same: true, paused: true }, 'preview seeks the same mounted glyph loops');
+    await lifecycle.getByRole('button', { name: 'Back to layout', exact: true }).click();
+    assert.deepEqual(await lifecycle.evaluate(() => {
+      const { glyph, loops } = globalThis.__lrdGlyphFixture;
+      return { same: glyph === document.querySelector('.weather-glyph[data-glyph-hero]'), running: loops.every(animation => animation.playState === 'running') };
+    }), { same: true, running: true }, 'Back to layout resumes the same previously running glyph loops');
+    await lifecycle.evaluate(() => { for (const animation of globalThis.__lrdGlyphFixture.loops) { animation.pause(); animation.currentTime = 1234; } });
+    await lifecycle.getByRole('button', { name: 'Preview movement', exact: true }).click(); await seek(lifecycle, 31.5);
+    await lifecycle.getByRole('button', { name: 'Back to layout', exact: true }).click();
+    assert.ok(await lifecycle.evaluate(() => globalThis.__lrdGlyphFixture.loops.every(animation => animation.playState === 'paused' && animation.currentTime === 1234)), 'preview restores an already-paused loop without taking over its play state or time');
+    await lifecycle.context().close();
+    checks.push('Back to layout restores the same mounted Lively glyph loops: previously running loops resume, and already-paused loops retain their original time and state');
+
     const live = await open('/display'), liveBefore = await readFrame(live), page = await open();
     assert.equal(await page.getByRole('button', { name: 'Play movement preview' }).count(), 1, 'preview starts paused');
     const frames = new Map();

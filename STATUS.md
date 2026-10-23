@@ -1,11 +1,11 @@
 # Project status
 ## Active PR reconciliation (#517, #519)
 
-PR #518 has resumed. Its first reconciliation checkpoint merges PR #522's
-compatible toolbar source at `e49bd96` and merged pre-idle snapshot source
-`7771b178`, preserving the Home/Edit display/Settings roles and the newer reminder
-focus, native capture and teardown safeguards. Further PR #522 corrections remain
-an explicit dependency; final base integration, review and CI are still required.
+PR #518 has resumed. Its integration includes PR #522's corrected toolbar source
+at `8310497` and merged pre-idle snapshot source `7771b178`, preserving the
+Home/Edit display/Settings roles and the newer reminder focus, native capture and
+teardown safeguards. PR #522's reviewed main merge remains an explicit dependency;
+final base integration, review and CI are still required.
 
 The scheduled preview now admits frames using the effective visual and a composite
 configuration generation. An unobserved on/off/on interval, schedule edit or
@@ -34,8 +34,12 @@ checks use the actual movement timeline's interval controls while retaining all
 geometry, anchoring and fitted-row assertions. Home/Settings desktop and editor
 mobile renders were inspected in RAM with synthetic data.
 
-The full 25-suite browser aggregate, independent final-head
-review and applicable CI remain acceptance gates. Earlier recorded failures remain diagnostic evidence.
+The frozen full 25-suite run at `df53cf7` reproduces the earlier #527 short-window
+alert failure; it remains dated diagnostic evidence. The corrected integration
+passes Studio (29 groups, 66 s), Workspace (18, 53 s), Styles (15, 22 s) and
+Free-size (13, 33 s), with a synthetic 390-by-480 alert render inspected in RAM.
+The aggregate, independent final-head review and applicable CI remain acceptance
+gates. Earlier recorded failures remain diagnostic evidence.
 No installed files/data/settings or sealed native artifacts changed; source checks
 do not establish actual screensaver or screenshot-content acceptance under #519.
 
@@ -54,6 +58,13 @@ The corrected source passes Studio (29 groups, 59 s), Workspace (18, 52 s) and
 Styles (15, 20 s) together, including long errors without a floating/inline loop.
 Direct geometry updates preserve any pending animation-frame ID so unmount can
 still cancel the scheduled resize/focus update.
+
+Independent review also reproduced #515's glyph-loop lifecycle issue: returning
+from the movement timeline left the same mounted Lively weather loop paused.
+The timeline now restores only the CSS loops it borrowed, including their prior
+clock and running/paused state; cancelled or replaced glyphs are not revived.
+The real-browser regression fails before the correction and passes afterward;
+movement preview and context help pass together (6 s and 7 s).
 
 The following entries retain their historical checkpoint scope.
 
