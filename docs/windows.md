@@ -136,6 +136,14 @@ ambient browser exists. It scales to at most 640 by 360, encodes PNG into a
 file, history, capture log or image export is implemented. DPI awareness makes
 bounds physical pixels. This is last state, not live capture.
 
+Capture uses `Format32bppRgb`, whose fourth byte is unused, and the thumbnail
+uses `Format24bppRgb` (#519). GDI color data can have zero high bytes; treating
+them as ARGB alpha made GDI+ scaling erase valid RGB. The synthetic
+`DesktopSnapshotTests` exercises the production encoding helper with those
+bytes, checks opaque decoded colors including black, the unchanged scaling
+bounds and cancellation. See Microsoft's [GDI alpha explanation](https://devblogs.microsoft.com/oldnewthing/20210915-00/?p=105687)
+and [pixel format definitions](https://learn.microsoft.com/en-us/dotnet/api/system.drawing.imaging.pixelformat).
+
 A memory-only token obtained through `/api/host/session` authenticates upload and
 delete; browser-origin requests cannot retrieve it. Preview responses use
 no-store. Tokens/pixels never enter settings, reminders, backup or diagnostics.
@@ -148,6 +156,14 @@ are not captured separately. Protected content may be black/unavailable; failed
 capture omits preview. No elevated access, protection bypass or locked-desktop
 capture is attempted. Capture precedes display creation to avoid recursive
 previews. Multi-monitor selection and live capture are not built.
+
+Windows may switch to a separate desktop before a secure screensaver starts;
+an unsecured screensaver runs on the default desktop ([Microsoft desktop
+documentation](https://learn.microsoft.com/en-us/windows/win32/winstation/desktops)).
+Capturing before this app's surface exists does not establish capture before
+that Windows switch. Manual `--display` evidence therefore does not prove
+automatic `/s` can obtain the same source. The #519 encoding regression does
+not establish the cause or resolution of a particular native blank scene.
 
 ## Idle and security
 

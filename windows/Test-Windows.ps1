@@ -66,6 +66,12 @@ try {
     & $lifecycleTest
     if ($LASTEXITCODE -ne 0) { throw 'Lifecycle regression failed.' }
     $passed++
+    $snapshotTest = Join-Path $compiled 'DesktopSnapshotTests.exe'
+    & $compiler /nologo /target:exe /platform:anycpu "/out:$snapshotTest" /reference:System.Drawing.dll (Join-Path $PSScriptRoot 'DesktopSnapshot.cs') (Join-Path $PSScriptRoot 'tests\DesktopSnapshotTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Snapshot encoding regression compilation failed.' }
+    & $snapshotTest
+    if ($LASTEXITCODE -ne 0) { throw 'Snapshot encoding regression failed.' }
+    $passed++
     $runtimeTest = Join-Path $compiled 'ServerRuntimeTests.exe'
     & $compiler /nologo /target:exe /platform:anycpu "/out:$runtimeTest" /reference:System.Management.dll /reference:System.Web.Extensions.dll (Join-Path $PSScriptRoot 'ServerRuntime.cs') (Join-Path $PSScriptRoot 'tests\ServerRuntimeTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Server runtime regression compilation failed.' }
