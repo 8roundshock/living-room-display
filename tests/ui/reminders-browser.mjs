@@ -72,6 +72,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
   }
   async function open({ viewport = { width: 1280, height: 720 }, reducedMotion = 'no-preference', clock = true, init } = {}) {
     const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion });
+    await context.route('**/api/windows/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ available: false, selectedScreenSaver: null, active: null, timeoutSeconds: null, secure: null, isLivingRoomDisplay: false, power: { available: false, scheme: null, displayOffSeconds: null, sleepSeconds: null } }) }));
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     // 404 and 400 replies are expected where a reminder was deleted elsewhere (#355) or a creation time is ahead of the server (#296).
@@ -864,9 +865,16 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await page.clock.runFor(8200);
     await eventually(() => undoButton(page).count(), 0, 'the check-off Undo expires');
     await focusIs(page, 'Up next (4)', 'focus moves from an expired check-off Undo to the Up next switch');
-    await page.getByRole('button', { name: 'Delete: Book a check-up', exact: true }).click();
+    // #521: hold the delete's queued next-row focus until after the user has focused its Undo.
+    // This order must preserve the newer focus choice, not move it back to a reminder row.
+    await page.getByRole('button', { name: 'Delete: Book a check-up', exact: true }).focus();
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+    await page.keyboard.press('Enter');
+    await status(page).getByText('Reminder deleted', { exact: true }).waitFor();
     await undoButton(page).focus();
-    await page.clock.runFor(8200);
+    assert.equal(await focused(page), 'Undo', 'the delete Undo starts focused');
+    await focusIs(page, 'Undo', 'a pending delete focus callback respects the newly focused Undo');
+    await page.clock.runFor(8150);
     await eventually(() => undoButton(page).count(), 0, 'the delete Undo expires');
     await focusIs(page, 'Up next (3)', 'focus moves from an expired delete Undo to the Up next switch');
     await circle(page, 'Call a friend').click();

@@ -17,6 +17,22 @@ possible cause, and this correction does not open or switch desktops. Session
 exit still clears the RAM-only snapshot. Review and runtime acceptance remain
 tracked in [#519](https://github.com/8roundshock/living-room-display/issues/519).
 
+### Reminder focus follow-up (#521)
+
+A queued next-row focus move now respects a newer focus choice. The deterministic
+regression holds the delete callback until the new Undo is focused; the previous
+source moved focus back to a reminder row, so expiry could not hand it to Up next.
+With the correction, Undo keeps focus and expiry still moves it to the list switch
+within the unchanged timing budget. Ordinary row handoffs and explicit Undo
+restoration remain covered by the full reminders suite.
+
+Build/typecheck, nine pure reminder unit tests, all 24 reminders browser groups
+(43 s) and all six preview groups (14 s) pass. Browser checks use temporary
+synthetic data, ephemeral loopback servers and mocked Windows status, with images
+in RAM only. The earlier failed CI run is retained as evidence; the corrected head
+still requires fresh independent review and CI before merge. This does not establish
+installation or native screensaver acceptance.
+
 ## Published continuation
 
 The integration is published in [PR #507](https://github.com/8roundshock/living-room-display/pull/507)
