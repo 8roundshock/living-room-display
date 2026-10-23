@@ -62,7 +62,8 @@ still cancel the scheduled resize/focus update.
 Independent review also reproduced #515's glyph-loop lifecycle issue: returning
 from the movement timeline left the same mounted Lively weather loop paused.
 The timeline now restores only the CSS loops it borrowed, including their prior
-clock and running/paused state; cancelled or replaced glyphs are not revived.
+clock and running/paused state; cancelled or replaced glyphs release their
+ownership entry on the next draw and are not revived.
 The real-browser regression fails before the correction and passes afterward;
 movement preview and context help pass together (6 s and 7 s).
 

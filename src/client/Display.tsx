@@ -387,6 +387,10 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
     if (!controlled) return;
     const draw = () => {
       const element = plane.current; if (!element) return;
+      for (const animation of previewLoops.current.keys()) {
+        const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+        if (animation.playState === 'idle' || !target?.isConnected || !root.current?.contains(target)) previewLoops.current.delete(animation);
+      }
       const { width, height } = size.current, dpr = window.devicePixelRatio || 1;
       const unit = floating ? floatPath(previewTime, motionIntervalSeconds) : stepPath(previewTime, motionIntervalSeconds);
       element.style.transform = `translate(${snap(unit.x * FLOAT_TRAVEL * width, dpr)}px, ${snap(unit.y * FLOAT_TRAVEL * height, dpr)}px)`;

@@ -98,8 +98,25 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     await lifecycle.getByRole('button', { name: 'Preview movement', exact: true }).click(); await seek(lifecycle, 31.5);
     await lifecycle.getByRole('button', { name: 'Back to layout', exact: true }).click();
     assert.ok(await lifecycle.evaluate(() => globalThis.__lrdGlyphFixture.loops.every(animation => animation.playState === 'paused' && animation.currentTime === 1234)), 'preview restores an already-paused loop without taking over its play state or time');
+    await lifecycle.getByRole('button', { name: 'Preview movement', exact: true }).click(); await seek(lifecycle, 15);
+    await lifecycle.route('**/api/state', async route => {
+      const response = await route.fetch(), state = await response.json();
+      state.weather.current.weatherCode = 61;
+      await route.fulfill({ response, json: state });
+    });
+    await lifecycle.clock.runFor(30_100);
+    await lifecycle.locator('.weather-glyph[data-glyph-hero][data-glyph="rain"]').waitFor();
+    await seek(lifecycle, 31.5);
+    assert.deepEqual(await lifecycle.evaluate(() => {
+      const old = globalThis.__lrdGlyphFixture.loops;
+      const fresh = document.querySelector('.weather-glyph[data-glyph-hero]').getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations === Infinity);
+      globalThis.__lrdGlyphFixture.fresh = fresh;
+      return { oldIdle: old.every(animation => animation.playState === 'idle' && !animation.effect.target.isConnected), freshPaused: fresh.length > 0 && fresh.every(animation => animation.playState === 'paused') };
+    }), { oldIdle: true, freshPaused: true }, 'a condition update cancels the replaced glyph loops and seeks only their live replacements');
+    await lifecycle.getByRole('button', { name: 'Back to layout', exact: true }).click();
+    assert.ok(await lifecycle.evaluate(() => globalThis.__lrdGlyphFixture.loops.every(animation => animation.playState === 'idle') && globalThis.__lrdGlyphFixture.fresh.every(animation => animation.playState === 'running')), 'returning restores the replacement glyph without reviving its cancelled predecessor');
     await lifecycle.context().close();
-    checks.push('Back to layout restores the same mounted Lively glyph loops: previously running loops resume, and already-paused loops retain their original time and state');
+    checks.push('Back to layout restores the same mounted Lively glyph loops and prior paused clocks; condition changes seek/restore the live replacement without reviving cancelled predecessors');
 
     const live = await open('/display'), liveBefore = await readFrame(live), page = await open();
     assert.equal(await page.getByRole('button', { name: 'Play movement preview' }).count(), 1, 'preview starts paused');
