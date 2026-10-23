@@ -8,7 +8,8 @@ import { request } from 'node:http';
 import { createApplication } from './app.ts';
 import { forecastFixture } from './fixtures.ts';
 import { defaultSettings } from '../shared/defaults.ts';
-import { MANUAL_OVERRIDE_MS } from '../shared/schedule.ts';
+import { MANUAL_OVERRIDE_MS, scheduledSettings } from '../shared/schedule.ts';
+import { AIR_ENDPOINT } from './air.ts';
 import { assertPreviousReaderAccepts } from './compat/previous-reader.ts';
 
 const body = (value: unknown) => ({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
@@ -78,4 +79,59 @@ test('schedule API switches at boundaries and on wake without changing manual se
     assert.deepEqual(missing.selection.missingPresetIds, ['legacy-style']);
     assert.equal(missing.visual, null);
   } finally { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); }
+});
+
+test('scheduled-only Weather and Air quality request data while manual settings and content stay unchanged', async () => {
+  const now = Date.parse('2026-10-18T13:00:00Z'), hour = now / 1000;
+  const directory = await mkdtemp(join(tmpdir(), 'lrd-schedule-demand-'));
+  const requested: URL[] = [];
+  const app = await createApplication({ dataDirectory: directory, now: () => now, fetcher: async input => {
+    const url = new URL(input); requested.push(url);
+    return Response.json(url.origin + url.pathname === AIR_ENDPOINT ? {
+      current: { time: hour, us_aqi: 42, pm2_5: 12, pm10: 18, uv_index: 3 },
+      hourly: { time: [hour, hour + 3600], us_aqi: [42, 45], uv_index: [3, 4] },
+    } : forecastFixture(hour));
+  } });
+  const manual = defaultSettings();
+  for (const id of Object.keys(manual.widgets) as (keyof typeof manual.widgets)[]) manual.widgets[id] = id === 'clock';
+  const { appearance, widgets, widgetGrid, widgetOverrides, widgetBehavior, preview } = manual;
+  const visual = { appearance, widgets, widgetGrid, widgetOverrides, widgetBehavior, preview };
+  manual.savedPresets = ['weather', 'airQuality'].map(id => ({
+    id, name: `Synthetic ${id}`, visual: { ...visual, widgets: { ...widgets, clock: false, [id]: true } },
+  }));
+  await app.store.update(data => { data.settings = manual; });
+  app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
+  const address = app.server.address(); assert.ok(address && typeof address === 'object');
+  const base = `http://127.0.0.1:${address.port}`;
+  const get = async () => (await fetch(base + '/api/state')).json();
+  try {
+    const reminder = await fetch(base + '/api/reminders', { method: 'POST', ...body({ text: 'Synthetic schedule reminder' }) });
+    assert.equal(reminder.status, 201);
+    const before = await get(); assert.equal(requested.length, 0, 'manual clock-only board needs no providers');
+    const select = async (fallbackPresetId: string) => {
+      const result = await fetch(base + '/api/schedule', { method: 'PUT', ...body({ enabled: true, fallbackPresetId, rules: [] }) });
+      assert.equal(result.status, 200);
+    };
+    await select('weather');
+    const weather = await get();
+    assert.equal(weather.weather.status, 'fresh'); assert.equal(weather.airQuality.status, 'off');
+    assert.equal(requested.length, 1);
+    assert.equal(requested[0]!.searchParams.get('latitude'), String(manual.location.latitude));
+    assert.equal(requested[0]!.searchParams.get('longitude'), String(manual.location.longitude));
+    await select('airQuality');
+    const air = await get();
+    assert.equal(air.airQuality.status, 'fresh'); assert.equal(air.airQuality.current.aqi, 42);
+    assert.equal(requested.length, 2); assert.equal(requested[1]!.origin + requested[1]!.pathname, AIR_ENDPOINT);
+    for (const state of [weather, air]) {
+      assert.deepEqual(state.settings, before.settings);
+      assert.deepEqual(state.reminders, before.reminders);
+      const effective = scheduledSettings(state.settings, state.schedule);
+      assert.deepEqual(effective.location, before.settings.location);
+      assert.deepEqual(effective.units, before.settings.units);
+      assert.deepEqual(effective.widgetData, before.settings.widgetData);
+    }
+  } finally {
+    app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close');
+    await rm(directory, { recursive: true, force: true });
+  }
 });

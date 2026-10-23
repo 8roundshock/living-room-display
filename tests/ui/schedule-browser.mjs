@@ -1,4 +1,4 @@
-// #514: schedules use desktop civil time and never replace the manual Editor source.
+// #514/#517: Settings owns schedules, Home owns overrides, Editor keeps the manual visual.
 // Synthetic data, fake clock, ephemeral loopback server; optional screenshots stay in RAM.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -50,10 +50,9 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
       data.settings = settings;
     });
     const manual = app.store.snapshot().settings;
-    const editor = await context.newPage(); await editor.goto(base + '/editor');
-    await editor.getByRole('tab', { name: 'Style', exact: true }).click();
-    await editor.locator('.schedule-disclosure > summary').click();
-    const schedule = editor.locator('.schedule-settings');
+    const settingsPage = await context.newPage(); await settingsPage.goto(base + '/settings');
+    await settingsPage.locator('.schedule-disclosure > summary').click();
+    const schedule = settingsPage.locator('.schedule-settings');
     assert.match(await schedule.locator('.schedule-status').innerText(), /Schedule off/);
     await schedule.getByRole('button', { name: 'Add schedule row', exact: true }).click();
     const row = schedule.locator('.schedule-row').first();
@@ -70,43 +69,45 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
     checks.push('Schedule starts off; Add leaves days/times unchosen; native controls save an explicit row and fallback independently of manual settings.');
 
     await row.getByLabel('Until', { exact: true }).fill('12:30');
-    await editor.getByRole('tab', { name: 'Widgets', exact: true }).click();
-    await editor.getByRole('tab', { name: 'Style', exact: true }).click();
-    await editor.locator('.schedule-disclosure > summary').click();
+    await settingsPage.locator('.schedule-disclosure > summary').click();
+    await settingsPage.locator('.schedule-disclosure > summary').click();
     assert.equal(await row.getByLabel('Until', { exact: true }).inputValue(), '12:30');
+    const editor = await context.newPage(); await editor.goto(base + '/editor');
+    await editor.getByRole('tab', { name: 'Style', exact: true }).click();
     const brightness = editor.getByRole('slider', { name: 'Brightness', exact: true });
     await brightness.focus(); await brightness.press('ArrowLeft');
-    assert.equal(await schedule.getByRole('button', { name: 'Use manual appearance for 1 hour', exact: true }).isDisabled(), true);
     await schedule.getByRole('button', { name: 'Save schedule', exact: true }).click();
     await schedule.getByText('Schedule saved.', { exact: true }).waitFor();
     assert.equal(app.store.snapshot().settings.appearance.brightness, manual.appearance.brightness);
     assert.equal(await editor.locator('.studio-savebar').count(), 1, 'schedule Save keeps the separate visual draft');
     await editor.locator('.cancel-settings').click();
     assert.equal((await request('/api/schedule')).config.rules[0].end, '12:30');
-    checks.push('Schedule drafts survive inspector tab changes; schedule Save preserves the visual draft, and visual Cancel preserves the saved schedule.');
+    checks.push('Settings schedule drafts survive closing/reopening their section; schedule Save preserves a separate Editor visual draft, and visual Cancel preserves the saved schedule.');
 
     const home = await context.newPage(); await home.goto(base + '/');
-    const display = await context.newPage(); await display.goto(base + '/display?native=1');
+    const display = await context.newPage(); await display.goto(base + '/display');
     await display.locator('.ambient-clock').waitFor();
     await advance(16_000);
-    await settle(editor, () => document.querySelector('.schedule-status')?.textContent.includes('schedule row 1'));
+    await settle(settingsPage, () => document.querySelector('.schedule-status')?.textContent.includes('scheduled now'));
     await settle(display, () => document.querySelector('.ambient')?.style.getPropertyValue('--ambient-brightness') === '0.25');
-    await settle(home, () => document.querySelector('.home-preview .ambient')?.style.getPropertyValue('--ambient-brightness') === '0.25');
+    await settle(home, () => document.querySelector('.schedule-home .schedule-status')?.textContent.includes('Synthetic morning'));
     const noBlank = await display.evaluate(() => ({ opacity: getComputedStyle(document.querySelector('.ambient-content')).opacity, background: getComputedStyle(document.querySelector('.display-page')).backgroundColor, count: document.querySelectorAll('.display-page').length }));
     assert.equal(noBlank.opacity, '1'); assert.equal(noBlank.count, 1);
     assert.deepEqual(app.store.snapshot().settings, manual);
-    await schedule.getByRole('button', { name: 'Use manual appearance for 1 hour', exact: true }).click();
-    await schedule.getByRole('button', { name: 'Return to schedule now', exact: true }).waitFor();
+    const useManual = home.getByRole('button', { name: 'Use manual style for 1 hour', exact: true });
+    const resume = home.getByRole('button', { name: 'Return to schedule', exact: true });
+    await useManual.click();
+    await resume.waitFor();
     assert.equal((await snapshot()).schedule.selection.source, 'override');
-    await schedule.getByRole('button', { name: 'Return to schedule now', exact: true }).click();
-    await schedule.getByRole('button', { name: 'Use manual appearance for 1 hour', exact: true }).waitFor();
+    await resume.click();
+    await useManual.waitFor();
     assert.equal((await snapshot()).schedule.selection.source, 'rule');
-    await schedule.getByRole('button', { name: 'Use manual appearance for 1 hour', exact: true }).click();
-    await schedule.getByRole('button', { name: 'Return to schedule now', exact: true }).waitFor();
+    await useManual.click();
+    await resume.waitFor();
     await advance(3_606_000);
-    await schedule.getByRole('button', { name: 'Use manual appearance for 1 hour', exact: true }).waitFor();
+    await useManual.waitFor();
     assert.equal((await snapshot()).schedule.selection.source, 'rule');
-    checks.push('A minute boundary updates live display and inert Home preview without blanking or changing manual settings; override/Return and one-hour expiry work.');
+    checks.push('A minute boundary updates the live display and Home status without blanking or changing manual settings; Home override/Return and one-hour expiry work.');
 
     await schedule.getByRole('button', { name: 'Add schedule row', exact: true }).click();
     const second = schedule.locator('.schedule-row').nth(1);
@@ -128,10 +129,24 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
     await request('/api/schedule', 'PUT', clean.config); await advance(6000);
     checks.push('Overlaps identify ordered winners; keyboard reordering preserves focus in the moved row; external edits preserve a stale local draft and block overwrite.');
 
+    const scheduleBackup = await request('/api/schedule/export');
+    assert.equal(await schedule.getByRole('link', { name: 'Download saved schedule', exact: true }).getAttribute('href'), '/api/schedule/export');
+    const upload = { name: 'synthetic-schedule.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(scheduleBackup)) };
+    await schedule.getByLabel('Schedule backup file', { exact: true }).setInputFiles(upload);
+    await schedule.getByRole('group', { name: 'Restore schedule', exact: true }).waitFor();
+    await schedule.getByRole('button', { name: 'Keep current schedule', exact: true }).click();
+    assert.deepEqual((await request('/api/schedule')).config, clean.config, 'canceling restoration keeps the saved sidecar');
+    await schedule.getByLabel('Schedule backup file', { exact: true }).setInputFiles(upload);
+    await schedule.getByRole('button', { name: 'Replace schedule', exact: true }).click();
+    await schedule.getByText('Schedule restored.', { exact: true }).waitFor();
+    assert.deepEqual((await request('/api/schedule')).config, clean.config);
+    checks.push('A separate schedule backup is linked explicitly; restoring requires confirmation, cancel preserves it and confirmed restore keeps the referenced styles.');
+
     await request('/api/settings', 'PATCH', { savedPresets: manual.savedPresets.filter(item => item.id !== 'legacy-morning') });
     await advance(6000);
     await schedule.getByText(/A scheduled style was deleted or is missing/).waitFor();
-    assert.match(await schedule.locator('.schedule-status').innerText(), /fallback/);
+    assert.match(await schedule.locator('.schedule-status').innerText(), /Synthetic evening.*outside scheduled times/);
+    assert.equal((await snapshot()).schedule.selection.source, 'fallback');
     assert.match(await row.getByLabel('Saved style', { exact: true }).innerText(), /Missing saved style/);
     const savedSchedule = await readFile(join(directory, 'schedule.json'), 'utf8');
     app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); app = await start(port);
@@ -141,7 +156,7 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
     checks.push('Deleted styles remain repairable and fall back safely; restart catches up without rewriting the saved schedule.');
 
     for (const width of [1280, 390, 320]) {
-      await editor.setViewportSize({ width, height: width === 1280 ? 720 : 844 });
+      await settingsPage.setViewportSize({ width, height: width === 1280 ? 720 : 844 });
       await schedule.scrollIntoViewIfNeeded();
       const layout = await schedule.evaluate(element => ({
         overflow: document.documentElement.scrollWidth - innerWidth,
@@ -149,7 +164,7 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
       }));
       assert.ok(layout.overflow <= 0, `${width}: no horizontal page overflow`);
       assert.deepEqual(layout.small, [], `${width}: schedule targets at least 44px`);
-      if (capture) images.push({ name: `schedule-${width}`, bytes: await editor.screenshot() });
+      if (capture) images.push({ name: `schedule-${width}`, bytes: await settingsPage.screenshot() });
     }
     checks.push('Desktop, 390px and 320px layouts have no horizontal overflow and keep 44px form/reorder/touch targets.');
     assert.deepEqual(errors, []);
