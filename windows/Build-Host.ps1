@@ -12,8 +12,9 @@ $compiler = Join-Path $env:WINDIR "Microsoft.NET\$framework\v4.0.30319\csc.exe"
 if (-not (Test-Path -LiteralPath $compiler)) { throw '.NET Framework 4.x C# compiler is required on Windows.' }
 $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
 $output = Join-Path ([IO.Path]::GetFullPath($OutputDirectory)) 'LivingRoomDisplay.scr'
-$arguments = @('/nologo','/target:winexe','/platform:anycpu','/optimize+',"/out:$output",'/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll','/reference:System.Management.dll')
-$sources = @(@('LivingRoomDisplay.cs','SessionStartup.cs','AmbientSession.cs','NativeDisplay.cs','SurfacePolicy.cs','ServerRuntime.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ })
+$arguments = @('/nologo','/platform:anycpu','/optimize+','/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll','/reference:System.Management.dll')
+$sources = @(@('LivingRoomDisplay.cs','DesktopSnapshot.cs','PreparedSnapshotClient.cs','PreviewPreparation.cs','SessionStartup.cs','AmbientSession.cs','NativeDisplay.cs','SurfacePolicy.cs','ServerRuntime.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ })
+$preparerSources = @(@('PreviewPreparer.cs','PreviewPreparation.cs','PreparedSnapshotClient.cs','DesktopSnapshot.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ })
 $assemblyInfo = $null
 try {
     if ($IconFile) {
@@ -36,9 +37,13 @@ using System.Reflection;
 "@
         [IO.File]::WriteAllText($assemblyInfo, $info, (New-Object Text.UTF8Encoding($false)))
         $sources += $assemblyInfo
+        $preparerSources += $assemblyInfo
     }
-    & $compiler @arguments @sources
+    & $compiler @arguments /target:winexe "/out:$output" @sources
     if ($LASTEXITCODE -ne 0) { throw 'Windows helper compilation failed.' }
+    $preparer = Join-Path ([IO.Path]::GetFullPath($OutputDirectory)) 'LivingRoomDisplay.Preview.exe'
+    & $compiler @arguments /target:exe "/out:$preparer" @preparerSources
+    if ($LASTEXITCODE -ne 0) { throw 'Windows preview preparer compilation failed.' }
 } finally {
     if ($assemblyInfo -and (Test-Path -LiteralPath $assemblyInfo)) { Remove-Item -LiteralPath $assemblyInfo -Force }
 }

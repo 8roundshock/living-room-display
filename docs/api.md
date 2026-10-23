@@ -745,11 +745,12 @@ saved change (and on a restart) and never on a read, so Home and the display ask
 
 The Windows host calls `GET /api/host/session` with `X-LRD-Native: 1`, no `Origin`,
 and no browser Fetch Metadata headers. The response contains a random process-only
-token, current settings, and display URL. Host/Origin checks and no CORS access
+token, current settings, display URL, and an optional scalar preparation-pipe
+name. The pipe name is not its child capability. Host/Origin checks and no CORS access
 prevent a website from obtaining this handshake. It is not an account system;
 other processes running as the local user remain trusted.
 
-The host captures before ambient activation and posts PNG bytes to
+Manual `--display`/`--test-display` captures before its own overlay and posts PNG bytes to
 `POST /api/preview` with `X-LRD-Token`, `X-Captured-At` (recent ISO timestamp),
 and `Content-Type: image/png`. Maximum: 4 MiB, 4096 pixels per side, 4 megapixels.
 The host clears it with `DELETE /api/preview` and the same token on exit.
@@ -760,6 +761,26 @@ check. Every clear invalidates earlier unfinished uploads, which return 409 inst
 restoring pixels; re-enabling preview does not revive them.
 No snapshot, token, capture log, or image cache is written
 by the server. Actual Windows capture is owned and tested by the Windows host.
+
+Automatic `/s` instead claims an earlier private frame (#525); it never captures
+after it starts as a fallback. The installed backend supervises a distinct native
+preparer through a child-only capability sent via redirected stdin. Native-only
+`/api/preview/preparation` GET/POST/DELETE and the attestation POST at
+`/api/preview/preparation/claim` require that capability; there is no ambient HTTP
+claim route which trusts caller-supplied process JSON. Preparation accepts at most
+a 640 × 360 PNG/4 MiB in one private RAM slot, tagged with configuration, generation,
+input epoch, session, desktop and completion clocks. It is absent from state,
+preview/image, exports and polls until the OS-identified named-pipe client passes
+the preparer's exact `/s` process checks. See [native guards and limits](windows.md#earlier-automatic-snapshot-525).
+The 90-second pending TTL is distinct from an active session's existing lifetime.
+Preparation uses effective scheduled visibility and an opaque configuration derived
+from manual settings, the schedule revision/selection and observed boundaries.
+It invalidates on an intervening off interval even when the next read sees the
+same style again; body completion and claim recheck that configuration. A resident
+worker retains its input-attempt history across scheduled off intervals. Explicit
+idle disable still stops it and revokes the capability. `preview.enabled` and the
+preview widget toggle are saved-style visual fields, not a separate global consent
+setting; schedules never replace global idle enablement or Windows selection.
 
 ## Persistence and recovery
 

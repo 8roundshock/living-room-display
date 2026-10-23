@@ -719,7 +719,9 @@ a computer whose clock ran ahead) is left out, and retried without when the serv
 clock is behind, so the reminder still returns, perhaps a place away, and no schema text
 shows (#296). Plain messages (“Reminder saved”, “Restored …”) also go after about 8 s,
 even while another tab is open (#295). A focused Undo that expires, or gives way to a
-plain message, hands focus to the Up next switch rather than the page (#297). A
+plain message, hands focus to the Up next switch rather than the page (#297).
+A queued move to the next row respects another control focused before it runs,
+so a newly focused Undo keeps focus until expiry (#521). A
 shown message sticks to the bottom of the visible panel (above the Save bar on narrow
 screens), and the focused row scrolls clear of it; with no message the empty line stays
 at the end of the list and covers no row. The message, its Undo and any row
@@ -1076,3 +1078,13 @@ require a separate isolated production server and mock state without saved-data
 changes. These are development tools, not runtime dependencies. Final source
 visuals also require independent RAM inspection. Native cursor proof, fresh-account
 installation, media/game inhibition and viewing-distance comfort remain separate.
+
+The compatible editor's persistent Style/Save toolbar owns its own height. Focused
+inspector controls must sit below it, remain inside the viewport and pass center
+hit testing. At 600 px high, the first-run inspector's earlier internal-scroll
+budget additionally allows only that measured toolbar height; all 44 px row
+targets and the no-body-overflow check remain. At 1280×720 the common Weather form
+fits without scrolling. An empty location status keeps its live region mounted
+without reserving a blank row. Mobile action errors return to their reserved
+canvas row whenever canvas controls are visible; floating is for a scrolled-away
+canvas, where it must still avoid the current control.

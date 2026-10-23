@@ -1,6 +1,30 @@
 # Project status
+## Active PR reconciliation (#517, #519)
 
-## Current integration checkpoint (#517)
+PR #518 has resumed. Its first reconciliation checkpoint merges PR #522's
+compatible toolbar source at `e49bd96` and merged pre-idle snapshot source
+`7771b178`, preserving the Home/Edit display/Settings roles and the newer reminder
+focus, native capture and teardown safeguards. Further PR #522 corrections remain
+an explicit dependency; final base integration, review and CI are still required.
+
+The scheduled preview now admits frames using the effective visual and a composite
+configuration generation. An unobserved on/off/on interval, schedule edit or
+override expiry invalidates a pending/in-flight frame. A scheduled off interval
+keeps the same disabled worker so it cannot reset one-attempt input history.
+Explicit idle disable still stops the child and revokes its private capability.
+Preview fields belong to saved visual styles; idle enablement and Windows
+selection remain independent global gates.
+
+The isolated backend integration passes 60 targeted tests and both TypeScript
+checks. Combined production build, full units, the full 25-suite browser aggregate,
+corrected desktop/mobile RAM renders, independent final-head review and applicable
+CI remain acceptance gates. Earlier recorded failures remain diagnostic evidence.
+No installed files/data/settings or sealed native artifacts changed; source checks
+do not establish actual screensaver or screenshot-content acceptance under #519.
+
+The following entries retain their historical checkpoint scope.
+
+## Historical paused integration checkpoint (#517)
 
 Work is paused with PR #518 still a draft. Its corrected source is checkpointed,
 but final independent approval, corrected RAM render inspection and the full
@@ -146,6 +170,62 @@ reader checks on canonical state, backup and export while scheduling is active.
 The original Editor-based browser suite must be adapted to the integrated Settings
 route and Home controls; final browser/rendering and independent review remain
 pending. These source checks establish no installation or native acceptance.
+## Pre-idle snapshot source work (#525)
+
+Work is in progress on one private RAM-only snapshot attempt per eligible input
+epoch, 30 seconds before the configured Windows idle threshold. A prepared image
+expires after 90 seconds unless an authenticated native activation claims it.
+Cold/replacement workers establish a baseline and wait for new input; early,
+late, expired or uncertain activation is unavailable. This is an earlier-frame
+feature, not proof of the remaining black-thumbnail cause in #519.
+
+The source includes the private backend pending store/supervisor, separate
+non-display native preparer, OS-identified pipe claim and build/package/control
+lifetime integration. Typechecking and server/client build pass, alongside all
+505 unit tests. `windows/tests/Test-PreIdleSource.ps1` compiles both production
+binaries without running them and passes 29 preparation/order assertions, 29
+injected claim/lifetime assertions, five scalar framing assertions, six synthetic
+encoding cases, eight fake host lifecycle cases, active-input/surface regressions,
+32 fake runtime contracts, mocked preparer lifecycle and nine static installer
+policy groups. CI and independent final-head review are still pending.
+
+No installed app/data/settings or sealed native artifacts have changed; no
+watcher, desktop capture or native display was launched. Installed and actual
+automatic-screen-content acceptance remain separate under #519. This source
+feature does not establish the cause or resolution of the observed black image.
+
+## Last screen encoding correction (#519)
+
+The native snapshot now uses an opaque RGB capture surface and RGB thumbnail.
+The previous ARGB surface let zero high bytes in GDI color data become transparency
+during scaling, erasing otherwise valid RGB. A synthetic regression through the
+production encoding helper failed with the previous formats and passes with the
+correction, preserving black and colored pixels with decoded alpha 255. Four
+size/scaling cases and two cancellation cases pass; host compilation, eight fake
+startup/lifecycle scenarios and the active-input regressions also pass.
+
+These are source checks only: no desktop capture, native display activation or
+installed files changed. The reported blank/unavailable automatic screensaver
+scene remains unverified; a secure screensaver's desktop context is a separate
+possible cause, and this correction does not open or switch desktops. Session
+exit still clears the RAM-only snapshot. Review and runtime acceptance remain
+tracked in [#519](https://github.com/8roundshock/living-room-display/issues/519).
+
+### Reminder focus follow-up (#521)
+
+A queued next-row focus move now respects a newer focus choice. The deterministic
+regression holds the delete callback until the new Undo is focused; the previous
+source moved focus back to a reminder row, so expiry could not hand it to Up next.
+With the correction, Undo keeps focus and expiry still moves it to the list switch
+within the unchanged timing budget. Ordinary row handoffs and explicit Undo
+restoration remain covered by the full reminders suite.
+
+Build/typecheck, nine pure reminder unit tests, all 24 reminders browser groups
+(43 s) and all six preview groups (14 s) pass. Browser checks use temporary
+synthetic data, ephemeral loopback servers and mocked Windows status, with images
+in RAM only. The earlier failed CI run is retained as evidence; the corrected head
+still requires fresh independent review and CI before merge. This does not establish
+installation or native screensaver acceptance.
 
 ## Published continuation
 

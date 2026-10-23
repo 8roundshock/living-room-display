@@ -427,14 +427,15 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
       for (const target of targets) {
         await target.focus(); await page.clock.runFor(50);
         const geometry = await target.evaluate(element => {
-          const r = element.getBoundingClientRect(), bar = document.querySelector('.studio-savebar')?.getBoundingClientRect();
+          const r = element.getBoundingClientRect(), bar = document.querySelector('.editor-style-bar')?.getBoundingClientRect();
           const controls = element.closest('.free-size-controls'), box = controls.getBoundingClientRect();
-          return { active: document.activeElement === element, top: r.top, bottom: r.bottom, left: r.left, right: r.right, barTop: bar && bar.left < r.right && r.left < bar.right ? bar.top : innerHeight,
+          return { active: document.activeElement === element, top: r.top, bottom: r.bottom, left: r.left, right: r.right, toolbarBottom: bar?.bottom ?? 0, viewportHeight: innerHeight,
             width: innerWidth, boxLeft: box.left, boxRight: box.right, overflow: controls.scrollWidth - controls.clientWidth, page: document.documentElement.scrollWidth - innerWidth };
         });
         const label = JSON.stringify({ viewport, name: await target.getAttribute('aria-label'), ...geometry });
         assert.equal(geometry.active, true, label);
-        assert.ok(geometry.bottom <= geometry.barTop - 4 && geometry.top >= 0, `focused control is clear of the Save bar: ${label}`);
+        assert.ok(geometry.top >= geometry.toolbarBottom + 4 && geometry.bottom <= geometry.viewportHeight, `focused control is below the Style/Save toolbar and inside the viewport: ${label}`);
+        assert.equal(await target.evaluate(element => { const r = element.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return element === hit || element.contains(hit); }), true, `focused control is unobscured: ${label}`);
         assert.ok(geometry.left >= geometry.boxLeft - 1 && geometry.right <= geometry.boxRight + 1 && geometry.right <= geometry.width, `control fits its panel: ${label}`);
         assert.ok(geometry.overflow <= 1 && geometry.page <= 1, `no horizontal overflow: ${label}`);
       }

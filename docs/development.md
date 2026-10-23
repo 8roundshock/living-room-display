@@ -14,6 +14,22 @@ Do not replace an existing system Node or application runtime to work on this pr
 
 ## Application commands
 
+For #525's bounded source-only Windows verification, use an installed PowerShell
+whose effective policy already permits the script, with inherited module/policy
+overrides cleared as described below:
+
+```powershell
+pwsh -NoProfile -File windows/tests/Test-PreIdleSource.ps1
+```
+
+This compiles both production binaries without running them, then executes pure
+policy/claim/lifetime/framing tests, synthetic bitmap encoding, fake host/input/
+surface/runtime checks, mocked preparer lifecycle and static installer policy.
+It never calls the installed backend or runs a watcher/display/desktop capture.
+The broader `Test-Windows.ps1` is a different integration scope; do not substitute
+it when only source checks are authorized. Installer smoke CI sets the disable-only
+`LRD_PREVIEW_PREPARER_DISABLED=1` so package lifecycle checks do not capture pixels.
+
 From the checkout with Node 24/npm available:
 
 ```powershell

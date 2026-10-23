@@ -2,8 +2,6 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
@@ -16,9 +14,11 @@ using Microsoft.Win32;
 internal static class Program
 {
     internal const string BaseUrl = "http://127.0.0.1:4318";
+    internal static long EnteredMonotonicMilliseconds;
     [STAThread]
     private static int Main(string[] args)
     {
+        EnteredMonotonicMilliseconds = checked((long)PreparedSnapshotClient.GetTickCount64());
         try
         {
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException, true);
@@ -57,7 +57,7 @@ internal static class Program
                     try
                     {
                         Application.EnableVisualStyles();
-                        using (AmbientSession session = new AmbientSession(mode == "--test-display"))
+                        using (AmbientSession session = new AmbientSession(mode == "--test-display", mode == "/s"))
                             if (session.Ready) Application.Run(session);
                     }
                     finally { DisplayNative.SetThreadDpiAwarenessContext(previousDpi); }
@@ -122,13 +122,17 @@ internal static class Program
 internal sealed class NativeApi : IPreviewSession
 {
     private string token;
+    private readonly bool preparedOnly;
+    private readonly string preparationPipe;
     public bool PreviewEnabled { get; private set; }
-    internal NativeApi(CancellationToken cancellation)
+    internal NativeApi(CancellationToken cancellation, bool preparedOnly = false)
     {
+            this.preparedOnly = preparedOnly;
             cancellation.ThrowIfCancellationRequested();
             string json = Request("GET", "/api/host/session", null, cancellation, 5000);
             var data = new JavaScriptSerializer().DeserializeObject(json) as System.Collections.Generic.Dictionary<string, object>;
             token = (string)data["token"];
+            preparationPipe = data.ContainsKey("preparationPipe") ? data["preparationPipe"] as string : null;
             var settings = data["settings"] as System.Collections.Generic.Dictionary<string, object>;
             var preview = settings["preview"] as System.Collections.Generic.Dictionary<string, object>;
             var widgets = settings["widgets"] as System.Collections.Generic.Dictionary<string, object>;
@@ -147,25 +151,22 @@ internal sealed class NativeApi : IPreviewSession
     }
     public void UploadDesktop(CancellationToken cancellation)
     {
+        NativePreviewSelection.Run(preparedOnly,
+            delegate { return PreparedSnapshotClient.Claim(preparationPipe,Program.EnteredMonotonicMilliseconds,cancellation); },
+            delegate { UploadCurrentDesktop(cancellation); },Clear);
+    }
+    private void UploadCurrentDesktop(CancellationToken cancellation)
+    {
         try
         {
             cancellation.ThrowIfCancellationRequested();
             Rectangle bounds = Screen.PrimaryScreen.Bounds;
-            double scale = Math.Min(1, Math.Min(640.0 / bounds.Width, 360.0 / bounds.Height));
-            using (Bitmap screen = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb))
-            using (Graphics capture = Graphics.FromImage(screen))
-            using (Bitmap small = new Bitmap(Math.Max(1, (int)(bounds.Width * scale)), Math.Max(1, (int)(bounds.Height * scale))))
-            using (Graphics resize = Graphics.FromImage(small))
-            using (MemoryStream png = new MemoryStream())
+            byte[] png = DesktopSnapshot.Create(bounds.Size, delegate(Bitmap screen)
             {
-                cancellation.ThrowIfCancellationRequested();
-                capture.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
-                resize.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                resize.DrawImage(screen, new Rectangle(0, 0, small.Width, small.Height));
-                small.Save(png, ImageFormat.Png);
-                cancellation.ThrowIfCancellationRequested();
-                Request("POST", "/api/preview", png.ToArray(), cancellation, 5000);
-            }
+                using (Graphics capture = Graphics.FromImage(screen))
+                    capture.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size, CopyPixelOperation.SourceCopy);
+            }, cancellation);
+            Request("POST", "/api/preview", png, cancellation, 5000);
         }
         catch (Exception ex)
         {

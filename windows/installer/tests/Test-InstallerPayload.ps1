@@ -63,7 +63,7 @@ try {
     Assert-True (Test-Path -LiteralPath $PayloadDirectory -PathType Container) "payload folder not found: $PayloadDirectory"
 
     # Required files.
-    foreach ($required in @('app/package.json','app/package-lock.json','app/dist/server/index.js','app/dist/client/index.html','app/windows/LivingRoomDisplay.ps1','app/windows/LivingRoomDisplay.scr','app/THIRD-PARTY-NOTICES.txt','app/node_modules/react/package.json','app/node_modules/react-dom/package.json','app/node_modules/zod/package.json','runtime/node.exe','runtime/npm.cmd','runtime/LICENSE')) {
+    foreach ($required in @('app/package.json','app/package-lock.json','app/dist/server/index.js','app/dist/client/index.html','app/windows/LivingRoomDisplay.ps1','app/windows/LivingRoomDisplay.scr','app/windows/LivingRoomDisplay.Preview.exe','app/THIRD-PARTY-NOTICES.txt','app/node_modules/react/package.json','app/node_modules/react-dom/package.json','app/node_modules/zod/package.json','runtime/node.exe','runtime/npm.cmd','runtime/LICENSE')) {
         Assert-True (Test-Path -LiteralPath (Join-Path $PayloadDirectory $required.Replace('/','\')) -PathType Leaf) "missing $required"
     }
     $checks++
@@ -84,7 +84,7 @@ try {
     foreach ($dev in @($package.devDependencies.PSObject.Properties.Name) + @('typescript','vite','@types')) {
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $appDirectory ('node_modules\' + $dev.Replace('/','\'))))) "development dependency packaged: $dev"
     }
-    Assert-True (@(Get-ChildItem -LiteralPath (Join-Path $appDirectory 'windows') -Force).Count -eq 2) 'app\windows must hold only the control script and the helper'
+    Assert-True (@(Get-ChildItem -LiteralPath (Join-Path $appDirectory 'windows') -Force).Count -eq 3) 'app\windows must hold only the control script, display host and preview preparer'
     $checks++
 
     # release.json is exact: every payload file, nothing else, matching hashes.
@@ -126,6 +126,8 @@ try {
     Assert-True ((& $nodeExe --version).Trim() -eq "v$($runtimePin.version)") 'node.exe version differs from runtime.json'
     $helperVersion = (Get-Item -LiteralPath (Join-Path $appDirectory 'windows\LivingRoomDisplay.scr')).VersionInfo
     Assert-True ($helperVersion.ProductName -eq 'Living Room Display' -and $helperVersion.FileVersion -eq "$($manifest.version).0") 'the helper lacks its product name or file version'
+    $preparerVersion = (Get-Item -LiteralPath (Join-Path $appDirectory 'windows\LivingRoomDisplay.Preview.exe')).VersionInfo
+    Assert-True ($preparerVersion.ProductName -eq 'Living Room Display' -and $preparerVersion.FileVersion -eq "$($manifest.version).0") 'the preview preparer lacks its product name or file version'
     $checks++
 } finally {
     if (Test-Path -LiteralPath $scratch) {

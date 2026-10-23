@@ -132,6 +132,7 @@ $checks++
 
 # CI: read-only token, SHA-pinned actions, no secrets.
 $workflow = [IO.File]::ReadAllText((Join-Path $repository '.github\workflows\installer.yml'))
+Assert-True ($workflow -match "(?s)name: Install, repair, rollback and uninstall smoke test.*?LRD_PREVIEW_PREPARER_DISABLED: '1'") 'installer lifecycle CI must disable desktop preparation'
 Assert-True ($workflow -match '(?m)^permissions:\s*\r?\n\s+contents: read\s*$') 'installer workflow must be contents: read'
 foreach ($use in [regex]::Matches($workflow, '(?m)uses:\s*(\S+)')) { Assert-True ($use.Groups[1].Value -match '@[0-9a-f]{40}$') "action not pinned by SHA: $($use.Groups[1].Value)" }
 Assert-True ($workflow -notmatch 'secrets\.') 'installer workflow must not use secrets'

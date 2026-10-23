@@ -3,7 +3,9 @@
 A small .NET Framework `.scr` host launches Microsoft Edge to render
 `/display?native=1`.
 `windows/Build-Host.ps1` uses the Windows Framework compiler; no SDK, native
-package, administrator installation or always-running idle watcher is required.
+package or administrator installation is required. The installed backend can own
+one non-display preparer while automatic activation and Last screen are enabled
+(#525); no service, task or startup entry is added.
 
 The lifecycle below is the source helper since
 [PR #51](https://github.com/8roundshock/living-room-display/pull/51): its own
@@ -16,8 +18,11 @@ this helper is still pending (see [verification](#verification)).
 
 ## Entry points and lifetime
 
-- `/s` or `--display`: ensure the installed backend is owned/ready, capture one
-  last-desktop thumbnail if enabled, then launch the isolated Edge kiosk.
+- `/s`: ensure the installed backend is owned/ready, claim an eligible earlier
+  RAM-only thumbnail if available, then launch the isolated Edge kiosk. Never
+  capture a replacement after automatic activation has started.
+- `--display`: ensure the backend is owned/ready, capture one last-desktop
+  thumbnail if enabled, then launch the isolated Edge kiosk.
 - `/c` (also `/c:<handle>`) or no argument: start the backend and open `/editor`
   (Edit display); `--editor` (the Start menu, desktop and Setup-finish shortcuts)
   opens Home (`/`, #438).
@@ -45,6 +50,49 @@ Session observation starts before cold server startup and handshake. A cancelled
 startup aborts pending HTTP, clears the image, skips later capture/kiosk steps,
 and releases its event subscription. Cancellation also closes an already-created
 owned browser job; failed startup and ordinary exit share cleanup.
+
+### Earlier automatic snapshot (#525)
+
+This is source behavior, separate from the dated installation and actual native
+acceptance in STATUS/#519. The app-owned backend starts a distinct
+`LivingRoomDisplay.Preview.exe` only through the installed lifecycle's explicit
+opt-in and exact clean installed layout/marker. Source `npm start`, imported
+`createApplication`, ephemeral test servers and injected fakes never start it.
+It adds no independently persistent service/task/autostart and dies with its
+exact parent backend. Stop waits for that exact child before returning.
+
+A fresh/replacement child first establishes an input baseline and stays unarmed
+until new physical input is observed. It attempts one capture in the 30 seconds
+before the configured idle threshold. It does not retry failures or overwrite
+periodically in that epoch. The actual selected saver, enable flag and timeout
+must match the desired configuration. Capture requires an active, unlocked local
+interactive session on the current input Default desktop; unknown, disconnected,
+locked or other-desktop contexts are unavailable. No desktop is opened/switched
+to obtain content. An existing owned ambient session makes capture ineligible
+without taking its mutex lease or erasing a valid pending/active image.
+
+The pending thumbnail stays private in RAM for at most 90 seconds. Input,
+session/configuration change, disable, expiry and child/backend loss invalidate
+it; in-flight work cannot resurrect an older generation. The capability is sent
+only over redirected child stdin. A logon-scoped, first-instance named pipe
+identifies the actual `/s` client PID; the preparer pins and checks the exact
+installed executable, strict automatic command, session and actual creation time.
+Only its secret-authenticated attestation can promote the pending image. Both
+monotonic order and UTC order are checked, with a conservative two-second clock
+uncertainty margin; ambiguous ordering is unavailable. Pipe traffic is scalar
+only, never pixels or the capability.
+
+This supplies a recent earlier frame or unavailable, not an exact final visible
+frame for arbitrary Windows timing. Cold/late/manual activation, suppression or
+delay beyond freshness, suspend and missed scheduling can leave it unavailable.
+Manual display/test capture stays separate and does not prove this automatic path.
+No screenshot or cache files are written. Actual capture/access and installed
+behavior still require separately coordinated native acceptance; source checks
+do not establish that the reported black preview is fixed.
+
+For source/CI safety, `LRD_PREVIEW_PREPARER_DISABLED=1` is a disable-only override
+used by installer smoke checks. It cannot enable the watcher or bypass any guard.
+Normal installed launch restores its scoped environment after spawning Node.
 
 Edge is atomically assigned to an owned Windows job at suspended creation, then
 resumes after a cancellation check. The job uses `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, so dismissal and helper crashes
@@ -136,6 +184,14 @@ ambient browser exists. It scales to at most 640 by 360, encodes PNG into a
 file, history, capture log or image export is implemented. DPI awareness makes
 bounds physical pixels. This is last state, not live capture.
 
+Capture uses `Format32bppRgb`, whose fourth byte is unused, and the thumbnail
+uses `Format24bppRgb` (#519). GDI color data can have zero high bytes; treating
+them as ARGB alpha made GDI+ scaling erase valid RGB. The synthetic
+`DesktopSnapshotTests` exercises the production encoding helper with those
+bytes, checks opaque decoded colors including black, the unchanged scaling
+bounds and cancellation. See Microsoft's [GDI alpha explanation](https://devblogs.microsoft.com/oldnewthing/20210915-00/?p=105687)
+and [pixel format definitions](https://learn.microsoft.com/en-us/dotnet/api/system.drawing.imaging.pixelformat).
+
 A memory-only token obtained through `/api/host/session` authenticates upload and
 delete; browser-origin requests cannot retrieve it. Preview responses use
 no-store. Tokens/pixels never enter settings, reminders, backup or diagnostics.
@@ -148,6 +204,14 @@ are not captured separately. Protected content may be black/unavailable; failed
 capture omits preview. No elevated access, protection bypass or locked-desktop
 capture is attempted. Capture precedes display creation to avoid recursive
 previews. Multi-monitor selection and live capture are not built.
+
+Windows may switch to a separate desktop before a secure screensaver starts;
+an unsecured screensaver runs on the default desktop ([Microsoft desktop
+documentation](https://learn.microsoft.com/en-us/windows/win32/winstation/desktops)).
+Capturing before this app's surface exists does not establish capture before
+that Windows switch. Manual `--display` evidence therefore does not prove
+automatic `/s` can obtain the same source. The #519 encoding regression does
+not establish the cause or resolution of a particular native blank scene.
 
 ## Idle and security
 

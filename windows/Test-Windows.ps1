@@ -17,7 +17,7 @@ function Expect-Failure([scriptblock]$Action, [string]$Message) {
     Assert-True $failed $Message
 }
 try {
-    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1','tests\Test-InstallLifecycle.ps1','tests\Test-SourceProvenance.ps1','tests\Test-PackageInstall.ps1','tests\Test-ServerRuntime.ps1','installer\Build-Installer.ps1','installer\New-InstallerArt.ps1','installer\tests\Test-InstallerPolicy.ps1','installer\tests\Test-InstallerPayload.ps1','installer\tests\Test-InstallerSmoke.ps1')) {
+    foreach ($file in @('LivingRoomDisplay.ps1','Build-Host.ps1','Test-Windows.ps1','tests\Test-IdleRestore.ps1','tests\Test-InstallLifecycle.ps1','tests\Test-PreviewLifecycle.ps1','tests\Test-SourceProvenance.ps1','tests\Test-PackageInstall.ps1','tests\Test-ServerRuntime.ps1','installer\Build-Installer.ps1','installer\New-InstallerArt.ps1','installer\tests\Test-InstallerPolicy.ps1','installer\tests\Test-InstallerPayload.ps1','installer\tests\Test-InstallerSmoke.ps1')) {
         $parseErrors = $null
         $null = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $file),[ref]$null,[ref]$parseErrors)
         Assert-True ($parseErrors.Count -eq 0) "PowerShell syntax failed: $file"
@@ -66,6 +66,30 @@ try {
     & $lifecycleTest
     if ($LASTEXITCODE -ne 0) { throw 'Lifecycle regression failed.' }
     $passed++
+    $snapshotTest = Join-Path $compiled 'DesktopSnapshotTests.exe'
+    & $compiler /nologo /target:exe /platform:anycpu "/out:$snapshotTest" /reference:System.Drawing.dll (Join-Path $PSScriptRoot 'DesktopSnapshot.cs') (Join-Path $PSScriptRoot 'tests\DesktopSnapshotTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Snapshot encoding regression compilation failed.' }
+    & $snapshotTest
+    if ($LASTEXITCODE -ne 0) { throw 'Snapshot encoding regression failed.' }
+    $passed++
+    $preparationTest = Join-Path $compiled 'PreviewPreparationTests.exe'
+    & $compiler /nologo /target:exe /platform:anycpu "/out:$preparationTest" (Join-Path $PSScriptRoot 'PreviewPreparation.cs') (Join-Path $PSScriptRoot 'tests\PreviewPreparationTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Preview preparation policy compilation failed.' }
+    & $preparationTest
+    if ($LASTEXITCODE -ne 0) { throw 'Preview preparation policy regression failed.' }
+    $passed++
+    $claimFlowTest = Join-Path $compiled 'PreparedClaimFlowTests.exe'
+    & $compiler /nologo /target:exe /platform:anycpu "/out:$claimFlowTest" (Join-Path $PSScriptRoot 'PreviewPreparation.cs') (Join-Path $PSScriptRoot 'tests\PreparedClaimFlowTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Prepared claim orchestration compilation failed.' }
+    & $claimFlowTest
+    if ($LASTEXITCODE -ne 0) { throw 'Prepared claim orchestration regression failed.' }
+    $passed++
+    $protocolTest = Join-Path $compiled 'PreparedSnapshotProtocolTests.exe'
+    & $compiler /nologo /target:exe /platform:anycpu "/out:$protocolTest" /reference:System.Web.Extensions.dll (Join-Path $PSScriptRoot 'PreparedSnapshotClient.cs') (Join-Path $PSScriptRoot 'tests\PreparedSnapshotProtocolTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Prepared snapshot protocol compilation failed.' }
+    & $protocolTest
+    if ($LASTEXITCODE -ne 0) { throw 'Prepared snapshot protocol regression failed.' }
+    $passed++
     $runtimeTest = Join-Path $compiled 'ServerRuntimeTests.exe'
     & $compiler /nologo /target:exe /platform:anycpu "/out:$runtimeTest" /reference:System.Management.dll /reference:System.Web.Extensions.dll (Join-Path $PSScriptRoot 'ServerRuntime.cs') (Join-Path $PSScriptRoot 'tests\ServerRuntimeTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Server runtime regression compilation failed.' }
@@ -89,6 +113,8 @@ try {
     $passed++
     & (Join-Path $PSScriptRoot 'tests\Test-InstallLifecycle.ps1')
     $passed++
+    & (Join-Path $PSScriptRoot 'tests\Test-PreviewLifecycle.ps1')
+    $passed++
     & (Join-Path $PSScriptRoot 'tests\Test-SourceProvenance.ps1')
     $passed++
     & (Join-Path $PSScriptRoot 'tests\Test-PackageInstall.ps1')
@@ -101,6 +127,8 @@ try {
     $versionInfo = (Get-Item -LiteralPath $versioned).VersionInfo
     Assert-True ($versionInfo.ProductName -eq 'Living Room Display' -and $versionInfo.FileVersion -eq '9.8.7.0' -and $versionInfo.FileDescription -eq 'Living Room Display') 'Versioned helper lacks product/version info.'
     Assert-True ([string]::IsNullOrEmpty((Get-Item -LiteralPath $binary).VersionInfo.ProductName)) 'The default helper build changed: it gained version info.'
+    $preparerInfo = (Get-Item -LiteralPath (Join-Path (Split-Path $versioned -Parent) 'LivingRoomDisplay.Preview.exe')).VersionInfo
+    Assert-True ($preparerInfo.ProductName -eq 'Living Room Display' -and $preparerInfo.FileVersion -eq '9.8.7.0') 'Versioned preview preparer lacks product/version info.'
     $passed++
     . (Join-Path $PSScriptRoot 'LivingRoomDisplay.ps1') -InstallRoot $fixture -FunctionsOnly
     Write-Json $marker @{product='living-room-display'}

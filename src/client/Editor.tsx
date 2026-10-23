@@ -492,12 +492,17 @@ export function Editor({
       // The toolbar now occupies the top edge. Place a floating message in the next free
       // vertical gap, so scrolling a canvas action into view never puts it under the alert.
       const alertHeight = alertBox.current?.getBoundingClientRect().height ?? 64;
-      const protectedControls = [...document.querySelectorAll<HTMLElement>('.canvas-heading-actions button, .canvas-toolbar button, .canvas-toolbar select')];
+      const canvasControls = [...document.querySelectorAll<HTMLElement>('.canvas-heading-actions button, .canvas-toolbar button, .canvas-toolbar select')];
+      const protectedControls = [...canvasControls];
       const active = document.activeElement;
       if (active instanceof HTMLElement && active !== document.body && !active.closest('.studio-error, .editor-style-bar')) protectedControls.push(active);
       const occupied = protectedControls.map(control => control.getBoundingClientRect())
         .filter(box => box.width > 0 && box.height > 0 && box.bottom > toolbarBottom && box.top < window.innerHeight)
         .sort((a, b) => a.top - b.top);
+      // Keep the message in its own canvas row whenever canvas actions are visible.
+      // Floating beside that changing layout can chase a scroll/resize and cover Done.
+      const canvasActionsVisible = canvasControls
+        .some(control => { const box = control.getBoundingClientRect(); return box.width > 0 && box.bottom > toolbarBottom && box.top < window.innerHeight; });
       const alertWidth = Math.min(420, window.innerWidth - 24);
       let position: { top: number; left: number } | null = null;
       for (const left of [12, window.innerWidth - alertWidth - 12]) {
@@ -512,7 +517,7 @@ export function Editor({
       document.documentElement.style.setProperty('--studio-alert-left', `${position?.left ?? 12}px`);
       // In a viewport with no free region, keep the message in its ordinary row instead
       // of forcing it over a control. Wide, short windows can use either side of the canvas.
-      setAlertFloating(narrow.matches && !inView && position !== null);
+      setAlertFloating(narrow.matches && !inView && !canvasActionsVisible && position !== null);
     };
     const schedule = () => {
       if (!frame) frame = window.requestAnimationFrame(update);
@@ -520,11 +525,16 @@ export function Editor({
     update();
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule);
+    window.addEventListener('focusin', schedule);
+    const resize = new ResizeObserver(schedule);
+    for (const element of document.querySelectorAll('.canvas-column, .editor-style-bar')) resize.observe(element);
     narrow.addEventListener('change', schedule);
     return () => {
       window.cancelAnimationFrame(frame);
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', schedule);
+      window.removeEventListener('focusin', schedule);
+      resize.disconnect();
       narrow.removeEventListener('change', schedule);
       document.documentElement.style.removeProperty('--studio-alert-top');
       document.documentElement.style.removeProperty('--studio-alert-left');

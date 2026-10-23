@@ -892,9 +892,16 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await page.clock.runFor(8200);
     await eventually(() => undoButton(page).count(), 0, 'the check-off Undo expires');
     await focusIs(page, 'Up next (4)', 'focus moves from an expired check-off Undo to the Up next switch');
-    await page.getByRole('button', { name: 'Delete: Book a check-up', exact: true }).click();
+    // #521: hold the delete's queued next-row focus until after the user has focused its Undo.
+    // This order must preserve the newer focus choice, not move it back to a reminder row.
+    await page.getByRole('button', { name: 'Delete: Book a check-up', exact: true }).focus();
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+    await page.keyboard.press('Enter');
+    await status(page).getByText('Reminder deleted', { exact: true }).waitFor();
     await undoButton(page).focus();
-    await page.clock.runFor(8200);
+    assert.equal(await focused(page), 'Undo', 'the delete Undo starts focused');
+    await focusIs(page, 'Undo', 'a pending delete focus callback respects the newly focused Undo');
+    await page.clock.runFor(8150);
     await eventually(() => undoButton(page).count(), 0, 'the delete Undo expires');
     await focusIs(page, 'Up next (3)', 'focus moves from an expired delete Undo to the Up next switch');
     await circle(page, 'Call a friend').click();
