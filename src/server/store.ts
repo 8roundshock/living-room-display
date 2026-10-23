@@ -37,7 +37,7 @@ export const STALE_TEMPORARY_FILE_MS = 60_000;
  * `state.json.<uuid>.tmp`, `state.backup.json.<uuid>.tmp` or the timers sidecar's `timers.json.<uuid>.tmp`
  * (#438), as atomicWrite names them.
  */
-const TEMPORARY_FILE = /^(?:state(?:\.backup)?|timers)\.json\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
+const TEMPORARY_FILE = /^(?:state(?:\.backup)?|timers|schedule(?:\.backup)?)\.json\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
 
 /** Writes `data` to a private temporary file, flushes it and renames it over `path`; the timers sidecar uses it too (#438). */
 export async function atomicWrite(path: string, data: string, files: StoreFiles): Promise<void> {

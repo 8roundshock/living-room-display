@@ -27,6 +27,50 @@ and wake lock. Page-navigation links still guard an unsaved Edit display draft;
 opening a display leaves the editor in place. Only `/editor` may ask for device location
 (`Permissions-Policy: geolocation=(self)`); Home and the display send `geolocation=()`.
 
+## Scheduled saved styles (#514)
+
+Settings owns **Schedule** configuration. Home shows the scheduled style with
+**Use manual style for 1 hour** / **Return to schedule** actions. The status names
+the committed active style and whether it is scheduled or a fallback; the canvas continues to show
+the manual editor draft. Applying or saving a manual style does **not** pause the
+schedule. Save visual edits first, then explicitly use the saved manual appearance
+temporarily. A nonvisual save never creates an override.
+
+**Edit schedule** uses saved-style selects, starting weekdays and local From/Until
+times, with **Up**, **Down**, **Remove**, and separate **Save schedule** / **Cancel
+schedule edits**. Rows initially need chosen days/times before saving. The schedule
+draft belongs to Settings and does not save or discard the visual
+draft. A changed schedule from another window blocks a stale overwrite; cancel
+loads that newer schedule. Override-only changes preserve a schedule draft.
+
+The first usable matching row wins, with overlaps explained by row numbers. Ranges
+include their start and exclude their end. Overnight ranges belong to the start
+weekday; equal times mean until that local time the following day. The desktop
+timezone is shown. Spring-forward missing clock minutes never run; repeated autumn
+minutes match twice. Missing styles remain visible and repairable, and are skipped
+before trying the next matching row, fallback, then manual appearance.
+
+Home's Showing list reflects the effective scheduled style. Its
+status points back to Settings. Home's Show-widget actions explain when a scheduled
+style controls visibility instead of silently editing an invisible manual layout.
+The live display keeps one mounted display; text/accent colours and brightness
+glide to the next look without a whole-screen fade or black rest. Widget visibility
+and arrangement use the next style immediately; Follow daylight remains per-style.
+
+Schedule backup/restore is separate from saved-settings backup for rollback
+compatibility. The UI explains both downloads, that schedule backups refer to saved
+style IDs without including those styles, and that restoring clears the temporary
+override. A missing style after restore stays visibly repairable.
+
+Concept review (2026-10-22): ordered ranges were selected over a weekly calendar grid
+for keyboard use, narrow-screen scrolling and explicit overlap priority. Independent
+review accepted the concept with the draft, override, DST and missing-style guards
+above. Native fieldsets/legends group weekdays and row fields; controls target 44px.
+Sources rechecked 2026-10-22: [W3C form grouping](https://www.w3.org/WAI/tutorials/forms/grouping/)
+and [WCAG target size](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html).
+Apple Layout/Motion reference URLs remain the existing design rationale; their
+Markdown was unavailable to this review tool. Recheck on interaction or layout changes.
+
 ## Home
 
 Home (`<div class="studio home-page">`, `src/client/Home.tsx`) is for day-to-day use

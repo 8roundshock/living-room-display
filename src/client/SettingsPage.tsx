@@ -9,6 +9,7 @@ import { Icon } from './icons';
 import { InfoTip } from './InfoTip';
 import { browserLocationPlatform, getDeviceLocation } from './location';
 import { ScreenSettings } from './ScreenSettings';
+import { ScheduleSettings, useScheduleDraft } from './ScheduleSettings';
 import { StudioHeader } from './StudioHeader';
 import { useDisplayWindow } from './displayWindow';
 import './settings.css';
@@ -27,6 +28,7 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
   const lastControl = useRef<HTMLElement | null>(null);
   const controls = useDisplayWindow();
   const dirty = !same(settingsChanges(saved, draft), {});
+  const scheduleEditor = useScheduleDraft(state.schedule);
   function update(next: Settings) { live.current = next; setDraft(next); setMessage(''); }
   function change(patch: Partial<Settings>) { update({ ...live.current, ...patch }); setError(''); }
   function adopt(current: Settings, etag: string | null) {
@@ -47,10 +49,10 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
     if (new URLSearchParams(window.location.search).get('focus') === 'city') document.getElementById('city-search')?.focus();
   }, []);
   useEffect(() => {
-    const leave = (event: BeforeUnloadEvent) => { if (dirty || saving) event.preventDefault(); };
+    const leave = (event: BeforeUnloadEvent) => { if (dirty || saving || scheduleEditor.dirty) event.preventDefault(); };
     window.addEventListener('beforeunload', leave);
     return () => window.removeEventListener('beforeunload', leave);
-  }, [dirty, saving]);
+  }, [dirty, saving, scheduleEditor.dirty]);
   // Settings may need a forecast while all weather widgets are off. No draft lookup is sent.
   useEffect(() => {
     let active = true;
@@ -123,7 +125,8 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
           <a className="weather-credit" href={state.weather.sourceUrl} target="_blank" rel="noreferrer">Forecast estimates by Open-Meteo</a>
         </section>
         <section className="settings-card" aria-labelledby="device-heading"><h2 id="device-heading">This device</h2><ScreenSettings keepAwake={draft.screen.keepAwake} active onKeepAwake={value => change({ screen: { ...live.current.screen, keepAwake: value } })} /></section>
-        <DataRecovery dirty={dirty || saving} clockFormat={draft.clockFormat} reload={reload} />
+        <div className="settings-card"><ScheduleSettings snapshot={state.schedule} presets={saved.savedPresets} editor={scheduleEditor} setState={setState} reload={reload} /></div>
+        <DataRecovery dirty={dirty || saving || scheduleEditor.dirty} clockFormat={draft.clockFormat} reload={reload} />
       </div>
       <p className="settings-status" role="status">{message}</p>
     </main>

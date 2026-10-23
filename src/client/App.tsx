@@ -8,6 +8,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type { AppState, ChangeMarker } from '../shared/contracts';
+import { scheduledSettings } from '../shared/schedule';
 import { ApiError, api, apiTagged, rememberRevision } from './api';
 import { AmbientDisplay } from './Display';
 import { useSingleDisplay } from './displayWindow';
@@ -118,11 +119,11 @@ export function App() {
       poll.timer = undefined;
     };
   }, [reload, retired]);
-  // #438: Home and the display ask whether anything changed every 5 s while visible, and reload the
-  // state only when it has; Edit display keeps its 30 s poll. A lost connection reloads at once, so
+  // Home, the display and schedule status ask whether anything changed every 5 s while visible,
+  // and reload state only when it has. A lost connection reloads at once, so
   // Home and the display say they are offline without waiting for the 30 s poll.
   useEffect(() => {
-    if (page === 'edit' || retired) return;
+    if (retired) return;
     let marker: string | null = null, failed = false, busy = false, stopped = false;
     const check = async () => {
       if (busy || document.visibilityState === 'hidden') return;
@@ -202,7 +203,7 @@ export function App() {
       </main>
     );
   if (display)
-    return <AmbientDisplay state={state} disconnected={error !== null} native={nativeDisplay} />;
+    return <div className={state.schedule?.config.enabled ? 'schedule-display' : undefined}><AmbientDisplay state={state} settings={scheduledSettings(state.settings, state.schedule)} disconnected={error !== null} native={nativeDisplay} /></div>;
   if (page === 'home')
     return (
       <Home

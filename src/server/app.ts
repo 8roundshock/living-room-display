@@ -15,6 +15,8 @@ import { AlertsService, offAlerts } from './alerts.ts';
 import { windowsStatus } from './windows.ts';
 import { automaticLocationSchema, countdownCreateSchema, importSchema, mergeSettings, reminderCreateSchema, reminderPatchSchema, settingsPatchSchema, timerCreateSchema, timerPatchSchema, validationMessage, worldClockCreateSchema } from './validation.ts';
 import { TimerError, TimerStore } from './timers.ts';
+import { ScheduleError, ScheduleStore, scheduleBackupSchema, scheduleConfigSchema } from './schedule.ts';
+import { scheduledSettings } from '../shared/schedule.ts';
 import { TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts';
 import { WIDGET_CATALOG, isActiveWidget } from '../shared/widgets.ts';
 import { HOME_SHOWABLE_WIDGETS, showPlacement } from '../shared/show.ts';
@@ -80,6 +82,9 @@ export async function createApplication(options: ApplicationOptions) {
   const now = options.now ?? Date.now;
   // Opened after the data store, whose startup removes stale timers.json temporary files (#438).
   const timers = await TimerStore.open(options.dataDirectory, now());
+  const schedules = await ScheduleStore.open(options.dataDirectory);
+  const effectiveSettings = () => { const settings = store.view().settings; return scheduledSettings(settings, schedules.snapshot(settings, now())); };
+  let scheduleMarker = schedules.marker(store.view().settings, now()), scheduleChanges = 0;
   // GET /api/changes (#438): this process, then the settings/reminder writes, the timer writes and the preview changes.
   const bootId = randomBytes(6).toString('hex');
   let previewChanges = 0;
@@ -117,7 +122,7 @@ export async function createApplication(options: ApplicationOptions) {
     response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     void route(request, response).catch(error => {
       if (response.headersSent) { response.end(); return; }
-      if (error instanceof HttpError || error instanceof TimerError) json(response, error.status, { error: error.message });
+      if (error instanceof HttpError || error instanceof TimerError || error instanceof ScheduleError) json(response, error.status, { error: error.message });
       else if (error instanceof z.ZodError) json(response, 400, { error: validationMessage(error) });
       else json(response, 500, { error: 'The request could not be completed. Existing saved data has been preserved.' });
     });
@@ -147,16 +152,19 @@ export async function createApplication(options: ApplicationOptions) {
     if (method === 'GET' && path === '/api/state') {
       // Metadata only: the photo bytes are not copied for a poll (#353).
       const { settings, reminders, photo, settingsRevision } = store.view();
+      const schedule = schedules.snapshot(settings, now());
+      const effective = scheduledSettings(settings, schedule);
+      if (!effective.preview.enabled || !effective.widgets.preview) clearPreview();
       // The forecast is refreshed only while a saved widget needs it (#352); air quality only while a saved
       // widget shows it (Air quality, or Dynamic with Air & UV, #437); official alerts only while Dynamic
       // shows them (#437). Each waits for a due refresh at most briefly (#351). Alerts are API-only: never
       // stored, exported or logged.
       const [weatherState, airQuality, alertsState] = await Promise.all([
-        needsForecast(settings) ? weather.get(settings) : weather.peek(settings),
-        needsAirQuality(settings) ? air.get(settings) : offAirQuality(settings),
-        needsAlerts(settings) ? alerts.get(settings) : offAlerts(),
+        needsForecast(effective) ? weather.get(effective) : weather.peek(effective),
+        needsAirQuality(effective) ? air.get(effective) : offAirQuality(effective),
+        needsAlerts(effective) ? alerts.get(effective) : offAlerts(),
       ]);
-      const state: AppState = { settings, reminders, weather: weatherState, preview: previewState(), airQuality, alerts: alertsState, timers: timers.list(now()), timersWarning: timers.warning,
+      const state: AppState = { settings, schedule, reminders, weather: weatherState, preview: previewState(), airQuality, alerts: alertsState, timers: timers.list(now()), timersWarning: timers.warning,
         photo: photo ? { available: true, ...photo } : { available: false, id: null, width: null, height: null, updatedAt: null } };
       json(response, 200, { ...state, storageWarning: store.warning }, etag(settingsRevision)); return;
     }
@@ -168,7 +176,8 @@ export async function createApplication(options: ApplicationOptions) {
         // A Save computed from outdated settings (#287): the editor merges these and tries again.
         json(response, 409, { error: error.message, settings: error.settings, revision: error.settingsRevision }, etag(error.settingsRevision)); return;
       }
-      if (!saved.settings.preview.enabled || !saved.settings.widgets.preview) clearPreview();
+      const effective = effectiveSettings();
+      if (!effective.preview.enabled || !effective.widgets.preview) clearPreview();
       json(response, 200, saved.settings, etag(saved.settingsRevision)); return;
     }
     if (method === 'POST' && path === '/api/location') {
@@ -245,9 +254,30 @@ export async function createApplication(options: ApplicationOptions) {
       }
       json(response, patch ? 200 : 204, changed); return;
     }
+    // Scheduled styles (#514) are a local sidecar, with their own concurrency revision.
+    if (path === '/api/schedule' && (method === 'GET' || method === 'PUT')) {
+      if (method === 'PUT') await schedules.configure(scheduleConfigSchema.parse(await jsonBody(request)), ifMatch(request));
+      json(response, 200, schedules.snapshot(store.view().settings, now()), etag(schedules.revision)); return;
+    }
+    if (path === '/api/schedule/override' && method === 'POST') {
+      const { manual } = z.object({ manual: z.boolean() }).strict().parse(await jsonBody(request));
+      await schedules.override(manual, now(), ifMatch(request));
+      json(response, 200, schedules.snapshot(store.view().settings, now()), etag(schedules.revision)); return;
+    }
+    if (path === '/api/schedule/export' && method === 'GET') {
+      json(response, 200, { version: 1, kind: 'still-schedule', config: schedules.snapshot(store.view().settings, now()).config }); return;
+    }
+    if (path === '/api/schedule/import' && method === 'POST') {
+      const backup = scheduleBackupSchema.parse(await jsonBody(request));
+      await schedules.restore(backup.config, ifMatch(request));
+      json(response, 200, schedules.snapshot(store.view().settings, now()), etag(schedules.revision)); return;
+    }
     // Home (#438) -------------------------------------------------------------------------------------
     if (method === 'GET' && path === '/api/changes') {
-      json(response, 200, { change: `${bootId}.${store.changes}.${timers.changes}.${previewChanges}` } satisfies ChangeMarker); return;
+      const next = schedules.marker(store.view().settings, now());
+      if (next !== scheduleMarker) { scheduleMarker = next; scheduleChanges++; }
+      // Preserve the opaque four-part marker contract; schedule transitions join ephemeral display changes.
+      json(response, 200, { change: `${bootId}.${store.changes}.${timers.changes}.${previewChanges + scheduleChanges}` } satisfies ChangeMarker); return;
     }
     if (method === 'GET' && path === '/api/timers') { json(response, 200, { timers: timers.list(now()), warning: timers.warning } satisfies TimersResult); return; }
     if (method === 'POST' && path === '/api/timers') {
@@ -325,7 +355,7 @@ export async function createApplication(options: ApplicationOptions) {
     }
     if (method === 'GET' && path === '/api/host/session') {
       nativeRequest(request, false);
-      json(response, 200, { token: hostToken, settings: store.view().settings, displayUrl: `http://127.0.0.1:${port}/` }); return;
+      json(response, 200, { token: hostToken, settings: effectiveSettings(), displayUrl: `http://127.0.0.1:${port}/` }); return;
     }
     if (method === 'GET' && path === '/api/preview') { json(response, 200, previewState()); return; }
     if (method === 'GET' && path === '/api/photo/image') {
@@ -342,7 +372,7 @@ export async function createApplication(options: ApplicationOptions) {
     if (path === '/api/preview' && (method === 'POST' || method === 'DELETE')) {
       nativeRequest(request, true);
       if (method === 'DELETE') { clearPreview(); json(response, 204); return; }
-      const settings = store.view().settings;
+      const settings = effectiveSettings();
       if (!settings.preview.enabled || !settings.widgets.preview) throw new HttpError(409, 'Preview is disabled');
       if (request.headers['content-type'] !== 'image/png') throw new HttpError(415, 'Use image/png');
       const capturedAt = z.iso.datetime({ offset: true }).parse(request.headers['x-captured-at']);
@@ -353,7 +383,7 @@ export async function createApplication(options: ApplicationOptions) {
       const width = content.readUInt32BE(16); const height = content.readUInt32BE(20);
       if (width < 1 || height < 1 || width > 4096 || height > 4096 || width * height > 4_194_304) throw new HttpError(400, 'Snapshot dimensions are too large');
       nativeRequest(request, true);
-      const currentSettings = store.view().settings;
+      const currentSettings = effectiveSettings();
       if (uploadGeneration !== previewGeneration || !currentSettings.preview.enabled || !currentSettings.widgets.preview) {
         throw new HttpError(409, 'Snapshot upload was cleared or preview is disabled');
       }
