@@ -9,10 +9,16 @@ the current draft. Rail keyboard help and accessible family footprints address #
 The shared room solver now explains unavailable sizes and offers explicit draft fixes
 before Add (#448), without changing the board during browsing.
 
-At the first local checkpoint, build/typecheck and all 486 unit tests passed (four
-new catalog tests). Extended catalog-time browser checks and actual rendered review
-remain pending the activation candidate's exclusive browser run. No publication,
-merge, installation or activation is implied by these local picker results.
+The preserved source checkpoint is published on `codex/widget-picker-next` for
+integration under #517. Production build and 16 catalog/make-room tests pass.
+The first extended catalog run caught inherited 34/36 px target sizes overriding
+the picker's 44 px contract; scoped selectors correct that. Catalog-time and
+free-size then pass 13 groups each. A later integration adjustment preserves the
+current editor's detail-content scroller and pins Add outside it. Its first check
+caught room-fix actions preceding Add in the keyboard order; restoring Add before
+those actions preserves the established short tab path. The final responsive/browser
+and independent rendered checks remain pending. No merge,
+installation or activation is implied by source checks.
 
 ## Published continuation
 

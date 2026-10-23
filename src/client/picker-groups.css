@@ -61,11 +61,12 @@
 .picker-empty p { color: #a9a3b5; font-size: 12px; line-height: 1.5; margin-bottom: 16px; }
 .picker-empty .button { min-height: 44px; }
 .picker-room-help { flex: none; margin: 8px 0 0; color: #b0a9bf; font-size: 11px; line-height: 1.35; }
-.widget-picker .room-fix { min-height: 44px; }
-.widget-picker .family-previews > button { min-height: 44px; }
+.studio .widget-picker .button.small.room-fix { min-height: 44px; }
+.studio .widget-picker .family-previews > button { min-height: 44px; }
 @media (min-width: 701px) {
-  /* One bounded detail scroller keeps samples readable when room fixes need extra space. */
-  .widget-picker .picker-detail { overflow-y: auto; scrollbar-width: thin; }
+  /* Preserve the current editor's content scroller and keep Add reachable outside it. */
+  .widget-picker .picker-detail-content { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  .widget-picker .room-notice:not([data-empty]) { flex: 0 1 auto; min-height: 0; max-height: 40%; overflow-y: auto; scrollbar-width: thin; }
   .studio .widget-picker .sample-stage { flex: 1 0 145px; min-height: 145px; }
 }
 @media (max-width: 700px) {

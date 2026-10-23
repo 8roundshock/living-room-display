@@ -28,7 +28,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
   // The picker owns its "No room" message: one live region, gone when the picker closes (#238).
   const [problem, setProblem] = useState<RoomProblem | null>(null);
   const close = useRef<HTMLButtonElement>(null), catalog = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null);
-  const results = useRef<HTMLDivElement>(null), detail = useRef<HTMLElement>(null);
+  const results = useRef<HTMLDivElement>(null), detail = useRef<HTMLDivElement>(null);
   const resultFocus = useRef<HTMLElement | null>(null);
   const groups = filteredPickerGroups(settings.widgets, query, filter);
   const visibleSelection = filteredPickerSelection(groups, preferred);
@@ -121,7 +121,8 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
         </button>)}
       </div>)}
     </div>
-    <section className="picker-detail" ref={detail} aria-label={`${widget.name} preview`}>
+    <section className="picker-detail" aria-label={`${widget.name} preview`}>
+      <div className="picker-detail-content" key={selected} ref={detail}>
       <div className="picker-detail-heading"><h3>{widget.name}</h3><p>{widget.description}</p></div>
       <WidgetSample key={`${selected}-${size}`} id={selected} size={size} appearance={settings.appearance} density={settings.widgetGrid.density} />
       <div className="family-previews" aria-label={`${widget.name} size`}>
@@ -136,6 +137,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       {caption && <p className="picker-free-size">{caption}</p>}
       {added && <p className="picker-added-note" id="picker-added-note"><Icon name="check" size={13} />{addedNote}</p>}
       {shown && <p className="picker-room-help" id="picker-room-help">{shown.fixes.length ? 'This size needs room. Choose a fix below to make room and add this widget to your draft.' : 'Make room in your layout before adding this widget.'}</p>}
+      </div>
       {/* The visible text is the accessible name in both states (#241). */}
       <button className="button primary picker-add" disabled={added} aria-describedby={added ? 'picker-added-note' : shown ? 'picker-room-help' : undefined} onClick={() => setProblem(onAdd(selected, size))}>
         <Icon name="plus" size={17} />
@@ -143,6 +145,6 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       </button>
       <RoomNotice problem={shown} onFix={(current, fix) => setProblem(onFix(current, fix))} />
     </section></div></>}
-    <p className="picker-footnote">Sample content · changes stay in your draft</p>
+    <p className="picker-footnote">Sample content · unsaved</p>
   </div>;
 }

@@ -626,7 +626,10 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
         const add = button(`Add ${name}`); await add.scrollIntoViewIfNeeded(); await inView(add, `${viewport.width}×${viewport.height} Add ${name}`);
       }
       for (const control of [search(), filter(), page.locator('.family-previews button').first(), page.locator('.widget-picker .room-fix').first()]) {
-        if (await control.count()) assert.ok((await control.boundingBox()).height >= 44, `${viewport.width}x${viewport.height} picker controls have 44 px targets`);
+        if (await control.count()) {
+          const box = await control.boundingBox();
+          assert.ok(box.height >= 44, `${viewport.width}x${viewport.height} picker control ${await control.getAttribute('aria-label') ?? await control.textContent()} has a 44 px target: ${JSON.stringify(box)}`);
+        }
       }
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.width}x${viewport.height} picker has no horizontal overflow`);
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
