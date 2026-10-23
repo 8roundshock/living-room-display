@@ -7,11 +7,19 @@ pre-idle source feature was independently reviewed at `1c79c032` and merged in
 `7771b178` after all ten applicable CI checks passed. It has not been installed
 or observed on the actual native display by this source reconciliation.
 
-PR #522's prior browser run exposed alert/control overlap at a short mobile
-viewport, assumptions about the moved top Save toolbar, Weather panel fitting,
-and the new help control's keyboard order. These are being corrected with
-isolated synthetic browser checks before final review. #519 remains open for
-installed/native acceptance; no installed files or settings are changed here.
+PR #522's compatibility repairs are tracked in #527. Mobile action errors keep
+their reserved row while canvas controls are visible, and an empty location
+status no longer consumes Weather's available space. Free-size focus checks now
+use the top Style/Save toolbar; Home's keyboard order includes its contextual
+help. The first-run checks select city results from their listbox and budget
+only the measured persistent toolbar height beyond the earlier internal-scroll
+contract. All 44 px row targets, center hit tests and body-overflow checks remain.
+
+Source typechecking/build and all 510 unit tests pass. Focused Workspace (18),
+Free-size (13) and First-run (7) checks pass against synthetic isolated data;
+desktop/mobile editor renders were inspected in RAM. Final-head independent
+review and applicable CI remain merge gates. #519 remains open for installed/
+native acceptance; no installed files or settings are changed here.
 
 The following entries retain their historical checkpoint scope.
 

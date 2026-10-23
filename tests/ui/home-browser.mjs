@@ -482,7 +482,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     const order = [];
     for (let step = 0; step < 8 && !order.includes('Timer'); step++) { await page.keyboard.press('Tab'); order.push(await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.querySelector('.home-action-label')?.textContent ?? document.activeElement?.textContent?.trim().slice(0, 20))); }
     assert.deepEqual(order.slice(0, 4), ['Still home', 'Home', 'Edit display', 'Open display'], 'the header first');
-    assert.deepEqual(order.slice(4), ['Choose your city', 'Timer'], 'then the first-run line and the quick actions');
+    assert.deepEqual(order.slice(4), ['About full screen', 'Choose your city', 'Timer'], 'then full-screen help, the first-run line and the quick actions');
     await page.keyboard.press('Enter'); await sheet(page).waitFor();
     for (let step = 0; step < 30; step++) await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => !!document.activeElement?.closest('dialog.home-sheet')), true, 'focus stays in the sheet');

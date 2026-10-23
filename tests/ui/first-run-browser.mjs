@@ -102,7 +102,7 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
     // #241: the field's name is its visible label; searching is its description.
     assert.match(await page.locator(`[id="${await city.getAttribute('aria-describedby')}"]`).textContent(), /search/i);
     await page.keyboard.type('Lon'); await page.clock.runFor(300);
-    await page.getByRole('option').first().waitFor();
+    await page.getByRole('listbox').getByRole('option', { name: /London/ }).first().waitFor();
     await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
     await savebar().waitFor();
     await tab('Widgets');
@@ -161,8 +161,8 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
     }
     checks.push('1280×720 and 390×844: the card’s controls are 44 px targets (Hide location tip 44 × 44) and fit the width with no horizontal scroll (#349)');
 
-    // 6. #435 adds Calendar to the old five-row default. Keep #310's original compact-board
-    // guarantees, and bound the six-row board's extra scroll to that one row without smaller targets.
+    // 6. The persistent Style/Save toolbar consumes its measured height. Preserve #310's
+    // compact-board budget below it, plus #435's one added row, without smaller targets.
     for (const currentBoard of [true, false]) {
       await reset(settings => {
         if (!currentBoard) { settings.widgets = defaultWidgetVisibility(); settings.widgetGrid = defaultWidgetGrid(); }
@@ -171,11 +171,12 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
         await open({ viewport });
         fit = await panelFit();
         const height = (await card().boundingBox()).height;
+        const toolbarHeight = (await page.locator('.editor-style-bar').boundingBox()).height;
         const rows = page.locator('.widget-option');
         assert.equal(await rows.count(), currentBoard ? 6 : 5);
         const rowPitch = await rows.evaluateAll(elements => elements[1].getBoundingClientRect().top - elements[0].getBoundingClientRect().top);
-        if (viewport.width === 1280) assert.ok(fit.scroll <= fit.client + (currentBoard ? rowPitch : 0) + 1, `${currentBoard ? 'six' : 'five'}-row Widgets at 1280x600 with the card: ${JSON.stringify(fit)}`);
-        else assert.ok(fit.scroll - fit.client < height + (currentBoard ? rowPitch : 0), `${viewport.width}x600 stays within the card${currentBoard ? ' plus one added row' : ''}: ${JSON.stringify(fit)}`);
+        if (viewport.width === 1280) assert.ok(fit.scroll <= fit.client + toolbarHeight + (currentBoard ? rowPitch : 0) + 1, `${currentBoard ? 'six' : 'five'}-row Widgets at 1280x600 with the card and toolbar: ${JSON.stringify(fit)}`);
+        else assert.ok(fit.scroll - fit.client < height + toolbarHeight + (currentBoard ? rowPitch : 0), `${viewport.width}x600 stays within the card, toolbar${currentBoard ? ' and one added row' : ''}: ${JSON.stringify(fit)}`);
         // The scroll stays inside the panel; every select/remove action can be focused and hit.
         const reachable = async () => {
           for (const control of await page.locator('.widget-row button, .add-widget').all()) {
@@ -190,11 +191,11 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
         };
         await reachable();
         await button('Hide location tip').click(); fit = await panelFit();
-        assert.ok(fit.scroll <= fit.client + (currentBoard ? rowPitch : 0) + 1, `${viewport.width}x600 ${currentBoard ? 'has at most one row of scroll' : 'fits'} without the card: ${JSON.stringify(fit)}`);
+        assert.ok(fit.scroll <= fit.client + toolbarHeight + (currentBoard ? rowPitch : 0) + 1, `${viewport.width}x600 stays within the toolbar${currentBoard ? ' plus one added row' : ''} without the card: ${JSON.stringify(fit)}`);
         await reachable();
       }
     }
-    checks.push('at 600px high, the six-row default adds at most one row of internal scroll to the five-row #310 contract; all row controls remain 44px, focusable, unobscured and reachable at 1280/1024/760px; hiding the tip leaves at most one row of scroll; the original five-row no-scroll/less-than-card checks still pass');
+    checks.push('at 600px high, internal scrolling stays within the original five-row #310 budget plus the measured Style toolbar and one added Calendar row; all row controls remain 44px, focusable, unobscured and reachable at 1280/1024/760px, with no body overflow; hiding the tip retains the same bounded budget');
 
     // 7. #235 and #241: Time format beside Units with the Clock off; the Reminders tab names its count.
     await reset(settings => { settings.widgets.clock = false; settings.locationSource = 'manual'; });
