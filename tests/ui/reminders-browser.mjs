@@ -98,7 +98,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
   /** A real settings draft, so the Save bar shows. */
   async function dirty(page) {
     await page.getByRole('tab', { name: 'Style', exact: true }).click();
-    await page.getByRole('button', { name: 'Night', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night');
     await remindersTab(page);
     await page.locator('.studio-savebar').waitFor();
   }
@@ -122,7 +122,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
   });
   /**
    * Where an element sits against what can actually be seen: the inspector's scroll area on desktop,
-   * the viewport on a phone, and never under a Save bar that overlaps it. `hit` means a click at its
+   * the viewport on a phone, and below the top Style and Save toolbar. `hit` means a click at its
    * centre reaches it.
    */
   const placement = locator => locator.evaluate(element => {
@@ -130,10 +130,10 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     const panel = document.querySelector('.inspector-panel');
     const scrolls = getComputedStyle(panel).overflowY !== 'visible';
     const area = panel.getBoundingClientRect();
-    const bar = document.querySelector('.studio-savebar')?.getBoundingClientRect();
-    const overBar = bar && bar.left < box.right && bar.right > box.left;
-    const visibleTop = Math.max(0, scrolls ? area.top : 0);
-    const visibleBottom = Math.min(innerHeight, scrolls ? area.bottom : innerHeight, overBar ? bar.top : Infinity);
+    const toolbar = document.querySelector('.editor-style-bar').getBoundingClientRect();
+    const overToolbar = toolbar.left < box.right && toolbar.right > box.left;
+    const visibleTop = Math.max(0, scrolls ? area.top : 0, overToolbar ? toolbar.bottom : 0);
+    const visibleBottom = Math.min(innerHeight, scrolls ? area.bottom : innerHeight);
     const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     return { top: Math.round(box.top), bottom: Math.round(box.bottom), visibleTop: Math.round(visibleTop), visibleBottom: Math.round(visibleBottom), hit: element === hit || element.contains(hit), viewport: `${innerWidth}×${innerHeight}`, mask: scrolls ? getComputedStyle(panel).maskImage : 'n/a' };
   });
@@ -153,12 +153,12 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     for (let top = 0; top < max + 6; top += 6) {
       scroller.scrollTop = Math.min(top, max);
       const area = panel.getBoundingClientRect();
-      const bar = document.querySelector('.studio-savebar')?.getBoundingClientRect();
+      const toolbar = document.querySelector('.editor-style-bar').getBoundingClientRect();
       for (const control of document.querySelectorAll('.reminders-panel .reminder-list button')) {
         const box = control.getBoundingClientRect();
         const x = box.left + box.width / 2, y = box.top + box.height / 2;
-        const visibleTop = Math.max(0, scroller === panel ? area.top : 0);
-        const visibleBottom = Math.min(innerHeight, scroller === panel ? area.bottom : innerHeight, bar && bar.left < box.right && bar.right > box.left ? bar.top : Infinity);
+        const visibleTop = Math.max(0, scroller === panel ? area.top : 0, toolbar.left < box.right && toolbar.right > box.left ? toolbar.bottom : 0);
+        const visibleBottom = Math.min(innerHeight, scroller === panel ? area.bottom : innerHeight);
         if (y < (visibleTop + visibleBottom) / 2 || y > visibleBottom - 2) continue;
         checked++;
         if (visibleBottom - y <= 40) nearEdge++;
@@ -179,11 +179,10 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     const panel = document.querySelector('.inspector-panel');
     const scroller = getComputedStyle(panel).overflowY !== 'visible' ? panel : document.scrollingElement;
     const max = scroller.scrollHeight - scroller.clientHeight;
-    const bar = document.querySelector('.studio-savebar')?.getBoundingClientRect();
     let chosen = null;
     for (const control of document.querySelectorAll('.reminders-panel .reminder-list .edit-reminder')) {
       const box = control.getBoundingClientRect();
-      const visibleBottom = Math.min(innerHeight, scroller === panel ? panel.getBoundingClientRect().bottom : innerHeight, bar && bar.left < box.right && bar.right > box.left ? bar.top : Infinity);
+      const visibleBottom = Math.min(innerHeight, scroller === panel ? panel.getBoundingClientRect().bottom : innerHeight);
       const scroll = scroller.scrollTop + (box.top + box.height / 2) - (visibleBottom - 19);
       if (scroll >= 0 && scroll <= max) chosen = { control, scroll };
     }
@@ -616,17 +615,19 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
         await page.keyboard.press('Tab');
         await page.clock.runFor(100);
         const layout = await page.evaluate(() => {
-          const active = document.activeElement.getBoundingClientRect(), bar = document.querySelector('.studio-savebar').getBoundingClientRect();
-          return { label: document.activeElement.getAttribute('aria-label') ?? document.activeElement.textContent, bottom: active.bottom, top: active.top, barTop: bar.top, panelBottom: document.querySelector('.inspector-panel').getBoundingClientRect().bottom, scroll: document.documentElement.scrollWidth, width: innerWidth };
+          const element = document.activeElement, active = element.getBoundingClientRect(), toolbar = document.querySelector('.editor-style-bar').getBoundingClientRect();
+          const panel = document.querySelector('.inspector-panel'), area = panel.getBoundingClientRect(), scrolls = getComputedStyle(panel).overflowY !== 'visible';
+          const hit = document.elementFromPoint(active.left + active.width / 2, active.top + active.height / 2);
+          return { label: element.getAttribute('aria-label') ?? element.textContent, bottom: active.bottom, top: active.top, visibleTop: Math.max(0, toolbar.bottom, scrolls ? area.top : 0), visibleBottom: Math.min(innerHeight, scrolls ? area.bottom : innerHeight), hit: hit === element || element.contains(hit), scroll: document.documentElement.scrollWidth, width: innerWidth };
         });
         assert.equal(layout.label, await last.evaluate(element => element.getAttribute('aria-label') ?? element.textContent));
-        assert.ok(layout.bottom <= layout.barTop + 0.5 && layout.top >= 0, `${viewport.width}×${viewport.height} ${view}: focus clear of the Save bar ${JSON.stringify(layout)}`);
+        assert.ok(layout.bottom <= layout.visibleBottom + 0.5 && layout.top >= layout.visibleTop && layout.hit, `${viewport.width}×${viewport.height} ${view}: focus visible below the Style and Save toolbar ${JSON.stringify(layout)}`);
         assert.ok(layout.scroll <= layout.width, `${viewport.width}×${viewport.height}: no horizontal page scroll`);
         if (capture) images.push({ name: `${view}-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
       }
       await context.close();
     }
-    checks.push('the tab fits 1280×720, 390×700 and 390×480 with keyboard focus clear of the Save bar and no horizontal scroll');
+    checks.push('the tab fits 1280×720, 390×700 and 390×480 with keyboard focus visible below the top Style and Save toolbar, receiving clicks, and no horizontal scroll');
 
     // Reduced motion removes the collapse but keeps the settle delay.
     await reset();

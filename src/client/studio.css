@@ -122,7 +122,7 @@ html.studio-editor {
   font-weight: 650;
   letter-spacing: -1.2px;
 }
-/* #360: one dim line beside Open display says where the full-screen display is. */
+/* Display actions share compact context help on Home and Edit display. */
 .open-display-group {
   display: flex;
   align-items: center;
@@ -130,31 +130,14 @@ html.studio-editor {
   gap: 14px;
   min-width: 0;
 }
-.studio .open-display-hint {
-  min-width: 0;
-  color: #a39cad;
-  font-size: 12px;
-  line-height: 1.35;
-  text-align: right;
-  text-wrap: balance;
-}
 @media (max-width: 700px) {
-  /* Narrow headers put the hint on its own line under the name and Open display. */
+  /* Actions wrap only when the viewport needs another row. */
   .studio .studio-header {
     flex-wrap: wrap;
     height: auto;
     min-height: 72px;
     padding-block: 12px;
     row-gap: 6px;
-  }
-  .open-display-group {
-    display: contents;
-  }
-  .studio .open-display-hint {
-    order: 3;
-    flex-basis: 100%;
-    text-align: left;
-    font-size: 11px;
   }
 }
 /* The Pages nav Home and Edit display share (#438): beside the brand, Open display stays at the right. */

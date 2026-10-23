@@ -244,7 +244,7 @@ function DisplayCard({ state, showing, waiting, waitingWithoutRoom, disconnected
           <AmbientDisplay state={state} embedded disconnected={disconnected} compositionOverride={0} layoutEditing motionSurface="preview" />
         </div>
       </a>
-      <p className="home-card-caption">Your saved arrangement. The display moves it around to protect the screen.</p>
+      <p className="home-card-caption">Saved layout</p>
       <div className="home-card-actions">
         <a className="button primary home-edit-display" href="/editor"><Icon name="edit" size={16} />Edit display</a>
         <a className="button home-open-display" href="/display" target={DISPLAY_WINDOW} onClick={displayControls.openDisplay}><Icon name="monitor" size={16} />{displayControls.displayOpen ? 'Show display' : 'Open display'}</a>

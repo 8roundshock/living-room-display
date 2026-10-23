@@ -269,8 +269,10 @@ export async function runScreenQa({ playwright, edge } = {}) {
         // Keep the screen on is the Screen part of Style › Motion, so the Style tab still fits 1280 × 720.
         await page.locator('summary', { hasText: 'Motion' }).click();
         const body = page.getByRole('group', { name: 'Screen', exact: true });
-        await body.getByRole('checkbox', { name: 'Keep the screen on while the display shows', exact: true }).waitFor();
-        assert.match(await body.locator('.keep-awake-hint').innerText(), /^When the display is full screen or running as your screensaver, Windows won't turn the screen off\. Windows' own power settings apply the rest of the time\.$/);
+        await body.getByRole('checkbox', { name: 'Keep the screen on', exact: true }).waitFor();
+        await body.getByRole('button', { name: 'About keeping the screen on' }).focus();
+        assert.match(await page.getByRole('tooltip').innerText(), /Keeps the screen awake in full screen or screensaver mode/);
+        await page.keyboard.press('Escape');
         if (name !== 'other') await body.locator('.power-status').waitFor();
         await page.waitForTimeout(200);
         results[name] = { line: await body.locator('.power-status').count() ? await body.locator('.power-status').innerText() : null, warning: await body.locator('.power-warning').count() ? await body.locator('.power-warning').innerText() : null };
@@ -288,7 +290,7 @@ export async function runScreenQa({ playwright, edge } = {}) {
       const page = await session.context.newPage();
       await page.goto(base + '/editor'); await page.getByRole('tab', { name: 'Style', exact: true }).click();
       await page.locator('summary', { hasText: 'Motion' }).click();
-      const toggle = page.getByRole('checkbox', { name: 'Keep the screen on while the display shows', exact: true });
+      const toggle = page.getByRole('checkbox', { name: 'Keep the screen on', exact: true });
       assert.equal(await toggle.isChecked(), true, 'on by default');
       assert.equal(await page.locator('.keep-awake-unsupported').count(), 0, 'Edge supports it');
       await toggle.uncheck();
@@ -324,24 +326,26 @@ export async function runScreenQa({ playwright, edge } = {}) {
       await body.getByRole('checkbox', { name: 'Float gently', exact: true }).waitFor();
       await body.getByRole('slider', { name: 'Move every', exact: true }).waitFor();
       const sentence = () => body.locator('.motion-sentence').innerText();
-      assert.equal(await sentence(), 'Your widgets stay where you put them and float slowly, reaching a new spot every 30 s, to protect your TV. The screen never goes dark to move.');
-      assert.equal(await body.getByText('Off keeps the content of widgets still; movement is set below.', { exact: false }).count(), 1);
+      assert.equal(await sentence(), 'Floats within your layout, reaching a new spot every 30 s.');
+      await body.getByRole('button', { name: 'About animation' }).focus();
+      assert.match(await page.getByRole('tooltip').innerText(), /Off keeps content still/);
+      await page.keyboard.press('Escape');
       const swap = body.getByRole('checkbox', { name: 'Swap places', exact: true });
       assert.equal(await swap.isChecked(), false, 'Swap places is off by default');
-      assert.equal(await body.locator('.swap-hint').innerText(), 'Widgets sometimes trade places. Your arrangement stays saved.');
+      assert.equal(await body.locator('.swap-hint').innerText(), 'Your saved layout stays unchanged.');
       assert.equal(await body.getByRole('slider', { name: 'Swap glide', exact: true }).count(), 0, 'Swap glide only with Swap places on');
       // The canvas preview offers numbered arrangements only when widgets swap.
       await page.locator('.movement-preview').click();
       assert.equal(await page.locator('.composition-picker').count(), 0);
       assert.equal(await page.locator('.preview-surface .grid-ambient').getAttribute('data-float'), 'float', 'Preview movement shows the draft float');
       await swap.check();
-      assert.equal(await sentence(), 'Your widgets float slowly and swap places every 30 s, gliding without going dark.');
+      assert.equal(await sentence(), 'Floats and swaps places every 30 s.');
       await body.getByRole('slider', { name: 'Swap glide', exact: true }).waitFor();
       assert.equal(await page.locator('.composition-picker').count(), 1);
       await body.getByRole('checkbox', { name: 'Float gently', exact: true }).uncheck();
-      assert.equal(await sentence(), 'Your widgets swap places every 30 s without animation, dimming briefly instead of going dark.');
+      assert.equal(await sentence(), 'Swaps places every 30 s, without animation.');
       await swap.uncheck();
-      assert.equal(await sentence(), 'Your widgets stay where you put them and shift a little every 30 s, without animation, to protect your TV. The screen never goes dark to move.');
+      assert.equal(await sentence(), 'Shifts within your layout every 30 s, without animation.');
       assert.equal(await page.getByText(/Drift and fade|through black|Fade duration|Move widgets every/).count(), 0, 'the old wording is gone');
       // Swap places is saved and keeps the style preset (a motion choice, not a look).
       await page.getByRole('button', { name: 'Cancel', exact: true }).click();

@@ -11,6 +11,7 @@ import type {
   DaylightBrightness,
   LocationResult,
   Settings,
+  SavedPreset,
   WeatherState,
   WidgetGrid,
   WidgetId,
@@ -49,7 +50,6 @@ import {
   duplicateStyleName,
   getVisual,
   labelLook,
-  matchingBuiltinPreset,
   reminderPresentation,
   resetAppearance,
   resetLayout,
@@ -92,6 +92,8 @@ import { GridEditor, type LayoutEdit } from './GridEditor';
 import { WidgetInspector, useHeldPointers, widgetListOrder, type InspectorReveal } from './WidgetInspector';
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
 import { MotionSentence, ScreenSettings } from './ScreenSettings';
+import { InfoTip } from './InfoTip';
+import { prepareStyleSave, restoredStyleId, sameVisual, type StyleSaveIntent } from './style-workflow';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { RemindersPanel, reminderFormPending } from './RemindersPanel';
@@ -142,6 +144,10 @@ interface StudioAlert {
 }
 
 const ACTIVE_TAB = '.inspector-tabs [role="tab"][aria-selected="true"]';
+const STYLE_SELECTION_KEY = 'still-editor-style';
+function rememberedStyle(settings: Settings): string {
+  try { return restoredStyleId(settings, localStorage.getItem(STYLE_SELECTION_KEY)); } catch { return ''; }
+}
 
 /** Why these settings cannot be saved: a widget module's reason, else a list over its limit (#288). */
 function saveProblem(settings: Settings): string | null {
@@ -357,7 +363,15 @@ export function Editor({
     photoEpoch = useRef(0),
     photoId = useRef(state.photo?.id ?? null);
   const [presetName, setPresetName] = useState(''),
-    [presetId, setPresetId] = useState('');
+    [presetId, setPresetId] = useState(() => rememberedStyle(state.settings));
+  const [presetOriginal, setPresetOriginal] = useState<SavedPreset | null>(() =>
+    structuredClone(state.settings.savedPresets.find(item => item.id === rememberedStyle(state.settings)) ?? null));
+  const [styleMode, setStyleMode] = useState<'update' | 'new' | 'rename'>('update');
+  const newStyleId = useRef<string | null>(null);
+  const [builtinSelection, setBuiltinSelection] = useState('');
+  const [pendingStyle, setPendingStyle] = useState<string | null>(null);
+  const [styleNotice, setStyleNotice] = useState('');
+  const [confirmStyleDelete, setConfirmStyleDelete] = useState(false);
   // Style → Data & recovery (#234): a checked backup awaiting confirmation, the section's status
   // line, an import in flight and the inline Reset appearance and Reset layout (#435) questions.
   const [backup, setBackup] = useState<BackupFile | null>(null),
@@ -378,7 +392,7 @@ export function Editor({
     mounted = useRef(true),
     automaticAttempted = useRef(false),
     guardLocation = useRef(false);
-  const savebar = useRef<HTMLElement>(null);
+  const savebar = useRef<HTMLDivElement>(null);
   // #76: the editor's own reduced-motion preference turns its animation off; the canvas replays
   // the entrance once after a level is chosen.
   const editorReducedMotion = usePrefersReducedMotion();
@@ -389,7 +403,8 @@ export function Editor({
   const photoChanged =
     photoDraft !== undefined &&
     (photoDraft?.id ?? null) !== (state.photo?.id ?? null);
-  const dirty = !sameEffectiveSettings(saved, draft) || photoChanged;
+  const settingsDirty = !sameEffectiveSettings(saved, draft) || photoChanged;
+  const dirty = settingsDirty || styleMode !== 'update';
   const airPreview = useAirQualityPreview(draft, state.airQuality);
   // A widget module, or a merged list over its limit (#288), can block Save with a reason shown in the save bar.
   const draftProblem = saveProblem(draft);
@@ -406,7 +421,7 @@ export function Editor({
     if (
       active instanceof HTMLElement &&
       active !== document.body &&
-      active.closest('.studio-workspace')
+      active.closest('.studio-workspace, .editor-style-bar')
     )
       lastEdited.current = active;
   }
@@ -467,34 +482,68 @@ export function Editor({
       setAlertFloating(false);
       return;
     }
-    const narrow = window.matchMedia('(max-width: 700px)');
+    // Short windows keep the announced, dismissible message in its normal row:
+    // there is too little room below the Style toolbar for a safe floating alert.
+    const narrow = window.matchMedia('(max-width: 700px) and (min-height: 361px)');
     let frame = 0;
     const update = () => {
-      frame = 0;
       // The message line directly above the alert row marks where the row starts; the row needs
-      // about 64 px of view above the Save bar's reserved space.
+      // about 64 px of view below the sticky Style toolbar.
       const anchor = document.querySelector('.canvas-messages');
       if (!anchor) return;
       const bottom = anchor.getBoundingClientRect().bottom;
       const clearance =
         Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--studio-footer-clearance')) || 24;
-      const inView = bottom >= 0 && bottom + 64 <= window.innerHeight - clearance + 24;
-      setAlertFloating(narrow.matches && !inView);
+      const toolbarBottom = document.querySelector('.editor-style-bar')?.getBoundingClientRect().bottom ?? 0;
+      const inView = bottom >= toolbarBottom && bottom + 64 <= window.innerHeight - clearance + 24;
+      // The toolbar now occupies the top edge. Place a floating message in the next free
+      // vertical gap, so scrolling a canvas action into view never puts it under the alert.
+      const alertHeight = alertBox.current?.getBoundingClientRect().height ?? 64;
+      const protectedControls = [...document.querySelectorAll<HTMLElement>('.canvas-heading-actions button, .canvas-toolbar button, .canvas-toolbar select')];
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && !active.closest('.studio-error, .editor-style-bar')) protectedControls.push(active);
+      const occupied = protectedControls.map(control => control.getBoundingClientRect())
+        .filter(box => box.width > 0 && box.height > 0 && box.bottom > toolbarBottom && box.top < window.innerHeight)
+        .sort((a, b) => a.top - b.top);
+      const alertWidth = Math.min(420, window.innerWidth - 24);
+      let position: { top: number; left: number } | null = null;
+      for (const left of [12, window.innerWidth - alertWidth - 12]) {
+        let top = toolbarBottom + 8;
+        for (const box of occupied.filter(box => box.right > left && box.left < left + alertWidth)) {
+          if (top + alertHeight + 8 <= box.top) break;
+          if (top < box.bottom + 8) top = box.bottom + 8;
+        }
+        if (top + alertHeight <= window.innerHeight - 12) { position = { top, left }; break; }
+      }
+      document.documentElement.style.setProperty('--studio-alert-top', `${position?.top ?? toolbarBottom + 8}px`);
+      document.documentElement.style.setProperty('--studio-alert-left', `${position?.left ?? 12}px`);
+      // In a viewport with no free region, keep the message in its ordinary row instead
+      // of forcing it over a control. Wide, short windows can use either side of the canvas.
+      setAlertFloating(narrow.matches && !inView && position !== null);
     };
     const schedule = () => {
-      if (!frame) frame = window.requestAnimationFrame(update);
+      if (!frame) frame = window.requestAnimationFrame(() => { frame = 0; update(); });
     };
     update();
-    window.addEventListener('scroll', schedule, { passive: true });
+    // Scroll geometry is needed before the next paint, including nested scrolls.
+    // A queued animation frame can otherwise position the alert using old controls.
+    window.addEventListener('scroll', update, { passive: true, capture: true });
     window.addEventListener('resize', schedule);
+    window.addEventListener('focusin', schedule);
+    const resize = new ResizeObserver(update);
+    for (const element of document.querySelectorAll('.canvas-column, .editor-style-bar')) resize.observe(element);
     narrow.addEventListener('change', schedule);
     return () => {
       window.cancelAnimationFrame(frame);
-      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', schedule);
+      window.removeEventListener('focusin', schedule);
+      resize.disconnect();
       narrow.removeEventListener('change', schedule);
+      document.documentElement.style.removeProperty('--studio-alert-top');
+      document.documentElement.style.removeProperty('--studio-alert-left');
     };
-  }, [floatingKey]);
+  }, [floatingKey, alertFloating]);
   // A floating alert never covers the control that was used: the page scrolls just enough.
   useLayoutEffect(() => {
     if (!alertFloating) return;
@@ -510,26 +559,25 @@ export function Editor({
     const root = document.documentElement;
     root.classList.add('studio-editor');
     const measure = () => {
-      if (!savebar.current) {
-        root.style.setProperty('--studio-footer-clearance', '24px');
-        return;
-      }
-      const bottom =
-        Number.parseFloat(getComputedStyle(savebar.current).bottom) || 0;
-      root.style.setProperty(
-        '--studio-footer-clearance',
-        `${savebar.current.getBoundingClientRect().height + bottom + 24}px`,
-      );
+      const toolbar = document.querySelector('.editor-style-bar')?.getBoundingClientRect();
+      root.style.setProperty('--studio-footer-clearance', '24px');
+      root.style.setProperty('--studio-toolbar-height', `${toolbar?.height ?? 0}px`);
+      root.style.setProperty('--studio-toolbar-bottom', `${Math.max(0, toolbar?.bottom ?? 0)}px`);
     };
     const observer = new ResizeObserver(measure);
-    if (savebar.current) observer.observe(savebar.current);
+    const toolbar = document.querySelector('.editor-style-bar');
+    if (toolbar) observer.observe(toolbar);
     window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, { passive: true });
     measure();
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure);
       root.classList.remove('studio-editor');
       root.style.removeProperty('--studio-footer-clearance');
+      root.style.removeProperty('--studio-toolbar-height');
+      root.style.removeProperty('--studio-toolbar-bottom');
     };
   }, [dirty]);
   useEffect(() => {
@@ -544,6 +592,12 @@ export function Editor({
   useEffect(() => {
     const incoming = structuredClone(state.settings);
     const rebased = rebaseSettingsReport(savedRef.current, draftRef.current, incoming);
+    // Keep the captured selected record as the conflict baseline, but never resurrect its stale
+    // draft metadata after another editor changes/deletes it. The local visual draft survives.
+    if (presetOriginal && !same(presetOriginal, incoming.savedPresets.find(item => item.id === presetOriginal.id))) {
+      const current = incoming.savedPresets.find(item => item.id === presetOriginal.id);
+      rebased.settings.savedPresets = rebased.settings.savedPresets.flatMap(item => item.id === presetOriginal.id ? current ? [structuredClone(current)] : [] : [item]);
+    }
     updateDraft(rebased.settings);
     savedRef.current = incoming;
     savedRevision.current = revisionOf(state.settings);
@@ -631,7 +685,11 @@ export function Editor({
     updateDraft(structuredClone(savedRef.current));
     setLocationQuery('');
     setLocationMessage('');
-    setPresetId('');
+    const selected = rememberedStyle(savedRef.current);
+    setPresetId(selected);
+    setPresetOriginal(structuredClone(savedRef.current.savedPresets.find(item => item.id === selected) ?? null));
+    setStyleMode('update'); newStyleId.current = null; setBuiltinSelection('');
+    setPendingStyle(null); setStyleNotice(''); setConfirmStyleDelete(false);
     setPresetName('');
     setError(null);
   }
@@ -1031,9 +1089,17 @@ export function Editor({
     setLocationQuery('');
     setLocationMessage('City ready to save');
   }
-  async function saveSettings() {
-    if (savingNow.current) return;
+  function styleSaveIntent(): StyleSaveIntent {
+    if (styleMode === 'new') return { kind: 'new', id: newStyleId.current ??= crypto.randomUUID(), name: presetName };
+    const visualEdited = !sameVisual(getVisual(savedRef.current), getVisual(draftRef.current));
+    if (presetId && presetOriginal && (styleMode === 'rename' || (visualEdited && !sameVisual(presetOriginal.visual, getVisual(draftRef.current)))))
+      return { kind: 'update', id: presetId, original: structuredClone(presetOriginal), ...(styleMode === 'rename' ? { name: presetName } : {}) };
+    return { kind: 'current' };
+  }
+  async function saveSettings(): Promise<boolean> {
+    if (savingNow.current) return false;
     savingNow.current = true;
+    const intent = styleSaveIntent();
     let base = savedRef.current,
       revision = savedRevision.current,
       submitted = structuredClone(draftRef.current);
@@ -1048,7 +1114,11 @@ export function Editor({
     try {
       let received: Settings, etag: string | null;
       for (let attempt = 0; ; attempt++) {
-        const patch = settingsChanges(base, submitted, automaticLocation);
+        // Saved-style snapshots are request metadata, not independent draft edits. Keeping the
+        // captured draft raw lets failures/cancellation leave no hidden list mutation, and lets
+        // acknowledgement adopt the server's snapshot while preserving genuinely later edits.
+        const prepared = prepareStyleSave(base, submitted, intent);
+        const patch = settingsChanges(base, prepared, automaticLocation);
         if (includesPhoto)
           patch.photoChange = submittedPhoto
             ? { pngBase64: submittedPhoto.pngBase64 }
@@ -1071,24 +1141,34 @@ export function Editor({
           // An automatic location result yields to a manual city saved elsewhere, as the server would.
           const merged = rebaseSettingsReport(base, submitted, current, { automaticLocation }),
             live = rebaseSettingsReport(base, draftRef.current, current, { automaticLocation });
+          let styleFailure: unknown, preparedMerged = merged.settings;
+          try { preparedMerged = prepareStyleSave(current, merged.settings, intent); }
+          catch (caughtStyle) {
+            styleFailure = caughtStyle;
+            if (intent.kind === 'update') {
+              const changed = current.savedPresets.find(item => item.id === intent.id);
+              live.settings.savedPresets = live.settings.savedPresets.flatMap(item => item.id === intent.id ? changed ? [structuredClone(changed)] : [] : [item]);
+            }
+          }
           updateDraft(live.settings);
           savedRef.current = current;
           savedRevision.current = conflict.etag;
           setSaved(current);
           setState((previous) => (previous ? { ...previous, settings: current } : previous));
           if (live.crowdedOut.length) setGridMessage(crowdedOutMessage(live.crowdedOut));
+          if (styleFailure) throw styleFailure;
           const clean =
             attempt === 0 &&
             !merged.crowdedOut.length &&
-            keepsSavedChanges(base, current, merged.settings) &&
-            saveProblem(merged.settings) === null;
+            keepsSavedChanges(base, current, preparedMerged) &&
+            saveProblem(preparedMerged) === null;
           if (!clean) throw caught;
           base = current;
           revision = conflict.etag;
           submitted = merged.settings;
         }
       }
-      if (!mounted.current) return;
+      if (!mounted.current) return false;
       rememberRevision(received, etag);
       updateDraft(rebaseSettings(submitted, draftRef.current, received));
       savedRef.current = received;
@@ -1125,13 +1205,25 @@ export function Editor({
         photoId.current = submittedPhoto?.id ?? null;
         updatePhoto(undefined);
       }
+      const selected = intent.kind === 'current' ? presetId : intent.id;
+      const selectedRecord = received.savedPresets.find(item => item.id === selected);
+      setPresetId(selectedRecord ? selected : '');
+      setPresetOriginal(structuredClone(selectedRecord ?? null));
+      setStyleMode('update'); setPresetName(''); newStyleId.current = null;
+      setStyleNotice(''); setConfirmStyleDelete(false);
+      try {
+        if (selectedRecord && sameVisual(selectedRecord.visual, getVisual(received))) localStorage.setItem(STYLE_SELECTION_KEY, selectedRecord.id);
+        else localStorage.removeItem(STYLE_SELECTION_KEY);
+      } catch { /* Browser storage is optional; saved styles remain on the server. */ }
       guardLocation.current = false;
       setLocationMessage('');
       setAnnouncement(
         announcement === 'Changes saved' ? 'Changes saved ' : 'Changes saved',
       );
       restoreFocusAfterSaveBar();
+      if (intent.kind === 'new' || styleMode === 'rename') setStyleFocus({ target: '#saved-style-select' });
       void reload();
+      return true;
     } catch (caught) {
       if (mounted.current) {
         setError(
@@ -1146,72 +1238,63 @@ export function Editor({
           onlyIfLost: true,
         });
       }
+      return false;
     } finally {
       savingNow.current = false;
       if (mounted.current) setSaving(false);
     }
   }
-  /**
-   * Saved styles (#344). The name field is only for a new name: choosing a style leaves it empty, an
-   * add clears it, and Update keeps the style's name unless another one is typed. A name another
-   * style already uses is refused inline.
-   */
-  function choosePreset(id: string) {
-    setPresetId(id);
-    setPresetName('');
-    const preset = draft.savedPresets.find((item) => item.id === id);
-    if (preset) {
-      const visual = structuredClone(preset.visual);
-      change((previous) => ({
-        ...previous,
-        ...visual,
-        appearance: labelLook(visual.appearance),
-      }));
+  /** A selection changes the visual draft; only the top Save action persists it. */
+  function applyStyleChoice(choice: string, discard = false) {
+    let next = structuredClone(draftRef.current);
+    if (discard) next = { ...next, ...getVisual(savedRef.current), savedPresets: structuredClone(savedRef.current.savedPresets) };
+    let selected: SavedPreset | null = null;
+    if (choice.startsWith('saved:')) {
+      selected = next.savedPresets.find(item => item.id === choice.slice(6)) ?? null;
+      if (!selected) { setStyleNotice('This style is no longer available. Your changes are still here.'); setPendingStyle(null); return; }
+      next = { ...next, ...structuredClone(selected.visual), appearance: labelLook(selected.visual.appearance) };
+    } else if (choice.startsWith('builtin:')) {
+      const preset = choice.slice(8);
+      if (!BUILTIN_PRESETS.includes(preset as typeof BUILTIN_PRESETS[number])) return;
+      next = applyBuiltinPreset(next, preset as typeof BUILTIN_PRESETS[number]);
     }
+    change(() => next);
+    setPresetId(selected?.id ?? ''); setPresetOriginal(structuredClone(selected));
+    setBuiltinSelection(choice.startsWith('builtin:') ? choice.slice(8) : '');
+    setPresetName(''); setStyleMode('update'); newStyleId.current = null;
+    setPendingStyle(null); setConfirmStyleDelete(false); setStyleNotice('');
   }
-  function addPreset() {
-    const name = presetName.trim();
-    if (
-      !name ||
-      duplicateStyleName(draftRef.current.savedPresets, name) ||
-      draftRef.current.savedPresets.length >= MAX_SAVED_STYLES
-    )
-      return;
-    const id = crypto.randomUUID();
-    change((previous) => ({
-      ...previous,
-      savedPresets: [
-        ...previous.savedPresets,
-        { id, name, visual: getVisual(previous) },
-      ],
-    }));
-    setPresetId(id);
-    setPresetName('');
-    // Add style is disabled once the name clears; the select now shows the new style.
-    setStyleFocus({ target: '#saved-style-select', edit: true });
+  function chooseStyle(choice: string) {
+    if (!sameVisual(getVisual(savedRef.current), getVisual(draftRef.current)) || styleMode !== 'update' || !same(savedRef.current.savedPresets, draftRef.current.savedPresets)) {
+      setPendingStyle(choice); setStyleNotice(''); return;
+    }
+    applyStyleChoice(choice);
   }
-  function updatePreset() {
-    const name = presetName.trim();
-    if (name && duplicateStyleName(draftRef.current.savedPresets, name, presetId)) return;
-    change((previous) => ({
-      ...previous,
-      savedPresets: previous.savedPresets.map((preset) =>
-        preset.id === presetId
-          ? { ...preset, name: name || preset.name, visual: getVisual(previous) }
-          : preset,
-      ),
-    }));
-    setPresetName('');
+  function beginNewStyle() {
+    if (styleMode !== 'new') { newStyleId.current = crypto.randomUUID(); setPresetName(''); }
+    setStyleMode('new'); setPendingStyle(null); setConfirmStyleDelete(false); setStyleNotice('');
+    setStyleFocus({ target: '#style-name', edit: true });
+  }
+  function renameStyle() {
+    if (!presetOriginal) return;
+    setPresetName(presetOriginal.name); setStyleMode('rename'); setConfirmStyleDelete(false);
+    setStyleFocus({ target: '#style-name', edit: true });
+  }
+  function keepEditingStyle() {
+    setStyleMode('update'); setPresetName(''); newStyleId.current = null;
+    setStyleFocus({ target: '#saved-style-select' });
   }
   function deletePreset() {
-    change((previous) => ({
-      ...previous,
-      savedPresets: previous.savedPresets.filter((preset) => preset.id !== presetId),
-    }));
-    setPresetId('');
-    setPresetName('');
-    // The delete button unmounts with the selection (#343).
+    change(previous => ({ ...previous, savedPresets: previous.savedPresets.filter(item => item.id !== presetId) }));
+    setPresetId(''); setPresetOriginal(null); setPresetName(''); setStyleMode('update');
+    setConfirmStyleDelete(false); setStyleNotice('Style will be deleted when you save.');
     setStyleFocus({ target: '#saved-style-select', edit: true });
+  }
+  async function saveAndSwitch() {
+    const requested = pendingStyle;
+    if (requested === null || !await saveSettings()) return;
+    if (sameEffectiveSettings(savedRef.current, draftRef.current) && (photoDraftRef.current === undefined || (photoDraftRef.current?.id ?? null) === photoId.current)) applyStyleChoice(requested);
+    else setStyleNotice('New edits are still unsaved. Keep editing or discard them to switch.');
   }
   // Style tab focus moves (#343, #302, #344): the control that was used unmounts or turns disabled,
   // so focus goes to the control that now holds the result. An edit records it, so Save and Cancel
@@ -1366,7 +1449,9 @@ export function Editor({
     const after = resetAppearance(draftRef.current);
     const unchanged = sameEffectiveSettings(savedRef.current, after);
     setConfirmReset(false);
-    setPresetId('');
+    // Reset is a visual draft edit of the selected style (or new-style intent).
+    // Keep its save target/name, but stop claiming a starter look is selected.
+    setBuiltinSelection('');
     change(() => after);
     setResetLook(unchanged ? null : after.appearance);
     setDataMessage({
@@ -1397,8 +1482,6 @@ export function Editor({
     setStyleFocus({ target: '.reset-layout', edit: true });
   }
   const pendingCount = state.reminders.filter((item) => !item.completed).length;
-  // The built-in style whose look is showing (#153): pressed whenever applying it changes nothing.
-  const lookPreset = matchingBuiltinPreset(draft.appearance);
   // #151: the kept custom colour (the draft's, else the saved one), selectable again after Native.
   // A built-in style's own single colour (Phone's or Night's) is one the user never chose, so it is
   // offered only while it is the accent: in the draft, or in saved data (#303: older colour-mode data
@@ -1416,17 +1499,26 @@ export function Editor({
           ([color, wasAccent]) => !accentSwatch(color) && (wasAccent || !builtinColour(color)),
         )?.[0] ?? null;
   // #344: a typed name another saved style already uses (without case or surrounding spaces).
-  const presetConflict = duplicateStyleName(draft.savedPresets, presetName);
+  const presetConflict = styleMode === 'update' ? null : duplicateStyleName(draft.savedPresets, presetName, styleMode === 'new' ? newStyleId.current ?? undefined : presetId);
+  const selectedStyle = draft.savedPresets.find(item => item.id === presetId);
+  const styleModified = !!presetId && !!presetOriginal && !sameVisual(presetOriginal.visual, getVisual(draft));
+  let styleProblem: string | null = null;
+  try { prepareStyleSave(savedRef.current, draftRef.current, styleSaveIntent()); }
+  catch (caught) { styleProblem = caught instanceof Error ? caught.message : 'Check the selected style.'; }
+  const meaningfulStyleAction = styleMode === 'new' || (styleMode === 'rename' && presetName.trim() !== presetOriginal?.name);
   const customActive =
     customAccent !== null &&
     draft.appearance.accentMode === 'color' &&
     draft.appearance.accentColor.toLowerCase() === customAccent.toLowerCase();
   const saveBlocked =
-    !dirty || saving || locationBusy || photoBusy || !!draftProblem;
+    !dirty || (!settingsDirty && !meaningfulStyleAction) || saving || locationBusy || photoBusy || !!draftProblem || !!styleProblem;
   const weatherPending =
     !same(draft.location, state.settings.location) ||
     draft.locationSource !== state.settings.locationSource ||
     draft.units !== state.settings.units;
+  const otherPending = Object.keys(settingsChanges(saved, draft)).some(key =>
+    !['appearance', 'widgets', 'widgetOverrides', 'widgetBehavior', 'widgetGrid', 'preview', 'savedPresets', 'location', 'locationSource', 'units'].includes(key));
+  const saveScope = [weatherPending ? 'weather' : '', photoChanged ? 'photo' : '', otherPending ? 'other settings' : ''].filter(Boolean).join(', ');
   const weatherRefreshing =
     saved.location.latitude !== state.weather.location.latitude ||
     saved.location.longitude !== state.weather.location.longitude ||
@@ -1443,10 +1535,69 @@ export function Editor({
   const canvasMessage = layoutMessage && (layoutMessage.where === 'canvas' || !listShown) ? layoutMessage.text : '';
   return (
     <div
-      className="studio"
+      className="studio editor-with-styles"
       data-animation={editorReducedMotion ? 'off' : draft.appearance.animation}
     >
       <StudioHeader page="edit" displayControls={displayControls} />
+      <section className="editor-style-bar" aria-label="Style and save">
+        <div className="style-choice-row">
+          <label className="style-choice-label" htmlFor="saved-style-select">Style</label>
+          <select id="saved-style-select" className="select-input style-choice" disabled={saving}
+            value={presetId ? `saved:${presetId}` : builtinSelection ? `builtin:${builtinSelection}` : ''}
+            onChange={event => chooseStyle(event.target.value)}>
+            <option value="">Current display</option>
+            {!!presetId && !selectedStyle && <option value={`saved:${presetId}`} disabled>Deleted style</option>}
+            {!!draft.savedPresets.length && <optgroup label="Saved styles">
+              {draft.savedPresets.map((preset, index) => <option key={preset.id} value={`saved:${preset.id}`}>
+                {preset.name}{duplicateStyleName(draft.savedPresets, preset.name, preset.id) ? ` (${index + 1})` : ''}
+              </option>)}
+            </optgroup>}
+            <optgroup label="Starter looks">
+              {BUILTIN_PRESETS.map(preset => <option key={preset} value={`builtin:${preset}`}>{preset[0].toUpperCase() + preset.slice(1)}</option>)}
+            </optgroup>
+          </select>
+          {styleModified && styleMode === 'update' && <span className="style-modified">Modified</span>}
+          <InfoTip label="About styles">Saved styles include your look and layout. Starter looks change appearance and keep widgets, motion and Follow daylight.</InfoTip>
+          {styleMode !== 'new' && <button className="button small" disabled={saving || draft.savedPresets.length >= MAX_SAVED_STYLES} onClick={beginNewStyle}>Save as new…</button>}
+          {presetId && styleMode === 'update' && <details className="style-management">
+            <summary className="button small">Manage style</summary>
+            <div><button className="button small" disabled={saving} onClick={renameStyle}>Rename</button>
+              <button className="button small" disabled={saving} onClick={() => setConfirmStyleDelete(true)}>Delete style…</button></div>
+          </details>}
+        </div>
+        {styleMode !== 'update' && <div className="style-name-row">
+          <label htmlFor="style-name">{styleMode === 'new' ? 'New style' : 'Style name'}</label>
+          <input id="style-name" className="text-input" maxLength={60} required disabled={saving} value={presetName}
+            onChange={event => setPresetName(event.target.value)} placeholder="Name" aria-invalid={!!presetConflict}
+            aria-describedby={presetConflict ? 'preset-name-error' : undefined} />
+          <button className="text-button" disabled={saving} onClick={keepEditingStyle}>Keep editing</button>
+        </div>}
+        {draft.savedPresets.length >= MAX_SAVED_STYLES && <p className="style-limit">Up to {MAX_SAVED_STYLES} styles.</p>}
+        {styleProblem && (styleMode === 'update' || presetName.trim()) && <p className="inline-message error preset-name-error" id="preset-name-error" role="alert">{styleProblem}</p>}
+        {presetOriginal && selectedStyle && !same(presetOriginal, selectedStyle) &&
+          <button className="button small" disabled={saving} onClick={() => chooseStyle(`saved:${selectedStyle.id}`)}>Reload style</button>}
+        {confirmStyleDelete && <div className="style-question" role="group" aria-label="Delete style">
+          <span>Delete {selectedStyle?.name}? Your current display stays.</span>
+            <button className="button small" disabled={saving} onClick={() => setConfirmStyleDelete(false)}>Keep style</button>
+            <button className="button small" disabled={saving} onClick={deletePreset}>Delete from styles</button>
+        </div>}
+        {pendingStyle !== null && <div className="style-question" role="group" aria-label="Switch style">
+          <span>Keep your unsaved style changes?</span>
+          <button className="button small" disabled={saving} onClick={() => setPendingStyle(null)}>Keep editing</button>
+          <button className="button small" disabled={saving} onClick={() => applyStyleChoice(pendingStyle, true)}>Discard and switch</button>
+          <button className="button small primary" aria-disabled={saveBlocked} onClick={() => { if (!saveBlocked) void saveAndSwitch(); }}>Save and switch</button>
+        </div>}
+        {styleNotice && <p className="style-notice" role="status">{styleNotice}</p>}
+        {dirty && <div ref={savebar} className="studio-savebar has-changes">
+          <span className="save-status" role="status">{saving ? 'Saving…' : draftProblem ?? (styleMode === 'new' ? 'New style' : styleMode === 'rename' ? 'Rename style' : styleSaveIntent().kind === 'update' ? `Updates ${presetOriginal?.name}` : 'Unsaved changes')}</span>
+          {saveScope && <span className="style-save-scope">Also saves {saveScope} changes</span>}
+          <div><button className="button cancel-settings" disabled={saving} onClick={cancelChanges}>Cancel</button>
+            {pendingStyle === null && <button className="button primary" aria-disabled={saveBlocked} onClick={() => { if (!saveBlocked) void saveSettings(); }}>
+              {saving ? 'Saving…' : styleMode === 'new' ? 'Save new style' : 'Save changes'}<Icon name="check" size={15} />
+            </button>}
+          </div>
+        </div>}
+      </section>
       <main className="studio-workspace">
         <section className="canvas-column" aria-label="Display preview">
           <div className="canvas-heading">
@@ -1516,7 +1667,7 @@ export function Editor({
           </div>
           </div>
           <div className="canvas-toolbar">
-            {!layoutEditing && <span>Your saved arrangement</span>}
+            {!layoutEditing && <span>Layout preview</span>}
             {layoutEditing ? (
               <label className="grid-density-control">
                 {/* #345: a short visible label; the select keeps its full accessible name. */}
@@ -1580,6 +1731,7 @@ export function Editor({
                 </>}
               </>
             )}
+            {layoutEditing && <InfoTip label="About editing the layout">Drag a widget to move it or its corner to resize. Arrow keys work too; Escape cancels a drag.</InfoTip>}
           </div>
           {/* One reserved line for layout messages and the weather note (#231). */}
           <div className="canvas-messages">
@@ -1595,12 +1747,6 @@ export function Editor({
                 </button>
               )}
             </p>
-            {/* #345: how to edit, in the reserved line while nothing else needs it. */}
-            {layoutEditing && !canvasMessage && !weatherNote && (
-              <p className="canvas-hint">
-                Drag a widget to move it · drag its corner to resize<span className="canvas-hint-keys"> · arrow keys work too</span>
-              </p>
-            )}
             {/* Always mounted, so a screen reader announces the note when it appears. */}
             <p className="canvas-note" role="status">
               {weatherNote}
@@ -1717,43 +1863,6 @@ export function Editor({
             {section === 'Style' && (
               <>
                 <h2>Make it yours</h2>
-                <div className="preset-list">
-                  {BUILTIN_PRESETS.map((preset) => (
-                    <button
-                      key={preset}
-                      className={`preset-button ${lookPreset === preset ? 'active' : ''}`}
-                      aria-pressed={lookPreset === preset}
-                      title="Sets brightness, colours and typeface; widgets, Text size and motion stay"
-                      onClick={() => {
-                        change((previous) =>
-                          applyBuiltinPreset(previous, preset),
-                        );
-                        setPresetId('');
-                      }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={`preset-miniature miniature-${preset}`}
-                      >
-                        <span>9:41</span>
-                        {(['time', 'sky', 'personal'] as const).map((role) => (
-                          <i
-                            key={role}
-                            style={
-                              { '--bar': NATIVE_PALETTE[role].hex } as React.CSSProperties
-                            }
-                          />
-                        ))}
-                      </span>
-                      <span className="preset-label">
-                        {preset[0].toUpperCase() + preset.slice(1)}
-                        {lookPreset === preset && (
-                          <Icon name="check" size={13} />
-                        )}
-                      </span>
-                    </button>
-                  ))}
-                </div>
                 {/* #439: Fixed (one level) or Follow daylight (Dimmest to Brightest, peaking at
                     solar noon). The mode sits on the label line, so the default Fixed tab keeps
                     its height at 1280×720. */}
@@ -1972,7 +2081,7 @@ export function Editor({
                   </summary>
                   <div className="disclosure-body">
                     <div className="animation-setting">
-                      <span className="field-label">Animation</span>
+                      <div className="field-label-with-help"><span className="field-label">Animation</span><InfoTip label="About animation">Off keeps content still. Subtle animates changes; Lively adds weather motion. Floating is controlled separately. Reduced motion follows this screen's system setting.</InfoTip></div>
                       <div
                         className="animation-options"
                         role="group"
@@ -1993,10 +2102,6 @@ export function Editor({
                           </button>
                         ))}
                       </div>
-                      <p className="animation-hint">
-                        Off keeps the content of widgets still; movement is set below.
-                        Subtle animates changes. Lively adds gentle weather motion.
-                      </p>
                       {editorReducedMotion && (
                         <p className="animation-hint">
                           This screen asks for reduced motion, so animation stays off
@@ -2039,7 +2144,7 @@ export function Editor({
                       }
                     />
                     <p className="hint swap-hint">
-                      Widgets sometimes trade places. Your arrangement stays saved.
+                      Your saved layout stays unchanged.
                     </p>
                     {draft.appearance.rearrange && (
                       <Range
@@ -2052,11 +2157,6 @@ export function Editor({
                         onChange={(value) => appearance('fadeSeconds', value)}
                       />
                     )}
-                    <p className="hint motion-hint">
-                      With Animation effects off in Windows Settings › Accessibility
-                      › Visual effects on the display PC, the display moves without
-                      animation.
-                    </p>
                     <ScreenSettings
                       keepAwake={draft.screen.keepAwake}
                       active={motionOpened}
@@ -2104,84 +2204,6 @@ export function Editor({
                         }
                       />
                     </label>
-                  </div>
-                </details>
-                <details className="disclosure">
-                  <summary>
-                    Saved styles<span>{draft.savedPresets.length || ''}</span>
-                  </summary>
-                  <div className="disclosure-body">
-                    {/* #344: what a saved style is, and the limit once it is reached. */}
-                    <p className="hint preset-hint" id="preset-hint">
-                      {draft.savedPresets.length >= MAX_SAVED_STYLES ? `Up to ${MAX_SAVED_STYLES} styles. ` : ''}
-                      Saves the current look and widgets so you can switch back later.
-                    </p>
-                    <label>
-                      <span className="field-label">Saved style</span>
-                      <select
-                        id="saved-style-select"
-                        className="select-input"
-                        value={presetId}
-                        onChange={(event) => choosePreset(event.target.value)}
-                      >
-                        <option value="">Choose…</option>
-                        {draft.savedPresets.map((preset) => (
-                          <option key={preset.id} value={preset.id}>
-                            {preset.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span className="field-label">Style name</span>
-                      <input
-                        className="text-input"
-                        maxLength={60}
-                        value={presetName}
-                        onChange={(event) => setPresetName(event.target.value)}
-                        placeholder="Evening"
-                        aria-invalid={presetConflict ? true : undefined}
-                        aria-describedby={presetConflict ? 'preset-name-error' : undefined}
-                      />
-                    </label>
-                    {presetConflict && (
-                      <p className="inline-message error preset-name-error" id="preset-name-error">
-                        A style named {presetConflict} already exists
-                      </p>
-                    )}
-                    <div className="preset-actions">
-                      <button
-                        className="button small add-style"
-                        disabled={
-                          !presetName.trim() ||
-                          !!presetConflict ||
-                          draft.savedPresets.length >= MAX_SAVED_STYLES
-                        }
-                        aria-describedby="preset-hint"
-                        onClick={addPreset}
-                      >
-                        <Icon name="plus" size={14} />
-                        Add style
-                      </button>
-                      {presetId && (
-                        <>
-                          <button
-                            className="button small"
-                            disabled={!!duplicateStyleName(draft.savedPresets, presetName, presetId)}
-                            onClick={updatePreset}
-                          >
-                            Update
-                          </button>
-                          <button
-                            className="icon-button"
-                            aria-label="Delete selected style"
-                            onClick={deletePreset}
-                          >
-                            <Icon name="trash" size={16} />
-                          </button>
-                        </>
-                      )}
-                    </div>
                   </div>
                 </details>
                 <details className="disclosure data-disclosure">
@@ -2467,7 +2489,7 @@ export function Editor({
                     description="Type two or more letters to search for a city"
                   />
                 </div>
-                <p className="inline-message" role="status">
+                <p className={`inline-message location-message${locationMessage ? ' has-message' : ''}`} role="status">
                   {locationMessage || '\u00a0'}
                 </p>
                 {/* #235: Time format applies to every widget, so it sits beside Units, outside any widget. */}
@@ -2566,38 +2588,7 @@ export function Editor({
       <p className="sr-only save-announcer" role="status">
         {announcement}
       </p>
-      {dirty && (
-        <footer
-          ref={savebar}
-          className={`studio-savebar ${dirty ? 'has-changes' : ''}`}
-        >
-          <span className="save-status" role="status">
-            {saving
-              ? 'Saving…'
-              : (draftProblem ?? (dirty ? 'Unsaved changes' : 'Saved'))}
-          </span>
-          <div>
-            <button
-              className="button cancel-settings"
-              disabled={saving}
-              onClick={cancelChanges}
-            >
-              Cancel
-            </button>
-            {/* aria-disabled rather than disabled, so keyboard focus stays on Save while saving (#289). */}
-            <button
-              className="button primary"
-              aria-disabled={saveBlocked}
-              onClick={() => {
-                if (!saveBlocked) void saveSettings();
-              }}
-            >
-              {saving ? 'Saving…' : 'Save changes'}
-              <Icon name="check" size={15} />
-            </button>
-          </div>
-        </footer>
-      )}
+
     </div>
   );
 }

@@ -20,7 +20,7 @@ busy dashboards. The application must produce no audio.
 | Area | Intended behavior |
 | --- | --- |
 | Home | The main page (`/`, #438) for day-to-day use beside the display rather than setting it up: the date and time, six quick actions (Timer, Reminder, Calendar, World clock, Countdown, Note) that feed the display, a Today list (timers, reminders due today, anytime and coming up) and the saved arrangement with **Edit display** one click away. Loopback only; phone or LAN access is a separate decision (#465). |
-| Edit display | The editor at `/editor` (#438): layout, widgets, looks, weather and reminders, every flow as before. |
+| Edit display | The editor at `/editor` (#438): layout, widgets, looks, weather and reminders. The top Style selector offers saved styles and starter looks; one Save action updates the selected style or saves a new one together with the editor draft. Switching with unsaved visual changes requires an explicit decision. |
 | Timers | Silent countdown timers started from Home (presets or a custom time, an optional name): pause, add a minute, cancel with Undo, restart and dismiss. While one runs, the display Clock's date line shows it ("Pasta 8 min"); a finished one reads Done in the status colour for 10 minutes. No sound, no flashing (#438). |
 | Time and date | Optional clock with outline numerals by default, solid digital or minimal analog hands, and 12/24-hour format. |
 | Weather | Conditions with a clear place label, units, and update age; when rain is near it adds the chance and estimated timing of upcoming rain inside the same widget, with uncertainty visible (#74). |

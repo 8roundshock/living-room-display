@@ -95,6 +95,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       </div>)}
     </div>
     <section className="picker-detail" aria-label={`${widget.name} preview`}>
+      <div className="picker-detail-content" key={selected}>
       <div className="picker-detail-heading"><h3>{widget.name}</h3><p>{widget.description}</p></div>
       <WidgetSample key={`${selected}-${size}`} id={selected} size={size} appearance={settings.appearance} density={settings.widgetGrid.density} />
       <div className="family-previews" aria-label={`${widget.name} size`}>
@@ -103,6 +104,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
         </button>)}
       </div>
       {caption && <p className="picker-free-size">{caption}</p>}
+      </div>
       {added && <p className="picker-added-note" id="picker-added-note"><Icon name="check" size={13} />{addedNote}</p>}
       {/* The visible text is the accessible name in both states (#241). */}
       <button className="button primary picker-add" disabled={added} aria-describedby={added ? 'picker-added-note' : undefined} onClick={() => setProblem(onAdd(selected, size))}>
@@ -111,6 +113,6 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       </button>
       <RoomNotice problem={shown} onFix={(current, fix) => setProblem(onFix(current, fix))} />
     </section></div>
-    <p className="picker-footnote">Sample content · changes stay in your draft</p>
+    <p className="picker-footnote">Sample content · unsaved</p>
   </div>;
 }

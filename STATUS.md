@@ -1,5 +1,97 @@
 # Project status
+## Active PR reconciliation (#519, #517)
 
+The compatible UI baseline in PR #522 is being reconciled with merged pre-idle
+source PR #526 before the newer Home/Edit/Settings workflow in PR #518. The
+pre-idle source feature was independently reviewed at `1c79c032` and merged in
+`7771b178` after all ten applicable CI checks passed. It has not been installed
+or observed on the actual native display by this source reconciliation.
+
+PR #522's compatibility repairs are tracked in #527. Mobile action errors update
+their placement on scroll, focus and layout changes, and an empty location
+status no longer consumes Weather's available space. Free-size focus checks now
+use the top Style/Save toolbar; Home's keyboard order includes its contextual
+help. The first-run checks select city results from their listbox and budget
+only the measured persistent toolbar height beyond the earlier internal-scroll
+contract. All 44 px row targets, center hit tests and body-overflow checks remain.
+
+Source typechecking/build and all 510 unit tests pass. Focused Workspace (18),
+Free-size (13) and First-run (7) checks pass against synthetic isolated data;
+desktop/mobile editor renders were inspected in RAM. Final-head independent
+review and applicable CI remain merge gates. #519 remains open for installed/
+native acceptance; no installed files or settings are changed here.
+
+A further keyboard continuation exposed a help tooltip consuming a newly opened
+dialog's Escape during its blur grace period. Help now consumes Escape only
+while its own trigger/tip owns focus. A controlled-clock regression fails with
+the old handler and passes with the correction; all three context-help groups
+pass, including the existing trigger-focused parent-preservation checks.
+
+The first integrated CI run passed 18/19 browser suites and exposed an
+over-conservative alert-row rule hiding a short-window Save failure. The alert
+keeps its floating visibility behavior while placement follows synchronous
+captured scroll events and observed canvas/toolbar resizes. The unchanged Studio
+visibility and Workspace control-clearance checks cover both requirements.
+The corrected source passes Studio (29 groups, 59 s), Workspace (18, 52 s) and
+Styles (15, 20 s) together, including long errors without a floating/inline loop.
+Direct geometry updates preserve any pending animation-frame ID so unmount can
+still cancel the scheduled resize/focus update.
+
+The following entries retain their historical checkpoint scope.
+
+## Editor style workflow (local checkpoint)
+
+The top Style toolbar now holds saved styles, virtual Phone/Room/Night starter
+looks, and one Save/Cancel group. Save changes updates the selected style under
+its existing ID; Save as new creates a separate record without changing the
+original. Rename/delete management stays beside the selector. No schema migration,
+default-style seeding or changes to native installation are involved.
+
+Switching with visual/naming drafts asks whether to keep editing, discard or save
+before switching. Save retains the existing atomic all-editor-drafts transaction,
+with a concise scope line for weather/photo/other settings. Captured requests keep
+their target, late edits survive acknowledgement, and generated style snapshots
+never become hidden draft edits after a failed save. Changed/deleted targets and
+new duplicate names are checked against refreshed data before retry. Reload style
+offers explicit recovery without discarding unrelated drafts. Related existing
+reports: #428 (save status/name validation), #488 (style labels after rebase), and
+#472 (starter looks preserve Follow daylight).
+
+Production build and 487 unit tests passed. On the final UI revision, Styles
+(15 groups), Studio (29), Workspace (18) and context-help (3) passed. The style
+suite covers failed-save recovery, concurrent changes, stable identity, reload,
+reset, keyboard controls and a readable selector at 320 px. The original Motion
+editor block also passed its three checks; the full performance suite was not rerun.
+
+Before the last selector-width and short-window alert fixes, Catalog sky (7),
+Catalog time (12), Daylight (7), Reminders (24), Palette (17), Editor sync (10) and
+Screen (8) passed. That combined run retained a Workspace failure; the final
+focused run verified its correction. A polling test's clock was moved before app
+startup to remove a real-timer deadline race, preserving its recovery assertions.
+Final synthetic desktop/mobile renders were inspected in RAM. Short windows keep
+action errors in their normal, announced and dismissible row. This is a local
+checkpoint, not a publication or installation claim.
+
+## Compact context help (local checkpoint)
+
+The local `codex/tighter-ux-copy` branch starts from reviewed integration `3f79e9b`.
+Home and Edit display now keep secondary directions behind four contextual info
+controls: full screen, layout editing, animation and keeping the screen awake.
+Each supports hover, keyboard focus and tap/click, with Escape and outside dismissal.
+Home's display caption, movement summary, saved-style hint and picker footer are
+shorter. Errors, reduced-motion status, power conflicts, privacy and destructive
+action consequences remain visible.
+
+The full-screen help uses the universal display shortcut instead of assuming a
+Start-menu entry exists, addressing the copy problem in [#422](https://github.com/8roundshock/living-room-display/issues/422).
+It does not change native behavior, Windows settings, presets or saved data.
+This is a local source checkpoint; installation and publication are separate steps.
+
+Verification on this source: production build passed; Screen (8 groups), Studio
+(29), Workspace (17) and context-help (3) browser checks passed with synthetic
+data. Desktop and narrow Home/editor renders were inspected in RAM. The Motion
+suite's copy assertion now opens the same help exercised by the focused checks;
+its performance run was not repeated for this UI-only change.
 ## Pre-idle snapshot source work (#525)
 
 Work is in progress on one private RAM-only snapshot attempt per eligible input

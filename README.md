@@ -14,7 +14,8 @@ Device-area weather with a Toronto fallback, editable presets and reminders,
 and configurable hiding of empty reminders are implemented. The sparse interface
 uses the [recorded HIG-inspired design choices](docs/design.md). The display studio
 puts one focused Style, Widgets, Weather or Reminders inspector beside its live
-preview. Save/Cancel appears only for effective settings/photo edits, cities appear as you type, and
+preview. The top Style selector lets you update a saved style or save the look as new;
+one Save/Cancel group commits the editor's settings and photo drafts. Cities appear as you type, and
 advanced controls stay out of the way. See [editing and browser checks](docs/ui.md).
 The latest read-only installation marker observation identifies `f85be29`, installed
 2026-10-21 at 04:50:32 UTC. The verified source checkpoint is being

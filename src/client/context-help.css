@@ -1,0 +1,46 @@
+.context-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--studio-muted, #aaa4b3);
+  cursor: help;
+}
+.context-help > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font: 600 11px/1 system-ui, sans-serif;
+}
+.context-help:hover { color: #e9e4ef; background: rgb(255 255 255 / 5%); }
+.context-help:focus-visible { outline: 2px solid #b7a4e3; outline-offset: -4px; }
+.context-help-tip {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 10px;
+  background: #24222c;
+  color: #e9e4ef;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
+  font: 400 12px/1.5 system-ui, sans-serif;
+  overflow-wrap: anywhere;
+}
+.field-label-with-help { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.studio .field-label-with-help > .field-label { margin: 0; }

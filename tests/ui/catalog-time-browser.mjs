@@ -303,7 +303,10 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     assert.equal(await row.getByRole('textbox', { name: 'Countdown 2 title' }).count(), 0, 'collapsing the panel drops the untitled row');
     await row.getByRole('button', { name: 'Add date', exact: true }).click();
     await button('Remove Countdown').click();
-    await tab('Style'); await button('Night').click();
+    await tab('Style'); await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night');
+    const switchStyle = page.getByRole('group', { name: 'Switch style', exact: true });
+    assert.equal(await switchStyle.getByRole('button', { name: 'Save and switch', exact: true }).isDisabled(), false, 'the removed incomplete row does not block switching styles');
+    await switchStyle.getByRole('button', { name: 'Keep editing', exact: true }).click();
     assert.equal(await saveStatus().innerText(), 'Unsaved changes');
     assert.equal(await button('Save changes').isDisabled(), false, 'removing the widget never leaves Save blocked by a hidden field');
     await cancel();
@@ -317,7 +320,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     assert.equal(await row.getByRole('textbox', { name: 'Countdown 1 title' }).inputValue(), 'Weekend trip', 'a cleared title reverts when the panel closes');
     await row.getByLabel('Countdown 1 date', { exact: true }).fill('');
     await row.getByRole('textbox', { name: 'Countdown 1 title' }).fill('Weekend away');
-    await tab('Style'); await button('Night').click(); await save();
+    await tab('Style'); await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night'); await save();
     assert.deepEqual(snapshot().widgetData.countdowns.map(({ title, date, repeatsYearly }) => [title, date, repeatsYearly]), [['Weekend away', '2026-10-30', true]], 'a cleared date reverts while other edits are kept');
     await app.store.patchSettings({ widgets: { countdown: true, calendar: true } });
     await page.reload(); await button('Edit layout').waitFor(); await page.clock.runFor(300);
@@ -379,15 +382,16 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     const added = () => Object.fromEntries(['calendar', 'countdown', 'note'].map(id => [id, [snapshot().widgets[id], snapshot().widgetGrid.placements[id]]]));
     const board = added();
     assert.deepEqual(Object.values(board).map(([enabled]) => enabled), [true, true, true], 'the three widgets are on the board');
-    await tab('Style'); await button('Room').click(); await save();
+    await tab('Style'); await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:room'); await save();
     assert.equal(snapshot().widgetData.note.text, 'Dinner at seven\nBack by nine'); assert.equal(snapshot().widgetData.countdowns.length, 1); assert.equal(snapshot().widgetData.calendar.weekStart, 'monday');
     assert.deepEqual(added(), board, 'Room keeps Calendar, Countdown and Note enabled and in place');
-    await button('Night').click(); await save();
+    await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night'); await save();
     assert.deepEqual(added(), board, 'Night keeps them too');
-    await page.getByText('Saved styles', { exact: true }).click();
-    await page.getByLabel('Style name', { exact: true }).fill('Synthetic style'); await button('Add style').click(); await save();
-    await button('Room').click(); await save();
-    await page.getByRole('combobox', { name: 'Saved style', exact: true }).selectOption({ label: 'Synthetic style' });
+    await page.getByRole('button', { name: /^Save as new/ }).click();
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic style');
+    await button('Save new style').click(); await savebar().waitFor({ state: 'detached' });
+    await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:room'); await save();
+    await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption({ label: 'Synthetic style' });
     await save();
     assert.equal(snapshot().widgetData.note.text, 'Dinner at seven\nBack by nine'); assert.equal(snapshot().widgetData.countdowns[0].title, 'Weekend trip');
     assert.equal('widgetData' in snapshot().savedPresets[0].visual, false);
@@ -466,7 +470,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await app.store.update(data => { data.settings = restore.settings; data.reminders = restore.reminders; });
     checks.push('Dense Balanced board (88/96 cells) with a 2 × 8 Reminders column beside Calendar, Countdown and Note: the server keeps the span, and display compositions 0–3 (Swap places on, #436) keep every widget whole, inside the plane, disjoint and relocating (#73, #93)');
 
-    // 7. Narrow reflow and Save-bar clearance for focused fields.
+    // 7. Narrow reflow and top-toolbar clearance for focused fields.
     for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 844 }, { width: 390, height: 480 }]) {
       await open({ viewport });
       row = await inspector('Countdown');
@@ -476,8 +480,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
       const date = row.getByLabel('Countdown 2 date', { exact: true });
       assert.equal(await date.evaluate(element => element === document.activeElement), true);
       await date.scrollIntoViewIfNeeded();
-      const field = await date.boundingBox(), bar = await savebar().boundingBox();
-      assert.ok(field.y >= 0 && field.y + field.height <= bar.y - 4, `${viewport.width}×${viewport.height} focused date clears the Save bar: ${JSON.stringify({ field, bar })}`);
+      const field = await date.boundingBox(), toolbar = await page.locator('.editor-style-bar').boundingBox();
+      assert.ok(field.y >= Math.max(0, toolbar.y + toolbar.height) + 4 && field.y + field.height <= viewport.height, `${viewport.width}×${viewport.height} focused date is visible below the Style and Save toolbar: ${JSON.stringify({ field, toolbar })}`);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.width}px has no horizontal scroll`);
       const overflow = await row.evaluate(element => [...element.querySelectorAll('input, button, textarea, select')].filter(control => { const r = control.getBoundingClientRect(); return r.width && (r.right > innerWidth + 1 || r.left < -1); }).map(control => control.getAttribute('aria-label') ?? control.textContent));
       assert.deepEqual(overflow, [], `${viewport.width}px countdown controls stay within the screen`);
@@ -485,12 +489,12 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
       const noteRow = await inspector('Note');
       await noteRow.getByRole('textbox', { name: 'Note' }).fill('Synthetic narrow note'); await page.clock.runFor(100);
       await noteRow.getByRole('textbox', { name: 'Note' }).blur(); await noteRow.getByRole('textbox', { name: 'Note' }).focus(); await page.clock.runFor(100);
-      const box = await noteRow.getByRole('textbox', { name: 'Note' }).boundingBox(), noteBar = await savebar().boundingBox();
-      assert.ok(box.y >= 0 && box.y + box.height <= noteBar.y - 4, `${viewport.width}x${viewport.height} focused note clears the Save bar: ${JSON.stringify({ box, noteBar })}`);
+      const box = await noteRow.getByRole('textbox', { name: 'Note' }).boundingBox(), noteToolbar = await page.locator('.editor-style-bar').boundingBox();
+      assert.ok(box.y >= Math.max(0, noteToolbar.y + noteToolbar.height) + 4 && box.y + box.height <= viewport.height, `${viewport.width}x${viewport.height} focused note is visible below the Style and Save toolbar: ${JSON.stringify({ box, noteToolbar })}`);
       if (capture) images.push({ name: `panels-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
       await cancel();
     }
-    checks.push('390/320px and 390×480 reflow: no horizontal scroll, countdown controls on screen, focused fields clear of the Save bar');
+    checks.push('390/320px and 390×480 reflow: no horizontal scroll, countdown controls on screen, focused fields visible below the top Style and Save toolbar');
 
     // 8. The grouped picker fits the compact viewports, on the #435 default board a new install shows.
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1280, height: 600 }, { width: 1024, height: 600 }, { width: 760, height: 600 }, { width: 390, height: 700 }, { width: 390, height: 480 }, { width: 640, height: 300 }]) {

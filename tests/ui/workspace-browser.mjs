@@ -50,7 +50,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   }
   async function inView(locator, label) {
     const box = await locator.boundingBox(); const viewport = page.viewportSize();
-    assert.ok(box && box.x >= -1 && box.y >= -1 && box.x + box.width <= viewport.width + 1 && box.y + box.height <= viewport.height + 1, `${label} must fit the viewport: ${JSON.stringify(box)}`);
+    assert.ok(box && box.x >= -1 && box.y >= -1 && box.x + box.width <= viewport.width + 1 && box.y + box.height <= viewport.height + 1, `${viewport.width}x${viewport.height}: ${label} must fit the viewport: ${JSON.stringify(box)}`);
   }
   const frame = () => page.locator('.preview-frame').boundingBox();
   const overlaps = (a, b) => a.x < b.x + b.width - 0.5 && b.x < a.x + a.width - 0.5 && a.y < b.y + b.height - 0.5 && b.y < a.y + a.height - 0.5;
@@ -61,6 +61,8 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     const alert = page.locator('.studio-error'); await alert.waitFor();
     for (const control of await page.locator('.canvas-heading-actions button, .canvas-toolbar button, .canvas-toolbar select').all()) {
       await control.scrollIntoViewIfNeeded();
+      // The controlled clock must run the scroll handler's animation frame before geometry checks.
+      await page.clock.runFor(32);
       const name = await control.evaluate(element => element.getAttribute('aria-label') || element.textContent.trim());
       const box = await control.boundingBox(), alertBox = await alert.boundingBox();
       assert.ok(!overlaps(box, alertBox), `${label}: the alert must not overlap ${name}: ${JSON.stringify({ box, alertBox })}`);
@@ -209,10 +211,12 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     await button('Hide location tip').click();
     if (viewport.width === 1280) assert.deepEqual(await listRows(), GROUPED, 'the list follows the picker groups (#365)');
     await button('Edit layout').click();
-    // #345: the how-to fills the reserved message line; the density select has a visible short label.
-    const hint = page.locator('.canvas-hint');
-    await inView(hint, `${label} how-to`);
-    assert.equal(await hint.innerText(), 'Drag a widget to move it · drag its corner to resize · arrow keys work too');
+    // Layout directions are available on demand without occupying the message line.
+    const hint = button('About editing the layout');
+    await inView(hint, label + ' layout help');
+    await hint.focus();
+    assert.match(await page.getByRole('tooltip').innerText(), /Drag a widget to move it or its corner to resize/);
+    await page.keyboard.press('Escape');
     await inView(page.locator('.grid-density-label'), `${label} Grid label`);
     assert.equal(await page.locator('.grid-density-label').innerText(), 'Grid');
     if (!stacked) assert.equal(await page.evaluate(() => `${document.documentElement.scrollWidth},${document.documentElement.scrollHeight}`), `${viewport.width},${viewport.height}`, `${label}: Edit layout keeps the bounded workspace`);
@@ -231,9 +235,9 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     const first = page.locator('.widget-option.selected .widget-inspector').locator('button').first();
     const firstBox = await first.boundingBox();
     assert.ok(firstBox.y >= 0 && firstBox.y + firstBox.height <= viewport.height, `${label}: a list row's settings come into view`);
-    // #345: a real message replaces the how-to.
+    // Layout messages remain visible while help stays available in the toolbar.
     await button('Move Note').focus(); await page.keyboard.press('ArrowUp');
-    assert.equal(await hint.count(), 0, 'the how-to gives way to a layout message');
+    assert.equal(await hint.count(), 1, 'layout help stays available beside the message');
     assert.match(await page.locator('.grid-status').innerText(), /^No room above$|^Note moved to column \d+, row \d+/);
     // #349: the canvas resize handle keeps its look but takes a 44 × 44 hit area, also at the canvas edge.
     await button('Move Calendar').focus();
@@ -252,7 +256,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       assert.equal(await focusedName(), 'Weather', 'removal focus follows the grouped order');
     }
     if (await page.locator('.studio-savebar').count()) { await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' }); }
-    checks.push(`${label} full board: Edit layout how-to and visible Grid label (#345); each canvas selection brings the inspector's first control into view without moving focus, and a list row too (#339); the how-to gives way to a message; the resize handle keeps its ${handle.visual.join(' × ')} look with a 44 × 44 hit area, also at the canvas corner, and Note Clear is 44 px (#349)${viewport.width === 1280 ? '; the list follows the picker groups and removal focus follows that order (#365)' : ''}`);
+    checks.push(`${label} full board: Edit layout how-to and visible Grid label (#345); each canvas selection brings the inspector's first control into view without moving focus, and a list row too (#339); layout help stays available beside messages; the resize handle keeps its ${handle.visual.join(' × ')} look with a 44 × 44 hit area, also at the canvas corner, and Note Clear is 44 px (#349)${viewport.width === 1280 ? '; the list follows the picker groups and removal focus follows that order (#365)' : ''}`);
   }
   /**
    * The focused element is fully visible: inside the viewport, inside the inspector panel's visible
@@ -262,7 +266,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     const result = await page.evaluate(() => {
       const element = document.activeElement;
       if (!element || element === document.body) return { name: 'BODY', visible: false };
-      const box = element.getBoundingClientRect(), panel = element.closest('.inspector-panel')?.getBoundingClientRect(), bar = document.querySelector('.studio-savebar')?.getBoundingClientRect();
+      const box = element.getBoundingClientRect(), panel = element.closest('.inspector-panel')?.getBoundingClientRect(), bar = document.querySelector('.editor-style-bar')?.getBoundingClientRect();
       const top = Math.max(0, panel?.top ?? 0), bottom = Math.min(innerHeight, panel?.bottom ?? innerHeight);
       const covered = !!bar && box.top < bar.bottom - 0.5 && bar.top < box.bottom - 0.5 && box.left < bar.right - 0.5 && bar.left < box.right - 0.5;
       return { name: element.getAttribute('aria-label') || element.textContent.trim(), box: [box.left, box.top, box.right, box.bottom].map(Math.round), area: [Math.round(top), Math.round(bottom)],
@@ -382,11 +386,14 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       await tab('Widgets'); await button('Clock').click(); await button('Digital').click(); await button('Save changes').waitFor();
       assert.deepEqual(await frame(), before, 'dirty bar must not change canvas geometry');
       await inView(button('Cancel'), 'Cancel'); await inView(button('Save changes'), 'Save');
-      if (viewport.width > 1050) { const bar = await page.locator('.studio-savebar').boundingBox(), aside = await page.locator('.inspector').boundingBox(); assert.ok(bar.x + bar.width <= aside.x, 'wide Save bar must stay clear of the full-height inspector'); }
+      const bar = await page.locator('.studio-savebar').boundingBox(), styleBar = await page.locator('.editor-style-bar').boundingBox(), aside = await page.locator('.inspector').boundingBox();
+      assert.equal(await page.locator('.studio-savebar').count(), 1, 'one Save group serves the editor');
+      assert.ok(bar.y >= styleBar.y && bar.y + bar.height <= styleBar.y + styleBar.height + 0.5, 'Save stays in the top Style toolbar');
+      assert.ok(!overlaps(bar, aside), 'top Save stays clear of the inspector');
       assert.equal(await page.locator('.widget-position-control').count(), 0);
       await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
       await button('Edit layout').click(); await inView(page.getByRole('combobox', { name: 'Grid density' }), 'Density');
-      await inView(page.locator('.canvas-hint'), 'Edit layout how-to (#345)');
+      await inView(button('About editing the layout'), 'Edit layout how-to (#345)');
       assert.equal(await page.evaluate(() => `${document.documentElement.scrollWidth},${document.documentElement.scrollHeight}`), `${viewport.width},${viewport.height}`, 'Edit layout stays within the height budget');
       await button('Move Weather').focus();
       assert.equal(await page.getByRole('button', { name: /^Resize / }).count(), 1, 'only the selected/focused widget exposes a resize handle');
@@ -401,40 +408,57 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
         await inView(button(`Add ${name}`), `${name} Add`);
         for (const size of widgetSizes(id)) { await button(`${name} ${size}`).click(); await inView(button(`Add ${name}`), `${name}/${size} Add`); }
       }
+      if (viewport.width === 760 && viewport.height === 600) {
+        const detail = page.locator('.picker-detail-content');
+        const reminders = page.getByRole('button', { name: /^Preview Reminders(, on your display)?$/ });
+        const clock = page.getByRole('button', { name: /^Preview Clock(, on your display)?$/ });
+        await reminders.click(); await button('Reminders large').click();
+        const scrolled = await detail.evaluate(element => {
+          element.scrollTop = element.scrollHeight;
+          return { top: element.scrollTop, height: element.clientHeight, content: element.scrollHeight };
+        });
+        assert.ok(scrolled.top > 0, `760x600: the long Reminders preview exercises the detail scroller: ${JSON.stringify(scrolled)}`);
+        await clock.focus(); await page.keyboard.press('Enter');
+        assert.equal(await detail.evaluate(element => element.scrollTop), 0, 'changing widgets starts the new detail at its heading');
+        assert.equal(await clock.evaluate(element => element === document.activeElement), true, 'resetting the detail scroll keeps keyboard focus in the catalog');
+        await button('Clock small').click();
+        assert.equal(await button('Clock small').getAttribute('aria-pressed'), 'true', 'size controls still select a family after the scroller reset');
+        await inView(button('Add Clock'), 'Clock Add after changing its size');
+        await reminders.click();
+        assert.equal(await button('Reminders large').getAttribute('aria-pressed'), 'true', 'switching widgets retains each previewed size choice');
+        assert.equal(await detail.evaluate(element => element.scrollTop), 0, 'returning to the long preview also starts at its heading');
+        assert.equal(await page.locator('.studio-savebar').count(), 0, 'preview scrolling, selection and size choices do not edit the display');
+        checks.push('760x600: a scrolled long picker sample resets to its heading on widget selection without moving catalog focus, while size selection and per-widget size memory stay intact and the display stays unchanged');
+      }
       assert.doesNotMatch(await page.locator('.widget-picker').innerText(), /Private reminder sentinel|Toronto/);
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
       await page.keyboard.press('Escape'); assert.equal(await page.locator('.widget-picker').count(), 0); assert.equal(await focusVisible(`${viewport.width}x${viewport.height} Escape from the picker`), 'Add widget');
       await tab('Weather'); const input = page.getByRole('combobox', { name: 'City', exact: true }); await input.focus(); await input.fill('unsaved');
       await tab('Style'); await page.getByRole('slider', { name: 'Brightness', exact: true }).focus(); await page.keyboard.press('ArrowRight'); await tab('Weather'); await input.focus();
       const field = await input.boundingBox(), savebar = await page.locator('.studio-savebar').boundingBox();
-      assert.ok(field.y >= 0 && field.y + field.height < savebar.y, 'focused desktop field must clear Save');
+      assert.ok(field.y >= savebar.y + savebar.height && field.y + field.height <= viewport.height, 'focused desktop field stays below top Save and within the viewport');
       await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
       if (viewport.width === 1280) await weatherNoteClear(viewport);
       if (viewport.width === 1280 && viewport.height === 720) await keyboardFocus();
       await alertRows(viewport);
-      checks.push(`${viewport.width}x${viewport.height}: bounded tabs/canvas/actions, stable dirty geometry, all ${familyActions} family catalog actions, keyboard close/focus return and Save clearance${viewport.width > 1050 ? ', wide Save bar beside the inspector' : ''}; storage, connection and photo alerts in their own row clear of every canvas action, dismiss and recovery${viewport.width === 1280 ? ', weather note clear of Save' : ''}${viewport.width === 1280 && viewport.height === 720 ? ', keyboard focus after Save/Cancel/Remove with announcements' : ''}`);
+      checks.push(`${viewport.width}x${viewport.height}: bounded tabs/canvas/actions, stable dirty geometry, all ${familyActions} family catalog actions, keyboard close/focus return and one Save group inside the top Style toolbar clear of the inspector; storage, connection and photo alerts in their own row clear of every canvas action, dismiss and recovery${viewport.width === 1280 ? ', weather note clear of Save' : ''}${viewport.width === 1280 && viewport.height === 720 ? ', keyboard focus after Save/Cancel/Remove with announcements' : ''}`);
     }
     for (const viewport of [{ width: 390, height: 700 }, { width: 390, height: 480 }, { width: 640, height: 300 }]) {
       await open(viewport);
-      // #360 keeps the hint on its own row below 700 px; #438 adds the Pages nav to the 44 px control row.
-      // Pin that two-row geometry instead of the pre-hint fixed header height.
+      // Compact help and display/page controls stay inside the responsive header.
       const header = await page.locator('.studio-header').evaluate(element => {
-        const box = element.getBoundingClientRect(), hint = element.querySelector('.open-display-hint').getBoundingClientRect();
-        const controls = [...element.querySelectorAll('.brand, .studio-page-link, .open-display, .close-display')].filter(control => control.checkVisibility()).map(control => {
+        const box = element.getBoundingClientRect();
+        const controls = [...element.querySelectorAll('.brand, .studio-page-link, .open-display, .close-display, .context-help')].filter(control => control.checkVisibility()).map(control => {
           const rect = control.getBoundingClientRect();
           return { name: control.getAttribute('aria-label') ?? control.textContent.trim(), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height };
         });
-        return { top: box.top, bottom: box.bottom, height: box.height, hint: { top: hint.top, bottom: hint.bottom, height: hint.height }, controls };
+        return { top: box.top, bottom: box.bottom, controls };
       });
       for (const control of header.controls) {
-        assert.ok(control.width >= 44 && control.height >= 44, `${control.name}: 44 px header target`);
-        assert.ok(control.left >= 0 && control.right <= viewport.width, `${control.name}: inside the viewport`);
-        assert.ok(Math.abs(control.top - header.top - 12) <= 1, `${control.name}: control row starts after 12 px padding`);
+        assert.ok(control.width >= 44 && control.height >= 44, control.name + ': 44 px header target');
+        assert.ok(control.left >= 0 && control.right <= viewport.width, control.name + ': inside viewport');
+        assert.ok(control.top >= header.top && control.bottom <= header.bottom, control.name + ': inside header');
       }
-      const controlBottom = Math.max(...header.controls.map(control => control.bottom));
-      assert.ok(Math.abs(header.hint.top - controlBottom - 6) <= 1, 'the hint has its own row, 6 px below the controls');
-      assert.ok(Math.abs(header.height - (24 + 44 + 6 + header.hint.height + 1)) <= 1, 'header contains both rows, 12 px vertical padding and 1 px border without extra space');
-      assert.ok(Math.abs(header.bottom - header.hint.bottom - 13) <= 1, 'the hint clears the bottom padding and border');
       if (viewport.width <= 480) {
         assert.deepEqual(await page.getByRole('navigation', { name: 'Pages' }).getByRole('link').allInnerTexts(), ['Home']);
         assert.equal(await page.locator('.open-display-label').isVisible(), false); await inView(page.getByRole('link', { name: 'Open display' }), 'icon-only Open display');
@@ -446,7 +470,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       const upload = page.locator('.photo-upload-control'); await upload.scrollIntoViewIfNeeded();
       const icon = await upload.locator('svg').boundingBox(); assert.ok(icon.width === 16 && icon.height === 16, 'upload icon keeps explicit geometry');
       await tab('Weather'); const input = page.getByRole('combobox', { name: 'City', exact: true }); await input.focus();
-      const field = await input.boundingBox(), bar = await page.locator('.studio-savebar').boundingBox(); assert.ok(field.y >= 0 && field.y + field.height < bar.y, 'focused narrow field must clear Save');
+      const field = await input.boundingBox(), bar = await page.locator('.editor-style-bar').boundingBox(); assert.ok(field.y >= bar.y + bar.height && field.y + field.height <= viewport.height, 'focused narrow field clears the sticky top Style/Save toolbar and stays in view');
       await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
       await alertRows(viewport);
       checks.push(`${viewport.width}x${viewport.height}: narrow/200% equivalent reflow, reachable picker/Add, fixed photo icon, focus clear of dirty Save, alerts clear of every canvas action`);

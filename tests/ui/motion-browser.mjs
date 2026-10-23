@@ -971,13 +971,18 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       const state = async () => (await (await fetch(`${base}/api/state`)).json()).settings.appearance;
       const savebar = page.locator('.studio-savebar');
       const pressed = name => page.getByRole('group', { name: 'Animation' }).getByRole('button', { name, exact: true });
+      const styleChoice = page.getByRole('combobox', { name: 'Style', exact: true });
+      const initialStyleChoice = await styleChoice.inputValue();
+      const initialPreset = (await state()).preset;
       assert.equal(await page.locator('.studio').getAttribute('data-animation'), 'subtle');
       await page.getByRole('tab', { name: 'Style', exact: true }).click();
       const summary = page.locator('summary', { hasText: 'Motion' });
       assert.match(await summary.textContent(), /Subtle/);
       await summary.click();
       assert.equal(await pressed('Subtle').getAttribute('aria-pressed'), 'true');
-      assert.equal(await page.getByText('Off keeps the content of widgets still; movement is set below. Subtle animates changes. Lively adds gentle weather motion.').count(), 1);
+      await page.getByRole('button', { name: 'About animation' }).focus();
+      assert.match(await page.getByRole('tooltip').innerText(), /Off keeps content still/);
+      await page.keyboard.press('Escape');
       assert.equal(await page.getByText(/asks for reduced motion/).count(), 0);
       const canvas = page.locator('.preview-surface .ambient');
       await pressed('Lively').click();
@@ -991,7 +996,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       await pressed('Subtle').click();
       await savebar.waitFor({ state: 'detached' });
       await pressed('Lively').click(); await savebar.waitFor();
-      assert.equal((await page.locator('.preset-button[aria-pressed="true"]').count()), 1, 'the style preset is not marked Custom');
+      assert.equal(await styleChoice.inputValue(), initialStyleChoice, 'changing animation keeps the selected style');
       await page.getByRole('button', { name: 'Edit layout', exact: true }).click();
       assert.equal(await canvas.getAttribute('data-animation'), 'off', 'Edit layout keeps the canvas still');
       assert.equal(await canvas.getAttribute('data-motion-surface'), 'canvas-editing');
@@ -1000,6 +1005,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await savebar.waitFor({ state: 'detached' });
       assert.equal((await state()).animation, 'lively', 'Save persists');
+      assert.equal((await state()).preset, initialPreset, 'changing animation keeps the stored style label');
       await page.reload(); await page.getByRole('tab', { name: 'Style', exact: true }).click();
       await page.locator('summary', { hasText: 'Motion' }).click();
       assert.equal(await pressed('Lively').getAttribute('aria-pressed'), 'true', 'survives reload');
@@ -1007,17 +1013,19 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await savebar.waitFor({ state: 'detached' });
       assert.equal(await pressed('Lively').getAttribute('aria-pressed'), 'true', 'Cancel restores');
       for (const preset of ['Room', 'Night']) {
-        await page.locator('.preset-button', { hasText: preset }).click();
+        await styleChoice.selectOption(`builtin:${preset.toLowerCase()}`);
         assert.equal(await pressed('Lively').getAttribute('aria-pressed'), 'true', `${preset} keeps the level`);
       }
       await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await savebar.waitFor({ state: 'detached' });
-      await page.locator('summary', { hasText: 'Saved styles' }).click();
-      await page.getByPlaceholder('Evening').fill('Synthetic lively');
-      await page.getByRole('button', { name: 'Add style', exact: true }).click();
+      await page.getByRole('button', { name: /^Save as new/ }).click();
+      await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic lively');
+      await page.getByRole('button', { name: 'Save new style', exact: true }).click(); await savebar.waitFor({ state: 'detached' });
+      await styleChoice.selectOption('');
       await pressed('Off').click();
-      await page.getByRole('combobox').filter({ has: page.locator('option', { hasText: 'Synthetic lively' }) }).selectOption({ label: 'Synthetic lively' });
+      await styleChoice.selectOption({ label: 'Synthetic lively' });
+      await page.getByRole('group', { name: 'Switch style', exact: true }).getByRole('button', { name: 'Discard and switch', exact: true }).click();
       assert.equal(await pressed('Lively').getAttribute('aria-pressed'), 'true', 'a saved style restores its level');
-      await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await savebar.waitFor({ state: 'detached' });
+      await savebar.waitFor({ state: 'detached' });
       await close();
       await app.store.update(data => { data.settings = defaultSettings(); });
     }
