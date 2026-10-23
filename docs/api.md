@@ -4,6 +4,54 @@ Source of truth: [shared types](../src/shared/contracts.ts) and
 [validation](../src/server/validation.ts). The server binds only to `127.0.0.1`,
 port 4318 by default (`LRD_PORT` may select another unprivileged port).
 
+## Saved-style schedule (#514)
+
+`GET /api/state` includes an API-only `schedule` snapshot: config, override expiry,
+active selection/reason, missing style IDs, effective visual, schedule revision,
+desktop timezone and storage warning. Its `settings` and settings ETag remain
+the canonical manual values. The effective visual overlays only visual settings
+for live display/Home and native host session; content, location, timers,
+idle/security and saved styles are unaffected. Provider demand follows effective
+widgets. The existing opaque four-part `/api/changes` marker advances for schedule
+selection changes and override expiry without writing settings or sidecar files.
+
+- `GET /api/schedule`: snapshot plus schedule ETag.
+- `PUT /api/schedule`: complete `{ enabled, fallbackPresetId: string|null, rules }`.
+  Each rule is `{ id: UUID, presetId: string, days: number[], start: 'HH:MM', end:
+  'HH:MM' }`; days are unique 0=Sunday through 6=Saturday, at least one; at most
+  24 rows, unique row IDs. Existing style IDs remain nonempty strings up to 80
+  characters, including legacy non-UUID IDs. Unknown fields are rejected.
+- `POST /api/schedule/override`: `{ manual: true }` selects saved manual visuals
+  for one elapsed hour; `{ manual: false }` resumes immediately. Pausing an off
+  schedule returns 409. Manual settings saves do not implicitly pause scheduling.
+- `GET /api/schedule/export`: `{ version: 1, kind: 'still-schedule', config }`;
+  contains style references, never visual snapshots or temporary overrides.
+- `POST /api/schedule/import`: validates that backup before replacing the
+  schedule and clearing its override. It never imports or edits styles.
+
+Writes accept the separate strong schedule `If-Match`; stale requests return 409
+without writing, and concurrent writes serialize. Successful writes return the
+snapshot and current ETag. Ranges are local civil `[start,end)`; overnight days
+name the start day, equal times end at that local time next day. First matching
+row whose style exists wins; deleted styles are skipped, followed by fallback or
+manual visuals. Each read recomputes selection for restart/wake catchup. DST
+skipped minutes never occur; repeated clock minutes both match the same rows.
+
+`schedule.json` is an optional private sidecar (`version`, `config`, `overrideUntil`).
+Missing means off; opening/reading/automatic transitions never create it or write
+an empty file. Explicit saves are atomic, preserve previous data in
+`schedule.backup.json`, and never modify canonical state, its backup, or its export.
+Invalid files are left untouched with scheduling off and a visible warning; a
+deliberate replacement preserves the original under a unique `schedule.corrupt-*`
+name. Ordinary saved-settings import and appearance/layout reset leave schedules
+in place; missing referenced styles are skipped. To reset scheduling, disable it
+or remove its rows and save. Full data-directory backups include all sidecars;
+ordinary JSON backup does not, and the UI points to the separate schedule backup.
+Install upgrades/uninstall-with-data-kept preserve it; explicit removal of the
+whole private data directory removes it with the other user data. Older app
+versions ignore this sidecar, so rollback-compatible settings/export formats stay
+unchanged. Temporary-file cleanup recognizes only exact schedule atomic-save names.
+
 ## Browser API
 
 | Method/path                    | Request                                                                | Response                                                                     |
@@ -17,7 +65,7 @@ port 4318 by default (`LRD_PORT` may select another unprivileged port).
 | `PATCH /api/reminders/:id`     | Partial `text`, `completed`, `dueAt`                                   | Updated reminder.                                                            |
 | `DELETE /api/reminders/:id`    | None                                                                   | Empty 204.                                                                   |
 | `DELETE /api/reminders/completed` | None                                                                | `{ "deleted": n }`; removes only completed reminders, atomically.            |
-| `GET /api/weather`             | None                                                                   | Normalized forecast for the saved location, refreshed when due (the editor's Weather tab). |
+| `GET /api/weather`             | None                                                                   | Normalized forecast for the saved location, refreshed when due (Settings or an unsaved editor visual preview). |
 | `GET /api/air-quality`         | Optional `scale=us\|european` (defaults to the saved scale)            | Editor preview of [air quality](#air-quality) for the saved location, `no-store`. |
 | `GET /api/locations?q=Toronto` | City query, 2–100 characters                                           | Up to eight city results with coordinates/timezone.                          |
 | `GET /api/export`              | None                                                                   | Downloadable settings/reminders JSON backup.                                 |
@@ -385,13 +433,17 @@ labels without converting twice. Daily date labels follow the provider's fixed
 offset boundaries; hourly epoch instants retain unambiguous timing across DST.
 [Open-Meteo parameter definitions](https://open-meteo.com/en/docs).
 
-`GET /api/state` refreshes the forecast only while a saved, enabled widget needs it
+`GET /api/state` normally refreshes the forecast only while an effective manual/scheduled widget needs it
 (#352): Weather, Forecast or Dynamic (#437), or Sun & moon or Air quality while the saved
 location's timezone is still `auto`, which only the forecast resolves. Otherwise it returns the
 cached forecast for the saved location and units, or the empty `unavailable` state with
 no error, and contacts no provider. `GET /api/weather` refreshes it whenever it is due; the
-editor requests it while its Weather tab is open, and while the draft shows a widget that
-needs it before Save.
+Settings requests it while open, and the editor requests it for an unsaved visual widget
+that needs it before Save. Edit display adds the read-only header `X-LRD-View: editor`
+to state requests: these include canonical manual Weather/Air/Alerts demand as well as
+the effective scheduled board, because its canvas previews the manual layout. Other
+header values are ignored. The hint does not change settings, schedule, same-origin
+or loopback checks; ordinary Home/display/native requests remain effective-only.
 
 A request waits for a due refresh at most about one second (#351). After that it answers
 with the cached state, while the refresh carries on and a later request sees its result.
@@ -721,6 +773,18 @@ input epoch, session, desktop and completion clocks. It is absent from state,
 preview/image, exports and polls until the OS-identified named-pipe client passes
 the preparer's exact `/s` process checks. See [native guards and limits](windows.md#earlier-automatic-snapshot-525).
 The 90-second pending TTL is distinct from an active session's existing lifetime.
+Preparation uses effective scheduled visibility and an opaque configuration derived
+from manual settings, the schedule revision/selection and observed boundaries.
+It invalidates on an intervening off interval even when the next read sees the
+same style again; body completion and claim recheck that configuration. A resident
+worker retains its input-attempt history across scheduled off intervals. Explicit
+idle disable still stops it and revokes the capability. `preview.enabled` and the
+preview widget toggle are saved-style visual fields, not a separate global consent
+setting; schedules never replace global idle enablement or Windows selection.
+An intervening effective off interval clears active pixels too, even if the next
+read sees the original style again. A clock reversal or gap beyond the bounded
+reconstruction window also clears them. Current-on cannot revive an older frame;
+ordinary native session exit and the existing cleanup guards remain unchanged.
 
 ## Persistence and recovery
 

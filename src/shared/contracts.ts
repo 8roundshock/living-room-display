@@ -201,6 +201,8 @@ export interface AlertsState {
   refreshing?: boolean;
 }
 export interface AppState {
+  /** Effective scheduled visuals are API-only; settings remains the manual editor source. */
+  schedule?: import('./schedule.ts').ScheduleSnapshot;
   settings: Settings; reminders: Reminder[]; weather: WeatherState; preview: PreviewState; photo?: PhotoState; airQuality?: AirQualityState; alerts?: AlertsState; storageWarning?: string | null;
   /** API-only (#438): the timers from `timers.json`, and why they were cleared after a restart, if they were. */
   timers?: Timer[]; timersWarning?: string | null;

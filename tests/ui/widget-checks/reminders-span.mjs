@@ -305,9 +305,10 @@ export async function sweep({ page, viewport, state, base, now }) {
     await page.goto(`${base}/editor`); await page.locator('.preview-surface').waitFor(); await page.clock.runFor(300);
     await page.getByRole('button', { name: 'Preview movement', exact: true }).click();
     const preview = page.locator('.preview-surface');
+    const movement = page.getByRole('region', { name: 'Movement preview', exact: true });
     const lefts = new Set();
     for (let composition = 0; composition < 4; composition++) {
-      await page.getByRole('button', { name: `Arrangement ${composition + 1}`, exact: true }).click();
+      await movement.getByRole('button', { name: composition ? `Jump to interval ${composition}` : 'Start', exact: true }).click();
       await preview.locator(`.ambient.composition-${composition}`).waitFor(); await page.clock.runFor(100);
       const label = `editor arrangement ${composition + 1}`;
       const rects = await boardGeometry(page, '.preview-surface [data-widget-id]');

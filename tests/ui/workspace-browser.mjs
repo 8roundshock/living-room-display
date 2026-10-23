@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Bounded editor regressions. Build first; all server state and images are isolated.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -31,7 +32,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   async function open(viewport, reducedMotion = 'reduce', settings = defaultSettings(), options = {}) {
     await context?.close();
     await app.store.update(data => { data.settings = structuredClone(settings); data.reminders = [{ id: '11111111-1111-4111-8111-111111111111', text: 'Private reminder sentinel', completed: false, dueAt: null, createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString() }]; });
-    context = await browser.newContext({ viewport, reducedMotion, timezoneId: 'America/Toronto', ...options });
+    context = await browser.newContext({ viewport, reducedMotion, timezoneId: 'America/Toronto', ...options }); await mockWindowsStatus(context);
     page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'prompt' }) } }));
     await page.clock.install({ time: new Date(now) });
@@ -112,10 +113,10 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   }
   // #231: the weather note under the canvas is never covered by the Save bar.
   async function weatherNoteClear(viewport) {
-    await tab('Weather'); const input = page.getByRole('combobox', { name: 'City', exact: true });
+    await page.goto(base + '/settings'); const input = page.getByRole('combobox', { name: 'City', exact: true });
     await input.fill('London'); await page.getByRole('option', { name: /London/ }).first().click();
-    const note = page.locator('.canvas-note'); await note.waitFor(); await button('Save changes').waitFor();
-    assert.match(await note.innerText(), /Weather updates after Save · preview still shows/);
+    const note = page.locator('.current-location'); await note.waitFor(); await button('Save changes').waitFor();
+    assert.match(await note.innerText(), /London[\s\S]*Draft/);
     const covered = await note.evaluate(element => {
       const range = document.createRange(); range.selectNodeContents(element); const misses = [];
       for (const rect of range.getClientRects()) for (let step = 0; step <= 16; step++) {
@@ -125,10 +126,11 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       return misses;
     });
     assert.deepEqual(covered, [], `${viewport.width}x${viewport.height}: the weather note must not be covered`);
-    const noteBox = await note.boundingBox(), bar = await page.locator('.studio-savebar').boundingBox();
+    const noteBox = await note.boundingBox(), bar = await page.locator('.settings-savebar').boundingBox();
     assert.ok(!overlaps(noteBox, bar), 'the note box stays clear of the Save bar');
     if (capture && viewport.height === 720) images.push({ name: 'weather-note-1280x720', bytes: await page.screenshot() });
-    await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
+    await button('Cancel').click(); await page.locator('.settings-savebar').waitFor({ state: 'detached' });
+    await page.goto(base + '/editor'); await button('Edit layout').waitFor();
   }
   // #229: Save, Cancel and Remove widget never drop keyboard focus to the page.
   async function keyboardFocus() {
@@ -208,7 +210,6 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   async function layoutEditing(viewport) {
     const label = `${viewport.width}x${viewport.height}`, stacked = viewport.width <= 700;
     await open(viewport, 'reduce', fullBoard());
-    await button('Hide location tip').click();
     if (viewport.width === 1280) assert.deepEqual(await listRows(), GROUPED, 'the list follows the picker groups (#365)');
     await button('Edit layout').click();
     // Layout directions are available on demand without occupying the message line.
@@ -279,7 +280,6 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   async function pickerFocus(viewport) {
     const label = `${viewport.width}x${viewport.height}`, picker = () => page.locator('.widget-picker');
     await open(viewport, 'reduce', fullBoard());
-    await button('Hide location tip').click();
     // Escape with the last row selected: focus returns to Add widget, which no replayed scroll hides.
     await button('Photo').click();
     await button('Add widget').focus(); await page.keyboard.press('Enter'); await picker().waitFor();
@@ -334,7 +334,6 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   async function canvasTaps(viewport, reducedMotion, settings, how) {
     const label = `${viewport.width}x${viewport.height} ${how}`;
     await open(viewport, reducedMotion, settings, { hasTouch: true });
-    await button('Hide location tip').tap();
     await button('Edit layout').tap(); await page.locator('.grid-editor').waitFor();
     for (const name of GROUPED) {
       const id = WIDGET_ID[name];
@@ -376,8 +375,8 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       const header = await page.locator('.studio-header').boundingBox();
       assert.equal(header.height, 64, `${viewport.width}x${viewport.height}: the header keeps 64 px`);
       assert.ok(before.y >= header.y + header.height, 'the canvas starts below the header');
-      assert.equal(await page.getByRole('navigation', { name: 'Pages' }).getByRole('link').count(), 2, 'Home and Edit display links');
-      for (const name of ['Style', 'Widgets', 'Weather', 'Reminders']) {
+      assert.equal(await page.getByRole('navigation', { name: 'Pages' }).getByRole('link').count(), 3, 'Home, Edit display and Settings links');
+      for (const name of ['Style', 'Widgets']) {
         await tab(name);
         assert.equal(await page.evaluate(() => `${document.documentElement.scrollWidth},${document.documentElement.scrollHeight}`), `${viewport.width},${viewport.height}`, `desktop ${name} must use contained scrolling`);
         await inView(button('Edit layout'), 'Edit layout');
@@ -433,8 +432,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       assert.doesNotMatch(await page.locator('.widget-picker').innerText(), /Private reminder sentinel|Toronto/);
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
       await page.keyboard.press('Escape'); assert.equal(await page.locator('.widget-picker').count(), 0); assert.equal(await focusVisible(`${viewport.width}x${viewport.height} Escape from the picker`), 'Add widget');
-      await tab('Weather'); const input = page.getByRole('combobox', { name: 'City', exact: true }); await input.focus(); await input.fill('unsaved');
-      await tab('Style'); await page.getByRole('slider', { name: 'Brightness', exact: true }).focus(); await page.keyboard.press('ArrowRight'); await tab('Weather'); await input.focus();
+      await tab('Style'); const input = page.getByRole('slider', { name: 'Brightness', exact: true }); await input.focus(); await page.keyboard.press('ArrowRight');
       const field = await input.boundingBox(), savebar = await page.locator('.studio-savebar').boundingBox();
       assert.ok(field.y >= savebar.y + savebar.height && field.y + field.height <= viewport.height, 'focused desktop field stays below top Save and within the viewport');
       await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
@@ -460,16 +458,16 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
         assert.ok(control.top >= header.top && control.bottom <= header.bottom, control.name + ': inside header');
       }
       if (viewport.width <= 480) {
-        assert.deepEqual(await page.getByRole('navigation', { name: 'Pages' }).getByRole('link').allInnerTexts(), ['Home']);
+        assert.deepEqual(await page.getByRole('navigation', { name: 'Pages' }).getByRole('link').allInnerTexts(), ['Home', 'Edit display', 'Settings']);
         assert.equal(await page.locator('.open-display-label').isVisible(), false); await inView(page.getByRole('link', { name: 'Open display' }), 'icon-only Open display');
       }
-      for (const name of ['Widgets', 'Style', 'Weather', 'Reminders']) { await tab(name); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'narrow/200% equivalent must not scroll horizontally'); }
+      for (const name of ['Widgets', 'Style']) { await tab(name); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'narrow/200% equivalent must not scroll horizontally'); }
       await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click(); await button('Photo large').click(); await button('Add Photo').scrollIntoViewIfNeeded(); await inView(button('Add Photo'), 'Mobile Add');
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
       await addPhoto();
       const upload = page.locator('.photo-upload-control'); await upload.scrollIntoViewIfNeeded();
       const icon = await upload.locator('svg').boundingBox(); assert.ok(icon.width === 16 && icon.height === 16, 'upload icon keeps explicit geometry');
-      await tab('Weather'); const input = page.getByRole('combobox', { name: 'City', exact: true }); await input.focus();
+      await tab('Style'); const input = page.getByRole('slider', { name: 'Brightness', exact: true }); await input.focus();
       const field = await input.boundingBox(), bar = await page.locator('.editor-style-bar').boundingBox(); assert.ok(field.y >= bar.y + bar.height && field.y + field.height <= viewport.height, 'focused narrow field clears the sticky top Style/Save toolbar and stays in view');
       await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
       await alertRows(viewport);

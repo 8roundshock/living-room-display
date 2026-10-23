@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
@@ -15,11 +15,13 @@ import { AlertsService, offAlerts } from './alerts.ts';
 import { windowsStatus } from './windows.ts';
 import { automaticLocationSchema, countdownCreateSchema, importSchema, mergeSettings, reminderCreateSchema, reminderPatchSchema, settingsPatchSchema, timerCreateSchema, timerPatchSchema, validationMessage, worldClockCreateSchema } from './validation.ts';
 import { TimerError, TimerStore } from './timers.ts';
+import { ScheduleError, ScheduleStore, scheduleBackupSchema, scheduleConfigSchema } from './schedule.ts';
+import { scheduledSettings } from '../shared/schedule.ts';
 import { TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts';
 import { WIDGET_CATALOG, isActiveWidget } from '../shared/widgets.ts';
 import { HOME_SHOWABLE_WIDGETS, showPlacement } from '../shared/show.ts';
 import type { ChangeMarker, Settings, TimersResult, WidgetId } from '../shared/contracts.ts';
-import { PreparationController, type PreparationOptions } from './preidle.ts';
+import { PREPARATION_MAX_AGE_MS, PreparationController, type PreparationOptions, type PreparationView } from './preidle.ts';
 
 // Read once at module load. src/server and the built dist/server both sit two
 // levels below the package.json shipped with the app, so health matches it.
@@ -43,9 +45,9 @@ export interface ApplicationOptions {
   dataDirectory: string; clientDirectory?: string; fetcher?: FetchLike; now?: () => number; development?: boolean;
   /** How long a request waits for a due weather, air-quality or alerts refresh before answering (#351). */
   refreshWaitMs?: number;
-  /** Only the installed entrypoint supplies this factory; fixtures/source starts have no worker. */
+  /** Only the installed entrypoint supplies this factory; source starts and fixtures stay inert. */
   preparation?: PreparationOptions;
-  /** Synthetic clock seam for preparation expiry/clock-discontinuity regressions. */
+  /** Synthetic clock seam for preparation expiry and discontinuity regressions. */
   preparationMonotonic?: () => number;
 }
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
@@ -85,6 +87,9 @@ export async function createApplication(options: ApplicationOptions) {
   const now = options.now ?? Date.now;
   // Opened after the data store, whose startup removes stale timers.json temporary files (#438).
   const timers = await TimerStore.open(options.dataDirectory, now());
+  const schedules = await ScheduleStore.open(options.dataDirectory);
+  const effectiveSettings = () => { const settings = store.view().settings; return scheduledSettings(settings, schedules.snapshot(settings, now())); };
+  let scheduleMarker = schedules.marker(store.view().settings, now()), scheduleChanges = 0;
   // GET /api/changes (#438): this process, then the settings/reminder writes, the timer writes and the preview changes.
   const bootId = randomBytes(6).toString('hex');
   let previewChanges = 0;
@@ -102,8 +107,48 @@ export async function createApplication(options: ApplicationOptions) {
     image?.fill(0); image = null; preview = { available: false, capturedAt: null, width: null, height: null };
   }
   function previewState(): PreviewState {
+    previewView();
     if (preview.capturedAt && now() - Date.parse(preview.capturedAt) > 12 * 3600_000) clearPreview();
     return { ...preview };
+  }
+  let preparationBoundary = 0;
+  let preparationObserved: { at: number; manual: string; schedule: string; marker: string } | null = null;
+  function previewView(): PreparationView {
+    const { settings, settingsRevision } = store.view(), at = now();
+    const schedule = schedules.snapshot(settings, at), marker = schedules.marker(settings, at);
+    const previous = preparationObserved;
+    if (previous && previous.manual === settingsRevision && previous.schedule === schedules.revision) {
+      if (at < previous.at || at - previous.at > PREPARATION_MAX_AGE_MS) { preparationBoundary++; clearPreview(); }
+      else {
+        // A hidden off interval must invalidate a pending frame even if the next poll
+        // sees the original style again. Bound the scan to the frame's 90-second life.
+        const times = [at];
+        for (let minute = (Math.floor(previous.at / 60_000) + 1) * 60_000; minute <= at; minute += 60_000) times.push(minute);
+        const override = schedules.snapshot(settings, previous.at).overrideUntil;
+        if (override && Date.parse(override) > previous.at && Date.parse(override) <= at) times.push(Date.parse(override));
+        let observed = previous.marker;
+        for (const time of times.sort((a, b) => a - b)) {
+          const next = schedules.marker(settings, time);
+          if (next !== observed) preparationBoundary++;
+          const during = scheduledSettings(settings, schedules.snapshot(settings, time));
+          if (!during.preview.enabled || !during.widgets.preview) clearPreview();
+          observed = next;
+        }
+      }
+    }
+    preparationObserved = { at, manual: settingsRevision, schedule: schedules.revision, marker };
+    const effective = scheduledSettings(settings, schedule);
+    if (!effective.preview.enabled || !effective.widgets.preview) clearPreview();
+    const referenced = new Set([schedule.config.fallbackPresetId, ...schedule.config.rules.map(rule => rule.presetId)]);
+    const supervisionEnabled = settings.preview.enabled && settings.widgets.preview || (schedule.config.enabled &&
+      settings.savedPresets.some(preset => referenced.has(preset.id) && preset.visual.preview.enabled && preset.visual.widgets.preview));
+    return { settings: effective, supervisionEnabled,
+      settingsRevision: createHash('sha256').update(JSON.stringify([settingsRevision, marker, preparationBoundary])).digest('hex') };
+  }
+  const preparation = new PreparationController(options.preparation, previewView, clearPreview, now, options.preparationMonotonic);
+  function preparationRequest(request: IncomingMessage) {
+    if (request.headers.origin || Object.keys(request.headers).some(key => key.startsWith('sec-fetch-')) ||
+        !preparation.authorized(request.headers['x-lrd-preparation'])) throw new HttpError(403, 'Preparation helper access only');
   }
   function nativeRequest(request: IncomingMessage, tokenRequired: boolean) {
     if (request.headers.origin || Object.keys(request.headers).some(key => key.startsWith('sec-fetch-'))) throw new HttpError(403, 'Native helper access only');
@@ -114,12 +159,6 @@ export async function createApplication(options: ApplicationOptions) {
       if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token) || !timingSafeEqual(Buffer.from(token), Buffer.from(hostToken))) throw new HttpError(403, 'Invalid helper token');
     }
   }
-  const preparation = new PreparationController(options.preparation, () => store.view(), clearPreview, now, options.preparationMonotonic);
-  function preparationRequest(request: IncomingMessage) {
-    // A browser cannot use this endpoint, and the random secret exists only in one owned child's stdin.
-    if (request.headers.origin || Object.keys(request.headers).some(key => key.startsWith('sec-fetch-')) ||
-        !preparation.authorized(request.headers['x-lrd-preparation'])) throw new HttpError(403, 'Preparation helper access only');
-  }
 
   const server = createServer((request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -128,17 +167,14 @@ export async function createApplication(options: ApplicationOptions) {
     response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     void route(request, response).catch(error => {
       if (response.headersSent) { response.end(); return; }
-      if (error instanceof HttpError || error instanceof TimerError) json(response, error.status, { error: error.message });
+      if (error instanceof HttpError || error instanceof TimerError || error instanceof ScheduleError) json(response, error.status, { error: error.message });
       else if (error instanceof z.ZodError) json(response, 400, { error: validationMessage(error) });
       else json(response, 500, { error: 'The request could not be completed. Existing saved data has been preserved.' });
     });
   });
   server.on('close', clearPreview);
   server.on('close', () => preparation.close());
-  server.on('listening', () => {
-    const address = server.address();
-    if (address && typeof address === 'object') preparation.listening(address.port);
-  });
+  server.on('listening', () => { const address = server.address(); if (address && typeof address === 'object') preparation.listening(address.port); });
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
 
@@ -155,24 +191,31 @@ export async function createApplication(options: ApplicationOptions) {
     const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`);
     const method = request.method ?? 'GET';
     const path = url.pathname;
-    // Only Edit display may ask for device location; Home and the display never do (#438).
-    response.setHeader('Permissions-Policy', path.startsWith('/editor') ? 'geolocation=(self)' : 'geolocation=()');
+    // Only Settings may ask for device location; Home, the editor and display never do (#517).
+    response.setHeader('Permissions-Policy', path === '/settings' || path.startsWith('/settings/') ? 'geolocation=(self)' : 'geolocation=()');
 
     if (method === 'GET' && path === '/api/health') { json(response, 200, { status: 'ok', version: APP_VERSION, storageWarning: store.warning }); return; }
     if (method === 'GET' && path === '/api/windows/status') { json(response, 200, await windowsStatus()); return; }
     if (method === 'GET' && path === '/api/state') {
       // Metadata only: the photo bytes are not copied for a poll (#353).
       const { settings, reminders, photo, settingsRevision } = store.view();
+      const schedule = schedules.snapshot(settings, now());
+      const effective = scheduledSettings(settings, schedule);
+      // A manual editor canvas can need providers hidden by the scheduled board.
+      // This read-only hint adds canonical manual needs; regular Home/display/native
+      // requests stay effective-only, and unsaved visual needs use the explicit APIs.
+      const editorView = request.headers['x-lrd-view'] === 'editor';
+      if (!effective.preview.enabled || !effective.widgets.preview) clearPreview();
       // The forecast is refreshed only while a saved widget needs it (#352); air quality only while a saved
       // widget shows it (Air quality, or Dynamic with Air & UV, #437); official alerts only while Dynamic
       // shows them (#437). Each waits for a due refresh at most briefly (#351). Alerts are API-only: never
       // stored, exported or logged.
       const [weatherState, airQuality, alertsState] = await Promise.all([
-        needsForecast(settings) ? weather.get(settings) : weather.peek(settings),
-        needsAirQuality(settings) ? air.get(settings) : offAirQuality(settings),
-        needsAlerts(settings) ? alerts.get(settings) : offAlerts(),
+        needsForecast(effective) || (editorView && needsForecast(settings)) ? weather.get(effective) : weather.peek(effective),
+        needsAirQuality(effective) || (editorView && needsAirQuality(settings)) ? air.get(effective) : offAirQuality(effective),
+        needsAlerts(effective) || (editorView && needsAlerts(settings)) ? alerts.get(effective) : offAlerts(),
       ]);
-      const state: AppState = { settings, reminders, weather: weatherState, preview: previewState(), airQuality, alerts: alertsState, timers: timers.list(now()), timersWarning: timers.warning,
+      const state: AppState = { settings, schedule, reminders, weather: weatherState, preview: previewState(), airQuality, alerts: alertsState, timers: timers.list(now()), timersWarning: timers.warning,
         photo: photo ? { available: true, ...photo } : { available: false, id: null, width: null, height: null, updatedAt: null } };
       json(response, 200, { ...state, storageWarning: store.warning }, etag(settingsRevision)); return;
     }
@@ -184,7 +227,8 @@ export async function createApplication(options: ApplicationOptions) {
         // A Save computed from outdated settings (#287): the editor merges these and tries again.
         json(response, 409, { error: error.message, settings: error.settings, revision: error.settingsRevision }, etag(error.settingsRevision)); return;
       }
-      if (!saved.settings.preview.enabled || !saved.settings.widgets.preview) clearPreview();
+      const effective = effectiveSettings();
+      if (!effective.preview.enabled || !effective.widgets.preview) clearPreview();
       preparation.refresh();
       json(response, 200, saved.settings, etag(saved.settingsRevision)); return;
     }
@@ -199,7 +243,7 @@ export async function createApplication(options: ApplicationOptions) {
       });
       json(response, 200, saved.settings); return;
     }
-    // The editor's Weather tab asks for the forecast whether or not a saved widget needs it (#352).
+    // Settings and unsaved visual previews can ask for the saved area's forecast (#352/#517).
     if (method === 'GET' && path === '/api/weather') { json(response, 200, await weather.get(store.view().settings)); return; }
     if (method === 'GET' && path === '/api/air-quality') {
       // Editor preview before Save: the saved location, the requested (or saved) scale, the shared cache.
@@ -262,9 +306,33 @@ export async function createApplication(options: ApplicationOptions) {
       }
       json(response, patch ? 200 : 204, changed); return;
     }
+    // Scheduled styles (#514) are a local sidecar, with their own concurrency revision.
+    if (path === '/api/schedule' && (method === 'GET' || method === 'PUT')) {
+      if (method === 'PUT') await schedules.configure(scheduleConfigSchema.parse(await jsonBody(request)), ifMatch(request));
+      preparation.refresh();
+      json(response, 200, schedules.snapshot(store.view().settings, now()), etag(schedules.revision)); return;
+    }
+    if (path === '/api/schedule/override' && method === 'POST') {
+      const { manual } = z.object({ manual: z.boolean() }).strict().parse(await jsonBody(request));
+      await schedules.override(manual, now(), ifMatch(request));
+      preparation.refresh();
+      json(response, 200, schedules.snapshot(store.view().settings, now()), etag(schedules.revision)); return;
+    }
+    if (path === '/api/schedule/export' && method === 'GET') {
+      json(response, 200, { version: 1, kind: 'still-schedule', config: schedules.snapshot(store.view().settings, now()).config }); return;
+    }
+    if (path === '/api/schedule/import' && method === 'POST') {
+      const backup = scheduleBackupSchema.parse(await jsonBody(request));
+      await schedules.restore(backup.config, ifMatch(request));
+      preparation.refresh();
+      json(response, 200, schedules.snapshot(store.view().settings, now()), etag(schedules.revision)); return;
+    }
     // Home (#438) -------------------------------------------------------------------------------------
     if (method === 'GET' && path === '/api/changes') {
-      json(response, 200, { change: `${bootId}.${store.changes}.${timers.changes}.${previewChanges}` } satisfies ChangeMarker); return;
+      const next = schedules.marker(store.view().settings, now());
+      if (next !== scheduleMarker) { scheduleMarker = next; scheduleChanges++; }
+      // Preserve the opaque four-part marker contract; schedule transitions join ephemeral display changes.
+      json(response, 200, { change: `${bootId}.${store.changes}.${timers.changes}.${previewChanges + scheduleChanges}` } satisfies ChangeMarker); return;
     }
     if (method === 'GET' && path === '/api/timers') { json(response, 200, { timers: timers.list(now()), warning: timers.warning } satisfies TimersResult); return; }
     if (method === 'POST' && path === '/api/timers') {
@@ -342,7 +410,8 @@ export async function createApplication(options: ApplicationOptions) {
     }
     if (method === 'GET' && path === '/api/host/session') {
       nativeRequest(request, false);
-      json(response, 200, { token: hostToken, settings: store.view().settings, displayUrl: `http://127.0.0.1:${port}/`, preparationPipe: preparation.pipeName }); return;
+      preparation.config();
+      json(response, 200, { token: hostToken, settings: effectiveSettings(), displayUrl: `http://127.0.0.1:${port}/`, preparationPipe: preparation.pipeName }); return;
     }
     if (path === '/api/preview/preparation' && ['GET', 'POST', 'DELETE'].includes(method)) {
       preparationRequest(request);
@@ -416,7 +485,8 @@ export async function createApplication(options: ApplicationOptions) {
     if (path === '/api/preview' && (method === 'POST' || method === 'DELETE')) {
       nativeRequest(request, true);
       if (method === 'DELETE') { preparation.invalidate(); clearPreview(); json(response, 204); return; }
-      const settings = store.view().settings;
+      const settings = effectiveSettings();
+      const uploadConfiguration = preparation.config().configuration;
       if (!settings.preview.enabled || !settings.widgets.preview) throw new HttpError(409, 'Preview is disabled');
       if (request.headers['content-type'] !== 'image/png') throw new HttpError(415, 'Use image/png');
       const capturedAt = z.iso.datetime({ offset: true }).parse(request.headers['x-captured-at']);
@@ -427,8 +497,9 @@ export async function createApplication(options: ApplicationOptions) {
       const width = content.readUInt32BE(16); const height = content.readUInt32BE(20);
       if (width < 1 || height < 1 || width > 4096 || height > 4096 || width * height > 4_194_304) throw new HttpError(400, 'Snapshot dimensions are too large');
       nativeRequest(request, true);
-      const currentSettings = store.view().settings;
-      if (uploadGeneration !== previewGeneration || !currentSettings.preview.enabled || !currentSettings.widgets.preview) {
+      const currentSettings = effectiveSettings();
+      const currentConfiguration = preparation.config().configuration;
+      if (uploadGeneration !== previewGeneration || uploadConfiguration !== currentConfiguration || !currentSettings.preview.enabled || !currentSettings.widgets.preview) {
         throw new HttpError(409, 'Snapshot upload was cleared or preview is disabled');
       }
       image = content; preview = { available: true, capturedAt, width, height }; previewChanges++;

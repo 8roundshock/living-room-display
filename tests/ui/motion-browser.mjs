@@ -1047,7 +1047,9 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       await app.store.update(data => { data.settings = catalogBoardDefaults(); });
       const { page, close } = await editorPage();
       const editorMotion = () => page.evaluate(() => document.getAnimations().filter(animation => !(animation.timeline instanceof ScrollTimeline) && !animation.effect?.target?.closest?.('.preview-surface')).map(animation => ({ name: animation.animationName ?? `transition:${animation.transitionProperty}`, pseudo: animation.effect.pseudoElement, target: animation.effect.target.className?.baseVal ?? animation.effect.target.className, duration: animation.effect.getTiming().duration })));
-      await page.getByRole('tab', { name: 'Reminders', exact: true }).click();
+      await page.getByRole('tab', { name: 'Style', exact: true }).click();
+      await page.waitForTimeout(300);
+      await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
       const tabs = await editorMotion();
       assert.ok(tabs.some(item => item.pseudo === '::before' && /transition:(left|right)/.test(item.name)), `the active-tab indicator slides ${JSON.stringify(tabs)}`);
       assert.equal(await page.locator('.inspector-tabs').evaluate(element => getComputedStyle(element, '::before').positionAnchor), '--lrd-active-tab');
@@ -1075,7 +1077,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       await page.getByRole('button', { name: 'Cancel', exact: true }).click();
       await close();
       const reduced = await editorPage({ reducedMotion: 'reduce' });
-      await reduced.page.getByRole('tab', { name: 'Reminders', exact: true }).click();
+      await reduced.page.getByRole('tab', { name: 'Widgets', exact: true }).click();
       await reduced.page.getByRole('tab', { name: 'Style', exact: true }).click();
       await reduced.page.locator('summary', { hasText: 'Motion' }).click();
       const immediate = await reduced.page.locator('details.motion-disclosure').evaluate(element => element.getBoundingClientRect().height);

@@ -193,20 +193,13 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
       assert.ok(result.rules > 100 && result.selectors > 50, `${label}: the guard read the studio stylesheet (${result.rules} rules, ${result.selectors} studio selectors)`);
     }
 
-    /** Home's saved-arrangement preview (#438): no `.studio` or `home-` rule may reach it either. */
-    async function inspectHome(page, state, label, { expect = null } = {}) {
-      current = state;
-      await page.goto(base + '/');
-      await page.locator('.home-preview .preview-surface .widget-grid-plane').waitFor();
-      if (expect?.length) for (const id of expect) await page.locator(`.home-preview .preview-surface [data-widget-id="${id}"]`).waitFor();
-      await page.clock.runFor(500);
-      const result = await page.evaluate(studioMatches, { allowed, scope: String.raw`\.studio(?![\w-])|\.home-[\w-]+` });
-      assert.equal(result.error, undefined, `${label}: ${result.error}`);
-      assert.deepEqual(result.skipped, [], `${label}: every studio- or home-scoped selector can be matched`);
-      if (expect) assert.deepEqual([...new Set(result.widgets)].sort(), [...expect].sort(), `${label}: the preview renders the expected widgets`);
-      for (const selector of result.deliberate) deliberate.add(selector);
-      for (const hit of result.found) failures.push(`${label}: ${hit.selector} (rule "${hit.rule}" in ${hit.origin}) matches ${hit.count} preview element(s): ${hit.elements.join(', ')}`);
-      scenarios++; inspected += result.elements;
+    /** Home owns content and display status; it must not mount a duplicate ambient canvas (#517). */
+    async function inspectHome(page, state, label) {
+      current = state; await page.goto(base + '/'); await page.locator('.home-card').waitFor();
+      assert.equal(await page.locator('.home-preview, .home-page .ambient, .home-page [data-widget-id]').count(), 0, label + ': no ambient renderer on Home');
+      assert.equal(await page.locator('.home-card .home-edit-display').count(), 1);
+      assert.equal(await page.locator('.home-card .home-open-display').count(), 1);
+      scenarios++;
     }
 
     // Every active widget alone in every family at the owner's TV size (1280×720), at the default
@@ -244,11 +237,11 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
     for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
       const view = await editor({ viewport });
       const label = `${viewport.width}×${viewport.height}`;
-      await inspectHome(view.page, fullBoard(withTimer), `Home preview of the full board with a timer at ${label}`, { expect: ACTIVE_WIDGET_IDS });
-      await inspectHome(view.page, fullBoard(placeholders), `Home preview of an empty full board at ${label}`);
+      await inspectHome(view.page, fullBoard(withTimer), `Home status for the full board with a timer at ${label}`, { expect: ACTIVE_WIDGET_IDS });
+      await inspectHome(view.page, fullBoard(placeholders), `Home status for an empty full board at ${label}`);
       await view.close();
     }
-    checks.push("Home's saved-arrangement preview (#438) of the full board with a timer in the Clock, and of an empty full board, at 1280×720 and 390×844: no .studio or home- rule reaches it");
+    checks.push("Home's full/empty-board summaries at 1280×720 and390×844 retain display actions without mounting an ambient renderer");
 
     assert.deepEqual(failures, [], `#313: a widget renderer element on the editor canvas matches a .studio-scoped rule (allowed: ${ALLOWED_RULES.map((rule) => `"${rule}"`).join(' and ')}). Rename the renderer class so it does not reuse a studio class name`);
     checks.push(`no element on the editor canvas matches a .studio-scoped rule other than ${ALLOWED_RULES.map((rule) => `"${rule}"`).join(' and ')}: ${scenarios} canvases, ${inspected} elements, ${studioSelectors} studio-scoped selectors`);

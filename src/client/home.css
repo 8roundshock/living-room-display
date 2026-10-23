@@ -427,7 +427,8 @@
 .home-sheet-panel {
   display: flex;
   flex-direction: column;
-  max-height: calc(100dvh - 48px);
+  /* The dialog's max-height includes its two borders; its child must fit the content box. */
+  max-height: calc(100dvh - 50px);
 }
 .home-sheet-header {
   flex: none;
@@ -449,12 +450,27 @@
   overflow: auto;
   padding: 4px 22px 18px;
   overscroll-behavior: contain;
+  scroll-padding-block: 8px 18px;
+}
+.home-sheet-body:has(.reminder-status.has-message) {
+  /* Completion Undo is sticky inside this scroller, just as in the former inspector. */
+  scroll-padding-block-end: 76px;
 }
 .home-sheet-status.home-status {
+  flex: none;
   position: static;
   translate: none;
   max-width: none;
   margin: 0 16px 14px;
+}
+.home-sheet-status .home-status-text {
+  /* Leave room for the real dismiss/retry control instead of wrapping it onto another row. */
+  flex: 1 1 0;
+  min-width: 0;
+}
+.home-sheet-status .home-icon-button {
+  flex: none;
+  align-self: flex-start;
 }
 .home-sheet-status:not(.shown) {
   display: none;
@@ -619,7 +635,11 @@
   font-variant-numeric: lining-nums tabular-nums;
 }
 .home-reminders {
-  margin: 0 -22px;
+  /* Keep row hit targets inside the dialog gutters and away from its rounded clip. */
+  margin: 0;
+}
+.studio .home-reminders .form-actions .button {
+  min-height: 44px;
 }
 
 /* Calendar. */
@@ -803,7 +823,8 @@
     border-bottom: 0;
   }
   .home-sheet-panel {
-    max-height: calc(100dvh - 24px);
+    /* The mobile sheet has one top border and no bottom border. */
+    max-height: calc(100dvh - 25px);
   }
   .home-sheet-body {
     padding: 4px 16px 0;
@@ -820,7 +841,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .home-reminders {
-    margin-inline: -16px;
+    margin-inline: 0;
   }
 }
 @media (max-width: 359px) {
@@ -851,3 +872,10 @@
     translate: 0 8px;
   }
 }
+/* #517: Home is a daily workspace; the visual preview belongs to Edit display. */
+.home-columns { grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; }
+.studio .home-action { min-height: 64px; padding: 10px 12px; border-radius: 14px; column-gap: 9px; }
+.home-action-icon { width: 30px; height: 30px; }
+.home-action-description { font-size: 11px; }
+.home-actions { gap: 8px; margin: 20px 0 24px; }
+@media (max-width: 950px) { .home-columns { grid-template-columns: minmax(0, 1fr); } .home-card { order: -1; } }

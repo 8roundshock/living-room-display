@@ -8,11 +8,13 @@ import {
   type SetStateAction,
 } from 'react';
 import type { AppState, ChangeMarker } from '../shared/contracts';
+import { scheduledSettings } from '../shared/schedule';
 import { ApiError, api, apiTagged, rememberRevision } from './api';
 import { AmbientDisplay } from './Display';
 import { useSingleDisplay } from './displayWindow';
 import { Editor } from './Editor';
 import { Home } from './Home';
+import { SettingsPage } from './SettingsPage';
 import { PAGE_TITLES, pageForPath } from './route';
 
 /** Home and the display pick up a change made elsewhere within about this long, while visible (#438). */
@@ -49,7 +51,9 @@ export function App() {
     },
     [],
   );
-  const page = pageForPath(window.location.pathname);
+  const legacyCity = pageForPath(window.location.pathname) === 'edit' && new URLSearchParams(window.location.search).get('focus') === 'city';
+  const page = legacyCity ? 'settings' : pageForPath(window.location.pathname);
+  useEffect(() => { if (legacyCity) window.location.replace('/settings?focus=city'); }, [legacyCity]);
   const display = page === 'display';
   const nativeDisplay = display && window.self === window.top && new URLSearchParams(window.location.search).get('native') === '1';
   // #436 one display window: a newer browser display retires this one (it closes, or shows a card and
@@ -71,7 +75,7 @@ export function App() {
     const requestId = ++request.current;
     const sentAt = performance.now();
     try {
-      const { body: received, etag } = await apiTagged<AppState>('/api/state');
+      const { body: received, etag } = await apiTagged<AppState>('/api/state', page === 'edit' ? { headers: { 'X-LRD-View': 'editor' } } : {});
       // The settings revision travels with these settings, for the editor's If-Match (#287).
       rememberRevision(received.settings, etag);
       setReachedAt((previous) => Math.max(previous, sentAt));
@@ -101,7 +105,7 @@ export function App() {
           network: !(caught instanceof ApiError) || caught.network,
         });
     }
-  }, []);
+  }, [page]);
   useEffect(() => {
     if (retired) return;
     void reload();
@@ -115,11 +119,11 @@ export function App() {
       poll.timer = undefined;
     };
   }, [reload, retired]);
-  // #438: Home and the display ask whether anything changed every 5 s while visible, and reload the
-  // state only when it has; Edit display keeps its 30 s poll. A lost connection reloads at once, so
+  // Home, the display and schedule status ask whether anything changed every 5 s while visible,
+  // and reload state only when it has. A lost connection reloads at once, so
   // Home and the display say they are offline without waiting for the 30 s poll.
   useEffect(() => {
-    if (page === 'edit' || retired) return;
+    if (retired) return;
     let marker: string | null = null, failed = false, busy = false, stopped = false;
     const check = async () => {
       if (busy || document.visibilityState === 'hidden') return;
@@ -172,7 +176,7 @@ export function App() {
                     {error.network
                       ? page === 'home'
                         ? 'Home needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.'
-                        : 'The editor needs the display server that runs on this computer. It may still be starting, or it may have stopped. Try again in a moment; if it keeps failing, restart the app.'
+                        : 'The app needs the display server that runs on this computer. Try again in a moment; if it keeps failing, restart the app.'
                       : 'The display server answered but could not open your settings. Try again in a moment.'}
                   </p>
                 </div>
@@ -199,7 +203,7 @@ export function App() {
       </main>
     );
   if (display)
-    return <AmbientDisplay state={state} disconnected={error !== null} native={nativeDisplay} />;
+    return <div className={state.schedule?.config.enabled ? 'schedule-display' : undefined}><AmbientDisplay state={state} settings={scheduledSettings(state.settings, state.schedule)} disconnected={error !== null} native={nativeDisplay} /></div>;
   if (page === 'home')
     return (
       <Home
@@ -210,6 +214,7 @@ export function App() {
         reload={reload}
       />
     );
+  if (page === 'settings') return <SettingsPage state={state} setState={updateState} connectionError={error?.message ?? null} reload={reload} />;
   return (
     <Editor
       state={state}

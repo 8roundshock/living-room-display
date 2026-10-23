@@ -1,11 +1,19 @@
 # Project status
-## Active PR reconciliation (#519, #517)
+## Active PR reconciliation (#517, #519)
 
-The compatible UI baseline in PR #522 is being reconciled with merged pre-idle
-source PR #526 before the newer Home/Edit/Settings workflow in PR #518. The
-pre-idle source feature was independently reviewed at `1c79c032` and merged in
-`7771b178` after all ten applicable CI checks passed. It has not been installed
-or observed on the actual native display by this source reconciliation.
+PR #518 has resumed. Its integration includes PR #522's corrected toolbar source
+at `8310497` and merged pre-idle snapshot source `7771b178`, preserving the
+Home/Edit display/Settings roles and the newer reminder focus, native capture and
+teardown safeguards. It includes PR #522's reviewed main merge `943c54fc`.
+Final pushed-head review and CI are still required.
+
+The scheduled preview now admits frames using the effective visual and a composite
+configuration generation. An unobserved on/off/on interval, schedule edit or
+override expiry invalidates a pending/in-flight frame. A scheduled off interval
+keeps the same disabled worker so it cannot reset one-attempt input history.
+Explicit idle disable still stops the child and revokes its private capability.
+Preview fields belong to saved visual styles; idle enablement and Windows
+selection remain independent global gates.
 
 PR #522's compatibility repairs are tracked in #527. Mobile action errors update
 their placement on scroll, focus and layout changes, and an empty location
@@ -15,11 +23,27 @@ help. The first-run checks select city results from their listbox and budget
 only the measured persistent toolbar height beyond the earlier internal-scroll
 contract. All 44 px row targets, center hit tests and body-overflow checks remain.
 
-Source typechecking/build and all 510 unit tests pass. Focused Workspace (18),
-Free-size (13) and First-run (7) checks pass against synthetic isolated data;
-desktop/mobile editor renders were inspected in RAM. Final-head independent
-review and applicable CI remain merge gates. #519 remains open for installed/
-native acceptance; no installed files or settings are changed here.
+The backend integration passes 64 targeted tests, including clearing active bytes
+after a missed off interval or an unreconstructable clock gap. Production build
+and both TypeScript checks pass. All 554 combined unit tests pass with no skips.
+
+The editor again consumes Home's Make-room query once without losing the selected
+picker widget. Picker samples retain the existing rendered 9 px text requirement
+(all 13 Catalog-time groups pass, smallest sample 9.4 px). Reminder arrangement
+checks use the actual movement timeline's interval controls while retaining all
+geometry, anchoring and fitted-row assertions. Home/Settings desktop and editor
+mobile renders were inspected in RAM with synthetic data.
+
+The frozen full 25-suite run at `df53cf7` finished 21/25 in 2121 s. Its failures
+were the earlier #527 short-window alert, Home modal Tab focus, a no-op motion-tab
+transition check, and the rain color hook's equivalent hex/RGB serialization.
+It remains dated diagnostic evidence. The corrected integration
+passes Studio (29 groups, 66 s), Workspace (18, 53 s), Styles (15, 22 s) and
+Free-size (13, 33 s), with a synthetic 390-by-480 alert render inspected in RAM.
+The aggregate, independent final-head review and applicable CI remain acceptance
+gates. Earlier recorded failures remain diagnostic evidence.
+No installed files/data/settings or sealed native artifacts changed; source checks
+do not establish actual screensaver or screenshot-content acceptance under #519.
 
 A further keyboard continuation exposed a help tooltip consuming a newly opened
 dialog's Escape during its blur grace period. Help now consumes Escape only
@@ -37,9 +61,84 @@ Styles (15, 20 s) together, including long errors without a floating/inline loop
 Direct geometry updates preserve any pending animation-frame ID so unmount can
 still cancel the scheduled resize/focus update.
 
+Independent review also reproduced #515's glyph-loop lifecycle issue: returning
+from the movement timeline left the same mounted Lively weather loop paused.
+The timeline now restores only the CSS loops it borrowed, including their prior
+clock and running/paused state; cancelled or replaced glyphs release their
+ownership entry on the next draw and are not revived.
+The real-browser regression fails before the correction and passes afterward;
+movement preview and context help pass together (6 s and 7 s); the replacement
+ownership extension passes movement preview again (7 s).
+
+The frozen aggregate also exposed Home focus reaching browser chrome after a
+complete Tab cycle in an open modal. Home sheets now wrap ordinary forward and
+reverse Tab at their current visible, enabled boundary controls, retaining native
+modal dismissal and browser modifier shortcuts. A bounded real-browser probe
+fails at Tab 12 before the change and passes 30 Tabs in each direction plus
+Escape focus return afterward. Motion's tab-indicator check now changes away
+from the editor's default Widgets tab before measuring the Widgets transition;
+a bounded probe confirms the former no-op and the corrected left/right slides.
+The full affected Home continuation passes (223 s), including offline retry and
+the strengthened focus guard; context help passes (10 s). Motion on frozen
+`27ca78d` fails after the corrected editor-motion checks at its unchanged
+full-board TaskDuration guard: 0.1603 s above Off, against 0.15 s. Its later GPU
+frame-budget and 70-second stages were not reached; this is not a Motion pass.
+
+Typed schedule color properties serialize the rain hook as `rgb(115, 177, 171)`
+rather than the equivalent `#73b1ab`. The palette check resolves the hook to a
+computed color and compares the same exact palette value. No expected colors,
+paint audits, geometry or timing assertions changed. The complete corrected
+Palette continuation passes (72 s), including the equivalent root Sand and
+canvas-tone property checks; persisted hex values remain exact.
+
+One predeclared identical-fixture comparison measured main `943c54fc` at 0.1096 s
+and candidate `3f752a8` at 0.1410 s for the same full-board Lively-minus-Off
+TaskDuration delta. That candidate delta is 0.0314 s above baseline with 0.0090 s
+headroom. It does not prove causality, cost neutrality, a budget exemption or a
+Motion-suite pass. The original failed run and bounded diagnostic are tracked in
+[#528](https://github.com/8roundshock/living-room-display/issues/528), separately
+from #364's ongoing-animation decision. Motion stays in the scheduled set and
+its guard remains unchanged; the complete 25-suite aggregate is not green.
+
 The following entries retain their historical checkpoint scope.
 
-## Editor style workflow (local checkpoint)
+## Historical paused integration checkpoint (#517)
+
+Work is paused with PR #518 still a draft. Its corrected source is checkpointed,
+but final independent approval, corrected RAM render inspection and the full
+25-suite aggregate are outstanding. The six-suite run at `494b096` passed Studio,
+Workspace, context help, movement preview and Screen; Home stopped at an obsolete
+88px action-size assertion for the intended 64px compact design. The corrected
+Home continuation was interrupted and establishes no result. Synthetic Windows
+unit fixtures passed; no new installation or native acceptance is claimed.
+
+PR #507 is merged as `c7c00b47b2c69514787645c8f28adfe44cbf2d75`.
+Its ten published-head checks passed; the final local aggregate was 19/20 with
+Motion's repeated renderer-task-time budget finding tracked as P3 #364. Do not
+interpret the historical local sections below as current running-test or
+installation evidence.
+
+PR #518 integrates the preserved saved-style toolbar and compact copy, predictable
+Manage style dismissal, a Home/Edit display/Settings split, scheduled styles (#514),
+deterministic movement preview (#515), and picker discovery (#516). Home keeps
+reminders/daily actions and a compact display summary. The editor has visual
+Style/Widgets controls; Settings owns weather, global preferences, schedule and
+recovery. Existing saved data is not migrated or seeded.
+
+The integration also keeps failed drafts and recovery confirmations, restores an
+enabled retry control without stealing another chosen control, guards meaningful
+Home drafts across close/reopen and navigation, and requests manual-editor weather
+without activating hidden providers for ordinary scheduled-display reads. Browser
+suites target the actual destinations and use synthetic device-status responses;
+their real geometry, focus, touch, concurrency and performance assertions remain.
+
+PR #518 records exact pushed-head validation, failed diagnostic runs, independent
+review and merge status. A production build, full units, the complete applicable
+browser aggregate, independent final-head review and applicable CI are required
+before source acceptance. Local installation and physical/native acceptance are
+separate evidence; this source checkpoint makes no new claim about either.
+
+## Editor style workflow (historical local checkpoint before #517)
 
 The top Style toolbar now holds saved styles, virtual Phone/Room/Night starter
 looks, and one Save/Cancel group. Save changes updates the selected style under
@@ -92,6 +191,63 @@ Verification on this source: production build passed; Screen (8 groups), Studio
 data. Desktop and narrow Home/editor renders were inspected in RAM. The Motion
 suite's copy assertion now opens the same help exercised by the focused checks;
 its performance run was not repeated for this UI-only change.
+## Widget discovery continuation (#516)
+
+The isolated picker change adds catalog search, All widgets / Not added / On display
+filters, result counts and an empty-result reset while preserving the grouped rail
+and one real synthetic sample. Size choices survive filtering; added states follow
+the current draft. Rail keyboard help and accessible family footprints address #430.
+The shared room solver now explains unavailable sizes and offers explicit draft fixes
+before Add (#448), without changing the board during browsing.
+
+The preserved source checkpoint is published on `codex/widget-picker-next` for
+integration under #517. Production build and 16 catalog/make-room tests pass.
+The first extended catalog run caught inherited 34/36 px target sizes overriding
+the picker's 44 px contract; scoped selectors correct that. Catalog-time and
+free-size then pass 13 groups each. A later integration adjustment preserves the
+current editor's detail-content scroller and pins Add outside it. Its first check
+caught room-fix actions preceding Add in the keyboard order; restoring Add before
+those actions preserves the established short tab path. The final responsive/browser
+and independent rendered checks remain pending. No merge,
+installation or activation is implied by source checks.
+## Movement preview continuation (#515, #517)
+
+The published `codex/motion-scrubber` checkpoint preserves the original local
+corrections: first-composition history matches the live renderer, the synthetic
+range helper dispatches real input/change events, and ink geometry accounts for
+the preview's scaled slots. The original dirty patch is retained privately under
+`.local/` before committing. Production build and 15 focused float/timeline tests
+pass. The new isolated browser suite, responsive rendering and independent final
+integration review remain pending; no installed display or native test was run.
+
+## Motion preview timeline (#515)
+
+The isolated feature adds a paused editor timeline for content float and widget
+swaps, using shared runtime float targets and glide keyframes, with deterministic
+replay of arrangement history. Windows of 4, 12 or 24 intervals include the final
+transition and explicitly do not claim a short repeating cycle. Preview time is
+local to the editor; saved settings and an open display are unaffected.
+
+At this implementation checkpoint, all 15 focused float/timeline unit tests pass.
+The initial implementation built successfully; the latest extraction and browser
+test additions still require final build and browser/visual verification. The new
+`motion-preview` browser suite awaits central runner registration during feature
+integration. No native installation or activation is established by this feature.
+## Scheduled styles continuation (#514, #517)
+
+The sidecar model/API and Settings/Home component split are published on
+`codex/scheduled-presets`. Configuration belongs to Settings; Home's compact
+status offers a one-hour saved-manual-style override and Return to schedule.
+Manual settings remain the editor source while only the effective display gets
+the selected saved visual. Reduced motion removes scheduled colour/brightness
+transitions. No schedule or saved style is created for an existing user.
+
+The production build and all 490 unit tests pass at this feature checkpoint,
+including boundary/DST/priority/missing-style/override/restart coverage and frozen
+reader checks on canonical state, backup and export while scheduling is active.
+The original Editor-based browser suite must be adapted to the integrated Settings
+route and Home controls; final browser/rendering and independent review remain
+pending. These source checks establish no installation or native acceptance.
 ## Pre-idle snapshot source work (#525)
 
 Work is in progress on one private RAM-only snapshot attempt per eligible input

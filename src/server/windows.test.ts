@@ -79,9 +79,29 @@ test('#436 the real timeout path: a powercfg that never answers within 2 s reads
 });
 
 test('#436 the status shape is additive: every earlier key stays and power is new', async () => {
-  // Read-only on Windows (reg query and powercfg /query); available: false elsewhere.
-  const status = await windowsStatus();
+  const calls: [string, string[]][] = [];
+  const status = await windowsStatus(async (file, args) => {
+    calls.push([file, args]);
+    if (file === 'reg.exe') return 'ScreenSaveActive REG_SZ 1\r\nScreenSaveTimeOut REG_SZ 600\r\n';
+    return args.includes('VIDEOIDLE') ? ENGLISH_VIDEO : args.includes('STANDBYIDLE') ? GERMAN_SLEEP : '(Synthetic plan)';
+  }, 'win32');
   for (const key of ['available', 'selectedScreenSaver', 'active', 'timeoutSeconds', 'secure', 'isLivingRoomDisplay']) assert.ok(key in status, key);
   assert.deepEqual(Object.keys(status.power).filter(key => key !== 'error').sort(), ['available', 'displayOffSeconds', 'scheme', 'sleepSeconds']);
-  assert.equal(status.power.available, process.platform === 'win32');
+  assert.equal(status.power.available, true);
+  assert.equal(status.active, true); assert.equal(status.timeoutSeconds, 600);
+  assert.deepEqual(calls, [
+    ['reg.exe', ['query', 'HKCU\\Control Panel\\Desktop']],
+    ['powercfg.exe', ['/query', 'SCHEME_CURRENT', 'SUB_VIDEO', 'VIDEOIDLE']],
+    ['powercfg.exe', ['/query', 'SCHEME_CURRENT', 'SUB_SLEEP', 'STANDBYIDLE']],
+    ['powercfg.exe', ['/getactivescheme']],
+  ]);
+});
+
+test('Windows status off Windows never invokes a runner; failed synthetic registry reads stay unknown', async () => {
+  let calls = 0;
+  const unavailable = await windowsStatus(async () => { calls++; return null; }, 'linux');
+  assert.equal(calls, 0); assert.equal(unavailable.available, false); assert.equal(unavailable.power.available, false);
+  const failed = await windowsStatus(async () => null, 'win32');
+  assert.equal(failed.available, true); assert.equal(failed.active, null); assert.equal(failed.timeoutSeconds, null);
+  assert.match(failed.error!, /could not be read/); assert.match(failed.power.error!, /could not be read/);
 });

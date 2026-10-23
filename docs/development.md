@@ -185,6 +185,14 @@ scope suites answer every request outside their own server with an empty respons
 (`tests/ui/lib/local-only.mjs`) and list it; the other suites do not yet
 ([#392](https://github.com/8roundshock/living-room-display/issues/392)).
 
+Every source-browser context must answer `/api/windows/status` with synthetic
+device facts before navigation. `keepPagesLocal` installs the default fixture;
+contexts that do not use that helper call `mockWindowsStatus` directly. The
+Screen suite registers scenario-specific synthetic responses after that default.
+Headless source QA must not read the testing machine's registry or power settings.
+Unit tests likewise pass a synthetic runner and platform to `windowsStatus` and
+`powerStatus`; their ordinary application defaults continue to query the device.
+
 ## Local checkout and agent startup
 
 On Windows, from the checkout (replace `<checkout>` with its actual path):

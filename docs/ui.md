@@ -11,50 +11,100 @@ acceptance are recorded separately in [STATUS](../STATUS.md).
 
 ## Pages
 
-The app has three pages (#438), chosen by `pageForPath` in `src/client/route.ts`: **Home**
-at `/` (and any other extension-less path), **Edit display** at `/editor` and the ambient
-display at `/display`. Their titles are "Still · Home", "Still · Edit display" and
-"Still · Display". Home and Edit display share one header (`StudioHeader`, 64 px from
-701 CSS px; below that it has automatic height, a 72 px minimum and room for the
-hint below the controls): the brand goes to Home ("Still home"), a **Pages** nav
-holds **Home** and **Edit display** with `aria-current="page"` on the current one
-(at 480 px or narrower only the other page's link shows). **Open display** is
-icon-only at 480 px or narrower and retains its accessible name. It uses the shared
+The app has three destinations (#517): **Home** at `/`, **Edit display** at `/editor`
+and **Settings** at `/settings`. The separate ambient view is `/display`. Unknown
+extension-less paths open Home. The shared header keeps all three labeled destination
+links, with `aria-current="page"`; narrow screens put them on a separate row rather
+than hiding the current destination. **Open display** is a distinct action,
+icon-only at 480 px or narrower with its accessible name. It uses the shared
 window helper and named window `still-display`; **Show display** reuses that tab's
 open display and **Close display** closes it. A display opened from an unrelated
 tab retires the older display through the same-origin channel, stopping its polls
 and wake lock. Page-navigation links still guard an unsaved Edit display draft;
-opening a display leaves the editor in place. Only `/editor` may ask for device location
-(`Permissions-Policy: geolocation=(self)`); Home and the display send `geolocation=()`.
+opening a display leaves its source page in place. Only `/settings` may ask for device
+location (`Permissions-Policy: geolocation=(self)`); Home, Edit display and the display
+send `geolocation=()`. Lookup happens only after the user's explicit action. Legacy
+`/editor?focus=city` links redirect to Settings with City focused.
+
+Home owns daily actions and reminder management. Its compact display summary lists
+what is shown and offers Edit/Open actions, without rendering a second ambient canvas.
+Edit display owns Style/Widgets, the visual canvas and local movement preview. Saved
+styles remain at the top with Save changes and Save as new. App-wide city, units,
+time format, screen-awake preference, schedule configuration and data recovery belong
+to Settings. Appearance/layout resets remain visual editor drafts.
+
+Settings saves only fields changed from its revision-tagged baseline. Polls preserve
+local edits; a stale Save keeps them, adopts unrelated remote fields and asks for
+review before an explicit retry. Failed saves keep their draft. Dirty page navigation
+uses the browser's leave guard; Save/Cancel only appears for effective changes.
+Schedule has its own guarded draft and Save/Cancel; restoring data is blocked while
+either settings or schedule edits are pending. No persisted data migration is needed.
+
+The grouping follows [Apple's Settings guidance](https://developer.apple.com/design/human-interface-guidelines/settings),
+[layout guidance](https://developer.apple.com/design/human-interface-guidelines/layout)
+and [W3C disclosure semantics](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/),
+reviewed 2026-10-22. Native controls and normal browser navigation provide focus and
+leave behavior; these references do not imply Apple assets or native OS controls.
+
+## Scheduled saved styles (#514)
+
+Settings owns **Schedule** configuration. Home shows the scheduled style with
+**Use manual style for 1 hour** / **Return to schedule** actions. The status names
+the committed active style and whether it is scheduled or a fallback; the canvas continues to show
+the manual editor draft. Applying or saving a manual style does **not** pause the
+schedule. Save visual edits first, then explicitly use the saved manual appearance
+temporarily. A nonvisual save never creates an override.
+
+**Edit schedule** uses saved-style selects, starting weekdays and local From/Until
+times, with **Up**, **Down**, **Remove**, and separate **Save schedule** / **Cancel
+schedule edits**. Rows initially need chosen days/times before saving. The schedule
+draft belongs to Settings and does not save or discard the visual
+draft. A changed schedule from another window blocks a stale overwrite; cancel
+loads that newer schedule. Override-only changes preserve a schedule draft.
+
+The first usable matching row wins, with overlaps explained by row numbers. Ranges
+include their start and exclude their end. Overnight ranges belong to the start
+weekday; equal times mean until that local time the following day. The desktop
+timezone is shown. Spring-forward missing clock minutes never run; repeated autumn
+minutes match twice. Missing styles remain visible and repairable, and are skipped
+before trying the next matching row, fallback, then manual appearance.
+
+Home's Showing list reflects the effective scheduled style. Its
+status points back to Settings. Home's Show-widget actions explain when a scheduled
+style controls visibility instead of silently editing an invisible manual layout.
+The live display keeps one mounted display; text/accent colours and brightness
+glide to the next look without a whole-screen fade or black rest. Widget visibility
+and arrangement use the next style immediately; Follow daylight remains per-style.
+
+Schedule backup/restore is separate from saved-settings backup for rollback
+compatibility. The UI explains both downloads, that schedule backups refer to saved
+style IDs without including those styles, and that restoring clears the temporary
+override. A missing style after restore stays visibly repairable.
+
+Concept review (2026-10-22): ordered ranges were selected over a weekly calendar grid
+for keyboard use, narrow-screen scrolling and explicit overlap priority. Independent
+review accepted the concept with the draft, override, DST and missing-style guards
+above. Native fieldsets/legends group weekdays and row fields; controls target 44px.
+Sources rechecked 2026-10-22: [W3C form grouping](https://www.w3.org/WAI/tutorials/forms/grouping/)
+and [WCAG target size](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html).
+Apple Layout/Motion reference URLs remain the existing design rationale; their
+Markdown was unavailable to this review tool. Recheck on interaction or layout changes.
 
 ## Home
 
 Home (`<div class="studio home-page">`, `src/client/Home.tsx`) is for day-to-day use
 beside the display rather than for setting it up. It reuses the studio's tokens,
 buttons, inputs, city search and Reminders panel; every rule of its own names a
-`home-` class, and none reaches the embedded preview (#313). Base text is 16 px.
+`home-` class. Home mounts no ambient renderer (#517); the editor canvas retains the CSS isolation guard (#313). Base text is 16 px.
 
-- **Layout at 1280 × 720:** the header, then a `minmax(0, 1fr) 400px` grid (gap 32,
-  padding 24/32). The left column holds the date as the `h1` (with a screen-reader
-  "Home · " before it) and the time beside it; world-clock chips ("London 11:42 PM ·
-  +5 h"); while no city has been saved and the first-run tip was not hidden (the same
-  `localStorage` key as Edit display's card) one line, "Weather shows Toronto until you
-  choose your city. Choose your city", which opens `/editor?focus=city`; six quick
-  actions in a 3 × 2 grid (each at least 88 px tall, named by its label and described
-  by its line); and **Today**. The date, all six actions, the Today heading with its
-  first row and **Edit display** are above the fold. The right column is **On your
-  display**: the saved arrangement at 400 × 225 (`AmbientDisplay embedded`, still,
-  inert and hidden from assistive technology; a click opens Edit display) captioned
-  "Your saved arrangement. The display moves it around to protect the screen.",
-  **Edit display** (primary) and **Open display** (then **Show display**). The Open/Show
-  link shares the header's display control: either link focuses the same window without
-  reloading, and the header's **Close display** resets both links (#513). The card lists
-  "Showing: Calendar, Clock and Weather." and, when a widget Home feeds has content but is off, "Not on your display:
-  World clocks and Countdown." with **Make room in Edit display** when one has no room.
-- **At 390 px:** one column with a 16 px gutter (date, actions, Today, then the card);
-  the actions stay 3 × 2 from 360 px and become 2 × 3 below; their descriptions are
-  screen-reader only below 600 px; every target is at least 44 × 44 and nothing
-  overflows sideways at 390 or 320 px.
+- **Layout:** a daily workspace with compact 3 × 2 action controls and Today, beside a
+  300px display-summary card on wide screens. At narrower widths the compact summary
+  moves above daily content. The card lists effective manual/scheduled widgets and
+  content not shown, with Edit/Open actions sharing the header's display controller.
+  There is no duplicate saved-arrangement preview. The city tip links to Settings.
+- **Responsive navigation:** all three destinations retain their labels and current
+  state. Narrow screens use a separate navigation row; every interactive target
+  remains at least 44px and content wraps without horizontal overflow.
 - **Quick actions** each open a native `<dialog>` with `showModal()` (`aria-haspopup`):
   focus moves to its first field (Timer's first preset), Esc returns focus to the
   button that opened it, and after a create focus moves to the new row. Below 600 px a
@@ -148,9 +198,9 @@ window and its keys, keyboard focus, a lost connection and silence (no `play()`,
 
 ## Edit display
 
-`/editor` opens Edit display (#438; it was the editor at `/` and `/editor`, and every flow
-is unchanged): a large live appearance preview and a focused inspector.
-Style, Widgets, Weather and Reminders share one settings draft. Desktop keeps the
+`/editor` opens Edit display (#517): a large visual preview and a focused inspector.
+Style and Widgets share one visual draft; weather/app preferences belong to Settings
+and reminder management belongs to Home. Desktop keeps the
 preview beside a height-bounded inspector with fixed tabs and contained scrolling
 above 700 CSS pixels. Canvas actions remain visible at compact desktop heights;
 the 16:9 preview takes the height left after the heading, the canvas actions, one
@@ -165,7 +215,7 @@ into view (`block: 'nearest'`: the whole settings when they fit, else their top)
 once: closing the picker or returning to the Widgets tab never
 scrolls to it again (#339). Selecting never moves keyboard focus. Closing the picker moves focus
 only when focus was in it: after an add to the new widget's row, shown with its settings, after
-Escape or Close to **Add widget**; a canvas widget focused while the picker is open keeps focus,
+Escape or Close to the actual opening control (else **Add widget**); a canvas widget focused while the picker is open keeps focus,
 so focus always stays in view. Desktop scrolls the
 inspector panel. Stacked layouts scroll the page only after a list row click, an add or a
 tap on the canvas, once the pointer is released and the tap's click has gone to the canvas
@@ -174,8 +224,8 @@ list control that moved there); a press that drags a widget and a canvas
 widget focused from the keyboard keep the canvas in view. Scrolling is instant with reduced
 motion or the Off animation level.
 
-- **Save changes** atomically persists settings, appearance, location, widget
-  options, selected local photo and saved styles. The bar exists only while
+- **Save changes** atomically persists the visual editor draft, widget
+  options, selected local photo and saved styles while preserving unrelated preferences. The bar exists only while
   effective saved values differ; reverting all edits hides it. Edits made while saving remain unsaved afterward.
   Failed saves preserve the draft and return keyboard focus to Save. Untouched fields refresh from server polling.
   Countdowns, world clocks and saved styles merge by item when another editor saved
@@ -245,7 +295,10 @@ motion or the Off animation level.
   **Save changes** action updates that exact ID while saving all editor drafts.
   **Save as new** opens an inline name, then **Save new style** creates a new ID and
   leaves the original untouched. **Manage style** contains Rename and a confirmed
-  deletion staged until Save. New/renamed names are validated for case/space-insensitive
+  deletion staged until Save. It closes when a click or keyboard focus moves outside;
+  Escape closes it and returns focus to its trigger. Rename and Delete hand focus to
+  their input or confirmation, whose cancellation returns to Manage style.
+  New/renamed names are validated for case/space-insensitive
   duplicates; existing imported duplicate names and arbitrary IDs are preserved.
   The active selection is restored only from an explicitly remembered ID whose look
   still matches, never guessed from the first matching record.
@@ -319,22 +372,12 @@ motion or the Off animation level.
   slider (Brightness, Text size, Move every, Swap glide and Last screen's
   Snapshot opacity) speaks its value with the unit (“55%”, “3 minutes”, “2 seconds”);
   the value shown beside its label is not announced a second time (#342).
-- The Motion disclosure ends with a **Screen** part (#436; inside Motion so the Style
-  tab still fits a 1280 × 720 editor without scrolling) holding **Keep the screen on
-  while the display shows** (`screen.keepAwake`, on by default): "When the display is full screen or running as your screensaver,
-  Windows won't turn the screen off. Windows' own power settings apply the rest of
-  the time." On Windows, opening Motion reads `GET /api/windows/status` once and shows a
-  read-only line such as "Windows turns the screen off after Never · Sleeps after
-  Never" (plugged-in values). When this app is the selected screensaver and Windows
-  would turn the screen off or sleep before the screensaver starts, a warning names
-  both times: "Windows turns the screen off after 10 min, before your screensaver
-  starts at 20 min, so the display won't appear. Change it in Settings › System ›
-  Power & sleep, or choose a shorter wait." A browser without the Screen Wake Lock
-  API says "This browser can't keep the screen on. The screensaver display uses
-  Microsoft Edge, which can." The editor never changes Windows settings. Keep the
-  screen on is not part of saved styles.
-- **Data & recovery** (#234): **Export saved data** downloads a backup of the saved
-  settings, styles and reminders (never the photo). **Restore from backup…** is
+- **Settings › This device › Screen** owns **Keep the screen on** (on by default).
+  It requests a browser wake lock only while full screen or native, reads Windows
+  status once and shows read-only power timing/conflict warnings. It never changes
+  Windows power settings, and is not part of a saved visual style.
+- **Settings › Data & recovery** (#234/#517): **Export saved data** downloads a backup of the saved
+  settings, styles and reminders (never the photo or schedule; schedule has its own download). **Restore from backup…** is
   refused while settings edits are unsaved ("Save or cancel your changes before
   restoring a backup."); otherwise it opens a file picker. The editor checks that
   the file is an export (version 1; a newer version asks to update the app first),
@@ -347,13 +390,12 @@ motion or the Off animation level.
   app, or the file was changed.” with the server's own text under **Technical details**,
   and no answer reads “Couldn't reach the display server, so nothing was restored. Try
   again in a moment.” and keeps the question open. A restore replaces the saved
-  settings, styles and reminders, keeps the current photo and refreshes the editor
-  with a clean draft. Don't restore, a refused file and a finished restore return focus
+  settings, styles and reminders, keeps the photo and schedule, and refreshes Settings with a clean draft. Missing scheduled style IDs are skipped. Don't restore, a refused file and a finished restore return focus
   to **Restore from backup…**. The server keeps the replaced state as
   `state.backup.json` only until the next change (a settings save or any reminder
   change rewrites it), and reads it only to recover automatically when the saved data
   can't be read; the confirmation says so and suggests exporting first to keep a copy
-  you can restore (#301). **Reset appearance…** asks inline and focuses **Keep my
+  you can restore (#301). **Style › Reset appearance & layout › Reset appearance…** asks inline and focuses **Keep my
   appearance**; Keep or Reset returns focus to Reset appearance… (#343). **Reset**
   returns every Style tab value to its default (the Room look, Fixed brightness, Text size 100%, Subtle,
   Float gently on, Swap places off, every 3 minutes, a 2 s glide) as an ordinary draft change, while
@@ -461,19 +503,36 @@ motion or the Off animation level.
   scrolled into view inside the rail (#154). Rail items already on the display are
   named with that state (“Preview Clock, on your display”); their Add button keeps
   its visible name as its accessible name (“Add Clock”, disabled) under “Clock is on
-  your display” (#241). An add with no room is reported once, in the picker's own
-  live region (“No room for Countdown at medium size.”), and cleared by another size
-  or widget or by closing the picker. Up to two fixes apply as one draft edit that
+  your display" (#241). Search matches catalog names, descriptions and categories;
+  **All widgets**, **Not added** and **On display** filter the current draft (#516).
+  Empty results remove the preview and Add action and offer **Show all widgets**.
+  A size with no room is reported before Add, in the picker's own live region
+  ("No room for Countdown at medium size.", #448). The same shared solver recomputes
+  guidance when the widget, size or board changes; closing the picker clears it.
+  Up to two fixes explicitly make room and add the widget as one draft edit that
   Cancel restores: **Try small** (a smaller family of the same widget), **Switch the
   grid to Fine** (a finer grid that changes no family) or **Make room: Weather
   medium** (#238). The default board (#435) fills the grid, so every add there is
   explained this way: each hidden widget in each family offers **Switch the grid to
   Fine** and one reduction (**Make room: Reminders small** for a small widget,
   **Weather medium** for a medium one, **Clock medium** for a large one). The
-  Reminders tab is named with its count (“Reminders, 8 pending”).
-- **Preview movement** shows the draft's float (or steps) on the canvas; with Swap
-  places on it also reveals numbered arrangements and **Automatic**, which swaps
-  like the display. Editing returns to authored placement.
+  Home names its All reminders action with the pending count.
+- **Preview movement** (#515) opens a paused, local timeline below the canvas.
+  **Play/Pause**, one-second backward/forward steps, a keyboard-accessible range,
+  and interval-boundary buttons inspect content float (or steps) and whole-widget
+  swaps. The window covers 4, 12 or 24 intervals from this layout, including the
+  last complete glide/dim transition. Elapsed time includes tenths of a second.
+  Seeking pauses; playback stops at the end, and Play there restarts from zero.
+  Changing motion mode, interval, layout or visibility resets the preview history.
+  The board and widget tracks visit different waypoint sequences; these windows
+  are not a claim that motion repeats in a short cycle. The preview shares runtime
+  float targets, measured content slack, history-dependent arrangement composition,
+  and glide keyframes. It samples path targets directly; runtime additionally
+  limits late-timer/startup catch-up to device-pixel steps. Reduced motion uses the
+  same stepped positions and dim transitions as the display. The paused movement
+  clock does not freeze live information or affect polling, timers, settings,
+  saved presets or an open display. Editing returns to authored placement and
+  restores each still-mounted glyph loop's prior clock and running/paused state.
 - **Open display** (#436) opens one display window, named `still-display`, and reuses
   and focuses it on later clicks (`<a href="/display" target="still-display">` without
   `rel`, same-origin loopback, is the no-script fallback). While that window is open
@@ -486,9 +545,8 @@ motion or the Off animation level.
   native screensaver needs none of this: `/s`, `--display` and `--test-display`
   already exit when the `Local\LivingRoomDisplay.Ambient` mutex is held
   ([Windows](windows.md)). The display's pointer remains visible, including
-  fullscreen. One dim line beside Open display (under the header on narrow windows)
-  says where the full-screen display is: "For full screen on this PC: Start > Living
-  Room Display - Show display, or press F on the display" (#360). Unmodified **F** toggles fullscreen without stealing typing, modifier
+  fullscreen. An accessible info button beside Open display explains the F shortcut;
+  no repeated Start-menu recipe occupies the header (#422/#517). Unmodified **F** toggles fullscreen without stealing typing, modifier
   shortcuts or repeats. Manual display controls appear on pointer movement or Tab and
   hide after 3.5 seconds without another supported interaction. Focused controls stay
   visible. Esc or E on a display opened by Home or Edit display focuses its still-open
@@ -500,7 +558,7 @@ motion or the Off animation level.
 - **Deep links** from Home (#438), read once and then cleared to `/editor`:
   `?add=<id>` (an active widget that is off) opens the Widgets tab with Edit layout on
   and the picker on that widget, with its Make-room fixes (`WidgetPicker`'s `initial`);
-  `?focus=city` opens the Weather tab with City focused.
+  `?focus=city` redirects to `/settings?focus=city` with City focused.
 
 Only explicit `native=1` presentation hides the document cursor and omits browser
 controls. Browser loading/failure/display and editor/embedded previews retain
@@ -517,8 +575,15 @@ and names at least 11 px, #195);
 narrow screens show three buttons per row under each label. Up/Down move through the
 whole list (across groups) and preview the focused widget (Left/Right do the same, matching
 the narrow three-column layout); Home/End jump to the first or last. The rail is one tab
-stop (#348): only the previewed widget takes Tab, so Tab goes from Close to the rail, then
-the size buttons, Add and any room fixes (Add is at most five presses from Close). Samples are the
+stop (#348): only the previewed widget takes Tab. Tab goes from Close through Search,
+its Clear button when present, the availability filter, the rail, size choices, Add
+and any room fixes (seven presses from Close to Add with an empty search). Search
+keeps its native text-editing keys. A rail description explains the arrow keys,
+Home/End and Tab; every size describes its columns and rows on the current grid
+outside the hidden sample (#430). Filtering keeps the selected widget when visible,
+otherwise the first result, and retains chosen sizes for this picker session.
+Desktop uses one bounded detail scroller when room guidance needs extra space;
+mobile retains natural page scrolling. Samples are the
 actual renderers with synthetic content (“Weekend trip”, “Birthday” and “Holiday”, “Dinner
 at seven”); only the date and time are real, so the Clock shows this computer's time, the
 Calendar marks today and Countdown's days count from today (#361). Each sample fills the
@@ -569,61 +634,24 @@ compact picker viewports with rail text of at least 11 px.
 
 ## Weather and location
 
-Typing two characters starts debounced city search. Up/Down explores, Enter
-selects, and Escape dismisses; focus stays in the input. Typing, blur or the first
-result never selects. Region/country distinguishes namesakes. Older requests
-cannot replace newer options. Selected location is separate from search text.
-Long city names and region/country text wrap within each result. The focused
-[#52](https://github.com/8roundshock/living-room-display/issues/52) regression
-checks actual text bounds, normal short results, keyboard selection and Cancel
-at 320px, 390px and desktop widths; synthetic visuals were inspected in RAM.
+Settings owns City, Use device location, Units and Time format. Two characters
+start debounced city search; arrows/Enter select, Escape dismisses, and focus stays
+in the input. Typing, blur or a first result never selects. Older requests cannot
+replace newer results; long names/regions wrap. Explicit device lookup keeps only
+rounded 0.1-degree coordinates; no raw fix or continuous watcher is stored. A denied
+or unavailable lookup keeps the chosen city. Cancel invalidates late callbacks.
 
-New installs use Toronto, labeled **Default location**, until an area/city is
-saved. An editor with already-granted browser permission attempts one automatic
-lookup; otherwise **Use device location** is the explicit permission action. All
-results remain drafts until Save. Cancel
-invalidates late callbacks. Only 0.1-degree coordinates leave the adapter; no raw
-fix, accuracy, altitude or timestamp is stored. Failed lookup preserves a manual
-city; automatic drafts cannot overwrite a manual city saved in another editor.
-No background watch or IP lookup exists. `/display` never queries location or
-permission, and its Permissions-Policy disables geolocation. The City field is named
-by its visible label (“City”); “Type two or more letters to search for a city” is its
-description (#241).
+Toronto is the labeled default until saved otherwise. No route requests GPS
+automatically, even with granted permission. Only Settings allows geolocation via
+Permissions-Policy; Home, editor and display deny it. The first-run Home link and
+legacy city deep links reach Settings with City focused.
 
-Until a location is saved, a small card above the inspector tabs reads “Showing
-Toronto weather” while the default Widgets tab is open (#252). **Use my location** runs
-the same permission-aware lookup and **Choose a city** opens the Weather tab with the
-City field focused; both only change the draft, and the card names a pending choice
-(“London is ready. Save changes to use it.”) or a blocked lookup. It steps aside on the
-other tabs (Weather holds the same actions; Style has no spare height at 1280×720) and
-while the picker is open, so every tab's default contents still fit at 1280×720, and it
-is gone for good once a location is saved. **Hide location tip** dismisses it in this
-browser only (`localStorage`); no key joins the saved data, so older releases still
-read it. Its buttons are 44 px targets, **Hide location tip** 44 × 44 (#349); the card is
-88 px tall and the six-row default Widgets tab fits beside it at 1280×720. At
-600 px high, the default board from #435 needs internal panel scrolling: measured
-52 px at 1280 px wide and 112 px at 1024/760 px wide with the tip; hiding the tip
-leaves 0 px and 14 px respectively. This is at most one added Calendar row beyond
-the five-row #310 trade-off. The six-row board keeps the existing control sizes
-(44 px row actions, 40 px desktop Add widget); every row and action remains
-keyboard- and pointer-reachable, with no body overflow. The original five-row
-board still fits at 1280×600, scrolls by less than the card at 1024/760×600 and fits
-there once the tip is hidden. `tests/ui/first-run-browser.mjs` covers both boards,
-with and without the tip; the temporary card does not shrink controls to fit.
-
-
-**Time & units** in the Weather tab holds Units (°C · metric or °F · imperial) and
-**Time format** (12-hour or 24-hour) side by side, so the format stays reachable with
-the Clock removed (#235); the Clock panel keeps a mirrored Time format control. The
-format drives every time shown on the display and in the editor, including the clock,
-reminder times, World clocks, rain timing, Sun & moon, Air quality hours, the Last screen
-caption, Weather's saved or offline “last known” time and the backup date in Style ›
-Data & recovery (#310); the editor list and canvas follow an unsaved change. The status
-line below shows the forecast's age (“Saved forecast · 2 hr ago” when stale, “Forecast
-unavailable” when there is none, both with an amber dot) and, when an update failed,
-the server's reason under it in the caution tone (“Weather update failed. Showing the
-last successful forecast.”, “Weather is unavailable. Check the connection and location
-settings.”, #347); **Location & forecast details** keeps only explanatory hints.
+Location, units, time format and screen preference remain drafts until Settings
+Save. A failed request retains them; a stale revision adopts unrelated remote
+changes and asks for review. Settings Cancel restores saved values. Time format
+applies across widgets and Home; the clock inspector links to Settings instead of
+duplicating the global control. The weather status line retains honest update age,
+amber stale/unavailable state and the server's readable failure reason.
 
 Preview weather retains its actual city/units while a selection is unsaved or
 refreshing. Forecast dates/intervals use the weather city's timezone, or the computer's
@@ -669,12 +697,12 @@ widget zooms out as a whole (icons and the unavailable dash may still shrink). S
 Reminder actions (add, edit, check off, restore, delete, clear history) save
 immediately with a short status line and never join the settings draft. Items are
 silent, dated or undated and one-time.
-The Reminders tab has an **Up next (N)** / **History (M)** switch (`aria-pressed`).
+Home’s **All reminders** sheet has an **Up next (N)** / **History (M)** switch (`aria-pressed`).
 Up next uses the display's order: overdue or due within seven days (soonest first),
 then undated (newest first), then later dates. Each row has a 44 px check circle,
 the title, a due line (`Overdue · Yesterday · 3:00 PM`, `Today · 6:00 PM` or
 `Anytime`) and Edit and Delete side by side, so a one-line reminder takes about 60 px and
-at least five fit the 1280×720 inspector (#366). Edit, Delete, Undo, **Clear history…** and
+the list uses its own scroll area in the Home sheet (#366/#517). Edit, Delete, Undo, **Clear history…** and
 the Up next/History switch are at least 44 px. The rows and their labels are worked out
 again only when the list, the minute or the time format changes, and the form renders on
 its own, so typing stays responsive with hundreds of dated reminders (#354; in headless
@@ -808,7 +836,7 @@ All three start disabled and are added from the picker; their panels sit under t
 Size control and join the normal draft (Save/Cancel, no autosave).
 
 - **World clocks:** up to four cities added with the same keyboard city search as
-  the Weather tab (debounced combobox, `GET /api/locations`). Each row has an
+  Settings (debounced combobox, `GET /api/locations`). Each row has an
   editable label (1–40 characters, defaulting to the city name), the region (the
   search result's region in this session, otherwise the time-zone name), the
   city's current time, and Move up, Move down and Remove buttons; focus stays with

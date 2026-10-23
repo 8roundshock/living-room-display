@@ -77,7 +77,9 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
       tip.current.style.maxWidth = `${maxWidth}px`;
       const box = tip.current.getBoundingClientRect();
       const left = Math.max(x + 12, Math.min(anchor.right - box.width, x + width - box.width - 12));
-      const below = anchor.bottom + 4;
+      // Header help must clear both the actions and the persistent navigation row.
+      const header = button.current.closest('.studio-header')?.getBoundingClientRect();
+      const below = Math.max(anchor.bottom, header?.bottom ?? anchor.bottom) + 4;
       const top = Math.max(y + 12, below + box.height <= y + height - 12 ? below : anchor.top - box.height - 4);
       setPosition({ left, top, maxWidth });
     };

@@ -56,9 +56,10 @@ export async function powerStatus(runner: (file: string, args: string[]) => Prom
   return result;
 }
 
-export async function windowsStatus(): Promise<WindowsStatus> {
-  if (process.platform !== 'win32') return { available: false, selectedScreenSaver: null, active: null, timeoutSeconds: null, secure: null, isLivingRoomDisplay: false, power: OFF_WINDOWS };
-  const [screensaver, power] = await Promise.all([run('reg.exe', ['query', 'HKCU\\Control Panel\\Desktop']), powerStatus()]);
+/** Defaults read the current device; source tests supply their own runner and platform. */
+export async function windowsStatus(runner: (file: string, args: string[]) => Promise<string | null> = run, platform = process.platform): Promise<WindowsStatus> {
+  if (platform !== 'win32') return { available: false, selectedScreenSaver: null, active: null, timeoutSeconds: null, secure: null, isLivingRoomDisplay: false, power: OFF_WINDOWS };
+  const [screensaver, power] = await Promise.all([runner('reg.exe', ['query', 'HKCU\\Control Panel\\Desktop']), powerStatus(runner, platform)]);
   if (screensaver === null) return { available: true, selectedScreenSaver: null, active: null, timeoutSeconds: null, secure: null, isLivingRoomDisplay: false, error: 'Windows screensaver settings could not be read.', power };
   return { ...parseWindowsStatus(screensaver), power };
 }

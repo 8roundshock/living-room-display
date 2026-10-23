@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // World clocks, Sun & moon and Air quality in production Edge (#78). Own ephemeral loopback
 // server and data; synthetic geocoding/forecast/air-quality responses. Screenshots are RAM buffers.
 import assert from 'node:assert/strict';
@@ -54,7 +55,7 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     });
   }
   async function open({ viewport = { width: 1440, height: 1000 }, route = '/editor', reducedMotion = 'no-preference' } = {}) {
-    const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion });
+    const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion }); await mockWindowsStatus(context);
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });

@@ -26,6 +26,11 @@ export interface PreparationOptions {
   /** Tests supply an inert factory. Ordinary createApplication calls never spawn a worker. */
   start(bootstrap: PreparationBootstrap, exited: () => void): PreparationChild;
 }
+export interface PreparationView {
+  settings: Settings; settingsRevision: string;
+  /** Keep the same child/epoch across a scheduled off interval; its capture config still stays disabled. */
+  supervisionEnabled?: boolean;
+}
 
 /** One unpublished thumbnail. Its byte array is transferred once, or zeroed on every refusal/clear. */
 export class PreparedSnapshot {
@@ -85,28 +90,31 @@ export class PreparationController {
   #attempted = false;
   #closed = false;
   #port: number | null = null;
+  #supervise = false;
   readonly #options: PreparationOptions | undefined;
-  readonly #view: () => { settings: Settings; settingsRevision: string };
+  readonly #view: () => PreparationView;
   readonly #clearActive: () => void;
   constructor(options: PreparationOptions | undefined,
-    view: () => { settings: Settings; settingsRevision: string },
+    view: () => PreparationView,
     clearActive: () => void, now: () => number = Date.now, monotonic?: () => number) {
     this.#options = options; this.#view = view; this.#clearActive = clearActive;
     this.snapshot = new PreparedSnapshot(now, monotonic);
   }
   get pipeName() { return this.#child && this.#token ? this.#pipeName : null; }
   config(): PreparationConfig {
-    const { settings, settingsRevision } = this.#view();
+    const { settings, settingsRevision, supervisionEnabled } = this.#view();
     this.snapshot.configure(settingsRevision);
+    this.#supervise = !this.#closed && !!this.#options && settings.idle.enabled &&
+      (supervisionEnabled ?? (settings.preview.enabled && settings.widgets.preview));
     return { generation: this.snapshot.generation, configuration: settingsRevision,
-      enabled: !this.#closed && !!this.#options && settings.preview.enabled && settings.widgets.preview && settings.idle.enabled,
+      enabled: this.#supervise && settings.preview.enabled && settings.widgets.preview,
       parentProcessId: process.pid, timeoutSeconds: settings.idle.idleMinutes * 60,
       prepareLeadSeconds: PREPARATION_LEAD_SECONDS, maxAgeMs: PREPARATION_MAX_AGE_MS };
   }
   listening(port: number) { this.#port = port; this.refresh(); }
   refresh() {
     const config = this.config();
-    if (!config.enabled) {
+    if (!this.#supervise) {
       this.invalidate(this.#child !== null || this.#token !== null); this.#token = null; this.#pipeName = null;
       const child = this.#child; this.#child = null; child?.stop();
       this.#attempted = false; return;

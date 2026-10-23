@@ -165,7 +165,9 @@ test('device location is rounded, fallback is Toronto, and late automatic result
     const exported = await (await fetch(`${app.url}/api/export`)).json(); assert.equal(exported.settings.location.latitude, 12.3);
     assert.equal((await fetch(`${app.url}/api/location`, { method: 'POST', headers: { ...body({}).headers, Origin: 'https://attacker.example' }, body: JSON.stringify({ source: 'fallback', automatic: true }) })).status, 403);
     assert.equal((await fetch(`${app.url}/display`)).headers.get('permissions-policy'), 'geolocation=()');
-    assert.equal((await fetch(`${app.url}/editor`)).headers.get('permissions-policy'), 'geolocation=(self)');
+    assert.equal((await fetch(`${app.url}/editor`)).headers.get('permissions-policy'), 'geolocation=()');
+    assert.equal((await fetch(`${app.url}/settings`)).headers.get('permissions-policy'), 'geolocation=(self)');
+    assert.equal((await fetch(`${app.url}/settings-extra`)).headers.get('permissions-policy'), 'geolocation=()');
   } finally { await app.close(); }
 });
 

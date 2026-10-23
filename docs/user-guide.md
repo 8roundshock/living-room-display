@@ -1,5 +1,37 @@
 # Using Living Room Display
 
+## Use different styles through the week
+
+Save the looks and widgets you want in **Edit display**,
+then save those editor changes. In **Settings → Schedule → Edit schedule**, add a row, choose
+a saved style, the days it starts, and its From/Until times. Choose a fallback
+style (or your manual appearance) for the rest of the week, enable the schedule,
+and choose **Save schedule**. Nothing is scheduled until you choose and save it.
+
+Times follow this computer's local clock, shown beside the controls. An evening
+range ending in the morning continues into the next day. Equal times mean until
+that time the next day. During daylight-saving changes, skipped times never run
+and repeated times follow the same schedule both times. If rows overlap, the first
+matching row wins; move it Up or Down to choose priority.
+
+Home names what's on the display and why.
+The editor canvas continues to show your manual appearance. Applying or saving a
+manual style does not pause the schedule: save any visual edits, then choose
+Home's **Use manual style for 1 hour**. It resumes automatically at the time shown,
+or choose **Return to schedule**. Scheduling never changes Windows lock settings.
+
+Schedule editing has its own Save/Cancel in Settings. A deleted style stays marked
+as missing and is skipped; choose
+another style or remove that row. The next matching row, fallback, or manual
+appearance keeps the display usable.
+
+To back everything up, download your saved-data backup under **Data & recovery**
+and **Download saved schedule** under Schedule. The schedule file refers to style
+IDs but does not include the styles themselves. Restore saved data first, then
+**Restore schedule…**. Restoring a schedule asks before replacing it and ends any
+temporary override. Restoring saved data alone, Reset appearance and Reset layout
+keep your local schedule. Disable scheduling and save to return to manual use.
+
 This guide is for you if Living Room Display is already installed on your Windows
 PC. It covers everyday use in plain words. For installing it, and for technical
 details, see [installation](install.md).
@@ -10,17 +42,18 @@ reminders and a few other things you choose. It makes no sound and needs no
 account. Your settings and reminders stay on your PC. It goes online only for the
 weather and air quality where you are, and for city names when you search.
 
-There are three parts, each a page in your web browser except the last one on the TV:
+The header has three destinations. The display opens separately:
 
 - **Home**, for every day: start a timer, add a reminder or put something on a
   calendar, add a world clock, a countdown or a note, and see what is on the display;
 - **Edit display**, where you choose what to show and how it looks;
+- **Settings**, for your city, units, time format, screen preference, schedules and backups;
 - the **display**, the black full-screen view you leave on the TV.
 
 ## Home
 
 Home is the app's main page (`http://127.0.0.1:4318/`). It shows today's date and time,
-six quick actions and a **Today** list, with your saved display on the right and
+six compact actions and a **Today** list, with a display summary and
 **Edit display** one click away.
 
 - **Timer**: pick 1, 3, 5, 10, 15 or 30 minutes or 1 hour and it starts at once, or set
@@ -42,6 +75,11 @@ reminders without a date and what is coming up in the next week; tick the circle
 something is done. **All reminders** opens the full list. Changes you make on Home
 reach the display within a few seconds.
 
+Closing a quick-action dialog keeps what you typed. Leaving Home warns about
+unsaved choices; returning a field to its original value clears that draft.
+Calendar browsing alone does not create a draft, while a time you explicitly
+change is kept even before you type the reminder.
+
 ## Open Home and Edit display
 
 Open the Start menu and choose **Living Room Display**. Home opens in your browser
@@ -49,32 +87,25 @@ Open the Start menu and choose **Living Room Display**. Home opens in your brows
 Each time you choose it, it opens another browser tab, so close the ones you no longer
 need. To choose what the display shows and how it looks, click **Edit display** at the
 top (`http://127.0.0.1:4318/editor`). Use the **Home** and **Edit display** links at
-the top to move between the two pages.
+the top to move between Home, Edit display and Settings. Unsaved changes ask before
+you leave. **Settings** holds weather setup; reminders are managed from Home.
 
-You can keep Edit display open while you change things. Changes to the look, the
-widgets and the weather settings are a draft: they show at once in the preview on
-the left (**Your display**), and a bar with **Save changes** and **Cancel** appears
-at the bottom. Nothing changes on the display until you click **Save changes**.
-**Cancel** puts everything back the way it was saved. Reminders are different:
-they save as soon as you add, change or tick one.
+You can keep Edit display open while you change things. Visual changes are drafts
+in the canvas; **Save changes** and **Cancel** appear in the top Style toolbar only
+when needed. Save changes updates the selected saved style; **Save as new…** keeps
+it and creates a separate style. Reminders save as soon as you change them on Home.
+Settings has its own Save/Cancel for app preferences and a separate schedule draft.
 
 ## First run: choose your city
 
-The weather starts with Toronto until you choose a place. Home says so ("Weather shows
-Toronto until you choose your city"), and its **Choose your city** link opens the
-**Weather** tab in Edit display with the **City** box ready. In Edit display, a card at
-the top of the **Widgets** tab says so too (for example "Showing Toronto weather") and
-offers two choices:
+Weather starts with Toronto until you choose a place. Home's **Choose your city**
+link opens **Settings** with **City** focused. Type two letters and choose a city
+from the dropdown, or choose **Use device location** for one browser lookup. Only
+a rounded weather area is kept. The app never requests location automatically.
 
-- **Use my location**: your browser asks once whether the app may use your
-  location. The app keeps only a rounded position, enough for local weather.
-- **Choose a city**: opens the **Weather** tab with the **City** box ready. Type
-  two or more letters, then pick your city from the list.
-
-Then click **Save changes**. You can change the city at any time in the **Weather**
-tab, where you also choose **Units** (°C or °F) and **Time format** (12-hour or
-24-hour). A city you chose yourself is never replaced by an automatic location.
-
+Choose **Save changes** to use the draft city. Settings also holds **Units** and
+**Time format**. Cancel keeps the saved preferences. A failed save keeps your edits;
+a conflict asks you to review before saving again.
 ## Show the display on the TV
 
 Make sure the TV shows your PC's screen.
@@ -112,7 +143,7 @@ below them, and a smaller Last screen and Reminders, filling the whole grid. In 
 - **Edit layout** lets you drag widgets around the grid and resize them from their
   corner. Click **Done** when you're finished.
 - Select a widget in the list to change its options or remove it.
-- **Style › Data & recovery › Reset layout…** puts the starting layout back: those
+- **Style › Reset appearance & layout › Reset layout…** puts the starting layout back: those
   six widgets in their places and every other widget off. Your widget settings,
   reminders and looks stay, and nothing changes until you Save.
 
@@ -134,7 +165,7 @@ estimates are never shown as official warnings. Official alerts are checked afte
 
 ## Reminders
 
-Add and tick off reminders on Home, or use the **Reminders** tab in Edit display:
+Add and tick off reminders on Home. **All reminders** opens the full list:
 
 - Click **Add reminder** (**+**), type what you want to remember and, if you like,
   add a date and time. Reminders without a date stay until you tick them off.
@@ -225,8 +256,9 @@ estimate, not a promise.
 
 Your settings, reminders and photo are stored only on this PC.
 
-- **Style › Data & recovery › Export saved data** saves a backup file of your
-  settings, styles and reminders (not the photo). Keep it somewhere safe.
+- **Settings › Data & recovery › Export saved data** saves a backup file of your
+  settings, styles and reminders (not photos or schedules). Download the schedule
+  separately in Schedule and keep both files.
 - **Restore from backup…** in the same place reads such a file back. It shows what
   the file contains and asks before it replaces anything.
 - When you install a newer version, Setup first makes its own copy of your data.

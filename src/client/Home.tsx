@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { AppState, Settings, Timer, WidgetId } from '../shared/contracts';
+import { scheduledSettings } from '../shared/schedule';
+import { ScheduleStatus } from './ScheduleStatus';
 import { orderTimers, timerDoneAt, timerName, timerPhase, timerRemaining, visibleTimers, KEEP_DONE_MS } from '../shared/timers';
 import { showPlacement } from '../shared/show';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG } from '../shared/widgets';
 import { ApiError, NETWORK_ERROR_MESSAGE, api } from './api';
 import { localTimeZone, timeParts, zoneOffsetMinutes } from './astronomy';
 import { civilFromDate, countdownLabel, parseCivil } from './calendar';
-import { AmbientDisplay } from './Display';
 import { readFirstRunDismissed } from './FirstRunCard';
 import { HOME_WIDGETS, longDay, namesList, relativeDay, todayGroups, type ComingUpItem } from './home-model';
 import { HomeSheet, type SheetKind } from './HomeSheets';
+import { homeDraftPending } from './home-drafts';
 import { ReminderRow, makeRoomLink, type HomeContext, type StatusMessage } from './HomeParts';
+import { reminderFormPending } from './RemindersPanel';
 import { Icon, type IconName } from './icons';
 import { DISPLAY_WINDOW, useDisplayWindow, type DisplayWindowControls } from './displayWindow';
 import { StudioHeader } from './StudioHeader';
@@ -65,6 +68,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
   reload: () => Promise<void>;
 }) {
   const settings = state.settings;
+  const displaySettings = scheduledSettings(settings, state.schedule);
   const displayControls = useDisplayWindow();
   const minute = useMinute();
   const timers = state.timers ?? [];
@@ -100,6 +104,10 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
     }));
   }, []);
   const show = useCallback(async (id: WidgetId, saved = 'Saved.') => {
+    if (state.schedule?.visual) {
+      announce({ text: 'A scheduled style is active. Use the manual style to show this widget.', link: { href: '/#schedule-active', label: 'Schedule controls' } });
+      return false;
+    }
     try {
       applySettings(await api<Settings>(`/api/widgets/${id}/show`, { method: 'POST' }));
       return true;
@@ -108,8 +116,8 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
       else announce({ text: caught instanceof ApiError && caught.network ? NETWORK_ERROR_MESSAGE : caught instanceof Error ? caught.message : 'Could not show it.', tone: 'error' });
       return false;
     }
-  }, [announce, applySettings]);
-  const context: HomeContext = { state, settings, now, offline, setState, reload, announce, run, applySettings, show, focusLater };
+  }, [announce, applySettings, state.schedule?.visual]);
+  const context: HomeContext = { state, settings: displaySettings, now, offline, setState, reload, announce, run, applySettings, show, focusLater };
 
   // A finished timer is announced once, and the tab title says so until it is dismissed (#438).
   const homeTimers = useMemo(() => orderTimers(visibleTimers(timers, now, false), now), [timers, now]);
@@ -125,12 +133,11 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
   }, [done.map(timer => timer.id).join(), announce]);
   useEffect(() => { document.title = done.length ? 'Done · Still · Home' : 'Still · Home'; }, [done.length]);
 
-  const anyDirty = useRef(false);
   useEffect(() => {
-    const leave = (event: BeforeUnloadEvent) => { if (anyDirty.current) event.preventDefault(); };
+    const leave = (event: BeforeUnloadEvent) => { if (homeDraftPending(settings) || reminderFormPending()) event.preventDefault(); };
     window.addEventListener('beforeunload', leave);
     return () => window.removeEventListener('beforeunload', leave);
-  }, []);
+  }, [settings]);
 
   const sheetRef = useRef(sheet);
   sheetRef.current = sheet;
@@ -147,12 +154,12 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
   const time = timeOfDay(new Date(now), settings.clockFormat);
   const groups = useMemo(() => todayGroups(state.reminders, settings.widgetData.countdowns, now), [state.reminders, settings.widgetData.countdowns, now]);
   const warning = state.timersWarning && state.timersWarning !== dismissedWarning ? state.timersWarning : null;
-  const showing = ACTIVE_WIDGET_IDS.filter(id => settings.widgets[id] && (id !== 'preview' || settings.preview.enabled));
+  const showing = ACTIVE_WIDGET_IDS.filter(id => displaySettings.widgets[id] && (id !== 'preview' || displaySettings.preview.enabled));
   // Off widgets that Home feeds and that have something to show.
-  const waiting = HOME_WIDGETS.filter(id => !settings.widgets[id] && (
+  const waiting = HOME_WIDGETS.filter(id => !displaySettings.widgets[id] && (
     id === 'clock' ? homeTimers.length > 0 : id === 'reminders' ? groups.pending > 0 : id === 'worldClocks' ? settings.widgetData.worldClocks.length > 0
       : id === 'countdown' ? settings.widgetData.countdowns.length > 0 : id === 'note' ? settings.widgetData.note.text.length > 0 : false));
-  const waitingWithoutRoom = waiting.filter(id => !showPlacement(settings, id));
+  const waitingWithoutRoom = waiting.filter(id => !showPlacement(displaySettings, id));
 
   const actions: { kind: SheetKind; label: string; description: string; icon: IconName }[] = [
     { kind: 'timer', label: 'Timer', description: "Counts down on your display's clock", icon: 'timer' },
@@ -174,11 +181,12 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
               <span className="home-time">{time}</span>
             </div>
             <WorldClockChips cities={settings.widgetData.worldClocks} minute={minute} clockFormat={settings.clockFormat} />
+            <ScheduleStatus snapshot={state.schedule} presets={settings.savedPresets} setState={setState} reload={reload} />
             {settings.locationSource === 'fallback' && !firstRunDismissed && (
               <p className="home-first-run">
                 <Icon name="location" size={15} />
                 <span>Weather shows {settings.location.name} until you choose your city.</span>{' '}
-                <a className="home-link" href="/editor?focus=city">Choose your city</a>
+                <a className="home-link" href="/settings?focus=city">Choose your city</a>
               </p>
             )}
             <div className="home-actions" role="group" aria-label="Quick actions">
@@ -199,7 +207,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
           {!status && offline && <span className="home-status-text home-offline">Offline · showing saved reminders</span>}
         </div>
       </main>
-      {sheet && <HomeSheet kind={sheet.kind} context={context} onClose={closeSheet} onDirty={dirty => { anyDirty.current = dirty; }} status={
+      {sheet && <HomeSheet kind={sheet.kind} context={context} onClose={closeSheet} status={
         <div className={`home-status home-sheet-status ${status ? 'shown' : ''} ${status?.tone === 'error' ? 'error' : ''}`} role="status" aria-live="polite">{status && renderStatus(status)}</div>
       } />}
     </div>
@@ -238,13 +246,6 @@ function DisplayCard({ state, showing, waiting, waitingWithoutRoom, disconnected
   return (
     <aside className="home-card" aria-labelledby="home-card-title">
       <h2 id="home-card-title" className="home-card-title">On your display</h2>
-      {/* The saved arrangement, still (#438): inert and hidden from assistive technology; a click opens Edit display. */}
-      <a className="home-preview" href="/editor" tabIndex={-1} aria-hidden="true">
-        <div className="home-preview-screen" inert>
-          <AmbientDisplay state={state} embedded disconnected={disconnected} compositionOverride={0} layoutEditing motionSurface="preview" />
-        </div>
-      </a>
-      <p className="home-card-caption">Saved layout</p>
       <div className="home-card-actions">
         <a className="button primary home-edit-display" href="/editor"><Icon name="edit" size={16} />Edit display</a>
         <a className="button home-open-display" href="/display" target={DISPLAY_WINDOW} onClick={displayControls.openDisplay}><Icon name="monitor" size={16} />{displayControls.displayOpen ? 'Show display' : 'Open display'}</a>

@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Native colours (#75) in production Edge: own ephemeral loopback server and data, synthetic
 // state only. Screenshots stay RAM buffers unless --capture names a temporary directory.
 import assert from 'node:assert/strict';
@@ -34,6 +35,12 @@ const FULL_BOARD = {
   note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
 };
 const PALETTE_RGB = new Set(Object.values(NATIVE_PALETTE).map((tone) => rgb(tone.hex)));
+
+/** Typed color properties may serialize as rgb() even when authored in hex; compare their color. */
+const customColor = (locator, property) => locator.evaluate((element, name) => {
+  const probe = document.createElement('i'); probe.style.color = `var(${name})`; element.append(probe);
+  const color = getComputedStyle(probe).color; probe.remove(); return color;
+}, property);
 
 /** Each widget section under `root`: its id, resolved --ambient-accent, first accent element colour and box styling. */
 function sections(root) {
@@ -131,7 +138,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     for (let row = 0; row < 200; row++) { pixels[row * (320 * 4 + 1)] = 0; for (let x = 0; x < 320; x++) pixels[row * (320 * 4 + 1) + 1 + x * 4 + 3] = 255; }
     const image = photoFixture(320, 200, pixels);
     let current = structuredClone(source), stateStatus = 200, photoMissing = false;
-    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
     await context.route('**/api/state', (route) => route.fulfill(stateStatus === 200 ? { contentType: 'application/json', body: JSON.stringify(current) } : { status: stateStatus, contentType: 'application/json', body: '{"error":"Synthetic outage"}' }));
     await context.route('**/api/photo/image?*', (route) => route.fulfill(photoMissing ? { status: 404, body: 'Synthetic missing image' } : { contentType: 'image/png', body: image }));
     await context.route('**/api/preview/image?*', (route) => route.fulfill({ contentType: 'image/png', body: image }));
@@ -224,7 +231,8 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       // Adaptive Weather (#74): the --weather-rain hook is Sea glass; timing stays primary text; the label stays Mist.
       current = weatherWith(mode, 'large', 'now-open'); await open();
       assert.equal(await page.locator('.weather-body').getAttribute('data-weather-mode'), 'elevated');
-      assert.equal((await page.locator('.ambient-weather').evaluate((el) => getComputedStyle(el).getPropertyValue('--weather-rain'))).trim().toLowerCase(), mode === 'native' ? NATIVE_PALETTE.water.hex : SAND, `${mode} --weather-rain`);
+      const rainTone = await customColor(page.locator('.ambient-weather'), '--weather-rain');
+      assert.equal(rainTone, expected(mode, 'water'), `${mode} --weather-rain`);
       const bars = await page.locator('.rain-bar').evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
       assert.ok(bars.length >= 12, `${bars.length} hourly bars`); for (const bar of bars) assert.equal(bar, expected(mode, 'water'), `${mode} rain bar`);
       assert.equal(await colorOf('.rain-detail'), expected(mode, 'water'), `${mode} rain detail`);
@@ -335,7 +343,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     assert.deepEqual(await decoded('.preview-image'), { width: 320, height: 200, pixel: [90, 90, 90, 255] }, 'the synthetic last screen paints');
     // #224: data that stores the retired Sand renders the retuned Sand everywhere, root included.
     current = state({ mode: 'color' }); current.settings.appearance.accentColor = LEGACY_SAND; current.settings.widgets.photo = false; await open();
-    assert.equal(await page.locator('.ambient').first().evaluate((el) => getComputedStyle(el).getPropertyValue('--ambient-accent').trim().toLowerCase()), SAND, 'the ambient root renders the retuned Sand');
+    assert.equal(await customColor(page.locator('.ambient').first(), '--ambient-accent'), rgb(SAND), 'the ambient root renders the retuned Sand');
     for (const section of await sections(page)) await assertSection(section, 'color', 'stored retired Sand', page.locator(`[data-widget-id="${section.id}"]`));
     // #251: partly cloudy is its cloud's Stone with a Gold sun or Lilac moon part; fog Stone; drizzle Sea glass.
     const glyphs = [[0, true, 'sun', 'sun'], [0, false, 'moon', 'time'], [1, true, 'suncloud', 'stone'], [2, false, 'mooncloud', 'stone'], [3, true, 'cloud', 'stone'], [45, true, 'fog', 'stone'], [53, true, 'drizzle', 'water'], [63, true, 'rain', 'water'], [73, true, 'snow', 'sky'], [95, true, 'storm', 'water']];
@@ -387,7 +395,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       await app.store.update((data) => { data.settings = defaultSettings(); data.settings.appearance.accentMode = 'color'; data.reminders = []; });
     }
     async function editor(viewport = { width: 1280, height: 720 }) {
-      const studio = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+      const studio = await browser.newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(studio);
       const editorPage = await studio.newPage();
       editorPage.on('pageerror', (error) => errors.push(error.message));
       await editorPage.clock.install({ time: new Date(now) });
@@ -459,8 +467,8 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     for (const preset of ['Phone', 'Room', 'Night']) {
       await p.getByRole('combobox', { name: 'Style', exact: true }).selectOption(`builtin:${preset.toLowerCase()}`);
       assert.equal(await pressed(p, 'Native colours'), true, `${preset} applies Native`); assert.equal(await canvasMode(p), 'native');
-      const tones = await p.locator('.preview-surface .ambient').evaluate(element => ['time', 'sky', 'personal'].map(role => getComputedStyle(element).getPropertyValue(`--tone-${role}`).trim()));
-      assert.deepEqual(tones, [NATIVE_PALETTE.time.hex, NATIVE_PALETTE.sky.hex, NATIVE_PALETTE.personal.hex], `${preset} canvas tones`);
+      const tones = await Promise.all(['time', 'sky', 'personal'].map(role => customColor(p.locator('.preview-surface .ambient'), `--tone-${role}`)));
+      assert.deepEqual(tones, [NATIVE_PALETTE.time.hex, NATIVE_PALETTE.sky.hex, NATIVE_PALETTE.personal.hex].map(rgb), `${preset} canvas tones`);
       await save(p);
     }
     assert.deepEqual({ preset: appearance().preset, accentMode: appearance().accentMode, brightness: appearance().brightness, accentColor: appearance().accentColor }, { preset: 'night', accentMode: 'native', brightness: 0.28, accentColor: '#9990b7' });

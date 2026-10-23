@@ -46,3 +46,31 @@
 .widget-picker .room-notice { flex: none; margin: 8px 0 0; }
 .widget-picker .room-notice[data-empty] { margin: 0; }
 .widget-picker .room-fixes .button { flex: 1 1 auto; }
+
+/* #516: compact discovery controls leave the catalog and its single real sample together. */
+.picker-discovery { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) 116px; gap: 6px; }
+.picker-search { min-width: 0; position: relative; }
+.picker-search input, .picker-discovery select { width: 100%; min-width: 0; min-height: 44px; font-size: 12px; border-radius: 9px; }
+.picker-search input { padding: 9px 40px 9px 10px; }
+.picker-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.picker-search > .icon-button { position: absolute; top: 0; right: 0; width: 44px; height: 44px; }
+.picker-discovery select { padding-inline: 8px 3px; }
+.picker-results { flex: none; display: flex; justify-content: space-between; gap: 8px; margin: 7px 1px 10px; color: #a9a3b5; font-size: 11px; line-height: 1.3; }
+.picker-empty { flex: 1; padding: 22px 12px; border: 1px solid #ffffff0d; border-radius: 12px; background: #141419; }
+.picker-empty h3 { font-size: 15px; margin: 0 0 8px; }
+.picker-empty p { color: #a9a3b5; font-size: 12px; line-height: 1.5; margin-bottom: 16px; }
+.picker-empty .button { min-height: 44px; }
+.picker-room-help { flex: none; margin: 8px 0 0; color: #b0a9bf; font-size: 11px; line-height: 1.35; }
+.studio .widget-picker .button.small.room-fix { min-height: 44px; }
+.studio .widget-picker .family-previews > button { min-height: 44px; }
+@media (min-width: 701px) {
+  /* Preserve the current editor's content scroller and keep Add reachable outside it. */
+  .widget-picker .picker-detail-content { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  .widget-picker .room-notice:not([data-empty]) { flex: 0 1 auto; min-height: 0; max-height: 40%; overflow-y: auto; scrollbar-width: thin; }
+  /* Retain the sample's 9px rendered text floor after adding discovery controls. */
+  .studio .widget-picker .sample-stage { flex: 1 0 190px; min-height: 190px; }
+}
+@media (max-width: 700px) {
+  .picker-discovery { grid-template-columns: minmax(0, 1fr) 120px; }
+  .widget-picker .catalog-item { min-height: 54px; }
+}

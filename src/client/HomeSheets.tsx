@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { CountdownEvent, LocationResult, Reminder, Settings, Timer, WidgetId, WorldClockCity } from '../shared/contracts';
 import { TIMER_LABEL_MAX, TIMER_LIMIT, TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers';
 import { showPlacement } from '../shared/show';
@@ -15,32 +15,25 @@ import { RemindersPanel } from './RemindersPanel';
 import { timerPhrase } from './timer';
 import { NOTE_MAX_LENGTH, limitNote } from './widgets/Note';
 import { MAX_WORLD_CLOCKS } from './widgets/WorldClocks';
+import { useHomeDraft as useDraft, forgetHomeDrafts as forget } from './home-drafts';
 
 export type SheetKind = 'timer' | 'reminder' | 'calendar' | 'worldClock' | 'countdown' | 'note' | 'allReminders';
 
 const TITLES: Record<SheetKind, string> = {
   timer: 'Timer', reminder: 'Reminder', calendar: 'Calendar', worldClock: 'World clock', countdown: 'Countdown', note: 'Note', allReminders: 'All reminders',
 };
-/** Typed values outlive a closed sheet for this page's life, so nothing typed is lost (#438). */
-const drafts: Record<string, unknown> = {};
-function useDraft<T>(key: string, initial: () => T): [T, (value: T) => void] {
-  const [value, setValue] = useState<T>(() => (key in drafts ? drafts[key] as T : initial()));
-  return [value, (next: T) => { drafts[key] = next; setValue(next); }];
-}
-function forget(...keys: string[]) { for (const key of keys) delete drafts[key]; }
-
 /**
  * One quick action in a native modal `<dialog>` (#438): `showModal()` traps focus, Esc closes it and focus
  * returns to the button that opened it. Below 600 px it is a bottom sheet with its own scroll and a
  * sticky primary button. The status line is inside it while it is open, so a message or Undo is never
  * hidden behind the backdrop.
  */
-export function HomeSheet({ kind, context, status, onClose, onDirty }: {
+export function HomeSheet({ kind, context, status, onClose }: {
   kind: SheetKind; context: HomeContext; status: ReactNode;
   onClose: (focus?: string) => void;
-  onDirty: (dirty: boolean) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const submittedControl = useRef<HTMLElement | null>(null);
   const titleId = useId();
   useEffect(() => {
     const element = dialog.current;
@@ -50,6 +43,31 @@ export function HomeSheet({ kind, context, status, onClose, onDirty }: {
     window.requestAnimationFrame(() => (element.querySelector<HTMLElement>('[data-autofocus]') ?? element.querySelector<HTMLElement>('input, textarea, button:not(.home-sheet-close)'))?.focus());
     return () => { if (element.open) element.close(); };
   }, []);
+  useLayoutEffect(() => {
+    const body = dialog.current?.querySelector<HTMLElement>('.home-sheet-body');
+    if (!body) return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const active = document.activeElement;
+        const lost = !active || active === document.body;
+        const control = lost ? submittedControl.current : active;
+        // An error/status can reduce the scroller after the form's initial reveal.
+        // Keep the user's current control visible without changing keyboard focus.
+        if (control instanceof HTMLElement && control.isConnected && body.contains(control)) {
+          const form = control.closest<HTMLElement>('.reminder-form');
+          const target = form && form.getBoundingClientRect().height + 20 <= body.clientHeight ? form : control;
+          target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+          // Disabling the submit button during a request can drop browser focus to BODY.
+          // Recover only that known submission, never a different control chosen meanwhile.
+          if (lost && control.matches('button:not(:disabled), input:not(:disabled)')) control.focus({ preventScroll: true });
+        }
+      });
+    });
+    observer.observe(body);
+    return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
+  }, []);
   const content = (() => {
     switch (kind) {
       case 'timer': return <TimerSheet context={context} onClose={onClose} />;
@@ -57,7 +75,7 @@ export function HomeSheet({ kind, context, status, onClose, onDirty }: {
       case 'calendar': return <HomeCalendar context={context} />;
       case 'worldClock': return <WorldClockSheet context={context} />;
       case 'countdown': return <CountdownSheet context={context} />;
-      case 'note': return <NoteSheet context={context} onDirty={onDirty} />;
+      case 'note': return <NoteSheet context={context} />;
       case 'allReminders': return <AllReminders context={context} />;
     }
   })();
@@ -67,6 +85,14 @@ export function HomeSheet({ kind, context, status, onClose, onDirty }: {
       className={`home-sheet home-sheet-${kind}`}
       aria-labelledby={titleId}
       onCancel={event => { event.preventDefault(); onClose(); }}
+      onKeyDown={event => {
+        if (event.key !== 'Tab' || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+        const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button, input:not([type="hidden"]), select, textarea, a[href], summary, [tabindex]')]
+          .filter(control => control.tabIndex >= 0 && !control.matches(':disabled') && control.checkVisibility());
+        const first = controls[0], last = controls.at(-1);
+        const target = event.shiftKey && document.activeElement === first ? last : !event.shiftKey && document.activeElement === last ? first : null;
+        if (target) { event.preventDefault(); target.focus(); }
+      }}
       onMouseDown={event => { if (event.target === dialog.current) onClose(); }}
     >
       <div className="home-sheet-panel">
@@ -74,7 +100,12 @@ export function HomeSheet({ kind, context, status, onClose, onDirty }: {
           <h2 id={titleId} className="home-sheet-title">{TITLES[kind]}</h2>
           <button type="button" className="home-icon-button home-sheet-close" aria-label={`Close ${TITLES[kind]}`} onClick={() => onClose()}><Icon name="close" size={18} /></button>
         </div>
-        <div className="home-sheet-body">{content}</div>
+        <div className="home-sheet-body" onSubmitCapture={event => {
+          const submitter = (event.nativeEvent as SubmitEvent).submitter;
+          submittedControl.current = submitter instanceof HTMLElement ? submitter : null;
+        }} onFocusCapture={event => {
+          if (submittedControl.current && event.target !== submittedControl.current) submittedControl.current = null;
+        }}>{content}</div>
         {status}
       </div>
     </dialog>
@@ -95,7 +126,7 @@ export function ShowSwitch({ id, settings, checked, onChange }: { id: WidgetId; 
 
 /** Shows a widget after its content saved, when asked; says why when it could not. */
 async function showAfterSave(context: HomeContext, id: WidgetId, wanted: boolean): Promise<'on' | 'shown' | 'off' | 'failed'> {
-  if (context.state.settings.widgets[id]) return 'on';
+  if (context.settings.widgets[id]) return 'on';
   if (!wanted) return 'off';
   return await context.show(id) ? 'shown' : 'failed';
 }
@@ -123,7 +154,7 @@ function TimerSheet({ context, onClose }: { context: HomeContext; onClose: (focu
       forget('timer.hours', 'timer.minutes', 'timer.seconds', 'timer.label');
       setState(previous => previous ? { ...previous, timers: [...(previous.timers ?? []), timer] } : previous);
       onClose(`.home-timer-row[data-timer-id="${timer.id}"] button`);
-      announce({ text: `${timerPhrase(timer)} started · ${context.state.settings.widgets.clock ? "on your display's clock." : "your display's Clock is off, so it shows here only."}` });
+      announce({ text: `${timerPhrase(timer)} started · ${context.settings.widgets.clock ? "on your display's clock." : "your display's Clock is off, so it shows here only."}` });
     } finally { setBusy(false); }
   }
   function custom(event: FormEvent) {
@@ -413,7 +444,7 @@ function CountdownSheet({ context }: { context: HomeContext }) {
 
 // Note ----------------------------------------------------------------------------------------------
 
-function NoteSheet({ context, onDirty }: { context: HomeContext; onDirty: (dirty: boolean) => void }) {
+function NoteSheet({ context }: { context: HomeContext }) {
   const { settings, offline, run, announce, applySettings } = context;
   const saved = settings.widgetData.note.text;
   const [text, setText] = useDraft('note.text', () => saved);
@@ -421,7 +452,6 @@ function NoteSheet({ context, onDirty }: { context: HomeContext; onDirty: (dirty
   const [busy, setBusy] = useState(false);
   const differs = limitNote(text).trim() !== saved;
   const previousSaved = useRef(saved);
-  useEffect(() => { onDirty(differs); }, [differs]);
   useEffect(() => {
     const previous = previousSaved.current;
     previousSaved.current = saved;
@@ -474,5 +504,5 @@ function NoteSheet({ context, onDirty }: { context: HomeContext; onDirty: (dirty
 
 function AllReminders({ context }: { context: HomeContext }) {
   // The existing Reminders panel, its only instance on the page (#438).
-  return <div className="home-reminders"><RemindersPanel state={context.state} setState={context.setState} connectionError={context.offline ? 'offline' : null} clockFormat={context.settings.clockFormat} onError={message => { if (message) context.announce({ text: message, tone: 'error' }); }} /></div>;
+  return <div className="home-reminders"><RemindersPanel state={context.state} setState={context.setState} connectionError={context.offline ? 'offline' : null} clockFormat={context.settings.clockFormat} onError={message => context.announce(message ? { text: message, tone: 'error' } : null)} /></div>;
 }

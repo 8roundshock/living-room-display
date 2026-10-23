@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { mockWindowsStatus } from '../lib/windows-fixture.mjs';
 import { GRID_DENSITIES, WIDGET_IDS } from '../../../src/shared/widgets.ts';
 import { intlPerTicks } from './clock.mjs';
 
@@ -192,6 +193,7 @@ const QUALIFIERS = { fresh: null, stale: null, estimate: /^Saved estimate$/, las
 export async function sweep({ page, viewport, state, base, now }) {
   const views = viewport.width === 1920 ? [{ width: 1280, height: 720 }, viewport] : [viewport];
   const context = await page.context().browser().newContext({ viewport, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
+  await mockWindowsStatus(context);
   await context.route('**/api/state', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(state) }));
   const own = await context.newPage(), errors = [];
   own.on('pageerror', error => errors.push(error.message));

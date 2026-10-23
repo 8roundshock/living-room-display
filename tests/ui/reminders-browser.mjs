@@ -1,5 +1,6 @@
-// Reminders tab check-off, local history (#73), editor polish (#265) and the #372 polish: compact rows
-// (#366), reminders deleted in another window (#355), forms kept across tab switches with a leave prompt
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
+// Home All reminders dialog check-off, local history (#73), editor polish (#265) and the #372 polish: compact rows
+// (#366), reminders deleted in another window (#355), forms kept across dialog reopen with a leave prompt
 // (#274), expiring messages (#295), a future creation time on Undo (#296), focus after an expired Undo
 // (#297) and typing cost (#354). Own ephemeral loopback server and data; synthetic reminders only.
 // Screenshots are RAM buffers and only taken with `capture`.
@@ -71,8 +72,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await app.store.update(data => { data.settings = { ...defaultSettings(), clockFormat }; data.reminders = seed({ extra }); });
   }
   async function open({ viewport = { width: 1280, height: 720 }, reducedMotion = 'no-preference', clock = true, init } = {}) {
-    const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion });
-    await context.route('**/api/windows/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ available: false, selectedScreenSaver: null, active: null, timeoutSeconds: null, secure: null, isLivingRoomDisplay: false, power: { available: false, scheme: null, displayOffSeconds: null, sleepSeconds: null } }) }));
+    const context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion }); await mockWindowsStatus(context);
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     // 404 and 400 replies are expected where a reminder was deleted elsewhere (#355) or a creation time is ahead of the server (#296).
@@ -84,23 +84,32 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     });
     if (init) await page.addInitScript(init);
     if (clock) { await page.clock.install({ time: new Date(now) }); clocked.add(page); }
-    await page.goto(`${base}/editor`);
-    await page.locator('.clock-time').waitFor();
+    await page.goto(`${base}/`);
+    await page.locator('.home-page').waitFor();
     if (clock) await page.clock.runFor(1000);
     await remindersTab(page);
     return { context, page };
   }
   async function remindersTab(page) {
-    await page.getByRole('tab', { name: /^Reminders/ }).click();
+    if (!await page.locator('.home-sheet-allReminders').count())
+      await page.getByRole('button', { name: /^All reminders/ }).click();
     if (clocked.has(page)) await page.clock.runFor(300);
     else await page.locator('.reminders-panel').waitFor();
   }
-  /** A real settings draft, so the Save bar shows. */
+  /** An independent editor draft stays open while Home saves reminders. */
+  const editorDrafts = new WeakMap();
   async function dirty(page) {
-    await page.getByRole('tab', { name: 'Style', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night');
-    await remindersTab(page);
-    await page.locator('.studio-savebar').waitFor();
+    const editor = await page.context().newPage();
+    await editor.clock.install({ time: new Date(now) });
+    await editor.goto(`${base}/editor`);
+    await editor.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night');
+    await editor.locator('.studio-savebar').waitFor();
+    editorDrafts.set(page, editor);
+    await page.bringToFront();
+  }
+  async function closeReminders(page) {
+    await page.getByRole('button', { name: 'Close All reminders', exact: true }).click();
+    await page.locator('.home-sheet-allReminders').waitFor({ state: 'detached' });
   }
   const circle = (page, text) => page.getByRole('button', { name: `Complete: ${text}`, exact: true });
   const rowTitles = page => page.locator('.reminders-panel .reminder-list .reminder-copy p').allTextContents();
@@ -111,7 +120,16 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
   const status = page => page.locator('.reminder-status');
   const undoButton = page => status(page).getByRole('button', { name: 'Undo', exact: true });
   const reminderForm = page => page.locator('.reminders-panel .reminder-form');
-  const canvasReminders = page => page.locator('.preview-surface .ambient-reminders');
+  async function canvasReminders(page) {
+    // Home deliberately has no preview. Inspect the actual editor renderer in a separate source
+    // page, freshly loaded so these immediate-save assertions do not depend on its polling timer.
+    const editor = await page.context().newPage();
+    try {
+      await editor.clock.install({ time: new Date(now) });
+      await editor.goto(`${base}/editor`);
+      return await editor.locator('.preview-surface .ambient-reminders').innerText();
+    } finally { await editor.close(); }
+  }
   const patches = (page, count) => new Promise(resolvePatches => {
     let seen = 0;
     const listener = response => {
@@ -122,15 +140,15 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
   });
   /**
    * Where an element sits against what can actually be seen: the inspector's scroll area on desktop,
-   * the viewport on a phone, and below the top Style and Save toolbar. `hit` means a click at its
+   * the viewport on a phone, and below the dialog header. `hit` means a click at its
    * centre reaches it.
    */
   const placement = locator => locator.evaluate(element => {
     const box = element.getBoundingClientRect();
-    const panel = document.querySelector('.inspector-panel');
+    const panel = document.querySelector('.home-sheet-body');
     const scrolls = getComputedStyle(panel).overflowY !== 'visible';
     const area = panel.getBoundingClientRect();
-    const toolbar = document.querySelector('.editor-style-bar').getBoundingClientRect();
+    const toolbar = document.querySelector('.home-sheet-header').getBoundingClientRect();
     const overToolbar = toolbar.left < box.right && toolbar.right > box.left;
     const visibleTop = Math.max(0, scrolls ? area.top : 0, overToolbar ? toolbar.bottom : 0);
     const visibleBottom = Math.min(innerHeight, scrolls ? area.bottom : innerHeight);
@@ -145,7 +163,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
    * counts the checks within 40 px of the visible bottom edge, where an empty sticky line would sit.
    */
   const rowsReachable = page => page.evaluate(() => {
-    const panel = document.querySelector('.inspector-panel');
+    const panel = document.querySelector('.home-sheet-body');
     const scroller = getComputedStyle(panel).overflowY !== 'visible' ? panel : document.scrollingElement;
     const max = scroller.scrollHeight - scroller.clientHeight;
     const blocked = [];
@@ -153,7 +171,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     for (let top = 0; top < max + 6; top += 6) {
       scroller.scrollTop = Math.min(top, max);
       const area = panel.getBoundingClientRect();
-      const toolbar = document.querySelector('.editor-style-bar').getBoundingClientRect();
+      const toolbar = document.querySelector('.home-sheet-header').getBoundingClientRect();
       for (const control of document.querySelectorAll('.reminders-panel .reminder-list button')) {
         const box = control.getBoundingClientRect();
         const x = box.left + box.width / 2, y = box.top + box.height / 2;
@@ -163,7 +181,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
         checked++;
         if (visibleBottom - y <= 40) nearEdge++;
         const hit = document.elementFromPoint(x, y);
-        if (hit !== control && !control.contains(hit)) blocked.push(`${control.getAttribute('aria-label')} at y ${Math.round(y)} (scroll ${Math.round(scroller.scrollTop)}) under ${hit?.tagName}.${hit?.className}`);
+        if (hit !== control && !control.contains(hit)) blocked.push(`${control.getAttribute('aria-label')} at x ${Math.round(x)}, y ${Math.round(y)} (scroll ${Math.round(scroller.scrollTop)}, viewport ${Math.round(visibleTop)}–${Math.round(visibleBottom)}, dialog ${JSON.stringify(document.querySelector('.home-sheet').getBoundingClientRect().toJSON())}) under ${hit?.tagName}.${hit?.className}`);
       }
     }
     scroller.scrollTop = 0;
@@ -171,12 +189,17 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
   });
   const assertRowsReachable = async (page, label) => {
     const result = await rowsReachable(page);
+    const independent = editorDrafts.get(page);
+    if (independent) {
+      assert.equal(await independent.locator('.studio-savebar').count(), 1, 'Home actions keep the other page’s visual draft');
+      assert.equal(await independent.getByRole('combobox', { name: 'Style', exact: true }).inputValue(), 'builtin:night');
+    }
     assert.ok(result.max > 0 && result.nearEdge > 0, `${label}: the list scrolls past the bottom edge ${JSON.stringify(result)}`);
     assert.deepEqual(result.blocked, [], `${label}: every row control in the lower half receives the click (${result.checked} checks)`);
   };
   /** Scrolls the lowest Edit button that can get there to sit 19 px above the visible bottom edge; returns its centre. */
   const editAtBottomEdge = page => page.evaluate(() => {
-    const panel = document.querySelector('.inspector-panel');
+    const panel = document.querySelector('.home-sheet-body');
     const scroller = getComputedStyle(panel).overflowY !== 'visible' ? panel : document.scrollingElement;
     const max = scroller.scrollHeight - scroller.clientHeight;
     let chosen = null;
@@ -195,7 +218,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
   try {
     await reset();
     let { page, context } = await open();
-    assert.equal(await page.locator('#tab-Reminders .tab-count').textContent(), '5');
+    assert.equal(await page.getByRole('button', { name: /^All reminders/ }).textContent().then(text => text.trim()), 'All reminders · 5');
     assert.equal(await page.getByRole('button', { name: 'Up next (5)', exact: true }).getAttribute('aria-pressed'), 'true');
     assert.equal(await page.getByRole('button', { name: 'History (59)', exact: true }).getAttribute('aria-pressed'), 'false');
     assert.deepEqual(await rowTitles(page), ['Pay the bill', 'Water the plants', 'Call a friend', 'Plan the weekend', 'Book a check-up'], 'same order as the display');
@@ -207,9 +230,9 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
       await page.getByRole('button', { name: `Edit: ${text}`, exact: true }).waitFor();
       await page.getByRole('button', { name: `Delete: ${text}`, exact: true }).waitFor();
     }
-    assert.match(await canvasReminders(page).innerText(), /Pay the bill/);
-    assert.doesNotMatch(await canvasReminders(page).innerText(), /Read a chapter|Take a walk/, 'the canvas widget never shows history');
-    checks.push('Up next lists pending reminders in the display order with due lines, unpressed 44 px circles, Edit/Delete, the tab badge and History count');
+    assert.match(await canvasReminders(page), /Pay the bill/);
+    assert.doesNotMatch(await canvasReminders(page), /Read a chapter|Take a walk/, 'the canvas widget never shows history');
+    checks.push('Up next lists pending reminders in the display order with due lines, unpressed 44 px circles, Edit/Delete, the Home pending count and History count');
     if (capture) images.push({ name: 'up-next-1280', bytes: await page.screenshot() });
 
     // One tap: the check fills at once and reads as pressed (#186), the row settles, then moves to History.
@@ -221,12 +244,12 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await focusIs(page, 'Complete: Water the plants', 'focus moves to the next circle');
     assert.equal(stored('Pay the bill').completed, true);
     assert.equal(stored('Pay the bill').updatedAt, new Date(now).toISOString());
-    assert.doesNotMatch(await canvasReminders(page).innerText(), /Pay the bill/, 'the canvas widget drops it as soon as it is saved');
+    assert.doesNotMatch(await canvasReminders(page), /Pay the bill/, 'the canvas widget drops it as soon as it is saved');
     assert.ok((await rowTitles(page)).includes('Pay the bill'), 'the row stays while it settles');
     if (capture) images.push({ name: 'settling', bytes: await page.locator('.inspector').screenshot({ animations: 'disabled' }) });
     await page.clock.runFor(1300);
     await eventually(() => rowTitles(page), ['Water the plants', 'Call a friend', 'Plan the weekend', 'Book a check-up'], 'the row leaves Up next after the settle');
-    assert.equal(await page.locator('#tab-Reminders .tab-count').textContent(), '4');
+    assert.equal(await page.getByRole('button', { name: /^All reminders/ }).textContent().then(text => text.trim()), 'All reminders · 4');
     await page.getByRole('button', { name: 'Up next (4)', exact: true }).waitFor();
     await page.getByRole('button', { name: 'History (60)', exact: true }).waitFor();
     checks.push('one tap fills the check (aria-pressed) and dims the title at once, saves, moves focus to the next circle, settles and leaves Up next; the canvas widget drops it');
@@ -288,7 +311,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     // A failed save reverts the row, unpressed, and says so.
     await page.route('**/api/reminders/*', route => route.request().method() === 'PATCH' ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic failure' }) }) : route.fallback());
     await circle(page, 'Call a friend').click();
-    await page.getByRole('alert').getByText('Could not complete reminder. It is still in Up next.', { exact: true }).waitFor();
+    await page.locator('.home-sheet-status.error, [role="alert"]').getByText('Could not complete reminder. It is still in Up next.', { exact: true }).waitFor();
     assert.equal(await page.locator('.reminders-panel .complete-button.done').count(), 0, 'the row reverts');
     assert.equal(await circle(page, 'Call a friend').getAttribute('aria-pressed'), 'false');
     assert.equal(stored('Call a friend').completed, false);
@@ -341,7 +364,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     const response = await fetch(`${base}/api/reminders/${id(3)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed: true }) });
     assert.equal(response.status, 200);
     await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
-    await page.getByRole('alert').getByText('This reminder was completed elsewhere. Restore it to edit.', { exact: true }).waitFor();
+    await page.locator('.home-sheet-status.error, [role="alert"]').getByText('This reminder was completed elsewhere. Restore it to edit.', { exact: true }).waitFor();
     assert.equal(stored('Plan the weekend').completed, true);
     assert.equal(stored('Plan the long weekend'), undefined);
     await page.getByText('Checked off. Undo or restore it to edit.', { exact: true }).waitFor();
@@ -458,7 +481,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
       await route.fallback();
     });
     await circle(page, 'Pay the bill').click();
-    await page.getByRole('tab', { name: 'Style', exact: true }).click();
+    await closeReminders(page);
     const saved = patches(page, 1);
     releaseComplete();
     await saved;
@@ -467,7 +490,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await page.unroute('**/api/reminders/*');
     await page.clock.runFor(1300);
     await eventually(() => rowTitles(page), ['Water the plants', 'Call a friend', 'Plan the weekend', 'Book a check-up'], 'the settle finished across the remount');
-    await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
+    await closeReminders(page);
     await page.clock.runFor(1000);
     await remindersTab(page);
     await undoButton(page).click();
@@ -475,12 +498,12 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await focusIs(page, 'Complete: Pay the bill');
     assert.equal(stored('Pay the bill').completed, false);
     await page.getByRole('button', { name: 'Delete: Plan the weekend', exact: true }).click();
-    await page.getByRole('tab', { name: 'Weather', exact: true }).click();
+    await closeReminders(page);
     await remindersTab(page);
     await undoButton(page).click();
     await status(page).getByText('Restored “Plan the weekend”', { exact: true }).waitFor();
     assert.equal(stored('Plan the weekend').completed, false);
-    checks.push('a check-off saved while another tab is open still settles, and its Undo (and a delete Undo) still works after switching tabs and back');
+    checks.push('a check-off saved while the dialog is closed still settles, and its Undo (and a delete Undo) still works after closing and reopening the dialog');
     await context.close();
 
     // Every time label follows the 24-hour setting (#129).
@@ -489,12 +512,12 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     assert.deepEqual((await dueLines(page)).slice(0, 2), ['Overdue · Yesterday · 15:00', 'Today · 18:00']);
     await page.getByRole('button', { name: /^History \(/ }).click();
     assert.equal(await page.locator('.history-day').first().locator('.reminder-copy > span').first().textContent(), 'Completed 08:42 · was due Yesterday · 15:00');
-    assert.match(await canvasReminders(page).innerText(), /Overdue · Yesterday · 15:00/);
+    assert.match(await canvasReminders(page), /Overdue · Yesterday · 15:00/);
     await context.close();
     checks.push('due, completed and canvas labels follow the 24-hour setting');
 
     // The status line with Undo stays in view after checking off the first row (#228): five clean
-    // and eight with a settings draft (Save bar shown), at couch-editor, compact and phone sizes.
+    // and eight with a settings draft (independent editor draft open), at couch-editor, compact and phone sizes.
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1024, height: 600 }, { width: 390, height: 844 }]) {
       for (const extra of [false, true]) {
         await reset({ extra });
@@ -518,14 +541,17 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
         await context.close();
       }
     }
-    checks.push('after checking off the first of five (clean) or eight (Save bar shown) reminders, the status line and Undo are in view, unmasked and clickable at 1280×720, 1024×600 and 390×844 (the focused next circle stays clear of it), also after the row leaves');
+    checks.push('after checking off the first of five (clean) or eight (independent editor draft open) reminders, the status line and Undo are in view, unmasked and clickable at 1280×720, 1024×600 and 390×844 (the focused next circle stays clear of it), also after the row leaves');
 
     // Only a shown message sticks over the rows (review of #279): with no message, the empty status
     // line leaves every row reachable at the bottom edge, before any message and after an Undo expires.
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1024, height: 600 }, { width: 390, height: 844 }]) {
       for (const draft of [false, true]) {
-        const label = `${viewport.width}×${viewport.height}${draft ? ' Save bar' : ''}`;
+        const label = `${viewport.width}×${viewport.height}${draft ? ' concurrent editor draft' : ''}`;
         await reset({ extra: true });
+        // The Home dialog is taller than the former inspector. Keep ample full-row
+        // overflow even on a tall phone after deleting a row; the original bottom-edge hit test must run.
+        await app.store.update(data => { data.reminders.push(...[9,14,15,16,17,18].map((index, position) => reminder(index, `Extra scroll row ${position+1}`))); });
         ({ page, context } = await open({ viewport }));
         if (draft) await dirty(page);
         assert.equal(await status(page).evaluate(element => element.classList.contains('has-message')), false);
@@ -545,7 +571,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
         await context.close();
       }
     }
-    checks.push('with no status message (before any, and after a delete Undo expires) the empty status line covers nothing: at 1280×720, 1024×600 and 390×844, clean and with the Save bar, every row control in the lower half of the visible list receives the click while it scrolls, and a mouse click on an Edit button 19 px above the bottom edge opens its form');
+    checks.push('with no status message (before any, and after a delete Undo expires) the empty status line covers nothing: at 1280×720, 1024×600 and 390×844, clean and with an independent editor draft, every row control in the lower half of the visible list receives the click while it scrolls, and a mouse click on an Edit button 19 px above the bottom edge opens its form');
 
     // Forms stay in view (#236), the date message is the app's own (#258) and a delete Undo shows
     // in the same status area, at the owner's TV editor size and a phone.
@@ -615,19 +641,19 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
         await page.keyboard.press('Tab');
         await page.clock.runFor(100);
         const layout = await page.evaluate(() => {
-          const element = document.activeElement, active = element.getBoundingClientRect(), toolbar = document.querySelector('.editor-style-bar').getBoundingClientRect();
-          const panel = document.querySelector('.inspector-panel'), area = panel.getBoundingClientRect(), scrolls = getComputedStyle(panel).overflowY !== 'visible';
+          const element = document.activeElement, active = element.getBoundingClientRect(), toolbar = document.querySelector('.home-sheet-header').getBoundingClientRect();
+          const panel = document.querySelector('.home-sheet-body'), area = panel.getBoundingClientRect(), scrolls = getComputedStyle(panel).overflowY !== 'visible';
           const hit = document.elementFromPoint(active.left + active.width / 2, active.top + active.height / 2);
           return { label: element.getAttribute('aria-label') ?? element.textContent, bottom: active.bottom, top: active.top, visibleTop: Math.max(0, toolbar.bottom, scrolls ? area.top : 0), visibleBottom: Math.min(innerHeight, scrolls ? area.bottom : innerHeight), hit: hit === element || element.contains(hit), scroll: document.documentElement.scrollWidth, width: innerWidth };
         });
         assert.equal(layout.label, await last.evaluate(element => element.getAttribute('aria-label') ?? element.textContent));
-        assert.ok(layout.bottom <= layout.visibleBottom + 0.5 && layout.top >= layout.visibleTop && layout.hit, `${viewport.width}×${viewport.height} ${view}: focus visible below the Style and Save toolbar ${JSON.stringify(layout)}`);
+        assert.ok(layout.bottom <= layout.visibleBottom + 0.5 && layout.top >= layout.visibleTop && layout.hit, `${viewport.width}×${viewport.height} ${view}: focus visible below the dialog header ${JSON.stringify(layout)}`);
         assert.ok(layout.scroll <= layout.width, `${viewport.width}×${viewport.height}: no horizontal page scroll`);
         if (capture) images.push({ name: `${view}-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
       }
       await context.close();
     }
-    checks.push('the tab fits 1280×720, 390×700 and 390×480 with keyboard focus visible below the top Style and Save toolbar, receiving clicks, and no horizontal scroll');
+    checks.push('the dialog fits 1280×720, 390×700 and 390×480 with keyboard focus visible below the dialog header, receiving clicks, and no horizontal scroll');
 
     // Reduced motion removes the collapse but keeps the settle delay.
     await reset();
@@ -672,11 +698,11 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await reset({ extra: true });
     ({ page, context } = await open());
     const compact = await page.evaluate(() => {
-      const area = document.querySelector('.inspector-panel').getBoundingClientRect();
+      const area = document.querySelector('.home-sheet-body').getBoundingClientRect();
       const rows = [...document.querySelectorAll('.reminders-panel .reminder-list .editor-reminder')].map(row => {
         const box = row.getBoundingClientRect(), title = row.querySelector('.reminder-copy p');
         const [edit, remove] = [...row.querySelectorAll('.reminder-actions button')].map(button => button.getBoundingClientRect());
-        return { text: title.textContent, height: Math.round(box.height * 10) / 10, oneLine: title.getBoundingClientRect().height < parseFloat(getComputedStyle(title).lineHeight) * 1.5, visible: box.top >= area.top - 0.5 && box.bottom <= area.bottom + 0.5, sideBySide: Math.abs(edit.top - remove.top) < 1 && remove.left >= edit.right - 0.5, targets: [edit.width, edit.height, remove.width, remove.height] };
+        return { text: title.textContent, height: Math.round(box.height * 10) / 10, oneLine: title.getBoundingClientRect().height < parseFloat(getComputedStyle(title).lineHeight) * 1.5, visible: box.top >= area.top - 0.5 && box.bottom <= area.bottom + 0.5, sideBySide: Math.abs(edit.top - remove.top) < 1 && remove.left >= edit.right - 0.5, targets: [edit.width, edit.height, remove.width, remove.height].map(size => Math.round(size * 1000) / 1000) };
       });
       return { rows, switches: [...document.querySelectorAll('.reminders-panel .reminder-view')].map(button => button.getBoundingClientRect().height) };
     });
@@ -713,7 +739,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await reset();
     ({ page, context } = await open());
     const deleteBehind = async index => assert.equal((await fetch(`${base}/api/reminders/${id(index)}`, { method: 'DELETE' })).status, 204);
-    const deletedAlert = () => page.getByRole('alert').getByText('This reminder was deleted in another window.', { exact: true });
+    const deletedAlert = () => page.locator('.home-sheet-status.error, [role="alert"]').getByText('This reminder was deleted in another window.', { exact: true });
     await deleteBehind(1);
     await circle(page, 'Pay the bill').click();
     await deletedAlert().waitFor();
@@ -773,26 +799,26 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await page.getByLabel('Reminder', { exact: true }).fill('Half typed');
     await dueInput().fill('2026-10-20T09:30');
     assert.equal(await leaving(), true, 'typed text: the leave prompt');
-    await page.getByRole('tab', { name: 'Style', exact: true }).click();
+    await closeReminders(page);
     await page.clock.runFor(300);
-    assert.equal(await leaving(), true, 'still asks from another tab');
+    assert.equal(await leaving(), true, 'still asks with the dialog closed');
     await remindersTab(page);
     await page.getByRole('heading', { name: 'New reminder', exact: true }).waitFor();
     assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Half typed', 'the text survives the switch');
     assert.equal(await dueInput().inputValue(), '2026-10-20T09:30', 'the date survives the switch');
-    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('role')), 'tab', 'returning keeps focus on the tab');
+    assert.equal(await page.getByRole('dialog', { name: 'All reminders', exact: true }).evaluate(dialog => dialog.contains(document.activeElement)), true, 'reopening puts focus inside the reminder dialog');
     await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
     await status(page).getByText('Reminder saved', { exact: true }).waitFor();
-    assert.equal(stored('Half typed').dueAt, '2026-10-20T13:30:00.000Z', 'Save works after the switch');
+    assert.equal(stored('Half typed').dueAt, '2026-10-20T13:30:00.000Z', 'Save works after reopening');
     assert.equal(await leaving(), false, 'saved: no leave prompt');
     await page.clock.runFor(8200);
     await eventually(() => hasMessage(page), false, 'a plain message expires after about 8 s');
-    await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
+    await closeReminders(page);
     await remindersTab(page);
-    assert.equal(await hasMessage(page), false, 'and does not come back after a tab switch');
+    assert.equal(await hasMessage(page), false, 'and does not come back after reopening the dialog');
     await page.getByRole('button', { name: 'Edit: Call a friend', exact: true }).click();
     await page.getByLabel('Reminder', { exact: true }).fill('Call a friend back');
-    await page.getByRole('tab', { name: 'Weather', exact: true }).click();
+    await closeReminders(page);
     await remindersTab(page);
     assert.equal(await page.locator('.editor-reminder-row.editing .reminder-form').count(), 1, 'the edit form is back in place');
     assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Call a friend back');
@@ -806,21 +832,21 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
     await status(page).getByText('Reminder saved', { exact: true }).waitFor();
     assert.equal(stored('Call a friend back').completed, false);
-    await focusIs(page, 'Edit: Call a friend back', 'Save after a switch returns focus to the row (#230)');
+    await focusIs(page, 'Edit: Call a friend back', 'Save after reopening returns focus to the row (#230)');
     await page.getByRole('button', { name: 'Edit: Plan the weekend', exact: true }).click();
     await page.getByLabel('Reminder', { exact: true }).fill('Changed then escaped');
-    await page.getByRole('tab', { name: 'Style', exact: true }).click();
+    await closeReminders(page);
     await remindersTab(page);
     await page.getByLabel('Reminder', { exact: true }).focus();
     await page.keyboard.press('Escape');
-    await focusIs(page, 'Edit: Plan the weekend', 'Escape after a switch closes only the form and focuses the row');
+    await focusIs(page, 'Edit: Plan the weekend', 'Escape after reopening closes only the form and focuses the row');
     assert.equal(stored('Plan the weekend').text, 'Plan the weekend');
     assert.equal(await leaving(), false, 'discarded: no leave prompt');
-    // A message that expires while another tab is open is gone on return.
+    // A message that expires while the dialog is closed is gone on return.
     await page.getByRole('button', { name: /^History \(/ }).click();
     await page.getByRole('button', { name: 'Restore: Read a chapter', exact: true }).click();
     await status(page).getByText('Restored “Read a chapter”', { exact: true }).waitFor();
-    await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
+    await closeReminders(page);
     await page.clock.runFor(9000);
     await remindersTab(page);
     assert.equal(await hasMessage(page), false, 'a plain message that expired elsewhere stays gone');
@@ -833,7 +859,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     assert.equal(await prompt, 'beforeunload', 'the browser asks before leaving');
     assert.equal(page.isClosed(), false, 'dismissing the prompt keeps the page');
     await context.close();
-    checks.push('open forms survive tab switches (#274): a new form keeps its text and date and saves; an edit comes back in place (still no circle) and saves with focus back on its Edit; returning leaves focus on the tab; + keeps a form with unsaved typing (“Save or discard this reminder first.”); Escape still closes only the form; typed text fires the browser’s leave prompt (also from another tab), saved or discarded forms do not; plain messages expire after ~8 s and stay gone after a tab switch, also when they expire while another tab is open (#295)');
+    checks.push('open forms survive closing and reopening the dialog (#274): a new form keeps its text and date and saves; an edit comes back in place (still no circle) and saves with focus back on its Edit; returning leaves focus on the tab; + keeps a form with unsaved typing (“Save or discard this reminder first.”); Escape still closes only the form; typed text fires the browser’s leave prompt (also from another tab), saved or discarded forms do not; plain messages expire after ~8 s and stay gone after reopening the dialog, also when they expire while the dialog is closed (#295)');
 
     // #296: Undo after deleting a reminder whose stored creation time is later than the clock. Five minutes
     // ahead it is left out; just ahead of the server only, the server refuses it and Undo retries without

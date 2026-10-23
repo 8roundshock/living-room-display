@@ -4,6 +4,7 @@ import { ReminderRow, type HomeContext } from './HomeParts';
 import { addReminder, ShowSwitch } from './HomeSheets';
 import { dayName, defaultTime, dueAtFor, isPastDay, longDay, monthGrid, monthTitle, moveDay, reminderMarks, remindersOn, shiftedMessage } from './home-model';
 import { Icon } from './icons';
+import { useHomeDraft, forgetHomeDrafts } from './home-drafts';
 
 /**
  * Home's calendar (#438): pick a day and it becomes an ordinary dated reminder (9:00 AM unless another
@@ -17,12 +18,12 @@ export function HomeCalendar({ context }: { context: HomeContext }) {
   const { state, settings, now, offline } = context;
   const today = civilFromDate(new Date(now)), todayKey = formatCivil(today);
   const weekStart = weekStartDay(settings.widgetData.calendar.weekStart);
-  const [focused, setFocused] = useState<CivilDate>(today);
-  const [selected, setSelected] = useState(todayKey);
-  const [text, setText] = useState('');
+  const [selected, setSelected] = useHomeDraft('calendar.selected', () => todayKey);
+  const [focused, setFocused] = useState<CivilDate>(() => parseCivil(selected) ?? today);
+  const [text, setText] = useHomeDraft('calendar.text', () => '');
   // 9:00 AM, or the next whole hour on today once 9:00 AM has passed.
   const timeFor = (day: string) => day === formatCivil(civilFromDate(new Date())) ? (new Date().getHours() >= 9 ? defaultTime('today', Date.now()) : '09:00') : '09:00';
-  const [time, setTime] = useState(() => timeFor(todayKey));
+  const [time, setTime] = useHomeDraft('calendar.time', () => timeFor(todayKey));
   const [showWanted, setShowWanted] = useState(true);
   const [problem, setProblem] = useState<{ field: 'text' | 'time'; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,7 +43,7 @@ export function HomeCalendar({ context }: { context: HomeContext }) {
     grid.current?.querySelector<HTMLElement>(`[data-day="${focusedKey}"]`)?.focus();
   }, [focusedKey]);
   function select(date: CivilDate, focusWhat: boolean) {
-    setFocused(date); setSelected(formatCivil(date)); setProblem(null); setTime(timeFor(formatCivil(date)));
+    setFocused(date); setSelected(formatCivil(date)); setProblem(null); setTime(timeFor(formatCivil(date)), true);
     if (focusWhat) window.requestAnimationFrame(() => (isPastDay(formatCivil(date), Date.now()) ? grid.current?.querySelector<HTMLElement>(`[data-day="${formatCivil(date)}"]`) : what.current)?.focus());
   }
   function onKey(event: KeyboardEvent<HTMLDivElement>, date: CivilDate) {
@@ -69,7 +70,8 @@ export function HomeCalendar({ context }: { context: HomeContext }) {
     try {
       const reminder = await addReminder(context, trimmed, due.iso, showWanted, due.shifted ? shiftedMessage(selected, time, due, settings.clockFormat) : '', () => form.current?.requestSubmit());
       if (!reminder) return;
-      setText(''); setTime(timeFor(selected));
+      forgetHomeDrafts('calendar.selected', 'calendar.text', 'calendar.time');
+      setText(''); setTime(timeFor(selected), true);
       context.focusLater(`.home-day-list .home-check[data-reminder-id="${reminder.id}"]`);
     } finally { setBusy(false); }
   }

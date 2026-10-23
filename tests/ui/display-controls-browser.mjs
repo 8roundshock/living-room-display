@@ -1,3 +1,4 @@
+import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 // Synthetic manual-display controls only; no desktop, installed app or native host.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -19,7 +20,7 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false }
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], images = [], errors = [];
   try {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' }); await mockWindowsStatus(context);
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.clock.install({ time: new Date('2026-10-18T13:00:00Z') });
     // #209: a capture listener counts handled pointer moves, so the fake clock never advances past a move
@@ -90,7 +91,7 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false }
     // black computed document background and theme colour; the editor keeps its navy page once mounted.
     const premount = [];
     for (const viewport of [{ width: 1280, height: 720 }, { width: 3840, height: 2160 }]) {
-      const held = await browser.newContext({ viewport });
+      const held = await browser.newContext({ viewport }); await mockWindowsStatus(held);
       try {
         let release; const gate = new Promise(resolve => { release = resolve; });
         await held.route(/\/assets\/[^/?]+\.js(\?.*)?$/, async route => { await gate; await route.continue(); });
