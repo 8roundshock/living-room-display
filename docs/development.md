@@ -23,7 +23,8 @@ pwsh -NoProfile -File windows/tests/Test-PreIdleSource.ps1
 ```
 
 This compiles both production binaries without running them, then executes pure
-policy/claim/lifetime/framing tests, synthetic bitmap encoding, fake host/input/
+policy/claim/lifetime/framing tests (including saved/actual timer drift and scalar
+production-context comparisons), synthetic bitmap encoding, fake host/input/
 surface/runtime checks, mocked preparer lifecycle and static installer policy.
 It never calls the installed backend or runs a watcher/display/desktop capture.
 The broader `Test-Windows.ps1` is a different integration scope; do not substitute

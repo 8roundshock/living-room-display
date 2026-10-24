@@ -10,7 +10,7 @@ $null = New-Item -ItemType Directory -Path $output -Force
 $null = & (Join-Path $windows 'Build-Host.ps1') -OutputDirectory (Join-Path $output 'compiled-only')
 function Invoke-Synthetic([string]$Name, [string[]]$Sources, [string[]]$References = @()) {
     $target = Join-Path $output ($Name + '.exe')
-    $arguments = @('/nologo','/target:exe','/platform:anycpu',"/out:$target")
+    $arguments = @('/nologo','/target:exe','/platform:anycpu',"/out:$target","/main:$Name")
     $arguments += @($References | ForEach-Object { "/reference:$_" })
     $arguments += @($Sources | ForEach-Object { Join-Path $windows $_ })
     & $compiler @arguments
@@ -19,6 +19,7 @@ function Invoke-Synthetic([string]$Name, [string[]]$Sources, [string[]]$Referenc
     if ($LASTEXITCODE -ne 0) { throw "$Name failed" }
 }
 Invoke-Synthetic 'PreviewPreparationTests' @('PreviewPreparation.cs','tests\PreviewPreparationTests.cs')
+Invoke-Synthetic 'NativePreviewContextTests' @('PreviewPreparer.cs','PreviewPreparation.cs','PreparedSnapshotClient.cs','DesktopSnapshot.cs','tests\NativePreviewContextTests.cs') @('System.Windows.Forms.dll','System.Drawing.dll','System.Web.Extensions.dll','System.Management.dll')
 Invoke-Synthetic 'PreparedClaimFlowTests' @('PreviewPreparation.cs','tests\PreparedClaimFlowTests.cs')
 Invoke-Synthetic 'PreparedSnapshotProtocolTests' @('PreparedSnapshotClient.cs','tests\PreparedSnapshotProtocolTests.cs') @('System.Web.Extensions.dll')
 Invoke-Synthetic 'DesktopSnapshotTests' @('DesktopSnapshot.cs','tests\DesktopSnapshotTests.cs') @('System.Drawing.dll')

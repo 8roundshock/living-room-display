@@ -1,4 +1,27 @@
 # Project status
+## Automatic Last screen after timer drift (#519)
+
+Automatic acceptance remains unsuccessful after source `70673ea`: the reported
+activation reached the ambient widgets without a recognizable Last screen image,
+after a grey interval of unmeasured duration. The separate startup investigation
+remains in #503; this change does not establish that interval's cause.
+
+A production-used synthetic regression reproduces one capture-blocking mechanism:
+when the saved desired timer is 20 minutes but the validated active Windows timer
+is 10 minutes, the previous mapping disables preparation throughout the actual
+pre-idle window. Preparation now uses the actual timeout returned only after the
+existing selected-saver, enable, session and input-desktop checks. Actual timeout
+changes invalidate pending and active frames without reopening a consumed input
+epoch. No Windows timer, saved preference, installed app or native artifact changes
+are part of this source fix.
+
+The regression fails with the previous mapping and passes with the correction.
+Source-only Windows checks pass: 47 preparation-policy and six actual production
+context-comparison assertions, existing fake lifecycle/claim/runtime tests and
+synthetic RAM-only encoding. Both production binaries compile without execution.
+This confirms a blocking source mechanism, not the exclusive cause of black
+pixels or actual capture/claim/render acceptance. #519 remains open.
+
 ## Active PR reconciliation (#517, #519)
 
 PR #518 has resumed. Its integration includes PR #522's corrected toolbar source

@@ -75,7 +75,7 @@ It should remain useful to read while fitting the sparse, mostly black display.
 
 A last-state snapshot is selected for version one. Manual display captures before
 its own overlay; automatic activation uses one private pre-idle frame, attempted
-30 seconds before the configured threshold and eligible for at most 90 seconds
+30 seconds before the active Windows threshold and eligible for at most 90 seconds
 (#525). It supplies a recent earlier state or unavailable, never a replacement
 capture after automatic startup. A live preview of an explicitly selected app remains future work.
 Label the snapshot as last state with capture time so it cannot be mistaken for
