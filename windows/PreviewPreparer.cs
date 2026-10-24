@@ -378,10 +378,7 @@ internal static class NativePreviewPipe
     [DllImport("kernel32.dll",SetLastError=true)] internal static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe,out uint pid);
     internal static NamedPipeServerStream Create(string name)
     {
-        string logon=null;
-        using(var identity=WindowsIdentity.GetCurrent()) foreach(var group in identity.Groups)
-        { string sid=group.Value; if(sid.StartsWith("S-1-5-5-",StringComparison.Ordinal)) { logon=sid; break; } }
-        if(logon==null)throw new InvalidOperationException();
+        string logon=NativePreviewLogonSid.Read();
         IntPtr descriptor; uint bytes;
         if(!ConvertStringSecurityDescriptorToSecurityDescriptor("D:P(A;;0x00100003;;;"+logon+")",1,out descriptor,out bytes))throw new System.ComponentModel.Win32Exception();
         try
@@ -393,5 +390,53 @@ internal static class NativePreviewPipe
             return new NamedPipeServerStream(PipeDirection.InOut,true,false,handle);
         }
         finally { LocalFree(descriptor); }
+    }
+}
+
+internal static class NativePreviewLogonSid
+{
+    [StructLayout(LayoutKind.Sequential)] private struct SidAndAttributes { internal IntPtr sid; internal uint attributes; }
+    [StructLayout(LayoutKind.Sequential)] private struct TokenGroupsOne { internal uint count; internal SidAndAttributes group; }
+    [DllImport("advapi32.dll",SetLastError=true)] private static extern bool GetTokenInformation(IntPtr token,int information,IntPtr buffer,uint length,out uint needed);
+
+    internal static string Read()
+    {
+        // WindowsIdentity.Groups deliberately filters out SE_GROUP_LOGON_ID.
+        // Query this token's dedicated TokenLogonSid result, never a user-SID fallback.
+        using(var identity=WindowsIdentity.GetCurrent(TokenAccessLevels.Query))
+        {
+            uint needed;
+            if(GetTokenInformation(identity.Token,28,IntPtr.Zero,0,out needed) || Marshal.GetLastWin32Error()!=122 || needed<8 || needed>4096)
+                throw new InvalidDataException("Logon SID size is unavailable.");
+            IntPtr buffer=Marshal.AllocHGlobal(checked((int)needed));
+            try
+            {
+                uint returned;
+                if(!GetTokenInformation(identity.Token,28,buffer,needed,out returned))throw new System.ComponentModel.Win32Exception();
+                if(returned>needed)throw new InvalidDataException("Logon SID size changed.");
+                return Parse(buffer,checked((int)returned));
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+    }
+
+    // Shared with bounded synthetic buffers, including x86/x64 pointer alignment.
+    internal static string Parse(IntPtr buffer,int length)
+    {
+        int groupOffset=Marshal.OffsetOf(typeof(TokenGroupsOne),"group").ToInt32();
+        if(buffer==IntPtr.Zero || length<groupOffset+Marshal.SizeOf(typeof(SidAndAttributes)) || Marshal.ReadInt32(buffer)!=1)
+            throw new InvalidDataException("Exactly one logon SID is required.");
+        var group=(SidAndAttributes)Marshal.PtrToStructure(IntPtr.Add(buffer,groupOffset),typeof(SidAndAttributes));
+        if((group.attributes&0xc0000004)!=0xc0000004 || (group.attributes&0x10)!=0 || group.sid==IntPtr.Zero)
+            throw new InvalidDataException("An enabled logon SID is required.");
+        long offset=group.sid.ToInt64()-buffer.ToInt64();
+        if(offset<0 || offset>length-8 || Marshal.ReadByte(group.sid)!=1 || Marshal.ReadByte(group.sid,1)!=3)
+            throw new InvalidDataException("Logon SID is outside its token buffer.");
+        const int sidLength=20; // SID header plus the three S-1-5-5-X-Y subauthorities.
+        if(offset>length-sidLength)throw new InvalidDataException("Logon SID is truncated.");
+        var bytes=new byte[sidLength]; Marshal.Copy(group.sid,bytes,0,bytes.Length);
+        var sid=new SecurityIdentifier(bytes,0);
+        if(!sid.Value.StartsWith("S-1-5-5-",StringComparison.Ordinal))throw new InvalidDataException("Token SID is not a logon SID.");
+        return sid.Value;
     }
 }

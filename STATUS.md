@@ -1,4 +1,20 @@
 # Project status
+## Automatic Last screen claim-pipe investigation (#519)
+
+The production claim-pipe constructor has a reproduced source defect:
+`WindowsIdentity.Groups` filters out logon-ID groups, so searching it for the
+logon SID throws before the pipe exists. The focused source patch queries
+`TokenLogonSid` with query-only access and retains the same logon-only ACL and
+claim guards. An alternate test entry point reproduces the old exception without
+starting the worker, reading a desktop or contacting an installed backend.
+
+The corrected lookup gets past pipe creation, but the real owned-pipe fixture
+currently reports an access-denied client connection. That subsequent failure
+is under investigation; no successful end-to-end pipe regression or native
+acceptance is claimed. The new fixture and bounded token-buffer validation are
+being integrated into the source-only and Windows checks. Independent review,
+applicable checks and actual automatic Last screen acceptance remain required.
+
 ## Automatic Last screen after timer drift (#519)
 
 Automatic acceptance remains unsuccessful after source `70673ea`: the reported

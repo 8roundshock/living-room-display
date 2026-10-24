@@ -20,6 +20,7 @@ function Invoke-Synthetic([string]$Name, [string[]]$Sources, [string[]]$Referenc
 }
 Invoke-Synthetic 'PreviewPreparationTests' @('PreviewPreparation.cs','tests\PreviewPreparationTests.cs')
 Invoke-Synthetic 'NativePreviewContextTests' @('PreviewPreparer.cs','PreviewPreparation.cs','PreparedSnapshotClient.cs','DesktopSnapshot.cs','tests\NativePreviewContextTests.cs') @('System.Windows.Forms.dll','System.Drawing.dll','System.Web.Extensions.dll','System.Management.dll')
+Invoke-Synthetic 'NativePreviewPipeTests' @('PreviewPreparer.cs','PreviewPreparation.cs','PreparedSnapshotClient.cs','DesktopSnapshot.cs','tests\NativePreviewPipeTests.cs') @('System.Windows.Forms.dll','System.Drawing.dll','System.Web.Extensions.dll','System.Management.dll')
 Invoke-Synthetic 'PreparedClaimFlowTests' @('PreviewPreparation.cs','tests\PreparedClaimFlowTests.cs')
 Invoke-Synthetic 'PreparedSnapshotProtocolTests' @('PreparedSnapshotClient.cs','tests\PreparedSnapshotProtocolTests.cs') @('System.Web.Extensions.dll')
 Invoke-Synthetic 'DesktopSnapshotTests' @('DesktopSnapshot.cs','tests\DesktopSnapshotTests.cs') @('System.Drawing.dll')
