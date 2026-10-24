@@ -2,7 +2,8 @@ using System;
 
 internal static class PreviewPreparationTests
 {
-    private static void Check(bool value, string why) { if (!value) throw new Exception(why); }
+    private static int assertions;
+    private static void Check(bool value, string why) { assertions++; if (!value) throw new Exception(why); }
     private static PreparationReading Reading(uint input, long idle)
     {
         return new PreparationReading { Readable=true, Enabled=true, Safe=true, CaptureAllowed=true, InputTick=input,
@@ -10,6 +11,57 @@ internal static class PreviewPreparationTests
     }
     private static void Main()
     {
+        var desired = new PreparationConfiguration { Generation=7, Enabled=true, Revision="a", TimeoutSeconds=1200, LeadSeconds=30 };
+        var actualPolicy = new PreviewPreparationPolicy();
+        actualPolicy.Observe(desired.Reading(Reading(99, 100)));
+        Check(!actualPolicy.Observe(desired.Reading(Reading(100, 569999))).Capture, "actual timer window has not opened");
+        Check(actualPolicy.Observe(desired.Reading(Reading(100, 570000))).Capture,
+            "validated ten-minute Windows timer prepares even when saved desired timer is twenty minutes");
+        var actualChanged=Reading(100,575000); actualChanged.TimeoutSeconds=900;
+        var changedDecision=actualPolicy.Observe(desired.Reading(actualChanged));
+        Check(changedDecision.Invalidate && changedDecision.InvalidateActive && !changedDecision.Capture,
+            "actual timeout change invalidates pending and active without a new attempt");
+        changedDecision=actualPolicy.Observe(desired.Reading(Reading(100,575001)));
+        Check(changedDecision.Invalidate && changedDecision.InvalidateActive && !changedDecision.Capture,
+            "restoring the actual timeout cannot revive the old frame or reopen the epoch");
+        Check(!actualPolicy.Observe(desired.Reading(Reading(100,580000))).Capture,
+            "consumed mismatched epoch stays consumed after timeout restoration");
+        Check(actualPolicy.Observe(desired.Reading(Reading(101,100))).InvalidateActive,
+            "physical input clears the prior actual-timeout epoch");
+        Check(actualPolicy.Observe(desired.Reading(Reading(101,570000))).Capture,
+            "new physical input permits one preparation against the current actual timer");
+        actualPolicy=new PreviewPreparationPolicy();
+        actualPolicy.Observe(desired.Reading(Reading(99,100)));
+        Check(!actualPolicy.Observe(desired.Reading(Reading(100,600000))).Capture,
+            "saved later preference never permits a capture at the actual activation deadline");
+        Check(!actualPolicy.Observe(desired.Reading(Reading(100,599999))).Capture,
+            "late actual deadline consumes the attempt without retry");
+        foreach(int invalid in new int[] { -1,0,30 })
+        {
+            actualPolicy=new PreviewPreparationPolicy();
+            var invalidReading=Reading(99,100); invalidReading.TimeoutSeconds=invalid;
+            actualPolicy.Observe(desired.Reading(invalidReading));
+            invalidReading.InputTick=100; invalidReading.IdleMilliseconds=570000;
+            Check(!actualPolicy.Observe(desired.Reading(invalidReading)).Capture,
+                "invalid or lead-sized actual deadline cannot capture");
+        }
+        foreach(string gate in new string[] { "disabled","unsafe","unreadable","saver","ambient" })
+        {
+            actualPolicy=new PreviewPreparationPolicy();
+            actualPolicy.Observe(desired.Reading(Reading(99,100)));
+            var blocked=Reading(100,570000);
+            if(gate=="disabled")desired.Enabled=false;
+            if(gate=="unsafe")blocked.Safe=false;
+            if(gate=="unreadable")blocked.Readable=false;
+            if(gate=="saver" || gate=="ambient")blocked.CaptureAllowed=false;
+            Check(!actualPolicy.Observe(desired.Reading(blocked)).Capture,
+                "saved/actual mismatch cannot bypass "+gate+" admission");
+            desired.Enabled=true;
+        }
+        desired.TimeoutSeconds=600;
+        actualPolicy=new PreviewPreparationPolicy(); actualPolicy.Observe(desired.Reading(Reading(99,100)));
+        Check(actualPolicy.Observe(desired.Reading(Reading(100,570000))).Capture,
+            "equal saved and actual timeout retains the same preparation window");
         var policy = new PreviewPreparationPolicy();
         Check(!policy.Observe(Reading(99, 580000)).Capture, "fresh worker cannot reuse an unknown idle epoch");
         Check(!policy.Observe(Reading(100, 569999)).Capture, "before window");
@@ -54,6 +106,6 @@ internal static class PreviewPreparationTests
         Check(!NativePreparationIdentity.ExactCommand("\"C:\\Other.scr\" /s",host,null,true),"wrong executable cannot claim");
         Check(!NativePreparationIdentity.ExactCommand(null,host,null,true),"missing process command fails closed");
         Check(NativePreparationIdentity.ExactCommand("\"C:\\Synthetic\\runtime\\node.exe\" \"C:\\Synthetic\\app\\dist\\server\\index.js\"", "C:\\Synthetic\\runtime\\node.exe", "C:\\Synthetic\\app\\dist\\server\\index.js",false),"exact parent command");
-        Console.WriteLine("Preview preparation policy: 29 assertions passed; no Windows calls or pixels.");
+        Console.WriteLine("Preview preparation policy: "+assertions+" assertions passed; no Windows calls or pixels.");
     }
 }

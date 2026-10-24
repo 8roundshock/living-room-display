@@ -58,14 +58,6 @@ internal sealed class NativePreviewPreparer : IDisposable
         internal int SessionId, TimeoutSeconds;
         internal DateTime CompletedUtc;
     }
-    private sealed class Configuration
-    {
-        internal long Generation;
-        internal string Revision;
-        internal bool Enabled;
-        internal int TimeoutSeconds, LeadSeconds;
-    }
-
     internal NativePreviewPreparer()
     {
         // Bootstrap is bounded, and a parent which never sends it cannot leave an orphan reader.
@@ -113,13 +105,12 @@ internal sealed class NativePreviewPreparer : IDisposable
             {
                 var config=ReadConfiguration(); failures=0;
                 var context=NativePreviewContext.Read(hostPath);
-                var decision=policy.Observe(new PreparationReading {
+                var decision=policy.Observe(config.Reading(new PreparationReading {
                     Readable=context.Readable, Safe=context.Safe,
-                    Enabled=config.Enabled && context.TimeoutSeconds==config.TimeoutSeconds,
                     CaptureAllowed=!context.SaverRunning && !context.AmbientRunning,
                     InputTick=context.InputTick, IdleMilliseconds=context.IdleMilliseconds,
-                    Configuration=config.Revision, TimeoutSeconds=config.TimeoutSeconds, LeadSeconds=config.LeadSeconds
-                });
+                    TimeoutSeconds=context.TimeoutSeconds
+                }));
                 if (decision.Invalidate) { Invalidate(decision.InvalidateActive); config=ReadConfiguration(); }
                 if (decision.Capture) Capture(config,context);
             }
@@ -132,14 +123,14 @@ internal sealed class NativePreviewPreparer : IDisposable
             if (stop.Token.WaitHandle.WaitOne(500)) break;
         }
     }
-    private Configuration ReadConfiguration()
+    private PreparationConfiguration ReadConfiguration()
     {
         var data=json.DeserializeObject(Request("GET","/api/preview/preparation",null,null,stop.Token)) as Dictionary<string,object>;
         if (data==null || Convert.ToInt32(data["parentProcessId"])!=parent.Id) throw new InvalidDataException();
-        return new Configuration { Generation=Convert.ToInt64(data["generation"]), Revision=(string)data["configuration"],
+        return new PreparationConfiguration { Generation=Convert.ToInt64(data["generation"]), Revision=(string)data["configuration"],
             Enabled=(bool)data["enabled"], TimeoutSeconds=Convert.ToInt32(data["timeoutSeconds"]), LeadSeconds=Convert.ToInt32(data["prepareLeadSeconds"]) };
     }
-    private void Capture(Configuration config, NativePreviewContext initial)
+    private void Capture(PreparationConfiguration config, NativePreviewContext initial)
     {
         byte[] png=null;
         using (var cancellation=CancellationTokenSource.CreateLinkedTokenSource(stop.Token))

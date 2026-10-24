@@ -63,9 +63,14 @@ exact parent backend. Stop waits for that exact child before returning.
 
 A fresh/replacement child first establishes an input baseline and stays unarmed
 until new physical input is observed. It attempts one capture in the 30 seconds
-before the configured idle threshold. It does not retry failures or overwrite
-periodically in that epoch. The actual selected saver, enable flag and timeout
-must match the desired configuration. Capture requires an active, unlocked local
+before the active Windows idle threshold. It does not retry failures or overwrite
+periodically in that epoch. The actual selected saver and enable flag must permit
+this app. The deadline comes from the validated Windows timeout, since the saved
+desired timer can differ after independent Windows configuration. An observed
+timeout change clears pending and active frames without rearming that input epoch;
+capture monitoring and claim publication also recheck the exact actual timeout.
+Nonpositive, lead-sized or already-reached deadlines remain unavailable.
+Capture requires an active, unlocked local
 interactive session on the current input Default desktop; unknown, disconnected,
 locked or other-desktop contexts are unavailable. No desktop is opened/switched
 to obtain content. An existing owned ambient session makes capture ineligible

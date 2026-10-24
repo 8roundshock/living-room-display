@@ -20,11 +20,35 @@ internal struct PreparationDecision
     internal bool Invalidate, Capture, InvalidateActive;
 }
 
+// Private backend configuration combined with the already-validated native context.
+internal sealed class PreparationConfiguration
+{
+    internal long Generation { get; set; }
+    internal string Revision { get; set; }
+    internal bool Enabled { get; set; }
+    // The saved preference is not the active Windows deadline. Windows may have
+    // been configured independently; never delay preparation until that preference.
+    internal int TimeoutSeconds { get; set; }
+    internal int LeadSeconds { get; set; }
+
+    internal PreparationReading Reading(PreparationReading observed)
+    {
+        // NativePreviewContext supplies this timeout only after validating the
+        // selected/enabled own saver and its session/input desktop. The policy
+        // below rejects nonpositive/too-short deadlines and late observations.
+        observed.Enabled = Enabled;
+        observed.LeadSeconds = LeadSeconds;
+        observed.Configuration = Revision;
+        return observed;
+    }
+}
+
 internal sealed class PreviewPreparationPolicy
 {
     private bool initialized, attempted;
     private uint input;
     private string configuration;
+    private int timeoutSeconds;
 
     internal PreparationDecision Observe(PreparationReading reading)
     {
@@ -38,6 +62,7 @@ internal sealed class PreviewPreparationPolicy
             return decision;
         }
         bool changed = initialized && input != reading.InputTick;
+        bool timeoutChanged = initialized && timeoutSeconds != reading.TimeoutSeconds;
         if (!initialized || changed)
         {
             bool first = !initialized;
@@ -49,8 +74,9 @@ internal sealed class PreviewPreparationPolicy
         }
         bool configurationChanged = configuration != reading.Configuration;
         configuration = reading.Configuration;
-        decision.Invalidate = changed || configurationChanged || !reading.Enabled || !reading.Safe;
-        decision.InvalidateActive = changed || !reading.Safe;
+        timeoutSeconds = reading.TimeoutSeconds;
+        decision.Invalidate = changed || timeoutChanged || configurationChanged || !reading.Enabled || !reading.Safe;
+        decision.InvalidateActive = changed || timeoutChanged || !reading.Safe;
         if (!reading.Enabled || !reading.Safe || !reading.CaptureAllowed || attempted) return decision;
         long deadline = (long)reading.TimeoutSeconds * 1000;
         long lead = (long)reading.LeadSeconds * 1000;

@@ -1,4 +1,6 @@
 import { mockWindowsStatus } from './lib/windows-fixture.mjs';
+import { waitForNativeRender } from './lib/native-render.mjs';
+import { verifyNativeRenderBarrier } from './lib/native-render-regression.mjs';
 // Bounded editor regressions. Build first; all server state and images are isolated.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -62,7 +64,8 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     const alert = page.locator('.studio-error'); await alert.waitFor();
     for (const control of await page.locator('.canvas-heading-actions button, .canvas-toolbar button, .canvas-toolbar select').all()) {
       await control.scrollIntoViewIfNeeded();
-      // The controlled clock must run the scroll handler's animation frame before geometry checks.
+      // Virtual frames alone can precede the browser's native scroll delivery (#523).
+      await waitForNativeRender(page);
       await page.clock.runFor(32);
       const name = await control.evaluate(element => element.getAttribute('aria-label') || element.textContent.trim());
       const box = await control.boundingBox(), alertBox = await alert.boundingBox();
@@ -368,6 +371,8 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   }
   const familyActions = ACTIVE_WIDGET_IDS.reduce((total, id) => total + widgetSizes(id).length, 0);
   try {
+    await verifyNativeRenderBarrier(browser);
+    checks.push('#523 held native rendering delivery cannot be replaced by virtual-clock frames; strict geometry follows delivery');
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1280, height: 600 }, { width: 1024, height: 600 }, { width: 760, height: 600 }]) {
       await open(viewport);
       const before = await frame();
