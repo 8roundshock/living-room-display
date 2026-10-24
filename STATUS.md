@@ -1,19 +1,30 @@
 # Project status
-## Automatic Last screen claim-pipe investigation (#519)
+## Automatic Last screen claim-pipe correction (#519)
 
 The production claim-pipe constructor has a reproduced source defect:
 `WindowsIdentity.Groups` filters out logon-ID groups, so searching it for the
 logon SID throws before the pipe exists. The focused source patch queries
-`TokenLogonSid` with query-only access and retains the same logon-only ACL and
+`TokenLogonSid` with query-only access and retains the logon-only principal and
 claim guards. An alternate test entry point reproduces the old exception without
 starting the worker, reading a desktop or contacting an installed backend.
 
-The corrected lookup gets past pipe creation, but the real owned-pipe fixture
-currently reports an access-denied client connection. That subsequent failure
-is under investigation; no successful end-to-end pipe regression or native
-acceptance is claimed. The new fixture and bounded token-buffer validation are
-being integrated into the source-only and Windows checks. Independent review,
-applicable checks and actual automatic Last screen acceptance remain required.
+After correcting the lookup, the real owned-pipe fixture exposed a second failure:
+the original data/synchronize ACL allows waiting but the unchanged client cannot
+connect. This reproduces locally and in the first PR #531 Windows installer run
+(`40105194193`); that failed evidence is retained. A controlled comparison changes
+only the server ACL's read-attributes bit (`0x80`) for the same logon SID and makes
+the full production scalar exchange pass. The correction adds that individual
+right, without generic write, create-instance, write-attributes or wider principals.
+This is observed Windows connection behavior, not a claim that the API documentation
+specifies a universal implicit access requirement.
+
+The source-only checks pass: 20 token-buffer and real owned-pipe assertions,
+including the exact protected single-logon ACE, unchanged client exchange, peer
+PID, scalar framing and first-instance refusal. Existing policy, context, claim,
+encoding and fake lifecycle/runtime checks also pass, and both production binaries
+compile without execution. Independent final-head review, applicable CI and actual
+automatic Last screen acceptance remain required; source checks do not establish
+installed capture or rendering. #519 remains open.
 
 ## Automatic Last screen after timer drift (#519)
 

@@ -380,7 +380,9 @@ internal static class NativePreviewPipe
     {
         string logon=NativePreviewLogonSid.Read();
         IntPtr descriptor; uint bytes;
-        if(!ConvertStringSecurityDescriptorToSecurityDescriptor("D:P(A;;0x00100003;;;"+logon+")",1,out descriptor,out bytes))throw new System.ComponentModel.Win32Exception();
+        // The production client exchange fails without read-attributes on Windows.
+        // Keep the exact logon principal; never grant create-instance/generic write.
+        if(!ConvertStringSecurityDescriptorToSecurityDescriptor("D:P(A;;0x00100083;;;"+logon+")",1,out descriptor,out bytes))throw new System.ComponentModel.Win32Exception();
         try
         {
             var security=new SecurityAttributes { length=Marshal.SizeOf(typeof(SecurityAttributes)),descriptor=descriptor,inherit=0 };
@@ -430,7 +432,7 @@ internal static class NativePreviewLogonSid
         if((group.attributes&0xc0000004)!=0xc0000004 || (group.attributes&0x10)!=0 || group.sid==IntPtr.Zero)
             throw new InvalidDataException("An enabled logon SID is required.");
         long offset=group.sid.ToInt64()-buffer.ToInt64();
-        if(offset<0 || offset>length-8 || Marshal.ReadByte(group.sid)!=1 || Marshal.ReadByte(group.sid,1)!=3)
+        if(offset<groupOffset+Marshal.SizeOf(typeof(SidAndAttributes)) || offset>length-8 || Marshal.ReadByte(group.sid)!=1 || Marshal.ReadByte(group.sid,1)!=3)
             throw new InvalidDataException("Logon SID is outside its token buffer.");
         const int sidLength=20; // SID header plus the three S-1-5-5-X-Y subauthorities.
         if(offset>length-sidLength)throw new InvalidDataException("Logon SID is truncated.");

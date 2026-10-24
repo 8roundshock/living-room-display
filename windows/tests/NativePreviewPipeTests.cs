@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
@@ -47,6 +48,7 @@ internal static class NativePreviewPipeTests
                 Refuses(delegate { NativePreviewLogonSid.Parse(buffer,length); },"non-logon/disabled/deny-only group refused");
             }
             reset(); Marshal.WriteIntPtr(buffer,groupOffset,IntPtr.Zero); Refuses(delegate { NativePreviewLogonSid.Parse(buffer,length); },"null SID refused");
+            reset(); Marshal.WriteIntPtr(buffer,groupOffset,buffer); Refuses(delegate { NativePreviewLogonSid.Parse(buffer,length); },"SID cannot overlap group header");
             reset(); Marshal.WriteIntPtr(buffer,groupOffset,IntPtr.Add(buffer,length)); Refuses(delegate { NativePreviewLogonSid.Parse(buffer,length); },"out-of-buffer SID refused");
             reset(); Refuses(delegate { NativePreviewLogonSid.Parse(buffer,length-1); },"truncated SID refused");
             reset(); Marshal.WriteByte(IntPtr.Add(buffer,header),0,2); Refuses(delegate { NativePreviewLogonSid.Parse(buffer,length); },"invalid SID revision refused");
@@ -61,15 +63,20 @@ internal static class NativePreviewPipeTests
         using(var deadline=new Timer(delegate { Environment.Exit(2); },null,8000,Timeout.Infinite))
         using(var server=NativePreviewPipe.Create(name))
         {
+            var descriptor=new RawSecurityDescriptor(server.GetAccessControl().GetSecurityDescriptorBinaryForm(),0);
+            Check((descriptor.ControlFlags&ControlFlags.DiscretionaryAclProtected)!=0 && descriptor.DiscretionaryAcl!=null && descriptor.DiscretionaryAcl.Count==1,"pipe has one protected explicit ACE");
+            var ace=descriptor.DiscretionaryAcl[0] as CommonAce;
+            Check(ace!=null && ace.AceQualifier==AceQualifier.AccessAllowed && ace.AceFlags==AceFlags.None && ace.AccessMask==0x100083 && ace.SecurityIdentifier.Value==NativePreviewLogonSid.Read(),"exact logon data/sync/read-attributes ACL grants no create-instance or broader rights");
             bool duplicateRefused=false;
             try { using(var duplicate=NativePreviewPipe.Create(name)) { } } catch(System.ComponentModel.Win32Exception) { duplicateRefused=true; }
             Check(duplicateRefused,"existing exact pipe cannot be replaced");
             Exception failure=null; bool serverPassed=false;
             uint expected=checked((uint)Process.GetCurrentProcess().Id);
+            var pending=server.BeginWaitForConnection(null,null);
             var thread=new Thread(delegate() {
                 try
                 {
-                    server.WaitForConnection();
+                    server.EndWaitForConnection(pending);
                     uint peer;
                     if(!NativePreviewPipe.GetNamedPipeClientProcessId(server.SafePipeHandle,out peer) || peer!=expected)throw new Exception("owned peer PID mismatch");
                     var request=new JavaScriptSerializer().DeserializeObject(PreparedSnapshotClient.ReadLine(server,256)) as System.Collections.Generic.Dictionary<string,object>;
@@ -79,8 +86,21 @@ internal static class NativePreviewPipeTests
                 catch(Exception ex) { failure=ex; }
             });
             thread.IsBackground=true; thread.Start();
-            bool claimed=PreparedSnapshotClient.Claim(name,1234567890123L,CancellationToken.None);
-            Check(thread.Join(3000),"test-owned pipe thread ends");
+            bool claimed=false; bool joined=false;
+            try
+            {
+                claimed=PreparedSnapshotClient.Claim(name,1234567890123L,CancellationToken.None);
+                if(claimed)joined=thread.Join(3000);
+            }
+            finally
+            {
+                if(!joined)
+                {
+                    server.Dispose();
+                    joined=thread.Join(3000);
+                }
+            }
+            Check(joined,"test-owned pipe thread ends");
             if(failure!=null)throw failure;
             Check(claimed && serverPassed,"production pipe ACL/client rights/peer identity/framing complete real exchange");
         }
