@@ -1,4 +1,16 @@
 # Project status
+## Motion-preview fixture readiness (#530)
+
+The unchanged production renderer's 550 ms Clock entrance runs on CSS time,
+independently of the editor's movement clock. A controlled synthetic browser
+probe reproduced CI's exact backward-seek mismatch at 123 s: Clock float Y was
+0 px during the entrance and -1 px after it, while every other frame field matched.
+The fixture now waits for that finite entrance to finish before comparing seeks;
+it leaves controlled swaps, infinite glyph loops and complete frame equality intact.
+The controlled settled probe replays all six reverse seeks exactly, and the full
+Motion-preview suite passes its five check groups. Runtime and native sources are
+unchanged; these source checks do not establish installed screensaver acceptance.
+
 ## Active PR reconciliation (#517, #519)
 
 PR #518 has resumed. Its integration includes PR #522's corrected toolbar source
