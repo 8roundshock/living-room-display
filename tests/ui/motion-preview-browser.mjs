@@ -14,6 +14,14 @@ import { WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { floatPath, FLOAT_TRAVEL } from '../../src/shared/float.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 
+// #530: enabling Preview starts this real-time entrance independently of the local movement
+// clock. Compare sought frames after it ends, rather than caching ink from two reveal phases.
+export async function settleClockEntrance(page) {
+  await page.locator('.clock-digits').evaluate(async digits => {
+    await Promise.all(digits.getAnimations().filter(animation => animation instanceof CSSAnimation && animation.animationName === 'lrd-clock-reveal').map(animation => animation.finished));
+  });
+}
+
 export async function runMotionPreviewQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const directory = await mkdtemp(join(tmpdir(), 'lrd-motion-preview-'));
@@ -44,7 +52,10 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     await page.clock.install({ time: new Date(now) }); await page.clock.pauseAt(new Date(now));
     await page.goto(base + path); await page.locator('.grid-ambient').waitFor();
     await page.evaluate(() => document.fonts.ready);
-    if (preview) await page.getByRole('button', { name: 'Preview movement', exact: true }).click();
+    if (preview) {
+      await page.getByRole('button', { name: 'Preview movement', exact: true }).click();
+      await settleClockEntrance(page);
+    }
     return page;
   }
   async function seek(page, seconds) {

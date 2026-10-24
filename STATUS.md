@@ -22,6 +22,32 @@ synthetic RAM-only encoding. Both production binaries compile without execution.
 This confirms a blocking source mechanism, not the exclusive cause of black
 pixels or actual capture/claim/render acceptance. #519 remains open.
 
+## Workspace native-scroll fixture readiness (#523)
+
+The first PR #529 Browser run (`40057144646`) passed 20 of 22 suites, with
+Workspace and Motion-preview failures. That failed evidence is retained.
+On unchanged production source, 32 ms of virtual clock frames could precede native
+scroll delivery and read the alert's old position over Done. A native rendering
+turn delivers the scroll handler and places the alert clear of Done before paint.
+The fixture now waits for that delivery before its existing strict geometry and
+centre-hit checks. A held-delivery regression fails with the old virtual-only
+wait and passes with the barrier. All 19 Workspace groups pass; no product UI,
+geometry tolerance or timing guard changed. Combined review and fresh CI remain
+required; the prior failed job was not rerun unchanged.
+
+## Motion-preview fixture readiness (#530)
+
+The unchanged production renderer's 550 ms Clock entrance runs on CSS time,
+independently of the editor's movement clock. A controlled synthetic browser
+probe reproduced CI's exact backward-seek mismatch at 123 s: Clock float Y was
+0 px during the entrance and -1 px after it, while every other frame field matched.
+The fixture now waits for that finite entrance to finish before comparing seeks;
+it leaves controlled swaps, infinite glyph loops and complete frame equality intact.
+The controlled settled probe replays all six reverse seeks exactly, and the full
+Motion-preview suite passes its five check groups. This fixture correction keeps
+runtime and native sources unchanged; these source checks do not establish
+installed screensaver acceptance.
+
 ## Active PR reconciliation (#517, #519)
 
 PR #518 has resumed. Its integration includes PR #522's corrected toolbar source
