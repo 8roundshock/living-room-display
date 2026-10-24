@@ -90,6 +90,12 @@ try {
     & $protocolTest
     if ($LASTEXITCODE -ne 0) { throw 'Prepared snapshot protocol regression failed.' }
     $passed++
+    $pipeTest = Join-Path $compiled 'NativePreviewPipeTests.exe'
+    & $compiler /nologo /target:exe /platform:anycpu /main:NativePreviewPipeTests "/out:$pipeTest" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll /reference:System.Management.dll (Join-Path $PSScriptRoot 'PreviewPreparer.cs') (Join-Path $PSScriptRoot 'PreviewPreparation.cs') (Join-Path $PSScriptRoot 'PreparedSnapshotClient.cs') (Join-Path $PSScriptRoot 'DesktopSnapshot.cs') (Join-Path $PSScriptRoot 'tests\NativePreviewPipeTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Native preview pipe compilation failed.' }
+    & $pipeTest
+    if ($LASTEXITCODE -ne 0) { throw 'Native preview pipe regression failed.' }
+    $passed++
     $runtimeTest = Join-Path $compiled 'ServerRuntimeTests.exe'
     & $compiler /nologo /target:exe /platform:anycpu "/out:$runtimeTest" /reference:System.Management.dll /reference:System.Web.Extensions.dll (Join-Path $PSScriptRoot 'ServerRuntime.cs') (Join-Path $PSScriptRoot 'tests\ServerRuntimeTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Server runtime regression compilation failed.' }
