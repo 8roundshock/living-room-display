@@ -761,7 +761,7 @@ can still claim the frame prepared before its own handshake.
 The native host makes one serialized handshake and enables its forced-exit
 deadline only after that call returns. Token rotation rejects stale mutations;
 it does not identify process-start order or order an older aborted GET that
-arrives late. That separate handshake-availability limit remains tracked in #532.
+arrives late. That separate handshake-availability limit remains tracked in #534.
 
 Manual `--display`/`--test-display` captures before its own overlay and posts PNG bytes to
 `POST /api/preview` with `X-LRD-Token`, `X-Captured-At` (recent ISO timestamp),
