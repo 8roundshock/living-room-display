@@ -45,11 +45,15 @@ the editor's fixed-height workspace. Weather and This device form a compact pair
 on wide screens; Schedule and Data & recovery use the full content width below,
 in keyboard reading order. Narrow windows stack all four groups. The page reserves
 bottom room for its dirty-only Save/Cancel bar so the last controls remain reachable.
+Native focus scrolling also leaves room for that bar at intermediate positions.
 
 This repair follows the existing grouped Settings direction and
-[W3C reflow guidance](https://www.w3.org/WAI/WCAG22/Understanding/reflow.html),
-checked 2026-10-25: preserve content and controls with one-axis scrolling down to
-320 CSS pixels. Recheck when Settings grouping, typography or scroll ownership changes.
+[Apple Settings guidance](https://developer.apple.com/design/human-interface-guidelines/settings)
+(its Markdown was read directly), [W3C reflow guidance](https://www.w3.org/WAI/WCAG22/Understanding/reflow.html)
+and [focus visibility guidance](https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html),
+checked 2026-10-25: retain the existing logical groups, preserve one-axis scrolling
+down to 320 CSS pixels, and keep focused controls clear of floating actions.
+Recheck when Settings grouping, typography or scroll ownership changes.
 
 The grouping follows [Apple's Settings guidance](https://developer.apple.com/design/human-interface-guidelines/settings),
 [layout guidance](https://developer.apple.com/design/human-interface-guidelines/layout)

@@ -8,8 +8,15 @@ Settings now explicitly keeps ordinary document flow independently of stylesheet
 order. Weather and device preferences share the first row; Schedule and Data &
 recovery use full-width rows in reading order, without the weather row span or
 Schedule's redundant inner divider. Narrow windows retain a single column and
-no inherited editor footer padding. Source checks and independent visual review
-are in progress; installed behavior has not changed.
+no inherited editor footer padding. Empty location messages no longer reserve
+blank space; Settings focus scrolling reserves the dirty-only Save/Cancel bar.
+
+Both TypeScript checks and the production build pass. Settings browser checks
+pass all 12 groups, including real wheel/keyboard recovery reachability, expanded
+schedule rows, narrow reflow and unobscured native Tab targets. All eight Schedule
+groups pass. Desktop and expanded narrow synthetic renders were inspected in RAM.
+Independent final-head review and applicable CI remain required; installed
+behavior has not changed.
 
 ## Native dismissal recovery source (#532)
 
