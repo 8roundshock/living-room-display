@@ -744,11 +744,24 @@ saved change (and on a restart) and never on a read, so Home and the display ask
 ## Native snapshot handoff
 
 The Windows host calls `GET /api/host/session` with `X-LRD-Native: 1`, no `Origin`,
-and no browser Fetch Metadata headers. The response contains a random process-only
+and no browser Fetch Metadata headers. The response contains a random native-session
 token, current settings, display URL, and an optional scalar preparation-pipe
 name. The pipe name is not its child capability. Host/Origin checks and no CORS access
 prevent a website from obtaining this handshake. It is not an account system;
 other processes running as the local user remain trusted.
+
+Each authorized handshake replaces the native-preview token and clears the earlier
+active image (#532). A previous helper's delayed DELETE is refused with 403 rather
+than erasing a replacement frame. POST rechecks that session at body completion,
+so an older in-flight upload cannot publish either. Refused browser/untrusted
+handshakes do not replace the current session. This does not rotate the preparer's
+independent capability or invalidate its private pending frame; an automatic `/s`
+can still claim the frame prepared before its own handshake.
+
+The native host makes one serialized handshake and enables its forced-exit
+deadline only after that call returns. Token rotation rejects stale mutations;
+it does not identify process-start order or order an older aborted GET that
+arrives late. That separate handshake-availability limit remains tracked in #532.
 
 Manual `--display`/`--test-display` captures before its own overlay and posts PNG bytes to
 `POST /api/preview` with `X-LRD-Token`, `X-Captured-At` (recent ISO timestamp),
@@ -784,7 +797,7 @@ setting; schedules never replace global idle enablement or Windows selection.
 An intervening effective off interval clears active pixels too, even if the next
 read sees the original style again. A clock reversal or gap beyond the bounded
 reconstruction window also clears them. Current-on cannot revive an older frame;
-ordinary native session exit and the existing cleanup guards remain unchanged.
+native cleanup is scoped to the current native-preview token as described above.
 
 ## Persistence and recovery
 
