@@ -22,6 +22,15 @@ export async function settleClockEntrance(page) {
   });
 }
 
+// #537: changing the native range maximum commits before the passive local-clock reset.
+// Poll both rendered values with Playwright's interval rather than advancing the frozen clock.
+export function motionPreviewResetReady(maximum) {
+  const slider = document.querySelector('[aria-label="Movement preview time"]');
+  return slider?.value === '0' && slider.max === maximum
+    && document.querySelector('.grid-ambient')?.getAttribute('data-preview-seconds') === '0.000'
+    && document.querySelector('[aria-label="Play movement preview"]') !== null;
+}
+
 export async function runMotionPreviewQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const directory = await mkdtemp(join(tmpdir(), 'lrd-motion-preview-'));
@@ -180,6 +189,7 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
 
     await page.getByRole('tab', { name: 'Style', exact: true }).click(); await page.locator('summary', { hasText: 'Motion' }).click();
     await page.getByRole('checkbox', { name: 'Float gently', exact: true }).uncheck();
+    await page.waitForFunction(motionPreviewResetReady, '121.2', { polling: 10 });
     assert.equal(await slider.inputValue(), '0', 'mode change resets local preview'); assert.equal(await slider.getAttribute('max'), '121.2');
     await seek(page, 30.3); assert.equal((await readFrame(page)).cycle, '0');
     await seek(page, 30.6); assert.equal((await readFrame(page)).cycle, '1');
