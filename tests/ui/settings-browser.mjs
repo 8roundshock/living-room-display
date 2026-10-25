@@ -41,7 +41,29 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
     page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.goto(base + path); await page.locator('.studio-header').waitFor();
   }
+  async function reachable(target, label) {
+    assert.ok(await target.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      return box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth
+        && element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    }), label);
+  }
   try {
+    for (const viewport of [{ width: 1280, height: 480 }, { width: 760, height: 480 }, { width: 390, height: 720 }, { width: 320, height: 480 }]) {
+      await open('/settings', viewport); await units().waitFor();
+      await page.mouse.move(viewport.width / 2, viewport.height / 2);
+      await page.mouse.wheel(0, 10000);
+      await page.waitForFunction(() => scrollY > 0);
+      await reachable(button('Restore from backup…'), `${viewport.width}: wheel reaches recovery without clipping`);
+      await page.keyboard.press('Control+Home');
+      await page.waitForFunction(() => scrollY === 0);
+      await page.keyboard.press('PageDown');
+      await page.waitForFunction(() => scrollY > 0);
+      await page.keyboard.press('Control+End');
+      await reachable(button('Restore from backup…'), `${viewport.width}: keyboard reaches recovery`);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.width}: one-axis reflow`);
+    }
+    record('Wheel and keyboard scrolling reach the final recovery controls in desktop, short and narrow windows without horizontal overflow');
     for (const path of ['/', '/editor', '/display', '/settings-extra']) assert.equal((await fetch(base + path)).headers.get('permissions-policy'), 'geolocation=()', path);
     assert.equal((await fetch(base + '/settings?focus=city')).headers.get('permissions-policy'), 'geolocation=(self)');
     await open('/');

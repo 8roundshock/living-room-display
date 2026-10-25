@@ -1,4 +1,16 @@
 # Project status
+## Settings scrolling and layout (#535)
+
+A synthetic desktop regression reproduces the clipped Settings page: the shared
+editor's later viewport-height rule wins the old single-class page rule, leaving
+native wheel scrolling at zero with recovery controls below the viewport.
+Settings now explicitly keeps ordinary document flow independently of stylesheet
+order. Weather and device preferences share the first row; Schedule and Data &
+recovery use full-width rows in reading order, without the weather row span or
+Schedule's redundant inner divider. Narrow windows retain a single column and
+no inherited editor footer padding. Source checks and independent visual review
+are in progress; installed behavior has not changed.
+
 ## Native dismissal recovery source (#532)
 
 A managed-only regression reproduces an ordering vulnerability in `81b6839`:

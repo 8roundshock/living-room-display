@@ -137,7 +137,7 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
           <a className="weather-credit" href={state.weather.sourceUrl} target="_blank" rel="noreferrer">Forecast estimates by Open-Meteo</a>
         </section>
         <section className="settings-card" aria-labelledby="device-heading"><h2 id="device-heading">This device</h2><ScreenSettings keepAwake={draft.screen.keepAwake} active onKeepAwake={value => change({ screen: { ...live.current.screen, keepAwake: value } })} /></section>
-        <div className="settings-card"><ScheduleSettings snapshot={state.schedule} presets={saved.savedPresets} editor={scheduleEditor} setState={setState} reload={reload} /></div>
+        <div className="settings-card settings-schedule-card"><ScheduleSettings snapshot={state.schedule} presets={saved.savedPresets} editor={scheduleEditor} setState={setState} reload={reload} /></div>
         <DataRecovery dirty={dirty || saving || scheduleEditor.dirty} clockFormat={draft.clockFormat} reload={reload} />
       </div>
       <p className="settings-status" role="status">{message}</p>
