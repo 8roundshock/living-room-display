@@ -87,7 +87,7 @@ internal static class SessionExitDeadlineTests
 
         var ticket = new Ticket(); exits = 0;
         deadline = new SessionExitDeadline(delegate(Action callback, int milliseconds) { callback(); return ticket; }, delegate { exits++; });
-        deadline.Arm(); deadline.Complete();
+        deadline.Enable(); deadline.Arm(); deadline.Complete();
         Check(exits == 1 && ticket.Disposals == 1, "inline expiry leaked a late-published timer");
     }
     private static int Main()
