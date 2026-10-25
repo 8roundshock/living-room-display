@@ -1,24 +1,36 @@
 # Project status
-## Native dismissal recovery checkpoint (#532)
+## Native dismissal recovery source (#532)
 
 A managed-only regression reproduces an ordering vulnerability in `81b6839`:
 input cancellation reaches a blocked preview clear while the owned renderer stays
 alive unless the UI/disposer progresses. The checkpoint releases that exact browser
 before synchronous cancellation callbacks or HTTP cleanup, rejects late browser
 publication after shutdown, and checks cancellation before UI/native observations.
-It also posts an asynchronous surface hide and arms a six-second exact-self exit
-request for an already-requested native ambient session. A later genuine teardown
-completion disarms the deadline; it does not promise kernel/GPU recovery or an exact
-OS process-exit time.
+It also posts an asynchronous surface hide. Terminal exit intent is recorded
+immediately, but a six-second exact-self termination deadline is eligible only
+after the one host handshake has returned, before any own surface/display stage.
+Cancellation during an unresolved handshake retains the existing bounded startup
+transport behavior; it is not force-terminated by this fallback. Concurrent
+disposal waits for the first renderer release and teardown to actually finish;
+same-thread callback reentry cannot wait on itself. Only genuine completed
+teardown disarms the deadline. This requests termination, not kernel/GPU recovery
+or an exact OS process-exit time.
 
 The old cancellation-only regression fails and the new scoped Windows source
-suite passes, including 23 injected deadline assertions and both compiled
-production binaries without execution. No actual native session or desktop was
-used. This draft checkpoint still requires the renderer-release completion race
-repair, backend stale native-session clear/upload isolation, integrated final-head
-review and applicable CI. A watchdog must not ship without those guards. #532,
-#519 and actual native acceptance remain open; this is not an exclusive diagnosis
-of the reported black screen or a completed installation.
+suite passes, including 27 injected deadline assertions and both compiled
+production binaries without execution. The integrated backend rotates only the
+native-preview session token at each authorized handshake and clears the old
+active image. Stale DELETE and in-flight POST cannot mutate a replacement; the
+separate preparer capability and private pending frame survive for automatic claim.
+Production API regressions cover these cases. A naturally cancelled or externally
+killed older handshake arriving late remains an availability limit in #534.
+
+All 558 unit tests, both TypeScript checks and the production build pass. No actual
+native session, desktop or installed operation was used. Independent final-head
+review, applicable CI and actual native acceptance remain required. #532 and #519
+remain open; this is not an exclusive diagnosis of the reported black screen or a
+completed installation. PR #531's claim-pipe correction is already in this source
+base, distinct from the version-bound older installation report.
 
 ## Automatic Last screen claim-pipe correction (#519)
 
