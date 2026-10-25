@@ -28,8 +28,88 @@ internal static class ActiveInputTests
     }
     private static InputStamp Stamp(uint tick) { return new InputStamp { Success = true, Tick = tick }; }
     private static void Check(bool ok, string why) { if (!ok) throw new Exception(why); }
+    private static void CancelWithoutUiProgress(bool blockCallback)
+    {
+        using (var entered = new ManualResetEvent(false))
+        using (var release = new ManualResetEvent(false))
+        using (var browserReleased = new ManualResetEvent(false))
+        {
+            var session = new Session();
+            var preview = new Preview { Upload = delegate { } };
+            var browser = new Browser { Disposing = delegate { browserReleased.Set(); } };
+            Action blocked = delegate { entered.Set(); Check(release.WaitOne(3000), "cancel barrier timed out"); };
+            if (!blockCallback) preview.ClearAction = blocked;
+            var startup = new SessionStartup(session, delegate { }, delegate { return preview; }, delegate { return browser; });
+            Check(startup.Start(), "cancellation-only startup failed");
+            CancellationTokenRegistration registration = blockCallback ? startup.Token.Register(blocked) : default(CancellationTokenRegistration);
+            Exception failure = null;
+            var cancellation = new Thread(delegate() { try { session.End(); } catch (Exception error) { failure = error; } });
+            bool enteredBlock = false, releasedFirst = false;
+            try {
+                cancellation.Start();
+                enteredBlock = entered.WaitOne(3000);
+                // No UI tick and no second Dispose thread may be needed for release.
+                releasedFirst = browserReleased.WaitOne(0);
+            } finally {
+                release.Set();
+                Check(cancellation.Join(3000), "cancellation-only worker did not end");
+                registration.Dispose(); startup.Dispose();
+            }
+            Check(enteredBlock && failure == null, "cancellation-only fixture failed");
+            Check(releasedFirst, blockCallback ? "browser waited for a synchronous cancellation callback" : "browser waited for UI/disposer progress behind preview clear");
+            Check(browser.Disposals == 1, "cancellation plus Dispose released the browser more than once");
+        }
+    }
+    private static void LateBrowserAfterDispose()
+    {
+        using (var entered = new ManualResetEvent(false))
+        using (var release = new ManualResetEvent(false))
+        {
+            var session = new Session(); var preview = new Preview { Upload = delegate { } }; var browser = new Browser();
+            var startup = new SessionStartup(session, delegate { }, delegate { return preview; }, delegate {
+                entered.Set(); Check(release.WaitOne(3000), "late browser barrier timed out"); return browser;
+            });
+            bool? started = null; Exception failure = null;
+            var worker = new Thread(delegate() { try { started = startup.Start(); } catch (Exception error) { failure = error; } });
+            worker.Start();
+            try { Check(entered.WaitOne(3000), "late browser factory was not entered"); session.End(); startup.Dispose(); }
+            finally { release.Set(); Check(worker.Join(3000), "late browser factory did not finish"); startup.Dispose(); }
+            Check(failure == null && started == false && browser.Disposals == 1, "browser published after Dispose leaked or was released twice");
+        }
+    }
+    private static void ObservationCutoff()
+    {
+        var session = new Session(); var preview = new Preview { Upload = delegate { } }; var browser = new Browser();
+        using (var startup = new SessionStartup(session, delegate { }, delegate { return preview; }, delegate { return browser; }))
+        {
+            Check(startup.Start(), "observation-cutoff startup failed");
+            session.End(); int reads = 0;
+            Check(!startup.ObserveWhileActive(delegate { reads++; }) && reads == 0, "cancelled UI poll performed new native observations");
+        }
+        using (var entered = new ManualResetEvent(false))
+        using (var browserReleased = new ManualResetEvent(false))
+        {
+            session = new Session(); browser = new Browser { Disposing = delegate { browserReleased.Set(); } };
+            using (var startup = new SessionStartup(session, delegate { }, delegate { return preview; }, delegate { return browser; }))
+            {
+                Check(startup.Start(), "blocked-observation startup failed");
+                bool? active = null; Exception failure = null;
+                var ui = new Thread(delegate() { try { active = startup.ObserveWhileActive(delegate {
+                    entered.Set(); Check(browserReleased.WaitOne(3000), "blocked UI did not observe renderer release");
+                }); } catch (Exception error) { failure = error; } });
+                ui.Start();
+                try { Check(entered.WaitOne(3000), "blocked UI observer was not entered"); session.End(); }
+                finally { browserReleased.Set(); Check(ui.Join(3000), "blocked UI fixture did not finish"); }
+                Check(failure == null && active == false && browser.Disposals == 1, "input did not release renderer independently of blocked UI observation");
+            }
+        }
+    }
     private static void Run()
     {
+        CancelWithoutUiProgress(false);
+        CancelWithoutUiProgress(true);
+        LateBrowserAfterDispose();
+        ObservationCutoff();
         var baseline = new ActiveInputBaseline(Stamp(100));
         Check(!baseline.Observe(Stamp(100)), "unchanged input cannot cancel");
         Check(baseline.Observe(Stamp(101)), "single early change must cancel immediately");

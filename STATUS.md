@@ -1,4 +1,25 @@
 # Project status
+## Native dismissal recovery checkpoint (#532)
+
+A managed-only regression reproduces an ordering vulnerability in `81b6839`:
+input cancellation reaches a blocked preview clear while the owned renderer stays
+alive unless the UI/disposer progresses. The checkpoint releases that exact browser
+before synchronous cancellation callbacks or HTTP cleanup, rejects late browser
+publication after shutdown, and checks cancellation before UI/native observations.
+It also posts an asynchronous surface hide and arms a six-second exact-self exit
+request for an already-requested native ambient session. A later genuine teardown
+completion disarms the deadline; it does not promise kernel/GPU recovery or an exact
+OS process-exit time.
+
+The old cancellation-only regression fails and the new scoped Windows source
+suite passes, including 23 injected deadline assertions and both compiled
+production binaries without execution. No actual native session or desktop was
+used. This draft checkpoint still requires the renderer-release completion race
+repair, backend stale native-session clear/upload isolation, integrated final-head
+review and applicable CI. A watchdog must not ship without those guards. #532,
+#519 and actual native acceptance remain open; this is not an exclusive diagnosis
+of the reported black screen or a completed installation.
+
 ## Automatic Last screen claim-pipe correction (#519)
 
 The production claim-pipe constructor has a reproduced source defect:

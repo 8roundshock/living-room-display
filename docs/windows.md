@@ -128,9 +128,22 @@ and a fresh ownership check permit alpha1 reveal; alpha0, color-key transparency
 and WS_EX_TRANSPARENT are not used. Loading that never becomes ready closes after
 15 seconds. Renderer loss, foreign/NULL foreground, visible cursor, input, stop
 or cancellation hide the surface and end its exact browser job. No timer repairs
-cursor state or forces focus. UI-thread cleanup hides/disposes the surface before
-waiting for HTTP cleanup. Monitor cancellation may already have started HTTP clear;
-disposal ends the owned browser job before waiting for that clear (#505).
+cursor state or forces focus. The off-UI input monitor marks cancellation terminal,
+arms a six-second exit deadline and releases the exact renderer before synchronous
+cancellation callbacks or HTTP cleanup can wait (#532). The UI poll checks that
+terminal state before new window/cursor/renderer observations. UI stop and cleanup
+also release the renderer before posting an asynchronous surface hide, without a
+redundant synchronous `Form.Hide`. Normal disposal still serializes RAM clear (#505).
+
+Only genuinely completed surface/session/HTTP teardown disarms the one-session
+deadline. If expiry wins, the helper requests `TerminateProcess` on its fixed
+current-process handle, never a supplied PID, backend or foreign process. This
+exists only for an already-requested `/s`, `--display` or `--test-display` session;
+it adds no service, restart loop, focus/input repair or FailFast/crash dump.
+Termination requests pending-I/O cancellation, so kernel/GPU recovery and exact
+OS exit time are not guaranteed. A forced exit can interrupt best-effort HTTP clear.
+This draft therefore depends on backend stale native-session mutation isolation
+and release-completion race review before it can be installed or accepted.
 Readiness matches the owned Edge window by the display document's title
 (`Still · Display`), so a change to that title in `src/client/App.tsx` must also
 change `windows/NativeDisplay.cs` until
