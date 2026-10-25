@@ -18,6 +18,22 @@ groups pass. Desktop and expanded narrow synthetic renders were inspected in RAM
 Independent final-head review and applicable CI remain required; installed
 behavior has not changed.
 
+## Movement preview mode-reset readiness (#537)
+
+The first final Settings CI run (`40204925957`) passed 21 of 22 browser suites,
+including Settings and Schedule, but read the movement slider as `121.2` rather
+than zero immediately after a mode change. Controlled browser breakpoints on
+unchanged production clients from both `97c7d71` and `15ffe4a` reproduce the exact
+intermediate state: the native range maximum has committed while the local
+clock's passive reset is held. Resuming that callback produces the required
+zero slider and zero rendered frame without advancing either test clock.
+
+The fixture now waits for those actual reset values and paused Play state before
+retaining its exact zero and duration assertions. It changes no product code,
+time/frame tolerance, clock, lifecycle or no-write guard. The focused five-group
+suite passes; the earlier failed CI evidence remains diagnostic. The integrated
+final head still needs independent review and fresh applicable CI before merge.
+
 ## Native dismissal recovery source (#532)
 
 A managed-only regression reproduces an ordering vulnerability in `81b6839`:
