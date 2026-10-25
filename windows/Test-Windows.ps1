@@ -66,6 +66,12 @@ try {
     & $lifecycleTest
     if ($LASTEXITCODE -ne 0) { throw 'Lifecycle regression failed.' }
     $passed++
+    $exitDeadlineTest = Join-Path $compiled 'SessionExitDeadlineTests.exe'
+    & $compiler /nologo /target:exe /platform:anycpu "/out:$exitDeadlineTest" (Join-Path $PSScriptRoot 'SessionStartup.cs') (Join-Path $PSScriptRoot 'tests\SessionExitDeadlineTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Exit-deadline regression compilation failed.' }
+    & $exitDeadlineTest
+    if ($LASTEXITCODE -ne 0) { throw 'Exit-deadline regression failed.' }
+    $passed++
     $snapshotTest = Join-Path $compiled 'DesktopSnapshotTests.exe'
     & $compiler /nologo /target:exe /platform:anycpu "/out:$snapshotTest" /reference:System.Drawing.dll (Join-Path $PSScriptRoot 'DesktopSnapshot.cs') (Join-Path $PSScriptRoot 'tests\DesktopSnapshotTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Snapshot encoding regression compilation failed.' }

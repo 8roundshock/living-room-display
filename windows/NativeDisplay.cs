@@ -158,7 +158,7 @@ internal static class DisplayNative {
     [DllImport("user32.dll")] internal static extern bool EnumWindows(Callback callback,IntPtr unused);
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")] internal static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] internal static extern bool ShowWindow(IntPtr window,int show);
+    [DllImport("user32.dll")] internal static extern bool ShowWindowAsync(IntPtr window,int show);
     [DllImport("user32.dll")] internal static extern IntPtr WindowFromPoint(Point point);
     [DllImport("user32.dll")] internal static extern IntPtr GetAncestor(IntPtr window,uint flags);
     [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr window,ref Point point);

@@ -25,6 +25,7 @@ Invoke-Synthetic 'PreparedClaimFlowTests' @('PreviewPreparation.cs','tests\Prepa
 Invoke-Synthetic 'PreparedSnapshotProtocolTests' @('PreparedSnapshotClient.cs','tests\PreparedSnapshotProtocolTests.cs') @('System.Web.Extensions.dll')
 Invoke-Synthetic 'DesktopSnapshotTests' @('DesktopSnapshot.cs','tests\DesktopSnapshotTests.cs') @('System.Drawing.dll')
 Invoke-Synthetic 'HostLifecycleTests' @('SessionStartup.cs','tests\HostLifecycleTests.cs')
+Invoke-Synthetic 'SessionExitDeadlineTests' @('SessionStartup.cs','tests\SessionExitDeadlineTests.cs')
 Invoke-Synthetic 'ActiveInputTests' @('SessionStartup.cs','tests\ActiveInputTests.cs')
 Invoke-Synthetic 'SurfacePolicyTests' @('SurfacePolicy.cs','tests\SurfacePolicyTests.cs')
 Invoke-Synthetic 'ServerRuntimeTests' @('ServerRuntime.cs','tests\ServerRuntimeTests.cs') @('System.Management.dll','System.Web.Extensions.dll')

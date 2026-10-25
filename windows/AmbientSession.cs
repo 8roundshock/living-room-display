@@ -5,8 +5,8 @@ using System.Threading;
 using System.Windows.Forms;
 
 // The input window owns its own queue, never an external Edge parent/owner.
-// Active UI callbacks perform only bounded native reads; UI cleanup hides the surface first.
-// Monitor cancellation may already be clearing HTTP state; Dispose ends the browser before waiting.
+// Terminal input releases the exact renderer without waiting for this UI queue.
+// A one-session deadline requests only this helper's termination if teardown stalls.
 internal sealed class AmbientSession : ApplicationContext
 {
     private readonly SurfacePolicy policy;
@@ -17,9 +17,12 @@ internal sealed class AmbientSession : ApplicationContext
     private readonly OwnedBrowser browser;
     private readonly string edgePath;
     private readonly AmbientInputSurface surface;
+    private readonly SessionExitDeadline exitDeadline = new SessionExitDeadline(
+        delegate(Action expired, int milliseconds) { return new System.Threading.Timer(delegate { expired(); }, null, milliseconds, Timeout.Infinite); },
+        RequestOwnTermination);
     private bool closed, disposed, ready;
     private int polling;
-    internal bool Ready { get { return ready && !closed; } }
+    internal bool Ready { get { return ready && !closed && !startup.IsCancelled; } }
 
     internal AmbientSession(bool testDisplay, bool automatic = false)
     {
@@ -29,14 +32,15 @@ internal sealed class AmbientSession : ApplicationContext
         {
             var signals = new ActiveSessionSignals(new WindowsSessionSignals(), Native.ReadInput, delegate { return stop.WaitOne(0); });
             startup = new SessionStartup(signals, Program.EnsureServer,
-                token => new NativeApi(token, automatic), token => new OwnedBrowser());
+                token => new NativeApi(token, automatic), token => new OwnedBrowser(), exitDeadline.Arm, exitDeadline.Enable);
             if (!startup.Start()) return; // Cancellation already disposed startup.
+            if (startup.IsCancelled) throw new OperationCanceledException(startup.Token);
             browser = (OwnedBrowser)startup.Browser;
             edgePath = Program.FindEdge();
             surface = new AmbientInputSurface(Foreground, RequestStop, Deactivated);
             surface.Shown += delegate { age.Restart(); timer.Start(); };
             timer.Tick += delegate { Poll(); };
-            startup.Token.ThrowIfCancellationRequested();
+            if (startup.IsCancelled) throw new OperationCanceledException(startup.Token);
             surface.Show(); // One ordinary activation, no focus repair/retry.
             ready = true;
         }
@@ -51,6 +55,7 @@ internal sealed class AmbientSession : ApplicationContext
     }
     private void Deactivated(IntPtr unusedHint)
     {
+        if (startup.IsCancelled) { RequestStop(); return; }
         // Exactly one actual foreground sample; the async lParam may be NULL.
         ForegroundKind actual = Foreground(DisplayNative.GetForegroundWindow());
         if (!policy.ObserveDeactivation(actual)) RequestStop();
@@ -60,6 +65,13 @@ internal sealed class AmbientSession : ApplicationContext
         if (closed || Interlocked.Exchange(ref polling, 1) != 0) return;
         try
         {
+            if (!startup.ObserveWhileActive(ObserveSurface)) RequestStop();
+        }
+        catch { RequestStop(); } // Never a modal UI-thread exception dialog.
+        finally { polling = 0; }
+    }
+    private void ObserveSurface()
+    {
             var cursor = DisplayNative.Cursor();
             IntPtr foreground = DisplayNative.GetForegroundWindow();
             Rectangle bounds = DisplayNative.Client(surface.Handle);
@@ -86,19 +98,17 @@ internal sealed class AmbientSession : ApplicationContext
                 if (!DisplayNative.SetLayeredWindowAttributes(surface.Handle, 0, 1, 2)) { RequestStop(); return; }
                 surface.Text = AmbientInputSurface.ReadyTitle;
             }
-        }
-        catch { RequestStop(); } // Never a modal UI-thread exception dialog.
-        finally { polling = 0; }
     }
     private void RequestStop(string ignoredReason) { RequestStop(); } // Native surface emits no production diagnostics.
     private void RequestStop()
     {
         if (closed) return;
+        exitDeadline.Arm();
         closed = true; policy.Stop(); timer.Stop();
+        if (startup != null) startup.StopBrowser();
         if (surface != null && surface.IsHandleCreated)
         {
-            DisplayNative.ShowWindow(surface.Handle, 0); // Hide own HWND before any cleanup/network operation.
-            try { surface.Hide(); surface.Text = AmbientInputSurface.LoadingTitle; } catch { }
+            DisplayNative.ShowWindowAsync(surface.Handle, 0); // Do not wait for activation of another queue.
             try { surface.BeginInvoke(new Action(delegate { surface.Close(); ExitThread(); })); return; } catch { }
         }
         ExitThread();
@@ -108,13 +118,23 @@ internal sealed class AmbientSession : ApplicationContext
     private void Cleanup()
     {
         if (disposed) return;
+        exitDeadline.Arm();
         disposed = true; closed = true; policy.Stop(); timer.Stop(); timer.Dispose();
+        if (startup != null) startup.StopBrowser();
         if (surface != null)
         {
-            if (surface.IsHandleCreated) DisplayNative.ShowWindow(surface.Handle, 0);
+            if (surface.IsHandleCreated) DisplayNative.ShowWindowAsync(surface.Handle, 0);
             surface.Dispose();
         }
         if (startup != null) startup.Dispose(); // Exact job and RAM clear, after the surface is gone.
         stop.Dispose();
+        exitDeadline.Complete(); // Only actual completed teardown disarms the fallback.
+    }
+    private static void RequestOwnTermination()
+    {
+        // Fixed current-process handle only: never a supplied PID, backend or
+        // foreign renderer. TerminateProcess requests pending-I/O cancellation;
+        // kernel/GPU recovery and exact OS exit time cannot be guaranteed here.
+        try { Native.TerminateProcess(DisplayNative.GetCurrentProcess(), 1); } catch { }
     }
 }

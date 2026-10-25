@@ -96,7 +96,7 @@ export async function createApplication(options: ApplicationOptions) {
   const weather = new WeatherService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   const air = new AirQualityService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   const alerts = new AlertsService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
-  const hostToken = randomBytes(32).toString('hex');
+  let hostToken = randomBytes(32).toString('hex');
   let image: Buffer | null = null;
   let previewGeneration = 0;
   let preview: PreviewState = { available: false, capturedAt: null, width: null, height: null };
@@ -411,6 +411,10 @@ export async function createApplication(options: ApplicationOptions) {
     if (method === 'GET' && path === '/api/host/session') {
       nativeRequest(request, false);
       preparation.config();
+      // A replacement helper owns a fresh native-preview session. Delayed cleanup
+      // or upload from its predecessor must not modify the replacement's pixels.
+      // The separate preparer capability and pending pre-idle frame remain intact.
+      hostToken = randomBytes(32).toString('hex'); clearPreview();
       json(response, 200, { token: hostToken, settings: effectiveSettings(), displayUrl: `http://127.0.0.1:${port}/`, preparationPipe: preparation.pipeName }); return;
     }
     if (path === '/api/preview/preparation' && ['GET', 'POST', 'DELETE'].includes(method)) {
