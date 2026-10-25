@@ -198,6 +198,22 @@ internal static class ActiveInputTests
             ending.IsBackground = true; ending.Start(); Check(ending.Join(3000) && failure == null, "same-thread cancellation callback disposal reentry deadlocked");
         }
     }
+    private static void FailedCleanupStaysFailed()
+    {
+        foreach (bool callback in new[] { false, true })
+        {
+            var preview = new Preview { Upload = delegate { } };
+            var browser = new Browser { Disposing = delegate { if (!callback) throw new InvalidOperationException("synthetic renderer release failure"); } };
+            var startup = new SessionStartup(new Session(), delegate { }, delegate { return preview; }, delegate { return browser; });
+            Check(startup.Start(), "failed-cleanup startup failed");
+            var registration = callback ? startup.Token.Register(delegate { throw new InvalidOperationException("synthetic cancellation callback failure"); }) : default(CancellationTokenRegistration);
+            bool first = false, repeated = false;
+            try { startup.Dispose(); } catch { first = true; }
+            try { startup.Dispose(); } catch { repeated = true; }
+            registration.Dispose();
+            Check(first && repeated && browser.Disposals == 1, "failed disposal later reported successful completion on its owner thread");
+        }
+    }
     private static void Run()
     {
         CancelWithoutUiProgress(false);
@@ -208,6 +224,7 @@ internal static class ActiveInputTests
         BlockedRendererCompletion(true);
         HandshakeBeforeExitDeadline();
         ReentrantDisposal();
+        FailedCleanupStaysFailed();
         var baseline = new ActiveInputBaseline(Stamp(100));
         Check(!baseline.Observe(Stamp(100)), "unchanged input cannot cancel");
         Check(baseline.Observe(Stamp(101)), "single early change must cancel immediately");

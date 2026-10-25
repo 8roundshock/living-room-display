@@ -138,7 +138,7 @@ internal sealed class SessionStartup : IDisposable
             if (browserReleased && !browserReleaseCompleted && browserReleaseThread == current) return;
             if (disposed)
             {
-                if (disposalThread == current) return;
+                if (disposalThread == current && !disposalCompleted) return;
                 while (!disposalCompleted) Monitor.Wait(gate);
                 if (!disposalSucceeded) throw new InvalidOperationException("Session teardown did not complete.");
                 return;
