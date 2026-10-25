@@ -1,23 +1,30 @@
-.settings-page { min-height: 100svh; height: auto; overflow: visible; }
+/* Settings is a document, not the editor's fixed-height canvas workspace. */
+.studio.settings-page { min-height: 100dvh; height: auto; overflow: visible; padding-bottom: 0; }
+/* Native Tab scrolling must reserve the floating Save/Cancel controls as well. */
+.studio.settings-page :is(input, select, button, a, summary, [tabindex]) { scroll-margin-block: 24px 124px; }
 .studio.settings-page :is(.settings-main, .settings-savebar) .button { min-height: 44px; }
-.settings-main { width: min(100% - 48px, 920px); margin: 0 auto; padding: 40px 0 100px; }
+.settings-main { width: min(100% - 48px, 920px); margin: 0 auto; padding: 32px 0 124px; }
 .settings-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
 .settings-heading .eyebrow { margin: 0 0 5px; color: var(--studio-muted); font-size: 12px; }
 .settings-heading h1 { font-size: 30px; letter-spacing: -.04em; margin: 0; }
-.settings-sections { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.settings-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
 .settings-card { border: 1px solid #ffffff14; background: #ffffff04; border-radius: 18px; padding: 24px; min-width: 0; }
-.settings-card:first-child { grid-row: span 2; }
+.settings-schedule-card, .settings-card.data-disclosure { grid-column: 1 / -1; }
+.settings-schedule-card .schedule-settings { margin: 0; padding: 0; border: 0; }
+.settings-schedule-card .schedule-settings h3 { font-size: 16px; font-weight: 600; }
 .settings-card h2 { font-size: 16px; margin: 0 0 20px; font-weight: 600; }
+.settings-card > h2 { min-height: 44px; display: flex; align-items: center; }
 .settings-section-title { display: flex; align-items: center; gap: 9px; margin-bottom: 18px; }
 .settings-section-title h2 { margin: 0; flex: 1; }
-.settings-card .current-location { margin-bottom: 22px; }
+.settings-card .current-location { padding: 0; margin: 0 0 20px; }
 .settings-card .city-field { margin-bottom: 14px; }
 .settings-location-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.settings-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
+.settings-card > .inline-message:empty { display: none; }
+.settings-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 0; }
 .settings-fields label { min-width: 0; }
 .settings-fields .select-input { width: 100%; }
 .settings-weather-age { font-size: 12px; color: var(--studio-muted); margin-top: 24px; }
-.settings-weather-age span { display: block; margin-top: 5px; }
+.settings-weather-age .weather-status-error { margin-top: 5px; }
 .settings-card .data-actions { flex-wrap: wrap; }
 .settings-card .data-confirm { margin-top: 18px; }
 .settings-card .data-confirm p { font-size: 13px; line-height: 1.6; }

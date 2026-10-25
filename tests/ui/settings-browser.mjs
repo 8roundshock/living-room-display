@@ -41,7 +41,65 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
     page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.goto(base + path); await page.locator('.studio-header').waitFor();
   }
+  async function reachable(target, label) {
+    const handle = target.elementHandle ? await target.elementHandle() : target;
+    await page.waitForFunction(element => {
+      const box = element.getBoundingClientRect();
+      return box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth
+        && element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    }, handle, { timeout: 3000 }).catch(async () => {
+      assert.fail(`${label}: ${JSON.stringify(await target.evaluate(element => ({ rect: element.getBoundingClientRect().toJSON(), scrollY, height: innerHeight })))}`);
+    });
+  }
   try {
+    for (const viewport of [{ width: 1280, height: 480 }, { width: 760, height: 480 }, { width: 390, height: 720 }, { width: 320, height: 480 }]) {
+      await open('/settings', viewport); await units().waitFor();
+      await page.mouse.move(viewport.width / 2, viewport.height / 2);
+      await page.mouse.wheel(0, 10000);
+      await page.waitForFunction(() => scrollY > 0);
+      await reachable(button('Restore from backup…'), `${viewport.width}: wheel reaches recovery without clipping`);
+      await page.keyboard.press('Control+Home');
+      await page.waitForFunction(() => scrollY === 0);
+      await page.keyboard.press('PageDown');
+      await page.waitForFunction(() => scrollY > 0);
+      await page.keyboard.press('Control+End');
+      await reachable(button('Restore from backup…'), `${viewport.width}: keyboard reaches recovery`);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.width}: one-axis reflow`);
+    }
+    record('Wheel and keyboard scrolling reach the final recovery controls in desktop, short and narrow windows without horizontal overflow');
+    for (const viewport of [{ width: 1280, height: 480 }, { width: 390, height: 640 }, { width: 320, height: 480 }]) {
+      await open('/settings', viewport);
+      await app.store.update(data => { data.settings.savedPresets = [{ id: 'layout-check', name: 'Layout check', visual: getVisual(data.settings) }]; });
+      await page.reload(); await units().waitFor();
+      await units().selectOption('imperial');
+      await page.locator('.schedule-disclosure > summary').click();
+      await button('Add schedule row').click();
+      await page.getByRole('checkbox', { name: 'Monday', exact: true }).check();
+      await page.getByLabel('From', { exact: true }).fill('08:00');
+      await page.getByLabel('Until', { exact: true }).fill('12:00');
+      await page.keyboard.press('Control+End');
+      await reachable(button('Restore from backup…'), `${viewport.width}: expanded schedule recovery clears the dirty savebar`);
+      // Keep the earlier pointer interaction from holding unrelated hover help over Tab targets.
+      await page.mouse.move(0, 0);
+      await units().focus();
+      let reachedSave = false;
+      for (let count = 0; count < 60; count++) {
+        await page.keyboard.press('Tab');
+        const active = await page.evaluate(() => ({ tag: document.activeElement?.tagName, text: document.activeElement?.textContent, label: document.activeElement?.getAttribute('aria-label') }));
+        assert.notEqual(active.tag, 'BODY', `${viewport.width}: Tab retains a page control at step ${count}: ${JSON.stringify(active)}`);
+        const focused = await page.evaluateHandle(() => document.activeElement);
+        await reachable(focused, `${viewport.width}: focused ${active.tag} ${active.label ?? active.text?.slice(0, 30)} stays clear of the savebar`);
+        await focused.dispose();
+        if (active.text === 'Save changes') { reachedSave = true; break; }
+      }
+      assert.ok(reachedSave, `${viewport.width}: keyboard reaches Save changes after the expanded form`);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.width}: expanded schedule reflows`);
+      if (capture) images.push({ name: `settings-expanded-${viewport.width}`, bytes: await page.screenshot({ fullPage: true }) });
+      await button('Cancel schedule edits').click();
+      assert.equal(await units().inputValue(), 'imperial', 'canceling the schedule keeps the independent settings draft');
+      await button('Cancel').click(); await clean();
+    }
+    record('Expanded schedule rows reflow, keyboard focus and lower controls clear the dirty savebar, and each draft cancels independently');
     for (const path of ['/', '/editor', '/display', '/settings-extra']) assert.equal((await fetch(base + path)).headers.get('permissions-policy'), 'geolocation=()', path);
     assert.equal((await fetch(base + '/settings?focus=city')).headers.get('permissions-policy'), 'geolocation=(self)');
     await open('/');

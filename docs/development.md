@@ -129,6 +129,15 @@ machine. Its display loads therefore wait up to 90 s for a specific element (#30
 
 ## Browser suites
 
+The movement-preview mode-reset step (#537) waits for both the native range and
+rendered local frame to reach zero with Play paused after changing Float gently.
+Its range maximum can commit before React's passive reset. Controlled callback
+breakpoints reproduce that intermediate state on unchanged baseline clients;
+the readiness predicate remains pending until the real reset runs. Keep the exact
+value/frame assertions and frozen clocks; do not replace this with a delay,
+time advancement or a weaker tolerance. The separate Clock entrance barrier
+(#530) covers CSS reveal timing, not this local-clock reset.
+
 The `tests/ui/*-browser.mjs` suites drive the built app in headless Microsoft Edge
 through Playwright. Each starts its own loopback server on an ephemeral port with
 temporary synthetic data, keeps screenshots in RAM and never uses an installed app

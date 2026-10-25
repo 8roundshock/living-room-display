@@ -1,4 +1,39 @@
 # Project status
+## Settings scrolling and layout (#535)
+
+A synthetic desktop regression reproduces the clipped Settings page: the shared
+editor's later viewport-height rule wins the old single-class page rule, leaving
+native wheel scrolling at zero with recovery controls below the viewport.
+Settings now explicitly keeps ordinary document flow independently of stylesheet
+order. Weather and device preferences share the first row; Schedule and Data &
+recovery use full-width rows in reading order, without the weather row span or
+Schedule's redundant inner divider. Narrow windows retain a single column and
+no inherited editor footer padding. Empty location messages no longer reserve
+blank space; Settings focus scrolling reserves the dirty-only Save/Cancel bar.
+
+Both TypeScript checks and the production build pass. Settings browser checks
+pass all 12 groups, including real wheel/keyboard recovery reachability, expanded
+schedule rows, narrow reflow and unobscured native Tab targets. All eight Schedule
+groups pass. Desktop and expanded narrow synthetic renders were inspected in RAM.
+Independent final-head review and applicable CI remain required; installed
+behavior has not changed.
+
+## Movement preview mode-reset readiness (#537)
+
+The first final Settings CI run (`40204925957`) passed 21 of 22 browser suites,
+including Settings and Schedule, but read the movement slider as `121.2` rather
+than zero immediately after a mode change. Controlled browser breakpoints on
+unchanged production clients from both `97c7d71` and `15ffe4a` reproduce the exact
+intermediate state: the native range maximum has committed while the local
+clock's passive reset is held. Resuming that callback produces the required
+zero slider and zero rendered frame without advancing either test clock.
+
+The fixture now waits for those actual reset values and paused Play state before
+retaining its exact zero and duration assertions. It changes no product code,
+time/frame tolerance, clock, lifecycle or no-write guard. The focused five-group
+suite passes; the earlier failed CI evidence remains diagnostic. The integrated
+final head still needs independent review and fresh applicable CI before merge.
+
 ## Native dismissal recovery source (#532)
 
 A managed-only regression reproduces an ordering vulnerability in `81b6839`:
