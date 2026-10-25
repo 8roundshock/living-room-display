@@ -28,7 +28,8 @@ internal sealed class SessionStartup : IDisposable
     private readonly object cleanupGate = new object();
     private IPreviewSession preview;
     private IAmbientBrowser browser;
-    private bool disposed, browserReleased;
+    private bool disposed, browserReleased, browserReleaseCompleted, browserReleaseSucceeded, disposalCompleted, disposalSucceeded;
+    private int browserReleaseThread, disposalThread;
     private volatile bool cancelled;
     internal SessionStartup(ISessionSignals signals, Action<CancellationToken> ensureServer,
         Func<CancellationToken, IPreviewSession> connect, Func<CancellationToken, IAmbientBrowser> launch, Action ending = null, Action handshakeCompleted = null)
@@ -96,6 +97,7 @@ internal sealed class SessionStartup : IDisposable
         // and release its exact renderer before Abort callbacks or HTTP can wait.
         if (ending != null) ending();
         StopBrowser();
+        WaitForBrowserRelease();
         try { cancellation.Cancel(); }
         finally
         {
@@ -112,27 +114,58 @@ internal sealed class SessionStartup : IDisposable
         lock (gate)
         {
             if (browserReleased || browser == null) return;
-            browserReleased = true; captured = browser;
+            browserReleased = true; browserReleaseThread = Thread.CurrentThread.ManagedThreadId; captured = browser;
         }
-        captured.Dispose();
+        bool succeeded = false;
+        try { captured.Dispose(); succeeded = true; }
+        finally { lock (gate) { browserReleaseSucceeded = succeeded; browserReleaseCompleted = true; Monitor.PulseAll(gate); } }
+    }
+    private void WaitForBrowserRelease()
+    {
+        lock (gate)
+        {
+            while (browserReleased && !browserReleaseCompleted) Monitor.Wait(gate);
+            if (browserReleased && !browserReleaseSucceeded) throw new InvalidOperationException("Owned renderer teardown did not complete.");
+        }
     }
     public void Dispose()
     {
         lock (gate)
         {
-            if (disposed) return;
+            int current = Thread.CurrentThread.ManagedThreadId;
+            // A same-stack callback must not wait for its own release/disposal.
+            // Its outer owner still performs and acknowledges the real teardown.
+            if (browserReleased && !browserReleaseCompleted && browserReleaseThread == current) return;
+            if (disposed)
+            {
+                if (disposalThread == current) return;
+                while (!disposalCompleted) Monitor.Wait(gate);
+                if (!disposalSucceeded) throw new InvalidOperationException("Session teardown did not complete.");
+                return;
+            }
             disposed = true; cancelled = true;
+            disposalThread = current;
             signals.Ended -= Cancel;
         }
-        if (ending != null) ending();
-        StopBrowser();
-        // No cancellation callback runs while gate is held, and renderer release
-        // never relies on the UI queue reaching this method.
-        try { cancellation.Cancel(); }
+        bool succeeded = false;
+        try
+        {
+            if (ending != null) ending();
+            StopBrowser();
+            WaitForBrowserRelease();
+            // No callback runs under gate. Concurrent cleanup cannot acknowledge
+            // completion while another thread is still releasing the renderer.
+            try { cancellation.Cancel(); }
+            finally
+            {
+                try { signals.Dispose(); }
+                finally { lock (cleanupGate) { if (preview != null) preview.Clear(); } }
+            }
+            succeeded = true;
+        }
         finally
         {
-            try { signals.Dispose(); }
-            finally { lock (cleanupGate) { if (preview != null) preview.Clear(); } }
+            lock (gate) { disposalSucceeded = succeeded; disposalCompleted = true; Monitor.PulseAll(gate); }
         }
         // Keep the source valid for callbacks already dispatched by SystemEvents.
         // It owns no OS handle because its WaitHandle is never requested.

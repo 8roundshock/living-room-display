@@ -90,11 +90,25 @@ internal static class SessionExitDeadlineTests
         deadline.Enable(); deadline.Arm(); deadline.Complete();
         Check(exits == 1 && ticket.Disposals == 1, "inline expiry leaked a late-published timer");
     }
+    private static void HandshakePhase()
+    {
+        var clock = new Clock(); int exits = 0;
+        var deadline = new SessionExitDeadline(clock.Schedule, delegate { exits++; });
+        deadline.Arm(); clock.Advance(12000);
+        Check(clock.Schedules == 0 && exits == 0, "unresolved handshake enabled forced termination");
+        deadline.Enable(); deadline.Enable();
+        Check(clock.Schedules == 1 && clock.Due == 18000, "late handshake did not arm one full cleanup margin");
+        clock.Advance(6000); Check(exits == 1, "late-enabled terminal session lost its deadline");
+
+        clock = new Clock(); exits = 0; deadline = new SessionExitDeadline(clock.Schedule, delegate { exits++; });
+        deadline.Arm(); deadline.Complete(); deadline.Enable(); deadline.Arm(); clock.Advance(12000);
+        Check(clock.Schedules == 0 && exits == 0, "completed startup cancellation was rearmed by late enable");
+    }
     private static int Main()
     {
         try {
             OrdinaryDeadlines(); SchedulingRaces(false); SchedulingRaces(true);
-            ExpiryCommittedBeforeCompletion(); SchedulerFailureAndInlineCallback();
+            ExpiryCommittedBeforeCompletion(); SchedulerFailureAndInlineCallback(); HandshakePhase();
             Console.WriteLine(checks + " exit-deadline assertions passed with injected clock/timer/action; no process exit, native, UI or capture.");
             return 0;
         } catch (Exception error) { Console.Error.WriteLine(error); return 1; }

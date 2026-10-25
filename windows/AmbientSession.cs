@@ -22,7 +22,7 @@ internal sealed class AmbientSession : ApplicationContext
         RequestOwnTermination);
     private bool closed, disposed, ready;
     private int polling;
-    internal bool Ready { get { return ready && !closed; } }
+    internal bool Ready { get { return ready && !closed && !startup.IsCancelled; } }
 
     internal AmbientSession(bool testDisplay, bool automatic = false)
     {
@@ -34,12 +34,13 @@ internal sealed class AmbientSession : ApplicationContext
             startup = new SessionStartup(signals, Program.EnsureServer,
                 token => new NativeApi(token, automatic), token => new OwnedBrowser(), exitDeadline.Arm, exitDeadline.Enable);
             if (!startup.Start()) return; // Cancellation already disposed startup.
+            if (startup.IsCancelled) throw new OperationCanceledException(startup.Token);
             browser = (OwnedBrowser)startup.Browser;
             edgePath = Program.FindEdge();
             surface = new AmbientInputSurface(Foreground, RequestStop, Deactivated);
             surface.Shown += delegate { age.Restart(); timer.Start(); };
             timer.Tick += delegate { Poll(); };
-            startup.Token.ThrowIfCancellationRequested();
+            if (startup.IsCancelled) throw new OperationCanceledException(startup.Token);
             surface.Show(); // One ordinary activation, no focus repair/retry.
             ready = true;
         }
@@ -54,6 +55,7 @@ internal sealed class AmbientSession : ApplicationContext
     }
     private void Deactivated(IntPtr unusedHint)
     {
+        if (startup.IsCancelled) { RequestStop(); return; }
         // Exactly one actual foreground sample; the async lParam may be NULL.
         ForegroundKind actual = Foreground(DisplayNative.GetForegroundWindow());
         if (!policy.ObserveDeactivation(actual)) RequestStop();
