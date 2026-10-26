@@ -152,7 +152,7 @@ export async function runScreenQa({ playwright, edge } = {}) {
       assert.equal(await wakeState(real.page), 'held', 'headless Edge grants a screen wake lock on loopback');
       await real.close();
     }
-    checks.push('Keep the screen on: native=1 requests once when visible and again after a release or becoming visible; a windowed display never asks; full screen asks and leaving it releases; off never asks; no API reports unsupported; a denial logs once and retries after 10 s; the real API is held in headless Edge; native title Still · Display');
+    checks.push('Keep the screen on: native=1 requests once when visible and again after a release or becoming visible; a windowed display never asks; full screen asks and leaving it releases; off never asks; no API reports unsupported; a denial logs once and retries after 10 s; the real API is held in headless Edge; native title Still · Display · Ready');
 
     // (2) One display window from the editor: reused, focused, closable; Esc closes it back to the editor.
     {

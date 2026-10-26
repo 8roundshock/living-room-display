@@ -12,6 +12,21 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { NATIVE_READY_TITLE, NATIVE_STARTING_TITLE } from '../../src/client/nativeReadiness.ts';
 
+// This suite checks presentation, not real power requests. Screen's CI-only
+// real-API subcase remains in its own suite; local readiness QA uses this stub.
+async function mockDisplayDeviceApis(context) {
+  await mockWindowsStatus(context);
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: {
+      request: async () => {
+        const sentinel = new EventTarget(); sentinel.released = false;
+        sentinel.release = async () => { if (sentinel.released) return; sentinel.released = true; sentinel.dispatchEvent(new Event('release')); };
+        return sentinel;
+      },
+    } });
+  });
+}
+
 export async function runDisplayControlsQa({ playwright, edge, capture = false, clientDirectory } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const directory = await mkdtemp(join(tmpdir(), 'lrd-display-controls-'));
@@ -21,7 +36,7 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false, 
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], images = [], errors = [];
   try {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' }); await mockWindowsStatus(context);
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' }); await mockDisplayDeviceApis(context);
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.clock.install({ time: new Date('2026-10-18T13:00:00Z') });
     // #209: a capture listener counts handled pointer moves, so the fake clock never advances past a move
@@ -92,7 +107,7 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false, 
     // black computed document background and theme colour; the editor keeps its navy page once mounted.
     const premount = [];
     for (const viewport of [{ width: 1280, height: 720 }, { width: 3840, height: 2160 }]) {
-      const held = await browser.newContext({ viewport }); await mockWindowsStatus(held);
+      const held = await browser.newContext({ viewport }); await mockDisplayDeviceApis(held);
       try {
         let release; const gate = new Promise(resolve => { release = resolve; });
         await held.route(/\/assets\/[^/?]+\.js(\?.*)?$/, async route => { await gate; await route.continue(); });
@@ -123,7 +138,7 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false, 
     checks.push(`#334 /display?native=1 with the app script held: ${premount.join('; ')}, document background and theme colour black; the mounted editor keeps rgb(9, 11, 18)`);
 
     // #539: hold actual state delivery. A route/title is never a painted-board certificate.
-    const startup = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' }); await mockWindowsStatus(startup);
+    const startup = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' }); await mockDisplayDeviceApis(startup);
     let releaseState; const stateGate = new Promise(resolve => { releaseState = resolve; });
     await startup.route('**/api/state', async route => { await stateGate; await route.continue(); });
     try {
@@ -146,11 +161,36 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false, 
       assert.ok(first.board && first.widgets > 0, 'content-ready title follows the actual default board');
       assert.deepEqual([first.background, first.opacity, first.ready, first.controls], ['rgb(0, 0, 0)', '1', 'true', false]);
       if (capture) images.push({ name: 'native-content-ready-board', bytes: await starting.screenshot() });
-      // A normal state poll must never replay the entrance or clear the ready marker.
-      await starting.evaluate(() => window.dispatchEvent(new Event('focus')));
+      // A transient reload error keeps an already-rendered board and its readiness.
+      await starting.route('**/api/changes', route => route.abort('connectionrefused'));
+      await starting.route('**/api/state', route => route.fulfill({ status: 503, json: { error: 'Synthetic reload failure' } }));
+      const reloaded = starting.waitForResponse(response => response.url().endsWith('/api/state') && response.status() === 503);
+      await starting.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+      await reloaded;
       assert.equal(await starting.title(), NATIVE_READY_TITLE);
+      assert.equal(await starting.locator('html').evaluate(element => element.dataset.nativeReady), 'true');
+      assert.equal(await starting.locator('.display-page').count(), 1);
       checks.push('#539: held state keeps native fallback black/hidden and title unready; committed default board publishes readiness after paint opportunities, with no native controls');
     } finally { releaseState(); await startup.close(); }
+
+    const nativeCases = await browser.newContext({ viewport: { width: 1280, height: 720 } }); await mockDisplayDeviceApis(nativeCases);
+    try {
+      const failed = await nativeCases.newPage();
+      await failed.route('**/api/state', route => route.fulfill({ status: 503, json: { error: 'Synthetic initial failure' } }));
+      await failed.goto(base + '/display?native=1');
+      await failed.locator('.display-fallback button').waitFor({ state: 'attached' });
+      assert.equal(await failed.title(), NATIVE_STARTING_TITLE, 'initial error cannot grant native readiness');
+      assert.equal(await failed.locator('.fallback-content').evaluate(element => getComputedStyle(element).visibility), 'hidden');
+      await failed.close();
+      await app.store.update(data => { for (const id of Object.keys(data.settings.widgets)) data.settings.widgets[id] = false; });
+      const empty = await nativeCases.newPage();
+      await empty.goto(base + '/display?native=1');
+      await empty.waitForFunction(title => document.title === title, NATIVE_READY_TITLE);
+      assert.equal(await empty.locator('.grid-ambient').count(), 1, 'intentional empty board is valid ambient content');
+      assert.equal(await empty.locator('.ambient-widget').count(), 0);
+      assert.equal(await empty.locator('.display-page').evaluate(element => getComputedStyle(element).transitionDuration), '0.28s', 'normal motion has one short native-only startup fade');
+      checks.push('#539: initial error stays unready, a later disconnect retains its board, all-widgets-off remains a ready intentional board, and the native fade is 280ms');
+    } finally { await nativeCases.close(); }
     assert.deepEqual(errors, []);
     return { checks, images };
   } finally { await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }

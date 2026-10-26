@@ -16,9 +16,7 @@ input baseline for dismissal
 [STATUS.md](../STATUS.md) records which revision is installed; native acceptance of
 this helper is still pending (see [verification](#verification)).
 
-## Entry points and lifetime
-
-### Widget-first native presentation (#539)
+## Widget-first native presentation (#539)
 
 The native host keeps its black input cover opaque while Edge prepares. An
 ordinary `Still · Display` title does not certify content readiness: it used to
@@ -42,6 +40,8 @@ and [GoogleChrome's tooling guide](https://github.com/GoogleChrome/chrome-launch
 Edge's actual native composition or #503's occlusion concern has been accepted.
 The source repair's physical reveal, grey-screen report and pointer behavior
 still need a current, separately authorized watched native check.
+
+## Entry points and lifetime
 
 - `/s`: ensure the installed backend is owned/ready, claim an eligible earlier
   RAM-only thumbnail if available, then launch the isolated Edge kiosk. Never
