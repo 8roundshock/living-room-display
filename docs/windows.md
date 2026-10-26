@@ -16,6 +16,31 @@ input baseline for dismissal
 [STATUS.md](../STATUS.md) records which revision is installed; native acceptance of
 this helper is still pending (see [verification](#verification)).
 
+## Widget-first native presentation (#539)
+
+The native host keeps its black input cover opaque while Edge prepares. An
+ordinary `Still · Display` title does not certify content readiness: it used to
+appear even while state was loading. The native page alone now emits
+`Still · Display · Ready` after state has mounted the ambient board, fonts are
+ready and browser paint opportunities have passed. Only that marker can satisfy
+the existing exact-job, window-class, full-primary-client and cursor checks.
+Loading and initial error content stays covered; failed preparation retains the
+15-second startup limit and immediate input cancellation. A later disconnected
+state that still renders the saved board does not restart this entrance.
+
+The native page has one 280 ms startup fade, disabled by reduced motion. The
+readiness lifecycle does not restart during ordinary polling or widget movement.
+This startup exception does not alter the always-on movement requirement (#436).
+
+The owned kiosk command adds `--disable-backgrounding-occluded-windows` so it can
+prepare frames behind the opaque input cover. This is a rendering switch scoped
+to this one browser process tree, documented in [Chromium's switches](https://chromium.googlesource.com/chromium/src/+/lkgr/content/public/common/content_switches.cc)
+and [GoogleChrome's tooling guide](https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md)
+(checked 2026-10-25; recheck on a browser/lifecycle change). It is not evidence that
+Edge's actual native composition or #503's occlusion concern has been accepted.
+The source repair's physical reveal, grey-screen report and pointer behavior
+still need a current, separately authorized watched native check.
+
 ## Entry points and lifetime
 
 - `/s`: ensure the installed backend is owned/ready, claim an eligible earlier

@@ -16,6 +16,7 @@ import { Editor } from './Editor';
 import { Home } from './Home';
 import { SettingsPage } from './SettingsPage';
 import { PAGE_TITLES, pageForPath } from './route';
+import { NATIVE_READY_TITLE, NATIVE_STARTING_TITLE, prepareNativeDisplay } from './nativeReadiness';
 
 /** Home and the display pick up a change made elsewhere within about this long, while visible (#438). */
 const CHANGE_POLL_MS = 5_000;
@@ -70,6 +71,22 @@ export function App() {
     return () =>
       document.documentElement.classList.remove('native-display');
   }, [nativeDisplay]);
+  const hasDisplayState = state !== null && !retired;
+  useLayoutEffect(() => {
+    if (!nativeDisplay) return;
+    return prepareNativeDisplay({
+      fontsReady: document.fonts?.ready ?? Promise.resolve(),
+      requestFrame: callback => window.requestAnimationFrame(callback),
+      cancelFrame: id => window.cancelAnimationFrame(id),
+      boardMounted: () => document.querySelector('.display-page .grid-ambient') !== null,
+      loading: () => {
+        document.title = NATIVE_STARTING_TITLE;
+        delete document.documentElement.dataset.nativeReady;
+      },
+      reveal: () => { document.documentElement.dataset.nativeReady = 'true'; },
+      ready: () => { document.title = NATIVE_READY_TITLE; },
+    }, hasDisplayState);
+  }, [nativeDisplay, hasDisplayState]);
   const reload = useCallback(async () => {
     const startedAt = revision.current;
     const requestId = ++request.current;
@@ -145,8 +162,8 @@ export function App() {
   }, [page, reload, retired]);
   useEffect(() => {
     // Home keeps the title current itself once it shows ("Done · Still · Home" while a timer is done).
-    document.title = PAGE_TITLES[page];
-  }, [page]);
+    if (!nativeDisplay) document.title = PAGE_TITLES[page];
+  }, [page, nativeDisplay]);
 
   if (retired)
     return (

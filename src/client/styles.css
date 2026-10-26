@@ -587,6 +587,14 @@ a.button {
 }
 
 /* Explicit native presentation only; browser display/fullscreen keeps its pointer. */
+/* A one-time startup fade is separate from movement: no later poll or relocation
+   replays it. Native loading/errors never expose the browser fallback card. */
+html.native-display .display-fallback .fallback-content { visibility: hidden; }
+html.native-display .display-page { opacity: 0; transition: opacity 280ms ease-out; }
+html.native-display[data-native-ready="true"] .display-page { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  html.native-display .display-page { transition: none; }
+}
 html.native-display,
 html.native-display *,
 html.native-display *::before,

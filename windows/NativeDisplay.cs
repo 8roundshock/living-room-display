@@ -82,7 +82,7 @@ internal sealed class OwnedBrowser : IAmbientBrowser {
                 if(!DisplayNative.UpdateProcThreadAttribute(attributes,0,new IntPtr(0x2000d),jobs,new IntPtr(IntPtr.Size),IntPtr.Zero,IntPtr.Zero)) throw new System.ComponentModel.Win32Exception();
                 var info=new DisplayNative.StartupEx(); info.info.cb=Marshal.SizeOf(info); info.attributes=attributes;
                 string profile=Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"..","..","edge-profile"));
-                string command=Native.Quote(edge)+" --kiosk "+Native.Quote(url)+" --edge-kiosk-type=fullscreen --no-first-run --no-default-browser-check --disable-background-mode --inprivate --user-data-dir="+Native.Quote(profile);
+                string command=Native.Quote(edge)+" --kiosk "+Native.Quote(url)+" --edge-kiosk-type=fullscreen --no-first-run --no-default-browser-check --disable-background-mode"+NativeBrowserReadiness.PaintArguments+" --inprivate --user-data-dir="+Native.Quote(profile);
                 token.ThrowIfCancellationRequested();
                 if(!DisplayNative.CreateProcess(edge,new StringBuilder(command),IntPtr.Zero,IntPtr.Zero,false,0x80004,IntPtr.Zero,null,ref info,out process)) throw new System.ComponentModel.Win32Exception();
                 lock(gate) {
@@ -122,7 +122,7 @@ internal sealed class OwnedBrowser : IAmbientBrowser {
             var text=new StringBuilder(256); DisplayNative.GetWindowText(window,text,text.Capacity);
             var name=new StringBuilder(128); DisplayNative.GetClassName(window,name,name.Capacity);
             string title=text.ToString().Replace("Microsoft\u200b Edge","Microsoft Edge");
-            if(name.ToString()=="Chrome_WidgetWin_1" && (title=="Still \u00b7 Display - [InPrivate] - Microsoft Edge" || title=="Still \u00b7 Display - Microsoft Edge")) {
+            if(name.ToString()=="Chrome_WidgetWin_1" && NativeBrowserReadiness.MatchesTitle(title)) {
                 if(DisplayNative.Client(window)==Screen.PrimaryScreen.Bounds && DisplayNative.WaitForSingleObject(pin,0)==258 && OwnsWindow(window)) { ready=window; return false; }
             }
             return true;
