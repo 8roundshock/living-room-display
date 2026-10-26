@@ -277,7 +277,7 @@ try {
     function Invoke-ChildScript([string]$Arguments) {
         $launch = New-Object Diagnostics.ProcessStartInfo
         $launch.FileName = $shell
-        $isolated = '& { ' + $script:childStatusBoundary + '; & ''' + $controlScript.Replace("'","''") + ''' ' + $Arguments + ' }'
+        $isolated = '& { ' + $script:childStatusBoundary + '; $global:LASTEXITCODE=0; & ''' + $controlScript.Replace("'","''") + ''' ' + $Arguments + '; exit $LASTEXITCODE }'
         $launch.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($isolated))
         $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true
         $launch.EnvironmentVariables['LOCALAPPDATA'] = Join-Path $scratchRoot 'child-default'
