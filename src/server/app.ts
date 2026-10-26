@@ -21,7 +21,7 @@ import { TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts'
 import { WIDGET_CATALOG, isActiveWidget } from '../shared/widgets.ts';
 import { HOME_SHOWABLE_WIDGETS, showPlacement } from '../shared/show.ts';
 import type { ChangeMarker, Settings, TimersResult, WidgetId } from '../shared/contracts.ts';
-import { PREPARATION_MAX_AGE_MS, PreparationController, type PreparationOptions, type PreparationView } from './preidle.ts';
+import { PREPARATION_MAX_OBSERVATION_GAP_MS, PreparationController, needsPreviewSupervision, type PreparationOptions, type PreparationView } from './preidle.ts';
 
 // Read once at module load. src/server and the built dist/server both sit two
 // levels below the package.json shipped with the app, so health matches it.
@@ -118,7 +118,7 @@ export async function createApplication(options: ApplicationOptions) {
     const schedule = schedules.snapshot(settings, at), marker = schedules.marker(settings, at);
     const previous = preparationObserved;
     if (previous && previous.manual === settingsRevision && previous.schedule === schedules.revision) {
-      if (at < previous.at || at - previous.at > PREPARATION_MAX_AGE_MS) { preparationBoundary++; clearPreview(); }
+      if (at < previous.at || at - previous.at > PREPARATION_MAX_OBSERVATION_GAP_MS) { preparationBoundary++; clearPreview(); }
       else {
         // A hidden off interval must invalidate a pending frame even if the next poll
         // sees the original style again. Bound the scan to the frame's 90-second life.
@@ -139,9 +139,7 @@ export async function createApplication(options: ApplicationOptions) {
     preparationObserved = { at, manual: settingsRevision, schedule: schedules.revision, marker };
     const effective = scheduledSettings(settings, schedule);
     if (!effective.preview.enabled || !effective.widgets.preview) clearPreview();
-    const referenced = new Set([schedule.config.fallbackPresetId, ...schedule.config.rules.map(rule => rule.presetId)]);
-    const supervisionEnabled = settings.preview.enabled && settings.widgets.preview || (schedule.config.enabled &&
-      settings.savedPresets.some(preset => referenced.has(preset.id) && preset.visual.preview.enabled && preset.visual.widgets.preview));
+    const supervisionEnabled = needsPreviewSupervision(settings, schedule.config);
     return { settings: effective, supervisionEnabled,
       settingsRevision: createHash('sha256').update(JSON.stringify([settingsRevision, marker, preparationBoundary])).digest('hex') };
   }
@@ -419,9 +417,20 @@ export async function createApplication(options: ApplicationOptions) {
     }
     if (path === '/api/preview/preparation' && ['GET', 'POST', 'DELETE'].includes(method)) {
       preparationRequest(request);
-      if (method === 'GET') { json(response, 200, preparation.config()); return; }
+      if (method === 'GET') {
+        const config = preparation.config();
+        if (request.headers['x-preparation-safe'] === '1' && config.enabled) {
+          const session = z.coerce.number().int().min(0).max(0x7fffffff).parse(request.headers['x-session-id']);
+          preparation.snapshot.observe(session);
+          if (request.headers['x-preparation-freeze'] === '1') preparation.snapshot.freeze();
+          else if (request.headers['x-preparation-capture-eligible'] === '1') preparation.snapshot.resume();
+        } else preparation.invalidate(true);
+        json(response, 200, { ...config, generation: preparation.snapshot.generation, frame: preparation.snapshot.metadata() }); return;
+      }
       if (method === 'DELETE') {
-        preparation.invalidate(request.headers['x-invalidate-active'] === '1'); json(response, 204); return;
+        if (request.headers['x-invalidate-active-only'] === '1') preparation.clearActive();
+        else preparation.invalidate(request.headers['x-invalidate-active'] === '1');
+        json(response, 204); return;
       }
       if (request.headers['content-type'] !== 'image/png') throw new HttpError(415, 'Use image/png');
       const integerHeader = (name: string, max = Number.MAX_SAFE_INTEGER) => z.coerce.number().int().min(0).max(max).parse(request.headers[name]);
@@ -430,6 +439,7 @@ export async function createApplication(options: ApplicationOptions) {
         inputTick: integerHeader('x-input-tick', 0xffffffff), sessionId: integerHeader('x-session-id', 0x7fffffff),
         desktopId: z.literal('Default').parse(request.headers['x-desktop-id']), capturedAt: z.iso.datetime({ offset: true }).parse(request.headers['x-captured-at']),
         completedAt: z.iso.datetime({ offset: true }).parse(request.headers['x-completed-at']), completedMonotonicMs: integerHeader('x-completed-monotonic-ms'),
+        timeoutSeconds: integerHeader('x-idle-timeout-seconds', 0x7fffffff),
       };
       // Unlike the active preview, this slot is never reachable by state, image, export or Home polls.
       let content: Buffer | undefined;
@@ -461,13 +471,13 @@ export async function createApplication(options: ApplicationOptions) {
         const claim = z.object({
           generation: uint, configuration: z.string().min(1).max(100), processId: uint.min(1).max(0x7fffffff),
           processStartedAt: z.iso.datetime({ offset: true }), startedMonotonicMs: uint,
-          inputTick: uint.max(0xffffffff), sessionId: uint.max(0x7fffffff), desktopId: z.literal('Default'),
+          inputTick: uint.max(0xffffffff), sessionId: uint.max(0x7fffffff), desktopId: z.literal('Default'), completedMonotonicMs: uint,
         }).strict().parse(await jsonBody(request));
         preparationRequest(request);
         const config = preparation.config();
         const prepared = preparation.snapshot.claim(claim, config.enabled);
-        clearPreview();
         if (prepared) {
+          clearPreview();
           image = prepared.content; preview = { available: true, capturedAt: prepared.capturedAt, width: prepared.width, height: prepared.height };
           previewChanges++; claimed = true;
         }

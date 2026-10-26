@@ -30,5 +30,6 @@ Invoke-Synthetic 'ActiveInputTests' @('SessionStartup.cs','tests\ActiveInputTest
 Invoke-Synthetic 'SurfacePolicyTests' @('SurfacePolicy.cs','tests\SurfacePolicyTests.cs')
 Invoke-Synthetic 'ServerRuntimeTests' @('ServerRuntime.cs','tests\ServerRuntimeTests.cs') @('System.Management.dll','System.Web.Extensions.dll')
 & (Join-Path $PSScriptRoot 'Test-PreviewLifecycle.ps1')
+& (Join-Path $PSScriptRoot 'Test-LogonStartup.ps1')
 & (Join-Path $windows 'installer\tests\Test-InstallerPolicy.ps1')
 Write-Output 'Pre-idle source checks passed. No production helper, watcher, desktop capture or installed endpoint was run.'

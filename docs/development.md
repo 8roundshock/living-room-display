@@ -32,6 +32,24 @@ The broader `Test-Windows.ps1` is a different integration scope; do not substitu
 it when only source checks are authorized. Installer smoke CI sets the disable-only
 `LRD_PREVIEW_PREPARER_DISABLED=1` so package lifecycle checks do not capture pixels.
 
+The periodic-cache contract (#538) additionally covers first safe capture,
+five-minute monotonic refresh, retention through eligible capture failure,
+safe-producer leases, authoritative freeze/claim and lost-acknowledgement races.
+Sign-in setup tests (#540) inject all registry boundaries and never write startup
+settings. For package transaction source verification use the explicit safe subset:
+
+```powershell
+pwsh -NoProfile -File windows/tests/Test-PackageInstall.ps1 -SourceOnly
+```
+
+That mode reports three explicit skipped integration cases: missing-root CLI
+entry, the native Stop event boundary, and CLI uninstall delegation. Hosted CI
+keeps the full cases by default. The protected legacy-reader child and parent
+status calls receive synthetic registry/process facts; children use fixture-only
+LOCALAPPDATA. The header of an older fixture was not sufficient isolation proof
+(#543). Audit actual call/child boundaries before using a suite in a restricted
+source-only context. Never describe a skipped subset as the full integration pass.
+
 From the checkout with Node 24/npm available:
 
 ```powershell

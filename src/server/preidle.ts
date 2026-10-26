@@ -4,20 +4,28 @@ import { lstatSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import type { Settings } from '../shared/contracts.ts';
 
-export const PREPARATION_MAX_AGE_MS = 90_000;
+// Observation-gap reconstruction is separate from the age of a retained image.
+export const PREPARATION_MAX_OBSERVATION_GAP_MS = 630_000;
+export const PREPARATION_CAPTURE_INTERVAL_MS = 300_000;
+export const PREPARATION_OBSERVATION_LEASE_MS = 10_000;
+export const PREPARATION_UPLOAD_MAX_AGE_MS = 10_000;
 export const PREPARATION_LEAD_SECONDS = 30;
 export interface PreparationConfig {
   generation: number; configuration: string; enabled: boolean; parentProcessId: number;
-  timeoutSeconds: number; prepareLeadSeconds: number; maxAgeMs: number;
+  timeoutSeconds: number; prepareLeadSeconds: number; maxAgeMs: null;
+  captureIntervalMs: number; observationLeaseMs: number;
+  frame: PreparationStamp | null;
 }
 export interface PreparationStamp {
   generation: number; configuration: string; inputTick: number; sessionId: number; desktopId: 'Default';
   capturedAt: string; completedAt: string; completedMonotonicMs: number;
+  timeoutSeconds: number;
 }
 export interface PreparedImage { content: Buffer; capturedAt: string; width: number; height: number }
 export interface PreparationClaim {
   generation: number; configuration: string; processId: number; processStartedAt: string; startedMonotonicMs: number;
   inputTick: number; sessionId: number; desktopId: 'Default';
+  completedMonotonicMs: number;
 }
 export interface PreparationChild { stop(): void }
 export interface PreparationBootstrap { token: string; pipeName: string; parentProcessId: number; port: number; source: string }
@@ -32,16 +40,46 @@ export interface PreparationView {
   supervisionEnabled?: boolean;
 }
 
+/** Potential preview visibility, shared by the resident supervisor and startup-policy fixtures. */
+export function needsPreviewSupervision(settings: Pick<Settings, 'preview' | 'widgets' | 'savedPresets'>,
+  schedule: { enabled: boolean; fallbackPresetId: string | null; rules: readonly { presetId: string }[] }): boolean {
+  if (settings.preview.enabled && settings.widgets.preview) return true;
+  if (!schedule.enabled) return false;
+  const referenced = new Set([schedule.fallbackPresetId, ...schedule.rules.map(rule => rule.presetId)]);
+  return settings.savedPresets.some(preset => referenced.has(preset.id) && preset.visual.preview.enabled && preset.visual.widgets.preview);
+}
+
 /** One unpublished thumbnail. Its byte array is transferred once, or zeroed on every refusal/clear. */
 export class PreparedSnapshot {
   #generation = 0;
   #configuration = '';
   #pending: (PreparedImage & PreparationStamp & { receivedAt: number; receivedMonotonic: number }) | null = null;
   #expiry: ReturnType<typeof setTimeout> | null = null;
+  #observation: { sessionId: number; wall: number; mono: number } | null = null;
+  #frozen = false;
   readonly #now: () => number;
   readonly #monotonic: () => number;
-  constructor(now: () => number = Date.now, monotonic: () => number = () => performance.now()) { this.#now = now; this.#monotonic = monotonic; }
+  readonly #observationLost: () => void;
+  constructor(now: () => number = Date.now, monotonic: () => number = () => performance.now(), observationLost = () => {}) {
+    this.#now = now; this.#monotonic = monotonic; this.#observationLost = observationLost;
+  }
   get generation() { return this.#generation; }
+  metadata(): PreparationStamp | null {
+    const p = this.#pending;
+    return p ? { generation: p.generation, configuration: p.configuration, inputTick: p.inputTick, sessionId: p.sessionId,
+      desktopId: p.desktopId, capturedAt: p.capturedAt, completedAt: p.completedAt,
+      completedMonotonicMs: p.completedMonotonicMs, timeoutSeconds: p.timeoutSeconds } : null;
+  }
+  freeze() {
+    if (this.#frozen) return;
+    this.#frozen = true; this.#generation++;
+    if (this.#pending) this.#pending.generation = this.#generation;
+  }
+  resume() {
+    if (!this.#frozen) return;
+    this.#frozen = false; this.#generation++;
+    if (this.#pending) this.#pending.generation = this.#generation;
+  }
   configure(configuration: string) {
     if (configuration !== this.#configuration) { this.clear(); this.#configuration = configuration; }
   }
@@ -49,32 +87,52 @@ export class PreparedSnapshot {
     this.#generation++;
     if (this.#expiry) clearTimeout(this.#expiry);
     this.#expiry = null;
+    this.#observation = null;
+    this.#frozen = false;
     this.#pending?.content.fill(0); this.#pending = null;
+  }
+  /** Only the child-secret endpoint can renew safe-context observation, never UI polls. */
+  observe(sessionId: number) {
+    const wall = this.#now(), mono = this.#monotonic(), previous = this.#observation;
+    if (previous && (sessionId !== previous.sessionId || !this.#observed())) this.#loseObservation();
+    if (this.#expiry) clearTimeout(this.#expiry);
+    const observation = this.#observation = { sessionId, wall, mono };
+    this.#expiry = setTimeout(() => { if (this.#observation === observation) this.#loseObservation(); }, PREPARATION_OBSERVATION_LEASE_MS);
+    this.#expiry.unref();
+  }
+  #loseObservation() { this.clear(); this.#observationLost(); }
+  #observed(sessionId = this.#observation?.sessionId) {
+    const observed = this.#observation;
+    if (!observed || observed.sessionId !== sessionId) return false;
+    const elapsed = this.#monotonic() - observed.mono;
+    return elapsed >= 0 && elapsed <= PREPARATION_OBSERVATION_LEASE_MS &&
+      Math.abs(this.#now() - observed.wall - elapsed) <= 2_000;
   }
   receive(image: PreparedImage, stamp: PreparationStamp, enabled: boolean): boolean {
     const receivedAt = this.#now(), captured = Date.parse(stamp.capturedAt), completed = Date.parse(stamp.completedAt);
-    if (!enabled || this.#pending || stamp.generation !== this.#generation || stamp.configuration !== this.#configuration ||
+    if (!enabled || this.#frozen || !this.#observed(stamp.sessionId) || stamp.generation !== this.#generation || stamp.configuration !== this.#configuration ||
         !Number.isFinite(captured) || !Number.isFinite(completed) || completed < captured || completed > receivedAt ||
-        receivedAt - captured > PREPARATION_MAX_AGE_MS || stamp.desktopId !== 'Default') { image.content.fill(0); return false; }
-    if (this.#expiry) clearTimeout(this.#expiry);
+        receivedAt - captured > PREPARATION_UPLOAD_MAX_AGE_MS || stamp.desktopId !== 'Default' ||
+        (this.#pending !== null && stamp.completedMonotonicMs <= this.#pending.completedMonotonicMs)) { image.content.fill(0); return false; }
+    // Publication is atomic: failed or older uploads leave the latest success intact.
+    this.#pending?.content.fill(0);
     this.#pending = { ...image, ...stamp, receivedAt, receivedMonotonic: this.#monotonic() };
-    const generation = this.#generation;
-    this.#expiry = setTimeout(() => { if (generation === this.#generation) this.clear(); }, Math.max(1, PREPARATION_MAX_AGE_MS - (receivedAt - captured)));
-    this.#expiry.unref();
     return true;
   }
   claim(claim: PreparationClaim, enabled: boolean): PreparedImage | null {
     const pending = this.#pending;
+    if (pending && (claim.generation !== pending.generation || claim.configuration !== pending.configuration ||
+        claim.completedMonotonicMs !== pending.completedMonotonicMs)) return null; // A stale attestation cannot consume the latest frame.
     this.#pending = null;
     const started = Date.parse(claim.processStartedAt), current = this.#now();
     const elapsed = pending ? this.#monotonic() - pending.receivedMonotonic : Infinity;
-    const valid = enabled && pending && pending.generation === this.#generation && pending.configuration === this.#configuration &&
+    const valid = enabled && pending && this.#observed(pending.sessionId) && pending.generation === this.#generation && pending.configuration === this.#configuration &&
       claim.generation === pending.generation && claim.configuration === pending.configuration &&
       pending.inputTick === claim.inputTick && pending.sessionId === claim.sessionId && pending.desktopId === claim.desktopId &&
+      pending.completedMonotonicMs === claim.completedMonotonicMs &&
       Number.isSafeInteger(claim.processId) && claim.processId > 0 && pending.completedMonotonicMs + 2_000 < claim.startedMonotonicMs &&
       Number.isFinite(started) && pending.receivedAt < started && Date.parse(pending.completedAt) + 2_000 < started && started <= current &&
-      elapsed >= 0 && elapsed <= PREPARATION_MAX_AGE_MS && Math.abs(current - pending.receivedAt - elapsed) <= 2_000 &&
-      current - Date.parse(pending.capturedAt) <= PREPARATION_MAX_AGE_MS;
+      elapsed >= 0 && Math.abs(current - pending.receivedAt - elapsed) <= 2_000;
     this.clear();
     if (!valid || !pending) { pending?.content.fill(0); return null; }
     return { content: pending.content, capturedAt: pending.capturedAt, width: pending.width, height: pending.height };
@@ -98,7 +156,7 @@ export class PreparationController {
     view: () => PreparationView,
     clearActive: () => void, now: () => number = Date.now, monotonic?: () => number) {
     this.#options = options; this.#view = view; this.#clearActive = clearActive;
-    this.snapshot = new PreparedSnapshot(now, monotonic);
+    this.snapshot = new PreparedSnapshot(now, monotonic, clearActive);
   }
   get pipeName() { return this.#child && this.#token ? this.#pipeName : null; }
   config(): PreparationConfig {
@@ -109,7 +167,8 @@ export class PreparationController {
     return { generation: this.snapshot.generation, configuration: settingsRevision,
       enabled: this.#supervise && settings.preview.enabled && settings.widgets.preview,
       parentProcessId: process.pid, timeoutSeconds: settings.idle.idleMinutes * 60,
-      prepareLeadSeconds: PREPARATION_LEAD_SECONDS, maxAgeMs: PREPARATION_MAX_AGE_MS };
+      prepareLeadSeconds: PREPARATION_LEAD_SECONDS, maxAgeMs: null,
+      captureIntervalMs: PREPARATION_CAPTURE_INTERVAL_MS, observationLeaseMs: PREPARATION_OBSERVATION_LEASE_MS, frame: this.snapshot.metadata() };
   }
   listening(port: number) { this.#port = port; this.refresh(); }
   refresh() {
@@ -136,6 +195,7 @@ export class PreparationController {
       timingSafeEqual(Buffer.from(token), Buffer.from(this.#token));
   }
   invalidate(active = false) { this.snapshot.clear(); if (active) this.#clearActive(); }
+  clearActive() { this.#clearActive(); }
   close() {
     this.#closed = true; this.invalidate(true); this.#token = null; this.#pipeName = null;
     const child = this.#child; this.#child = null; child?.stop();

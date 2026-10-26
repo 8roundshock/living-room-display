@@ -14,6 +14,23 @@ internal static class NativePreviewContextTests
     {
         var initial=Context();
         Check(NativePreviewContext.Same(initial,Context()),"unchanged validated context remains eligible");
+        var active=Context(); active.InputTick++;
+        Check(NativePreviewContext.CaptureCompatible(initial,active),"periodic copy permits normal input while context remains safe");
+        Check(!NativePreviewContext.Same(initial,active),"claim publication still requires current input stability");
+        foreach(string change in new string[] { "session","timeout","unsafe","unreadable","saver","ambient","near deadline" })
+        {
+            var current=Context();
+            if(change=="session")current.SessionId++;
+            if(change=="timeout")current.TimeoutSeconds++;
+            if(change=="unsafe")current.Safe=false;
+            if(change=="unreadable")current.Readable=false;
+            if(change=="saver")current.SaverRunning=true;
+            if(change=="ambient")current.AmbientRunning=true;
+            if(change=="near deadline")current.IdleMilliseconds=570000;
+            Check(!NativePreviewContext.CaptureCompatible(initial,current),"periodic copy rejects "+change);
+            if(change=="saver" || change=="ambient" || change=="near deadline")
+                Check(NativePreviewContext.PrivacyCompatible(initial,current),change+" cancels refresh but preserves the earlier safe cache");
+        }
         foreach(string change in new string[] { "timeout","input","session","unreadable","unsafe" })
         {
             var current=Context();

@@ -4,6 +4,7 @@ $windowsDirectory = Split-Path $PSScriptRoot -Parent
 . (Join-Path $windowsDirectory 'LivingRoomDisplay.ps1') -FunctionsOnly
 # Mock all external boundaries; no native type or registry provider is invoked.
 function Assert-Installed { }
+function Remove-OwnedLogonEntry { }
 function Initialize-WindowsApi { }
 function Set-WindowsScreenSaverParameter { param($Action,$Value) $script:spiCalls++; return $true }
 function Test-Path { param($Path,$LiteralPath) return ($LiteralPath -eq (Join-Path $InstallRoot 'screensaver-before.json')) }

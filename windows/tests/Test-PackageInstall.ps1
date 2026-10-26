@@ -1,9 +1,12 @@
+[CmdletBinding()]
+param([switch]$SourceOnly)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 # InstallPackage transaction tests. Synthetic packages are built here; the real
 # control script runs its file transactions inside a scratch folder under .local.
 # Start/Stop, idle, the port probe, runtime version, disk space and health are
-# mocked: no listener, registry write, capture, kiosk or real install is used.
+# mocked. -SourceOnly skips CLI-entry integration cases that can reach native
+# OS boundaries on a product regression; hosted CI retains those full cases.
 $windowsDirectory = Split-Path $PSScriptRoot -Parent
 $repository = Split-Path $windowsDirectory -Parent
 $controlScript = Join-Path $windowsDirectory 'LivingRoomDisplay.ps1'
@@ -14,6 +17,25 @@ $outside = Join-Path $scratchRoot 'outside'
 $logFile = Join-Path $scratchRoot 'logs\setup-helper.log'
 $junctions = New-Object 'Collections.Generic.List[string]'
 $script:checks = 0
+$script:skippedIntegration = 0
+# Child processes do not inherit the parent test's functions. Every script child
+# receives these synthetic boundaries before invoking either control version.
+# EncodedCommand provides literal quoting, not an execution-policy override.
+$script:childStatusBoundary = @'
+function Get-ItemProperty { param($Path,$LiteralPath,$ErrorAction) return [pscustomobject]@{ScreenSaveActive='0';ScreenSaveTimeOut='543';ScreenSaverIsSecure='0'} }
+function Get-CimInstance { param($ClassName,$Filter,$ErrorAction) return @() }
+function Get-Process { throw 'Unexpected process lookup in isolated child.' }
+function Test-Path {
+    [CmdletBinding(DefaultParameterSetName='Path')]
+    param([Parameter(ParameterSetName='Path',Position=0)][string[]]$Path,[Parameter(ParameterSetName='Literal')][string[]]$LiteralPath,[string]$PathType)
+    $targets=if($PSCmdlet.ParameterSetName -eq 'Literal'){$LiteralPath}else{$Path}
+    foreach($target in $targets){if($target -match '^(HKCU|HKLM|Registry):'){return $false}}
+    return Microsoft.PowerShell.Management\Test-Path @PSBoundParameters
+}
+function Set-ItemProperty { throw 'Unexpected registry write in isolated child.' }
+function New-ItemProperty { throw 'Unexpected registry write in isolated child.' }
+function Remove-ItemProperty { throw 'Unexpected registry write in isolated child.' }
+'@
 $null = New-Item -ItemType Directory -Path $packages,$outside,(Split-Path $logFile -Parent),(Split-Path $testRoot -Parent) -Force
 [IO.File]::WriteAllText((Join-Path $outside 'keep.txt'),'outside the install root')
 
@@ -48,6 +70,18 @@ try {
     }
     function Stop-App { $script:stops++; $script:serverRunning = $false; if ($script:portBusyAfterStop) { $script:portBusy = $true } }
     function Set-Idle { param($Enable) }
+    function Get-ItemProperty { param($Path,$LiteralPath,$ErrorAction) return [pscustomobject]@{ScreenSaveActive='0';ScreenSaveTimeOut='600';ScreenSaverIsSecure='0'} }
+    function Get-CimInstance { param($ClassName,$Filter,$ErrorAction) return @() }
+    function Test-Path {
+        [CmdletBinding(DefaultParameterSetName='Path')]
+        param([Parameter(ParameterSetName='Path',Position=0)][string[]]$Path,[Parameter(ParameterSetName='Literal')][string[]]$LiteralPath,[string]$PathType)
+        $targets=if($PSCmdlet.ParameterSetName -eq 'Literal'){$LiteralPath}else{$Path}
+        foreach($target in $targets){if($target -match '^(HKCU|HKLM|Registry):'){return $false}}
+        return Microsoft.PowerShell.Management\Test-Path @PSBoundParameters
+    }
+    function Assert-LogonEntryAvailable { }
+    function Sync-LogonStartup { }
+    function Remove-OwnedLogonEntry { }
     function Get-OwnedServer { if ($script:serverRunning) { return [pscustomobject]@{Id=1} }; return $null }
     function Test-PortInUse { return $script:portBusy }
     function Get-RuntimeVersion { param($NodePath) return $script:runtimeVersion }
@@ -243,8 +277,10 @@ try {
     function Invoke-ChildScript([string]$Arguments) {
         $launch = New-Object Diagnostics.ProcessStartInfo
         $launch.FileName = $shell
-        $launch.Arguments = '-NoProfile -NonInteractive -File "' + $controlScript + '" ' + $Arguments
+        $isolated = '& { ' + $script:childStatusBoundary + '; $global:LASTEXITCODE=0; & ''' + $controlScript.Replace("'","''") + ''' ' + $Arguments + '; exit $LASTEXITCODE }'
+        $launch.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($isolated))
         $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true
+        $launch.EnvironmentVariables['LOCALAPPDATA'] = Join-Path $scratchRoot 'child-default'
         $launch.RedirectStandardError = $true; $launch.RedirectStandardOutput = $true
         $process = [Diagnostics.Process]::Start($launch)
         try {
@@ -255,9 +291,13 @@ try {
         } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
     }
     $childLog = Join-Path $scratchRoot 'logs\child.log'
-    $result = Invoke-ChildScript ('InstallPackage -PackageArchive "' + $package.Path + '" -PackageSha256 ' + $package.Sha256 + ' -LogPath "' + $childLog + '"')
-    Assert-True ($result.Code -eq 1 -and (Get-Content -Raw $childLog) -match 'explicit -InstallRoot') "Missing -InstallRoot was not refused: $($result.Code) $($result.Err)"
-    Assert-True (-not (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'LivingRoomDisplay\package.next'))) 'A default install root was touched.'
+    if ($SourceOnly) {
+        $script:skippedIntegration++; Write-Output 'SKIP source-only: missing-root CLI entry integration (hosted CI runs it).'
+    } else {
+        $result = Invoke-ChildScript ('InstallPackage -PackageArchive "' + $package.Path + '" -PackageSha256 ' + $package.Sha256 + ' -LogPath "' + $childLog + '"')
+        Assert-True ($result.Code -eq 1 -and (Get-Content -Raw $childLog) -match 'explicit -InstallRoot') "Missing -InstallRoot was not refused: $($result.Code) $($result.Err)"
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $scratchRoot 'child-default\LivingRoomDisplay\package.next'))) 'A child default install root was touched.'
+    }
     $null = New-Item -ItemType Directory -Path $testRoot -Force
     $inside = Join-Path $testRoot 'payload.zip'
     Copy-Item -LiteralPath $package.Path -Destination $inside
@@ -980,6 +1020,9 @@ try {
     # ending a process, so each stopped display, display browser and server is
     # waited for, and one that doesn't exit fails Stop instead of racing the
     # rename of app that follows. Only the scripted processes below are touched.
+    if ($SourceOnly) {
+        $script:skippedIntegration++; Write-Output 'SKIP source-only: Stop event/process integration (hosted CI runs it).'
+    } else {
     $script:stopEvents = New-Object 'Collections.Generic.List[string]'
     function New-FakeProcess([int]$Id, [bool[]]$Waits) {
         $fake = [pscustomobject]@{Id=$Id;Waits=(New-Object 'Collections.Generic.Queue[bool]');StartTime=([DateTime]'2026-01-01T00:00:00Z').AddSeconds($Id);Path=(Join-Path $app 'windows\LivingRoomDisplay.Preview.exe');Handle=[IntPtr]1}
@@ -1022,6 +1065,7 @@ try {
     Invoke-RealStop @{11=(New-FakeProcess 11 @($true));12=(New-FakeProcess 12 @($true));13=(New-FakeProcess 13 @($true));14=(New-FakeProcess 14 @($true));15=(New-FakeProcess 15 @($false,$true))}
     Assert-True (($script:stopEvents -join ', ') -eq 'wait 11 4000, wait 12 10000, kill 13, wait 13 10000, wait 15 10000, kill 15, wait 15 10000, wait 14 10000') 'Stop failed to end and wait for its pinned lingering preparer.'
     Complete-Check 'stop waits for stopped processes'
+    }
 
     # ---- the new marker is readable by the previous control script ----------
     Reset-Root; Reset-Mocks
@@ -1031,8 +1075,10 @@ try {
     function Assert-OldReaderReads([string]$Revision) {
         $launch = New-Object Diagnostics.ProcessStartInfo
         $launch.FileName = $shell
-        $launch.Arguments = '-NoProfile -NonInteractive -Command "& { $r = & ''' + $oldScript + ''' Status -InstallRoot ''' + $testRoot + '''; if ($r.InstallRoot -ne ''' + $testRoot + ''' -or $r.SourceRevision -ne ''' + $Revision + ''' -or $r.SourceState -ne ''clean'') { exit 3 }; . ''' + $oldScript + ''' -InstallRoot ''' + $testRoot + ''' -FunctionsOnly; Assert-Installed; exit 0 }"'
+        $isolated = '& { ' + $script:childStatusBoundary + '; $r = & ''' + $oldScript.Replace("'","''") + ''' Status -InstallRoot ''' + $testRoot.Replace("'","''") + '''; if ($r.InstallRoot -ne ''' + $testRoot.Replace("'","''") + ''' -or $r.SourceRevision -ne ''' + $Revision + ''' -or $r.SourceState -ne ''clean'' -or $r.IdleSeconds -ne ''543'' -or $r.DisplayRunning) { exit 3 }; . ''' + $oldScript.Replace("'","''") + ''' -InstallRoot ''' + $testRoot.Replace("'","''") + ''' -FunctionsOnly; Assert-Installed; exit 0 }'
+        $launch.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($isolated))
         $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true; $launch.RedirectStandardError = $true; $launch.RedirectStandardOutput = $true
+        $launch.EnvironmentVariables['LOCALAPPDATA'] = Join-Path $scratchRoot 'child-default'
         $process = [Diagnostics.Process]::Start($launch)
         try {
             $stderr = $process.StandardError.ReadToEndAsync(); $null = $process.StandardOutput.ReadToEndAsync()
@@ -1080,7 +1126,9 @@ try {
     Complete-Check 'source update keeps Setup ownership'
 
     # ---- CLI Uninstall delegates to the Setup uninstaller without the lock --
-    if (Test-Path -LiteralPath $script:UninstallKeyPath) {
+    if ($SourceOnly) {
+        $script:skippedIntegration++; Write-Output 'SKIP source-only: CLI uninstall delegation integration (hosted CI runs it).'
+    } elseif (Test-Path -LiteralPath $script:UninstallKeyPath) {
         Write-Output 'Skipped the delegation check: this account has a real Setup registration.'
     } else {
         Reset-Root; Reset-Mocks
@@ -1130,4 +1178,4 @@ static class FakeUninstaller {
     if (-not $full.StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase)) { throw 'Package test cleanup escaped .local.' }
     if (Test-Path -LiteralPath $full) { Remove-Item -LiteralPath $full -Recurse -Force }
 }
-Write-Output "$($script:checks) InstallPackage transaction check groups passed with synthetic packages; start/stop, port, runtime, disk and health boundaries were mocked."
+Write-Output "$($script:checks) InstallPackage transaction groups completed with $($script:skippedIntegration) explicitly skipped CLI integration cases; synthetic parent registry/process/start/stop/port/runtime/disk/health boundaries."

@@ -1,4 +1,39 @@
 # Project status
+## Periodic Last screen cache (#538, #540)
+
+The source checkpoint replaces the one-shot pre-idle attempt with an immediate
+first eligible desktop snapshot and a monotonic five-minute cadence. It keeps
+one private latest-success RAM thumbnail across normal input and failed capture
+refreshes, atomically zeroing the preceding bytes on successful replacement.
+The full primary desktop is copied before downscaling; no screenshots are saved.
+Only the child-secret safe-context heartbeat maintains the cache's short producer
+lease. Unknown/locked/session/configuration/disabled contexts or lost observation
+clear it; an image has no arbitrary age expiry while the safe producer is healthy.
+Actual saver/ambient surfaces are excluded, with a brief band around the nominal
+idle transition. Claim still requires an exact frame identity and completion
+before the actual automatic process was created. Active-session expiry remains
+separate.
+
+The integration includes reviewed widget-first source #539. All 570 unit tests,
+both TypeScript checks and the production build pass. The bounded Windows source
+suite passes, including 58 cadence/recovery assertions, 18 injected context checks,
+36 mocked sign-in setup assertions and both compiled production binaries without
+execution. Private claim fetches the authoritative frozen frame, so a committed
+upload with a lost response cannot strand stale native metadata. Deterministic
+API checks cover that failure, late in-flight bodies, and an ambient transition
+before handshake.
+
+Early sign-in setup under #540 supports an existing owned idle/Last screen opt-in,
+including referenced visible saved styles under an explicitly enabled schedule
+when manual preview is off. One shared fixture checks backend/PowerShell parity;
+unused styles and disabled schedules do not authorize startup.
+AUTO never creates or rewrites the data preference. Explicit CLI startup choices
+are retained in complete data backups. Mocked source install transactions pass.
+Package test-isolation correction #543 supplies synthetic child status facts and
+a source-only mode excluding three OS integration cases; hosted CI retains the
+full cases. Final head review/CI remain required. No installed capture or native
+session acceptance is established; #519 remains open.
+
 ## Native widget-first reveal (#539)
 
 The native selector previously accepted the ordinary Display title, which React
