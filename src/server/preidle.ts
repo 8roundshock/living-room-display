@@ -5,7 +5,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import type { Settings } from '../shared/contracts.ts';
 
 // Observation-gap reconstruction is separate from the age of a retained image.
-export const PREPARATION_MAX_AGE_MS = 630_000;
+export const PREPARATION_MAX_OBSERVATION_GAP_MS = 630_000;
 export const PREPARATION_CAPTURE_INTERVAL_MS = 300_000;
 export const PREPARATION_OBSERVATION_LEASE_MS = 10_000;
 export const PREPARATION_UPLOAD_MAX_AGE_MS = 10_000;

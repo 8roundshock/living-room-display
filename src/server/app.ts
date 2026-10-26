@@ -21,7 +21,7 @@ import { TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts'
 import { WIDGET_CATALOG, isActiveWidget } from '../shared/widgets.ts';
 import { HOME_SHOWABLE_WIDGETS, showPlacement } from '../shared/show.ts';
 import type { ChangeMarker, Settings, TimersResult, WidgetId } from '../shared/contracts.ts';
-import { PREPARATION_MAX_AGE_MS, PreparationController, type PreparationOptions, type PreparationView } from './preidle.ts';
+import { PREPARATION_MAX_OBSERVATION_GAP_MS, PreparationController, type PreparationOptions, type PreparationView } from './preidle.ts';
 
 // Read once at module load. src/server and the built dist/server both sit two
 // levels below the package.json shipped with the app, so health matches it.
@@ -118,7 +118,7 @@ export async function createApplication(options: ApplicationOptions) {
     const schedule = schedules.snapshot(settings, at), marker = schedules.marker(settings, at);
     const previous = preparationObserved;
     if (previous && previous.manual === settingsRevision && previous.schedule === schedules.revision) {
-      if (at < previous.at || at - previous.at > PREPARATION_MAX_AGE_MS) { preparationBoundary++; clearPreview(); }
+      if (at < previous.at || at - previous.at > PREPARATION_MAX_OBSERVATION_GAP_MS) { preparationBoundary++; clearPreview(); }
       else {
         // A hidden off interval must invalidate a pending frame even if the next poll
         // sees the original style again. Bound the scan to the frame's 90-second life.

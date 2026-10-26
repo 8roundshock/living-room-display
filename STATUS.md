@@ -14,11 +14,22 @@ idle transition. Claim still requires an exact frame identity and completion
 before the actual automatic process was created. Active-session expiry remains
 separate.
 
-The first source checkpoint passes 50 backend tests, both TypeScript checks and
-the bounded Windows source suite, including pure cadence/context checks and both
-compiled production binaries without execution. Early sign-in backend lifecycle
-under #540 and remaining integration/documentation checks are still in progress.
-No installed, desktop capture or native session acceptance ran; #519 remains open.
+The integration includes reviewed widget-first source #539. All 569 unit tests,
+both TypeScript checks and the production build pass. The bounded Windows source
+suite passes, including 58 cadence/recovery assertions, 18 injected context checks,
+24 mocked sign-in setup assertions and both compiled production binaries without
+execution. Private claim fetches the authoritative frozen frame, so a committed
+upload with a lost response cannot strand stale native metadata. Deterministic
+API checks cover that failure, late in-flight bodies, and an ambient transition
+before handshake.
+
+Early sign-in setup under #540 supports an existing owned idle/Last screen opt-in;
+AUTO never creates or rewrites the data preference. Explicit CLI startup choices
+are retained in complete data backups. Mocked source install transactions pass.
+Package test-isolation correction #543 supplies synthetic child status facts and
+a source-only mode excluding three OS integration cases; hosted CI retains the
+full cases. Final head review/CI remain required. No installed capture or native
+session acceptance is established; #519 remains open.
 
 ## Native widget-first reveal (#539)
 
