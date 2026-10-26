@@ -1,4 +1,25 @@
 # Project status
+## Periodic Last screen cache (#538, #540)
+
+The source checkpoint replaces the one-shot pre-idle attempt with an immediate
+first eligible desktop snapshot and a monotonic five-minute cadence. It keeps
+one private latest-success RAM thumbnail across normal input and failed capture
+refreshes, atomically zeroing the preceding bytes on successful replacement.
+The full primary desktop is copied before downscaling; no screenshots are saved.
+Only the child-secret safe-context heartbeat maintains the cache's short producer
+lease. Unknown/locked/session/configuration/disabled contexts or lost observation
+clear it; an image has no arbitrary age expiry while the safe producer is healthy.
+Actual saver/ambient surfaces are excluded, with a brief band around the nominal
+idle transition. Claim still requires an exact frame identity and completion
+before the actual automatic process was created. Active-session expiry remains
+separate.
+
+The first source checkpoint passes 50 backend tests, both TypeScript checks and
+the bounded Windows source suite, including pure cadence/context checks and both
+compiled production binaries without execution. Early sign-in backend lifecycle
+under #540 and remaining integration/documentation checks are still in progress.
+No installed, desktop capture or native session acceptance ran; #519 remains open.
+
 ## Settings scrolling and layout (#535)
 
 A synthetic desktop regression reproduces the clipped Settings page: the shared

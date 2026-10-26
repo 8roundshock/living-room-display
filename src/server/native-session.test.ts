@@ -121,11 +121,11 @@ test('native handshake clears the earlier active image but preserves the private
     assert.equal((await app.native('/api/preview', 'POST', app.uploadHeaders(old.token), photoFixture(3, 2))).status, 201);
     const auth = { 'X-LRD-Preparation': app.bootstrap.token };
     const config = async () => {
-      const result = await app.native('/api/preview/preparation', 'GET', auth);
+      const result = await app.native('/api/preview/preparation', 'GET', { ...auth, 'X-Preparation-Safe': '1', 'X-Session-Id': '1' });
       assert.equal(result.status, 200); return JSON.parse(result.content.toString()) as PreparationConfig;
     };
     const before = await config(); assert.equal(before.enabled, true);
-    const prepared = photoFixture();
+    const prepared = photoFixture(), preparedMonotonic = app.clock.mono;
     assert.equal((await app.native('/api/preview/preparation', 'POST', { ...auth, 'Content-Type': 'image/png',
       'X-Preparation-Generation': String(before.generation), 'X-Preparation-Configuration': before.configuration,
       'X-Input-Tick': '123', 'X-Session-Id': '1', 'X-Desktop-Id': 'Default', 'X-Captured-At': new Date(app.clock.wall - 100).toISOString(),
@@ -139,7 +139,7 @@ test('native handshake clears the earlier active image but preserves the private
     const claim = await app.native('/api/preview/preparation/claim', 'POST', { ...auth, 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify({
       generation: before.generation, configuration: before.configuration, processId: 200,
       processStartedAt: new Date(app.clock.wall - 100).toISOString(), startedMonotonicMs: app.clock.mono - 100,
-      inputTick: 123, sessionId: 1, desktopId: 'Default',
+      inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: preparedMonotonic,
     })));
     assert.equal(claim.status, 200); assert.equal(JSON.parse(claim.content.toString()).claimed, true);
     assert.deepEqual((await app.native('/api/preview/image')).content, prepared);

@@ -14,13 +14,13 @@ const BASE = Date.parse('2026-10-23T16:00:00Z');
 function slotFixture() {
   const clock = { wall: BASE, mono: 10_000 };
   const slot = new PreparedSnapshot(() => clock.wall, () => clock.mono);
-  slot.configure('configuration-a');
+  slot.configure('configuration-a'); slot.observe(1);
   const content = Buffer.from('synthetic thumbnail');
   const stamp = (): PreparationStamp => ({ generation: slot.generation, configuration: 'configuration-a', inputTick: 123,
     sessionId: 1, desktopId: 'Default', capturedAt: new Date(BASE - 100).toISOString(), completedAt: new Date(BASE).toISOString(), completedMonotonicMs: 10_000 });
   const receive = () => slot.receive({ content, capturedAt: stamp().capturedAt, width: 2, height: 2 }, stamp(), true);
   const claim = (): PreparationClaim => ({ generation: slot.generation, configuration: 'configuration-a', processId: 200,
-    processStartedAt: new Date(BASE + 3_000).toISOString(), startedMonotonicMs: 13_000, inputTick: 123, sessionId: 1, desktopId: 'Default' });
+    processStartedAt: new Date(BASE + 3_000).toISOString(), startedMonotonicMs: 13_000, inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000 });
   const advance = (elapsed = 3_100) => { clock.wall += elapsed; clock.mono += elapsed; };
   return { slot, clock, content, stamp, receive, claim, advance };
 }
@@ -36,7 +36,8 @@ test('an unpublished frame transfers once only after trusted pre-process UTC and
 
 test('input/context/config/disabled/clock/order uncertainty consumes and zeroes the candidate', async t => {
   const variants: Record<string, (f: ReturnType<typeof slotFixture>, claim: PreparationClaim) => void> = {
-    'new input': (_, claim) => { claim.inputTick++; },
+    'wrong captured input tag': (_, claim) => { claim.inputTick++; },
+    'wrong exact frame identity': (_, claim) => { claim.completedMonotonicMs++; },
     'another session': (_, claim) => { claim.sessionId++; },
     'another configuration': (_, claim) => { claim.configuration = 'configuration-b'; },
     'another generation': (_, claim) => { claim.generation++; },
@@ -47,7 +48,7 @@ test('input/context/config/disabled/clock/order uncertainty consumes and zeroes 
     'UTC went backwards': f => { f.clock.wall -= 10_000; },
     'UTC went forwards': f => { f.clock.wall += 10_000; },
     'monotonic clock went backwards': f => { f.clock.mono -= 10_000; },
-    'expired': f => { f.advance(90_001); },
+    'producer observation expired': f => { f.advance(10_001); },
   };
   for (const [name, change] of Object.entries(variants)) await t.test(name, () => {
     const f = slotFixture(); assert.equal(f.receive(), true); f.advance();
@@ -59,7 +60,7 @@ test('input/context/config/disabled/clock/order uncertainty consumes and zeroes 
   assert.equal(disabled.slot.claim(disabled.claim(), false), null); assert.ok(disabled.content.every(value => value === 0));
 });
 
-test('clear/config/failed claim invalidate arriving bodies, and a second frame cannot replace an epoch', () => {
+test('clear/config/failed claim invalidate arriving bodies, and an older or duplicate frame cannot replace the latest success', () => {
   for (const operation of ['clear', 'configuration', 'cold claim'] as const) {
     const f = slotFixture(), stamp = f.stamp();
     if (operation === 'clear') f.slot.clear();
@@ -72,6 +73,49 @@ test('clear/config/failed claim invalidate arriving bodies, and a second frame c
   const duplicate = Buffer.from('duplicate');
   assert.equal(f.slot.receive({ content: duplicate, capturedAt: f.stamp().capturedAt, width: 2, height: 2 }, f.stamp(), true), false);
   assert.ok(duplicate.every(value => value === 0)); f.slot.clear(); assert.ok(f.content.every(value => value === 0));
+});
+
+test('five-minute replacement zeroes the former frame and healthy observations retain latest success across failed refreshes', () => {
+  const f = slotFixture(); assert.equal(f.receive(), true);
+  const pulse = (milliseconds: number) => {
+    for (let passed = 0; passed < milliseconds; passed += 5_000) {
+      f.advance(Math.min(5_000, milliseconds - passed)); f.slot.observe(1);
+    }
+  };
+  pulse(300_000);
+  const latest = Buffer.from('latest successful full desktop thumbnail');
+  const stamp = { ...f.stamp(), capturedAt: new Date(f.clock.wall - 100).toISOString(), completedAt: new Date(f.clock.wall).toISOString(), completedMonotonicMs: f.clock.mono, inputTick: 456 };
+  assert.equal(f.slot.receive({ content: latest, capturedAt: stamp.capturedAt, width: 2, height: 2 }, stamp, true), true);
+  assert.ok(f.content.every(value => value === 0), 'successful replacement erases previous bytes');
+  const refused = Buffer.from('delayed older upload');
+  assert.equal(f.slot.receive({ content: refused, capturedAt: f.stamp().capturedAt, width: 2, height: 2 }, f.stamp(), true), false);
+  assert.ok(refused.every(value => value === 0));
+  pulse(900_000); // Several failed/missed screenshot refreshes do not erase a healthy latest-success cache.
+  const claim = { ...f.claim(), inputTick: 456, completedMonotonicMs: stamp.completedMonotonicMs,
+    processStartedAt: new Date(f.clock.wall - 100).toISOString(), startedMonotonicMs: f.clock.mono - 100 };
+  const result = f.slot.claim(claim, true);
+  assert.equal(result?.content, latest); assert.equal(result?.capturedAt, stamp.capturedAt);
+  latest.fill(0);
+});
+
+test('a missing safe producer observation, another session and an unknown context cannot retain cached bytes', () => {
+  const f = slotFixture(); assert.equal(f.receive(), true);
+  f.advance(10_001); f.slot.observe(1);
+  assert.ok(f.content.every(value => value === 0), 'missed safe-context lease erases the old image before renewal');
+  const next = Buffer.from('next');
+  const stamp = { ...f.stamp(), generation: f.slot.generation, capturedAt: new Date(f.clock.wall - 100).toISOString(), completedAt: new Date(f.clock.wall).toISOString(), completedMonotonicMs: f.clock.mono };
+  assert.equal(f.slot.receive({ content: next, capturedAt: stamp.capturedAt, width: 1, height: 1 }, stamp, true), true);
+  f.slot.observe(2); assert.ok(next.every(value => value === 0), 'another session clears cache');
+  f.slot.clear();
+});
+
+test('an obsolete observation timer cannot expire the renewed latest-success cache', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = slotFixture(); assert.equal(f.receive(), true);
+  f.advance(5_000); t.mock.timers.tick(5_000); f.slot.observe(1);
+  f.advance(5_001); t.mock.timers.tick(5_001);
+  assert.equal(f.slot.claim({ ...f.claim(), processStartedAt: new Date(f.clock.wall - 100).toISOString(), startedMonotonicMs: f.clock.mono - 100 }, true)?.content, f.content);
+  f.content.fill(0); f.slot.clear();
 });
 
 test('controller is inert while disabled, owns one secret child, clears on exit and never auto-restarts', () => {
@@ -121,7 +165,7 @@ async function apiFixture() {
     });
   }
   const auth = () => ({ 'X-LRD-Preparation': bootstrap.token });
-  const config = async () => JSON.parse((await native('/api/preview/preparation', 'GET', auth())).body.toString());
+  const config = async () => JSON.parse((await native('/api/preview/preparation', 'GET', { ...auth(), 'X-Preparation-Safe': '1', 'X-Session-Id': '1' })).body.toString());
   const headers = (current: { generation: number; configuration: string }) => ({ ...auth(), 'Content-Type': 'image/png',
     'X-Preparation-Generation': String(current.generation), 'X-Preparation-Configuration': current.configuration,
     'X-Input-Tick': '123', 'X-Session-Id': '1', 'X-Desktop-Id': 'Default', 'X-Captured-At': new Date(BASE - 100).toISOString(),
@@ -148,12 +192,31 @@ test('prepared pixels stay private in RAM until the exact child attests a native
     assert.equal((await app.native('/api/preview/claim', 'POST', { 'X-LRD-Token': session.token, 'Content-Type': 'application/json' }, Buffer.from('{}'))).status, 404, 'there is no selfreported HTTP claim bypass');
     app.clock.wall += 3_100; app.clock.mono += 3_100;
     const claim: PreparationClaim = { generation: config.generation, configuration: config.configuration, processId: 200,
-      processStartedAt: new Date(BASE + 3_000).toISOString(), startedMonotonicMs: 13_000, inputTick: 123, sessionId: 1, desktopId: 'Default' };
+      processStartedAt: new Date(BASE + 3_000).toISOString(), startedMonotonicMs: 13_000, inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000 };
     const promoted = await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify(claim)));
     assert.equal(promoted.status, 200); assert.equal(JSON.parse(promoted.body.toString()).claimed, true);
     const image = await fetch(app.url + '/api/preview/image'); assert.equal(image.status, 200); assert.deepEqual(Buffer.from(await image.arrayBuffer()), png);
     assert.equal((await app.native('/api/preview', 'DELETE', { 'X-LRD-Token': session.token })).status, 204);
     assert.equal((await fetch(app.url + '/api/preview/image')).status, 404);
+  } finally { await app.close(); }
+});
+
+test('ordinary-input active-only cleanup preserves the private latest frame for later automatic claim', async () => {
+  const app = await apiFixture();
+  try {
+    const config = await app.config(), png = photoFixture();
+    assert.equal(config.captureIntervalMs, 300_000); assert.equal(config.maxAgeMs, null);
+    assert.equal((await app.native('/api/preview/preparation', 'POST', app.headers(config), png)).status, 201);
+    assert.equal((await app.native('/api/preview/preparation', 'DELETE', { ...app.auth(), 'X-Invalidate-Active-Only': '1' })).status, 204);
+    const after = await app.config(); assert.equal(after.generation, config.generation);
+    app.clock.wall += 3_100; app.clock.mono += 3_100;
+    const result = await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify({
+      generation: config.generation, configuration: config.configuration, processId: 200,
+      processStartedAt: new Date(BASE + 3_000).toISOString(), startedMonotonicMs: 13_000,
+      inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000,
+    })));
+    assert.equal(result.status, 200); assert.equal(JSON.parse(result.body.toString()).claimed, true);
+    assert.deepEqual(Buffer.from(await (await fetch(app.url + '/api/preview/image')).arrayBuffer()), png);
   } finally { await app.close(); }
 });
 
@@ -175,7 +238,7 @@ test('generation, settings changes and child loss reject a preparation body stil
       else {
         const rejected = await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify({
           generation: config.generation, configuration: config.configuration, processId: 200,
-          processStartedAt: new Date(BASE).toISOString(), startedMonotonicMs: 10_000, inputTick: 123, sessionId: 1, desktopId: 'Default',
+          processStartedAt: new Date(BASE).toISOString(), startedMonotonicMs: 10_000, inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000,
         })));
         assert.equal(rejected.status, 200); assert.equal(JSON.parse(rejected.body.toString()).claimed, false);
       }

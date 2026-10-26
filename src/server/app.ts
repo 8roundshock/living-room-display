@@ -419,9 +419,18 @@ export async function createApplication(options: ApplicationOptions) {
     }
     if (path === '/api/preview/preparation' && ['GET', 'POST', 'DELETE'].includes(method)) {
       preparationRequest(request);
-      if (method === 'GET') { json(response, 200, preparation.config()); return; }
+      if (method === 'GET') {
+        const config = preparation.config();
+        if (request.headers['x-preparation-safe'] === '1' && config.enabled) {
+          const session = z.coerce.number().int().min(0).max(0x7fffffff).parse(request.headers['x-session-id']);
+          preparation.snapshot.observe(session);
+        } else preparation.invalidate(true);
+        json(response, 200, { ...config, generation: preparation.snapshot.generation }); return;
+      }
       if (method === 'DELETE') {
-        preparation.invalidate(request.headers['x-invalidate-active'] === '1'); json(response, 204); return;
+        if (request.headers['x-invalidate-active-only'] === '1') preparation.clearActive();
+        else preparation.invalidate(request.headers['x-invalidate-active'] === '1');
+        json(response, 204); return;
       }
       if (request.headers['content-type'] !== 'image/png') throw new HttpError(415, 'Use image/png');
       const integerHeader = (name: string, max = Number.MAX_SAFE_INTEGER) => z.coerce.number().int().min(0).max(max).parse(request.headers[name]);
@@ -461,7 +470,7 @@ export async function createApplication(options: ApplicationOptions) {
         const claim = z.object({
           generation: uint, configuration: z.string().min(1).max(100), processId: uint.min(1).max(0x7fffffff),
           processStartedAt: z.iso.datetime({ offset: true }), startedMonotonicMs: uint,
-          inputTick: uint.max(0xffffffff), sessionId: uint.max(0x7fffffff), desktopId: z.literal('Default'),
+          inputTick: uint.max(0xffffffff), sessionId: uint.max(0x7fffffff), desktopId: z.literal('Default'), completedMonotonicMs: uint,
         }).strict().parse(await jsonBody(request));
         preparationRequest(request);
         const config = preparation.config();

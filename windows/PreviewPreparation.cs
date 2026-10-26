@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 
-// Pure one-shot policy. No Windows calls, pixels, timers or transport live here.
+// Pure periodic policy. No Windows calls, pixels, timers or transport live here.
 internal struct PreparationReading
 {
     internal bool Readable { get; set; }
@@ -10,6 +10,8 @@ internal struct PreparationReading
     internal bool CaptureAllowed { get; set; }
     internal uint InputTick { get; set; }
     internal long IdleMilliseconds { get; set; }
+    internal long MonotonicMilliseconds { get; set; }
+    internal int SessionId { get; set; }
     internal int TimeoutSeconds { get; set; }
     internal int LeadSeconds { get; set; }
     internal string Configuration { get; set; }
@@ -45,57 +47,66 @@ internal sealed class PreparationConfiguration
 
 internal sealed class PreviewPreparationPolicy
 {
-    private bool initialized, attempted;
+    internal const long CaptureIntervalMilliseconds = 300000;
+    internal const long MaximumObservationGapMilliseconds = 630000;
+    private bool initialized, eligible;
     private uint input;
     private string configuration;
-    private int timeoutSeconds;
+    private int timeoutSeconds, session;
+    private long observedAt, nextCaptureAt;
 
     internal PreparationDecision Observe(PreparationReading reading)
     {
         var decision = new PreparationDecision();
-        if (!reading.Readable)
+        if (!reading.Readable || reading.MonotonicMilliseconds < 0)
         {
             decision.Invalidate = true;
             decision.InvalidateActive = true;
-            // Unknown input cannot create a new eligible epoch.
-            attempted = true;
+            eligible = false;
             return decision;
         }
         bool changed = initialized && input != reading.InputTick;
         bool timeoutChanged = initialized && timeoutSeconds != reading.TimeoutSeconds;
-        if (!initialized || changed)
-        {
-            bool first = !initialized;
-            initialized = true;
-            input = reading.InputTick;
-            // A replacement/cold worker cannot know whether this epoch already
-            // captured. Establish a baseline and arm only after observed input.
-            attempted = first;
-        }
+        bool sessionChanged = initialized && session != reading.SessionId;
+        bool clockChanged = initialized && (reading.MonotonicMilliseconds < observedAt ||
+            reading.MonotonicMilliseconds - observedAt > MaximumObservationGapMilliseconds);
         bool configurationChanged = configuration != reading.Configuration;
+        initialized = true;
+        input = reading.InputTick;
+        session = reading.SessionId;
         configuration = reading.Configuration;
         timeoutSeconds = reading.TimeoutSeconds;
-        decision.Invalidate = changed || timeoutChanged || configurationChanged || !reading.Enabled || !reading.Safe;
-        decision.InvalidateActive = changed || timeoutChanged || !reading.Safe;
-        if (!reading.Enabled || !reading.Safe || !reading.CaptureAllowed || attempted) return decision;
-        long deadline = (long)reading.TimeoutSeconds * 1000;
-        long lead = (long)reading.LeadSeconds * 1000;
-        if (deadline <= 0 || lead <= 0 || lead >= deadline || reading.IdleMilliseconds < 0)
+        observedAt = reading.MonotonicMilliseconds;
+        decision.Invalidate = timeoutChanged || sessionChanged || clockChanged || configurationChanged || !reading.Enabled || !reading.Safe;
+        // Normal interaction dismisses an active preview, but must not erase the
+        // latest desktop snapshot or postpone the next five-minute refresh.
+        decision.InvalidateActive = decision.Invalidate || changed;
+        bool allowed = reading.Enabled && reading.Safe && reading.CaptureAllowed && !clockChanged &&
+            OutsideTransition(reading.IdleMilliseconds,reading.TimeoutSeconds,reading.LeadSeconds);
+        if (!allowed)
         {
-            attempted = true;
+            eligible = false;
             return decision;
         }
-        if (reading.IdleMilliseconds >= deadline)
+        // Explicit periodic capture consent permits the first safe observation;
+        // no hidden extra input is required after launching the app or signing in.
+        if (!eligible || decision.Invalidate) nextCaptureAt = reading.MonotonicMilliseconds;
+        eligible = true;
+        if (reading.MonotonicMilliseconds >= nextCaptureAt)
         {
-            attempted = true; // A late/cold start never samples an already-starting saver.
-            return decision;
-        }
-        if (reading.IdleMilliseconds >= deadline - lead)
-        {
-            attempted = true; // Consume before IO; failures/timeouts never retry this epoch.
+            nextCaptureAt = reading.MonotonicMilliseconds > long.MaxValue - CaptureIntervalMilliseconds
+                ? long.MaxValue : reading.MonotonicMilliseconds + CaptureIntervalMilliseconds;
             decision.Capture = true;
         }
         return decision;
+    }
+    internal static bool OutsideTransition(long idle,int timeout,int leadSeconds)
+    {
+        long deadline=(long)timeout*1000, lead=(long)leadSeconds*1000;
+        // The Windows deadline is a transition band, not proof that a saver is
+        // running forever afterwards (video can inhibit it). Actual saver and
+        // owned ambient checks remain mandatory on either side of this band.
+        return deadline>0 && lead>0 && lead<deadline && idle>=0 && (idle<deadline-lead || idle>deadline+lead);
     }
 }
 

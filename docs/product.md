@@ -73,11 +73,17 @@ ambient display. Provide a small, very dim translucent thumbnail with adjustable
 size/opacity, a hide toggle, and placement that moves with the other widgets.
 It should remain useful to read while fitting the sparse, mostly black display.
 
-A last-state snapshot is selected for version one. Manual display captures before
-its own overlay; automatic activation uses one private pre-idle frame, attempted
-30 seconds before the active Windows threshold and eligible for at most 90 seconds
-(#525). It supplies a recent earlier state or unavailable, never a replacement
-capture after automatic startup. A live preview of an explicitly selected app remains future work.
+A last-state snapshot is selected for version one. With idle display and Last
+screen enabled, an early-running owned backend captures the full primary desktop
+once when safely eligible, then every five minutes. Successful refresh replaces
+one private RAM thumbnail; ordinary input and failed refreshes retain the latest
+success with its original capture time. It is frozen while a saver/ambient surface
+is running, then claimed before automatic display activation. A short nominal
+idle-transition band pauses capture, not indefinitely inhibited desktop use.
+Unknown/locked/session/configuration/disabled contexts or loss of the safe producer
+clear the private cache. Manual display captures before its own overlay; automatic
+startup never takes a late replacement of its own surface. Early sign-in lifecycle
+is tracked in #540, periodic source in #538. Live selected-app preview remains future work.
 Label the snapshot as last state with capture time so it cannot be mistaken for
 a live view.
 

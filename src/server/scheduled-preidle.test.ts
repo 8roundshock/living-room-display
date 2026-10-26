@@ -47,7 +47,7 @@ async function fixture(initialScheduledOff = false) {
   });
   const auth = () => ({ 'X-LRD-Preparation': bootstrap.token });
   const config = async (): Promise<PreparationConfig> => {
-    const result = await native('/api/preview/preparation', 'GET', auth()); assert.equal(result.status, 200); return JSON.parse(result.text);
+    const result = await native('/api/preview/preparation', 'GET', { ...auth(), 'X-Preparation-Safe': '1', 'X-Session-Id': '1' }); assert.equal(result.status, 200); return JSON.parse(result.text);
   };
   const schedule = (presetId = 'hidden', start = '08:00', end = '08:01') => ({ enabled: true, fallbackPresetId: 'visible', rules: [{ id: RULE, presetId, days: [0, 1, 2, 3, 4, 5, 6], start, end }] });
   const put = async (value: unknown) => { assert.equal((await fetch(base + '/api/schedule', { method: 'PUT', ...json(value) })).status, 200); };
@@ -56,12 +56,13 @@ async function fixture(initialScheduledOff = false) {
     'X-Preparation-Generation': String(current.generation), 'X-Preparation-Configuration': current.configuration,
     'X-Input-Tick': '123', 'X-Session-Id': '1', 'X-Desktop-Id': 'Default', 'X-Captured-At': new Date(clock.now - 100).toISOString(),
     'X-Completed-At': new Date(clock.now).toISOString(), 'X-Completed-Monotonic-Ms': String(clock.monotonic) });
-  const prepare = async (current: PreparationConfig) => native('/api/preview/preparation', 'POST', frameHeaders(current), photoFixture());
+  let preparedMonotonic = clock.monotonic;
+  const prepare = async (current: PreparationConfig) => { preparedMonotonic = clock.monotonic; return native('/api/preview/preparation', 'POST', frameHeaders(current), photoFixture()); };
   const claim = async (current: PreparationConfig) => {
     const result = await native('/api/preview/preparation/claim', 'POST', { ...auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify({
       generation: current.generation, configuration: current.configuration, processId: 200,
       processStartedAt: new Date(clock.now - 100).toISOString(), startedMonotonicMs: clock.monotonic - 100,
-      inputTick: 123, sessionId: 1, desktopId: 'Default',
+      inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: preparedMonotonic,
     })));
     assert.equal(result.status, 200); return JSON.parse(result.text).claimed as boolean;
   };
@@ -135,7 +136,8 @@ test('crossing a minute without changing the effective style preserves a valid n
   try {
     await app.put(app.schedule('hidden', '22:00', '22:01'));
     const before = await app.config(); assert.equal((await app.prepare(before)).status, 201);
-    app.advance(13_100); const after = await app.config();
+    app.advance(7_000); await app.config(); // Healthy producer keeps its context lease across the minute.
+    app.advance(6_100); const after = await app.config();
     assert.equal(after.configuration, before.configuration);
     assert.equal(await app.claim(before), true);
     assert.equal((await fetch(app.base + '/api/preview/image')).status, 200);
@@ -229,7 +231,7 @@ test('a private preparation or claim arriving across a schedule boundary cannot 
       const content = operation === 'preparation' ? photoFixture() : Buffer.from(JSON.stringify({
         generation: current.generation, configuration: current.configuration, processId: 200,
         processStartedAt: new Date(app.clock.now - 100).toISOString(), startedMonotonicMs: app.clock.monotonic - 100,
-        inputTick: 123, sessionId: 1, desktopId: 'Default',
+        inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: app.clock.monotonic - 3_100,
       }));
       const bodyStarted = new Promise<void>(resolve => app.server.once('request', incoming => incoming.once('data', () => resolve())));
       const result = new Promise<{ status: number; text: string }>((resolve, reject) => {
