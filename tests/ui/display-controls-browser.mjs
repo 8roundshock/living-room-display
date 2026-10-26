@@ -10,11 +10,12 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
+import { NATIVE_READY_TITLE, NATIVE_STARTING_TITLE } from '../../src/client/nativeReadiness.ts';
 
-export async function runDisplayControlsQa({ playwright, edge, capture = false } = {}) {
+export async function runDisplayControlsQa({ playwright, edge, capture = false, clientDirectory } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const directory = await mkdtemp(join(tmpdir(), 'lrd-display-controls-'));
-  const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), fetcher: async () => Response.json(forecastFixture()) });
+  const app = await createApplication({ dataDirectory: directory, clientDirectory: clientDirectory ?? fileURLToPath(new URL('../../dist/client', import.meta.url)), fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const browser = await chromium.launch({ executablePath: edge, headless: true });
@@ -120,6 +121,36 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false }
     await open('/editor');
     assert.equal(await page.locator('html').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(9, 11, 18)', 'the mounted editor keeps its navy page');
     checks.push(`#334 /display?native=1 with the app script held: ${premount.join('; ')}, document background and theme colour black; the mounted editor keeps rgb(9, 11, 18)`);
+
+    // #539: hold actual state delivery. A route/title is never a painted-board certificate.
+    const startup = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' }); await mockWindowsStatus(startup);
+    let releaseState; const stateGate = new Promise(resolve => { releaseState = resolve; });
+    await startup.route('**/api/state', async route => { await stateGate; await route.continue(); });
+    try {
+      const starting = await startup.newPage(); starting.on('pageerror', error => errors.push(error.message));
+      await starting.goto(base + '/display?native=1', { waitUntil: 'domcontentloaded' });
+      await starting.locator('.display-fallback').waitFor();
+      assert.equal(await starting.title(), NATIVE_STARTING_TITLE, 'pending state cannot advertise the content-ready marker');
+      assert.equal(await starting.locator('.fallback-content').evaluate(element => getComputedStyle(element).visibility), 'hidden', 'native loading content remains covered');
+      assert.equal(await starting.locator('html').evaluate(element => element.dataset.nativeReady), undefined);
+      releaseState();
+      await starting.waitForFunction(title => document.title === title, NATIVE_READY_TITLE);
+      const first = await starting.locator('.display-page').evaluate(element => ({
+        board: element.querySelector('.grid-ambient') !== null,
+        widgets: element.querySelectorAll('.ambient-widget').length,
+        background: getComputedStyle(element).backgroundColor,
+        opacity: getComputedStyle(element).opacity,
+        ready: document.documentElement.dataset.nativeReady,
+        controls: element.querySelector('.display-help') !== null,
+      }));
+      assert.ok(first.board && first.widgets > 0, 'content-ready title follows the actual default board');
+      assert.deepEqual([first.background, first.opacity, first.ready, first.controls], ['rgb(0, 0, 0)', '1', 'true', false]);
+      if (capture) images.push({ name: 'native-content-ready-board', bytes: await starting.screenshot() });
+      // A normal state poll must never replay the entrance or clear the ready marker.
+      await starting.evaluate(() => window.dispatchEvent(new Event('focus')));
+      assert.equal(await starting.title(), NATIVE_READY_TITLE);
+      checks.push('#539: held state keeps native fallback black/hidden and title unready; committed default board publishes readiness after paint opportunities, with no native controls');
+    } finally { releaseState(); await startup.close(); }
     assert.deepEqual(errors, []);
     return { checks, images };
   } finally { await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true }); }

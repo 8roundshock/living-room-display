@@ -5,6 +5,12 @@ internal static class SurfacePolicyTests
     private static SurfaceReading Safe() { return new SurfaceReading { Foreground = ForegroundKind.Surface, HitSurface = true, FullPrimaryClient = true, CursorRead = true, CursorNull = true }; }
     private static void Main()
     {
+        Check(!NativeBrowserReadiness.MatchesTitle("Still \u00b7 Display - [InPrivate] - Microsoft Edge"), "legacy loading title never grants content readiness");
+        Check(!NativeBrowserReadiness.MatchesTitle("Still \u00b7 Starting display - Microsoft Edge"), "starting title never grants content readiness");
+        Check(NativeBrowserReadiness.MatchesTitle(NativeBrowserReadiness.ContentTitle + " - [InPrivate] - Microsoft Edge") &&
+            NativeBrowserReadiness.MatchesTitle(NativeBrowserReadiness.ContentTitle + " - Microsoft Edge"), "exact native content marker admits the two owned Edge title formats");
+        Check(!NativeBrowserReadiness.MatchesTitle(NativeBrowserReadiness.ContentTitle + " - Another browser"), "foreign title suffix is rejected");
+        Check(NativeBrowserReadiness.PaintArguments == " --disable-backgrounding-occluded-windows", "only native rendering is kept painting behind its opaque startup cover");
         var policy = new SurfacePolicy(); var read = Safe();
         Check(policy.Decide(read) == SurfaceAction.StartBrowser, "NULL own-client ownership precedes browser");
         Check(policy.Decide(read) == SurfaceAction.Keep, "one browser launch");

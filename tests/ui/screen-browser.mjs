@@ -75,6 +75,13 @@ export async function runScreenQa({ playwright, edge } = {}) {
     const page = await session.context.newPage();
     if (options.clock !== false) await page.clock.install({ time: new Date(now) });
     await page.goto(base + path); await page.locator('.display-page').waitFor();
+    if (path.includes('native=1')) {
+      for (let attempt = 0; (await page.title()) !== 'Still · Display · Ready'; attempt++) {
+        assert.ok(attempt < 100, 'native board publishes its content-ready marker');
+        if (options.clock !== false) await page.clock.runFor(32);
+        await page.waitForTimeout(10);
+      }
+    }
     return { ...session, page };
   }
   async function until(page, predicate, label, argument) {
@@ -89,7 +96,7 @@ export async function runScreenQa({ playwright, edge } = {}) {
       const native = await display('/display?native=1', { init: [stubWakeLock] });
       await until(native.page, () => document.querySelector('.grid-ambient')?.dataset.wakeLock === 'held', 'native wake lock');
       assert.deepEqual(await record(native.page), { requests: 1, releases: 0, held: 1 }, 'native=1 requests once');
-      assert.equal(await native.page.title(), 'Still · Display', 'native title is exactly Still · Display (PR #51, #444)');
+      assert.equal(await native.page.title(), 'Still · Display · Ready', 'native title certifies committed board readiness (#539)');
       // The browser releases the lock (for example the screen locks): the display asks again while still wanted.
       await native.page.evaluate(() => window.__wakeLock.sentinels[0].release());
       await until(native.page, () => window.__wakeLock.requests === 2, 're-request after release');
