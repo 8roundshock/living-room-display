@@ -28,10 +28,10 @@ internal static class PreviewPreparationTests
         Check(!policy.Observe(Reading(99,600000,600000)).Capture, "actual deadline never captures startup surface");
         Check(!policy.Observe(Reading(99,630000,630000)).Capture, "transition band includes its upper boundary");
         Check(policy.Observe(Reading(99,630001,630001)).Capture, "ordinary eligible desktop resumes if a video inhibited the nominal saver deadline");
-        var ambient=Reading(99,600001,600001); ambient.CaptureAllowed=false;
+        var ambient=Reading(99,630002,630002); ambient.CaptureAllowed=false;
         var frozen=policy.Observe(ambient);
         Check(!frozen.Capture && !frozen.Invalidate, "running saver freezes the last success for claim");
-        Check(policy.Observe(Reading(100,600500,10)).Capture, "desktop return starts a new eligible cadence immediately");
+        Check(policy.Observe(Reading(100,630500,10)).Capture, "desktop return starts a new eligible cadence immediately");
         var desired = new PreparationConfiguration { Generation=7, Enabled=true, Revision="a", TimeoutSeconds=1200, LeadSeconds=30 };
         policy = new PreviewPreparationPolicy();
         Check(policy.Observe(desired.Reading(Reading(99,0,100))).Capture, "saved timer does not replace actual validated timeout");
