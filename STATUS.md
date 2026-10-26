@@ -1,4 +1,29 @@
 # Project status
+## Native widget-first reveal (#539)
+
+The native selector previously accepted the ordinary Display title, which React
+also assigned while the initial state request was pending. Native presentation
+now publishes a distinct content-ready title only after a committed ambient
+board, font readiness and paint opportunities. The exact owned job/window class,
+fullscreen bounds, input surface and NULL-cursor checks remain prerequisites.
+The opaque black cover remains until that marker; native loading/error content
+is hidden. A short native-only startup entrance runs once, with reduced motion
+honored; normal polls and movement never replay it. The native kiosk's rendering
+flag lets covered content prepare without changing ordinary browser settings.
+
+Four deterministic readiness tests, the surface/lifecycle/input/deadline source
+fixtures, both compiled production binaries, typechecks/build and eight isolated
+display-control browser groups pass. The latter holds state delivery to prove
+the page cannot advertise readiness before the actual board, and retains the
+1080p/4K premount black-pixel checks, plus initial error, retained disconnected
+content and an intentional empty board. Display-control QA explicitly stubs
+device and wake-lock APIs. The existing eight-group Screen suite also passed;
+its real headless wake-lock subcase acquired and released a browser request, not
+a native screen/power-policy acceptance test. No installed/native display was run. Actual
+grey-screen cause and physical native reveal still require fresh watched
+acceptance; #503 remains separate. Independent final-head review and applicable
+CI are recorded on the linked PR before any merge.
+
 ## Settings scrolling and layout (#535)
 
 A synthetic desktop regression reproduces the clipped Settings page: the shared

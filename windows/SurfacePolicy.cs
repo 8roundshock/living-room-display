@@ -9,6 +9,19 @@ internal sealed class SurfaceReading
 }
 internal enum SurfaceAction { Keep, StartBrowser, Reveal, Close }
 
+// Content-ready marker emitted after native page preparation and a board paint.
+// The legacy display title was also used while state was still loading.
+internal static class NativeBrowserReadiness
+{
+    internal const string ContentTitle = "Still \u00b7 Display \u00b7 Ready";
+    internal const string PaintArguments = " --disable-backgrounding-occluded-windows";
+    internal static bool MatchesTitle(string title)
+    {
+        return title == ContentTitle + " - [InPrivate] - Microsoft Edge" ||
+            title == ContentTitle + " - Microsoft Edge";
+    }
+}
+
 // Pure decisions shared by the actual host and lifecycle tests. No native writes.
 internal sealed class SurfacePolicy
 {
