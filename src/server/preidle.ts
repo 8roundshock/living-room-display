@@ -14,10 +14,12 @@ export interface PreparationConfig {
   generation: number; configuration: string; enabled: boolean; parentProcessId: number;
   timeoutSeconds: number; prepareLeadSeconds: number; maxAgeMs: null;
   captureIntervalMs: number; observationLeaseMs: number;
+  frame: PreparationStamp | null;
 }
 export interface PreparationStamp {
   generation: number; configuration: string; inputTick: number; sessionId: number; desktopId: 'Default';
   capturedAt: string; completedAt: string; completedMonotonicMs: number;
+  timeoutSeconds: number;
 }
 export interface PreparedImage { content: Buffer; capturedAt: string; width: number; height: number }
 export interface PreparationClaim {
@@ -45,10 +47,30 @@ export class PreparedSnapshot {
   #pending: (PreparedImage & PreparationStamp & { receivedAt: number; receivedMonotonic: number }) | null = null;
   #expiry: ReturnType<typeof setTimeout> | null = null;
   #observation: { sessionId: number; wall: number; mono: number } | null = null;
+  #frozen = false;
   readonly #now: () => number;
   readonly #monotonic: () => number;
-  constructor(now: () => number = Date.now, monotonic: () => number = () => performance.now()) { this.#now = now; this.#monotonic = monotonic; }
+  readonly #observationLost: () => void;
+  constructor(now: () => number = Date.now, monotonic: () => number = () => performance.now(), observationLost = () => {}) {
+    this.#now = now; this.#monotonic = monotonic; this.#observationLost = observationLost;
+  }
   get generation() { return this.#generation; }
+  metadata(): PreparationStamp | null {
+    const p = this.#pending;
+    return p ? { generation: p.generation, configuration: p.configuration, inputTick: p.inputTick, sessionId: p.sessionId,
+      desktopId: p.desktopId, capturedAt: p.capturedAt, completedAt: p.completedAt,
+      completedMonotonicMs: p.completedMonotonicMs, timeoutSeconds: p.timeoutSeconds } : null;
+  }
+  freeze() {
+    if (this.#frozen) return;
+    this.#frozen = true; this.#generation++;
+    if (this.#pending) this.#pending.generation = this.#generation;
+  }
+  resume() {
+    if (!this.#frozen) return;
+    this.#frozen = false; this.#generation++;
+    if (this.#pending) this.#pending.generation = this.#generation;
+  }
   configure(configuration: string) {
     if (configuration !== this.#configuration) { this.clear(); this.#configuration = configuration; }
   }
@@ -57,17 +79,19 @@ export class PreparedSnapshot {
     if (this.#expiry) clearTimeout(this.#expiry);
     this.#expiry = null;
     this.#observation = null;
+    this.#frozen = false;
     this.#pending?.content.fill(0); this.#pending = null;
   }
   /** Only the child-secret endpoint can renew safe-context observation, never UI polls. */
   observe(sessionId: number) {
     const wall = this.#now(), mono = this.#monotonic(), previous = this.#observation;
-    if (previous && (sessionId !== previous.sessionId || !this.#observed())) this.clear();
+    if (previous && (sessionId !== previous.sessionId || !this.#observed())) this.#loseObservation();
     if (this.#expiry) clearTimeout(this.#expiry);
     const observation = this.#observation = { sessionId, wall, mono };
-    this.#expiry = setTimeout(() => { if (this.#observation === observation) this.clear(); }, PREPARATION_OBSERVATION_LEASE_MS);
+    this.#expiry = setTimeout(() => { if (this.#observation === observation) this.#loseObservation(); }, PREPARATION_OBSERVATION_LEASE_MS);
     this.#expiry.unref();
   }
+  #loseObservation() { this.clear(); this.#observationLost(); }
   #observed(sessionId = this.#observation?.sessionId) {
     const observed = this.#observation;
     if (!observed || observed.sessionId !== sessionId) return false;
@@ -77,7 +101,7 @@ export class PreparedSnapshot {
   }
   receive(image: PreparedImage, stamp: PreparationStamp, enabled: boolean): boolean {
     const receivedAt = this.#now(), captured = Date.parse(stamp.capturedAt), completed = Date.parse(stamp.completedAt);
-    if (!enabled || !this.#observed(stamp.sessionId) || stamp.generation !== this.#generation || stamp.configuration !== this.#configuration ||
+    if (!enabled || this.#frozen || !this.#observed(stamp.sessionId) || stamp.generation !== this.#generation || stamp.configuration !== this.#configuration ||
         !Number.isFinite(captured) || !Number.isFinite(completed) || completed < captured || completed > receivedAt ||
         receivedAt - captured > PREPARATION_UPLOAD_MAX_AGE_MS || stamp.desktopId !== 'Default' ||
         (this.#pending !== null && stamp.completedMonotonicMs <= this.#pending.completedMonotonicMs)) { image.content.fill(0); return false; }
@@ -88,6 +112,8 @@ export class PreparedSnapshot {
   }
   claim(claim: PreparationClaim, enabled: boolean): PreparedImage | null {
     const pending = this.#pending;
+    if (pending && (claim.generation !== pending.generation || claim.configuration !== pending.configuration ||
+        claim.completedMonotonicMs !== pending.completedMonotonicMs)) return null; // A stale attestation cannot consume the latest frame.
     this.#pending = null;
     const started = Date.parse(claim.processStartedAt), current = this.#now();
     const elapsed = pending ? this.#monotonic() - pending.receivedMonotonic : Infinity;
@@ -121,7 +147,7 @@ export class PreparationController {
     view: () => PreparationView,
     clearActive: () => void, now: () => number = Date.now, monotonic?: () => number) {
     this.#options = options; this.#view = view; this.#clearActive = clearActive;
-    this.snapshot = new PreparedSnapshot(now, monotonic);
+    this.snapshot = new PreparedSnapshot(now, monotonic, clearActive);
   }
   get pipeName() { return this.#child && this.#token ? this.#pipeName : null; }
   config(): PreparationConfig {
@@ -133,7 +159,7 @@ export class PreparationController {
       enabled: this.#supervise && settings.preview.enabled && settings.widgets.preview,
       parentProcessId: process.pid, timeoutSeconds: settings.idle.idleMinutes * 60,
       prepareLeadSeconds: PREPARATION_LEAD_SECONDS, maxAgeMs: null,
-      captureIntervalMs: PREPARATION_CAPTURE_INTERVAL_MS, observationLeaseMs: PREPARATION_OBSERVATION_LEASE_MS };
+      captureIntervalMs: PREPARATION_CAPTURE_INTERVAL_MS, observationLeaseMs: PREPARATION_OBSERVATION_LEASE_MS, frame: this.snapshot.metadata() };
   }
   listening(port: number) { this.#port = port; this.refresh(); }
   refresh() {

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Position=0)][ValidateSet('Install','Update','Start','Stop','Status','Editor','Display','EnableIdle','DisableIdle','Uninstall','InstallPackage')][string]$Command = 'Status',
+    [Parameter(Position=0)][ValidateSet('Install','Update','Start','Stop','Status','Editor','Display','EnableIdle','DisableIdle','EnableStartup','DisableStartup','Uninstall','InstallPackage')][string]$Command = 'Status',
     [string]$InstallRoot,
     [string]$SourceRoot,
     [ValidateRange(1,120)][int]$IdleMinutes = 20,
@@ -426,6 +426,7 @@ function Add-SetupOwnership($Fields, $Previous) {
     if ((Get-MarkerValue $Previous 'runtimePreviousOwner') -eq 'package' -and (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime.previous'))) { $Fields['runtimePreviousOwner'] = 'package' }
 }
 function Install-App {
+    Assert-LogonEntryAvailable
     # An unfinished Setup rollback means app.previous holds the last working app;
     # a source update would replace app.previous and lose it.
     if (Test-Path -LiteralPath $transaction) {
@@ -500,6 +501,7 @@ function Install-App {
         Remove-OwnedDirectory $next
     }
     Start-App
+    Sync-LogonStartup
     Write-Output "Installed at $InstallRoot. Idle activation remains unchanged. Editor: $script:baseUrl/editor"
     if (-not $NoBrowser) { Start-Process "$script:baseUrl/editor" }
 }
@@ -514,6 +516,96 @@ public static class LrdWindowsSettings {
 '@
     }
 }
+function Get-LogonCommand { return ('"' + $hostExe + '" --start') }
+function Read-LogonEntry {
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    if (-not (Test-Path -LiteralPath $key)) { return $null }
+    $values = Get-ItemProperty -LiteralPath $key -ErrorAction Stop
+    $entry = $values.PSObject.Properties['LivingRoomDisplay']
+    if ($entry) { return $entry.Value }
+    return $null
+}
+function Write-LogonEntry([string]$Value) {
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    if (-not (Test-Path -LiteralPath $key)) { $null = New-Item -Path $key -Force }
+    $null = New-ItemProperty -LiteralPath $key -Name 'LivingRoomDisplay' -PropertyType String -Value $Value -Force
+}
+function Delete-LogonEntry {
+    Remove-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'LivingRoomDisplay' -ErrorAction Stop
+}
+function Test-OwnSaverSelection {
+    $current = Get-ItemProperty -LiteralPath 'HKCU:\Control Panel\Desktop' -ErrorAction Stop
+    $selected = $current.PSObject.Properties['SCRNSAVE.EXE']
+    $active = $current.PSObject.Properties['ScreenSaveActive']
+    return $selected -and $active -and $active.Value -eq '1' -and
+        [string]::Equals([IO.Path]::GetFullPath(([string]$selected.Value).Trim('"')),$hostExe,[StringComparison]::OrdinalIgnoreCase)
+}
+function Test-LogonRequested([switch]$ForIdleEnable) {
+    # Absence is AUTO. Normal setup must never add or rewrite private data just
+    # to express the default; only the two explicit startup commands write it.
+    $choice = Join-Path $data 'startup.json'
+    if (Test-Path -LiteralPath $choice -PathType Leaf) {
+        $saved = Get-Content -LiteralPath $choice -Raw | ConvertFrom-Json
+        if (-not $saved.PSObject.Properties['enabled'] -or $saved.enabled -isnot [bool]) { throw 'Start with Windows preference is invalid; no startup entry was changed.' }
+        if (-not $saved.enabled) { return $false }
+    }
+    $stateFile = Join-Path $data 'state.json'
+    if (-not (Test-Path -LiteralPath $stateFile -PathType Leaf)) { return $false }
+    $state = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
+    if (-not $state.PSObject.Properties['settings']) { return $false }
+    $settings = $state.settings
+    foreach ($group in @('idle','preview','widgets')) { if (-not $settings.PSObject.Properties[$group]) { return $false } }
+    if (-not $settings.idle.PSObject.Properties['enabled'] -or -not $settings.preview.PSObject.Properties['enabled'] -or
+        -not $settings.widgets.PSObject.Properties['preview']) { return $false }
+    if ($settings.idle.enabled -isnot [bool] -or $settings.preview.enabled -isnot [bool] -or $settings.widgets.preview -isnot [bool]) { return $false }
+    return ($ForIdleEnable -or $settings.idle.enabled) -and $settings.preview.enabled -and $settings.widgets.preview -and ($ForIdleEnable -or (Test-OwnSaverSelection))
+}
+function Assert-LogonEntryAvailable([switch]$ForIdleEnable) {
+    if (-not (Test-LogonRequested -ForIdleEnable:$ForIdleEnable)) { return }
+    $current = Read-LogonEntry
+    if ($null -ne $current -and ($current -isnot [string] -or $current -cne (Get-LogonCommand))) {
+        throw 'Start with Windows entry LivingRoomDisplay belongs to another command; it was preserved.'
+    }
+}
+function Remove-OwnedLogonEntry {
+    $current = Read-LogonEntry
+    if ($null -ne $current -and $current -is [string] -and $current -ceq (Get-LogonCommand)) { Delete-LogonEntry }
+}
+function Sync-LogonStartup {
+    if (-not (Test-LogonRequested)) { Remove-OwnedLogonEntry; return }
+    Assert-LogonEntryAvailable
+    # Do not rewrite an existing exact value: Windows Startup Apps may have
+    # disabled it independently, and that user choice must stay untouched.
+    if ($null -eq (Read-LogonEntry)) { Write-LogonEntry (Get-LogonCommand) }
+}
+function Set-LogonPreference([bool]$Enabled) {
+    Assert-Installed
+    if ($Enabled) {
+        $choice = Join-Path $data 'startup.json'
+        $existing = if (Test-Path -LiteralPath $choice) { [IO.File]::ReadAllBytes($choice) } else { $null }
+        try {
+            # Validate all opt-ins without mutating the existing choice first.
+            $stateFile = Join-Path $data 'state.json'
+            if (-not (Test-Path -LiteralPath $stateFile)) { throw 'Enable idle display and Last screen before Start with Windows.' }
+            $settings = (Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json).settings
+            if (-not $settings.idle.enabled -or -not $settings.preview.enabled -or -not $settings.widgets.preview -or -not (Test-OwnSaverSelection)) {
+                throw 'Enable idle display and Last screen before Start with Windows.'
+            }
+            $current = Read-LogonEntry
+            if ($null -ne $current -and ($current -isnot [string] -or $current -cne (Get-LogonCommand))) { throw 'Start with Windows entry belongs to another command; it was preserved.' }
+            Write-Json $choice @{enabled=$true}
+            Sync-LogonStartup
+        } catch {
+            if ($null -ne $existing) { [IO.File]::WriteAllBytes($choice,$existing) }
+            elseif (Test-Path -LiteralPath $choice) { Remove-Item -LiteralPath $choice -Force }
+            throw
+        }
+    } else {
+        Remove-OwnedLogonEntry
+        Write-Json (Join-Path $data 'startup.json') @{enabled=$false}
+    }
+    Write-Output ('Start with Windows ' + $(if ($Enabled) {'enabled.'} else {'disabled.'}))
+}
 function Update-IdlePreference([bool]$Enabled) {
     if (-not (Get-OwnedServer)) { return }
     $idle = @{enabled=$Enabled}
@@ -527,6 +619,8 @@ function Set-WindowsScreenSaverParameter([uint32]$Action, [uint32]$Value) {
 }
 function Set-Idle([bool]$Enable) {
     Assert-Installed
+    if ($Enable) { Assert-LogonEntryAvailable -ForIdleEnable }
+    if (-not $Enable) { Remove-OwnedLogonEntry }
     $key = 'HKCU:\Control Panel\Desktop'
     $backup = Join-Path $InstallRoot 'screensaver-before.json'
     $names = @('SCRNSAVE.EXE','ScreenSaveActive','ScreenSaveTimeOut')
@@ -562,6 +656,7 @@ function Set-Idle([bool]$Enable) {
             throw $failure
         }
         Update-IdlePreference $true
+        Sync-LogonStartup
         Write-Output "Windows ambient screensaver enabled after $IdleMinutes minutes. Existing lock/security setting was preserved."
     } else {
         if (-not (Test-Path -LiteralPath $backup)) { Write-Output 'No saved screensaver configuration to restore.'; return }
@@ -630,6 +725,7 @@ function Remove-RemovalFolders {
 }
 function Uninstall-App {
     Assert-Installed
+    Remove-OwnedLogonEntry
     Set-Idle $false
     Stop-App
     $installed = Read-MarkerFile
@@ -1219,6 +1315,7 @@ function Install-Package {
     # Preflight: nothing below writes until every check has passed (finishing an
     # earlier unfinished rollback is the one exception; it only puts files back).
     $installed = Assert-PackageFolder
+    Assert-LogonEntryAvailable
     $packageHash = Get-Sha256 $archive
     if ($packageHash -ne $PackageSha256.ToLowerInvariant()) { throw 'LRD-E13: The package archive hash does not match Setup.' }
     $manifest = Read-PackageArchive $archive
@@ -1394,6 +1491,7 @@ function Install-Package {
         try { Remove-OwnedDirectory $stage } catch { Write-PackageLog "Could not remove staging: $($_.Exception.Message)" }
         if ($cleanUpFirstInstall) { Remove-UnfinishedFirstInstall $ownsFolder }
     }
+    Sync-LogonStartup
     Write-PackageLog "Installed $version at $InstallRoot; server healthy. Idle activation unchanged."
     Write-Output "Installed Living Room Display $version at $InstallRoot. Idle activation remains unchanged. Editor: $script:baseUrl/editor"
 }
@@ -1438,12 +1536,13 @@ try {
     if (-not $lockHeld) { throw 'Another application operation is in progress. Wait for it to finish.' }
     switch ($Command) {
     { $_ -in @('Install','Update') } { Install-App; break }
-    'Start' { Start-App; if (-not $NoBrowser) { Start-Process "$script:baseUrl/editor" }; break }
+    'Start' { Start-App; Sync-LogonStartup; if (-not $NoBrowser) { Start-Process "$script:baseUrl/editor" }; break }
     'Stop' { Stop-App; Write-Output 'Owned display and server stopped.'; break }
     'Status' { Get-InstallStatus; break }
-    'Editor' { Start-App; Start-Process "$script:baseUrl/editor"; break }
+    'Editor' { Start-App; Sync-LogonStartup; Start-Process "$script:baseUrl/editor"; break }
     'Display' {
         Start-App
+        Sync-LogonStartup
         $launch = New-Object Diagnostics.ProcessStartInfo
         $launch.FileName = $hostExe
         $launch.Arguments = '--display'
@@ -1452,8 +1551,10 @@ try {
         $null = [Diagnostics.Process]::Start($launch)
         break
     }
-    'EnableIdle' { Set-Idle $true; break }
+    'EnableIdle' { Start-App; Set-Idle $true; break }
     'DisableIdle' { Set-Idle $false; break }
+    'EnableStartup' { Set-LogonPreference $true; break }
+    'DisableStartup' { Set-LogonPreference $false; break }
     'Uninstall' { Uninstall-App; break }
     }
 } catch {

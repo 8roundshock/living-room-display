@@ -424,8 +424,10 @@ export async function createApplication(options: ApplicationOptions) {
         if (request.headers['x-preparation-safe'] === '1' && config.enabled) {
           const session = z.coerce.number().int().min(0).max(0x7fffffff).parse(request.headers['x-session-id']);
           preparation.snapshot.observe(session);
+          if (request.headers['x-preparation-freeze'] === '1') preparation.snapshot.freeze();
+          else if (request.headers['x-preparation-capture-eligible'] === '1') preparation.snapshot.resume();
         } else preparation.invalidate(true);
-        json(response, 200, { ...config, generation: preparation.snapshot.generation }); return;
+        json(response, 200, { ...config, generation: preparation.snapshot.generation, frame: preparation.snapshot.metadata() }); return;
       }
       if (method === 'DELETE') {
         if (request.headers['x-invalidate-active-only'] === '1') preparation.clearActive();
@@ -439,6 +441,7 @@ export async function createApplication(options: ApplicationOptions) {
         inputTick: integerHeader('x-input-tick', 0xffffffff), sessionId: integerHeader('x-session-id', 0x7fffffff),
         desktopId: z.literal('Default').parse(request.headers['x-desktop-id']), capturedAt: z.iso.datetime({ offset: true }).parse(request.headers['x-captured-at']),
         completedAt: z.iso.datetime({ offset: true }).parse(request.headers['x-completed-at']), completedMonotonicMs: integerHeader('x-completed-monotonic-ms'),
+        timeoutSeconds: integerHeader('x-idle-timeout-seconds', 0x7fffffff),
       };
       // Unlike the active preview, this slot is never reachable by state, image, export or Home polls.
       let content: Buffer | undefined;
@@ -475,8 +478,8 @@ export async function createApplication(options: ApplicationOptions) {
         preparationRequest(request);
         const config = preparation.config();
         const prepared = preparation.snapshot.claim(claim, config.enabled);
-        clearPreview();
         if (prepared) {
+          clearPreview();
           image = prepared.content; preview = { available: true, capturedAt: prepared.capturedAt, width: prepared.width, height: prepared.height };
           previewChanges++; claimed = true;
         }

@@ -14,6 +14,23 @@ $outside = Join-Path $scratchRoot 'outside'
 $logFile = Join-Path $scratchRoot 'logs\setup-helper.log'
 $junctions = New-Object 'Collections.Generic.List[string]'
 $script:checks = 0
+# Child processes do not inherit the parent test's functions. Every script child
+# receives these synthetic boundaries before invoking either control version.
+# EncodedCommand provides literal quoting, not an execution-policy override.
+$script:childStatusBoundary = @'
+function Get-ItemProperty { param($Path,$LiteralPath,$ErrorAction) return [pscustomobject]@{ScreenSaveActive='0';ScreenSaveTimeOut='543';ScreenSaverIsSecure='0'} }
+function Get-CimInstance { param($ClassName,$Filter,$ErrorAction) return @() }
+function Test-Path {
+    [CmdletBinding(DefaultParameterSetName='Path')]
+    param([Parameter(ParameterSetName='Path',Position=0)][string[]]$Path,[Parameter(ParameterSetName='Literal')][string[]]$LiteralPath,[string]$PathType)
+    $targets=if($PSCmdlet.ParameterSetName -eq 'Literal'){$LiteralPath}else{$Path}
+    foreach($target in $targets){if($target -match '^(HKCU|HKLM|Registry):'){return $false}}
+    return Microsoft.PowerShell.Management\Test-Path @PSBoundParameters
+}
+function Set-ItemProperty { throw 'Unexpected registry write in isolated child.' }
+function New-ItemProperty { throw 'Unexpected registry write in isolated child.' }
+function Remove-ItemProperty { throw 'Unexpected registry write in isolated child.' }
+'@
 $null = New-Item -ItemType Directory -Path $packages,$outside,(Split-Path $logFile -Parent),(Split-Path $testRoot -Parent) -Force
 [IO.File]::WriteAllText((Join-Path $outside 'keep.txt'),'outside the install root')
 
@@ -48,6 +65,11 @@ try {
     }
     function Stop-App { $script:stops++; $script:serverRunning = $false; if ($script:portBusyAfterStop) { $script:portBusy = $true } }
     function Set-Idle { param($Enable) }
+    function Get-ItemProperty { param($Path,$LiteralPath,$ErrorAction) return [pscustomobject]@{ScreenSaveActive='0';ScreenSaveTimeOut='600';ScreenSaverIsSecure='0'} }
+    function Get-CimInstance { param($ClassName,$Filter,$ErrorAction) return @() }
+    function Assert-LogonEntryAvailable { }
+    function Sync-LogonStartup { }
+    function Remove-OwnedLogonEntry { }
     function Get-OwnedServer { if ($script:serverRunning) { return [pscustomobject]@{Id=1} }; return $null }
     function Test-PortInUse { return $script:portBusy }
     function Get-RuntimeVersion { param($NodePath) return $script:runtimeVersion }
@@ -243,7 +265,8 @@ try {
     function Invoke-ChildScript([string]$Arguments) {
         $launch = New-Object Diagnostics.ProcessStartInfo
         $launch.FileName = $shell
-        $launch.Arguments = '-NoProfile -NonInteractive -File "' + $controlScript + '" ' + $Arguments
+        $isolated = '& { ' + $script:childStatusBoundary + '; & ''' + $controlScript.Replace("'","''") + ''' ' + $Arguments + ' }'
+        $launch.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($isolated))
         $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true
         $launch.RedirectStandardError = $true; $launch.RedirectStandardOutput = $true
         $process = [Diagnostics.Process]::Start($launch)
@@ -1031,7 +1054,8 @@ try {
     function Assert-OldReaderReads([string]$Revision) {
         $launch = New-Object Diagnostics.ProcessStartInfo
         $launch.FileName = $shell
-        $launch.Arguments = '-NoProfile -NonInteractive -Command "& { $r = & ''' + $oldScript + ''' Status -InstallRoot ''' + $testRoot + '''; if ($r.InstallRoot -ne ''' + $testRoot + ''' -or $r.SourceRevision -ne ''' + $Revision + ''' -or $r.SourceState -ne ''clean'') { exit 3 }; . ''' + $oldScript + ''' -InstallRoot ''' + $testRoot + ''' -FunctionsOnly; Assert-Installed; exit 0 }"'
+        $isolated = '& { ' + $script:childStatusBoundary + '; $r = & ''' + $oldScript.Replace("'","''") + ''' Status -InstallRoot ''' + $testRoot.Replace("'","''") + '''; if ($r.InstallRoot -ne ''' + $testRoot.Replace("'","''") + ''' -or $r.SourceRevision -ne ''' + $Revision + ''' -or $r.SourceState -ne ''clean'' -or $r.IdleSeconds -ne ''543'' -or $r.DisplayRunning) { exit 3 }; . ''' + $oldScript.Replace("'","''") + ''' -InstallRoot ''' + $testRoot.Replace("'","''") + ''' -FunctionsOnly; Assert-Installed; exit 0 }'
+        $launch.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($isolated))
         $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true; $launch.RedirectStandardError = $true; $launch.RedirectStandardOutput = $true
         $process = [Diagnostics.Process]::Start($launch)
         try {

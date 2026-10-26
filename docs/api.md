@@ -775,29 +775,51 @@ restoring pixels; re-enabling preview does not revive them.
 No snapshot, token, capture log, or image cache is written
 by the server. Actual Windows capture is owned and tested by the Windows host.
 
-Automatic `/s` instead claims an earlier private frame (#525); it never captures
-after it starts as a fallback. The installed backend supervises a distinct native
-preparer through a child-only capability sent via redirected stdin. Native-only
-`/api/preview/preparation` GET/POST/DELETE and the attestation POST at
-`/api/preview/preparation/claim` require that capability; there is no ambient HTTP
-claim route which trusts caller-supplied process JSON. Preparation accepts at most
-a 640 × 360 PNG/4 MiB in one private RAM slot, tagged with configuration, generation,
-input epoch, session, desktop and completion clocks. It is absent from state,
-preview/image, exports and polls until the OS-identified named-pipe client passes
-the preparer's exact `/s` process checks. See [native guards and limits](windows.md#earlier-automatic-snapshot-525).
-The 90-second pending TTL is distinct from an active session's existing lifetime.
-Preparation uses effective scheduled visibility and an opaque configuration derived
-from manual settings, the schedule revision/selection and observed boundaries.
-It invalidates on an intervening off interval even when the next read sees the
-same style again; body completion and claim recheck that configuration. A resident
-worker retains its input-attempt history across scheduled off intervals. Explicit
-idle disable still stops it and revokes the capability. `preview.enabled` and the
-preview widget toggle are saved-style visual fields, not a separate global consent
-setting; schedules never replace global idle enablement or Windows selection.
-An intervening effective off interval clears active pixels too, even if the next
-read sees the original style again. A clock reversal or gap beyond the bounded
-reconstruction window also clears them. Current-on cannot revive an older frame;
-native cleanup is scoped to the current native-preview token as described above.
+Automatic `/s` claims the producer's latest earlier successful frame (#538), never
+a screenshot of its startup surface. The installed backend supervises a distinct
+native producer with a child-only capability on redirected stdin. The
+`/api/preview/preparation` GET/POST/DELETE and private claim POST require that
+capability plus existing Host/Origin/Fetch Metadata restrictions. The ordinary
+UI, state/export/image endpoints and polls never receive pending pixels or the
+producer capability. Source/test servers cannot start the producer.
+
+The private GET supplies `captureIntervalMs:300000`, `observationLeaseMs:10000`,
+`maxAgeMs:null`, configuration/generation and optional scalar `frame` metadata.
+`X-Preparation-Safe:1` with the current `X-Session-Id` renews the producer's safe
+observation lease; absent/unsafe context clears pixels. This lease is not image
+age: healthy observations retain the last success across missed/failed refreshes.
+Producer loss, unknown/locked/disconnected context or configuration/disable clears
+it. Public reads cannot renew the lease. Uploads still have a separate ten-second
+fresh-body bound and at most one 640 by 360 PNG/4 MiB RAM slot.
+
+Before attesting an OS-pinned automatic client, the producer sends
+`X-Preparation-Freeze:1` on private GET. Freeze atomically preserves the current
+bytes and returns their authoritative metadata under a new fenced generation.
+Older in-flight POST bodies return409; they cannot replace or erase this frame.
+The exact `completedMonotonicMs` identity, frozen generation/configuration,
+session and captured input tag accompany the attestation. Current input stability
+is rechecked separately during the native claim. Normal input after an earlier
+capture is allowed. UTC/monotonic consistency and completion before the actual
+client process was created remain strict. A stale frame-ID/generation attestation
+is refused without consuming a newer authoritative image.
+
+A committed POST with a lost acknowledgement cannot strand a native metadata
+copy: the backend is the sole authority and claim fetches it again. An eligible
+ordinary desktop heartbeat (`X-Preparation-Capture-Eligible:1`) resumes a previously
+frozen cache under another fenced generation. Normal input uses the child-secret
+DELETE `X-Invalidate-Active-Only:1` to clear visible active pixels without erasing
+the pending latest-success cache; other DELETE keeps its full invalidation role.
+All frame bytes are zeroed on replacement/clear. No pixel log, file or history is
+created. Active-session pixels retain the separate existing twelve-hour limit.
+
+Preparation uses effective scheduled visibility and a composite configuration;
+intervening off intervals, schedule edits and unreconstructable clock changes
+invalidate pending/in-flight images. A resident child survives scheduled off
+intervals but remains capture-disabled; explicit idle disable stops it and revokes
+its capability. `preview.enabled` and the preview widget are saved visual fields;
+schedules do not change global idle enablement or Windows selection. See
+[the native contract](windows.md#periodic-automatic-snapshot-538) and
+[early sign-in setup](install.md#start-with-windows-and-the-snapshot-cache-540).
 
 ## Persistence and recovery
 

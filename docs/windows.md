@@ -51,49 +51,58 @@ startup aborts pending HTTP, clears the image, skips later capture/kiosk steps,
 and releases its event subscription. Cancellation also closes an already-created
 owned browser job; failed startup and ordinary exit share cleanup.
 
-### Earlier automatic snapshot (#525)
+<a id="earlier-automatic-snapshot-525"></a>
+### Periodic automatic snapshot (#538)
 
-This is source behavior, separate from the dated installation and actual native
-acceptance in STATUS/#519. The app-owned backend starts a distinct
-`LivingRoomDisplay.Preview.exe` only through the installed lifecycle's explicit
-opt-in and exact clean installed layout/marker. Source `npm start`, imported
-`createApplication`, ephemeral test servers and injected fakes never start it.
-It adds no independently persistent service/task/autostart and dies with its
-exact parent backend. Stop waits for that exact child before returning.
+This is source behavior, separate from installation and native acceptance in
+STATUS/#519. The installed owned backend supervises one distinct
+`LivingRoomDisplay.Preview.exe` using a child-only capability on redirected stdin.
+Source `npm start`, imported applications and test servers never opt in. The child
+dies with its exact parent and Stop waits for it. For an already enabled owned
+idle display with Last screen on, supported setup synchronizes an exact per-user
+sign-in entry invoking the installed native `.scr --start` without a browser
+(#540). New idle-off installations stay off. `EnableStartup`/`DisableStartup`
+control the choice; AUTO creates no private-data preference file.
 
-A fresh/replacement child first establishes an input baseline and stays unarmed
-until new physical input is observed. It attempts one capture in the 30 seconds
-before the active Windows idle threshold. It does not retry failures or overwrite
-periodically in that epoch. The actual selected saver and enable flag must permit
-this app. The deadline comes from the validated Windows timeout, since the saved
-desired timer can differ after independent Windows configuration. An observed
-timeout change clears pending and active frames without rearming that input epoch;
-capture monitoring and claim publication also recheck the exact actual timeout.
-Nonpositive, lead-sized or already-reached deadlines remain unavailable.
-Capture requires an active, unlocked local
-interactive session on the current input Default desktop; unknown, disconnected,
-locked or other-desktop contexts are unavailable. No desktop is opened/switched
-to obtain content. An existing owned ambient session makes capture ineligible
-without taking its mutex lease or erasing a valid pending/active image.
+The first safely eligible observation captures the full primary desktop, then a
+monotonic five-minute cadence refreshes one private RAM thumbnail. No extra input
+after worker launch is required. Normal mouse/key activity is permitted during
+copying and does not erase the latest success or reset the cadence. Failed
+eligible captures retain that success and its original timestamp. A fresh safe
+recovery after invalidation/generation loss captures immediately.
 
-The pending thumbnail stays private in RAM for at most 90 seconds. Input,
-session/configuration change, disable, expiry and child/backend loss invalidate
-it; in-flight work cannot resurrect an older generation. The capability is sent
-only over redirected child stdin. A logon-scoped, first-instance named pipe
-identifies the actual `/s` client PID; the preparer pins and checks the exact
-installed executable, strict automatic command, session and actual creation time.
-Only its secret-authenticated attestation can promote the pending image. Both
-monotonic order and UTC order are checked, with a conservative two-second clock
-uncertainty margin; ambiguous ordering is unavailable. Pipe traffic is scalar
-only, never pixels or the capability.
+Capture requires this app's selected/enabled saver and an unlocked local console
+session on the current Default input desktop. Unknown, locked, disconnected or
+other-desktop contexts clear the cache. Actual saver state and the owned ambient
+mutex exclude capture throughout ambient startup/display. A thirty-second band
+on either side of the validated Windows idle threshold pauses copying; afterwards
+an otherwise safe desktop can resume when video has inhibited the nominal saver.
+Pre/post-copy checks and cancellation retain the same context/actual-timeout
+requirements. No desktop is opened/switched and no power-request inventory is used.
 
-This supplies a recent earlier frame or unavailable, not an exact final visible
-frame for arbitrary Windows timing. Cold/late/manual activation, suppression or
-delay beyond freshness, suspend and missed scheduling can leave it unavailable.
-Manual display/test capture stays separate and does not prove this automatic path.
-No screenshot or cache files are written. Actual capture/access and installed
-behavior still require separately coordinated native acceptance; source checks
-do not establish that the reported black preview is fixed.
+The backend is the sole frame/metadata authority. One latest-success slot has no
+image-age expiry while child-secret safe-context observations renew a ten-second
+producer lease. UI reads cannot renew it. Unknown context, configuration changes,
+disable, missed observation/clock discontinuity, child/backend exit clear bytes.
+Successful replacement zeroes former bytes. An expected ambient mutex transition
+freezes capture while safe producer observations preserve the earlier image.
+
+A logon-scoped first-instance pipe identifies/pins the actual installed `/s`
+process. Under its publication gate the preparer fetches authoritative metadata
+and freezes the backend slot; freeze fences older in-flight uploads without
+clearing the current image. Exact frame ID, generation, session, current claim
+input stability, actual process creation and UTC/monotonic order remain checked.
+A committed upload with a lost response cannot leave stale local frame metadata:
+there is no second native frame cache. Pipe traffic is scalar only, never pixels
+or capabilities. Automatic startup never captures a replacement of its own surface.
+
+The thumbnail covers the full primary desktop and is downscaled to at most
+640 by 360 for display. No screenshot/cache file or capture history is written.
+The capture time label remains honest when a refresh fails. Active-session pixels
+still have the separate existing twelve-hour limit; that is not a pending-cache
+age rule. Cold automatic launch before an early backend has run can still be
+unavailable. Manual display capture remains separate. Source tests do not prove
+installed capture, protected-content support or physical native acceptance.
 
 For source/CI safety, `LRD_PREVIEW_PREPARER_DISABLED=1` is a disable-only override
 used by installer smoke checks. It cannot enable the watcher or bypass any guard.
@@ -154,8 +163,9 @@ session's pixels. The pending pre-idle frame and preparer capability stay separa
 and unchanged. Token rotation does not order older naturally cancelled or
 externally killed handshake GETs; that availability limit remains in #534.
 Readiness matches the owned Edge window by the display document's title
-(`Still · Display`), so a change to that title in `src/client/App.tsx` must also
-change `windows/NativeDisplay.cs` until
+(`Still · Display · Ready`), so a change to that readiness title in
+`src/client/nativeReadiness.ts` must also change `windows/SurfacePolicy.cs`
+(selected by `NativeDisplay.cs`) until
 [#444](https://github.com/8roundshock/living-room-display/issues/444) removes that
 dependency.
 

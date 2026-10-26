@@ -53,8 +53,13 @@ dependency. Node 24 is an active LTS line; existing system runtimes are not repl
 | Last-state snapshot, selected for version one | Shows the screen immediately before ambient activation. | Actual current-PC 4K source/content/readability, label and RAM clear are accepted; other-account, real-lock and room-comfort checks remain. |
 | Live selected-app thumbnail, future work | Shows changing state from an explicitly chosen application. | Capture support, minimized/occluded app behavior, permissions, performance, and avoiding dashboard recursion. |
 
-The native Windows host captures before activating the display and transfers a
-small PNG to the backend's RAM-only endpoint. A normal web page has no silent
+The owned producer captures the full primary desktop on its first safe eligible
+observation and every five minutes, replacing one private RAM thumbnail. Its
+safe-context heartbeat retains the latest success through normal input and failed
+refreshes; unknown/locked contexts, disable or producer loss clear it. Automatic
+startup freezes and claims that earlier frame. An owned per-user native sign-in
+entry supports an already opted-in idle/Last screen install (#540); idle-off
+new users and source/test servers do not register it. A normal web page has no silent
 desktop capture permission. Keep the thumbnail dim, adjustable, movable, and
 toggleable. Do not save screenshots. Actual native capture and rendered preview
 were inspected in RAM on the current 3840x2160 Windows 10 setup on 2026-10-18;

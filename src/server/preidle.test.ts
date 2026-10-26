@@ -17,7 +17,7 @@ function slotFixture() {
   slot.configure('configuration-a'); slot.observe(1);
   const content = Buffer.from('synthetic thumbnail');
   const stamp = (): PreparationStamp => ({ generation: slot.generation, configuration: 'configuration-a', inputTick: 123,
-    sessionId: 1, desktopId: 'Default', capturedAt: new Date(BASE - 100).toISOString(), completedAt: new Date(BASE).toISOString(), completedMonotonicMs: 10_000 });
+    sessionId: 1, desktopId: 'Default', capturedAt: new Date(BASE - 100).toISOString(), completedAt: new Date(BASE).toISOString(), completedMonotonicMs: 10_000, timeoutSeconds: 600 });
   const receive = () => slot.receive({ content, capturedAt: stamp().capturedAt, width: 2, height: 2 }, stamp(), true);
   const claim = (): PreparationClaim => ({ generation: slot.generation, configuration: 'configuration-a', processId: 200,
     processStartedAt: new Date(BASE + 3_000).toISOString(), startedMonotonicMs: 13_000, inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000 });
@@ -53,8 +53,13 @@ test('input/context/config/disabled/clock/order uncertainty consumes and zeroes 
   for (const [name, change] of Object.entries(variants)) await t.test(name, () => {
     const f = slotFixture(); assert.equal(f.receive(), true); f.advance();
     const claim = f.claim(); change(f, claim);
-    assert.equal(f.slot.claim(claim, true), null); assert.ok(f.content.every(value => value === 0));
-    assert.equal(f.slot.claim(f.claim(), true), null);
+    assert.equal(f.slot.claim(claim, true), null);
+    if (['wrong exact frame identity', 'another configuration', 'another generation'].includes(name)) {
+      assert.equal(f.content.toString(), 'synthetic thumbnail', 'stale attestation preserves the authoritative latest frame');
+      assert.equal(f.slot.claim(f.claim(), true)?.content, f.content); f.content.fill(0);
+    } else {
+      assert.ok(f.content.every(value => value === 0)); assert.equal(f.slot.claim(f.claim(), true), null);
+    }
   });
   const disabled = slotFixture(); disabled.receive(); disabled.advance();
   assert.equal(disabled.slot.claim(disabled.claim(), false), null); assert.ok(disabled.content.every(value => value === 0));
@@ -169,7 +174,7 @@ async function apiFixture() {
   const headers = (current: { generation: number; configuration: string }) => ({ ...auth(), 'Content-Type': 'image/png',
     'X-Preparation-Generation': String(current.generation), 'X-Preparation-Configuration': current.configuration,
     'X-Input-Tick': '123', 'X-Session-Id': '1', 'X-Desktop-Id': 'Default', 'X-Captured-At': new Date(BASE - 100).toISOString(),
-    'X-Completed-At': new Date(BASE).toISOString(), 'X-Completed-Monotonic-Ms': '10000' });
+    'X-Completed-At': new Date(BASE).toISOString(), 'X-Completed-Monotonic-Ms': '10000', 'X-Idle-Timeout-Seconds': '600' });
   return { ...app, url, directory, clock, native, auth, config, headers, patch, get bootstrap() { return bootstrap; }, get stopped() { return stopped; }, exit() { exited(); },
     async close() { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); } };
 }
@@ -216,6 +221,74 @@ test('ordinary-input active-only cleanup preserves the private latest frame for 
       inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000,
     })));
     assert.equal(result.status, 200); assert.equal(JSON.parse(result.body.toString()).claimed, true);
+    assert.deepEqual(Buffer.from(await (await fetch(app.url + '/api/preview/image')).arrayBuffer()), png);
+  } finally { await app.close(); }
+});
+
+test('a committed refresh with a lost response is reconciled by authoritative freeze and late uploads cannot replace it', async () => {
+  const app = await apiFixture();
+  try {
+    let config = await app.config();
+    const original = photoFixture(3, 2), latest = photoFixture(4, 2);
+    assert.equal((await app.native('/api/preview/preparation', 'POST', app.headers(config), original)).status, 201);
+    app.clock.wall += 3_100; app.clock.mono += 3_100;
+    let loseAcknowledgement = true;
+    app.server.prependListener('request', (incoming, response) => {
+      if (loseAcknowledgement && incoming.method === 'POST' && incoming.url === '/api/preview/preparation') {
+        loseAcknowledgement = false;
+        response.end = function () { this.destroy(); return this; };
+      }
+    });
+    const latestHeaders = { ...app.headers(config), 'X-Captured-At': new Date(app.clock.wall - 100).toISOString(),
+      'X-Completed-At': new Date(app.clock.wall).toISOString(), 'X-Completed-Monotonic-Ms': String(app.clock.mono) };
+    await assert.rejects(app.native('/api/preview/preparation', 'POST', latestHeaders, latest), /socket hang up/);
+    // Source publication has no acknowledgement-dependent native metadata copy.
+    app.clock.wall += 3_100; app.clock.mono += 3_100;
+    const lateBodyStarted = new Promise<void>(resolve => app.server.once('request', incoming => incoming.once('data', () => resolve())));
+    let delayed!: ReturnType<typeof httpRequest>;
+    const lateResponse = new Promise<number>((resolve, reject) => {
+      delayed = httpRequest(app.url + '/api/preview/preparation', { method: 'POST', headers: latestHeaders }, response => {
+        response.resume(); response.on('end', () => resolve(response.statusCode!));
+      }); delayed.on('error', reject); delayed.write(original.subarray(0, 8));
+    });
+    await lateBodyStarted;
+    const frozen = JSON.parse((await app.native('/api/preview/preparation', 'GET', { ...app.auth(),
+      'X-Preparation-Safe': '1', 'X-Session-Id': '1', 'X-Preparation-Freeze': '1' })).body.toString());
+    assert.equal(frozen.frame.completedMonotonicMs, 13_100);
+    assert.equal(frozen.frame.generation, frozen.generation);
+    assert.ok(frozen.generation > config.generation, 'freeze fences the generation but retains exact latest frame');
+    delayed.end(original.subarray(8)); assert.equal(await lateResponse, 409, 'a body started before freeze cannot publish after it');
+    assert.equal((await app.native('/api/preview/preparation', 'POST', latestHeaders, original)).status, 409);
+    const old = { generation: config.generation, configuration: config.configuration, processId: 200,
+      processStartedAt: new Date(app.clock.wall - 100).toISOString(), startedMonotonicMs: app.clock.mono - 100,
+      inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000 };
+    assert.equal(JSON.parse((await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify(old)))).body.toString()).claimed, false);
+    const current = { ...old, generation: frozen.generation, completedMonotonicMs: frozen.frame.completedMonotonicMs };
+    assert.equal(JSON.parse((await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify(current)))).body.toString()).claimed, true);
+    assert.deepEqual(Buffer.from(await (await fetch(app.url + '/api/preview/image')).arrayBuffer()), latest);
+  } finally { await app.close(); }
+});
+
+test('ambient mutex observation before handshake freezes capture while safe heartbeat preserves the earlier frame', async () => {
+  const app = await apiFixture();
+  try {
+    const config = await app.config(), png = photoFixture();
+    assert.equal((await app.native('/api/preview/preparation', 'POST', app.headers(config), png)).status, 201);
+    for (let elapsed = 0; elapsed < 45_000; elapsed += 5_000) {
+      app.clock.wall += 5_000; app.clock.mono += 5_000;
+      const observed = JSON.parse((await app.native('/api/preview/preparation', 'GET', { ...app.auth(),
+        'X-Preparation-Safe': '1', 'X-Session-Id': '1' })).body.toString());
+      assert.equal(observed.generation, config.generation, 'safe own-ambient observation does not invalidate pending pixels');
+    }
+    const host = await app.native('/api/host/session', 'GET', { 'X-LRD-Native': '1' }); assert.equal(host.status, 200);
+    const frozen = JSON.parse((await app.native('/api/preview/preparation', 'GET', { ...app.auth(),
+      'X-Preparation-Safe': '1', 'X-Session-Id': '1', 'X-Preparation-Freeze': '1' })).body.toString());
+    const result = await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify({
+      generation: frozen.generation, configuration: frozen.configuration, processId: 200,
+      processStartedAt: new Date(BASE + 3_000).toISOString(), startedMonotonicMs: 13_000,
+      inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: frozen.frame.completedMonotonicMs,
+    })));
+    assert.equal(JSON.parse(result.body.toString()).claimed, true);
     assert.deepEqual(Buffer.from(await (await fetch(app.url + '/api/preview/image')).arrayBuffer()), png);
   } finally { await app.close(); }
 });

@@ -66,8 +66,9 @@ installs for your account only (no administrator rights) into
 - finishes with **Open Living Room Display** checked, which opens Home at
   <http://127.0.0.1:4318/> (#438), with **Edit display** (`/editor`) a click away.
 
-It never adds startup entries, services, scheduled tasks or Run keys, and it
-never changes your screen saver. There's no firewall prompt because the server
+It does not change your screen saver or add a service/scheduled task. An already
+enabled owned idle display with Last screen can synchronize the per-user sign-in
+entry described below (#540); fresh idle-off users are not opted in. There's no firewall prompt because the server
 listens only on 127.0.0.1. No account and no cloud are involved.
 
 **Start menu.** **Living Room Display** opens Home in a new browser tab (it starts the
@@ -344,7 +345,9 @@ Replace the final word of the installation command with:
 | `Status` | Show installed source revision/state, owned processes and selected screensaver. |
 | `Stop` | Close this install's display and local server. |
 | `Update` | Build the current source clone and replace the installed app. |
-| `DisableIdle` | Restore the saved Windows screensaver and timeout. |
+| `DisableIdle` | Restore the saved Windows screensaver and timeout; remove only the owned sign-in entry. |
+| `EnableStartup` | Explicitly enable Start with Windows after owned idle display and Last screen are enabled. |
+| `DisableStartup` | Remove only the exact owned sign-in command and save an explicit opt-out. |
 | `Uninstall` | Restore idle configuration, stop owned processes and remove app/runtime. |
 
 The installed script also lives at
@@ -366,9 +369,35 @@ Move the mouse or press a key to dismiss ambient mode after its short launch
 grace period. `Stop` also dismisses it. The host owns an isolated Edge profile/job;
 it does not close normal browser windows. Closing ambient clears the snapshot
 and leaves the local server available for later use. `Stop` stops both. The
-loopback server is not a Windows service, scheduled task or startup item.
+loopback server is not a Windows service or scheduled task. An opted-in per-user
+sign-in entry starts it before idle activation so the five-minute RAM cache exists.
 Windows screensaver invocation has a cold-start implementation; its actual `/c`
 end-to-end cold test remains unverified as described below.
+
+## Start with Windows and the snapshot cache (#540)
+
+A screensaver that cold-starts its backend cannot show a screenshot from before
+that startup. Successful source/package setup, public `Start`/`Editor`/`Display`,
+and `EnableIdle` synchronize a per-user Run value only when idle and both Last
+screen enable flags are already on and this installed saver is selected/enabled.
+The exact value is `"<installed app>\windows\LivingRoomDisplay.scr" --start`.
+It uses the existing owned Node backend, opens no browser and needs no admin.
+Fresh idle-off installations and source/fixture servers do not register it.
+
+AUTO is the absence of `data/startup.json` and never creates or rewrites that
+file during setup. Explicit `EnableStartup` or `DisableStartup` writes only that
+small choice; full data backups retain it and updates preserve an opt-out.
+Disabling Last screen stops capture/clears RAM immediately; a sign-in entry may
+remain inert until the next supported sync as an independent startup choice.
+Windows Startup Apps can also disable the existing entry; setup never rewrites
+an already exact value or changes Windows' separate approval record.
+
+Registration refuses a foreign command at the same value name, including during
+preflight before a source/package swap. DisableIdle/uninstall delete only this
+installation's exact owned command, preserving other values. Registration occurs
+only after successful install health/commit; failed swaps do not add an entry.
+Source checks use mocked registry facts. No actual sign-in/capture acceptance is
+implied; agents must not run live startup or native tests as part of those checks.
 
 ## Optional native screensaver
 

@@ -28,6 +28,8 @@ internal static class NativePreviewContextTests
             if(change=="ambient")current.AmbientRunning=true;
             if(change=="near deadline")current.IdleMilliseconds=570000;
             Check(!NativePreviewContext.CaptureCompatible(initial,current),"periodic copy rejects "+change);
+            if(change=="saver" || change=="ambient" || change=="near deadline")
+                Check(NativePreviewContext.PrivacyCompatible(initial,current),change+" cancels refresh but preserves the earlier safe cache");
         }
         foreach(string change in new string[] { "timeout","input","session","unreadable","unsafe" })
         {

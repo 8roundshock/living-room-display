@@ -20,6 +20,12 @@ internal static class PreviewPreparationTests
         Check(policy.Observe(Reading(103,600000)).Capture, "ten-minute refresh works while desktop stays active");
         Check(!policy.Observe(Reading(104,899999)).Capture, "cadence is monotonic rather than idle age");
         Check(policy.Observe(Reading(105,900000)).Capture, "fifteen-minute refresh");
+        var recovered=Reading(105,915001); recovered.Generation=1;
+        Check(policy.Observe(recovered).Capture,"backend producer-lease loss generation refresh captures immediately before five-minute due time");
+        policy.Acknowledge(2); recovered=Reading(105,915002); recovered.Generation=2;
+        Check(!policy.Observe(recovered).Capture,"acknowledged own invalidation cannot create a generation feedback capture loop");
+        policy.ObservationLost();
+        Check(policy.Observe(recovered).Capture,"one configuration read failure resets eligibility for first safe recovery");
         policy = new PreviewPreparationPolicy();
         Check(policy.Observe(Reading(99,0,0)).Capture, "capture first quiet desktop");
         Check(policy.Observe(Reading(99,300000,300000)).Capture, "capture at five minutes of idle");

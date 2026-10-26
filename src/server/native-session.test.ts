@@ -129,7 +129,7 @@ test('native handshake clears the earlier active image but preserves the private
     assert.equal((await app.native('/api/preview/preparation', 'POST', { ...auth, 'Content-Type': 'image/png',
       'X-Preparation-Generation': String(before.generation), 'X-Preparation-Configuration': before.configuration,
       'X-Input-Tick': '123', 'X-Session-Id': '1', 'X-Desktop-Id': 'Default', 'X-Captured-At': new Date(app.clock.wall - 100).toISOString(),
-      'X-Completed-At': new Date(app.clock.wall).toISOString(), 'X-Completed-Monotonic-Ms': String(app.clock.mono) }, prepared)).status, 201);
+      'X-Completed-At': new Date(app.clock.wall).toISOString(), 'X-Completed-Monotonic-Ms': String(app.clock.mono), 'X-Idle-Timeout-Seconds': '600' }, prepared)).status, 201);
     app.advance(3_100);
     const next = await app.session();
     assert.equal((await app.current()).available, false, 'a new native session must not reuse the earlier active image');

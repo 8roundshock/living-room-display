@@ -15,6 +15,7 @@ internal struct PreparationReading
     internal int TimeoutSeconds { get; set; }
     internal int LeadSeconds { get; set; }
     internal string Configuration { get; set; }
+    internal long Generation { get; set; }
 }
 
 internal struct PreparationDecision
@@ -41,6 +42,7 @@ internal sealed class PreparationConfiguration
         observed.Enabled = Enabled;
         observed.LeadSeconds = LeadSeconds;
         observed.Configuration = Revision;
+        observed.Generation = Generation;
         return observed;
     }
 }
@@ -54,6 +56,9 @@ internal sealed class PreviewPreparationPolicy
     private string configuration;
     private int timeoutSeconds, session;
     private long observedAt, nextCaptureAt;
+    private long generation;
+    internal void ObservationLost() { eligible=false; }
+    internal void Acknowledge(long value) { generation=value; }
 
     internal PreparationDecision Observe(PreparationReading reading)
     {
@@ -71,11 +76,13 @@ internal sealed class PreviewPreparationPolicy
         bool clockChanged = initialized && (reading.MonotonicMilliseconds < observedAt ||
             reading.MonotonicMilliseconds - observedAt > MaximumObservationGapMilliseconds);
         bool configurationChanged = configuration != reading.Configuration;
+        bool generationChanged = initialized && generation != reading.Generation;
         initialized = true;
         input = reading.InputTick;
         session = reading.SessionId;
         configuration = reading.Configuration;
         timeoutSeconds = reading.TimeoutSeconds;
+        generation = reading.Generation;
         observedAt = reading.MonotonicMilliseconds;
         decision.Invalidate = timeoutChanged || sessionChanged || clockChanged || configurationChanged || !reading.Enabled || !reading.Safe;
         // Normal interaction dismisses an active preview, but must not erase the
@@ -90,7 +97,7 @@ internal sealed class PreviewPreparationPolicy
         }
         // Explicit periodic capture consent permits the first safe observation;
         // no hidden extra input is required after launching the app or signing in.
-        if (!eligible || decision.Invalidate) nextCaptureAt = reading.MonotonicMilliseconds;
+        if (!eligible || decision.Invalidate || generationChanged) nextCaptureAt = reading.MonotonicMilliseconds;
         eligible = true;
         if (reading.MonotonicMilliseconds >= nextCaptureAt)
         {

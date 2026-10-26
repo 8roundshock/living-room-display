@@ -55,7 +55,7 @@ async function fixture(initialScheduledOff = false) {
   const frameHeaders = (current: PreparationConfig) => ({ ...auth(), 'Content-Type': 'image/png',
     'X-Preparation-Generation': String(current.generation), 'X-Preparation-Configuration': current.configuration,
     'X-Input-Tick': '123', 'X-Session-Id': '1', 'X-Desktop-Id': 'Default', 'X-Captured-At': new Date(clock.now - 100).toISOString(),
-    'X-Completed-At': new Date(clock.now).toISOString(), 'X-Completed-Monotonic-Ms': String(clock.monotonic) });
+    'X-Completed-At': new Date(clock.now).toISOString(), 'X-Completed-Monotonic-Ms': String(clock.monotonic), 'X-Idle-Timeout-Seconds': '600' });
   let preparedMonotonic = clock.monotonic;
   const prepare = async (current: PreparationConfig) => { preparedMonotonic = clock.monotonic; return native('/api/preview/preparation', 'POST', frameHeaders(current), photoFixture()); };
   const claim = async (current: PreparationConfig) => {
@@ -162,7 +162,7 @@ test('schedule edits and temporary-override expiry invalidate preparation withou
   } finally { await app.close(); }
 });
 
-test('a failed capture and schedule toggles retain the existing worker and its one-attempt input history', async () => {
+test('a failed capture and schedule toggles retain the same explicitly supervised worker', async () => {
   const app = await fixture();
   try {
     await app.put(app.schedule()); const current = await app.config();

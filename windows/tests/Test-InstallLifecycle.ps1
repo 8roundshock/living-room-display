@@ -16,6 +16,9 @@ try {
     $script:failBuild = $false
     $script:moveRetryDelayMs = 10
     function Set-Idle { param($Enabled) }
+    function Assert-LogonEntryAvailable { }
+    function Sync-LogonStartup { }
+    function Remove-OwnedLogonEntry { }
     function Stop-App { $script:stops++ }
     function Start-App { $script:starts++ }
     function Install-Runtime { $null = New-Item -ItemType Directory -Path $runtime -Force }
