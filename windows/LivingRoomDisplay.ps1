@@ -540,11 +540,31 @@ function Test-OwnSaverSelection {
     return $selected -and $active -and $active.Value -eq '1' -and
         [string]::Equals([IO.Path]::GetFullPath(([string]$selected.Value).Trim('"')),$hostExe,[StringComparison]::OrdinalIgnoreCase)
 }
-function Test-LogonRequested([switch]$ForIdleEnable) {
+function Test-PreviewVisible($Visual) {
+    if ($null -eq $Visual -or -not $Visual.PSObject.Properties['preview'] -or -not $Visual.PSObject.Properties['widgets']) { return $false }
+    if (-not $Visual.preview.PSObject.Properties['enabled'] -or -not $Visual.widgets.PSObject.Properties['preview']) { return $false }
+    return $Visual.preview.enabled -is [bool] -and $Visual.preview.enabled -and $Visual.widgets.preview -is [bool] -and $Visual.widgets.preview
+}
+function Test-PreviewSupervision($Settings,$Schedule) {
+    if (Test-PreviewVisible $Settings) { return $true }
+    if ($null -eq $Schedule -or -not $Schedule.PSObject.Properties['enabled'] -or $Schedule.enabled -isnot [bool] -or -not $Schedule.enabled) { return $false }
+    if (-not $Settings.PSObject.Properties['savedPresets']) { return $false }
+    $referenced = @()
+    if ($Schedule.PSObject.Properties['fallbackPresetId'] -and $null -ne $Schedule.fallbackPresetId) { $referenced += [string]$Schedule.fallbackPresetId }
+    if ($Schedule.PSObject.Properties['rules']) {
+        foreach ($rule in @($Schedule.rules)) { if ($rule.PSObject.Properties['presetId']) { $referenced += [string]$rule.presetId } }
+    }
+    foreach ($preset in @($Settings.savedPresets)) {
+        if ($preset.PSObject.Properties['id'] -and $preset.PSObject.Properties['visual'] -and
+            $referenced -ccontains [string]$preset.id -and (Test-PreviewVisible $preset.visual)) { return $true }
+    }
+    return $false
+}
+function Test-LogonRequested([switch]$ForIdleEnable,[switch]$IgnoreChoice) {
     # Absence is AUTO. Normal setup must never add or rewrite private data just
     # to express the default; only the two explicit startup commands write it.
     $choice = Join-Path $data 'startup.json'
-    if (Test-Path -LiteralPath $choice -PathType Leaf) {
+    if (-not $IgnoreChoice -and (Test-Path -LiteralPath $choice -PathType Leaf)) {
         $saved = Get-Content -LiteralPath $choice -Raw | ConvertFrom-Json
         if (-not $saved.PSObject.Properties['enabled'] -or $saved.enabled -isnot [bool]) { throw 'Start with Windows preference is invalid; no startup entry was changed.' }
         if (-not $saved.enabled) { return $false }
@@ -554,11 +574,14 @@ function Test-LogonRequested([switch]$ForIdleEnable) {
     $state = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
     if (-not $state.PSObject.Properties['settings']) { return $false }
     $settings = $state.settings
-    foreach ($group in @('idle','preview','widgets')) { if (-not $settings.PSObject.Properties[$group]) { return $false } }
-    if (-not $settings.idle.PSObject.Properties['enabled'] -or -not $settings.preview.PSObject.Properties['enabled'] -or
-        -not $settings.widgets.PSObject.Properties['preview']) { return $false }
-    if ($settings.idle.enabled -isnot [bool] -or $settings.preview.enabled -isnot [bool] -or $settings.widgets.preview -isnot [bool]) { return $false }
-    return ($ForIdleEnable -or $settings.idle.enabled) -and $settings.preview.enabled -and $settings.widgets.preview -and ($ForIdleEnable -or (Test-OwnSaverSelection))
+    if (-not $settings.PSObject.Properties['idle'] -or -not $settings.idle.PSObject.Properties['enabled'] -or $settings.idle.enabled -isnot [bool]) { return $false }
+    $schedule = $null
+    $scheduleFile = Join-Path $data 'schedule.json'
+    if (Test-Path -LiteralPath $scheduleFile -PathType Leaf) {
+        $savedSchedule = Get-Content -LiteralPath $scheduleFile -Raw | ConvertFrom-Json
+        if ($savedSchedule.PSObject.Properties['config']) { $schedule = $savedSchedule.config }
+    }
+    return ($ForIdleEnable -or $settings.idle.enabled) -and (Test-PreviewSupervision $settings $schedule) -and ($ForIdleEnable -or (Test-OwnSaverSelection))
 }
 function Assert-LogonEntryAvailable([switch]$ForIdleEnable) {
     if (-not (Test-LogonRequested -ForIdleEnable:$ForIdleEnable)) { return }
@@ -585,10 +608,7 @@ function Set-LogonPreference([bool]$Enabled) {
         $existing = if (Test-Path -LiteralPath $choice) { [IO.File]::ReadAllBytes($choice) } else { $null }
         try {
             # Validate all opt-ins without mutating the existing choice first.
-            $stateFile = Join-Path $data 'state.json'
-            if (-not (Test-Path -LiteralPath $stateFile)) { throw 'Enable idle display and Last screen before Start with Windows.' }
-            $settings = (Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json).settings
-            if (-not $settings.idle.enabled -or -not $settings.preview.enabled -or -not $settings.widgets.preview -or -not (Test-OwnSaverSelection)) {
+            if (-not (Test-LogonRequested -IgnoreChoice)) {
                 throw 'Enable idle display and Last screen before Start with Windows.'
             }
             $current = Read-LogonEntry

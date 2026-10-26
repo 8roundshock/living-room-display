@@ -40,6 +40,15 @@ export interface PreparationView {
   supervisionEnabled?: boolean;
 }
 
+/** Potential preview visibility, shared by the resident supervisor and startup-policy fixtures. */
+export function needsPreviewSupervision(settings: Pick<Settings, 'preview' | 'widgets' | 'savedPresets'>,
+  schedule: { enabled: boolean; fallbackPresetId: string | null; rules: readonly { presetId: string }[] }): boolean {
+  if (settings.preview.enabled && settings.widgets.preview) return true;
+  if (!schedule.enabled) return false;
+  const referenced = new Set([schedule.fallbackPresetId, ...schedule.rules.map(rule => rule.presetId)]);
+  return settings.savedPresets.some(preset => referenced.has(preset.id) && preset.visual.preview.enabled && preset.visual.widgets.preview);
+}
+
 /** One unpublished thumbnail. Its byte array is transferred once, or zeroed on every refusal/clear. */
 export class PreparedSnapshot {
   #generation = 0;

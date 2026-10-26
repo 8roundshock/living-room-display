@@ -378,8 +378,11 @@ end-to-end cold test remains unverified as described below.
 
 A screensaver that cold-starts its backend cannot show a screenshot from before
 that startup. Successful source/package setup, public `Start`/`Editor`/`Display`,
-and `EnableIdle` synchronize a per-user Run value only when idle and both Last
-screen enable flags are already on and this installed saver is selected/enabled.
+and `EnableIdle` synchronize a per-user Run value only when idle is on, this
+installed saver is selected/enabled, and Last screen can be shown either manually
+or by an explicitly enabled schedule's referenced saved style. Disabled schedules
+and unused saved styles do not authorize startup. This matches backend preview
+supervision; the effective board still decides when capture is actually allowed.
 The exact value is `"<installed app>\windows\LivingRoomDisplay.scr" --start`.
 It uses the existing owned Node backend, opens no browser and needs no admin.
 Fresh idle-off installations and source/fixture servers do not register it.

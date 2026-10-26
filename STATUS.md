@@ -14,16 +14,19 @@ idle transition. Claim still requires an exact frame identity and completion
 before the actual automatic process was created. Active-session expiry remains
 separate.
 
-The integration includes reviewed widget-first source #539. All 569 unit tests,
+The integration includes reviewed widget-first source #539. All 570 unit tests,
 both TypeScript checks and the production build pass. The bounded Windows source
 suite passes, including 58 cadence/recovery assertions, 18 injected context checks,
-24 mocked sign-in setup assertions and both compiled production binaries without
+36 mocked sign-in setup assertions and both compiled production binaries without
 execution. Private claim fetches the authoritative frozen frame, so a committed
 upload with a lost response cannot strand stale native metadata. Deterministic
 API checks cover that failure, late in-flight bodies, and an ambient transition
 before handshake.
 
-Early sign-in setup under #540 supports an existing owned idle/Last screen opt-in;
+Early sign-in setup under #540 supports an existing owned idle/Last screen opt-in,
+including referenced visible saved styles under an explicitly enabled schedule
+when manual preview is off. One shared fixture checks backend/PowerShell parity;
+unused styles and disabled schedules do not authorize startup.
 AUTO never creates or rewrites the data preference. Explicit CLI startup choices
 are retained in complete data backups. Mocked source install transactions pass.
 Package test-isolation correction #543 supplies synthetic child status facts and

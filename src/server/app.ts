@@ -21,7 +21,7 @@ import { TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts'
 import { WIDGET_CATALOG, isActiveWidget } from '../shared/widgets.ts';
 import { HOME_SHOWABLE_WIDGETS, showPlacement } from '../shared/show.ts';
 import type { ChangeMarker, Settings, TimersResult, WidgetId } from '../shared/contracts.ts';
-import { PREPARATION_MAX_OBSERVATION_GAP_MS, PreparationController, type PreparationOptions, type PreparationView } from './preidle.ts';
+import { PREPARATION_MAX_OBSERVATION_GAP_MS, PreparationController, needsPreviewSupervision, type PreparationOptions, type PreparationView } from './preidle.ts';
 
 // Read once at module load. src/server and the built dist/server both sit two
 // levels below the package.json shipped with the app, so health matches it.
@@ -139,9 +139,7 @@ export async function createApplication(options: ApplicationOptions) {
     preparationObserved = { at, manual: settingsRevision, schedule: schedules.revision, marker };
     const effective = scheduledSettings(settings, schedule);
     if (!effective.preview.enabled || !effective.widgets.preview) clearPreview();
-    const referenced = new Set([schedule.config.fallbackPresetId, ...schedule.config.rules.map(rule => rule.presetId)]);
-    const supervisionEnabled = settings.preview.enabled && settings.widgets.preview || (schedule.config.enabled &&
-      settings.savedPresets.some(preset => referenced.has(preset.id) && preset.visual.preview.enabled && preset.visual.widgets.preview));
+    const supervisionEnabled = needsPreviewSupervision(settings, schedule.config);
     return { settings: effective, supervisionEnabled,
       settingsRevision: createHash('sha256').update(JSON.stringify([settingsRevision, marker, preparationBoundary])).digest('hex') };
   }

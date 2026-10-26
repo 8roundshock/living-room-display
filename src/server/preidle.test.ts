@@ -4,11 +4,17 @@ import { once } from 'node:events';
 import { request as httpRequest } from 'node:http';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultSettings } from '../shared/defaults.ts';
 import { createApplication } from './app.ts';
 import { photoFixture, forecastFixture } from './fixtures.ts';
-import { PreparedSnapshot, PreparationController, installedPreparationOptions, type PreparationBootstrap, type PreparationClaim, type PreparationStamp } from './preidle.ts';
+import { PreparedSnapshot, PreparationController, installedPreparationOptions, needsPreviewSupervision, type PreparationBootstrap, type PreparationClaim, type PreparationStamp } from './preidle.ts';
+
+test('sign-in and backend supervision share manual/scheduled preview fixture expectations', () => {
+  const cases = JSON.parse(readFileSync(new URL('../../windows/tests/fixtures/logon-preview-policy.json', import.meta.url), 'utf8'));
+  for (const item of cases) assert.equal(needsPreviewSupervision(item.settings, item.schedule), item.expected, item.name);
+});
 
 const BASE = Date.parse('2026-10-23T16:00:00Z');
 function slotFixture() {

@@ -66,6 +66,26 @@ try {
     $script:entry=$foreign
     Refused { Assert-LogonEntryAvailable -ForIdleEnable } 'EnableIdle must detect collision before changing Windows.'
     Check ($script:entry -ceq $foreign) 'EnableIdle collision changed foreign startup.'
+    $cases=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'fixtures\logon-preview-policy.json') -Raw | ConvertFrom-Json
+    foreach($case in $cases) {
+        Check ((Test-PreviewSupervision $case.settings $case.schedule) -eq $case.expected) ('Backend preview policy parity: ' + $case.name)
+    }
+    $scheduled=$cases | Where-Object name -eq 'manual off referenced rule on'
+    $scheduled.settings | Add-Member -NotePropertyName idle -NotePropertyValue ([pscustomobject]@{enabled=$true})
+    Write-Json (Join-Path $data 'state.json') @{settings=$scheduled.settings}
+    Write-Json (Join-Path $data 'schedule.json') @{version=1;config=$scheduled.schedule;overrideUntil=$null}
+    Remove-Item -LiteralPath $choice -Force
+    $stateHash=(Get-FileHash -LiteralPath (Join-Path $data 'state.json')).Hash
+    $scheduleHash=(Get-FileHash -LiteralPath (Join-Path $data 'schedule.json')).Hash
+    $script:entry=$null
+    Sync-LogonStartup
+    Check ($script:entry -ceq (Get-LogonCommand)) 'An enabled referenced scheduled Last screen must get an early backend even when manual preview is off.'
+    Check (-not (Test-Path -LiteralPath $choice) -and (Get-FileHash -LiteralPath (Join-Path $data 'state.json')).Hash -eq $stateHash -and
+        (Get-FileHash -LiteralPath (Join-Path $data 'schedule.json')).Hash -eq $scheduleHash) 'AUTO must not rewrite state or schedule data, or add a startup preference.'
+    Set-LogonPreference $false | Out-Null; Sync-LogonStartup
+    Check ($null -eq $script:entry) 'Explicit opt-out also overrides scheduled preview.'
+    Set-LogonPreference $true | Out-Null
+    Check ($script:entry -ceq (Get-LogonCommand)) 'Explicit opt-in supports scheduled preview without rewriting manual flags.'
     Write-Output ($script:assertions.ToString() + ' logon startup assertions passed; mocked registry only, no app or native entry.')
 } finally {
     $full=[IO.Path]::GetFullPath($fixture)

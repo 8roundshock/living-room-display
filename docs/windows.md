@@ -4,8 +4,10 @@ A small .NET Framework `.scr` host launches Microsoft Edge to render
 `/display?native=1`.
 `windows/Build-Host.ps1` uses the Windows Framework compiler; no SDK, native
 package or administrator installation is required. The installed backend can own
-one non-display preparer while automatic activation and Last screen are enabled
-(#525); no service, task or startup entry is added.
+one non-display producer while automatic activation and Last screen are enabled
+(#538). No service or scheduled task is added. An existing owned idle/Last screen
+opt-in can register the exact per-user native sign-in command described below
+(#540), with an explicit opt-out.
 
 The lifecycle below is the source helper since
 [PR #51](https://github.com/8roundshock/living-room-display/pull/51): its own
@@ -279,7 +281,9 @@ not establish the cause or resolution of a particular native blank scene.
 
 Native Windows screensaver activation is preferred over a blind idle timer:
 media/game apps can inhibit the system screensaver. No background service,
-scheduled task, startup entry or global input hook is installed. `EnableIdle`
+scheduled task or global input hook is installed. The optional owned per-user
+sign-in entry starts the backend early for the five-minute cache; it does not
+activate the display or alter lock/security policy. `EnableIdle`
 saves the previous per-user screensaver/timeout and selects this app;
 `DisableIdle`/uninstall restore it when this app remains selected. Lock-on-resume
 is never edited. Managed policy is not overridden. This is a visual screensaver,
