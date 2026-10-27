@@ -1,15 +1,37 @@
 # Project status
-## Shared latest screenshot file (#544, work in progress)
+## Shared latest screenshot file (#544)
 
 The owner chose one overwritten app screenshot file on 2026-10-27, replacing
-this app's earlier RAM-only requirement. The initial source checkpoint implements
-an atomic PNG store with capture time on the same file, retaining the prior
-success when replacement fails and clearing unknown prior-session files. Four
-isolated synthetic-file tests pass. Browser/native integration, capture pause,
-independent final-head review and CI remain unfinished; this does not change the
-installed app or establish actual capture success. #519 remains unresolved.
+this app's earlier RAM-only requirement. Source now publishes one atomic PNG at
+`run/cache/last-screen.png`, outside data backups and application generations.
+Browser and native metadata/image routes read that same file without a claim.
+Its capture timestamp belongs to the opened file; a stale timestamp URL cannot
+receive newer bytes. Failed writes retain the last success. Privacy invalidation
+removes logical availability immediately, even if Windows delays unlinking.
+Unknown previous-session files and the fixed orphan temp are cleared at startup.
+
+The browser registers a separate capture pause before painting. Pause transitions
+wait for already-committing safe writes and fence later uploads; a missing close
+acknowledgment stays paused until explicit Home recovery. Native safe observations
+continue during either display, and normal native handshakes, exit and input keep
+the shared file. Automatic native startup takes no extra screenshot or claim.
+An enabled missing image keeps the dim Last screen placeholder.
+
+Both TypeScript checks and the production build pass. The full source unit run
+passes 585 tests without skips; the additional explicit development-origin case
+also passes. Synthetic API checks cover authorization, version binding, privacy
+clear, six-minute native retention and upload fencing. Deterministic file tests
+cover replacement failure, linked paths and actual in-flight rename/pause/privacy
+races. The real headless browser flow passes with explicit device/wake-lock mocks;
+opaque-image and missing-image boards were inspected in RAM. Independent final-head
+review and applicable CI remain required. No installed capture/native acceptance
+is established; #519 remains unresolved.
 
 ## Periodic Last screen cache (#538, #540)
+
+This records the earlier RAM implementation. Its storage and native-claim
+publication requirements are superseded by #544 above; its dated test evidence
+does not establish acceptance of the new shared-file source.
 
 The source checkpoint replaces the one-shot pre-idle attempt with an immediate
 first eligible desktop snapshot and a monotonic five-minute cadence. It keeps

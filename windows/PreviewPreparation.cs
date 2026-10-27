@@ -29,6 +29,8 @@ internal sealed class PreparationConfiguration
     internal long Generation { get; set; }
     internal string Revision { get; set; }
     internal bool Enabled { get; set; }
+    internal bool CapturePaused { get; set; }
+    internal long CaptureRevision { get; set; }
     // The saved preference is not the active Windows deadline. Windows may have
     // been configured independently; never delay preparation until that preference.
     internal int TimeoutSeconds { get; set; }
@@ -40,11 +42,55 @@ internal sealed class PreparationConfiguration
         // selected/enabled own saver and its session/input desktop. The policy
         // below rejects nonpositive/too-short deadlines and late observations.
         observed.Enabled = Enabled;
+        observed.CaptureAllowed = observed.CaptureAllowed && !CapturePaused;
         observed.LeadSeconds = LeadSeconds;
         observed.Configuration = Revision;
         observed.Generation = Generation;
         return observed;
     }
+
+    internal bool ConfirmsCapture(PreparationConfiguration current)
+    {
+        return Enabled && !CapturePaused && current != null && current.Enabled && !current.CapturePaused &&
+            Generation == current.Generation && Revision == current.Revision && CaptureRevision == current.CaptureRevision;
+    }
+
+    internal static long ReadCaptureRevision(object value)
+    {
+        if (!(value is int) && !(value is long)) throw new InvalidOperationException("Invalid capture revision.");
+        long revision=Convert.ToInt64(value);
+        if(revision<0 || revision>9007199254740991L)throw new InvalidOperationException("Invalid capture revision.");
+        return revision;
+    }
+}
+
+internal static class SharedSnapshotMode
+{
+    internal static void Validate(object value)
+    {
+        if(!(value is bool) || !(bool)value)throw new InvalidOperationException("Shared snapshot mode is required.");
+    }
+}
+
+// Fixed scalars retained only in producer RAM, with no exception text or pixels.
+internal struct PreparationDiagnosticSnapshot
+{
+    internal string Event;
+    internal long Sequence, CaptureAttempts, CaptureFailures;
+}
+
+internal sealed class PreparationDiagnostics
+{
+    private const long MaximumCounter=9007199254740991L;
+    private readonly object gate=new object();
+    private PreparationDiagnosticSnapshot current;
+    private static long Increment(long value) { return value<MaximumCounter ? value+1 : value; }
+    private void Record(string value) { current.Event=value; current.Sequence=Increment(current.Sequence); }
+    internal void CaptureStarted() { lock(gate) { current.CaptureAttempts=Increment(current.CaptureAttempts); Record("capture-started"); } }
+    internal void CaptureSkipped() { lock(gate) Record("capture-skipped"); }
+    internal void CaptureFailed() { lock(gate) { current.CaptureFailures=Increment(current.CaptureFailures); Record("capture-failed"); } }
+    internal void CaptureUploaded() { lock(gate) Record("capture-uploaded"); }
+    internal PreparationDiagnosticSnapshot Snapshot() { lock(gate) return current; }
 }
 
 internal sealed class PreviewPreparationPolicy
@@ -186,12 +232,12 @@ internal sealed class PreparationLifetime
 
 internal static class NativePreviewSelection
 {
-    internal static void Run(bool automatic,Func<bool> claim,Action capture,Action clear)
+    internal static void Run(bool automatic,Action capture,CancellationToken cancellation)
     {
-        if(!automatic) { capture(); return; }
-        try { if(!claim())clear(); }
-        catch(OperationCanceledException) { throw; }
-        catch { clear(); }
+        cancellation.ThrowIfCancellationRequested();
+        // Both displays read the backend's same canonical snapshot. Automatic
+        // startup must not claim, clear or replace it with its startup surface.
+        if(!automatic)capture();
     }
 }
 

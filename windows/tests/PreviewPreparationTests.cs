@@ -42,6 +42,59 @@ internal static class PreviewPreparationTests
         policy = new PreviewPreparationPolicy();
         Check(policy.Observe(desired.Reading(Reading(99,0,100))).Capture, "saved timer does not replace actual validated timeout");
         Check(!policy.Observe(desired.Reading(Reading(99,570000,570000))).Capture, "actual ten-minute cutoff wins over saved twenty-minute timer");
+        var shared = new PreparationConfiguration { Generation=7, Enabled=true, Revision="a", CaptureRevision=11, LeadSeconds=30 };
+        policy=new PreviewPreparationPolicy();
+        Check(policy.Observe(shared.Reading(Reading(99,0))).Capture,"shared-file producer begins normally");
+        shared.CapturePaused=true;
+        var paused=shared.Reading(Reading(99,1000));
+        var pauseDecision=policy.Observe(paused);
+        Check(paused.Enabled && paused.Safe && paused.Readable && !paused.CaptureAllowed && paused.Generation==7,
+            "browser capture pause changes only capture eligibility");
+        Check(!pauseDecision.Capture && !pauseDecision.Invalidate && !pauseDecision.InvalidateActive,
+            "visible browser pause retains the latest file and producer privacy observation");
+        shared.CapturePaused=false;
+        Check(policy.Observe(shared.Reading(Reading(99,1500))).Capture,"confirmed browser close resumes capture without a native claim or new generation");
+        Check(shared.ConfirmsCapture(new PreparationConfiguration { Generation=7, Enabled=true, Revision="a", CaptureRevision=11 }),
+            "unchanged unpaused config confirms the capture fence");
+        Check(!shared.ConfirmsCapture(new PreparationConfiguration { Generation=7, Enabled=true, Revision="a", CaptureRevision=12 }),
+            "a browser transition fences an older capture");
+        Check(!shared.ConfirmsCapture(new PreparationConfiguration { Generation=7, Enabled=true, Revision="a", CaptureRevision=11, CapturePaused=true }),
+            "a newly visible browser prevents GDI capture");
+        Check(!shared.ConfirmsCapture(new PreparationConfiguration { Generation=8, Enabled=true, Revision="a", CaptureRevision=11 }) &&
+            !shared.ConfirmsCapture(new PreparationConfiguration { Generation=7, Enabled=true, Revision="b", CaptureRevision=11 }) &&
+            !shared.ConfirmsCapture(new PreparationConfiguration { Generation=7, Enabled=false, Revision="a", CaptureRevision=11 }) &&
+            !shared.ConfirmsCapture(null),"stale, disabled and unknown confirmation fail closed");
+        Check(PreparationConfiguration.ReadCaptureRevision(0)==0 && PreparationConfiguration.ReadCaptureRevision(9007199254740991L)==9007199254740991L,
+            "capture revision accepts only the bounded shared integer contract");
+        foreach(object invalidRevision in new object[] { null, "1", true, 1.0, -1, 9007199254740992L })
+        {
+            bool invalidRefused=false;
+            try { PreparationConfiguration.ReadCaptureRevision(invalidRevision); } catch(InvalidOperationException) { invalidRefused=true; }
+            Check(invalidRefused,"invalid capture revision is refused");
+        }
+        SharedSnapshotMode.Validate(true);
+        foreach(object invalidMode in new object[] { null, false, "true", 1 })
+        {
+            bool invalidRefused=false;
+            try { SharedSnapshotMode.Validate(invalidMode); } catch(InvalidOperationException) { invalidRefused=true; }
+            Check(invalidRefused,"only explicit boolean shared snapshot mode starts this producer");
+        }
+        var diagnostics=new PreparationDiagnostics();
+        Check(diagnostics.Snapshot().Sequence==0,"no capture success is invented at producer startup");
+        diagnostics.CaptureStarted(); diagnostics.CaptureSkipped();
+        var observation=diagnostics.Snapshot();
+        Check(observation.Event=="capture-skipped" && observation.Sequence==2 && observation.CaptureAttempts==1 && observation.CaptureFailures==0,
+            "expected pause/fence skips do not become capture failures");
+        diagnostics.CaptureStarted(); diagnostics.CaptureFailed();
+        observation=diagnostics.Snapshot();
+        Check(observation.Event=="capture-failed" && observation.Sequence==4 && observation.CaptureAttempts==2 && observation.CaptureFailures==1,
+            "actual failed attempts remain distinguishable from skips");
+        diagnostics.CaptureStarted(); diagnostics.CaptureUploaded();
+        observation=diagnostics.Snapshot();
+        Check(observation.Event=="capture-uploaded" && observation.Sequence==6 && observation.CaptureAttempts==3 && observation.CaptureFailures==1,
+            "only acknowledged upload records uploaded");
+        observation.CaptureAttempts=0;
+        Check(diagnostics.Snapshot().CaptureAttempts==3,"reading diagnostics returns an independent scalar snapshot");
         foreach(string gate in new string[] { "disabled","unsafe","unreadable","saver","ambient" })
         {
             policy=new PreviewPreparationPolicy();

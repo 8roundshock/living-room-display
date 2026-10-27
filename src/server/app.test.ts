@@ -171,7 +171,7 @@ test('device location is rounded, fallback is Toronto, and late automatic result
   } finally { await app.close(); }
 });
 
-test('native preview stays in RAM and clears when disabled', async () => {
+test('native preview stays outside private-data backups and clears when disabled', async () => {
   const app = await fixture();
   try {
     // Native http clients do not send browser Fetch Metadata headers. Node fetch adds sec-fetch-mode.
@@ -197,8 +197,8 @@ test('native preview stays in RAM and clears when disabled', async () => {
   } finally { await app.close(); }
 });
 
-test('every preview clear invalidates an upload whose body is still arriving', async t => {
-  for (const operation of ['disable', 'hide widget', 'delete', 'import', 'expire'] as const) {
+test('every privacy/configuration clear invalidates an upload whose body is still arriving', async t => {
+  for (const operation of ['disable', 'hide widget', 'import', 'clock gap'] as const) {
     await t.test(operation, async () => {
       let currentTime = Date.now();
       const app = await fixture(() => currentTime);
@@ -233,8 +233,6 @@ test('every preview clear invalidates an upload whose body is still arriving', a
           assert.equal((await fetch(`${app.url}/api/settings`, { method: 'PATCH', ...body(patch) })).status, 200);
           // A later re-enable must not revive the upload from before the clear.
           assert.equal((await fetch(`${app.url}/api/settings`, { method: 'PATCH', ...body({ preview: { enabled: true }, widgets: { preview: true } }) })).status, 200);
-        } else if (operation === 'delete') {
-          assert.equal((await native('/api/preview', 'DELETE', { 'X-LRD-Token': token }).response).status, 204);
         } else if (operation === 'import') {
           const exported = await (await fetch(`${app.url}/api/export`)).json();
           assert.equal((await fetch(`${app.url}/api/import`, { method: 'POST', ...body(exported) })).status, 200);
@@ -247,7 +245,7 @@ test('every preview clear invalidates an upload whose body is still arriving', a
         assert.equal((await (await fetch(`${app.url}/api/preview`)).json()).available, false);
         assert.equal((await fetch(`${app.url}/api/preview/image`)).status, 404);
         assert.equal((await native('/api/preview', 'POST', headers(), png).response).status, 201, 'a new upload after clearing still works');
-        assert.ok((await readdir(app.directory)).every(name => name === 'state.json' || name === 'state.backup.json'), 'no image files are persisted');
+        assert.ok((await readdir(app.directory)).every(name => name === 'state.json' || name === 'state.backup.json'), 'the runtime PNG stays outside private-data backups');
       } finally {
         for (const request of pendingRequests) request.destroy();
         await app.close();
@@ -445,7 +443,7 @@ test('HEAD /api/preview/image answers like GET without a body (#124)', async () 
     const available = await compare('available');
     assert.equal(available.status, 200); assert.equal(available.bytes, png.length); assert.equal(available.headers['content-type'], 'image/png');
     assert.equal((await raw('/api/preview', 'DELETE', { 'X-LRD-Token': token })).status, 204);
-    assert.equal((await compare('cleared')).status, 404);
+    assert.equal((await compare('normal exit retains the latest file')).status, 200);
     assert.equal((await upload()).status, 201);
     assert.equal((await app.patch({ preview: { enabled: false } })).status, 200);
     assert.equal((await compare('disabled')).status, 404);

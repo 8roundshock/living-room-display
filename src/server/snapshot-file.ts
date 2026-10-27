@@ -4,7 +4,7 @@ import type { PreviewState } from '../shared/contracts.ts';
 
 export const SNAPSHOT_NAME = 'last-screen.png';
 const EMPTY: PreviewState = { available: false, capturedAt: null, width: null, height: null };
-export type SnapshotPhase = 'empty' | 'capture-started' | 'saved' | 'write-failed' | 'cleared';
+export type SnapshotPhase = 'empty' | 'capture-started' | 'saved' | 'write-failed' | 'cleared' | 'clear-failed';
 
 /** One app-owned PNG, outside data/backups. No pixels are retained after a request. */
 export class SnapshotFile {
@@ -54,7 +54,7 @@ export class SnapshotFile {
     if (visible) this.#changed();
     this.#queue = this.#queue.catch(() => {}).then(async () => {
       await this.#remove(this.path); await this.#remove(this.#temporary);
-    });
+    }).catch(() => { this.#phase = 'clear-failed'; this.#failures++; });
     return this.#queue;
   }
   /** A publication may be invalidated while disk IO is pending. Never recreate cleared pixels. */
@@ -84,7 +84,11 @@ export class SnapshotFile {
             if (generation !== this.#generation || !allowed()) return false;
           }
         }
-        if (generation !== this.#generation || !allowed()) { await this.#remove(this.path); return false; }
+        if (generation !== this.#generation || !allowed()) {
+          const visible = this.#state.available; this.#state = { ...EMPTY }; this.#phase = 'cleared';
+          if (visible) this.#changed();
+          await this.#remove(this.path); return false;
+        }
         this.#state = { available: true, capturedAt: captured.toISOString(), width, height };
         this.#phase = 'saved'; this.#writes++; this.#changed(); return true;
       } catch {
@@ -109,11 +113,17 @@ export class SnapshotFile {
         content = await handle.readFile(); capturedAt = stat.mtime.toISOString();
       } finally { await handle.close(); }
       if (generation !== this.#generation || capturedAt !== expected.capturedAt || (expectedAt !== undefined && capturedAt !== expectedAt) ||
-          content.toString('ascii', 12, 16) !== 'IHDR') return null;
+          !content.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) || content.toString('ascii', 12, 16) !== 'IHDR') return null;
       const preview = { available: true, capturedAt, width: content.readUInt32BE(16), height: content.readUInt32BE(20) };
+      if (!preview.width || !preview.height || preview.width > 4096 || preview.height > 4096 || preview.width * preview.height > 4_194_304 ||
+          preview.width !== expected.width || preview.height !== expected.height) return null;
       const result = { content, preview }; content = undefined; return result;
     } catch { return null; }
     finally { content?.fill(0); }
   }
   async settled() { await this.#queue; }
+  /** Order display-pause/session transitions against publication before acknowledging/painting. */
+  transition<T>(change: () => T): Promise<T> {
+    const task = this.#queue.catch(() => {}).then(change); this.#queue = task; return task;
+  }
 }

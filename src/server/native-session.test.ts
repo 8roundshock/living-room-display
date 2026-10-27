@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { request as httpRequest } from 'node:http';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createApplication } from './app.ts';
 import { forecastFixture, photoFixture } from './fixtures.ts';
 import type { PreparationBootstrap, PreparationConfig } from './preidle.ts';
@@ -12,10 +12,11 @@ import type { PreparationBootstrap, PreparationConfig } from './preidle.ts';
 // Real API handlers with synthetic data and an inert preparer factory only.
 // No installed endpoint, child process, desktop, window or image capture is used.
 async function fixture(withPreparation = false) {
-  const directory = await mkdtemp(join(tmpdir(), 'lrd-native-session-synthetic-'));
+  const root = await mkdtemp(join(tmpdir(), 'lrd-native-session-synthetic-'));
+  const directory = join(root, 'data'), snapshotDirectory = join(root, 'cache');
   const clock = { wall: Date.parse('2026-10-25T16:00:00Z'), mono: 10_000 };
   let bootstrap!: PreparationBootstrap, children = 0;
-  const app = await createApplication({ dataDirectory: directory, now: () => clock.wall,
+  const app = await createApplication({ dataDirectory: directory, snapshotDirectory, now: () => clock.wall,
     preparationMonotonic: () => clock.mono, fetcher: async () => Response.json(forecastFixture()),
     preparation: withPreparation ? { source: 'a'.repeat(40), start(value) {
       bootstrap = value; children++; return { stop() {} };
@@ -43,7 +44,7 @@ async function fixture(withPreparation = false) {
     send(path, method, headers, content).response;
   const session = async () => {
     const response = await native('/api/host/session', 'GET', { 'X-LRD-Native': '1' });
-    assert.equal(response.status, 200); return JSON.parse(response.content.toString()) as { token: string; preparationPipe: string | null };
+    assert.equal(response.status, 200); return JSON.parse(response.content.toString()) as { token: string; preparationPipe?: string };
   };
   const uploadHeaders = (token: string) => ({ 'X-LRD-Token': token, 'Content-Type': 'image/png',
     'X-Captured-At': new Date(clock.wall).toISOString() });
@@ -54,7 +55,8 @@ async function fixture(withPreparation = false) {
     async close() {
       for (const request of requests) request.destroy();
       app.closePreparation(); app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close');
-      await rm(directory, { recursive: true, force: true });
+      assert.ok(isAbsolute(root) && dirname(resolve(root)) === resolve(tmpdir()) && basename(root).startsWith('lrd-native-session-synthetic-'));
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 });
     } };
 }
 
@@ -75,8 +77,8 @@ test('a replacement native session refuses the old helper cleanup and upload', a
     assert.equal((await app.native('/api/preview', 'POST', app.uploadHeaders(old.token), first)).status, 403);
     assert.notEqual(old.token, next.token);
     assert.equal((await app.native('/api/preview', 'DELETE', { 'X-LRD-Token': next.token })).status, 204);
-    assert.equal((await app.current()).available, false, 'the current helper still clears normally');
-    assert.equal((await app.native('/api/preview/image')).status, 404);
+    assert.equal((await app.current()).available, true, 'ordinary current-helper exit retains the canonical screenshot');
+    assert.deepEqual((await app.native('/api/preview/image')).content, replacement);
   } finally { await app.close(); }
 });
 
@@ -114,7 +116,7 @@ test('denied browser or untrusted handshakes cannot replace the current native s
   } finally { await app.close(); }
 });
 
-test('native handshake clears the earlier active image but preserves the private pending frame and preparer capability', async () => {
+test('native handshake retains the latest shared producer image and its capability without native claims', async () => {
   const app = await fixture(true);
   try {
     const old = await app.session();
@@ -122,18 +124,20 @@ test('native handshake clears the earlier active image but preserves the private
     const auth = { 'X-LRD-Preparation': app.bootstrap.token };
     const config = async () => {
       const result = await app.native('/api/preview/preparation', 'GET', { ...auth, 'X-Preparation-Safe': '1', 'X-Session-Id': '1' });
-      assert.equal(result.status, 200); return JSON.parse(result.content.toString()) as PreparationConfig;
+      assert.equal(result.status, 200); return JSON.parse(result.content.toString()) as PreparationConfig & { captureRevision: number };
     };
     const before = await config(); assert.equal(before.enabled, true);
     const prepared = photoFixture(), preparedMonotonic = app.clock.mono;
     assert.equal((await app.native('/api/preview/preparation', 'POST', { ...auth, 'Content-Type': 'image/png',
       'X-Preparation-Generation': String(before.generation), 'X-Preparation-Configuration': before.configuration,
+      'X-Preparation-Capture-Revision': String(before.captureRevision),
       'X-Input-Tick': '123', 'X-Session-Id': '1', 'X-Desktop-Id': 'Default', 'X-Captured-At': new Date(app.clock.wall - 100).toISOString(),
       'X-Completed-At': new Date(app.clock.wall).toISOString(), 'X-Completed-Monotonic-Ms': String(app.clock.mono), 'X-Idle-Timeout-Seconds': '600' }, prepared)).status, 201);
     app.advance(3_100);
     const next = await app.session();
-    assert.equal((await app.current()).available, false, 'a new native session must not reuse the earlier active image');
-    assert.equal(next.preparationPipe, old.preparationPipe); assert.equal(app.children, 1);
+    assert.equal((await app.current()).available, true, 'the new session reads the latest producer image immediately');
+    assert.deepEqual((await app.native('/api/preview/image')).content, prepared);
+    assert.equal(next.preparationPipe, undefined); assert.equal(old.preparationPipe, undefined); assert.equal(app.children, 1);
     const after = await config();
     assert.equal(after.generation, before.generation); assert.equal(after.configuration, before.configuration);
     const claim = await app.native('/api/preview/preparation/claim', 'POST', { ...auth, 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify({
@@ -141,11 +145,12 @@ test('native handshake clears the earlier active image but preserves the private
       processStartedAt: new Date(app.clock.wall - 100).toISOString(), startedMonotonicMs: app.clock.mono - 100,
       inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: preparedMonotonic,
     })));
-    assert.equal(claim.status, 200); assert.equal(JSON.parse(claim.content.toString()).claimed, true);
+    assert.equal(claim.status, 410, 'retired claim is not required and cannot republish pixels');
     assert.deepEqual((await app.native('/api/preview/image')).content, prepared);
     assert.equal((await app.native('/api/preview', 'DELETE', { 'X-LRD-Token': old.token })).status, 403);
-    assert.deepEqual((await app.native('/api/preview/image')).content, prepared, 'old clear cannot invalidate a newly claimed automatic frame');
-    assert.ok((await readdir(app.directory)).every(name => ['state.json', 'state.backup.json'].includes(name)), 'synthetic pixels remain in RAM');
+    assert.deepEqual((await app.native('/api/preview/image')).content, prepared, 'old clear cannot invalidate the latest shared frame');
+    assert.ok((await readdir(app.directory)).every(name => ['state.json', 'state.backup.json'].includes(name)), 'runtime pixels stay outside private data/backups');
     assert.equal((await app.native('/api/preview', 'DELETE', { 'X-LRD-Token': next.token })).status, 204);
+    assert.deepEqual((await app.native('/api/preview/image')).content, prepared);
   } finally { await app.close(); }
 });

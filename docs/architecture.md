@@ -12,8 +12,9 @@ required. The original alternatives remain below for context.
 | B. Local web dashboard plus a thin Windows idle/screensaver host | Same custom display, with an optional route to automatic activation and dismissal. | Adds Windows-specific lifecycle, fullscreen, and media/game compatibility work. |
 | C. Home Assistant dashboard | Existing dashboard editor, widgets, local to-do integration, and a path to wider smart-home use. | Additional platform to operate; the sparse, moving ambient composition still needs custom work. |
 
-The manual display/editor and current-PC native snapshot are verified; automatic
-activation and native cursor compatibility remain separate acceptance gates.
+The manual display/editor and an older native snapshot have dated verification;
+current shared-file capture, automatic activation and native compatibility remain
+separate acceptance gates in [STATUS.md](../STATUS.md).
 Keep the display useful without TV control. Home Assistant is not a
 dependency. Node 24 is an active LTS line; existing system runtimes are not replaced.
 [Node release status](https://nodejs.org/en/about/previous-releases).
@@ -50,19 +51,32 @@ dependency. Node 24 is an active LTS line; existing system runtimes are not repl
 
 | Mode | Intended benefit | Open work |
 | --- | --- | --- |
-| Last-state snapshot, selected for version one | Shows the screen immediately before ambient activation. | Actual current-PC 4K source/content/readability, label and RAM clear are accepted; other-account, real-lock and room-comfort checks remain. |
+| Last-state snapshot, selected for version one | Shows the latest safely captured desktop with its capture time. | Older RAM-only evidence is dated below; current shared-file source and installed/native acceptance remain separate (#544, #519). |
 | Live selected-app thumbnail, future work | Shows changing state from an explicitly chosen application. | Capture support, minimized/occluded app behavior, permissions, performance, and avoiding dashboard recursion. |
 
-The owned producer captures the full primary desktop on its first safe eligible
-observation and every five minutes, replacing one private RAM thumbnail. Its
-safe-context heartbeat retains the latest success through normal input and failed
-refreshes; unknown/locked contexts, disable or producer loss clear it. Automatic
-startup freezes and claims that earlier frame. An owned per-user native sign-in
-entry supports an already opted-in idle/Last screen install (#540); idle-off
-new users and source/test servers do not register it. A normal web page has no silent
-desktop capture permission. Keep the thumbnail dim, adjustable, movable, and
-toggleable. Do not save screenshots. Actual native capture and rendered preview
-were inspected in RAM on the current 3840x2160 Windows 10 setup on 2026-10-18;
+Owner decision, 2026-10-27 (#544): one private canonical PNG at
+`InstallRoot/run/cache/last-screen.png` replaces the RAM-only handoff. The owned
+producer captures the full primary desktop at first safe eligibility and every
+five minutes, downscaling to at most 640 by 360; only the backend atomically
+replaces the file. Its capture-time modification stamp is set before rename;
+each reader uses the same open handle for metadata, dimensions and bytes.
+Browser/native state and image routes use this same file, with no automatic
+capture or private claim during screensaver startup. Normal input/handshake/exit
+and failed refresh retain the latest success. Privacy/disable/configuration or
+safe-producer lease loss deletes it; cold startup removes a prior unknown file
+and fixed orphan temp before the next eligible capture. There is no truncation,
+history or `.bak`, and the cache is outside app/data/backups/Git.
+
+A browser display pauses capture before painting to avoid recursion; an
+unconfirmed close remains paused until explicit recovery after previews close.
+Child-only publication and existing local HTTP security boundaries remain.
+The general RAM-only rule for agent screenshots is unchanged. An owned per-user
+sign-in entry supports an opted-in install (#540); source/test servers stay inert.
+Keep the thumbnail dim, adjustable, movable and toggleable. Current source/CI
+evidence is not installed/native acceptance; #519 remains unresolved.
+
+Historical evidence for the previous RAM-only implementation: native capture and
+rendered preview were inspected in RAM on a 3840x2160 Windows 10 setup on 2026-10-18;
 normal exit cleared the image to 404 without capture files. That native preview
 evidence predates every later web rollout, from clean `7e654fd` (PR #57 studio
 refinement) on 2026-10-18 to the installed revision that [STATUS.md](../STATUS.md)
@@ -93,7 +107,7 @@ and [Windows evidence](windows.md#actual-current-pc-runtime-evidence).
 | Scheduled visuals | A local schedule sidecar selects saved visual settings without mutating canonical data. Ordered civil-time ranges support overnight spans, fallback and temporary manual overrides. Separate schedule backup references saved-style IDs; complete directory recovery retains both data and sidecars (#514). |
 | Motion preview | Shared deterministic float/relocation timeline, embedded-editor only; explicit finite windows, play/pause/seek, no mutation of live settings or display (#515). |
 | Visual controls | Reviewed Studio/grid, optional modules, outline/digital/analog clocks, Native colours, animation levels and presets are installed on the owner's PC (revision and evidence in [STATUS.md](../STATUS.md)); actual 4K preview is accepted, while across-room comfort and compatibility gates remain. |
-| Preview | Last-desktop snapshot in RAM only; live app preview deferred. |
+| Preview | One private atomically replaced runtime desktop PNG shared by browser/native (#544, 2026-10-27); live app preview deferred. |
 | Local photo | Explicit selected raster is normalized in-browser, validated and atomically saved with settings in private local state; exports/imports exclude its bytes. Prior recovery backup may retain an older image. |
 | Activation | Manual use first; Windows idle activation remains off until verification and explicit enablement. |
 | Installer | Per-user Inno Setup 6 wrapper (`LivingRoomDisplaySetup-<version>.exe`, no admin) around one checksummed payload of the prebuilt app and pinned Node 24 runtime; the control script's `InstallPackage` owns the transaction (verification, data snapshot, swap, health check, automatic rollback). Rejected: MSIX (virtualized AppData/registry conflict with per-user `.scr` registration), WiX/MSI, a custom bootstrapper and a portable ZIP. See [installation](install.md#install-with-setup-recommended). |

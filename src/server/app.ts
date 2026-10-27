@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp, rm, lstat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import type { AppState, ClearCompletedResult, PreviewState, Reminder } from '../shared/contracts.ts';
@@ -22,6 +23,8 @@ import { WIDGET_CATALOG, isActiveWidget } from '../shared/widgets.ts';
 import { HOME_SHOWABLE_WIDGETS, showPlacement } from '../shared/show.ts';
 import type { ChangeMarker, Settings, TimersResult, WidgetId } from '../shared/contracts.ts';
 import { PREPARATION_MAX_OBSERVATION_GAP_MS, PreparationController, needsPreviewSupervision, type PreparationOptions, type PreparationView } from './preidle.ts';
+import { SnapshotFile } from './snapshot-file.ts';
+import { DisplayPresence } from './display-presence.ts';
 
 // Read once at module load. src/server and the built dist/server both sit two
 // levels below the package.json shipped with the app, so health matches it.
@@ -49,6 +52,8 @@ export interface ApplicationOptions {
   preparation?: PreparationOptions;
   /** Synthetic clock seam for preparation expiry and discontinuity regressions. */
   preparationMonotonic?: () => number;
+  /** Explicit isolated fixture path, or the verified installed runtime path. Never a data backup. */
+  snapshotDirectory?: string;
 }
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 
@@ -93,23 +98,25 @@ export async function createApplication(options: ApplicationOptions) {
   // GET /api/changes (#438): this process, then the settings/reminder writes, the timer writes and the preview changes.
   const bootId = randomBytes(6).toString('hex');
   let previewChanges = 0;
+  const privateCache = options.snapshotDirectory ?? options.preparation?.snapshotDirectory;
+  // Source/tests get a new ephemeral directory, never an installed-path fallback.
+  const cacheDirectory = privateCache ?? await mkdtemp(join(tmpdir(), 'still-snapshot-source-'));
+  const snapshotFile = await SnapshotFile.open(cacheDirectory, () => { previewChanges++; });
+  const displayPresence = new DisplayPresence(now);
+  let captureEvent = { phase: 'not-observed', sequence: 0, attempts: 0, failures: 0 };
   const weather = new WeatherService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   const air = new AirQualityService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   const alerts = new AlertsService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   let hostToken = randomBytes(32).toString('hex');
-  let image: Buffer | null = null;
   let previewGeneration = 0;
-  let preview: PreviewState = { available: false, capturedAt: null, width: null, height: null };
   function clearPreview() {
     // Invalidate uploads that began before this clear, even if preview is later enabled again.
     previewGeneration++;
-    if (preview.available || image) previewChanges++;
-    image?.fill(0); image = null; preview = { available: false, capturedAt: null, width: null, height: null };
+    void snapshotFile.clear().catch(() => {});
   }
   function previewState(): PreviewState {
     previewView();
-    if (preview.capturedAt && now() - Date.parse(preview.capturedAt) > 12 * 3600_000) clearPreview();
-    return { ...preview };
+    return snapshotFile.state();
   }
   let preparationBoundary = 0;
   let preparationObserved: { at: number; manual: string; schedule: string; marker: string } | null = null;
@@ -143,7 +150,7 @@ export async function createApplication(options: ApplicationOptions) {
     return { settings: effective, supervisionEnabled,
       settingsRevision: createHash('sha256').update(JSON.stringify([settingsRevision, marker, preparationBoundary])).digest('hex') };
   }
-  const preparation = new PreparationController(options.preparation, previewView, clearPreview, now, options.preparationMonotonic);
+  const preparation = new PreparationController(options.preparation, previewView, () => {}, now, options.preparationMonotonic, clearPreview);
   function preparationRequest(request: IncomingMessage) {
     if (request.headers.origin || Object.keys(request.headers).some(key => key.startsWith('sec-fetch-')) ||
         !preparation.authorized(request.headers['x-lrd-preparation'])) throw new HttpError(403, 'Preparation helper access only');
@@ -191,6 +198,28 @@ export async function createApplication(options: ApplicationOptions) {
     const path = url.pathname;
     // Only Settings may ask for device location; Home, the editor and display never do (#517).
     response.setHeader('Permissions-Policy', path === '/settings' || path.startsWith('/settings/') ? 'geolocation=(self)' : 'geolocation=()');
+
+    if (method === 'POST' && path === '/api/preview/display') {
+      const displayOrigin = origin === `http://${request.headers.host}` ||
+        (options.development && (origin === 'http://127.0.0.1:5173' || origin === 'http://localhost:5173'));
+      if (!displayOrigin || request.headers['sec-fetch-site'] !== 'same-origin' ||
+          !['cors', 'same-origin'].includes(String(request.headers['sec-fetch-mode'])) || request.headers['sec-fetch-dest'] !== 'empty' ||
+          request.headers['x-lrd-display'] !== '1') throw new HttpError(403, 'Same-origin display action required');
+      const action = z.discriminatedUnion('action', [
+        z.object({ action: z.literal('start') }).strict(),
+        z.object({ action: z.literal('heartbeat'), id: z.string().regex(/^[a-f0-9]{32}$/) }).strict(),
+        z.object({ action: z.literal('release'), id: z.string().regex(/^[a-f0-9]{32}$/) }).strict(),
+        z.object({ action: z.literal('resume'), confirmedAllClosed: z.literal(true) }).strict(),
+      ]).parse(await jsonBody(request));
+      if (action.action === 'start') {
+        const id = await snapshotFile.transition(() => displayPresence.start()); if (!id) throw new HttpError(409, 'Close browser displays, then resume snapshots from Home');
+        json(response, 201, { id }); return;
+      }
+      if (action.action === 'heartbeat' && !displayPresence.heartbeat(action.id)) throw new HttpError(409, 'Close this display and resume snapshots from Home');
+      if (action.action === 'release') await snapshotFile.transition(() => displayPresence.release(action.id));
+      if (action.action === 'resume') await snapshotFile.transition(() => displayPresence.resume());
+      json(response, 204); return;
+    }
 
     if (method === 'GET' && path === '/api/health') { json(response, 200, { status: 'ok', version: APP_VERSION, storageWarning: store.warning }); return; }
     if (method === 'GET' && path === '/api/windows/status') { json(response, 200, await windowsStatus()); return; }
@@ -412,12 +441,21 @@ export async function createApplication(options: ApplicationOptions) {
       // A replacement helper owns a fresh native-preview session. Delayed cleanup
       // or upload from its predecessor must not modify the replacement's pixels.
       // The separate preparer capability and pending pre-idle frame remain intact.
-      hostToken = randomBytes(32).toString('hex'); clearPreview();
-      json(response, 200, { token: hostToken, settings: effectiveSettings(), displayUrl: `http://127.0.0.1:${port}/`, preparationPipe: preparation.pipeName }); return;
+      await snapshotFile.transition(() => { hostToken = randomBytes(32).toString('hex'); });
+      json(response, 200, { token: hostToken, settings: effectiveSettings(), displayUrl: `http://127.0.0.1:${port}/` }); return;
     }
     if (path === '/api/preview/preparation' && ['GET', 'POST', 'DELETE'].includes(method)) {
       preparationRequest(request);
       if (method === 'GET') {
+        const event = z.enum(['capture-started', 'capture-uploaded', 'capture-failed', 'capture-skipped']).safeParse(request.headers['x-preparation-event']);
+        if (event.success) {
+          const count = (key: string) => z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).parse(request.headers[key]);
+          const sequence = count('x-preparation-event-sequence');
+          if (sequence > captureEvent.sequence) {
+            captureEvent = { phase: event.data, sequence, attempts: count('x-preparation-capture-attempts'), failures: count('x-preparation-capture-failures') };
+            if (event.data === 'capture-started') snapshotFile.captureStarted();
+          }
+        }
         const config = preparation.config();
         if (request.headers['x-preparation-safe'] === '1' && config.enabled) {
           const session = z.coerce.number().int().min(0).max(0x7fffffff).parse(request.headers['x-session-id']);
@@ -425,15 +463,17 @@ export async function createApplication(options: ApplicationOptions) {
           if (request.headers['x-preparation-freeze'] === '1') preparation.snapshot.freeze();
           else if (request.headers['x-preparation-capture-eligible'] === '1') preparation.snapshot.resume();
         } else preparation.invalidate(true);
-        json(response, 200, { ...config, generation: preparation.snapshot.generation, frame: preparation.snapshot.metadata() }); return;
+        json(response, 200, { ...config, generation: preparation.snapshot.generation, frame: null,
+          capturePaused: displayPresence.paused, captureRevision: displayPresence.revision }); return;
       }
       if (method === 'DELETE') {
-        if (request.headers['x-invalidate-active-only'] === '1') preparation.clearActive();
+        if (request.headers['x-invalidate-active-only'] === '1') { /* Ordinary input retains the latest file. */ }
         else preparation.invalidate(request.headers['x-invalidate-active'] === '1');
         json(response, 204); return;
       }
       if (request.headers['content-type'] !== 'image/png') throw new HttpError(415, 'Use image/png');
       const integerHeader = (name: string, max = Number.MAX_SAFE_INTEGER) => z.coerce.number().int().min(0).max(max).parse(request.headers[name]);
+      const captureRevision = integerHeader('x-preparation-capture-revision');
       const stamp = {
         generation: integerHeader('x-preparation-generation'), configuration: z.string().min(1).max(100).parse(request.headers['x-preparation-configuration']),
         inputTick: integerHeader('x-input-tick', 0xffffffff), sessionId: integerHeader('x-session-id', 0x7fffffff),
@@ -458,33 +498,22 @@ export async function createApplication(options: ApplicationOptions) {
         if (width < 1 || height < 1 || width > 640 || height > 360) throw new HttpError(400, 'Snapshot dimensions are too large');
         preparationRequest(request);
         const config = preparation.config();
-        if (!preparation.snapshot.receive({ content, capturedAt: stamp.capturedAt, width, height }, stamp, config.enabled)) throw new HttpError(409, 'Preparation was invalidated');
-        content = undefined; // Ownership moved to the one private RAM slot.
+        if (!preparation.snapshot.accepts(stamp, config.enabled)) throw new HttpError(409, 'Preparation was invalidated');
+        const accepted = await snapshotFile.write(content, stamp.capturedAt, () => {
+          preparationRequest(request);
+          return !displayPresence.paused && captureRevision === displayPresence.revision && preparation.snapshot.accepts(stamp, preparation.config().enabled);
+        });
+        if (!accepted) throw new HttpError(409, 'Snapshot publication failed or was invalidated');
+        // Keep scalar ordering/epoch validation only; pixels have one canonical file.
+        preparation.snapshot.receive({ content: Buffer.alloc(0), capturedAt: stamp.capturedAt, width, height }, stamp, config.enabled);
         json(response, 201, { prepared: true }); return;
       } finally { for (const chunk of chunks) chunk.fill(0); content?.fill(0); }
     }
     if (method === 'POST' && path === '/api/preview/preparation/claim') {
       preparationRequest(request);
-      const uint = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
-      let claimed = false;
-      try {
-        const claim = z.object({
-          generation: uint, configuration: z.string().min(1).max(100), processId: uint.min(1).max(0x7fffffff),
-          processStartedAt: z.iso.datetime({ offset: true }), startedMonotonicMs: uint,
-          inputTick: uint.max(0xffffffff), sessionId: uint.max(0x7fffffff), desktopId: z.literal('Default'), completedMonotonicMs: uint,
-        }).strict().parse(await jsonBody(request));
-        preparationRequest(request);
-        const config = preparation.config();
-        const prepared = preparation.snapshot.claim(claim, config.enabled);
-        if (prepared) {
-          clearPreview();
-          image = prepared.content; preview = { available: true, capturedAt: prepared.capturedAt, width: prepared.width, height: prepared.height };
-          previewChanges++; claimed = true;
-        }
-      } catch (error) { preparation.invalidate(true); throw error; }
-      json(response, 200, { claimed }); return;
+      throw new HttpError(410, 'The shared screenshot file does not require a native claim');
     }
-    if (method === 'GET' && path === '/api/preview') { json(response, 200, previewState()); return; }
+    if (method === 'GET' && path === '/api/preview') { json(response, 200, { ...previewState(), pipeline: { ...snapshotFile.pipeline(), capture: captureEvent, display: displayPresence.status() } }); return; }
     if (method === 'GET' && path === '/api/photo/image') {
       // Decoded once per photo and shared until it changes (#353).
       const photo = store.photoImage();
@@ -493,12 +522,16 @@ export async function createApplication(options: ApplicationOptions) {
     }
     // HEAD answers with GET's status and headers and no body (#124); Node sends no body for HEAD.
     if ((method === 'GET' || method === 'HEAD') && path === '/api/preview/image') {
-      if (!previewState().available || !image) throw new HttpError(404, 'No snapshot is available');
-      response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'Content-Length': image.length }); response.end(image); return;
+      if (!previewState().available) throw new HttpError(404, 'No snapshot is available');
+      const frame = await snapshotFile.read(url.searchParams.get('t') ?? undefined);
+      if (!frame) throw new HttpError(404, 'No matching snapshot is available');
+      const clear = () => frame.content.fill(0);
+      response.once('finish', clear); response.once('close', clear);
+      response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'Content-Length': frame.content.length }); response.end(frame.content); return;
     }
     if (path === '/api/preview' && (method === 'POST' || method === 'DELETE')) {
       nativeRequest(request, true);
-      if (method === 'DELETE') { preparation.invalidate(); clearPreview(); json(response, 204); return; }
+      if (method === 'DELETE') { json(response, 204); return; }
       const settings = effectiveSettings();
       const uploadConfiguration = preparation.config().configuration;
       if (!settings.preview.enabled || !settings.widgets.preview) throw new HttpError(409, 'Preview is disabled');
@@ -516,7 +549,12 @@ export async function createApplication(options: ApplicationOptions) {
       if (uploadGeneration !== previewGeneration || uploadConfiguration !== currentConfiguration || !currentSettings.preview.enabled || !currentSettings.widgets.preview) {
         throw new HttpError(409, 'Snapshot upload was cleared or preview is disabled');
       }
-      image = content; preview = { available: true, capturedAt, width, height }; previewChanges++;
+      const saved = await snapshotFile.write(content, capturedAt, () => {
+        nativeRequest(request, true);
+        return uploadGeneration === previewGeneration && uploadConfiguration === preparation.config().configuration && !displayPresence.paused;
+      });
+      content.fill(0);
+      if (!saved) throw new HttpError(409, 'Snapshot publication failed or was invalidated');
       json(response, 201, previewState()); return;
     }
     if (path.startsWith('/api/')) throw new HttpError(404, 'API endpoint not found');
@@ -533,5 +571,17 @@ export async function createApplication(options: ApplicationOptions) {
     response.writeHead(200, { 'Content-Type': MIME[extname(file)] ?? 'application/octet-stream', 'Cache-Control': extname(file) === '.html' ? 'no-store' : 'public, max-age=3600' });
     response.end(method === 'HEAD' ? undefined : content);
   }
-  return { server, store, weather, closePreparation: () => preparation.close() };
+  let closed = false;
+  const closePreparation = () => {
+    if (closed) return; closed = true;
+    preparation.close();
+    void snapshotFile.clear().then(async () => {
+      if (privateCache) return;
+      const absolute = resolve(cacheDirectory);
+      if (!absolute.startsWith(resolve(tmpdir()) + sep) || (await lstat(absolute)).isSymbolicLink()) return;
+      await rm(absolute, { recursive: true });
+    }).catch(() => {});
+  };
+  server.once('close', closePreparation);
+  return { server, store, weather, closePreparation };
 }

@@ -42,11 +42,13 @@ internal sealed class NativePreviewPreparer : IDisposable
     private readonly object publication = new object();
     private readonly JavaScriptSerializer json = new JavaScriptSerializer();
     private readonly Process parent;
-    private readonly string hostPath, token, pipeName, baseUrl;
+    private readonly string hostPath, token, baseUrl;
+    private readonly string pipeName = null; // Legacy claim code is uninvoked in required shared-snapshot mode.
     private readonly PreviewPreparationPolicy policy = new PreviewPreparationPolicy();
+    private readonly PreparationDiagnostics diagnostics = new PreparationDiagnostics();
     private readonly PreparationLifetime lifetime;
     private readonly Timer parentTimer;
-    private readonly Thread inputThread, pipeThread;
+    private readonly Thread inputThread;
     private NamedPipeServerStream pipe;
     private bool disposed;
 
@@ -66,9 +68,10 @@ internal sealed class NativePreviewPreparer : IDisposable
             bootstrap = PreparedSnapshotClient.ReadLine(Console.OpenStandardInput(), 2048);
         var data = json.DeserializeObject(bootstrap) as Dictionary<string,object>;
         if (data == null) throw new InvalidDataException();
-        token = (string)data["token"]; pipeName = (string)data["pipeName"];
+        SharedSnapshotMode.Validate(data.ContainsKey("sharedSnapshot") ? data["sharedSnapshot"] : null);
+        token = (string)data["token"];
         if (!System.Text.RegularExpressions.Regex.IsMatch(token, "^[a-f0-9]{64}$") ||
-            !System.Text.RegularExpressions.Regex.IsMatch(pipeName, "^LivingRoomDisplay\\.Preview\\.[a-f0-9]{32}$") || Convert.ToInt32(data["port"]) != 4318)
+            Convert.ToInt32(data["port"]) != 4318)
             throw new InvalidDataException();
         baseUrl = "http://127.0.0.1:4318";
         string windows = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory);
@@ -93,7 +96,8 @@ internal sealed class NativePreviewPreparer : IDisposable
             lifetime.InputClosed();
         });
         inputThread.IsBackground=true; inputThread.Start();
-        pipeThread = new Thread(ServeClaims); pipeThread.IsBackground=true; pipeThread.Start();
+        // Shared-file publication needs no claim pipe. Automatic and browser
+        // renderers both use the backend's existing snapshot reader.
     }
 
     internal void Run()
@@ -138,21 +142,34 @@ internal sealed class NativePreviewPreparer : IDisposable
         var headers=new Dictionary<string,string> { {"X-Preparation-Safe",context.Readable && context.Safe ? "1" : "0"},
             {"X-Session-Id",context.SessionId.ToString(CultureInfo.InvariantCulture)},
             {"X-Preparation-Capture-Eligible",NativePreviewContext.CaptureCompatible(context,context) ? "1" : "0"} };
+        var observed=diagnostics.Snapshot();
+        if(observed.Sequence>0)
+        {
+            headers["X-Preparation-Event"]=observed.Event;
+            headers["X-Preparation-Event-Sequence"]=observed.Sequence.ToString(CultureInfo.InvariantCulture);
+            headers["X-Preparation-Capture-Attempts"]=observed.CaptureAttempts.ToString(CultureInfo.InvariantCulture);
+            headers["X-Preparation-Capture-Failures"]=observed.CaptureFailures.ToString(CultureInfo.InvariantCulture);
+        }
         if(freeze)headers["X-Preparation-Freeze"]="1";
         var data=json.DeserializeObject(Request("GET","/api/preview/preparation",null,headers,stop.Token)) as Dictionary<string,object>;
         if (data==null || Convert.ToInt32(data["parentProcessId"])!=parent.Id) throw new InvalidDataException();
-        var metadata=data.ContainsKey("frame") ? data["frame"] as Dictionary<string,object> : null;
-        prepared=metadata==null ? null : new PreparedFrame { Generation=Convert.ToInt64(metadata["generation"]),
-            Configuration=(string)metadata["configuration"], InputTick=Convert.ToUInt32(metadata["inputTick"]),
-            SessionId=Convert.ToInt32(metadata["sessionId"]), TimeoutSeconds=Convert.ToInt32(metadata["timeoutSeconds"]),
-            CompletedMonotonic=Convert.ToInt64(metadata["completedMonotonicMs"]),
-            CompletedUtc=DateTime.Parse((string)metadata["completedAt"],CultureInfo.InvariantCulture,DateTimeStyles.RoundtripKind) };
+        // Shared-file publication has no private frame attestation or claim.
+        prepared=null;
         return new PreparationConfiguration { Generation=Convert.ToInt64(data["generation"]), Revision=(string)data["configuration"],
-            Enabled=(bool)data["enabled"], TimeoutSeconds=Convert.ToInt32(data["timeoutSeconds"]), LeadSeconds=Convert.ToInt32(data["prepareLeadSeconds"]) };
+            Enabled=(bool)data["enabled"], CapturePaused=(bool)data["capturePaused"], CaptureRevision=PreparationConfiguration.ReadCaptureRevision(data["captureRevision"]),
+            TimeoutSeconds=Convert.ToInt32(data["timeoutSeconds"]), LeadSeconds=Convert.ToInt32(data["prepareLeadSeconds"]) };
         }
     }
     private void Capture(PreparationConfiguration config, NativePreviewContext initial)
     {
+        if(!config.Enabled || config.CapturePaused)return;
+        diagnostics.CaptureStarted();
+        PreparationConfiguration confirmation;
+        try { confirmation=ReadConfiguration(initial); }
+        catch { diagnostics.CaptureFailed(); throw; }
+        // Establish the attempted stage before GDI and reject a pause or upload
+        // fence transition. The backend separately fences publication races.
+        if(!config.ConfirmsCapture(confirmation)) { diagnostics.CaptureSkipped(); return; }
         byte[] png=null;
         int contextLost=0;
         using (var cancellation=CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
@@ -177,27 +194,38 @@ internal sealed class NativePreviewPreparer : IDisposable
                 long completedMonotonic=checked((long)PreparedSnapshotClient.GetTickCount64());
                 DateTime completedUtc=DateTime.UtcNow;
                 var after=NativePreviewContext.Read(hostPath);
-                if (!NativePreviewContext.CaptureCompatible(initial,after)) { if(!NativePreviewContext.PrivacyCompatible(initial,after)) Invalidate(true); return; }
+                if (!NativePreviewContext.CaptureCompatible(initial,after)) { diagnostics.CaptureSkipped(); if(!NativePreviewContext.PrivacyCompatible(initial,after)) Invalidate(true); return; }
                 cancellation.Token.ThrowIfCancellationRequested();
                 var headers=new Dictionary<string,string> {
                     {"X-Preparation-Generation",config.Generation.ToString(CultureInfo.InvariantCulture)},
+                    {"X-Preparation-Capture-Revision",config.CaptureRevision.ToString(CultureInfo.InvariantCulture)},
                     {"X-Preparation-Configuration",config.Revision}, {"X-Input-Tick",initial.InputTick.ToString(CultureInfo.InvariantCulture)},
                     {"X-Session-Id",initial.SessionId.ToString(CultureInfo.InvariantCulture)}, {"X-Desktop-Id","Default"},
                     {"X-Captured-At",capturedUtc.ToString("o")}, {"X-Completed-At",completedUtc.ToString("o")},
                     {"X-Completed-Monotonic-Ms",completedMonotonic.ToString(CultureInfo.InvariantCulture)},
                     {"X-Idle-Timeout-Seconds",initial.TimeoutSeconds.ToString(CultureInfo.InvariantCulture)}
                 };
-                // The backend is the only authoritative frame and metadata store.
-                // Even a committed POST with a lost response is reconciled at claim.
+                // Only the backend writes the canonical file. A lost upload
+                // acknowledgment never makes the native host publish a replacement.
                 lock(publication)
                 {
                     Request("POST","/api/preview/preparation",png,headers,cancellation.Token);
+                    diagnostics.CaptureUploaded();
                 }
                 if(Interlocked.CompareExchange(ref contextLost,0,0)!=0 || stop.IsCancellationRequested) Invalidate(true);
             }
             // A failed eligible refresh leaves the last success intact. Context
             // loss still invalidates immediately, including an in-flight upload.
-            catch { if(Interlocked.CompareExchange(ref contextLost,0,0)!=0 || stop.IsCancellationRequested) Invalidate(true); }
+            catch(Exception failure)
+            {
+                var web=failure as WebException;
+                var response=web==null ? null : web.Response as HttpWebResponse;
+                bool contextChanged=Interlocked.CompareExchange(ref contextLost,0,0)!=0;
+                bool skipped=(response!=null && response.StatusCode==HttpStatusCode.Conflict) ||
+                    (failure is OperationCanceledException && (contextChanged || stop.IsCancellationRequested));
+                if(skipped)diagnostics.CaptureSkipped(); else diagnostics.CaptureFailed();
+                if(contextChanged || stop.IsCancellationRequested)Invalidate(true);
+            }
             finally { if(png!=null) Array.Clear(png,0,png.Length); }
         }
     }

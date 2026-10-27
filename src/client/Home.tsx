@@ -250,6 +250,7 @@ function DisplayCard({ state, showing, waiting, waitingWithoutRoom, disconnected
         <a className="button primary home-edit-display" href="/editor"><Icon name="edit" size={16} />Edit display</a>
         <a className="button home-open-display" href="/display" target={DISPLAY_WINDOW} onClick={displayControls.openDisplay}><Icon name="monitor" size={16} />{displayControls.displayOpen ? 'Show display' : 'Open display'}</a>
       </div>
+      <SnapshotStatus disconnected={disconnected} clockFormat={state.settings.clockFormat} />
       <p className="home-card-showing">{showing.length ? <>Showing: {namesList([...showing].sort((a, b) => WIDGET_CATALOG[a].name.localeCompare(WIDGET_CATALOG[b].name, 'en')))}.</> : 'Nothing is shown on your display.'}</p>
       {waiting.length > 0 && (
         <p className="home-card-waiting">
@@ -259,6 +260,34 @@ function DisplayCard({ state, showing, waiting, waitingWithoutRoom, disconnected
       )}
     </aside>
   );
+}
+
+function SnapshotStatus({ disconnected, clockFormat }: { disconnected: boolean; clockFormat: Settings['clockFormat'] }) {
+  const [snapshot, setSnapshot] = useState<{ available: boolean; capturedAt: string | null; pipeline?: { phase: string; writes: number; failures: number; capture: { phase: string; attempts: number; failures: number }; display: { paused: boolean; needsResume: boolean } } } | null>(null);
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    let stopped = false;
+    const read = () => { if (!disconnected && document.visibilityState === 'visible') void api<NonNullable<typeof snapshot>>('/api/preview').then(value => { if (!stopped) setSnapshot(value); }).catch(() => {}); };
+    read(); const timer = window.setInterval(read, 5_000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [disconnected]);
+  if (!snapshot?.pipeline) return null;
+  const { pipeline } = snapshot;
+  const resume = async () => {
+    if (!window.confirm('Close every browser display first, then resume desktop snapshots?')) return;
+    try {
+      await api('/api/preview/display', { method: 'POST', headers: { 'X-LRD-Display': '1' }, body: JSON.stringify({ action: 'resume', confirmedAllClosed: true }) });
+      setSnapshot(await api<NonNullable<typeof snapshot>>('/api/preview')); setMessage('Snapshots resumed.');
+    } catch { setMessage('Could not resume snapshots. Try again.'); }
+  };
+  return <details className="home-card-waiting"><summary>Last screen</summary>
+    <p>{snapshot.available && snapshot.capturedAt ? `Saved ${timeOfDay(new Date(snapshot.capturedAt), clockFormat)}` : 'No snapshot saved yet.'}</p>
+    <p>Capture: {pipeline.capture.phase.replaceAll('-', ' ')} · {pipeline.capture.attempts} attempts · {pipeline.capture.failures} failed</p>
+    <p>File: {pipeline.phase.replaceAll('-', ' ')} · {pipeline.writes} saved · {pipeline.failures} failed</p>
+    {pipeline.display.paused && <p>Capture paused while a browser display is open.</p>}
+    {pipeline.display.needsResume && <button type="button" className="button" onClick={() => { void resume(); }}>Resume snapshots</button>}
+    {message && <p role="status">{message}</p>}
+  </details>;
 }
 
 // Today -------------------------------------------------------------------------------------------

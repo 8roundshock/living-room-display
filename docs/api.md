@@ -71,7 +71,7 @@ unchanged. Temporary-file cleanup recognizes only exact schedule atomic-save nam
 | `GET /api/export`              | None                                                                   | Downloadable settings/reminders JSON backup.                                 |
 | `POST /api/import`             | A validated export                                                     | Atomic replacement of settings/reminders.                                    |
 | `GET /api/preview`             | None                                                                   | Availability, capture timestamp, dimensions.                                 |
-| `GET`/`HEAD /api/preview/image` | None                                                                  | RAM-only PNG, `no-store`, or 404; HEAD answers the same without a body.      |
+| `GET`/`HEAD /api/preview/image` | None                                                                  | Canonical private runtime PNG, `no-store`, or 404; HEAD answers the same without a body. |
 | `GET /api/photo/image?id=hash` | Current photo hash                                                     | Selected local PNG, `no-store`, or 404.                                      |
 | `GET /api/windows/status`      | None                                                                   | Actual screensaver registry state and power plan timeouts (read-only).       |
 | `GET /api/changes`             | None                                                                   | `{ "change": "<boot>.<store>.<timers>.<preview>" }`, `no-store` ([change marker](#change-marker), #438). |
@@ -325,8 +325,8 @@ routes read a metadata-only view of the store and never copy the photo bytes; th
 endpoint decodes the current photo once and serves that buffer until the photo changes
 (#353). Imports leave the existing local photo unchanged. The private atomic store contains selected
 photo bytes; its previous-state recovery backup may retain an older photo after
-Replace/Clear. This is not secure deletion. Desktop snapshots remain separate,
-RAM-only and never become a photo or part of that backup.
+Replace/Clear. This is not secure deletion. The separate desktop runtime cache
+never becomes a selected photo or part of that backup.
 
 ## Weather semantics
 
@@ -741,22 +741,32 @@ settings/reminder writes, timer writes, and snapshot uploads or clears. It moves
 saved change (and on a restart) and never on a read, so Home and the display ask for it every
 5 s while visible and reload `/api/state` only when it moved. Nothing about it is persisted.
 
-## Native snapshot handoff
+<a id="native-snapshot-handoff"></a>
+## Shared native/browser snapshot (#544)
 
 The Windows host calls `GET /api/host/session` with `X-LRD-Native: 1`, no `Origin`,
 and no browser Fetch Metadata headers. The response contains a random native-session
-token, current settings, display URL, and an optional scalar preparation-pipe
-name. The pipe name is not its child capability. Host/Origin checks and no CORS access
+token, current settings and display URL. Host/Origin checks and no CORS access
 prevent a website from obtaining this handshake. It is not an account system;
 other processes running as the local user remain trusted.
 
-Each authorized handshake replaces the native-preview token and clears the earlier
-active image (#532). A previous helper's delayed DELETE is refused with 403 rather
-than erasing a replacement frame. POST rechecks that session at body completion,
-so an older in-flight upload cannot publish either. Refused browser/untrusted
-handshakes do not replace the current session. This does not rotate the preparer's
-independent capability or invalidate its private pending frame; an automatic `/s`
-can still claim the frame prepared before its own handshake.
+Owner decision, 2026-10-27: both browser and native `state`, `preview` and image
+reads use one canonical `InstallRoot/run/cache/last-screen.png`, outside Git,
+app, data and backups. Only the backend writes it, using a fixed replacement temp
+and atomic rename, never in-place truncation, history or `.bak`. The PNG's mtime
+is set to the capture time before rename; an image read obtains fstat metadata,
+dimensions and bytes from the same open handle. `GET`/`HEAD /api/preview/image`
+remain `no-store`, with HEAD returning no body. Exports and diagnostics exclude
+pixels; native tokens remain RAM-only. This app-cache exception does not permit
+agent/computer-use screenshot files. Existing Host/Origin/Fetch Metadata checks,
+CORP `same-origin` and no-CORS behavior remain unchanged.
+
+Each authorized handshake replaces the native-preview token, preserving the
+canonical image. A previous helper's delayed mutation remains refused with 403;
+POST rechecks the current token at body completion. Refused browser/untrusted
+handshakes do not replace it. Normal exit's authorized `DELETE /api/preview`
+acknowledges cleanup without deleting the shared file. Native #533 dismissal,
+cursor ownership and termination guards are unchanged.
 
 The native host makes one serialized handshake and enables its forced-exit
 deadline only after that call returns. Token rotation rejects stale mutations;
@@ -766,60 +776,51 @@ arrives late. That separate handshake-availability limit remains tracked in #534
 Manual `--display`/`--test-display` captures before its own overlay and posts PNG bytes to
 `POST /api/preview` with `X-LRD-Token`, `X-Captured-At` (recent ISO timestamp),
 and `Content-Type: image/png`. Maximum: 4 MiB, 4096 pixels per side, 4 megapixels.
-The host clears it with `DELETE /api/preview` and the same token on exit.
-Disabling the preview, importing data, server shutdown, or a 12-hour expiry also
-removes availability. `HEAD /api/preview/image` answers with the same status and headers
-as `GET` and no body (#124); `GET /api/preview` (`available`) is the simpler clearance
-check. Every clear invalidates earlier unfinished uploads, which return 409 instead of
-restoring pixels; re-enabling preview does not revive them.
-No snapshot, token, capture log, or image cache is written
-by the server. Actual Windows capture is owned and tested by the Windows host.
-
-Automatic `/s` claims the producer's latest earlier successful frame (#538), never
-a screenshot of its startup surface. The installed backend supervises a distinct
-native producer with a child-only capability on redirected stdin. The
-`/api/preview/preparation` GET/POST/DELETE and private claim POST require that
-capability plus existing Host/Origin/Fetch Metadata restrictions. The ordinary
-UI, state/export/image endpoints and polls never receive pending pixels or the
-producer capability. Source/test servers cannot start the producer.
+Manual upload uses the same canonical reader afterward. Automatic `/s` performs
+no copy, claim or alternate publication: its renderer reads the existing file.
+The installed backend supervises a distinct native producer with a child-only
+capability and explicit `sharedSnapshot:true` bootstrap on redirected stdin;
+this mode starts no claim pipe. `/api/preview/preparation` GET/POST/DELETE retain
+that capability and existing Host/Origin/Fetch Metadata restrictions. Browser
+reads never receive the publisher capability or authorize a capture. Source/test
+servers cannot start the producer.
 
 The private GET supplies `captureIntervalMs:300000`, `observationLeaseMs:10000`,
-`maxAgeMs:null`, configuration/generation and optional scalar `frame` metadata.
+`maxAgeMs:null`, configuration/generation, `capturePaused` and `captureRevision`.
 `X-Preparation-Safe:1` with the current `X-Session-Id` renews the producer's safe
-observation lease; absent/unsafe context clears pixels. This lease is not image
+observation lease; absent/unsafe context deletes the canonical file. This lease is not image
 age: healthy observations retain the last success across missed/failed refreshes.
 Producer loss, unknown/locked/disconnected context or configuration/disable clears
-it. Public reads cannot renew the lease. Uploads still have a separate ten-second
-fresh-body bound and at most one 640 by 360 PNG/4 MiB RAM slot.
+it. Public reads cannot renew the lease. Uploads retain their ten-second fresh-body
+bound, validated PNG/dimensions, configuration/generation and safe-context stamp.
+Periodic capture covers the full primary desktop, downscaled to at most 640 by
+360 within 4 MiB; failed capture or file replacement retains the previous success.
 
-Before attesting an OS-pinned automatic client, the producer sends
-`X-Preparation-Freeze:1` on private GET. Freeze atomically preserves the current
-bytes and returns their authoritative metadata under a new fenced generation.
-Older in-flight POST bodies return409; they cannot replace or erase this frame.
-The exact `completedMonotonicMs` identity, frozen generation/configuration,
-session and captured input tag accompany the attestation. Current input stability
-is rechecked separately during the native claim. Normal input after an earlier
-capture is allowed. UTC/monotonic consistency and completion before the actual
-client process was created remain strict. A stale frame-ID/generation attestation
-is refused without consuming a newer authoritative image.
+Browser display visibility pauses capture before painting without changing Safe,
+Enabled or the producer lease. `X-Preparation-Capture-Revision` fences an upload
+across pause transitions; stale/in-flight bodies cannot overwrite the file.
+Normal input's child-secret `DELETE X-Invalidate-Active-Only:1` retains it; full
+privacy invalidation deletes it. Missing browser-close release fails closed until
+the user closes previews and explicitly resumes snapshots from Home. No browser
+grant or private native claim is needed to read the same image.
 
-A committed POST with a lost acknowledgement cannot strand a native metadata
-copy: the backend is the sole authority and claim fetches it again. An eligible
-ordinary desktop heartbeat (`X-Preparation-Capture-Eligible:1`) resumes a previously
-frozen cache under another fenced generation. Normal input uses the child-secret
-DELETE `X-Invalidate-Active-Only:1` to clear visible active pixels without erasing
-the pending latest-success cache; other DELETE keeps its full invalidation role.
-All frame bytes are zeroed on replacement/clear. No pixel log, file or history is
-created. Active-session pixels retain the separate existing twelve-hour limit.
+Cold backend startup removes a prior unvalidated PNG and the orphan fixed temp;
+the first eligible producer observation captures immediately. Safe-producer
+lease loss, unknown/locked/session/configuration/disabled contexts and opt-out
+delete the file and invalidate arriving uploads. Re-enabling does not revive it.
+Fixed capture event/reason/counters remain bounded RAM-only technical data; no
+exception text, paths, tokens, settings content or pixels are logged.
 
 Preparation uses effective scheduled visibility and a composite configuration;
 intervening off intervals, schedule edits and unreconstructable clock changes
-invalidate pending/in-flight images. A resident child survives scheduled off
+invalidate cached/in-flight images. A resident child survives scheduled off
 intervals but remains capture-disabled; explicit idle disable stops it and revokes
 its capability. `preview.enabled` and the preview widget are saved visual fields;
 schedules do not change global idle enablement or Windows selection. See
 [the native contract](windows.md#periodic-automatic-snapshot-538) and
 [early sign-in setup](install.md#start-with-windows-and-the-snapshot-cache-540).
+These are source contracts under #544, not installed capture/native acceptance;
+#519 remains unresolved. Older RAM-only claim evidence is historical.
 
 ## Persistence and recovery
 
@@ -828,7 +829,7 @@ Snapshot presentation uses the grid family rather than legacy
 `preview.opacity:0.24`; existing saved values/presets/imports are preserved, with
 no automatic migration from 0.08. Browser-only midtone correction keeps black
 pixels black and normalized white bounded before ordinary opacity/ambient
-brightness. It never rewrites or persists the raw RAM snapshot bytes.
+brightness. It never rewrites the canonical snapshot's raw bytes.
 
 Windows data defaults to `%LOCALAPPDATA%\LivingRoomDisplay\data`; `LRD_DATA_DIR`
 can select an isolated test location. Other systems use their per-user application

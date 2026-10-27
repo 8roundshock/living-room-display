@@ -572,9 +572,14 @@ again; see [limits and storage](api.md#local-photo). Replacing or clearing a pho
 does not securely erase older bytes from the previous-state recovery backup.
 
 This deliberate photo selection is separate from the last-desktop widget. A
-desktop snapshot is captured only by the authorized native flow, stays in RAM,
-expires on exit/session lock, and is never persisted, exported or reused as a
-photo. Tests use synthetic images. Do not request GPS, screen capture or access
+desktop snapshot is captured only by the authorized native flow. Owner decision
+2026-10-27 (#544) permits one canonical runtime PNG at
+`InstallRoot/run/cache/last-screen.png`, atomically replaced on the eligible
+five-minute cadence and shared by browser/native readers. Normal exit/input keeps
+it; privacy/opt-out/configuration or safe-producer lease loss deletes it. It stays
+outside Git, app/data and backups, is never exported or reused as a photo, and
+has no history or `.bak`. Global agent/computer-use screenshots still stay in RAM.
+Tests use synthetic images. Do not request GPS, screen capture or access
 to personal photo folders merely to implement a widget.
 
 ## Verification for a widget change

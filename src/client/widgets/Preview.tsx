@@ -24,7 +24,7 @@ function Preview({ state: { preview }, settings, embedded }: WidgetContentProps)
   const [shown, setShown] = useState(false); useEffect(() => setShown(true), []);
   // Built once per capture and clock format, not on every one-second tick (#99).
   const caption = useMemo(() => preview.capturedAt ? new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit', hour12: settings.clockFormat === '12h' }).format(new Date(preview.capturedAt)) : '', [preview.capturedAt, settings.clockFormat]);
-  if (!preview.available || !preview.capturedAt || failed) return embedded || failed ? <div className="widget-body image-placeholder"><Icon name="monitor" size={null} /><div className="ambient-label">Last screen</div><div className="ambient-description">{failed ? 'Snapshot unavailable' : 'Your screen from just before the display starts'}</div></div> : null;
+  if (!preview.available || !preview.capturedAt || failed) return <div className="widget-body image-placeholder"><Icon name="monitor" size={null} /><div className="ambient-label">Last screen</div><div className="ambient-description">{failed ? 'Screenshot unavailable' : 'Waiting for screenshot'}</div></div>;
   const capturedAt = preview.capturedAt;
   const shape = aspect(preview.width, preview.height) ?? (natural?.at === capturedAt ? natural.aspect : null) ?? 16 / 9;
   const loaded = (image: HTMLImageElement) => { const value = aspect(image.naturalWidth, image.naturalHeight); if (value && !aspect(preview.width, preview.height)) setNatural({ at: capturedAt, aspect: value }); };
@@ -38,5 +38,5 @@ function Preview({ state: { preview }, settings, embedded }: WidgetContentProps)
 
 export const PreviewWidget: WidgetModule = {
   Renderer: Preview,
-  visible: props => props.settings.preview.enabled && (props.embedded || props.state.preview.available),
+  visible: props => props.settings.preview.enabled,
 };

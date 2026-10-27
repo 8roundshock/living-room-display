@@ -57,9 +57,14 @@ idle/screensaver helper. Implementation is authorized and in progress;
   are optional future work, never prerequisites or recurring power-off advice.
 - Present rain timing as a forecast estimate. Show weather age and stale/error
   states; never invent current weather or present a model estimate as certainty.
-- Use a last-desktop snapshot captured before ambient activation, kept in RAM
-  only. Live app preview is future work; preserve capture access and physical-stop
-  safeguards. See [preview requirements](docs/product.md#screen-preview).
+- Owner decision, 2026-10-27 (#544): use one private runtime snapshot at
+  `InstallRoot/run/cache/last-screen.png`, atomically replaced every five minutes
+  when safely eligible. Browser and native displays read that same file; automatic
+  startup never captures or claims a replacement. Keep it out of Git, app/data
+  backups, exports and diagnostics; create no history or `.bak` files. This narrow
+  app-cache exception does not change the RAM-only rule for agent/computer-use
+  screenshots. Preserve capture access and physical-stop safeguards; see
+  [preview requirements](docs/product.md#screen-preview).
 - Local implementation, dependency setup, and scoped testing are authorized.
   Keep loopback-only defaults; enable Windows idle activation only after actual
   verification and coordinator approval. TV control, LAN exposure, and release

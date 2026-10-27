@@ -217,15 +217,17 @@ test('#438 the change marker moves after every saved change and never on a read'
     await app.send('POST', '/api/import', await (await fetch(`${app.url}/api/export`)).json()); await expectChange('an import');
     await app.send('PATCH', '/api/settings', { units: 'nonsense' }); await expectSame('a refused save');
 
-    // The native snapshot: an upload and its clear both move the marker.
+    // Publication moves the marker; normal native cleanup retains the shared file.
     const token = JSON.parse((await app.native('/api/host/session', 'GET', { 'X-LRD-Native': '1' })).body).token;
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jC7sAAAAASUVORK5CYII=', 'base64');
     assert.equal((await app.native('/api/preview', 'POST', { 'X-LRD-Token': token, 'Content-Type': 'image/png', 'X-Captured-At': new Date(clock.now).toISOString() }, png)).status, 201);
     await expectChange('a snapshot upload');
     assert.equal((await app.native('/api/preview', 'DELETE', { 'X-LRD-Token': token })).status, 204);
-    await expectChange('a snapshot clear');
+    await expectSame('normal native cleanup');
     assert.equal((await app.native('/api/preview', 'DELETE', { 'X-LRD-Token': token })).status, 204);
-    await expectSame('clearing nothing');
+    await expectSame('repeated normal cleanup');
+    await app.send('PATCH', '/api/settings', { preview: { enabled: false } });
+    await expectChange('an explicit snapshot opt-out');
     await app.close();
     app = await application(directory, clock);
     await expectChange('a restart');

@@ -45,9 +45,9 @@ still need a current, separately authorized watched native check.
 
 ## Entry points and lifetime
 
-- `/s`: ensure the installed backend is owned/ready, claim an eligible earlier
-  RAM-only thumbnail if available, then launch the isolated Edge kiosk. Never
-  capture a replacement after automatic activation has started.
+- `/s`: ensure the installed backend is owned/ready, then show its canonical
+  latest screenshot through the isolated Edge kiosk. Automatic startup neither
+  captures nor claims a replacement of its own surface (#544).
 - `--display`: ensure the backend is owned/ready, capture one last-desktop
   thumbnail if enabled, then launch the isolated Edge kiosk.
 - `/c` (also `/c:<handle>`) or no argument: start the backend and open `/editor`
@@ -74,7 +74,7 @@ already held, so the native host never starts a second display (#436). Session l
 logoff and disconnect close the display. A named event scoped to the installed
 helper path lets `Stop` ask it to exit normally.
 Session observation starts before cold server startup and handshake. A cancelled
-startup aborts pending HTTP, clears the image, skips later capture/kiosk steps,
+startup aborts pending HTTP, acknowledges preview cleanup, skips later capture/kiosk steps,
 and releases its event subscription. Cancellation also closes an already-created
 owned browser job; failed startup and ordinary exit share cleanup.
 
@@ -91,12 +91,15 @@ sign-in entry invoking the installed native `.scr --start` without a browser
 (#540). New idle-off installations stay off. `EnableStartup`/`DisableStartup`
 control the choice; AUTO creates no private-data preference file.
 
-The first safely eligible observation captures the full primary desktop, then a
-monotonic five-minute cadence refreshes one private RAM thumbnail. No extra input
-after worker launch is required. Normal mouse/key activity is permitted during
-copying and does not erase the latest success or reset the cadence. Failed
-eligible captures retain that success and its original timestamp. A fresh safe
-recovery after invalidation/generation loss captures immediately.
+Owner decision, 2026-10-27 (#544): the first safely eligible observation captures
+the full primary desktop, then a monotonic five-minute cadence refreshes one
+canonical `InstallRoot/run/cache/last-screen.png`, downscaled to at most 640 by
+360. Only the backend writes it, through a fixed temp and atomic rename. The PNG
+mtime is set to capture time before rename; image readers use one open handle for
+fstat metadata, dimensions and bytes. Failed capture/write keeps the last success
+and original time. There is no in-place truncation, history or `.bak`.
+No extra input after launch is required; ordinary input does not erase the file
+or reset cadence. Fresh eligibility after invalidation captures immediately.
 
 Capture requires this app's selected/enabled saver and an unlocked local console
 session on the current Default input desktop. Unknown, locked, disconnected or
@@ -107,29 +110,31 @@ an otherwise safe desktop can resume when video has inhibited the nominal saver.
 Pre/post-copy checks and cancellation retain the same context/actual-timeout
 requirements. No desktop is opened/switched and no power-request inventory is used.
 
-The backend is the sole frame/metadata authority. One latest-success slot has no
-image-age expiry while child-secret safe-context observations renew a ten-second
-producer lease. UI reads cannot renew it. Unknown context, configuration changes,
-disable, missed observation/clock discontinuity, child/backend exit clear bytes.
-Successful replacement zeroes former bytes. An expected ambient mutex transition
-freezes capture while safe producer observations preserve the earlier image.
+The backend is the sole file/metadata authority. Child-secret safe observations
+renew the ten-second producer lease; public reads cannot renew it. Unknown,
+locked or disconnected context, configuration/disable, observation/clock loss or
+producer loss deletes the file and invalidates arriving bodies. Cold backend
+startup removes the prior unvalidated PNG and orphan fixed temp before capturing
+again. Keep this private runtime cache outside Git, app/data and backups. This
+one app-specific file is not permission to save agent/computer-use screenshots.
 
-A logon-scoped first-instance pipe identifies/pins the actual installed `/s`
-process. Under its publication gate the preparer fetches authoritative metadata
-and freezes the backend slot; freeze fences older in-flight uploads without
-clearing the current image. Exact frame ID, generation, session, current claim
-input stability, actual process creation and UTC/monotonic order remain checked.
-A committed upload with a lost response cannot leave stale local frame metadata:
-there is no second native frame cache. Pipe traffic is scalar only, never pixels
-or capabilities. Automatic startup never captures a replacement of its own surface.
+Browser and native state/image readers use that same file. Required
+`sharedSnapshot:true` producer bootstrap starts no claim pipe; automatic `/s`
+does no extra copy or private claim. Native handshake, normal exit and ordinary
+input retain the file; privacy invalidation deletes it. The existing manual
+capture's upload limits are unchanged. Child-only publishing, parent identity,
+Host/Origin/Fetch Metadata/CORP and no-CORS guards remain.
 
-The thumbnail covers the full primary desktop and is downscaled to at most
-640 by 360 for display. No screenshot/cache file or capture history is written.
-The capture time label remains honest when a refresh fails. Active-session pixels
-still have the separate existing twelve-hour limit; that is not a pending-cache
-age rule. Cold automatic launch before an early backend has run can still be
-unavailable. Manual display capture remains separate. Source tests do not prove
-installed capture, protected-content support or physical native acceptance.
+A visible browser display establishes a separate capture pause before painting;
+it does not disable safe producer heartbeats or erase the previous image.
+Capture-revision checks fence uploads across pause transitions. A confirmed
+hide/close releases the pause; missing release remains paused until the user
+closes previews and explicitly resumes snapshots from Home. Fixed capture
+events/counters stay in RAM, with no private strings or pixel logging.
+The timestamp remains honest after a failed refresh. These source contracts and
+CI checks do not prove installed capture, protected-content support or physical
+native acceptance; #519 remains unresolved. Earlier RAM-only claim evidence is
+historical, and native dismissal/cursor/deadline behavior is unchanged.
 
 For source/CI safety, `LRD_PREVIEW_PREPARER_DISABLED=1` is a disable-only override
 used by installer smoke checks. It cannot enable the watcher or bypass any guard.
@@ -169,7 +174,7 @@ records exit intent and releases the exact renderer before synchronous
 cancellation callbacks or HTTP cleanup can wait (#532). The UI poll checks that
 terminal state before new window/cursor/renderer observations. UI stop and cleanup
 also release the renderer before posting an asynchronous surface hide, without a
-redundant synchronous `Form.Hide`. Normal disposal still serializes RAM clear (#505).
+redundant synchronous `Form.Hide`. Normal disposal still serializes preview-cleanup acknowledgment (#505).
 
 The six-second exit timer becomes eligible only after the one native host handshake
 returns, before any own fullscreen surface or display stage. If cancellation came
@@ -242,11 +247,14 @@ own output.
 
 ## Preview and privacy
 
-The helper captures the primary display once with `CopyFromScreen`, before any
-ambient browser exists. It scales to at most 640 by 360, encodes PNG into a
-`MemoryStream`, uploads to loopback, and disposes pixel buffers. No screenshot
-file, history, capture log or image export is implemented. DPI awareness makes
-bounds physical pixels. This is last state, not live capture.
+The owned producer copies the full primary display with `CopyFromScreen` on the
+first safe observation and every five minutes while capture remains eligible.
+It scales to at most 640 by 360, uploads the PNG to loopback and disposes pixel
+buffers. The backend atomically overwrites one `run/cache/last-screen.png` outside
+data backups; the browser and native widget read that same file. Privacy loss
+removes availability immediately and attempts to unlink it. There is no history,
+capture log or image export. DPI awareness makes bounds physical pixels. This is
+last state, not a live view.
 
 Capture uses `Format32bppRgb`, whose fourth byte is unused, and the thumbnail
 uses `Format24bppRgb` (#519). GDI color data can have zero high bytes; treating
