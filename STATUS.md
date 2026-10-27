@@ -1,4 +1,14 @@
 # Project status
+## Shared latest screenshot file (#544, work in progress)
+
+The owner chose one overwritten app screenshot file on 2026-10-27, replacing
+this app's earlier RAM-only requirement. The initial source checkpoint implements
+an atomic PNG store with capture time on the same file, retaining the prior
+success when replacement fails and clearing unknown prior-session files. Four
+isolated synthetic-file tests pass. Browser/native integration, capture pause,
+independent final-head review and CI remain unfinished; this does not change the
+installed app or establish actual capture success. #519 remains unresolved.
+
 ## Periodic Last screen cache (#538, #540)
 
 The source checkpoint replaces the one-shot pre-idle attempt with an immediate
