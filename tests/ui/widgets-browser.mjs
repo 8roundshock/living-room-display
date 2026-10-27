@@ -1,4 +1,4 @@
-import { mockWindowsStatus } from './lib/windows-fixture.mjs';
+import { mockWindowsStatus, mockScreenWakeLock } from './lib/windows-fixture.mjs';
 // Isolated production renderer QA. Synthetic weather/images; screenshots remain RAM buffers.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -77,7 +77,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], images = [], errors = [];
   try {
-    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
+    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(context); await mockScreenWakeLock(context);
     const source = await (await fetch(`${base}/api/state`)).json();
     // Every active widget has a check module (tests/ui/widget-checks); their prepare hooks give it content.
     for (const id of ACTIVE_WIDGET_IDS) assert.ok(WIDGET_CHECKS[id], `${id} needs a tests/ui/widget-checks module`);
@@ -251,15 +251,19 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     if (capture) images.push({ name: 'default-composition', bytes: await page.screenshot() });
     current.weather.status = 'stale'; current.weather.updatedAt = new Date(now - 3 * 3600000).toISOString(); await open(); assert.match(await page.locator('.ambient-weather').innerText(), /Saved forecast/);
     current.weather = { ...current.weather, status: 'unavailable', current: null, daily: [], hourly: [], updatedAt: null }; current.reminders = []; current.preview.available = false; current.photo.available = false; await open();
-    assert.equal(await page.locator('.ambient-reminders').count(), 0); assert.equal(await page.locator('.ambient-preview').count(), 0); assert.match(await page.locator('.ambient-weather').innerText(), /Weather unavailable/); assert.match(await page.locator('.ambient-forecast').innerText(), /Forecast unavailable/);
+    assert.equal(await page.locator('.ambient-reminders').count(), 0); assert.equal(await page.locator('.ambient-preview').count(), 1);
+    await page.getByText('Waiting for screenshot', { exact: true }).waitFor();
+    assert.equal(await page.locator('.preview-image, .preview-caption').count(), 0, 'missing pixels cannot imply a captured image or time');
+    assert.match(await page.locator('.ambient-weather').innerText(), /Weather unavailable/); assert.match(await page.locator('.ambient-forecast').innerText(), /Forecast unavailable/);
     if (capture) images.push({ name: 'unavailable-composition', bytes: await page.screenshot() });
-    checks.push('Outline/digital/analog clock, reduced-motion surface, 4% inset, saved/unavailable weather and default hidden empty reminders/snapshot');
+    current.settings.widgets.preview = false; await open(); assert.equal(await page.locator('.ambient-preview').count(), 0, 'saved-off Last screen remains hidden');
+    checks.push('Outline/digital/analog clock, reduced-motion surface, 4% inset, saved/unavailable weather, hidden empty reminders and honest enabled-missing/saved-off snapshot states');
     current = structuredClone(source); current.settings.widgets.photo = true; imagesUnavailable = true; await open();
-    await page.getByText('Photo unavailable', { exact: true }).waitFor(); await page.getByText('Snapshot unavailable', { exact: true }).waitFor();
+    await page.getByText('Photo unavailable', { exact: true }).waitFor(); await page.getByText('Screenshot unavailable', { exact: true }).waitFor();
     imagesUnavailable = false; current = structuredClone(source); current.preview.available = false; current.photo.available = false;
     current.settings.widgets.photo = true;
     await page.goto(base + '/editor'); await page.locator('.preview-surface').waitFor();
-    assert.match(await page.locator('.ambient-photo').innerText(), /Choose a photo/); assert.match(await page.locator('.ambient-preview').innerText(), /Your screen from just before the display starts/);
+    assert.match(await page.locator('.ambient-photo').innerText(), /Choose a photo/); assert.match(await page.locator('.ambient-preview').innerText(), /Waiting for screenshot/);
     assert.notEqual(await cursor(), 'none');
     checks.push('Honest failed image placeholders, editor-only empty photo/snapshot placeholders, normal editor cursor, no source image or capture needed');
 
@@ -267,7 +271,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     // no widget re-creates an observer, refits or writes its style, and nothing extends beyond its box.
     const fitMetrics = {};
     for (const [label, viewport, deviceScaleFactor, fontScale] of [['1280×720 ×3, Text 125%', { width: 1280, height: 720 }, 3, 1.25], ['3840×2160 ×1, Text 100%', { width: 3840, height: 2160 }, 1, 1], ['3840×2160 ×1, Text 125%', { width: 3840, height: 2160 }, 1, 1.25]]) {
-      const restContext = await browser.newContext({ viewport, deviceScaleFactor, timezoneId: 'America/Toronto' }); await mockWindowsStatus(restContext);
+      const restContext = await browser.newContext({ viewport, deviceScaleFactor, timezoneId: 'America/Toronto' }); await mockWindowsStatus(restContext); await mockScreenWakeLock(restContext);
       try {
         const state = structuredClone(source); state.settings.appearance.fontScale = fontScale;
         state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD])); state.settings.preview.enabled = true; state.settings.widgetGrid.density = 'balanced';
@@ -305,7 +309,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
 
     // #99: Intl formatter constructions per one-second tick with the minute unchanged, each widget alone at
     // its largest family (Clock medium), then the full board.
-    const intlContext = await browser.newContext({ viewport: { width: 1280, height: 720 }, timezoneId: 'America/Toronto' }); await mockWindowsStatus(intlContext);
+    const intlContext = await browser.newContext({ viewport: { width: 1280, height: 720 }, timezoneId: 'America/Toronto' }); await mockWindowsStatus(intlContext); await mockScreenWakeLock(intlContext);
     const intlPerTick = {};
     try {
       let state;

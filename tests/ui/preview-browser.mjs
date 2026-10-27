@@ -38,6 +38,16 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
     viewport: { width: 1920, height: 1080 },
     reducedMotion: 'reduce',
   }); await mockWindowsStatus(context);
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => {
+      const sentinel = new EventTarget(); sentinel.released = false;
+      sentinel.release = async () => { sentinel.released = true; sentinel.dispatchEvent(new Event('release')); }; return sentinel;
+    } } });
+  });
+  // Optics fixtures replace synthetic pixels while the page is visible. The real
+  // capture-pause transport is exercised separately by shared-snapshot-browser.
+  await context.route('**/api/preview/display', route => route.fulfill(route.request().postDataJSON()?.action === 'start'
+    ? { status: 201, json: { id: '0'.repeat(32) } } : { status: 204 }));
   const page = await context.newPage(),
     errors = [],
     checks = [],
@@ -193,7 +203,7 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
     assert.equal(raw.headers.get('cache-control'), 'no-store');
     assert.deepEqual(Buffer.from(await raw.arrayBuffer()), source);
     checks.push(
-      'native-token synthetic PNG remains byte-for-byte unchanged in RAM/no-store endpoint',
+      'native-token synthetic PNG remains byte-for-byte unchanged through the shared no-store file endpoint',
     );
 
     for (const density of ['spacious', 'balanced', 'fine'])
@@ -395,7 +405,7 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
     await page.goto(base + '/display');
     assert.equal(await page.locator('.preview-image').count(), 0);
     checks.push(
-      'RAM snapshot excluded from saved state/export and removing widget clears the endpoint',
+      'runtime snapshot excluded from saved data/export and removing widget clears the endpoint',
     );
     assert.deepEqual(errors, []);
     return { checks, images, levels };

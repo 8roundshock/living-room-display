@@ -367,10 +367,10 @@ execution policy.
 
 Move the mouse or press a key to dismiss ambient mode after its short launch
 grace period. `Stop` also dismisses it. The host owns an isolated Edge profile/job;
-it does not close normal browser windows. Closing ambient clears the snapshot
-and leaves the local server available for later use. `Stop` stops both. The
+it does not close normal browser windows. Closing ambient retains the canonical
+latest screenshot and leaves the server available for later use. `Stop` stops both. The
 loopback server is not a Windows service or scheduled task. An opted-in per-user
-sign-in entry starts it before idle activation so the five-minute RAM cache exists.
+sign-in entry starts it before idle activation so the five-minute screenshot cache exists.
 Windows screensaver invocation has a cold-start implementation; its actual `/c`
 end-to-end cold test remains unverified as described below.
 
@@ -390,7 +390,7 @@ Fresh idle-off installations and source/fixture servers do not register it.
 AUTO is the absence of `data/startup.json` and never creates or rewrites that
 file during setup. Explicit `EnableStartup` or `DisableStartup` writes only that
 small choice; full data backups retain it and updates preserve an opt-out.
-Disabling Last screen stops capture/clears RAM immediately; a sign-in entry may
+Disabling Last screen stops capture/deletes the runtime screenshot immediately; a sign-in entry may
 remain inert until the next supported sync as an independent startup choice.
 Windows Startup Apps can also disable the existing entry; setup never rewrites
 an already exact value or changes Windows' separate approval record.
@@ -444,6 +444,7 @@ choose a shorter wait. The native host's own hold (`SetThreadExecutionState`) is
 | `runtime` | App-owned Node/npm. |
 | `data` | Private settings and reminders. |
 | `run/server.json` | Server PID/start time for scoped process management. |
+| `run/cache/last-screen.png` | One private canonical desktop snapshot, atomically replaced every five minutes when eligible (#544, owner decision 2026-10-27); excluded from data/app backups, exports and diagnostics. |
 | `edge-profile` | Dedicated Edge profile; ambient uses InPrivate/no-store preview responses. |
 | `screensaver-before.json` | Prior native screensaver settings, only after opt-in. |
 | `installation.json` | Non-secret ownership/state and source provenance, retained for reinstall. Written durably (flushed, then swapped in whole). |
@@ -451,8 +452,17 @@ choose a shorter wait. The native host's own hold (`SetThreadExecutionState`) is
 | `removing`, `removing-2`, ... | A folder being deleted: Setup, `Update` and `Uninstall` rename a folder to one of these names first, then delete it. One left behind (a file in it was in use) is removed by the next Setup run, `Update` or `Uninstall`. |
 
 Use the editor's export, or stop the app and copy `data` to a private backup.
-Snapshot pixels and native tokens are RAM only and excluded from persisted
-data/exports/diagnostics. Do not include private data or screenshots in reports.
+Native tokens remain RAM-only. The single desktop PNG is a private runtime cache
+outside `data`, `app`, Git and backups; it is not part of exports or diagnostics.
+The backend sets capture-time mtime on a fixed temp before atomic replacement,
+never truncates the canonical image, and creates no history or `.bak`. Cold start
+removes a prior unvalidated image and orphan temp; privacy/opt-out/configuration
+or safe-producer lease loss deletes it. Failed refresh keeps the previous success.
+Browser and native readers share this same file; normal handshake/input/exit does
+not delete it. Missing browser-close release keeps capture paused until previews
+are closed and the user chooses Home's explicit resume action. This app-only
+exception does not change RAM-only agent/computer-use screenshot rules. Source
+checks are not installed/native acceptance (#519). Do not attach screenshots to reports.
 
 For an update, review/pull the desired source revision and run `Update`. The
 installer builds first, keeps data outside app files, stops owned processes,

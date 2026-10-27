@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { createApplication } from './app.ts';
 import { defaultDataDirectory } from './store.ts';
-import { installedPreparationOptions } from './preidle.ts';
+import { installedPreparationOptions, installedSnapshotDirectory } from './preidle.ts';
 
 const port = Number(process.env.LRD_PORT ?? 4318);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('LRD_PORT must be an integer from 1024 to 65535');
@@ -9,6 +9,8 @@ const application = await createApplication({
   dataDirectory: defaultDataDirectory(),
   clientDirectory: fileURLToPath(new URL('../client/', import.meta.url)),
   development: process.argv.includes('--dev'),
+  snapshotDirectory: installedSnapshotDirectory({ platform: process.platform, executable: process.execPath,
+    entry: fileURLToPath(import.meta.url), dataDirectory: defaultDataDirectory() }),
   preparation: installedPreparationOptions({ platform: process.platform, enabledFlag: process.env.LRD_PREVIEW_PREPARER,
     executable: process.execPath, entry: fileURLToPath(import.meta.url), dataDirectory: defaultDataDirectory() }),
 });

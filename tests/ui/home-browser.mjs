@@ -1,4 +1,4 @@
-import { mockWindowsStatus } from './lib/windows-fixture.mjs';
+import { mockWindowsStatus, mockScreenWakeLock } from './lib/windows-fixture.mjs';
 // Home (#438): day-to-day use beside the display. An isolated loopback server with temporary synthetic
 // data and a fake clock that the server follows; screenshots stay in RAM. Build first.
 import assert from 'node:assert/strict';
@@ -66,7 +66,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     page.on('console', message => { if (message.type() === 'error' && !/\b(409|503)\b|Failed to load resource/.test(message.text())) errors.push(message.text()); });
   };
   async function newContext(viewport = EDGE_VIEWPORTS[0]) {
-    const context = await browser.newContext({ viewport, reducedMotion: 'reduce', timezoneId: 'America/Toronto', locale: 'en-US' }); await mockWindowsStatus(context);
+    const context = await browser.newContext({ viewport, reducedMotion: 'reduce', timezoneId: 'America/Toronto', locale: 'en-US' }); await mockWindowsStatus(context); await mockScreenWakeLock(context);
     contexts.push(context);
     await keepPagesLocal(context, base);
     await context.addInitScript(instrumentSilence);

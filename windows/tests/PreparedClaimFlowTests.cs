@@ -33,17 +33,19 @@ internal static class PreparedClaimFlowTests
         Check(PreparedClaimAdmission.Pin(17,3,delegate(uint pid) { return peer; })==null && peer.Disposed,"unreadable identity fails closed and releases pin");
         Check(PreparedClaimAdmission.Pin(17,3,delegate(uint pid) { throw new IOException(); })==null,"unopenable OS peer fails closed");
 
-        int captures=0, clears=0, claims=0;
-        NativePreviewSelection.Run(false,delegate { claims++; return true; },delegate { captures++; },delegate { clears++; });
-        Check(captures==1 && claims==0 && clears==0,"manual capture behavior retained");
-        NativePreviewSelection.Run(true,delegate { claims++; return false; },delegate { captures++; },delegate { clears++; });
-        Check(captures==1 && claims==1 && clears==1,"automatic absence never falls back to capture");
-        NativePreviewSelection.Run(true,delegate { throw new IOException(); },delegate { captures++; },delegate { clears++; });
-        Check(captures==1 && clears==2,"automatic transport failure is unavailable without blocking ambient startup");
+        int captures=0;
+        NativePreviewSelection.Run(false,delegate { captures++; },CancellationToken.None);
+        Check(captures==1,"manual capture behavior retained");
+        NativePreviewSelection.Run(true,delegate { captures++; throw new IOException(); },CancellationToken.None);
+        Check(captures==1,"automatic startup performs no capture, claim or clear; it reads the canonical backend image");
         bool cancelled=false;
-        try { NativePreviewSelection.Run(true,delegate { throw new OperationCanceledException(); },delegate { captures++; },delegate { clears++; }); }
-        catch(OperationCanceledException) { cancelled=true; }
-        Check(cancelled && captures==1,"physical stop cancellation propagates without recapture");
+        using(var automaticCancellation=new CancellationTokenSource())
+        {
+            automaticCancellation.Cancel();
+            try { NativePreviewSelection.Run(true,delegate { captures++; },automaticCancellation.Token); }
+            catch(OperationCanceledException) { cancelled=true; }
+        }
+        Check(cancelled && captures==1,"physical stop cancellation propagates before automatic startup without capture");
 
         int posts=0;
         Func<bool> post=delegate { posts++; return true; };

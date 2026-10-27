@@ -17,6 +17,7 @@ import { Home } from './Home';
 import { SettingsPage } from './SettingsPage';
 import { PAGE_TITLES, pageForPath } from './route';
 import { NATIVE_READY_TITLE, NATIVE_STARTING_TITLE, prepareNativeDisplay } from './nativeReadiness';
+import { useDisplayPresence } from './displayPresence';
 
 /** Home and the display pick up a change made elsewhere within about this long, while visible (#438). */
 const CHANGE_POLL_MS = 5_000;
@@ -60,6 +61,7 @@ export function App() {
   // #436 one display window: a newer browser display retires this one (it closes, or shows a card and
   // stops polling, floating and holding the screen awake). The native screensaver page is single-instance on its own.
   const retired = useSingleDisplay(display && !nativeDisplay && window.self === window.top);
+  const browserPresence = useDisplayPresence(display && !nativeDisplay && !retired);
   // A request still in flight when the display retires must not start the early refresh polls again.
   const polling = useRef(true);
   polling.current = !retired;
@@ -219,6 +221,8 @@ export function App() {
         </div>
       </main>
     );
+  if (display && !browserPresence.ready)
+    return <main className="display-page"><div className="loading-state"><p>{browserPresence.failed ? 'Close this display, then resume snapshots from Home.' : 'Opening display…'}</p></div></main>;
   if (display)
     return <div className={state.schedule?.config.enabled ? 'schedule-display' : undefined}><AmbientDisplay state={state} settings={scheduledSettings(state.settings, state.schedule)} disconnected={error !== null} native={nativeDisplay} /></div>;
   if (page === 'home')

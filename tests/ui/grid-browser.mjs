@@ -1,4 +1,4 @@
-import { mockWindowsStatus } from './lib/windows-fixture.mjs';
+import { mockWindowsStatus, mockScreenWakeLock } from './lib/windows-fixture.mjs';
 // Actual production Edge grid/photo interactions. Synthetic data and RAM images only.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -50,7 +50,7 @@ export async function runGridQa({ playwright, edge } = {}) {
       viewport: { width: 1440, height: 1000 },
       timezoneId: 'America/Toronto',
       ...options,
-    }); await mockWindowsStatus(context);
+    }); await mockWindowsStatus(context); await mockScreenWakeLock(context);
     page = await context.newPage();
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => {
@@ -807,7 +807,9 @@ export async function runGridQa({ playwright, edge } = {}) {
         await page.clock.runFor(4000);
         await bounds();
         const current = await places();
-        assert.deepEqual(Object.keys(current).sort(), ['calendar', 'clock', 'forecast', 'weather'], `${viewport.width}: the default board shows Calendar, Clock, Weather and Forecast (no reminders or snapshot to show)`);
+        assert.deepEqual(Object.keys(current).sort(), ['calendar', 'clock', 'forecast', 'preview', 'weather'], `${viewport.width}: the default board keeps the enabled Last screen waiting state visible`);
+        await page.getByText('Waiting for screenshot', { exact: true }).waitFor();
+        assert.equal(await page.locator('.preview-image, .preview-caption').count(), 0);
         if (previous) for (const [id, place] of Object.entries(current)) assert.notEqual(place, previous[id], `${viewport.width} cycle ${cycle}: ${id} moves with the board`);
         previous = current;
       }

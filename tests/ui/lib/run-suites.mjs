@@ -29,7 +29,7 @@ export const SETS = {
   'pull-request': [
     'widgets', // 371
     'canvas-scope', 'grid', 'studio', 'workspace', 'catalog-sky', 'reminders', 'catalog-time', 'freesize', // 22, 45, 41, 38, 34, 34, 31, 29
-    'preview', 'first-run', 'editor-sync', 'display-controls', // 19, 9, 8, 3
+    'preview', 'shared-snapshot', 'first-run', 'editor-sync', 'display-controls', // Shared file flow also exercises real fetch metadata.
     'daylight', // #439: not yet timed on the runner; 25 to 70 locally under load, where catalog-time took 59
     'dynamic', // #437: its own Dynamic scenarios, timed locally (see docs/development.md)
     'screen', // #436, about 40 locally

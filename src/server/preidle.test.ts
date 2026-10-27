@@ -5,7 +5,7 @@ import { request as httpRequest } from 'node:http';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { defaultSettings } from '../shared/defaults.ts';
 import { createApplication } from './app.ts';
 import { photoFixture, forecastFixture } from './fixtures.ts';
@@ -156,10 +156,11 @@ test('ordinary source/non-Windows/missing opt-in entrypoints cannot start a prep
 });
 
 async function apiFixture() {
-  const directory = await mkdtemp(join(tmpdir(), 'lrd-preparation-synthetic-'));
+  const root = await mkdtemp(join(tmpdir(), 'lrd-preparation-synthetic-'));
+  const directory = join(root, 'data'), snapshotDirectory = join(root, 'cache');
   const clock = { wall: BASE, mono: 10_000 };
   let bootstrap!: PreparationBootstrap, exited!: () => void, stopped = 0;
-  const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()),
+  const app = await createApplication({ dataDirectory: directory, snapshotDirectory, fetcher: async () => Response.json(forecastFixture()),
     now: () => clock.wall, preparationMonotonic: () => clock.mono,
     preparation: { source: 'a'.repeat(40), start(value, end) { bootstrap = value; exited = end; return { stop() { stopped++; } }; } } });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
@@ -177,27 +178,33 @@ async function apiFixture() {
   }
   const auth = () => ({ 'X-LRD-Preparation': bootstrap.token });
   const config = async () => JSON.parse((await native('/api/preview/preparation', 'GET', { ...auth(), 'X-Preparation-Safe': '1', 'X-Session-Id': '1' })).body.toString());
-  const headers = (current: { generation: number; configuration: string }) => ({ ...auth(), 'Content-Type': 'image/png',
+  const headers = (current: { generation: number; configuration: string; captureRevision: number }) => ({ ...auth(), 'Content-Type': 'image/png',
     'X-Preparation-Generation': String(current.generation), 'X-Preparation-Configuration': current.configuration,
+    'X-Preparation-Capture-Revision': String(current.captureRevision),
     'X-Input-Tick': '123', 'X-Session-Id': '1', 'X-Desktop-Id': 'Default', 'X-Captured-At': new Date(BASE - 100).toISOString(),
     'X-Completed-At': new Date(BASE).toISOString(), 'X-Completed-Monotonic-Ms': '10000', 'X-Idle-Timeout-Seconds': '600' });
-  return { ...app, url, directory, clock, native, auth, config, headers, patch, get bootstrap() { return bootstrap; }, get stopped() { return stopped; }, exit() { exited(); },
-    async close() { app.server.closeAllConnections(); app.server.close(); await once(app.server, 'close'); await rm(directory, { recursive: true, force: true }); } };
+  return { ...app, url, directory, snapshotDirectory, clock, native, auth, config, headers, patch, get bootstrap() { return bootstrap; }, get stopped() { return stopped; }, exit() { exited(); },
+    async close() {
+      app.closePreparation(); app.server.closeAllConnections(); const closed = once(app.server, 'close'); app.server.close(); await closed;
+      assert.ok(isAbsolute(root) && dirname(resolve(root)) === resolve(tmpdir()) && basename(root).startsWith('lrd-preparation-synthetic-'));
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 });
+    } };
 }
 
-test('prepared pixels stay private in RAM until the exact child attests a native pipe claim', async () => {
+test('the private producer publishes one shared image immediately without exposing its capability or using native claims', async () => {
   const app = await apiFixture();
   try {
     const config = await app.config(), png = photoFixture();
     const host = await app.native('/api/host/session', 'GET', { 'X-LRD-Native': '1' });
-    const session = JSON.parse(host.body.toString()); assert.equal(session.preparationPipe, app.bootstrap.pipeName);
+    const session = JSON.parse(host.body.toString()); assert.equal(session.preparationPipe, undefined); assert.equal(app.bootstrap.sharedSnapshot, true);
     assert.equal(host.body.toString().includes(app.bootstrap.token), false);
     assert.equal((await app.native('/api/preview/preparation', 'POST', app.headers(config), png)).status, 201);
-    assert.equal((await fetch(app.url + '/api/preview/image')).status, 404);
-    assert.equal((await (await fetch(app.url + '/api/preview')).json()).available, false);
-    assert.equal((await (await fetch(app.url + '/api/state')).json()).preview.available, false);
+    assert.equal((await fetch(app.url + '/api/preview/image')).status, 200);
+    assert.equal((await (await fetch(app.url + '/api/preview')).json()).available, true);
+    assert.equal((await (await fetch(app.url + '/api/state')).json()).preview.available, true);
     assert.equal((await (await fetch(app.url + '/api/export')).text()).includes(png.toString('base64')), false);
     assert.deepEqual(await readdir(app.directory), ['state.backup.json', 'state.json']);
+    assert.deepEqual(await readdir(app.snapshotDirectory), ['last-screen.png']);
     assert.equal((await fetch(app.url + '/api/preview/preparation', { headers: app.auth() })).status, 403, 'browser metadata cannot use the private endpoint');
     assert.equal((await app.native('/api/preview/preparation/claim', 'POST', { 'X-LRD-Token': session.token, 'Content-Type': 'application/json' }, Buffer.from('{}'))).status, 403);
     assert.equal((await app.native('/api/preview/claim', 'POST', { 'X-LRD-Token': session.token, 'Content-Type': 'application/json' }, Buffer.from('{}'))).status, 404, 'there is no selfreported HTTP claim bypass');
@@ -205,14 +212,14 @@ test('prepared pixels stay private in RAM until the exact child attests a native
     const claim: PreparationClaim = { generation: config.generation, configuration: config.configuration, processId: 200,
       processStartedAt: new Date(BASE + 3_000).toISOString(), startedMonotonicMs: 13_000, inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000 };
     const promoted = await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify(claim)));
-    assert.equal(promoted.status, 200); assert.equal(JSON.parse(promoted.body.toString()).claimed, true);
+    assert.equal(promoted.status, 410, 'retired claim cannot publish or consume the shared file');
     const image = await fetch(app.url + '/api/preview/image'); assert.equal(image.status, 200); assert.deepEqual(Buffer.from(await image.arrayBuffer()), png);
     assert.equal((await app.native('/api/preview', 'DELETE', { 'X-LRD-Token': session.token })).status, 204);
-    assert.equal((await fetch(app.url + '/api/preview/image')).status, 404);
+    assert.deepEqual(Buffer.from(await (await fetch(app.url + '/api/preview/image')).arrayBuffer()), png, 'normal native exit retains the shared image');
   } finally { await app.close(); }
 });
 
-test('ordinary-input active-only cleanup preserves the private latest frame for later automatic claim', async () => {
+test('ordinary-input active-only cleanup preserves the shared latest frame without later native promotion', async () => {
   const app = await apiFixture();
   try {
     const config = await app.config(), png = photoFixture();
@@ -226,12 +233,12 @@ test('ordinary-input active-only cleanup preserves the private latest frame for 
       processStartedAt: new Date(BASE + 3_000).toISOString(), startedMonotonicMs: 13_000,
       inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000,
     })));
-    assert.equal(result.status, 200); assert.equal(JSON.parse(result.body.toString()).claimed, true);
+    assert.equal(result.status, 410);
     assert.deepEqual(Buffer.from(await (await fetch(app.url + '/api/preview/image')).arrayBuffer()), png);
   } finally { await app.close(); }
 });
 
-test('a committed refresh with a lost response is reconciled by authoritative freeze and late uploads cannot replace it', async () => {
+test('a committed refresh with a lost response remains publicly readable and a legacy freeze fences late uploads', async () => {
   const app = await apiFixture();
   try {
     let config = await app.config();
@@ -260,22 +267,22 @@ test('a committed refresh with a lost response is reconciled by authoritative fr
     await lateBodyStarted;
     const frozen = JSON.parse((await app.native('/api/preview/preparation', 'GET', { ...app.auth(),
       'X-Preparation-Safe': '1', 'X-Session-Id': '1', 'X-Preparation-Freeze': '1' })).body.toString());
-    assert.equal(frozen.frame.completedMonotonicMs, 13_100);
-    assert.equal(frozen.frame.generation, frozen.generation);
+    assert.equal(frozen.frame, null, 'shared-file mode requires no private attestation metadata');
     assert.ok(frozen.generation > config.generation, 'freeze fences the generation but retains exact latest frame');
+    assert.equal((await (await fetch(app.url + '/api/preview')).json()).capturedAt, latestHeaders['X-Captured-At']);
     delayed.end(original.subarray(8)); assert.equal(await lateResponse, 409, 'a body started before freeze cannot publish after it');
     assert.equal((await app.native('/api/preview/preparation', 'POST', latestHeaders, original)).status, 409);
     const old = { generation: config.generation, configuration: config.configuration, processId: 200,
       processStartedAt: new Date(app.clock.wall - 100).toISOString(), startedMonotonicMs: app.clock.mono - 100,
       inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000 };
-    assert.equal(JSON.parse((await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify(old)))).body.toString()).claimed, false);
-    const current = { ...old, generation: frozen.generation, completedMonotonicMs: frozen.frame.completedMonotonicMs };
-    assert.equal(JSON.parse((await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify(current)))).body.toString()).claimed, true);
+    assert.equal((await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify(old)))).status, 410);
+    const current = { ...old, generation: frozen.generation, completedMonotonicMs: 13_100 };
+    assert.equal((await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify(current)))).status, 410);
     assert.deepEqual(Buffer.from(await (await fetch(app.url + '/api/preview/image')).arrayBuffer()), latest);
   } finally { await app.close(); }
 });
 
-test('ambient mutex observation before handshake freezes capture while safe heartbeat preserves the earlier frame', async () => {
+test('safe own-ambient observations and native handshake preserve the earlier shared frame without claim or freeze', async () => {
   const app = await apiFixture();
   try {
     const config = await app.config(), png = photoFixture();
@@ -284,23 +291,23 @@ test('ambient mutex observation before handshake freezes capture while safe hear
       app.clock.wall += 5_000; app.clock.mono += 5_000;
       const observed = JSON.parse((await app.native('/api/preview/preparation', 'GET', { ...app.auth(),
         'X-Preparation-Safe': '1', 'X-Session-Id': '1' })).body.toString());
-      assert.equal(observed.generation, config.generation, 'safe own-ambient observation does not invalidate pending pixels');
+      assert.equal(observed.generation, config.generation, 'safe own-ambient observation does not invalidate shared pixels');
+      assert.equal(observed.frame, null);
     }
     const host = await app.native('/api/host/session', 'GET', { 'X-LRD-Native': '1' }); assert.equal(host.status, 200);
-    const frozen = JSON.parse((await app.native('/api/preview/preparation', 'GET', { ...app.auth(),
-      'X-Preparation-Safe': '1', 'X-Session-Id': '1', 'X-Preparation-Freeze': '1' })).body.toString());
+    const after = await app.config(); assert.equal(after.generation, config.generation);
     const result = await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify({
-      generation: frozen.generation, configuration: frozen.configuration, processId: 200,
+      generation: after.generation, configuration: after.configuration, processId: 200,
       processStartedAt: new Date(BASE + 3_000).toISOString(), startedMonotonicMs: 13_000,
-      inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: frozen.frame.completedMonotonicMs,
+      inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000,
     })));
-    assert.equal(JSON.parse(result.body.toString()).claimed, true);
+    assert.equal(result.status, 410);
     assert.deepEqual(Buffer.from(await (await fetch(app.url + '/api/preview/image')).arrayBuffer()), png);
   } finally { await app.close(); }
 });
 
 test('generation, settings changes and child loss reject a preparation body still arriving', async t => {
-  for (const operation of ['input invalidation', 'settings change', 'child exit', 'cold claim'] as const) await t.test(operation, async () => {
+  for (const operation of ['input invalidation', 'settings change', 'child exit', 'unsafe context', 'retired claim'] as const) await t.test(operation, async () => {
     const app = await apiFixture(); let upload!: ReturnType<typeof httpRequest>;
     try {
       const config = await app.config(), png = photoFixture();
@@ -314,16 +321,17 @@ test('generation, settings changes and child loss reject a preparation body stil
       if (operation === 'input invalidation') assert.equal((await app.native('/api/preview/preparation', 'DELETE', { ...app.auth(), 'X-Invalidate-Active': '1' })).status, 204);
       else if (operation === 'settings change') assert.equal((await app.patch({ appearance: { brightness: 0.3 } })).status, 200);
       else if (operation === 'child exit') app.exit();
+      else if (operation === 'unsafe context') assert.equal((await app.native('/api/preview/preparation', 'GET', { ...app.auth(), 'X-Preparation-Safe': '0' })).status, 200);
       else {
         const rejected = await app.native('/api/preview/preparation/claim', 'POST', { ...app.auth(), 'Content-Type': 'application/json' }, Buffer.from(JSON.stringify({
           generation: config.generation, configuration: config.configuration, processId: 200,
           processStartedAt: new Date(BASE).toISOString(), startedMonotonicMs: 10_000, inputTick: 123, sessionId: 1, desktopId: 'Default', completedMonotonicMs: 10_000,
         })));
-        assert.equal(rejected.status, 200); assert.equal(JSON.parse(rejected.body.toString()).claimed, false);
+        assert.equal(rejected.status, 410);
       }
       upload.end(png.subarray(8));
-      assert.equal(await response, operation === 'child exit' ? 403 : 409);
-      assert.equal((await fetch(app.url + '/api/preview/image')).status, 404);
+      assert.equal(await response, operation === 'retired claim' ? 201 : operation === 'child exit' ? 403 : 409);
+      assert.equal((await fetch(app.url + '/api/preview/image')).status, operation === 'retired claim' ? 200 : 404);
       assert.ok((await readdir(app.directory)).every(name => ['state.json', 'state.backup.json'].includes(name)));
     } finally { upload?.destroy(); await app.close(); }
   });

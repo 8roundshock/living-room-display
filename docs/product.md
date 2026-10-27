@@ -73,25 +73,32 @@ ambient display. Provide a small, very dim translucent thumbnail with adjustable
 size/opacity, a hide toggle, and placement that moves with the other widgets.
 It should remain useful to read while fitting the sparse, mostly black display.
 
-A last-state snapshot is selected for version one. With idle display and Last
-screen enabled, an early-running owned backend captures the full primary desktop
-once when safely eligible, then every five minutes. Successful refresh replaces
-one private RAM thumbnail; ordinary input and failed refreshes retain the latest
-success with its original capture time. It is frozen while a saver/ambient surface
-is running, then claimed before automatic display activation. A short nominal
-idle-transition band pauses capture, not indefinitely inhibited desktop use.
-Unknown/locked/session/configuration/disabled contexts or loss of the safe producer
-clear the private cache. Manual display captures before its own overlay; automatic
-startup never takes a late replacement of its own surface. Early sign-in lifecycle
-is tracked in #540, periodic source in #538. Live selected-app preview remains future work.
-Label the snapshot as last state with capture time so it cannot be mistaken for
-a live view.
+Owner decision, 2026-10-27 (#544): browser and native displays read one canonical
+private file, `InstallRoot/run/cache/last-screen.png`. With idle display and Last
+screen enabled, the owned producer captures the full primary desktop at its first
+safe opportunity, then every five minutes, downscaling to at most 640 by 360.
+Only the backend writes the file: successful refresh atomically replaces it,
+with the capture time set as its modification time before replacement. Readers
+obtain bytes, dimensions and capture time from the same open file handle.
+Ordinary input, native handshake and normal display exit retain the latest file;
+automatic startup only reads it, without another capture or private claim.
+Failed capture/write retains the previous success and its original time.
 
-Keep snapshot pixels in RAM only; do not accumulate screenshot files. A live
-source needs explicit selection and testing to avoid capturing the dashboard
-itself or creating recursive previews. Do not promise whole-desktop live capture
-works. The backend implements the RAM-only handoff; actual capture is verified
-separately with the Windows host.
+Actual saver/ambient surfaces and the nominal idle-transition band pause capture.
+A visible browser display establishes a capture pause before painting; hiding or
+closing it releases that pause. Missing release fails closed; Home's explicit
+resume action requires closing previews first. Unknown/locked/session/configuration/
+disabled contexts or loss of the safe producer delete the cache. Cold backend
+startup removes a prior unvalidated file and orphan replacement temp, then the
+next eligible observation captures immediately. Keep the file outside Git, app,
+data and backups; never truncate it in place or create capture history or `.bak`
+copies. Agent/computer-use screenshots remain RAM-only; this exception is solely
+the app's one runtime cache. Selected photos and exports are unchanged.
+
+Label Last screen with its capture time so it cannot be mistaken for a live view.
+Early sign-in lifecycle is #540; #544 replaces the earlier RAM-only handoff.
+Live selected-app preview remains future work. Source/CI checks do not establish
+installed capture or native acceptance; #519 remains unresolved.
 
 ## Movement and OLED considerations
 
@@ -144,7 +151,8 @@ the TV off instead of meeting the ambient-display requirement.
 - Demonstrate reminder add/edit/complete and persistence through restart, with an
   export or recovery path.
 - For the chosen preview mode, verify source selection, freshness labeling,
-  toggle/hide behavior, no recursive capture, and no screenshot files left behind.
+  toggle/hide behavior, no recursive capture, and only the one owned runtime cache
+  with no capture history or diagnostic screenshot files.
 - Verify the chosen start/exit behavior without interrupting movies or games.
 
 These are the integrated acceptance targets. [STATUS.md](../STATUS.md) records

@@ -123,7 +123,6 @@ internal sealed class NativeApi : IPreviewSession
 {
     private string token;
     private readonly bool preparedOnly;
-    private readonly string preparationPipe;
     public bool PreviewEnabled { get; private set; }
     internal NativeApi(CancellationToken cancellation, bool preparedOnly = false)
     {
@@ -132,7 +131,6 @@ internal sealed class NativeApi : IPreviewSession
             string json = Request("GET", "/api/host/session", null, cancellation, 5000);
             var data = new JavaScriptSerializer().DeserializeObject(json) as System.Collections.Generic.Dictionary<string, object>;
             token = (string)data["token"];
-            preparationPipe = data.ContainsKey("preparationPipe") ? data["preparationPipe"] as string : null;
             var settings = data["settings"] as System.Collections.Generic.Dictionary<string, object>;
             var preview = settings["preview"] as System.Collections.Generic.Dictionary<string, object>;
             var widgets = settings["widgets"] as System.Collections.Generic.Dictionary<string, object>;
@@ -151,9 +149,7 @@ internal sealed class NativeApi : IPreviewSession
     }
     public void UploadDesktop(CancellationToken cancellation)
     {
-        NativePreviewSelection.Run(preparedOnly,
-            delegate { return PreparedSnapshotClient.Claim(preparationPipe,Program.EnteredMonotonicMilliseconds,cancellation); },
-            delegate { UploadCurrentDesktop(cancellation); },Clear);
+        NativePreviewSelection.Run(preparedOnly,delegate { UploadCurrentDesktop(cancellation); },cancellation);
     }
     private void UploadCurrentDesktop(CancellationToken cancellation)
     {

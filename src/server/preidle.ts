@@ -28,9 +28,10 @@ export interface PreparationClaim {
   completedMonotonicMs: number;
 }
 export interface PreparationChild { stop(): void }
-export interface PreparationBootstrap { token: string; pipeName: string; parentProcessId: number; port: number; source: string }
+export interface PreparationBootstrap { token: string; pipeName: string; parentProcessId: number; port: number; source: string; sharedSnapshot: true }
 export interface PreparationOptions {
   source: string;
+  snapshotDirectory?: string;
   /** Tests supply an inert factory. Ordinary createApplication calls never spawn a worker. */
   start(bootstrap: PreparationBootstrap, exited: () => void): PreparationChild;
 }
@@ -60,8 +61,10 @@ export class PreparedSnapshot {
   readonly #now: () => number;
   readonly #monotonic: () => number;
   readonly #observationLost: () => void;
-  constructor(now: () => number = Date.now, monotonic: () => number = () => performance.now(), observationLost = () => {}) {
+  readonly #cleared: () => void;
+  constructor(now: () => number = Date.now, monotonic: () => number = () => performance.now(), observationLost = () => {}, cleared = () => {}) {
     this.#now = now; this.#monotonic = monotonic; this.#observationLost = observationLost;
+    this.#cleared = cleared;
   }
   get generation() { return this.#generation; }
   metadata(): PreparationStamp | null {
@@ -90,6 +93,7 @@ export class PreparedSnapshot {
     this.#observation = null;
     this.#frozen = false;
     this.#pending?.content.fill(0); this.#pending = null;
+    this.#cleared();
   }
   /** Only the child-secret endpoint can renew safe-context observation, never UI polls. */
   observe(sessionId: number) {
@@ -108,12 +112,16 @@ export class PreparedSnapshot {
     return elapsed >= 0 && elapsed <= PREPARATION_OBSERVATION_LEASE_MS &&
       Math.abs(this.#now() - observed.wall - elapsed) <= 2_000;
   }
-  receive(image: PreparedImage, stamp: PreparationStamp, enabled: boolean): boolean {
+  accepts(stamp: PreparationStamp, enabled: boolean): boolean {
     const receivedAt = this.#now(), captured = Date.parse(stamp.capturedAt), completed = Date.parse(stamp.completedAt);
-    if (!enabled || this.#frozen || !this.#observed(stamp.sessionId) || stamp.generation !== this.#generation || stamp.configuration !== this.#configuration ||
+    return !(!enabled || this.#frozen || !this.#observed(stamp.sessionId) || stamp.generation !== this.#generation || stamp.configuration !== this.#configuration ||
         !Number.isFinite(captured) || !Number.isFinite(completed) || completed < captured || completed > receivedAt ||
         receivedAt - captured > PREPARATION_UPLOAD_MAX_AGE_MS || stamp.desktopId !== 'Default' ||
-        (this.#pending !== null && stamp.completedMonotonicMs <= this.#pending.completedMonotonicMs)) { image.content.fill(0); return false; }
+        (this.#pending !== null && stamp.completedMonotonicMs <= this.#pending.completedMonotonicMs));
+  }
+  receive(image: PreparedImage, stamp: PreparationStamp, enabled: boolean): boolean {
+    const receivedAt = this.#now();
+    if (!this.accepts(stamp, enabled)) { image.content.fill(0); return false; }
     // Publication is atomic: failed or older uploads leave the latest success intact.
     this.#pending?.content.fill(0);
     this.#pending = { ...image, ...stamp, receivedAt, receivedMonotonic: this.#monotonic() };
@@ -154,9 +162,9 @@ export class PreparationController {
   readonly #clearActive: () => void;
   constructor(options: PreparationOptions | undefined,
     view: () => PreparationView,
-    clearActive: () => void, now: () => number = Date.now, monotonic?: () => number) {
+    clearActive: () => void, now: () => number = Date.now, monotonic?: () => number, cleared = () => {}) {
     this.#options = options; this.#view = view; this.#clearActive = clearActive;
-    this.snapshot = new PreparedSnapshot(now, monotonic, clearActive);
+    this.snapshot = new PreparedSnapshot(now, monotonic, clearActive, cleared);
   }
   get pipeName() { return this.#child && this.#token ? this.#pipeName : null; }
   config(): PreparationConfig {
@@ -183,7 +191,7 @@ export class PreparationController {
     const token = randomBytes(32).toString('hex'); this.#token = token;
     this.#pipeName = `LivingRoomDisplay.Preview.${randomBytes(16).toString('hex')}`;
     try {
-      const child = this.#options.start({ token, pipeName: this.#pipeName, parentProcessId: process.pid, port: this.#port, source: this.#options.source }, () => {
+      const child = this.#options.start({ token, pipeName: this.#pipeName, parentProcessId: process.pid, port: this.#port, source: this.#options.source, sharedSnapshot: true }, () => {
         if (this.#token !== token) return;
         this.#token = null; this.#pipeName = null; this.#child = null; this.invalidate(true);
       });
@@ -223,7 +231,7 @@ export function installedPreparationOptions(input: {
     const marker = JSON.parse(readFileSync(join(root, 'installation.json'), 'utf8')) as Record<string, unknown>;
     if (marker.product !== 'living-room-display' || marker.state !== 'installed' ||
         typeof marker.sourceRevision !== 'string' || !/^[0-9a-f]{40}$/.test(marker.sourceRevision) || marker.sourceState !== 'clean') return undefined;
-    return { source: marker.sourceRevision, start(bootstrap, exited) {
+    return { source: marker.sourceRevision, snapshotDirectory: join(root, 'run', 'cache'), start(bootstrap, exited) {
       const child = spawn(helper, [], { cwd: app, shell: false, windowsHide: true, stdio: ['pipe', 'ignore', 'ignore'] });
       let stopped = false;
       child.once('error', exited); child.once('exit', exited);
@@ -237,4 +245,11 @@ export function installedPreparationOptions(input: {
       } };
     } };
   } catch { return undefined; }
+}
+
+/** File-only installed layout validation also selects the cache when the producer is opted out. */
+export function installedSnapshotDirectory(input: {
+  platform: string; executable: string; entry: string; dataDirectory: string;
+}): string | undefined {
+  return installedPreparationOptions({ ...input, enabledFlag: '1' })?.snapshotDirectory;
 }

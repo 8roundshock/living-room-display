@@ -42,22 +42,14 @@ internal sealed class NativePreviewPreparer : IDisposable
     private readonly object publication = new object();
     private readonly JavaScriptSerializer json = new JavaScriptSerializer();
     private readonly Process parent;
-    private readonly string hostPath, token, pipeName, baseUrl;
+    private readonly string hostPath, token, baseUrl;
     private readonly PreviewPreparationPolicy policy = new PreviewPreparationPolicy();
+    private readonly PreparationDiagnostics diagnostics = new PreparationDiagnostics();
     private readonly PreparationLifetime lifetime;
     private readonly Timer parentTimer;
-    private readonly Thread inputThread, pipeThread;
-    private NamedPipeServerStream pipe;
+    private readonly Thread inputThread;
     private bool disposed;
 
-    private sealed class PreparedFrame
-    {
-        internal long Generation, CompletedMonotonic;
-        internal string Configuration;
-        internal uint InputTick;
-        internal int SessionId, TimeoutSeconds;
-        internal DateTime CompletedUtc;
-    }
     internal NativePreviewPreparer()
     {
         // Bootstrap is bounded, and a parent which never sends it cannot leave an orphan reader.
@@ -66,9 +58,10 @@ internal sealed class NativePreviewPreparer : IDisposable
             bootstrap = PreparedSnapshotClient.ReadLine(Console.OpenStandardInput(), 2048);
         var data = json.DeserializeObject(bootstrap) as Dictionary<string,object>;
         if (data == null) throw new InvalidDataException();
-        token = (string)data["token"]; pipeName = (string)data["pipeName"];
+        SharedSnapshotMode.Validate(data.ContainsKey("sharedSnapshot") ? data["sharedSnapshot"] : null);
+        token = (string)data["token"];
         if (!System.Text.RegularExpressions.Regex.IsMatch(token, "^[a-f0-9]{64}$") ||
-            !System.Text.RegularExpressions.Regex.IsMatch(pipeName, "^LivingRoomDisplay\\.Preview\\.[a-f0-9]{32}$") || Convert.ToInt32(data["port"]) != 4318)
+            Convert.ToInt32(data["port"]) != 4318)
             throw new InvalidDataException();
         baseUrl = "http://127.0.0.1:4318";
         string windows = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory);
@@ -93,7 +86,8 @@ internal sealed class NativePreviewPreparer : IDisposable
             lifetime.InputClosed();
         });
         inputThread.IsBackground=true; inputThread.Start();
-        pipeThread = new Thread(ServeClaims); pipeThread.IsBackground=true; pipeThread.Start();
+        // Shared-file publication needs no claim pipe. Automatic and browser
+        // renderers both use the backend's existing snapshot reader.
     }
 
     internal void Run()
@@ -128,31 +122,36 @@ internal sealed class NativePreviewPreparer : IDisposable
     }
     private PreparationConfiguration ReadConfiguration(NativePreviewContext context)
     {
-        PreparedFrame ignored;
-        return ReadConfiguration(context,false,out ignored);
-    }
-    private PreparationConfiguration ReadConfiguration(NativePreviewContext context,bool freeze,out PreparedFrame prepared)
-    {
         lock(publication)
         {
         var headers=new Dictionary<string,string> { {"X-Preparation-Safe",context.Readable && context.Safe ? "1" : "0"},
             {"X-Session-Id",context.SessionId.ToString(CultureInfo.InvariantCulture)},
             {"X-Preparation-Capture-Eligible",NativePreviewContext.CaptureCompatible(context,context) ? "1" : "0"} };
-        if(freeze)headers["X-Preparation-Freeze"]="1";
+        var observed=diagnostics.Snapshot();
+        if(observed.Sequence>0)
+        {
+            headers["X-Preparation-Event"]=observed.Event;
+            headers["X-Preparation-Event-Sequence"]=observed.Sequence.ToString(CultureInfo.InvariantCulture);
+            headers["X-Preparation-Capture-Attempts"]=observed.CaptureAttempts.ToString(CultureInfo.InvariantCulture);
+            headers["X-Preparation-Capture-Failures"]=observed.CaptureFailures.ToString(CultureInfo.InvariantCulture);
+        }
         var data=json.DeserializeObject(Request("GET","/api/preview/preparation",null,headers,stop.Token)) as Dictionary<string,object>;
         if (data==null || Convert.ToInt32(data["parentProcessId"])!=parent.Id) throw new InvalidDataException();
-        var metadata=data.ContainsKey("frame") ? data["frame"] as Dictionary<string,object> : null;
-        prepared=metadata==null ? null : new PreparedFrame { Generation=Convert.ToInt64(metadata["generation"]),
-            Configuration=(string)metadata["configuration"], InputTick=Convert.ToUInt32(metadata["inputTick"]),
-            SessionId=Convert.ToInt32(metadata["sessionId"]), TimeoutSeconds=Convert.ToInt32(metadata["timeoutSeconds"]),
-            CompletedMonotonic=Convert.ToInt64(metadata["completedMonotonicMs"]),
-            CompletedUtc=DateTime.Parse((string)metadata["completedAt"],CultureInfo.InvariantCulture,DateTimeStyles.RoundtripKind) };
         return new PreparationConfiguration { Generation=Convert.ToInt64(data["generation"]), Revision=(string)data["configuration"],
-            Enabled=(bool)data["enabled"], TimeoutSeconds=Convert.ToInt32(data["timeoutSeconds"]), LeadSeconds=Convert.ToInt32(data["prepareLeadSeconds"]) };
+            Enabled=(bool)data["enabled"], CapturePaused=(bool)data["capturePaused"], CaptureRevision=PreparationConfiguration.ReadCaptureRevision(data["captureRevision"]),
+            TimeoutSeconds=Convert.ToInt32(data["timeoutSeconds"]), LeadSeconds=Convert.ToInt32(data["prepareLeadSeconds"]) };
         }
     }
     private void Capture(PreparationConfiguration config, NativePreviewContext initial)
     {
+        if(!config.Enabled || config.CapturePaused)return;
+        diagnostics.CaptureStarted();
+        PreparationConfiguration confirmation;
+        try { confirmation=ReadConfiguration(initial); }
+        catch { diagnostics.CaptureFailed(); throw; }
+        // Establish the attempted stage before GDI and reject a pause or upload
+        // fence transition. The backend separately fences publication races.
+        if(!config.ConfirmsCapture(confirmation)) { diagnostics.CaptureSkipped(); return; }
         byte[] png=null;
         int contextLost=0;
         using (var cancellation=CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
@@ -177,27 +176,38 @@ internal sealed class NativePreviewPreparer : IDisposable
                 long completedMonotonic=checked((long)PreparedSnapshotClient.GetTickCount64());
                 DateTime completedUtc=DateTime.UtcNow;
                 var after=NativePreviewContext.Read(hostPath);
-                if (!NativePreviewContext.CaptureCompatible(initial,after)) { if(!NativePreviewContext.PrivacyCompatible(initial,after)) Invalidate(true); return; }
+                if (!NativePreviewContext.CaptureCompatible(initial,after)) { diagnostics.CaptureSkipped(); if(!NativePreviewContext.PrivacyCompatible(initial,after)) Invalidate(true); return; }
                 cancellation.Token.ThrowIfCancellationRequested();
                 var headers=new Dictionary<string,string> {
                     {"X-Preparation-Generation",config.Generation.ToString(CultureInfo.InvariantCulture)},
+                    {"X-Preparation-Capture-Revision",config.CaptureRevision.ToString(CultureInfo.InvariantCulture)},
                     {"X-Preparation-Configuration",config.Revision}, {"X-Input-Tick",initial.InputTick.ToString(CultureInfo.InvariantCulture)},
                     {"X-Session-Id",initial.SessionId.ToString(CultureInfo.InvariantCulture)}, {"X-Desktop-Id","Default"},
                     {"X-Captured-At",capturedUtc.ToString("o")}, {"X-Completed-At",completedUtc.ToString("o")},
                     {"X-Completed-Monotonic-Ms",completedMonotonic.ToString(CultureInfo.InvariantCulture)},
                     {"X-Idle-Timeout-Seconds",initial.TimeoutSeconds.ToString(CultureInfo.InvariantCulture)}
                 };
-                // The backend is the only authoritative frame and metadata store.
-                // Even a committed POST with a lost response is reconciled at claim.
+                // Only the backend writes the canonical file. A lost upload
+                // acknowledgment never makes the native host publish a replacement.
                 lock(publication)
                 {
                     Request("POST","/api/preview/preparation",png,headers,cancellation.Token);
+                    diagnostics.CaptureUploaded();
                 }
                 if(Interlocked.CompareExchange(ref contextLost,0,0)!=0 || stop.IsCancellationRequested) Invalidate(true);
             }
             // A failed eligible refresh leaves the last success intact. Context
             // loss still invalidates immediately, including an in-flight upload.
-            catch { if(Interlocked.CompareExchange(ref contextLost,0,0)!=0 || stop.IsCancellationRequested) Invalidate(true); }
+            catch(Exception failure)
+            {
+                var web=failure as WebException;
+                var response=web==null ? null : web.Response as HttpWebResponse;
+                bool contextChanged=Interlocked.CompareExchange(ref contextLost,0,0)!=0;
+                bool skipped=(response!=null && response.StatusCode==HttpStatusCode.Conflict) ||
+                    (failure is OperationCanceledException && (contextChanged || stop.IsCancellationRequested));
+                if(skipped)diagnostics.CaptureSkipped(); else diagnostics.CaptureFailed();
+                if(contextChanged || stop.IsCancellationRequested)Invalidate(true);
+            }
             finally { if(png!=null) Array.Clear(png,0,png.Length); }
         }
     }
@@ -224,66 +234,7 @@ internal sealed class NativePreviewPreparer : IDisposable
             using(var reader=new StreamReader(response.GetResponseStream())) { string result=reader.ReadToEnd(); if(result.Length>4096) throw new InvalidDataException(); return result; }
         }
     }
-    private void ServeClaims()
-    {
-        try
-        {
-            while(!stop.IsCancellationRequested)
-            {
-                using(var server=NativePreviewPipe.Create(pipeName))
-                {
-                    lock(gate) { if(disposed)return; pipe=server; }
-                    server.WaitForConnection();
-                    using(var deadline=new Timer(delegate { try { server.Dispose(); } catch { } },null,2000,Timeout.Infinite))
-                    {
-                        bool claimed=false;
-                        try { claimed=Claim(server); } catch { }
-                        byte[] response=Encoding.UTF8.GetBytes(claimed ? "{\"claimed\":true}\n" : "{\"claimed\":false}\n");
-                        try { server.Write(response,0,response.Length); server.Flush(); } catch { }
-                    }
-                    lock(gate) pipe=null;
-                }
-            }
-        }
-        catch { Cancel(); } // Preexisting instance/ACL/identity failures never start a different pipe.
-    }
-    private bool Claim(NamedPipeServerStream server)
-    {
-        uint processId;
-        if(!NativePreviewPipe.GetNamedPipeClientProcessId(server.SafePipeHandle,out processId) || processId==0) return false;
-        var data=json.DeserializeObject(PreparedSnapshotClient.ReadLine(server,256)) as Dictionary<string,object>;
-        if(data==null || data.Count!=1) return false;
-        long entered=Convert.ToInt64(data["enteredMonotonicMs"]);
-        var context=NativePreviewContext.Read(hostPath);
-        if(!context.Readable || !context.Safe)return false;
-        using(var claimant=PreparedClaimAdmission.Pin(processId,context.SessionId,delegate(uint pid) { return new NativePreparedClaimProcess(pid,hostPath); }))
-        {
-            if(claimant==null)return false;
-            DateTime created=claimant.CreatedUtc;
-            lock(publication)
-            {
-            PreparedFrame prepared;
-            var latest=ReadConfiguration(context,true,out prepared);
-            return PreparedClaimFlow.Run(delegate { return !(prepared==null || !context.Readable || !context.Safe ||
-                !latest.Enabled || prepared.Generation!=latest.Generation || prepared.Configuration!=latest.Revision ||
-                context.SessionId!=prepared.SessionId || context.TimeoutSeconds!=prepared.TimeoutSeconds || claimant.SessionId!=prepared.SessionId ||
-                !PreparedSnapshotOrder.Eligible(prepared.CompletedMonotonic,entered,prepared.CompletedUtc,created,
-                    checked((long)PreparedSnapshotClient.GetTickCount64())-prepared.CompletedMonotonic,DateTime.UtcNow)); },delegate {
-            // Pin and recheck immediately before the secret-authenticated atomic promotion.
-            return claimant.Running && claimant.CreatedUtc==created &&
-                NativePreviewContext.Same(context,NativePreviewContext.Read(hostPath)); },delegate {
-            byte[] body=Encoding.UTF8.GetBytes(json.Serialize(new {
-                generation=prepared.Generation, configuration=prepared.Configuration, processId=processId,
-                processStartedAt=created.ToString("o"), startedMonotonicMs=entered, inputTick=prepared.InputTick,
-                sessionId=prepared.SessionId, desktopId="Default", completedMonotonicMs=prepared.CompletedMonotonic
-            }));
-            var response=json.DeserializeObject(Request("POST","/api/preview/preparation/claim",body,null,stop.Token)) as Dictionary<string,object>;
-            return response!=null && response.ContainsKey("claimed") && response["claimed"] is bool && (bool)response["claimed"];
-            },stop.Token);
-            }
-        }
-    }
-    private void Cancel() { try { stop.Cancel(); } catch { } lock(gate) { if(pipe!=null)try { pipe.Dispose(); } catch { } } }
+    private void Cancel() { try { stop.Cancel(); } catch { } }
     public void Dispose()
     {
         lock(gate) { if(disposed)return; disposed=true; }

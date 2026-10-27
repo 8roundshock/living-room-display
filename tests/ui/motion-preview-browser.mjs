@@ -13,6 +13,7 @@ import { defaultSettings } from '../../src/shared/defaults.ts';
 import { WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { floatPath, FLOAT_TRAVEL } from '../../src/shared/float.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
+import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
 
 // #530: enabling Preview starts this real-time entrance independently of the local movement
 // clock. Compare sought frames after it ends, rather than caching ink from two reveal phases.
@@ -47,6 +48,19 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], images = [], errors = [], writes = [], contexts = [], crossings = [];
   const saved = JSON.stringify(app.store.snapshot().settings);
+  const savedRevision = app.store.view().settingsRevision;
+  async function assertNoPersistedWrites() {
+    assert.equal(JSON.stringify(app.store.snapshot().settings), saved);
+    assert.equal(app.store.view().settingsRevision, savedRevision, 'presence and preview cannot advance the persisted settings revision');
+    for (const write of writes) {
+      assert.deepEqual([write.method(), new URL(write.url()).pathname], ['POST', '/api/preview/display'], 'every other mutation remains forbidden');
+      const body = write.postDataJSON();
+      assert.ok(['start', 'heartbeat', 'release'].includes(body?.action), 'only normal display lifecycle actions are expected');
+      assert.deepEqual(Object.keys(body).sort(), body.action === 'start' ? ['action'] : ['action', 'id']);
+      if (body.action !== 'start') assert.match(body.id, /^[a-f0-9]{32}$/);
+      const response = await write.response(); assert.equal(response?.status(), body.action === 'start' ? 201 : 204);
+    }
+  }
   const readFrame = page => page.locator('.grid-ambient').evaluate(ambient => ({
     time: ambient.getAttribute('data-preview-seconds'), cycle: ambient.getAttribute('data-composition'),
     plane: ambient.querySelector('.widget-grid-plane').style.transform,
@@ -55,9 +69,10 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
   async function open(path = '/editor', viewport = { width: 1280, height: 720 }, reducedMotion = 'no-preference', preview = path === '/editor') {
     const context = await browser.newContext({ viewport, reducedMotion, timezoneId: 'America/Toronto' }); contexts.push(context);
     await keepPagesLocal(context, base);
+    await mockScreenWakeLock(context);
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
-    page.on('request', request => { if (new URL(request.url()).origin === base && !['GET', 'HEAD'].includes(request.method())) writes.push(`${request.method()} ${new URL(request.url()).pathname}`); });
+    page.on('request', request => { if (new URL(request.url()).origin === base && !['GET', 'HEAD'].includes(request.method())) writes.push(request); });
     await page.clock.install({ time: new Date(now) }); await page.clock.pauseAt(new Date(now));
     await page.goto(base + path); await page.locator('.grid-ambient').waitFor();
     await page.evaluate(() => document.fonts.ready);
@@ -197,9 +212,9 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     await page.getByRole('checkbox', { name: 'Swap places', exact: true }).uncheck(); await seek(page, 120);
     assert.equal((await readFrame(page)).cycle, '0');
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-    assert.equal(JSON.stringify(app.store.snapshot().settings), saved); assert.deepEqual(writes, []);
+    await assertNoPersistedWrites();
     assert.deepEqual(await readFrame(live), liveBefore, 'editor clock cannot mutate an already-open display');
-    checks.push('Mode changes reset only the local clock; dim midpoint and swaps-off behavior are correct, draft Cancel restores settings, and no API writes or live-display changes occur');
+    checks.push('Mode changes reset only the local clock; dim midpoint and swaps-off behavior are correct, Cancel restores settings, and only valid ephemeral display-presence requests occur without persisted writes or live-display changes');
 
     await seek(page, 31.5);
     if (capture) images.push({ name: 'motion-preview-desktop', bytes: await page.screenshot() });
@@ -220,7 +235,7 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     await seek(reduced, 30.6); assert.equal((await readFrame(reduced)).cycle, '1');
     assert.equal(await reduced.locator('.grid-ambient').getAttribute('data-float'), 'step');
     checks.push('320/390px mobile controls fit with touch targets and preserve return/reopen behavior; reduced motion keeps stepped positions and dim swaps');
-    assert.deepEqual(errors, []); assert.deepEqual(writes, []); assert.equal(JSON.stringify(app.store.snapshot().settings), saved);
+    assert.deepEqual(errors, []); await assertNoPersistedWrites();
     return { checks, images, crossings };
   } finally {
     await browser.close(); await new Promise(resolve => app.server.close(resolve)); await rm(directory, { recursive: true, force: true });

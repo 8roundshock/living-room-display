@@ -42,7 +42,13 @@ code and tests for actual symbols and commands; the documentation is not a schem
   disappear according to its option; a failed request must not imply no content.
   Ambient widgets are silent and passive; configuration/actions belong in the editor.
 - For image widgets, read the contract's photo boundary. User-selected photo
-  storage and the RAM-only last-desktop capture are different features.
+  storage and the last-desktop runtime cache are different features. Owner
+  decision 2026-10-27 (#544) permits only this app's one canonical
+  `InstallRoot/run/cache/last-screen.png`, atomically replaced every five minutes
+  when eligible and read by both browser/native displays. Keep it outside Git,
+  app/data, backups, exports and diagnostics; create no history or `.bak`.
+  Privacy/disable/configuration or safe-producer lease loss deletes it; normal
+  display exit/input retains it. Agent/computer-use screenshots remain RAM-only.
 
 ## Rules for new widgets
 
