@@ -102,7 +102,7 @@ export async function createApplication(options: ApplicationOptions) {
   // Source/tests get a new ephemeral directory, never an installed-path fallback.
   const cacheDirectory = privateCache ?? await mkdtemp(join(tmpdir(), 'still-snapshot-source-'));
   const snapshotFile = await SnapshotFile.open(cacheDirectory, () => { previewChanges++; });
-  const displayPresence = new DisplayPresence(now);
+  const displayPresence = new DisplayPresence(options.preparationMonotonic);
   let captureEvent = { phase: 'not-observed', sequence: 0, attempts: 0, failures: 0 };
   const weather = new WeatherService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   const air = new AirQualityService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);

@@ -6,3 +6,14 @@ export async function mockWindowsStatus(context) {
     power: { available: false, scheme: null, displayOffSeconds: null, sleepSeconds: null },
   } }));
 }
+
+/** Presentation suites never acquire a real screen wake lock. */
+export async function mockScreenWakeLock(context) {
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => {
+      const sentinel = new EventTarget(); sentinel.released = false;
+      sentinel.release = async () => { if (sentinel.released) return; sentinel.released = true; sentinel.dispatchEvent(new Event('release')); };
+      return sentinel;
+    } } });
+  });
+}

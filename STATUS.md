@@ -27,6 +27,15 @@ opaque-image and missing-image boards were inspected in RAM. Independent final-h
 review and applicable CI remain required. No installed capture/native acceptance
 is established; #519 remains unresolved.
 
+The first integrated browser CI exposed four contract/clock regressions. Widget
+and grid checks now assert the intentional missing-image placeholder; movement
+preview still forbids every persistent write while validating only expected
+ephemeral display-presence actions. Presence uses elapsed monotonic time rather
+than the business wall clock. An API regression proves a 61-second wall jump
+keeps a healthy view, while more than 20 seconds of elapsed lease time still
+fails closed. The ten focused presence/shared-file checks and both typechecks
+pass; the affected browser suites and fresh final-head CI must pass before merge.
+
 ## Periodic Last screen cache (#538, #540)
 
 This records the earlier RAM implementation. Its storage and native-claim

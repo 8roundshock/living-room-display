@@ -15,9 +15,10 @@ import { mockWindowsStatus } from './lib/windows-fixture.mjs';
 export async function runSharedSnapshotQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const root = await mkdtemp(join(tmpdir(), 'still-shared-browser-'));
-  const clock = { now: Date.now() };
+  const clock = { now: Date.now(), mono: 0 };
   const app = await createApplication({ dataDirectory: join(root, 'data'), snapshotDirectory: join(root, 'cache'),
-    clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), now: () => clock.now, fetcher: async () => Response.json(forecastFixture()) });
+    clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), now: () => clock.now,
+    preparationMonotonic: () => clock.mono, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const native = (path, method, headers = {}, body) => new Promise((done, reject) => {
@@ -57,7 +58,7 @@ export async function runSharedSnapshotQa({ playwright, edge, capture = false } 
     assert.equal((await (await fetch(base + '/api/preview')).json()).pipeline.display.paused, false);
     // A synthetic lost close acknowledgement leaves a pause; recovery is a real explicit Home action.
     assert.equal(await page.evaluate(async () => (await fetch('/api/preview/display', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-LRD-Display': '1' }, body: JSON.stringify({ action: 'start' }) })).status), 201);
-    clock.now += 21_000;
+    clock.mono += 21_000;
     await page.reload(); await page.locator('summary').filter({ hasText: /^Last screen$/ }).waitFor();
     await page.locator('summary').filter({ hasText: /^Last screen$/ }).click();
     page.once('dialog', dialog => dialog.accept());

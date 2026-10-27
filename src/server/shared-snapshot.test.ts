@@ -11,13 +11,13 @@ import type { PreparationBootstrap, PreparationConfig } from './preidle.ts';
 
 // Synthetic source backend only. Every data/cache path belongs to this fixture,
 // and the explicit factory never starts a native process or captures a desktop.
-async function fixture(development = false) {
+async function fixture(development = false, injectMonotonic = true) {
   const root = await mkdtemp(join(tmpdir(), 'lrd-shared-snapshot-synthetic-'));
   const dataDirectory = join(root, 'data'), snapshotDirectory = join(root, 'cache');
   const clock = { wall: Date.parse('2026-10-27T16:00:00Z'), mono: 10_000 };
   let bootstrap!: PreparationBootstrap;
   const app = await createApplication({ dataDirectory, snapshotDirectory, development,
-    now: () => clock.wall, preparationMonotonic: () => clock.mono,
+    now: () => clock.wall, ...(injectMonotonic ? { preparationMonotonic: () => clock.mono } : {}),
     fetcher: async () => Response.json(forecastFixture()),
     preparation: { source: 'a'.repeat(40), start(value) { bootstrap = value; return { stop() {} }; } } });
   await app.store.update(data => {
@@ -102,6 +102,26 @@ test('display presence accepts only the existing explicit Vite origins in develo
       assert.equal((await app.display({ action: 'start' }, { ...app.displayHeaders(), Origin: 'http://localhost:5174' })).status, 403);
     } finally { await app.close(); }
   }
+});
+
+test('display presence ignores business wall-clock jumps but actual elapsed expiry remains fail-closed', async () => {
+  const wallOnly = await fixture();
+  try {
+    const opened = await wallOnly.display({ action: 'start' });
+    const id = JSON.parse(opened.body.toString()).id;
+    wallOnly.clock.wall += 61_000;
+    assert.equal((await wallOnly.display({ action: 'heartbeat', id })).status, 204, 'a timer/business clock jump is not elapsed presence time');
+  } finally { await wallOnly.close(); }
+  const elapsed = await fixture();
+  try {
+    const opened = await elapsed.display({ action: 'start' });
+    const id = JSON.parse(opened.body.toString()).id;
+    elapsed.clock.mono += 20_001;
+    assert.equal((await elapsed.display({ action: 'heartbeat', id })).status, 409);
+    const status = JSON.parse((await elapsed.request('/api/preview')).body.toString()).pipeline.display;
+    assert.deepEqual(status, { paused: true, needsResume: true });
+    assert.equal((await elapsed.display({ action: 'resume', confirmedAllClosed: true })).status, 204);
+  } finally { await elapsed.close(); }
 });
 
 test('producer publication is immediately shared by state/browser/native image readers without a claim', async () => {

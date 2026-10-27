@@ -6,7 +6,7 @@ export class DisplayPresence {
   readonly #views = new Map<string, number>();
   readonly #now: () => number;
   #revision = 0;
-  constructor(now: () => number = Date.now) { this.#now = now; }
+  constructor(now: () => number = () => performance.now()) { this.#now = now; }
   get paused() { return this.#views.size > 0; }
   get revision() { return this.#revision; }
   status() { return { paused: this.paused, needsResume: [...this.#views.values()].some(expires => this.#now() >= expires) }; }
