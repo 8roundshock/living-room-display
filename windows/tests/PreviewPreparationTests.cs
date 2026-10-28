@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 internal static class PreviewPreparationTests
 {
@@ -9,8 +10,80 @@ internal static class PreviewPreparationTests
         return new PreparationReading { Readable=true, Enabled=true, Safe=true, CaptureAllowed=true, InputTick=input,
             MonotonicMilliseconds=at, SessionId=3, IdleMilliseconds=idle, TimeoutSeconds=600, LeadSeconds=30, Configuration="a" };
     }
+    private static void IdentityObservations()
+    {
+        int calls=0,observerThread=0;
+        int callerThread=Thread.CurrentThread.ManagedThreadId;
+        Check(PreparationIdentityObservation.Confirm(delegate {
+            Interlocked.Increment(ref calls); observerThread=Thread.CurrentThread.ManagedThreadId; return true;
+        },CancellationToken.None),"one confirmed identity permits startup");
+        Check(calls==1 && observerThread!=callerThread,"identity uses one independent read-only observer");
+        Check(!PreparationIdentityObservation.Confirm(delegate { return false; },CancellationToken.None),
+            "unconfirmed identity cannot permit startup");
+        Check(!PreparationIdentityObservation.Confirm(delegate { throw new InvalidOperationException("synthetic unreadable identity"); },CancellationToken.None),
+            "unreadable identity fails closed");
+        using(var cancellation=new CancellationTokenSource())
+        {
+            cancellation.Cancel(); calls=0;
+            Check(!PreparationIdentityObservation.Confirm(delegate { Interlocked.Increment(ref calls); return true; },cancellation.Token) && calls==0,
+                "already-cancelled startup does not start an identity read");
+        }
+        using(var cancellation=new CancellationTokenSource())
+        {
+            Check(!PreparationIdentityObservation.Confirm(delegate { cancellation.Cancel(); return true; },cancellation.Token),
+                "cancellation beats a just-returned true identity");
+        }
+        foreach(bool cancel in new[] { false,true })
+        {
+            using(var entered=new ManualResetEvent(false))
+            using(var release=new ManualResetEvent(false))
+            using(var returned=new ManualResetEvent(false))
+            using(var cancellation=new CancellationTokenSource())
+            {
+                int observations=0,continuations=0;
+                bool accepted=false;
+                Exception failure=null;
+                var caller=new Thread(delegate() {
+                    try
+                    {
+                        accepted=PreparationIdentityObservation.Confirm(delegate {
+                            Interlocked.Increment(ref observations); entered.Set();
+                            try
+                            {
+                                if(!release.WaitOne(5000))throw new TimeoutException("synthetic reader was not released");
+                                return true;
+                            }
+                            finally { returned.Set(); }
+                        },cancellation.Token,cancel ? 3000 : 500);
+                        if(accepted)Interlocked.Increment(ref continuations);
+                    }
+                    catch(Exception error) { failure=error; }
+                });
+                caller.IsBackground=true; caller.Start();
+                try
+                {
+                    Check(entered.WaitOne(3000),"blocked identity fixture entered");
+                    if(cancel)cancellation.Cancel();
+                    Check(caller.Join(3000),"blocked identity cannot retain its caller after timeout/cancellation");
+                    Check(failure==null && !accepted && continuations==0,
+                        "unknown identity cannot continue to capture or preparation heartbeat");
+                    Check(observations==1 && !returned.WaitOne(0),
+                        "abandoning one blocked reader starts no retry or replacement observer");
+                }
+                finally
+                {
+                    release.Set();
+                    Check(caller.Join(3000),"identity caller completed before fixture cleanup");
+                    Check(returned.WaitOne(3000),"late identity reader released its fixture");
+                }
+                Check(!accepted && continuations==0 && observations==1,
+                    "late true identity cannot resume an abandoned startup");
+            }
+        }
+    }
     private static void Main()
     {
+        IdentityObservations();
         var policy = new PreviewPreparationPolicy();
         Check(policy.Observe(Reading(99,0)).Capture, "first safe desktop captures without hidden extra input");
         Check(!policy.Observe(Reading(100,299999)).Capture, "normal input does not move or reopen cadence");

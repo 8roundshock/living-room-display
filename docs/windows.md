@@ -200,6 +200,13 @@ revalidated retained server handle, reports incomplete cleanup and retains its
 record; it cannot authorize child kills. This does not bound every synchronous
 OS launch/write/termination call (#547) or establish physical recovery. It does
 not enable the forced-exit timer before the handshake or change #534 ordering.
+The separate producer's constructor uses a one-shot three-second caller bound
+around its read-only parent identity proof (#549). The observer opens its own
+process/query handles from immutable expected facts; the original parent pin is
+checked before and after admission. Unknown/cancelled/timed-out proof cannot enter
+Run or capture, and a late true result is discarded. A throwing constructor closes
+its own timer and retained pin; existing capture policy and backend restart policy
+are unchanged.
 Each completed authorized handshake gets a new native-preview capability, so a
 previous helper's delayed DELETE or in-flight POST cannot clear/replace the new
 session's pixels. The pending pre-idle frame and preparer capability stay separate

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 
 // Pure periodic policy. No Windows calls, pixels, timers or transport live here.
@@ -187,6 +188,47 @@ internal static class NativePreparationIdentity
         string suffix = ambient ? " /s" : " \"" + entry + "\"";
         return String.Equals(command.Trim(), "\"" + executable + "\"" + suffix, StringComparison.OrdinalIgnoreCase) ||
             String.Equals(command.Trim(), executable + suffix, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+// One read-only startup observation. A provider may ignore its own query timeout;
+// abandoning this caller never starts a replacement reader or adopts a late result.
+internal static class PreparationIdentityObservation
+{
+    internal static bool Confirm(Func<bool> observation,CancellationToken cancellation,int milliseconds=3000)
+    {
+        if(observation==null)throw new ArgumentNullException("observation");
+        if(milliseconds<=0)throw new ArgumentOutOfRangeException("milliseconds");
+        if(cancellation.IsCancellationRequested)return false;
+        var age=Stopwatch.StartNew();
+        var gate=new object();
+        bool finished=false,confirmed=false,abandoned=false;
+        var worker=new Thread(delegate() {
+            bool result=false;
+            try { result=observation(); } catch { }
+            lock(gate)
+            {
+                if(abandoned)return;
+                confirmed=result; finished=true; Monitor.PulseAll(gate);
+            }
+        });
+        worker.IsBackground=true;
+        worker.Start();
+        lock(gate)
+        {
+            try
+            {
+                while(!finished)
+                {
+                    long remaining=milliseconds-age.ElapsedMilliseconds;
+                    if(cancellation.IsCancellationRequested || remaining<=0)return false;
+                    Monitor.Wait(gate,(int)Math.Min(remaining,50));
+                }
+                // Cancellation/expiry wins even if the reader just finished.
+                return !cancellation.IsCancellationRequested && age.ElapsedMilliseconds<milliseconds && confirmed;
+            }
+            finally { abandoned=true; }
+        }
     }
 }
 

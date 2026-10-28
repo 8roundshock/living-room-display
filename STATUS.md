@@ -1,5 +1,5 @@
 # Project status
-## Bounded native startup observations (#546)
+## Bounded native startup and preparer identity observations (#546, #549)
 
 The source checkpoint bounds the caller's wait for read-only installation,
 record, identity, listener and health observations with one ten-second monotonic
@@ -10,6 +10,13 @@ covers preparer discovery and all parent/child waits. Inconclusive discovery
 still requests only the revalidated retained server's termination, preserves the
 recovery record, and never authorizes guessed child kills. Primary startup and
 incomplete-cleanup errors are retained together.
+
+The separate screenshot producer also bounds its one initial read-only parent
+identity observation to three seconds. Its observer owns independent process and
+query handles; timeout/cancellation/unknown prevents Run and capture, and a late
+true result cannot restart it. Constructor failure releases the producer's own
+timer and retained parent pin. This adds no retry, respawn policy or weaker
+first-safe capture gate.
 
 Injected managed regressions cover blocked readers, cancellation, late disposable
 results, shared budgets, caller-thread mutations and incomplete cleanup. Hosted
