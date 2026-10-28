@@ -199,6 +199,31 @@ internal static class ServerRuntimeTests {
             Check(env.Launches == 0 && env.Saves == 0 && env.Stops == 0 && env.Deletes == 0 && env.Releases == 1,
                 "unknown identity advanced startup or lost mutex");
         });
+        Scenario("live missing identity fields cannot authorize fallback startup", delegate {
+            foreach (bool command in new[] { false, true }) {
+                var env = new Environment(); env.Existing(); env.Listening = false;
+                if (command) env.Current.CommandLine = null; else env.Current.ExecutablePath = " ";
+                Throws<InvalidOperationException>(delegate { new ServerRuntime(env).Start(CancellationToken.None); }, "unreadable live field became missing server");
+                Check(env.Launches == 0 && env.Saves == 0 && env.Stops == 0 && env.Deletes == 0 && env.Releases == 1, "unknown live fields mutated startup");
+            }
+        });
+        Scenario("required child identity is complete before foreign match decision", delegate {
+            string expected = @"C:\Synthetic install\app\windows\LivingRoomDisplay.Preview.exe";
+            Check(ObservedProcessIdentity.ChildMatches(1, (uint)77, expected.ToUpperInvariant(), 77, expected), "well-formed child identity did not match");
+            Check(!ObservedProcessIdentity.ChildMatches(1, (uint)78, expected, 77, expected), "known foreign parent was adopted");
+            Check(!ObservedProcessIdentity.ChildMatches(1, (uint)77, @"C:\Other\other.exe", 77, expected), "known foreign executable was adopted");
+            foreach (int rows in new[] { 0, 2 })
+                Throws<InvalidOperationException>(delegate { ObservedProcessIdentity.ChildMatches(rows, (uint)77, expected, 77, expected); }, "missing/ambiguous child row became complete discovery");
+            foreach (object value in new object[] { null, 0, -1, "77", true, uint.MaxValue, ulong.MaxValue }) {
+                object candidate = value;
+                Throws<InvalidOperationException>(delegate { ObservedProcessIdentity.ChildMatches(1, candidate, expected, 77, expected); }, "invalid parent field became complete discovery");
+            }
+            foreach (object value in new object[] { null, "", " ", 77 }) {
+                object candidate = value;
+                Throws<InvalidOperationException>(delegate { ObservedProcessIdentity.ChildMatches(1, (uint)77, candidate, 77, expected); }, "invalid executable field became complete discovery");
+                Throws<InvalidOperationException>(delegate { ObservedProcessIdentity.RequiredText(candidate); }, "unreadable module identity accepted");
+            }
+        });
         Scenario("unreadable child discovery retains record after exact parent request", delegate {
             var env = new Environment(); int parentKills = 0, childKills = 0;
             var primary = new IOException("synthetic cold startup failure");

@@ -47,6 +47,27 @@ internal sealed class ServerRuntimeStatus {
     public bool Healthy { get; set; }
 }
 
+// A well-formed foreign identity is different from an unreadable observation.
+// Shared with pure fixtures so missing WMI rows/fields cannot silently complete cleanup.
+internal static class ObservedProcessIdentity {
+    internal static string RequiredText(object value) {
+        var text = value as string;
+        if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException("Process identity was unreadable.");
+        return text;
+    }
+    internal static bool ChildMatches(int rows, object parentValue, object executableValue, int expectedParent, string expectedPath) {
+        if (rows != 1 || parentValue == null || !(parentValue is byte || parentValue is sbyte || parentValue is short || parentValue is ushort ||
+            parentValue is int || parentValue is uint || parentValue is long || parentValue is ulong))
+            throw new InvalidOperationException("Preparer identity was unreadable.");
+        long parent;
+        try { parent = Convert.ToInt64(parentValue, CultureInfo.InvariantCulture); }
+        catch (OverflowException) { throw new InvalidOperationException("Preparer parent identity was unreadable."); }
+        if (parent <= 0 || parent > int.MaxValue) throw new InvalidOperationException("Preparer parent identity was unreadable.");
+        string executable = RequiredText(executableValue);
+        return parent == expectedParent && string.Equals(executable, expectedPath, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
 // One absolute monotonic budget. Only read-only operations may run on its worker:
 // an abandoned observation can finish late, but cannot launch, save or kill.
 internal sealed class RuntimeObservationBudget {
@@ -149,6 +170,10 @@ internal sealed class ServerRuntime {
         // Never capture a caller-owned ServerProcess whose Handle may be disposed.
         using (var process = environment.Inspect(record.ProcessId)) {
             budget.Check(cancellation);
+            if (process != null && !process.Exited) {
+                ObservedProcessIdentity.RequiredText(process.ExecutablePath);
+                ObservedProcessIdentity.RequiredText(process.CommandLine);
+            }
             if (!Matches(record, process, environment.NodePath, environment.EntryPath)) return Readiness.Missing;
             bool listener = environment.HasOwnedListener(process);
             budget.Check(cancellation);
@@ -306,7 +331,8 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
                 executable = item["ExecutablePath"] as string; command = item["CommandLine"] as string;
             }
             if (process.HasExited || process.StartTime.ToUniversalTime().Ticks != ticks) return null;
-            if (executable == null || command == null) throw new InvalidOperationException("Recorded process identity was unreadable.");
+            ObservedProcessIdentity.RequiredText(executable);
+            ObservedProcessIdentity.RequiredText(command);
             var observed = new ServerProcess { ProcessId = processId, StartedUtcTicks = ticks, ExecutablePath = executable, CommandLine = command, Handle = process };
             process = null; // Transfer only a fully read identity and its handle.
             return observed;
@@ -413,16 +439,17 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
                     catch (ArgumentException) { continue; } // A vanished PID has no surviving child to stop.
                     var pin = child.Handle;
                     // Query after pinning so PID recycling cannot inherit a stale parent's identity.
-                    bool matches = false;
+                    int identityRows = 0; object observedParent = null, observedExecutable = null;
                     using (var identityQuery = new ManagementObjectSearcher("SELECT ExecutablePath, ParentProcessId FROM Win32_Process WHERE ProcessId=" + child.Id.ToString(CultureInfo.InvariantCulture)))
                     using (var identities = identityQuery.Get()) foreach (ManagementObject identity in identities) using (identity) {
                         budget.Check(CancellationToken.None);
-                        matches = !parent.HasExited && !child.HasExited &&
-                            Convert.ToInt32(identity["ParentProcessId"], CultureInfo.InvariantCulture) == serverId &&
-                            string.Equals(identity["ExecutablePath"] as string, expected, StringComparison.OrdinalIgnoreCase) &&
-                            string.Equals(child.MainModule.FileName, expected, StringComparison.OrdinalIgnoreCase) &&
-                            child.StartTime.ToUniversalTime().Ticks >= serverStartedUtcTicks;
+                        identityRows++; observedParent = identity["ParentProcessId"]; observedExecutable = identity["ExecutablePath"];
                     }
+                    budget.Check(CancellationToken.None);
+                    bool matches = ObservedProcessIdentity.ChildMatches(identityRows, observedParent, observedExecutable, serverId, expected);
+                    if (matches) matches = !parent.HasExited && !child.HasExited &&
+                        string.Equals(ObservedProcessIdentity.RequiredText(child.MainModule.FileName), expected, StringComparison.OrdinalIgnoreCase) &&
+                        child.StartTime.ToUniversalTime().Ticks >= serverStartedUtcTicks;
                     budget.Check(CancellationToken.None);
                     if (matches) { pinned.Processes.Add(child); child = null; }
                 } catch (InvalidOperationException) { if (!DefinitelyExited(child)) throw; }
