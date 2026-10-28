@@ -192,6 +192,31 @@ internal static class ServerRuntimeTests {
         Scenario("late disposable results and cancellation precedence", LateResultsAndCancellation);
         Scenario("unknown discovery keeps parent-only cleanup", delegate { BoundedCleanup(false); });
         Scenario("blocked discovery keeps parent-only cleanup", delegate { BoundedCleanup(true); });
+        Scenario("unreadable recorded identity is unknown, not absent", delegate {
+            var env = new Environment(); env.Existing(); env.Listening = false;
+            env.InspectAction = delegate { throw new System.ComponentModel.Win32Exception(5, "synthetic unreadable identity"); };
+            Throws<System.ComponentModel.Win32Exception>(delegate { new ServerRuntime(env).Start(CancellationToken.None); }, "unreadable identity authorized fallback launch");
+            Check(env.Launches == 0 && env.Saves == 0 && env.Stops == 0 && env.Deletes == 0 && env.Releases == 1,
+                "unknown identity advanced startup or lost mutex");
+        });
+        Scenario("unreadable child discovery retains record after exact parent request", delegate {
+            var env = new Environment(); int parentKills = 0, childKills = 0;
+            var primary = new IOException("synthetic cold startup failure");
+            env.WaitAction = delegate { throw primary; };
+            env.StopAction = delegate {
+                OwnedServerCleanup.Run<CountedLease>(new RuntimeObservationBudget(),
+                    delegate { throw new System.ComponentModel.Win32Exception(5, "synthetic unreadable preparer identity"); },
+                    delegate { Check(env.Stopped.ProcessId == 123 && env.Stopped.StartedUtcTicks == env.Saved.StartedUtcTicks, "unknown discovery changed parent target"); parentKills++; },
+                    delegate { return true; }, delegate { childKills++; });
+            };
+            try { new ServerRuntime(env).Start(CancellationToken.None); throw new Exception("unknown discovery was accepted as complete"); }
+            catch (AggregateException failure) {
+                Check(object.ReferenceEquals(failure.InnerExceptions[0], primary) && failure.InnerExceptions[1].InnerException is System.ComponentModel.Win32Exception,
+                    "unreadable discovery erased primary or unknown cause");
+            }
+            Check(parentKills == 1 && childKills == 0 && env.Deletes == 0 && env.Record != null && env.Releases == 1,
+                "unknown candidate authorized child kill or recovery deletion");
+        });
         Scenario("one observation budget spans phases and mutex wait", delegate {
             long elapsed = 0; var env = new Environment();
             env.AssertAction = delegate { Interlocked.Add(ref elapsed, 6); };

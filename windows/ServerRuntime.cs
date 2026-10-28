@@ -294,7 +294,8 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
     public ServerProcess Inspect(int processId) {
         Process process = null;
         try {
-            process = Process.GetProcessById(processId);
+            try { process = Process.GetProcessById(processId); }
+            catch (ArgumentException) { return null; } // This PID is definitely absent.
             // Open and retain this process handle before consulting WMI: subsequent PID reuse cannot
             // turn Stop into killing a different process, and exited reads fail closed.
             var handle = process.Handle;
@@ -304,13 +305,18 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
             using (var found = query.Get()) foreach (ManagementObject item in found) using (item) {
                 executable = item["ExecutablePath"] as string; command = item["CommandLine"] as string;
             }
-            if (process.HasExited || process.StartTime.ToUniversalTime().Ticks != ticks || executable == null || command == null) { process.Dispose(); return null; }
-            return new ServerProcess { ProcessId = processId, StartedUtcTicks = ticks, ExecutablePath = executable, CommandLine = command, Handle = process };
-        } catch (ArgumentException) { if (process != null) process.Dispose(); return null; }
-        catch (InvalidOperationException) { if (process != null) process.Dispose(); return null; }
-        // Access/WMI failures are unknown, not evidence that the recorded process
-        // is absent. Refuse startup rather than authorize another child.
-        catch { if (process != null) process.Dispose(); throw; }
+            if (process.HasExited || process.StartTime.ToUniversalTime().Ticks != ticks) return null;
+            if (executable == null || command == null) throw new InvalidOperationException("Recorded process identity was unreadable.");
+            var observed = new ServerProcess { ProcessId = processId, StartedUtcTicks = ticks, ExecutablePath = executable, CommandLine = command, Handle = process };
+            process = null; // Transfer only a fully read identity and its handle.
+            return observed;
+        } catch (InvalidOperationException) { if (DefinitelyExited(process)) return null; throw; }
+        // Unreadable access/WMI identity is unknown. Never turn it into absence.
+        finally { if (process != null) process.Dispose(); }
+    }
+    private static bool DefinitelyExited(Process process) {
+        if (process == null) return false;
+        try { return process.HasExited; } catch { return false; }
     }
     public bool Healthy() {
         try {
@@ -402,7 +408,9 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
                 budget.Check(CancellationToken.None);
                 Process child = null;
                 try {
-                    child = Process.GetProcessById(Convert.ToInt32(item["ProcessId"], CultureInfo.InvariantCulture));
+                    int childId = Convert.ToInt32(item["ProcessId"], CultureInfo.InvariantCulture);
+                    try { child = Process.GetProcessById(childId); }
+                    catch (ArgumentException) { continue; } // A vanished PID has no surviving child to stop.
                     var pin = child.Handle;
                     // Query after pinning so PID recycling cannot inherit a stale parent's identity.
                     bool matches = false;
@@ -417,9 +425,7 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
                     }
                     budget.Check(CancellationToken.None);
                     if (matches) { pinned.Processes.Add(child); child = null; }
-                } catch (ArgumentException) { }
-                catch (InvalidOperationException) { }
-                catch (System.ComponentModel.Win32Exception) { }
+                } catch (InvalidOperationException) { if (!DefinitelyExited(child)) throw; }
                 finally { if (child != null) child.Dispose(); }
             }
             }
