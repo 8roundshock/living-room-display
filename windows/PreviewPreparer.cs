@@ -72,7 +72,10 @@ internal sealed class NativePreviewPreparer : IDisposable
         string entry = Path.Combine(app,"dist","server","index.js");
         if (!File.Exists(Path.Combine(root,"installation.json"))) throw new InvalidDataException();
         parent = Process.GetProcessById(Convert.ToInt32(data["parentProcessId"]));
+        try
+        {
         IntPtr pin = parent.Handle;
+        int parentId=parent.Id;
         lifetime = new PreparationLifetime(Cancel,delegate { Environment.Exit(0); });
         // This child owns no descendants. A pinned parent handle prevents PID reuse from extending life.
         parentTimer = new Timer(delegate {
@@ -80,7 +83,11 @@ internal sealed class NativePreviewPreparer : IDisposable
             // ExitProcess releases even an in-progress native GDI call and every RAM-only buffer.
             lifetime.ParentObserved(false);
         },null,0,100);
-        if (!NativePreviewContext.ExactProcess(parent,node,entry,false)) throw new InvalidDataException();
+        // Only immutable facts cross to the read-only observer. Its process/query
+        // handles are independent of the retained lifetime handle above.
+        if (parent.HasExited || !PreparationIdentityObservation.Confirm(delegate {
+            return NativePreviewContext.ExactParentProcess(parentId,node,entry);
+        },stop.Token) || parent.HasExited) throw new InvalidDataException();
         inputThread = new Thread(delegate() {
             try { while (Console.ReadLine() != null) { } } catch { }
             lifetime.InputClosed();
@@ -88,6 +95,16 @@ internal sealed class NativePreviewPreparer : IDisposable
         inputThread.IsBackground=true; inputThread.Start();
         // Shared-file publication needs no claim pipe. Automatic and browser
         // renderers both use the backend's existing snapshot reader.
+        }
+        catch
+        {
+            // A throwing constructor never enters the caller's using/Dispose.
+            // The abandoned identity reader owns only its independent handles.
+            Cancel();
+            if(parentTimer!=null)parentTimer.Dispose();
+            parent.Dispose();
+            throw;
+        }
     }
 
     internal void Run()
@@ -339,6 +356,18 @@ internal sealed class NativePreviewContext
         PreviewPreparationPolicy.OutsideTransition(second.IdleMilliseconds,second.TimeoutSeconds,30); }
     internal static bool PrivacyCompatible(NativePreviewContext first,NativePreviewContext second)
     { return second.Readable && second.Safe && first.SessionId==second.SessionId && first.TimeoutSeconds==second.TimeoutSeconds; }
+    internal static bool ExactParentProcess(int processId,string executable,string entry)
+    {
+        try
+        {
+            using(var process=Process.GetProcessById(processId))
+            {
+                IntPtr pin=process.Handle;
+                return ExactProcess(process,executable,entry,false);
+            }
+        }
+        catch { return false; }
+    }
     internal static bool ExactProcess(Process process,string executable,string entry,bool ambient)
     {
         try

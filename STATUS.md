@@ -1,4 +1,31 @@
 # Project status
+## Bounded native startup and preparer identity observations (#546, #549)
+
+The source checkpoint bounds the caller's wait for read-only installation,
+record, identity, listener and health observations with one ten-second monotonic
+startup budget. Unknown/timeout is an error, never not-running. Mutex ownership
+and every launch/save/kill remain on the controlling thread; late observations
+can only release their own read handles. A separate ten-second cleanup budget
+covers preparer discovery and all parent/child waits. Inconclusive discovery
+still requests only the revalidated retained server's termination, preserves the
+recovery record, and never authorizes guessed child kills. Primary startup and
+incomplete-cleanup errors are retained together.
+
+The separate screenshot producer also bounds its one initial read-only parent
+identity observation to three seconds. Its observer owns independent process and
+query handles; timeout/cancellation/unknown prevents Run and capture, and a late
+true result cannot restart it. Constructor failure releases the producer's own
+timer and retained parent pin. This adds no retry, respawn policy or weaker
+first-safe capture gate.
+
+Injected managed regressions cover blocked readers, cancellation, late disposable
+results, shared budgets, caller-thread mutations and incomplete cleanup. Hosted
+Windows compilation/test results and independent final-head review are pending.
+No installed or native operation ran. This repairs source-established blocking
+observations; it does not establish the cause or recovery of any reported screen.
+Remaining synchronous launch/save mutation risk is tracked separately in #547;
+actual native acceptance remains #532/#519.
+
 ## Shared latest screenshot file (#544)
 
 The owner chose one overwritten app screenshot file on 2026-10-27, replacing

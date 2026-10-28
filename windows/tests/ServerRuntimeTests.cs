@@ -19,7 +19,7 @@ internal static class ServerRuntimeTests {
         internal ServerRecord Record;
         internal ServerProcess Current;
         internal bool Health, Listening, ForeignPort;
-        internal int Locks, Releases, Launches, Saves, Stops, Deletes, Waits, HealthReads;
+        internal int Locks, Releases, Launches, Saves, Stops, Deletes, Waits, HealthReads, OwnerThread;
         internal ServerProcess Stopped;
         internal ServerRecord Saved;
         internal Action<CancellationToken> LockAction = delegate { };
@@ -28,29 +28,35 @@ internal static class ServerRuntimeTests {
         internal Action StopAction = delegate { };
         internal Action HealthAction = delegate { };
         internal Action AssertAction = delegate { };
+        internal Action RecordAction = delegate { };
+        internal Action InspectAction = delegate { };
+        internal Action ListenerAction = delegate { };
+        internal Action PortAction = delegate { };
         public void AssertInstalled() { AssertAction(); }
         public IDisposable AcquireLock(CancellationToken token) {
-            Locks++; LockAction(token); token.ThrowIfCancellationRequested();
-            return new Lease(delegate { Releases++; });
+            Locks++; OwnerThread = Thread.CurrentThread.ManagedThreadId; LockAction(token); token.ThrowIfCancellationRequested();
+            return new Lease(delegate { Check(Thread.CurrentThread.ManagedThreadId == OwnerThread, "mutex released from observation worker"); Releases++; });
         }
-        public ServerRecord ReadRecord() { return Copy(Record); }
-        public ServerProcess Inspect(int pid) { return Current != null && Current.ProcessId == pid ? Copy(Current) : null; }
+        public ServerRecord ReadRecord() { RecordAction(); return Copy(Record); }
+        public ServerProcess Inspect(int pid) { InspectAction(); return Current != null && Current.ProcessId == pid ? Copy(Current) : null; }
         public bool Healthy() { HealthReads++; HealthAction(); return Health; }
-        public bool PortInUse() { return ForeignPort; }
-        public bool HasOwnedListener(ServerProcess process) { return Listening; }
+        public bool PortInUse() { PortAction(); return ForeignPort; }
+        public bool HasOwnedListener(ServerProcess process) { ListenerAction(); return Listening; }
         public ServerProcess Launch() {
+            Check(Thread.CurrentThread.ManagedThreadId == OwnerThread, "launch moved to observation worker");
             Launches++;
             Current = new ServerProcess { ProcessId = 123, StartedUtcTicks = 638966016001234567,
                 ExecutablePath = NodePath, CommandLine = "\"" + NodePath + "\" \"" + EntryPath + "\"" };
             return Copy(Current);
         }
-        public void SaveRecord(ServerRecord record) { Saves++; SaveAction(); Saved = Copy(record); Record = Copy(record); }
+        public void SaveRecord(ServerRecord record) { Check(Thread.CurrentThread.ManagedThreadId == OwnerThread, "record save moved to observation worker"); Saves++; SaveAction(); Saved = Copy(record); Record = Copy(record); }
         public void DeleteRecordIfMatches(ServerRecord record) {
+            Check(Thread.CurrentThread.ManagedThreadId == OwnerThread, "record delete moved to observation worker");
             if (Record != null && Record.ProcessId == record.ProcessId && Record.StartedUtcTicks == record.StartedUtcTicks) {
                 Deletes++; Record = null;
             }
         }
-        public void Stop(ServerProcess process) { Stops++; Stopped = Copy(process); StopAction(); }
+        public void Stop(ServerProcess process) { Check(Thread.CurrentThread.ManagedThreadId == OwnerThread, "process stop moved to observation worker"); Stops++; Stopped = Copy(process); StopAction(); }
         public void Wait(int milliseconds, CancellationToken token) {
             Check(milliseconds == 250, "startup wait must remain bounded in 250ms steps");
             Waits++; WaitAction(token); token.ThrowIfCancellationRequested();
@@ -77,6 +83,207 @@ internal static class ServerRuntimeTests {
     private static int cases;
     private static void Scenario(string name, Action action) {
         try { action(); cases++; } catch (Exception error) { throw new Exception(name + ": " + error.Message, error); }
+    }
+    private sealed class CountedLease : IDisposable {
+        internal int Disposals;
+        internal readonly ManualResetEvent Disposed = new ManualResetEvent(false);
+        public void Dispose() { Interlocked.Increment(ref Disposals); Disposed.Set(); }
+    }
+    private static void BlockedObservation(string phase, bool cancel) {
+        var env = new Environment(); env.Existing();
+        if (phase == "port") { env.Record = null; env.Current = null; }
+        using (var entered = new ManualResetEvent(false))
+        using (var release = new ManualResetEvent(false))
+        using (var returned = new ManualResetEvent(false))
+        using (var cancellation = new CancellationTokenSource()) {
+            Action blocked = delegate { entered.Set(); Check(release.WaitOne(5000), "blocked observation was not released by fixture"); returned.Set(); };
+            if (phase == "installation") env.AssertAction = blocked;
+            else if (phase == "record") env.RecordAction = blocked;
+            else if (phase == "inspect") env.InspectAction = blocked;
+            else if (phase == "listener") env.ListenerAction = blocked;
+            else if (phase == "health") env.HealthAction = blocked;
+            else env.PortAction = blocked;
+            Exception failure = null;
+            var caller = new Thread(delegate() {
+                try { new ServerRuntime(env, cancel ? 10000 : 500).Start(cancellation.Token); }
+                catch (Exception error) { failure = error; }
+            });
+            caller.IsBackground = true; caller.Start();
+            try {
+                Check(entered.WaitOne(3000), "observation did not enter");
+                if (cancel) cancellation.Cancel();
+                Check(caller.Join(3000), "caller still waited for abandoned read");
+                Check(cancel ? failure is OperationCanceledException : failure is TimeoutException, "unknown observation lost cancellation/timeout identity");
+                Check(env.Launches == 0 && env.Saves == 0 && env.Stops == 0 && env.Deletes == 0 && env.Releases == 1,
+                    "unknown observation authorized startup mutation or retained mutex");
+            } finally { release.Set(); Check(caller.Join(3000), "blocked caller did not finish"); }
+            Check(returned.WaitOne(3000), "late read did not leave its fixture");
+            Check(env.Launches == 0 && env.Saves == 0 && env.Stops == 0 && env.Deletes == 0, "late observation mutated startup");
+        }
+    }
+    private static void LateResultsAndCancellation() {
+        using (var entered = new ManualResetEvent(false))
+        using (var release = new ManualResetEvent(false)) {
+            var lease = new CountedLease();
+            try {
+                var budget = new RuntimeObservationBudget(500);
+                Throws<TimeoutException>(delegate {
+                    budget.Read(delegate { entered.Set(); Check(release.WaitOne(5000), "late lease fixture stalled"); return lease; }, CancellationToken.None);
+                }, "late disposable observation did not time out");
+                Check(entered.WaitOne(0) && lease.Disposals == 0, "late lease disposed before it existed");
+                release.Set(); Check(lease.Disposed.WaitOne(3000) && lease.Disposals == 1, "late returned handle was not closed exactly once");
+            } finally { release.Set(); lease.Disposed.Dispose(); }
+        }
+        using (var cancellation = new CancellationTokenSource()) {
+            var lease = new CountedLease();
+            try {
+                Throws<OperationCanceledException>(delegate {
+                    new RuntimeObservationBudget().Read(delegate { cancellation.Cancel(); return lease; }, cancellation.Token);
+                }, "just-returned observation beat cancellation");
+                Check(lease.Disposals == 1, "cancelled returned result was leaked or double-closed");
+            } finally { lease.Disposed.Dispose(); }
+        }
+        using (var entered = new ManualResetEvent(false))
+        using (var release = new ManualResetEvent(false))
+        using (var ended = new ManualResetEvent(false)) {
+            try {
+                Throws<TimeoutException>(delegate {
+                    new RuntimeObservationBudget(500).Read<int>(delegate {
+                        entered.Set(); Check(release.WaitOne(5000), "late exception fixture stalled");
+                        try { throw new InvalidOperationException("synthetic late read error"); } finally { ended.Set(); }
+                    }, CancellationToken.None);
+                }, "late exception read did not time out");
+                Check(entered.WaitOne(0), "late exception fixture did not start");
+            } finally { release.Set(); }
+            Check(ended.WaitOne(3000), "late exception reader did not finish");
+        }
+    }
+    private static void BoundedCleanup(bool timeout) {
+        using (var entered = new ManualResetEvent(false))
+        using (var release = new ManualResetEvent(false)) {
+            int parentKills = 0, childCalls = 0, caller = Thread.CurrentThread.ManagedThreadId;
+            var children = new CountedLease();
+            try {
+                Action terminate = delegate { Check(Thread.CurrentThread.ManagedThreadId == caller, "parent kill moved to discovery worker"); parentKills++; };
+                Func<CountedLease> discover = delegate {
+                    if (!timeout) throw new InvalidOperationException("synthetic unknown discovery");
+                    entered.Set(); Check(release.WaitOne(5000), "late discovery fixture stalled"); return children;
+                };
+                Throws<InvalidOperationException>(delegate {
+                    OwnedServerCleanup.Run(new RuntimeObservationBudget(timeout ? 500 : 10000), discover, terminate,
+                        remaining => { Check(remaining >= 0 && remaining <= (timeout ? 500 : 10000), "parent wait exceeded single cleanup budget"); return true; },
+                        delegate { childCalls++; });
+                }, "unknown discovery was acknowledged as complete");
+                Check(parentKills == 1 && childCalls == 0, "unknown discovery skipped pinned parent or authorized child kills");
+                if (timeout) {
+                    Check(entered.WaitOne(0), "blocked discovery never began");
+                    release.Set(); Check(children.Disposed.WaitOne(3000) && children.Disposals == 1, "late discovery handles leaked");
+                    Check(parentKills == 1 && childCalls == 0, "late discovery mutated cleanup");
+                }
+            } finally { release.Set(); children.Disposed.Dispose(); }
+        }
+    }
+    private static void NewObservationContracts() {
+        foreach (string phase in new[] { "installation", "record", "inspect", "listener", "health", "port" }) {
+            string selected = phase;
+            Scenario("cancel blocked read-only " + selected, delegate { BlockedObservation(selected, true); });
+            Scenario("timeout blocked read-only " + selected, delegate { BlockedObservation(selected, false); });
+        }
+        Scenario("late disposable results and cancellation precedence", LateResultsAndCancellation);
+        Scenario("unknown discovery keeps parent-only cleanup", delegate { BoundedCleanup(false); });
+        Scenario("blocked discovery keeps parent-only cleanup", delegate { BoundedCleanup(true); });
+        Scenario("unreadable recorded identity is unknown, not absent", delegate {
+            var env = new Environment(); env.Existing(); env.Listening = false;
+            env.InspectAction = delegate { throw new System.ComponentModel.Win32Exception(5, "synthetic unreadable identity"); };
+            Throws<System.ComponentModel.Win32Exception>(delegate { new ServerRuntime(env).Start(CancellationToken.None); }, "unreadable identity authorized fallback launch");
+            Check(env.Launches == 0 && env.Saves == 0 && env.Stops == 0 && env.Deletes == 0 && env.Releases == 1,
+                "unknown identity advanced startup or lost mutex");
+        });
+        Scenario("live missing identity fields cannot authorize fallback startup", delegate {
+            foreach (bool command in new[] { false, true }) {
+                var env = new Environment(); env.Existing(); env.Listening = false;
+                if (command) env.Current.CommandLine = null; else env.Current.ExecutablePath = " ";
+                Throws<InvalidOperationException>(delegate { new ServerRuntime(env).Start(CancellationToken.None); }, "unreadable live field became missing server");
+                Check(env.Launches == 0 && env.Saves == 0 && env.Stops == 0 && env.Deletes == 0 && env.Releases == 1, "unknown live fields mutated startup");
+            }
+        });
+        Scenario("required child identity is complete before foreign match decision", delegate {
+            string expected = @"C:\Synthetic install\app\windows\LivingRoomDisplay.Preview.exe";
+            Check(ObservedProcessIdentity.ChildMatches(1, (uint)77, expected.ToUpperInvariant(), 77, expected), "well-formed child identity did not match");
+            Check(!ObservedProcessIdentity.ChildMatches(1, (uint)78, expected, 77, expected), "known foreign parent was adopted");
+            Check(!ObservedProcessIdentity.ChildMatches(1, (uint)77, @"C:\Other\other.exe", 77, expected), "known foreign executable was adopted");
+            foreach (int rows in new[] { 0, 2 })
+                Throws<InvalidOperationException>(delegate { ObservedProcessIdentity.ChildMatches(rows, (uint)77, expected, 77, expected); }, "missing/ambiguous child row became complete discovery");
+            foreach (object value in new object[] { null, 0, -1, "77", true, uint.MaxValue, ulong.MaxValue }) {
+                object candidate = value;
+                Throws<InvalidOperationException>(delegate { ObservedProcessIdentity.ChildMatches(1, candidate, expected, 77, expected); }, "invalid parent field became complete discovery");
+            }
+            foreach (object value in new object[] { null, "", " ", 77 }) {
+                object candidate = value;
+                Throws<InvalidOperationException>(delegate { ObservedProcessIdentity.ChildMatches(1, (uint)77, candidate, 77, expected); }, "invalid executable field became complete discovery");
+                Throws<InvalidOperationException>(delegate { ObservedProcessIdentity.RequiredText(candidate); }, "unreadable module identity accepted");
+            }
+        });
+        Scenario("unreadable child discovery retains record after exact parent request", delegate {
+            var env = new Environment(); int parentKills = 0, childKills = 0;
+            var primary = new IOException("synthetic cold startup failure");
+            env.WaitAction = delegate { throw primary; };
+            env.StopAction = delegate {
+                OwnedServerCleanup.Run<CountedLease>(new RuntimeObservationBudget(),
+                    delegate { throw new System.ComponentModel.Win32Exception(5, "synthetic unreadable preparer identity"); },
+                    delegate { Check(env.Stopped.ProcessId == 123 && env.Stopped.StartedUtcTicks == env.Saved.StartedUtcTicks, "unknown discovery changed parent target"); parentKills++; },
+                    delegate { return true; }, delegate { childKills++; });
+            };
+            try { new ServerRuntime(env).Start(CancellationToken.None); throw new Exception("unknown discovery was accepted as complete"); }
+            catch (AggregateException failure) {
+                Check(object.ReferenceEquals(failure.InnerExceptions[0], primary) && failure.InnerExceptions[1].InnerException is System.ComponentModel.Win32Exception,
+                    "unreadable discovery erased primary or unknown cause");
+            }
+            Check(parentKills == 1 && childKills == 0 && env.Deletes == 0 && env.Record != null && env.Releases == 1,
+                "unknown candidate authorized child kill or recovery deletion");
+        });
+        Scenario("one observation budget spans phases and mutex wait", delegate {
+            long elapsed = 0; var env = new Environment();
+            env.AssertAction = delegate { Interlocked.Add(ref elapsed, 6); };
+            env.RecordAction = delegate { Interlocked.Add(ref elapsed, 5); };
+            Throws<TimeoutException>(delegate { new ServerRuntime(env, 10, delegate { return Interlocked.Read(ref elapsed); }).Start(CancellationToken.None); },
+                "each phase received a fresh timeout");
+            Check(env.Launches == 0 && env.Saves == 0 && env.Releases == 1, "exhausted observation budget advanced startup");
+            elapsed = 0; env = new Environment(); env.LockAction = delegate { Interlocked.Add(ref elapsed, 11); };
+            Throws<TimeoutException>(delegate { new ServerRuntime(env, 10, delegate { return Interlocked.Read(ref elapsed); }).Start(CancellationToken.None); },
+                "mutex wait did not consume startup observation budget");
+            Check(env.Launches == 0 && env.Releases == 1, "expired mutex phase retained lease or launched");
+        });
+        Scenario("parent and child waits share discovery budget", delegate {
+            long elapsed = 0; int parentKills = 0, childrenCalls = 0;
+            var children = new CountedLease();
+            try {
+                OwnedServerCleanup.Run(new RuntimeObservationBudget(10, delegate { return Interlocked.Read(ref elapsed); }),
+                    delegate { Interlocked.Add(ref elapsed, 6); return children; }, delegate { parentKills++; },
+                    remaining => { Check(remaining == 4, "parent wait reset discovery budget"); Interlocked.Add(ref elapsed, 3); return true; },
+                    delegate(CountedLease lease, RuntimeObservationBudget budget) { Check(object.ReferenceEquals(children, lease) && budget.Remaining == 1, "child waits reset cleanup budget"); childrenCalls++; });
+                Check(parentKills == 1 && childrenCalls == 1 && children.Disposals == 1, "successful cleanup lost its exact lease");
+            } finally { children.Disposed.Dispose(); }
+        });
+        Scenario("post-launch cancelled read cleans exact child on caller", delegate {
+            var env = new Environment { Health = true, Listening = true };
+            using (var cancellation = new CancellationTokenSource()) {
+                env.InspectAction = delegate { cancellation.Cancel(); };
+                Throws<OperationCanceledException>(delegate { new ServerRuntime(env).Start(cancellation.Token); }, "postlaunch observation cancelled late");
+                Check(env.Launches == 1 && env.Stops == 1 && env.Stopped.ProcessId == 123 && env.Releases == 1, "postlaunch cancellation lost exact child cleanup");
+            }
+        });
+        Scenario("startup and incomplete cleanup errors both survive", delegate {
+            var env = new Environment();
+            var startup = new IOException("synthetic primary wait failure"); var cleanup = new InvalidOperationException("synthetic incomplete discovery");
+            env.WaitAction = delegate { throw startup; }; env.StopAction = delegate { throw cleanup; };
+            try { new ServerRuntime(env).Start(CancellationToken.None); throw new Exception("incomplete cleanup succeeded"); }
+            catch (AggregateException failure) {
+                Check(failure.InnerExceptions.Count == 2 && object.ReferenceEquals(failure.InnerExceptions[0], startup) &&
+                    object.ReferenceEquals(failure.InnerExceptions[1], cleanup), "cleanup failure hid original startup error");
+            }
+            Check(env.Stops == 1 && env.Deletes == 0 && env.Record != null && env.Releases == 1, "incomplete cleanup deleted recovery record");
+        });
     }
     private static void RecordFiles() {
         string root = Path.Combine(Path.GetTempPath(), "lrd-server-record-test-" + Guid.NewGuid().ToString("N"));
@@ -282,7 +489,7 @@ internal static class ServerRuntimeTests {
         });
     }
     private static int Main() {
-        try { Run(); RecordFiles(); Console.WriteLine(cases + " server runtime contract scenarios passed; fake processes/listeners/waits and isolated record files only."); return 0; }
+        try { Run(); RecordFiles(); NewObservationContracts(); Console.WriteLine(cases + " server runtime contract scenarios passed; fake processes/listeners/waits and isolated record files only."); return 0; }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
 }
