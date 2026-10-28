@@ -46,9 +46,89 @@ internal sealed class ServerRuntimeStatus {
     public bool ServerRunning { get; set; }
     public bool Healthy { get; set; }
 }
+
+// One absolute monotonic budget. Only read-only operations may run on its worker:
+// an abandoned observation can finish late, but cannot launch, save or kill.
+internal sealed class RuntimeObservationBudget {
+    private readonly Stopwatch age = Stopwatch.StartNew();
+    private readonly int milliseconds;
+    private readonly Func<long> elapsed;
+    internal RuntimeObservationBudget(int milliseconds = 10000, Func<long> elapsed = null) {
+        if (milliseconds <= 0) throw new ArgumentOutOfRangeException("milliseconds");
+        this.milliseconds = milliseconds; this.elapsed = elapsed ?? delegate { return age.ElapsedMilliseconds; };
+    }
+    internal int Remaining { get { return (int)Math.Max(0, milliseconds - elapsed()); } }
+    internal void Check(CancellationToken cancellation) {
+        cancellation.ThrowIfCancellationRequested();
+        if (Remaining == 0) throw new TimeoutException("Native startup observation timed out; server state is unknown.");
+    }
+    private static void DisposeLate<T>(T value) {
+        var disposable = (object)value as IDisposable;
+        if (disposable != null) try { disposable.Dispose(); } catch { }
+    }
+    internal T Read<T>(Func<T> observation, CancellationToken cancellation) {
+        Check(cancellation);
+        var gate = new object();
+        bool finished = false, abandoned = false, adopted = false;
+        T result = default(T); Exception failure = null;
+        var worker = new Thread(delegate() {
+            T value = default(T); Exception error = null;
+            try { value = observation(); } catch (Exception caught) { error = caught; }
+            bool discard;
+            lock (gate) {
+                discard = abandoned;
+                if (!discard) { result = value; failure = error; finished = true; Monitor.PulseAll(gate); }
+            }
+            if (discard) DisposeLate(value);
+        });
+        worker.IsBackground = true;
+        worker.Start();
+        try {
+            lock (gate) {
+                while (!finished) {
+                    Check(cancellation);
+                    Monitor.Wait(gate, Math.Min(50, Math.Max(1, Remaining)));
+                }
+                // Cancellation/budget expiry beats even a just-returned result.
+                Check(cancellation);
+                if (failure != null) throw failure;
+                adopted = true;
+                return result;
+            }
+        } finally {
+            bool discard;
+            lock (gate) { abandoned = true; discard = finished && !adopted; }
+            if (discard) DisposeLate(result);
+        }
+    }
+}
+
+// Discovery is read-only and owns its returned handles. Exact process mutations
+// always stay on this caller; unknown discovery cannot authorize child kills.
+internal static class OwnedServerCleanup {
+    internal static void Run<T>(RuntimeObservationBudget budget, Func<T> discover,
+        Action terminateParent, Func<int, bool> waitParent, Action<T, RuntimeObservationBudget> finishChildren) where T : class, IDisposable {
+        T children = null; Exception unknown = null;
+        try {
+            try { children = budget.Read(discover, CancellationToken.None); }
+            catch (Exception error) { unknown = error; }
+            terminateParent(); // The delegate must revalidate its exact retained handle.
+            bool parentExited = waitParent(budget.Remaining);
+            if (unknown != null)
+                throw new InvalidOperationException("Owned server termination requested, but preparer discovery was incomplete; recovery record retained.", unknown);
+            if (!parentExited) throw new TimeoutException("The owned server did not finish exiting within the cleanup budget.");
+            finishChildren(children, budget);
+        } finally { if (children != null) children.Dispose(); }
+    }
+}
+
 internal sealed class ServerRuntime {
     private readonly IServerRuntimeEnvironment environment;
-    internal ServerRuntime(IServerRuntimeEnvironment environment) { this.environment = environment; }
+    private readonly int observationMilliseconds;
+    private readonly Func<long> observationElapsed;
+    internal ServerRuntime(IServerRuntimeEnvironment environment, int observationMilliseconds = 10000, Func<long> observationElapsed = null) {
+        this.environment = environment; this.observationMilliseconds = observationMilliseconds; this.observationElapsed = observationElapsed;
+    }
     internal static bool Matches(ServerRecord record, ServerProcess process, string node, string entry) {
         return record != null && process != null && !process.Exited && record.ProcessId == process.ProcessId &&
             record.StartedUtcTicks == process.StartedUtcTicks &&
@@ -62,42 +142,63 @@ internal sealed class ServerRuntime {
         if (process != null) process.Dispose();
         return null;
     }
+    private enum Readiness { Missing, Unhealthy, Healthy }
+    private Readiness ObserveReadiness(ServerRecord record, RuntimeObservationBudget budget, CancellationToken cancellation) {
+        if (record == null) return Readiness.Missing;
+        // The worker owns this independent handle throughout listener/health reads.
+        // Never capture a caller-owned ServerProcess whose Handle may be disposed.
+        using (var process = environment.Inspect(record.ProcessId)) {
+            budget.Check(cancellation);
+            if (!Matches(record, process, environment.NodePath, environment.EntryPath)) return Readiness.Missing;
+            bool listener = environment.HasOwnedListener(process);
+            budget.Check(cancellation);
+            if (!listener) return Readiness.Unhealthy;
+            bool healthy = environment.Healthy();
+            budget.Check(cancellation);
+            return healthy ? Readiness.Healthy : Readiness.Unhealthy;
+        }
+    }
     internal void Start(CancellationToken cancellation) {
-        cancellation.ThrowIfCancellationRequested();
+        var budget = new RuntimeObservationBudget(observationMilliseconds, observationElapsed);
+        budget.Check(cancellation);
         using (environment.AcquireLock(cancellation)) {
-            cancellation.ThrowIfCancellationRequested();
-            environment.AssertInstalled();
-            using (var owned = Owned(environment.ReadRecord())) {
-                if (owned != null) {
-                    if (!environment.HasOwnedListener(owned) || !environment.Healthy())
-                        throw new InvalidOperationException("Owned server is running but not responding. Run Stop, then Start.");
-                    cancellation.ThrowIfCancellationRequested();
-                    return;
-                }
+            budget.Read(delegate { environment.AssertInstalled(); return true; }, cancellation);
+            var previous = budget.Read(environment.ReadRecord, cancellation);
+            var observed = budget.Read(delegate { return ObserveReadiness(previous, budget, cancellation); }, cancellation);
+            if (observed != Readiness.Missing) {
+                if (observed != Readiness.Healthy)
+                    throw new InvalidOperationException("Owned server is running but not responding. Run Stop, then Start.");
+                budget.Check(cancellation);
+                return;
             }
-            if (environment.PortInUse()) throw new InvalidOperationException("Port 4318 is occupied by a different instance. Stop that instance first.");
-            cancellation.ThrowIfCancellationRequested();
+            if (budget.Read(environment.PortInUse, cancellation)) throw new InvalidOperationException("Port 4318 is occupied by a different instance. Stop that instance first.");
+            budget.Check(cancellation);
             using (var started = environment.Launch()) {
                 var record = new ServerRecord { ProcessId = started.ProcessId, StartedUtcTicks = started.StartedUtcTicks };
                 try {
+                    budget.Check(cancellation);
                     environment.SaveRecord(record);
                     for (int attempt = 0; attempt < 40; attempt++) {
+                        budget.Check(cancellation);
                         environment.Wait(250, cancellation);
-                        using (var current = environment.Inspect(started.ProcessId)) {
-                            if (!Matches(record, current, environment.NodePath, environment.EntryPath))
-                                throw new InvalidOperationException("Server exited during startup. Check prerequisites and port 4318.");
-                        }
-                        if (environment.HasOwnedListener(started) && environment.Healthy()) {
-                            cancellation.ThrowIfCancellationRequested();
+                        observed = budget.Read(delegate { return ObserveReadiness(record, budget, cancellation); }, cancellation);
+                        if (observed == Readiness.Missing)
+                            throw new InvalidOperationException("Server exited during startup. Check prerequisites and port 4318.");
+                        if (observed == Readiness.Healthy) {
+                            budget.Check(cancellation);
                             return;
                         }
                     }
                     throw new TimeoutException("Local server startup timed out.");
-                } catch {
+                } catch (Exception startupFailure) {
                     // Only this invocation's pinned child may be stopped. A reused PID or changed record
                     // must never turn failed/cancelled startup into stopping somebody else's process.
-                    environment.Stop(started);
-                    environment.DeleteRecordIfMatches(record);
+                    try {
+                        environment.Stop(started);
+                        environment.DeleteRecordIfMatches(record);
+                    } catch (Exception cleanupFailure) {
+                        throw new AggregateException("Native startup and its owned-child cleanup did not complete; recovery record retained.", startupFailure, cleanupFailure);
+                    }
                     throw;
                 }
             }
@@ -207,8 +308,9 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
             return new ServerProcess { ProcessId = processId, StartedUtcTicks = ticks, ExecutablePath = executable, CommandLine = command, Handle = process };
         } catch (ArgumentException) { if (process != null) process.Dispose(); return null; }
         catch (InvalidOperationException) { if (process != null) process.Dispose(); return null; }
-        catch (System.ComponentModel.Win32Exception) { if (process != null) process.Dispose(); return null; }
-        catch (ManagementException) { if (process != null) process.Dispose(); return null; }
+        // Access/WMI failures are unknown, not evidence that the recorded process
+        // is absent. Refuse startup rather than authorize another child.
+        catch { if (process != null) process.Dispose(); throw; }
     }
     public bool Healthy() {
         try {
@@ -280,12 +382,24 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
         var actual = ReadRecord();
         if (actual != null && expected != null && actual.ProcessId == expected.ProcessId && actual.StartedUtcTicks == expected.StartedUtcTicks) File.Delete(recordPath);
     }
-    private List<Process> PinOwnedPreparers(ServerProcess server) {
-        var pinned = new List<Process>();
+    private sealed class PreparerLease : IDisposable {
+        internal readonly List<Process> Processes = new List<Process>();
+        public void Dispose() { foreach (var process in Processes) process.Dispose(); Processes.Clear(); }
+    }
+    private PreparerLease PinOwnedPreparers(int serverId, long serverStartedUtcTicks, RuntimeObservationBudget budget) {
+        var pinned = new PreparerLease();
         string expected = Path.Combine(app, "windows", "LivingRoomDisplay.Preview.exe");
         try {
-            using (var query = new ManagementObjectSearcher("SELECT ProcessId FROM Win32_Process WHERE Name='LivingRoomDisplay.Preview.exe' AND ParentProcessId=" + server.ProcessId.ToString(CultureInfo.InvariantCulture)))
+            budget.Check(CancellationToken.None);
+            // This read-only worker owns a separate parent handle. Its caller
+            // may already have disposed/killed its own handle after a timeout.
+            using (var parent = Process.GetProcessById(serverId)) {
+            if (parent.Handle == IntPtr.Zero) throw new InvalidOperationException("Parent ownership handle was unavailable.");
+            if (parent.HasExited || parent.StartTime.ToUniversalTime().Ticks != serverStartedUtcTicks) return pinned;
+            budget.Check(CancellationToken.None);
+            using (var query = new ManagementObjectSearcher("SELECT ProcessId FROM Win32_Process WHERE Name='LivingRoomDisplay.Preview.exe' AND ParentProcessId=" + serverId.ToString(CultureInfo.InvariantCulture)))
             using (var found = query.Get()) foreach (ManagementObject item in found) using (item) {
+                budget.Check(CancellationToken.None);
                 Process child = null;
                 try {
                     child = Process.GetProcessById(Convert.ToInt32(item["ProcessId"], CultureInfo.InvariantCulture));
@@ -293,36 +407,46 @@ internal sealed class WindowsServerEnvironment : IServerRuntimeEnvironment {
                     // Query after pinning so PID recycling cannot inherit a stale parent's identity.
                     bool matches = false;
                     using (var identityQuery = new ManagementObjectSearcher("SELECT ExecutablePath, ParentProcessId FROM Win32_Process WHERE ProcessId=" + child.Id.ToString(CultureInfo.InvariantCulture)))
-                    using (var identities = identityQuery.Get()) foreach (ManagementObject identity in identities) using (identity)
-                        matches = !server.Handle.HasExited && !child.HasExited &&
-                            Convert.ToInt32(identity["ParentProcessId"], CultureInfo.InvariantCulture) == server.ProcessId &&
+                    using (var identities = identityQuery.Get()) foreach (ManagementObject identity in identities) using (identity) {
+                        budget.Check(CancellationToken.None);
+                        matches = !parent.HasExited && !child.HasExited &&
+                            Convert.ToInt32(identity["ParentProcessId"], CultureInfo.InvariantCulture) == serverId &&
                             string.Equals(identity["ExecutablePath"] as string, expected, StringComparison.OrdinalIgnoreCase) &&
                             string.Equals(child.MainModule.FileName, expected, StringComparison.OrdinalIgnoreCase) &&
-                            child.StartTime.ToUniversalTime().Ticks >= server.StartedUtcTicks;
-                    if (matches) { pinned.Add(child); child = null; }
+                            child.StartTime.ToUniversalTime().Ticks >= serverStartedUtcTicks;
+                    }
+                    budget.Check(CancellationToken.None);
+                    if (matches) { pinned.Processes.Add(child); child = null; }
                 } catch (ArgumentException) { }
                 catch (InvalidOperationException) { }
                 catch (System.ComponentModel.Win32Exception) { }
                 finally { if (child != null) child.Dispose(); }
             }
+            }
             return pinned;
-        } catch { foreach (var child in pinned) child.Dispose(); throw; }
+        } catch { pinned.Dispose(); throw; }
     }
     public void Stop(ServerProcess process) {
         if (process.Handle == null) throw new InvalidOperationException("Cannot stop a process without its ownership handle.");
-        if (process.Handle.HasExited) return;
-        if (process.Handle.Id != process.ProcessId || process.Handle.StartTime.ToUniversalTime().Ticks != process.StartedUtcTicks) throw new InvalidOperationException("Process ownership changed; nothing was stopped.");
-        var preparers = PinOwnedPreparers(process);
-        try {
-            process.Handle.Kill();
-            if (!process.Handle.WaitForExit(10000)) throw new TimeoutException("The Living Room Display server did not exit after Stop.");
-            foreach (var preparer in preparers) {
+        Process retained = process.Handle;
+        if (retained.HasExited) return;
+        int serverId = process.ProcessId; long serverStarted = process.StartedUtcTicks;
+        Action validate = delegate {
+            if (retained.Id != serverId || retained.StartTime.ToUniversalTime().Ticks != serverStarted)
+                throw new InvalidOperationException("Process ownership changed; nothing was stopped.");
+        };
+        validate();
+        var cleanupBudget = new RuntimeObservationBudget();
+        OwnedServerCleanup.Run(cleanupBudget, delegate { return PinOwnedPreparers(serverId, serverStarted, cleanupBudget); },
+            delegate { validate(); if (!retained.HasExited) retained.Kill(); },
+            milliseconds => retained.WaitForExit(milliseconds), delegate(PreparerLease preparers, RuntimeObservationBudget budget) {
+            foreach (var preparer in preparers.Processes) {
                 // EOF and the pinned parent guard normally end the child without intervention.
-                if (preparer.WaitForExit(10000)) continue;
+                if (preparer.WaitForExit(budget.Remaining)) continue;
                 preparer.Kill();
-                if (!preparer.WaitForExit(10000)) throw new TimeoutException("The Living Room Display preview preparer did not exit after Stop.");
+                if (!preparer.WaitForExit(budget.Remaining)) throw new TimeoutException("The Living Room Display preview preparer did not exit within the cleanup budget.");
             }
-        } finally { foreach (var preparer in preparers) preparer.Dispose(); }
+        });
     }
     public void Wait(int milliseconds, CancellationToken cancellation) {
         // SessionStartup keeps its cancellation source alive for already-dispatched callbacks.
