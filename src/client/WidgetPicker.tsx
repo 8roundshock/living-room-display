@@ -179,7 +179,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       })}
       {caption && <p className="picker-free-size">{caption}</p>}
       {added && <p className="picker-added-note" id="picker-added-note"><Icon name="check" size={13} />{addedNote}</p>}
-      {shown && <p className="sr-only" id="picker-room-help">Choose an explicit make-room action to add this widget.</p>}
+      {shown && <p className="sr-only" id="picker-room-help">Choose how to make room and add this widget to your draft.</p>}
       </div>
       <div className="picker-actions">
       {/* The visible text is the accessible name in both states (#241). */}

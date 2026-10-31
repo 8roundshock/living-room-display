@@ -45,10 +45,9 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
    * fixes; the first (Switch the grid to Fine) adds it as the same single draft edit.
    */
   async function addPhoto() {
-    await button('Add Photo').click();
-    await page.locator('.studio-savebar, .widget-picker .room-fix').first().waitFor();
     const fix = page.locator('.widget-picker .room-fix').first();
     if (await fix.count()) { assert.equal(await fix.innerText(), 'Switch the grid to Fine'); await fix.scrollIntoViewIfNeeded(); await fix.click(); }
+    else await button('Add Photo').click();
     await button('Save changes').waitFor();
   }
   async function inView(locator, label) {
@@ -106,7 +105,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     // A rejected photo, with the Save bar showing for the added Photo widget.
     await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click();
     if (viewport.width <= 700) await button('Photo large').click();
-    await button('Add Photo').scrollIntoViewIfNeeded(); await addPhoto();
+    await addPhoto();
     await page.getByLabel('Choose local photo').setInputFiles({ name: 'bad.png', mimeType: 'text/plain', buffer: Buffer.from('not an image') });
     await page.getByRole('alert').filter({ hasText: 'Choose a JPEG, PNG or WebP image' }).waitFor();
     await alertClear(viewport, `${viewport.width}x${viewport.height} rejected photo`);
@@ -472,7 +471,9 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
         assert.equal(await page.locator('.open-display-label').isVisible(), false); await inView(page.getByRole('link', { name: 'Open display' }), 'icon-only Open display');
       }
       for (const name of ['Widgets', 'Style']) { await tab(name); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'narrow/200% equivalent must not scroll horizontally'); }
-      await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click(); await button('Photo large').click(); await button('Add Photo').scrollIntoViewIfNeeded(); await inView(button('Add Photo'), 'Mobile Add');
+      await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click(); await button('Photo large').click();
+      const mobileAdd = await page.locator('.picker-add').isVisible() ? button('Add Photo') : page.locator('.picker-actions .room-fix').first();
+      await mobileAdd.scrollIntoViewIfNeeded(); await inView(mobileAdd, 'Mobile Add or explicit room choice');
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
       await addPhoto();
       const upload = page.locator('.photo-upload-control'); await upload.scrollIntoViewIfNeeded();

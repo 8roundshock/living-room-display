@@ -41,7 +41,7 @@
 .studio .picker-sheet .family-previews > button { flex-direction: column; gap: 4px; min-height: 82px; padding: 7px 4px; font-size: 12px; }
 .picker-sheet .family-previews small { font-size: 10px; opacity: .65; }
 .family-shape { display: flex; align-items: center; justify-content: center; width: 100%; height: 36px; }
-.family-shape i { display: block; width: calc(var(--family-columns) * 6px); height: calc(var(--family-rows) * 6px); border: 1.5px solid currentColor; border-radius: 3px; background: #b9b2ed0b; max-width: 100%; }
+.family-shape i { display: block; width: min(100%, calc(var(--family-columns) * 6px)); aspect-ratio: var(--family-columns) / var(--family-rows); border: 1.5px solid currentColor; border-radius: 3px; background: #b9b2ed0b; }
 .picker-sheet .picker-free-size, .picker-sheet .picker-added-note, .picker-sheet .picker-room-help { font-size: 12px; line-height: 1.45; }
 .picker-sheet .picker-actions { flex: none; padding-top: 12px; }
 .studio .picker-sheet .picker-add { margin: 0; font-size: 14px; min-height: 46px; }
@@ -79,4 +79,11 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .studio .picker-sheet { transition: none; }
+}
+/* At landscape/zoom heights there is not room for a preview and pinned actions.
+   Use one detail scroller instead of allowing fixed controls to clip each other. */
+@media (max-height: 440px) {
+  .picker-sheet .picker-detail { overflow-y: auto; scrollbar-width: thin; }
+  .picker-sheet .picker-detail-content { display: block; flex: none; overflow: visible; }
+  .studio .picker-sheet .sample-stage { height: 170px; min-height: 170px; }
 }
