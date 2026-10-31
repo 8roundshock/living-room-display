@@ -110,6 +110,23 @@ function Assert-Installed {
     if (-not $installed) { throw "The installation marker $marker is damaged (empty or not valid JSON). Run Setup again, or Update from the source clone, to repair it; your data stays in place." }
     if ((Get-MarkerValue $installed 'product') -ne 'living-room-display') { throw 'Installation marker does not match this application.' }
 }
+function Test-CurrentProcessElevated {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    try {
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } finally { $identity.Dispose() }
+}
+function Invoke-PerUserCommand([string]$Action, [scriptblock]$Body) {
+    # Admit before the operation lock, Stop, build, backup, startup or registry writes.
+    # Setup has its own admission policy; cleanup and inspection remain available.
+    if ($Action -in @('Install','Update','Start','Editor','Display','EnableIdle')) {
+        if (Test-CurrentProcessElevated) {
+            throw 'Living Room Display is a per-user app. Close this administrator window and run the same command from a normal PowerShell window. An elevated backend prevents normal Windows screensaver startup.'
+        }
+    }
+    & $Body
+}
 function Read-MarkerFile {
     # The parsed installation.json, or $null when it is empty, NUL-filled or not
     # valid JSON (#199). A marker that can't be read at all still throws.
@@ -1541,6 +1558,7 @@ function Invoke-PackageCommand {
 
 if ($FunctionsOnly) { return }
 if ($script:packageMode) { exit (Invoke-PackageCommand) }
+Invoke-PerUserCommand $Command {
 # A Setup install is removed through its own uninstaller so shortcuts and the
 # Apps & Features entry go too. Decide before taking the operation lock: the
 # uninstaller runs this script again (Uninstall -FromInstaller), which takes it.
@@ -1582,3 +1600,4 @@ try {
     Write-PackageLog ('Failed: ' + $_.Exception.Message)
     throw
 } finally { if ($lockHeld) { $operationLock.ReleaseMutex() }; $operationLock.Dispose() }
+}

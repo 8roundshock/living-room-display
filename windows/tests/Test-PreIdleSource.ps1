@@ -25,11 +25,13 @@ Invoke-Synthetic 'PreparedClaimFlowTests' @('PreviewPreparation.cs','tests\Prepa
 Invoke-Synthetic 'PreparedSnapshotProtocolTests' @('PreparedSnapshotClient.cs','tests\PreparedSnapshotProtocolTests.cs') @('System.Web.Extensions.dll')
 Invoke-Synthetic 'DesktopSnapshotTests' @('DesktopSnapshot.cs','tests\DesktopSnapshotTests.cs') @('System.Drawing.dll')
 Invoke-Synthetic 'HostLifecycleTests' @('SessionStartup.cs','tests\HostLifecycleTests.cs')
+Invoke-Synthetic 'StartupAdmissionTests' @('StartupAdmission.cs','tests\StartupAdmissionTests.cs')
 Invoke-Synthetic 'SessionExitDeadlineTests' @('SessionStartup.cs','tests\SessionExitDeadlineTests.cs')
 Invoke-Synthetic 'ActiveInputTests' @('SessionStartup.cs','tests\ActiveInputTests.cs')
 Invoke-Synthetic 'SurfacePolicyTests' @('SurfacePolicy.cs','tests\SurfacePolicyTests.cs')
 Invoke-Synthetic 'ServerRuntimeTests' @('ServerRuntime.cs','tests\ServerRuntimeTests.cs') @('System.Management.dll','System.Web.Extensions.dll')
 & (Join-Path $PSScriptRoot 'Test-PreviewLifecycle.ps1')
 & (Join-Path $PSScriptRoot 'Test-LogonStartup.ps1')
+& (Join-Path $PSScriptRoot 'Test-StartupAdmission.ps1')
 & (Join-Path $windows 'installer\tests\Test-InstallerPolicy.ps1')
 Write-Output 'Pre-idle source checks passed. No production helper, watcher, desktop capture or installed endpoint was run.'
