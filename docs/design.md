@@ -1,5 +1,29 @@
 # Display studio design
 
+## Add-widget sheet (#554, 2026-10-31)
+
+The Add-widget flow now has a dedicated responsive sheet. The inline discovery
+work below remains useful, but its narrow inspector forced the preview and room
+actions into competing scroll areas. Inline polish would retain that constraint;
+a gallery of live renders would add cost and visual competition. Independent
+concept review selected a grouped catalog beside one real synthetic preview.
+Proportional outline tiles distinguish supported sizes without extra renderers.
+On compact screens, choosing a widget opens its preview and All widgets returns
+to the retained query, filter and selection.
+
+Native modal dialog behavior contains keyboard focus and makes the unchanged
+editor inert. Close/Escape restores the opener; a successful add takes focus to
+the new widget's settings. A blocked size offers only explicit, named room fixes;
+selecting a widget or size never changes a draft. The existing global Save/Cancel
+still owns persistence.
+
+Primary guidance checked 2026-10-31: [W3C APG modal dialog](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)
+for focus containment, Escape and logical focus return. The existing
+[Apple widget inspiration](widgets.md#apple-inspiration-and-project-adaptations)
+continues to guide glanceable, family-specific previews; this web sheet does not
+use Apple's frameworks or promise native-platform behavior. Recheck when dialog,
+catalog, preview geometry or viewport behavior changes.
+
 ## Widget discovery (#516, 2026-10-22)
 
 The picker keeps its grouped rail and one actual synthetic preview, adding catalog

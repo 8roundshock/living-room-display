@@ -1,4 +1,19 @@
 # Project status
+## Focused Add-widget sheet (#554)
+
+Source work opens Add widget in its own responsive modal sheet, preserving the
+underlying board and inspector. A grouped catalog and one synthetic renderer sit
+side by side on desktop; compact screens browse the catalog and then the selected
+preview, with an All widgets return action. Size tiles show proportional shapes
+and cell footprints. A full board exposes the shared explicit make-room choices
+instead of an Add action that can only repeat the refusal. All changes remain
+ordinary cancellable editor drafts.
+
+The production build and 16 focused catalog/room tests pass. Desktop and mobile
+synthetic renders have been inspected in RAM during implementation. Expanded
+modal/focus/reflow browser verification, independent final-head review and CI are
+pending. No installed app or native behavior is changed by this source checkpoint.
+
 ## Bounded native startup and preparer identity observations (#546, #549)
 
 The source checkpoint bounds the caller's wait for read-only installation,

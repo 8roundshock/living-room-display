@@ -1,5 +1,22 @@
 # Display studio
 
+## Adding widgets (#554)
+
+Either plus opens a focused Add-widget sheet over the unchanged editor. Desktop
+shows a readable grouped catalog beside one synthetic preview, with proportional
+size tiles and explicit Add or make-room actions. On compact screens, choose a
+widget from the catalog, then use All widgets to return without losing search,
+filter or size choices. The sheet keeps its Close control and relevant action
+reachable; the preview can scroll when height is limited.
+
+The native dialog makes the background inert and contains Tab navigation.
+Close/Escape returns to the opener and preserves the existing draft. Adding
+selects and focuses the new widget in the inspector. Search/filter changes and
+size previews do not edit the board; a named room fix and its add remain one
+cancellable draft transaction. On a full board the unavailable Add action is
+replaced by the existing explicit room choices, rather than repeating a refusal.
+This supersedes the historical inline-picker layout described below.
+
 Reviewed 2026-10-18 for [#56](https://github.com/8roundshock/living-room-display/issues/56)
 and scoped [#58](https://github.com/8roundshock/living-room-display/issues/58),
 [#59](https://github.com/8roundshock/living-room-display/issues/59),
