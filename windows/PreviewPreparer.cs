@@ -48,6 +48,7 @@ internal sealed class NativePreviewPreparer : IDisposable
     private readonly PreparationLifetime lifetime;
     private readonly Timer parentTimer;
     private readonly Thread inputThread;
+    private readonly PreviewRetentionIdentity retention;
     private bool disposed;
 
     internal NativePreviewPreparer()
@@ -68,6 +69,7 @@ internal sealed class NativePreviewPreparer : IDisposable
         string app = Path.GetFullPath(Path.Combine(windows,".."));
         string root = Path.GetFullPath(Path.Combine(app,".."));
         hostPath = Path.Combine(windows,"LivingRoomDisplay.scr");
+        retention=new PreviewRetentionIdentity(session => NativePreviewRetentionProcess.Discover(hostPath,session),stop.Token);
         string node = Path.Combine(root,"runtime","node.exe");
         string entry = Path.Combine(app,"dist","server","index.js");
         if (!File.Exists(Path.Combine(root,"installation.json"))) throw new InvalidDataException();
@@ -101,6 +103,7 @@ internal sealed class NativePreviewPreparer : IDisposable
             // A throwing constructor never enters the caller's using/Dispose.
             // The abandoned identity reader owns only its independent handles.
             Cancel();
+            if(retention!=null)retention.Dispose();
             if(parentTimer!=null)parentTimer.Dispose();
             parent.Dispose();
             throw;
@@ -114,11 +117,11 @@ internal sealed class NativePreviewPreparer : IDisposable
         {
             try
             {
-                var context=NativePreviewContext.Read(hostPath);
+                var context=NativePreviewContext.Read(hostPath,retention);
                 var config=ReadConfiguration(context); failures=0;
                 var decision=policy.Observe(config.Reading(new PreparationReading {
                     Readable=context.Readable, Safe=context.Safe,
-                    CaptureAllowed=!context.SaverRunning && !context.AmbientRunning,
+                    CaptureAllowed=context.DefaultInput && !context.SaverRunning && !context.AmbientRunning,
                     InputTick=context.InputTick, IdleMilliseconds=context.IdleMilliseconds,
                     TimeoutSeconds=context.TimeoutSeconds, SessionId=context.SessionId,
                     MonotonicMilliseconds=checked((long)PreparedSnapshotClient.GetTickCount64())
@@ -174,7 +177,7 @@ internal sealed class NativePreviewPreparer : IDisposable
         using (var cancellation=CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
         using (var deadline=new Timer(delegate { PreparationCancellation.Cancel(cancellation); },null,5000,Timeout.Infinite))
         using (var monitor=new Timer(delegate {
-            try { var current=NativePreviewContext.Read(hostPath);
+            try { var current=NativePreviewContext.Read(hostPath,retention);
                 if (!NativePreviewContext.CaptureCompatible(initial,current)) {
                     if(!NativePreviewContext.PrivacyCompatible(initial,current)) Interlocked.Exchange(ref contextLost,1);
                     PreparationCancellation.Cancel(cancellation);
@@ -192,7 +195,7 @@ internal sealed class NativePreviewPreparer : IDisposable
                 },cancellation.Token);
                 long completedMonotonic=checked((long)PreparedSnapshotClient.GetTickCount64());
                 DateTime completedUtc=DateTime.UtcNow;
-                var after=NativePreviewContext.Read(hostPath);
+                var after=NativePreviewContext.Read(hostPath,retention);
                 if (!NativePreviewContext.CaptureCompatible(initial,after)) { diagnostics.CaptureSkipped(); if(!NativePreviewContext.PrivacyCompatible(initial,after)) Invalidate(true); return; }
                 cancellation.Token.ThrowIfCancellationRequested();
                 var headers=new Dictionary<string,string> {
@@ -255,7 +258,7 @@ internal sealed class NativePreviewPreparer : IDisposable
     public void Dispose()
     {
         lock(gate) { if(disposed)return; disposed=true; }
-        Cancel(); parentTimer.Dispose(); parent.Dispose();
+        Cancel(); retention.Dispose(); parentTimer.Dispose(); parent.Dispose();
         // Background readers hold no persisted state; parent closes inherited stdin on normal stop.
     }
 }
@@ -277,9 +280,52 @@ internal sealed class NativePreparedClaimProcess : IPreparedClaimProcess
     public void Dispose() { process.Dispose(); }
 }
 
+internal sealed class NativePreviewRetentionProcess : IPreviewRetentionProcess
+{
+    private readonly Process process;
+    private readonly DateTime created;
+    private readonly int session;
+    private NativePreviewRetentionProcess(Process process,int session)
+    { this.process=process; this.session=session; created=process.StartTime.ToUniversalTime(); }
+    public bool Running { get { return !process.HasExited && process.SessionId==session && process.StartTime.ToUniversalTime()==created; } }
+    public void Dispose() { process.Dispose(); }
+    internal static IPreviewRetentionProcess Discover(string executable,int session)
+    {
+        string logon=NativePreviewLogonSid.Read();
+        var candidates=new List<Process>();
+        NativePreviewRetentionProcess selected=null;
+        try
+        {
+            // Process names are only a discovery filter, never identity proof.
+            candidates.AddRange(Process.GetProcessesByName(Path.GetFileNameWithoutExtension(executable)));
+            candidates.AddRange(Process.GetProcessesByName(Path.GetFileName(executable)));
+            var seen=new HashSet<int>();
+            foreach(var candidate in candidates)
+            {
+                if(!seen.Add(candidate.Id))continue;
+                IntPtr pin=candidate.Handle;
+                if(candidate.HasExited || candidate.SessionId!=session ||
+                    !NativePreviewContext.ExactProcess(candidate,executable,null,true) ||
+                    !String.Equals(NativePreviewLogonSid.ReadProcess(candidate),logon,StringComparison.Ordinal))continue;
+                var proof=new NativePreviewRetentionProcess(candidate,session);
+                if(!proof.Running)continue;
+                if(selected!=null) { selected.Dispose(); selected=null; return null; } // Ambiguous ownership fails closed.
+                selected=proof;
+            }
+            return selected;
+        }
+        catch { if(selected!=null)selected.Dispose(); selected=null; return null; }
+        finally
+        {
+            foreach(var candidate in candidates)
+                if(selected==null || !Object.ReferenceEquals(candidate,selected.process))candidate.Dispose();
+        }
+    }
+}
+
 internal sealed class NativePreviewContext
 {
-    internal bool Readable, Safe, SaverRunning, AmbientRunning;
+    internal bool Readable, Safe, SaverRunning, AmbientRunning, DefaultInput, SaverInput;
     internal uint InputTick;
     internal int SessionId, TimeoutSeconds;
     internal long IdleMilliseconds;
@@ -288,6 +334,8 @@ internal sealed class NativePreviewContext
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("kernel32.dll")] private static extern uint WTSGetActiveConsoleSessionId();
     [DllImport("user32.dll")] private static extern IntPtr GetThreadDesktop(uint thread);
+    [DllImport("user32.dll",SetLastError=true)] private static extern IntPtr OpenInputDesktop(uint flags,bool inherit,uint access);
+    [DllImport("user32.dll")] private static extern bool CloseDesktop(IntPtr desktop);
     [DllImport("user32.dll")] private static extern IntPtr GetProcessWindowStation();
     [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] private static extern bool GetUserObjectInformation(IntPtr handle,int index,StringBuilder value,uint size,out uint needed);
     [DllImport("user32.dll",EntryPoint="GetUserObjectInformationW",SetLastError=true)] private static extern bool GetUserObjectFlag(IntPtr handle,int index,out int value,uint size,out uint needed);
@@ -314,7 +362,37 @@ internal sealed class NativePreviewContext
         }
         catch(WaitHandleCannotBeOpenedException) { return false; }
     }
-    internal static NativePreviewContext Read(string hostPath)
+    private static bool KnownSaverInput()
+    {
+        // Read the currently receiving desktop, never switch to it or capture it.
+        IntPtr desktop=OpenInputDesktop(0,false,1); // DESKTOP_READOBJECTS only.
+        if(desktop==IntPtr.Zero)return false;
+        try
+        {
+            string name=ObjectName(desktop); int receiving; uint needed;
+            return (String.Equals(name,"Screen-saver",StringComparison.OrdinalIgnoreCase) || String.Equals(name,"ScreenSaver",StringComparison.OrdinalIgnoreCase)) &&
+                GetUserObjectFlag(desktop,6,out receiving,4,out needed) && receiving==1;
+        }
+        finally { CloseDesktop(desktop); }
+    }
+    internal static NativePreviewContext Read(string hostPath,PreviewRetentionIdentity retention)
+    {
+        return Resolve(ReadCore(hostPath),()=>ReadCore(hostPath),retention);
+    }
+    // Pure coordination seam: native facts are independently re-read after the
+    // slower process proof. No unknown transition is given a retention grace.
+    internal static NativePreviewContext Resolve(NativePreviewContext first,Func<NativePreviewContext> reread,PreviewRetentionIdentity retention)
+    {
+        if(!first.Readable || !first.Safe)return first;
+        if(first.DefaultInput) { if(retention!=null)retention.Reset(); return first; }
+        if(!first.SaverInput || !first.SaverRunning || retention==null || !retention.Confirm(first.SessionId))return new NativePreviewContext();
+        var fresh=reread();
+        if(!PrivacyCompatible(first,fresh))return new NativePreviewContext();
+        if(fresh.DefaultInput) { retention.Reset(); return fresh; }
+        if(!fresh.SaverInput || !fresh.SaverRunning || !retention.Confirm(fresh.SessionId))return new NativePreviewContext();
+        return fresh;
+    }
+    private static NativePreviewContext ReadCore(string hostPath)
     {
         var result=new NativePreviewContext();
         try
@@ -325,8 +403,10 @@ internal sealed class NativePreviewContext
             result.IdleMilliseconds=unchecked((uint)(PreparedSnapshotClient.GetTickCount64()-input.tick));
             IntPtr desktop=GetThreadDesktop(GetCurrentThreadId()); uint needed; int receiving;
             if(ObjectName(GetProcessWindowStation())!="WinSta0" || ObjectName(desktop)!="Default" ||
-                !GetUserObjectFlag(desktop,6,out receiving,4,out needed) || receiving!=1 ||
+                !GetUserObjectFlag(desktop,6,out receiving,4,out needed) || (receiving!=0 && receiving!=1) ||
                 WTSGetActiveConsoleSessionId()!=(uint)result.SessionId) return result;
+            result.DefaultInput=receiving==1;
+            if(!result.DefaultInput && !(result.SaverInput=KnownSaverInput()))return result;
             IntPtr state; int bytes;
             if(!WTSQuerySessionInformation(IntPtr.Zero,result.SessionId,25,out state,out bytes))return result;
             try
@@ -352,7 +432,7 @@ internal sealed class NativePreviewContext
     internal static bool Same(NativePreviewContext first,NativePreviewContext second)
     { return second.Readable && second.Safe && first.InputTick==second.InputTick && first.SessionId==second.SessionId && first.TimeoutSeconds==second.TimeoutSeconds; }
     internal static bool CaptureCompatible(NativePreviewContext first,NativePreviewContext second)
-    { return PrivacyCompatible(first,second) && !second.SaverRunning && !second.AmbientRunning &&
+    { return PrivacyCompatible(first,second) && second.DefaultInput && !second.SaverRunning && !second.AmbientRunning &&
         PreviewPreparationPolicy.OutsideTransition(second.IdleMilliseconds,second.TimeoutSeconds,30); }
     internal static bool PrivacyCompatible(NativePreviewContext first,NativePreviewContext second)
     { return second.Readable && second.Safe && first.SessionId==second.SessionId && first.TimeoutSeconds==second.TimeoutSeconds; }
@@ -424,26 +504,36 @@ internal static class NativePreviewLogonSid
     [StructLayout(LayoutKind.Sequential)] private struct SidAndAttributes { internal IntPtr sid; internal uint attributes; }
     [StructLayout(LayoutKind.Sequential)] private struct TokenGroupsOne { internal uint count; internal SidAndAttributes group; }
     [DllImport("advapi32.dll",SetLastError=true)] private static extern bool GetTokenInformation(IntPtr token,int information,IntPtr buffer,uint length,out uint needed);
+    [DllImport("advapi32.dll",SetLastError=true)] private static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);
+    [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
 
     internal static string Read()
     {
         // WindowsIdentity.Groups deliberately filters out SE_GROUP_LOGON_ID.
         // Query this token's dedicated TokenLogonSid result, never a user-SID fallback.
         using(var identity=WindowsIdentity.GetCurrent(TokenAccessLevels.Query))
-        {
+            return ReadToken(identity.Token);
+    }
+    internal static string ReadProcess(Process process)
+    {
+        IntPtr token;
+        if(!OpenProcessToken(process.Handle,8,out token))throw new System.ComponentModel.Win32Exception(); // TOKEN_QUERY only.
+        try { return ReadToken(token); } finally { CloseHandle(token); }
+    }
+    private static string ReadToken(IntPtr token)
+    {
             uint needed;
-            if(GetTokenInformation(identity.Token,28,IntPtr.Zero,0,out needed) || Marshal.GetLastWin32Error()!=122 || needed<8 || needed>4096)
+            if(GetTokenInformation(token,28,IntPtr.Zero,0,out needed) || Marshal.GetLastWin32Error()!=122 || needed<8 || needed>4096)
                 throw new InvalidDataException("Logon SID size is unavailable.");
             IntPtr buffer=Marshal.AllocHGlobal(checked((int)needed));
             try
             {
                 uint returned;
-                if(!GetTokenInformation(identity.Token,28,buffer,needed,out returned))throw new System.ComponentModel.Win32Exception();
+                if(!GetTokenInformation(token,28,buffer,needed,out returned))throw new System.ComponentModel.Win32Exception();
                 if(returned>needed)throw new InvalidDataException("Logon SID size changed.");
                 return Parse(buffer,checked((int)returned));
             }
             finally { Marshal.FreeHGlobal(buffer); }
-        }
     }
 
     // Shared with bounded synthetic buffers, including x86/x64 pointer alignment.

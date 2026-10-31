@@ -232,6 +232,83 @@ internal static class PreparationIdentityObservation
     }
 }
 
+internal interface IPreviewRetentionProcess : IDisposable
+{
+    bool Running { get; }
+}
+
+// One bounded read-only discovery per non-Default input-desktop episode. A late
+// result only disposes its own handles; it cannot authorize cache retention.
+internal sealed class PreviewRetentionIdentity : IDisposable
+{
+    private readonly object gate=new object();
+    private readonly Func<int,IPreviewRetentionProcess> discover;
+    private readonly CancellationToken cancellation;
+    private readonly int milliseconds;
+    private IPreviewRetentionProcess retained;
+    private bool attempted, inFlight, disposed;
+    private int session;
+    private long epoch;
+    internal PreviewRetentionIdentity(Func<int,IPreviewRetentionProcess> discover,CancellationToken cancellation,int milliseconds=1500)
+    {
+        if(discover==null || milliseconds<=0)throw new ArgumentException();
+        this.discover=discover; this.cancellation=cancellation; this.milliseconds=milliseconds;
+    }
+    internal bool Confirm(int sessionId)
+    {
+        lock(gate)
+        {
+            if(disposed || cancellation.IsCancellationRequested)return false;
+            if(retained!=null)
+            {
+                try { if(session==sessionId && retained.Running)return true; } catch { }
+                retained.Dispose(); retained=null;
+                return false;
+            }
+            if(attempted || inFlight)return false;
+            attempted=true; inFlight=true; session=sessionId;
+            long request=++epoch;
+            var age=Stopwatch.StartNew();
+            bool finished=false, abandoned=false;
+            IPreviewRetentionProcess found=null;
+            var worker=new Thread(delegate() {
+                IPreviewRetentionProcess result=null;
+                try { result=discover(sessionId); } catch { }
+                lock(gate)
+                {
+                    inFlight=false;
+                    if(!disposed && !abandoned && request==epoch)
+                    { found=result; result=null; finished=true; Monitor.PulseAll(gate); }
+                }
+                if(result!=null)result.Dispose();
+            });
+            worker.IsBackground=true; worker.Start();
+            try
+            {
+                while(!finished)
+                {
+                    long remaining=milliseconds-age.ElapsedMilliseconds;
+                    if(disposed || cancellation.IsCancellationRequested || remaining<=0)return false;
+                    Monitor.Wait(gate,(int)Math.Min(remaining,50));
+                }
+                if(disposed || cancellation.IsCancellationRequested || age.ElapsedMilliseconds>=milliseconds || request!=epoch || found==null)return false;
+                if(!found.Running)return false;
+                retained=found; found=null; return true;
+            }
+            finally { abandoned=true; if(found!=null)found.Dispose(); }
+        }
+    }
+    internal void Reset()
+    {
+        lock(gate)
+        {
+            epoch++; attempted=false;
+            if(retained!=null)retained.Dispose(); retained=null;
+        }
+    }
+    public void Dispose() { lock(gate) { disposed=true; Reset(); Monitor.PulseAll(gate); } }
+}
+
 internal interface IPreparedClaimProcess : IDisposable
 {
     bool OwnedAutomatic { get; }

@@ -790,6 +790,8 @@ The private GET supplies `captureIntervalMs:300000`, `observationLeaseMs:10000`,
 `X-Preparation-Safe:1` with the current `X-Session-Id` renews the producer's safe
 observation lease; absent/unsafe context deletes the canonical file. This lease is not image
 age: healthy observations retain the last success across missed/failed refreshes.
+An independently validated own native screensaver desktop may renew retention
+observations, but capture eligibility still requires the receiving Default desktop.
 Producer loss, unknown/locked/disconnected context or configuration/disable clears
 it. Public reads cannot renew the lease. Uploads retain their ten-second fresh-body
 bound, validated PNG/dimensions, configuration/generation and safe-context stamp.
