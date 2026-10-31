@@ -21,9 +21,21 @@ internal static class Program
         EnteredMonotonicMilliseconds = checked((long)PreparedSnapshotClient.GetTickCount64());
         try
         {
+            string mode = args.Length == 0 ? "/c" : args[0].ToLowerInvariant();
+            return StartupAdmission.Run(mode, StartupAdmission.IsElevated, delegate { return Run(args, mode); });
+        }
+        catch (Exception ex)
+        {
+            // No URLs with credentials, settings, reminder contents, tokens or pixels.
+            Console.Error.WriteLine("Living Room Display: " + ex.GetType().Name + ": " + ex.Message);
+            return 1;
+        }
+    }
+
+    private static int Run(string[] args, string mode)
+    {
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException, true);
             Native.SetProcessDPIAware();
-            string mode = args.Length == 0 ? "/c" : args[0].ToLowerInvariant();
             if (mode == "--check")
             {
                 Console.WriteLine("Windows helper ready; Edge: " + FindEdge());
@@ -65,13 +77,6 @@ internal static class Program
                 finally { single.ReleaseMutex(); }
             }
             return 0;
-        }
-        catch (Exception ex)
-        {
-            // No URLs with credentials, settings, reminder contents, tokens or pixels.
-            Console.Error.WriteLine("Living Room Display: " + ex.GetType().Name + ": " + ex.Message);
-            return 1;
-        }
     }
 
     internal static string FindEdge()
