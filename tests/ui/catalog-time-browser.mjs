@@ -1,4 +1,4 @@
-import { mockWindowsStatus } from './lib/windows-fixture.mjs';
+import { mockWindowsStatus, mockScreenWakeLock } from './lib/windows-fixture.mjs';
 // Calendar, Countdown and Note (#78): grouped picker, settings panels and draft behaviour in the
 // production build. Own ephemeral loopback server and data; synthetic content; screenshots stay in RAM.
 import assert from 'node:assert/strict';
@@ -52,7 +52,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
   }
   async function open({ viewport = { width: 1440, height: 1000 }, route = '/editor' } = {}) {
     await context?.close();
-    context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
+    context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion: 'reduce' }); await mockWindowsStatus(context); await mockScreenWakeLock(context);
     page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
@@ -106,7 +106,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     const addButton = page.locator('.picker-add');
     assert.equal(await addButton.getAttribute('aria-label'), null);
     assert.equal((await addButton.innerText()).trim(), `Add ${WIDGET_CATALOG[firstUnadded].name}`);
-    assert.equal(await button(`Add ${WIDGET_CATALOG[firstUnadded].name}`).isEnabled(), true);
+    assert.equal(await addButton.isVisible(), false, 'a full board offers explicit make-room choices instead of an Add that can only refuse');
+    assert.equal(await page.locator('.picker-actions .room-fix').count() > 0, true);
     await button(itemName('clock', defaults)).click();
     assert.equal((await addButton.innerText()).trim(), 'Add Clock');
     assert.equal(await button('Add Clock').isDisabled(), true, 'the disabled button is found by its visible text');
@@ -133,14 +134,13 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await page.keyboard.press('Shift+Tab'); assert.equal(await focused(), order[groupBoundary], 'Shift+Tab returns to the previewed widget');
     assert.equal(await page.locator('.catalog-item[data-widget-id]').count(), 0, 'rail items carry no data-widget-id (#310)');
     // Search and the availability filter add two stops before the one-stop rail and size choices.
-    // From Close, Add is at most seven Tab presses away (a widget not yet
-    // on the display, so Add is enabled).
+    // From Close, the first explicit add/room action is at most seven Tab presses away.
     await button(itemName(firstUnadded, defaults)).click();
     await button('Close widget picker').focus();
     const path = [];
     const named = () => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent.trim());
-    for (let press = 0; press < 7 && !path.at(-1)?.startsWith('Add '); press++) { await page.keyboard.press('Tab'); path.push(await named()); }
-    assert.equal(path.at(-1), `Add ${WIDGET_CATALOG[firstUnadded].name}`, `Add is reached in at most seven Tab presses: ${path.join(' > ')}`);
+    for (let press = 0; press < 7; press++) { await page.keyboard.press('Tab'); path.push(await named()); }
+    assert.equal(path.at(-1), 'Switch the grid to Fine', `the full-board add action is reached in at most seven Tab presses: ${path.join(' > ')}`);
     assert.deepEqual(path.slice(0, 3), ['Search widgets', 'Filter widgets', itemName(firstUnadded, defaults)], 'search and filter precede the one rail tab stop');
     await button(itemName('preview', defaults)).click();
     assert.equal(await page.locator('.picker-detail-heading p').innerText(), 'A dim picture of your screen from just before the display starts', 'plain Last screen description (#281)');
@@ -170,7 +170,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     assert.match(await page.locator('.widget-picker .room-message').innerText(), /No room/, 'the full default board is explained before Add (#448)');
     assert.match(await page.locator('#picker-room-help').innerText(), /make room and add this widget to your draft/);
     assert.equal(await savebar().count(), 0, 'preflight never changes the draft');
-    await button('Preview Countdown').click(); await button('Countdown small').click(); await button('Add Countdown').click(); await page.clock.runFor(100);
+    await button('Preview Countdown').click(); await button('Countdown small').click(); await page.clock.runFor(100);
     assert.equal(await page.getByText('No room for Countdown at small size.', { exact: true }).count(), 1, 'the full board is explained once');
     assert.deepEqual(await page.locator('.widget-picker .room-fix').allInnerTexts(), ['Switch the grid to Fine', 'Make room: Reminders small']);
     assert.equal(await savebar().count(), 0, 'nothing changes before a fix is chosen');
@@ -183,7 +183,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     assert.equal(await canvas('countdown').count(), 0, 'Cancel restores the default board');
     assert.equal(await canvas('reminders').getAttribute('data-widget-size'), 'medium');
     await button('Add widget').click();
-    await button('Preview Note').click(); await button('Note large').click(); await button('Add Note').click(); await page.clock.runFor(100);
+    await button('Preview Note').click(); await button('Note large').click(); await page.clock.runFor(100);
     assert.equal(await page.getByText('No room for Note at large size.', { exact: true }).count(), 1);
     assert.deepEqual(await page.locator('.widget-picker .room-fix').allInnerTexts(), ['Switch the grid to Fine', 'Make room: Clock medium']);
     await button('Switch the grid to Fine').click(); await page.locator('.widget-picker').waitFor({ state: 'detached' });
@@ -299,7 +299,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     const announcing = () => page.locator('[role="status"], [aria-live]').evaluateAll(nodes => nodes.filter(node => node.textContent.includes('No room')).length);
     async function tryCountdownMedium() {
       await tab('Widgets'); await button('Add widget').click();
-      await button('Preview Countdown').click(); await button('Countdown medium').click(); await button('Add Countdown').click(); await page.clock.runFor(100);
+      await button('Preview Countdown').click(); await button('Countdown medium').click(); await page.clock.runFor(100);
+      assert.equal(await page.locator('.picker-add').isVisible(), false, 'the preflight replaces an impossible Add with explicit room choices');
     }
     await tryCountdownMedium();
     assert.equal(await page.getByText(noRoom, { exact: true }).count(), 1, 'the message is shown once');
@@ -327,7 +328,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await reset(settings => { qaBoard(settings); settings.widgetGrid = fitWidgetFamily(settings.widgetGrid, 'preview', 'small', settings.widgets); });
     await open();
     await tab('Widgets'); await button('Add widget').click();
-    await button('Preview Note').click(); await button('Note medium').click(); await button('Add Note').click(); await page.clock.runFor(100);
+    await button('Preview Note').click(); await button('Note medium').click(); await page.clock.runFor(100);
+    assert.equal(await page.locator('.picker-add').isVisible(), false);
     assert.equal(await page.getByText('No room for Note at medium size.', { exact: true }).count(), 1);
     await button('Try small').click(); await page.locator('.widget-picker').waitFor({ state: 'detached' });
     assert.equal(await canvas('note').getAttribute('data-widget-size'), 'small');
@@ -606,8 +608,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
       await tab('Widgets'); await button('Add widget').click();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.width}×${viewport.height} picker has no horizontal scroll`);
       if (viewport.width > 700) {
-        const panel = await page.locator('.inspector-panel').evaluate(element => [element.clientHeight, element.scrollHeight]);
-        assert.ok(panel[1] <= panel[0] + 1, `${viewport.width}×${viewport.height} picker fits its panel`);
+        const panel = await page.locator('.widget-picker-dialog').evaluate(element => [element.clientHeight, element.scrollHeight]);
+        assert.ok(panel[1] <= panel[0] + 1, `${viewport.width}×${viewport.height} picker fits its sheet`);
       }
       const labels = await page.locator('.catalog-group-label').evaluateAll(nodes => nodes.map(node => { const r = node.getBoundingClientRect(); return r.width > 0 && r.height > 0 && node.scrollWidth <= Math.ceil(r.width) + 1; }));
       assert.ok(labels.every(Boolean), `${viewport.width}×${viewport.height} group labels are visible and unclipped`);
@@ -627,11 +629,13 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
         assert.ok(selection.visible, `${viewport.width}×${viewport.height} the initial selection is in view: ${JSON.stringify(selection)}`);
       }
       for (const name of ['Calendar', 'Countdown', 'Note']) {
+        if (await button('All widgets').isVisible()) await button('All widgets').click();
         const item = button(itemName(name.toLowerCase(), defaultSettings().widgets)); await item.scrollIntoViewIfNeeded(); await item.click();
-        const add = button(`Add ${name}`); await add.scrollIntoViewIfNeeded(); await inView(add, `${viewport.width}×${viewport.height} Add ${name}`);
+        const add = await page.locator('.picker-add').isVisible() ? button(`Add ${name}`) : page.locator('.picker-actions .room-fix').first();
+        await add.scrollIntoViewIfNeeded(); await inView(add, `${viewport.width}×${viewport.height} Add ${name} or explicit room choice`);
       }
       for (const control of [search(), filter(), page.locator('.family-previews button').first(), page.locator('.widget-picker .room-fix').first()]) {
-        if (await control.count()) {
+        if (await control.isVisible()) {
           const box = await control.boundingBox();
           assert.ok(box.height >= 44, `${viewport.width}x${viewport.height} picker control ${await control.getAttribute('aria-label') ?? await control.textContent()} has a 44 px target: ${JSON.stringify(box)}`);
         }
@@ -648,7 +652,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await reset();
     const catalogWidgets = catalogBoardDefaults().widgets;
     await context?.close();
-    context = await browser.newContext({ viewport: { width: 1280, height: 720 }, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
+    context = await browser.newContext({ viewport: { width: 1280, height: 720 }, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion: 'reduce' }); await mockWindowsStatus(context); await mockScreenWakeLock(context);
     page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });

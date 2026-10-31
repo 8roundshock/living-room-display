@@ -38,6 +38,7 @@ export const SETS = {
     'styles', // Top style/save transactions and responsive controls; 16 seconds locally, CI not timed yet.
     'settings', // #517: app-wide preferences, destination/draft guards and recovery.
     'schedule', 'motion-preview', // #514/#515: isolated schedule and deterministic preview contracts.
+    'picker-sheet', // #554: modal add flow, responsive size previews and draft/focus contracts.
   ],
   scheduled: ['motion', 'weather', 'palette'], // 219, 81, 68
 };

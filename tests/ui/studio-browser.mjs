@@ -1,4 +1,4 @@
-import { mockWindowsStatus } from './lib/windows-fixture.mjs';
+import { mockWindowsStatus, mockScreenWakeLock } from './lib/windows-fixture.mjs';
 // Production Edge interaction regressions. Own ephemeral loopback server/data;
 // synthetic provider and device responses only. Screenshots are RAM buffers.
 import assert from 'node:assert/strict';
@@ -111,7 +111,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
       viewport,
       timezoneId: 'America/Toronto',
       reducedMotion,
-    }); await mockWindowsStatus(context);
+    }); await mockWindowsStatus(context); await mockScreenWakeLock(context);
     const page = await context.newPage();
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => {
@@ -1004,7 +1004,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await tab(page, 'Widgets');
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     await page.getByRole('button', { name: 'Preview Note', exact: true }).click();
-    await page.getByRole('button', { name: 'Add Note', exact: true }).click();
+    assert.equal(await page.locator('.picker-add').isVisible(), false, 'full boards offer the explicit room action directly');
     // The #435 default board fills the grid: the small Note goes in with its room fix, one draft edit.
     await page.getByRole('button', { name: 'Make room: Reminders small', exact: true }).click();
     await page.locator('.widget-picker').waitFor({ state: 'detached' });

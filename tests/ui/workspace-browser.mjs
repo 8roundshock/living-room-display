@@ -45,10 +45,9 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
    * fixes; the first (Switch the grid to Fine) adds it as the same single draft edit.
    */
   async function addPhoto() {
-    await button('Add Photo').click();
-    await page.locator('.studio-savebar, .widget-picker .room-fix').first().waitFor();
     const fix = page.locator('.widget-picker .room-fix').first();
     if (await fix.count()) { assert.equal(await fix.innerText(), 'Switch the grid to Fine'); await fix.scrollIntoViewIfNeeded(); await fix.click(); }
+    else await button('Add Photo').click();
     await button('Save changes').waitFor();
   }
   async function inView(locator, label) {
@@ -106,7 +105,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     // A rejected photo, with the Save bar showing for the added Photo widget.
     await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click();
     if (viewport.width <= 700) await button('Photo large').click();
-    await button('Add Photo').scrollIntoViewIfNeeded(); await addPhoto();
+    await addPhoto();
     await page.getByLabel('Choose local photo').setInputFiles({ name: 'bad.png', mimeType: 'text/plain', buffer: Buffer.from('not an image') });
     await page.getByRole('alert').filter({ hasText: 'Choose a JPEG, PNG or WebP image' }).waitFor();
     await alertClear(viewport, `${viewport.width}x${viewport.height} rejected photo`);
@@ -303,10 +302,14 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     assert.ok(control.y >= Math.max(0, area.y) - 0.5 && control.y + control.height <= Math.min(viewport.height, area.y + area.height) + 0.5,
       `${label}: the added widget's first control is in view too: ${JSON.stringify({ control, area })}`);
     if (capture) images.push({ name: `picker-add-${label}`, bytes: await page.screenshot() });
-    // A canvas widget focused while the picker is open selects it and closes the picker; focus stays on the canvas.
+    // #554: the sheet keeps the authored canvas inert; ordinary canvas focus works again after close.
     await button('Add widget').focus(); await page.keyboard.press('Enter'); await picker().waitFor();
-    await button('Move Clock').focus(); await picker().waitFor({ state: 'detached' });
-    assert.equal(await focusVisible(`${label} canvas focus with the picker open`), 'Move Clock');
+    await page.locator('[aria-label="Move Clock"]').evaluate(element => element.focus());
+    assert.equal(await picker().isVisible(), true);
+    assert.equal(await page.evaluate(() => document.querySelector('dialog').contains(document.activeElement)), true, 'the modal keeps background focus inert');
+    await page.keyboard.press('Escape'); await picker().waitFor({ state: 'detached' });
+    await button('Move Clock').focus();
+    assert.equal(await focusVisible(`${label} canvas focus after closing the picker`), 'Move Clock');
     // Coming back to the Widgets tab does not scroll to an earlier selection again.
     await button('Photo').click();
     const scroll = () => page.evaluate(() => [Math.round(scrollY), Math.round(document.querySelector('.inspector-panel').scrollTop)]);
@@ -316,7 +319,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     await page.locator('.widget-option.selected[data-widget-option="photo"]').waitFor(); await page.waitForTimeout(100);
     assert.deepEqual(await scroll(), [0, 0], `${label}: returning to the Widgets tab keeps the page and panel where they were`);
     await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
-    checks.push(`${label} full board: after Escape from the picker with the last row selected, Add widget has focus fully in view; after a keyboard add the new row has focus fully in view; a canvas widget focused with the picker open keeps focus; returning to the Widgets tab replays no scroll (#339)`);
+    checks.push(`${label} full board: Escape returns to Add widget in view; a keyboard add focuses the new row; the modal keeps background focus inert and restores ordinary canvas focus after close; returning to Widgets replays no scroll (#339/#554)`);
   }
   /** #349: on a coarse pointer the size families are 44 px tall. */
   async function coarseTargets() {
@@ -404,13 +407,14 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       await page.keyboard.press('Tab'); assert.equal(await button('Resize Weather').evaluate(element => element === document.activeElement), true, 'keyboard users can reach the selected resize handle');
       await button('Done').click();
       await button('Add widget').click();
-      const panel = await page.locator('.inspector-panel').evaluate(element => [element.clientHeight, element.scrollHeight]);
-      assert.ok(panel[1] <= panel[0] + 1, 'catalog and Add must fit the contained panel');
+      const panel = await page.locator('.widget-picker-dialog').evaluate(element => [element.clientHeight, element.scrollHeight]);
+      assert.ok(panel[1] <= panel[0] + 1, 'catalog and Add must fit the dedicated sheet');
+      const reachableAction = async (name, label) => inView(await page.locator('.picker-add').isVisible() ? button(`Add ${name}`) : page.locator('.picker-actions .room-fix').first(), label);
       for (const id of ACTIVE_WIDGET_IDS) {
         const name = WIDGET_CATALOG[id].name;
         await page.getByRole('button', { name: new RegExp(`^Preview ${name}(, on your display)?$`) }).focus(); await page.keyboard.press('Enter');
-        await inView(button(`Add ${name}`), `${name} Add`);
-        for (const size of widgetSizes(id)) { await button(`${name} ${size}`).click(); await inView(button(`Add ${name}`), `${name}/${size} Add`); }
+        await reachableAction(name, `${name} Add or explicit room action`);
+        for (const size of widgetSizes(id)) { await button(`${name} ${size}`).click(); await reachableAction(name, `${name}/${size} Add or explicit room action`); }
       }
       if (viewport.width === 760 && viewport.height === 600) {
         const detail = page.locator('.picker-detail-content');
@@ -467,7 +471,9 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
         assert.equal(await page.locator('.open-display-label').isVisible(), false); await inView(page.getByRole('link', { name: 'Open display' }), 'icon-only Open display');
       }
       for (const name of ['Widgets', 'Style']) { await tab(name); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'narrow/200% equivalent must not scroll horizontally'); }
-      await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click(); await button('Photo large').click(); await button('Add Photo').scrollIntoViewIfNeeded(); await inView(button('Add Photo'), 'Mobile Add');
+      await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click(); await button('Photo large').click();
+      const mobileAdd = await page.locator('.picker-add').isVisible() ? button('Add Photo') : page.locator('.picker-actions .room-fix').first();
+      await mobileAdd.scrollIntoViewIfNeeded(); await inView(mobileAdd, 'Mobile Add or explicit room choice');
       if (capture) images.push({ name: `picker-${viewport.width}x${viewport.height}`, bytes: await page.screenshot() });
       await addPhoto();
       const upload = page.locator('.photo-upload-control'); await upload.scrollIntoViewIfNeeded();

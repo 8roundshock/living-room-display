@@ -192,19 +192,20 @@ export function WidgetInspector({
     wasOpen = useRef(false),
     added = useRef<WidgetId | null>(null),
     list = useRef<HTMLDivElement>(null);
-  // Closing the picker moves focus only when focus went with it (Escape, Close, Add or a Make room
-  // add); a canvas widget focused while it was open keeps focus. After an add focus lands on the new
-  // widget's row, which the reveal below keeps in view with its settings; otherwise on Add widget,
-  // and a reveal still waiting is dropped so no scroll pushes that button out of view (#339).
+  // A successful add focuses its new row, kept in view with its settings by the reveal below.
+  // Escape and Close keep the dialog's native opener restoration; only a missing focus target
+  // needs the fallback. Drop a pending reveal there so it cannot scroll Add widget away (#339).
   useEffect(() => {
     const closed = wasOpen.current && !pickerOpen, id = added.current;
     wasOpen.current = pickerOpen;
     added.current = null;
     if (!closed) return;
+    const row = id && list.current?.querySelector<HTMLElement>(`[data-widget-option="${id}"] .widget-select`);
+    // A native dialog restores its opener before this effect. A successful add still moves
+    // to the new widget so its settings are the next keyboard stop.
+    if (row) return row.focus();
     const active = document.activeElement;
     if (active && active !== document.body && active.isConnected) return;
-    const row = id && list.current?.querySelector<HTMLElement>(`[data-widget-option="${id}"] .widget-select`);
-    if (row) return row.focus();
     if (reveal) handledReveals.add(reveal);
     if (pickerOpener?.isConnected) return pickerOpener.focus();
     addButton.current?.focus();
@@ -229,9 +230,9 @@ export function WidgetInspector({
     });
   }, [reveal, pickerOpen]);
   const rows = widgetListOrder(settings.widgets);
-  if (pickerOpen)
-    return (
-      <WidgetPicker
+  return (
+    <>
+      {pickerOpen && <WidgetPicker
         settings={settings}
         initial={pickerInitial}
         onAdd={(id, size) => {
@@ -245,10 +246,7 @@ export function WidgetInspector({
           return problem;
         }}
         onClose={() => onPicker(false)}
-      />
-    );
-  return (
-    <>
+      />}
       <div className="panel-heading">
         <h2>Widgets</h2>
         <button

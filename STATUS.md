@@ -1,4 +1,22 @@
 # Project status
+## Focused Add-widget sheet (#554)
+
+Source work opens Add widget in its own responsive modal sheet, preserving the
+underlying board and inspector. A grouped catalog and one synthetic renderer sit
+side by side on desktop; compact screens browse the catalog and then the selected
+preview, with an All widgets return action. Size tiles show proportional shapes
+and cell footprints. A full board exposes the shared explicit make-room choices
+instead of an Add action that can only repeat the refusal. All changes remain
+ordinary cancellable editor drafts.
+
+The production build and 16 focused catalog/room tests pass. Local browser runs
+cover modal focus and remote-result recovery, full/available boards, draft Cancel,
+every catalog family, free sizing and short-height scrolling. Independent visual
+review inspected synthetic desktop/mobile renders in RAM, including the repaired
+320×480 preview and 640×300 catalog/actions. Final pushed-head review and CI are
+tracked on PR #555. No installed app or native behavior is changed by this source
+work; installation and actual screensaver acceptance remain separate.
+
 ## Normal-user startup admission (#552)
 
 Per-user source Install/Update, Start/Editor/Display and EnableIdle now reject an
