@@ -10,6 +10,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
+import { addToGrid } from '../../src/client/make-room.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
 
@@ -69,6 +70,11 @@ export async function runPickerSheetQa({ playwright, edge, capture = false } = {
         await button('All widgets').click();
         assert.equal(await page.getByRole('searchbox', { name: 'Search widgets' }).inputValue(), 'world');
         assert.equal(await button('Preview World clocks').evaluate(element => element === document.activeElement), true);
+        const search = page.getByRole('searchbox', { name: 'Search widgets' });
+        await search.fill(''); await search.pressSequentially('calendar');
+        assert.equal(await search.inputValue(), 'calendar', 'changing results must not interrupt typing after returning from a preview');
+        assert.equal(await search.evaluate(element => element === document.activeElement), true);
+        await search.fill('world');
         await button('Preview World clocks').click();
         assert.equal(await button('World clocks medium').getAttribute('aria-pressed'), 'true');
       }
@@ -108,6 +114,21 @@ export async function runPickerSheetQa({ playwright, edge, capture = false } = {
     await visible(button('World clocks small'), 'focused preview survives compact reflow');
     await close();
     checks.push('full-board explicit make-room add/Cancel, no-results recovery, and focused desktop-to-mobile reflow');
+    await open({ width: 390, height: 600 });
+    await page.clock.install();
+    await button('Add widget to display').click();
+    await page.getByRole('combobox', { name: 'Filter widgets' }).selectOption('not-added');
+    await button('Preview World clocks').click(); await button('World clocks small').focus();
+    const previous = snapshot();
+    const grid = addToGrid(previous.widgetGrid, 'worldClocks', 'small', previous.widgets);
+    assert.ok(grid);
+    await app.store.patchSettings({ widgetGrid: grid, widgets: { worldClocks: true } });
+    await page.clock.runFor(30_000);
+    await page.getByRole('heading', { name: 'Calendar', exact: true }).waitFor();
+    assert.equal(await page.getByRole('heading', { name: 'Calendar', exact: true }).evaluate(element => element === document.activeElement), true, 'a removed focused preview recovers to its visible replacement, never hidden search');
+    await visible(page.getByRole('heading', { name: 'Calendar', exact: true }), 'remote replacement heading');
+    await close();
+    checks.push('mobile filtered remote replacement restores visible preview focus without interrupting normal search typing');
     assert.deepEqual(errors, []);
     return { checks, images };
   } finally {

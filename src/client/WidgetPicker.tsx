@@ -28,7 +28,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
   const [sizes, setSizes] = useState<Partial<Record<WidgetId, WidgetSize>>>({});
   const [mobileDetail, setMobileDetail] = useState(false);
   const sheet = useRef<HTMLDialogElement>(null), heading = useRef<HTMLHeadingElement>(null);
-  const detailChanged = useRef(false);
+  const navigationFocus = useRef(false);
   // The picker owns its "No room" message: one live region, gone when the picker closes (#238).
   const [problem, setProblem] = useState<RoomProblem | null>(null);
   const close = useRef<HTMLButtonElement>(null), catalog = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null);
@@ -47,16 +47,20 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
     return () => { document.removeEventListener('focusin', trackFocus); dialog.close(); };
   }, []);
   useEffect(() => {
-    if (window.matchMedia('(max-width: 600px)').matches && detailChanged.current) {
+    const requested = navigationFocus.current;
+    navigationFocus.current = false;
+    if (window.matchMedia('(max-width: 600px)').matches && requested) {
       if (mobileDetail) heading.current?.focus();
       else (catalog.current?.querySelector<HTMLElement>('.catalog-item[aria-pressed="true"]') ?? search.current)?.focus();
     }
-  }, [mobileDetail, visibleSelection]);
-  useEffect(() => { if (visibleSelection === null) setMobileDetail(false); }, [visibleSelection]);
+  }, [mobileDetail]);
+  useEffect(() => {
+    if (visibleSelection === null && mobileDetail) { navigationFocus.current = true; setMobileDetail(false); }
+  }, [visibleSelection, mobileDetail]);
   useEffect(() => {
     const compact = window.matchMedia('(max-width: 600px)');
     const keepFocusedPreview = () => {
-      if (compact.matches && sheet.current?.querySelector('.picker-detail')?.contains(document.activeElement)) setMobileDetail(true);
+      if (compact.matches) setMobileDetail(!!sheet.current?.querySelector('.picker-detail')?.contains(document.activeElement));
     };
     compact.addEventListener('change', keepFocusedPreview);
     return () => compact.removeEventListener('change', keepFocusedPreview);
@@ -69,7 +73,8 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
     // previously focused node was removed; typing, filter and outside-editor focus stay untouched.
     const previous = resultFocus.current;
     if (previous && !previous.isConnected && (document.activeElement === document.body || document.activeElement === sheet.current)) {
-      (previous.classList.contains('catalog-item') ? item ?? search.current : search.current)?.focus();
+      const preview = mobileDetail && visibleSelection !== null && window.matchMedia('(max-width: 600px)').matches;
+      (preview ? heading.current : previous.classList.contains('catalog-item') ? item ?? search.current : search.current)?.focus();
     }
     if (rail && item && rail.scrollHeight > rail.clientHeight) {
       const top = item.offsetTop - rail.offsetTop, bottom = top + item.offsetHeight;
@@ -98,7 +103,8 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
     : `Resize freely${added ? '' : ' after adding'}. Full height needs room first: make ${outlook.blockers.length ? listNames(outlook.blockers, 'or') : 'another widget'} smaller.`;
   const addedNote = `${widget.name} is on your display`;
   const choose = (id: WidgetId) => {
-    setSelected(id); setProblem(null); detailChanged.current = true; setMobileDetail(true);
+    setSelected(id); setProblem(null);
+    if (window.matchMedia('(max-width: 600px)').matches) { navigationFocus.current = true; setMobileDetail(true); }
   };
   return <dialog ref={sheet} className="widget-picker-dialog" aria-labelledby="widget-picker-title" onCancel={event => { event.preventDefault(); onClose(); }} onKeyDown={event => {
     // Match the Home sheets: retain keyboard cycling within the modal instead of reaching browser chrome.
@@ -111,7 +117,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
   }}>
   <div className="widget-picker picker-sheet" data-detail={mobileDetail ? '' : undefined}>
     <div className="panel-heading">
-      <button className="button picker-back" onClick={() => { detailChanged.current = true; setMobileDetail(false); }}>All widgets</button>
+      <button className="button picker-back" onClick={() => { navigationFocus.current = true; setMobileDetail(false); }}>All widgets</button>
       <h2 id="widget-picker-title">Add a widget</h2>
       <button className="icon-button" aria-label="Close widget picker" ref={close} onClick={onClose}><Icon name="close" size={18} /></button>
     </div>
@@ -157,7 +163,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       <p>{query.trim() ? 'Try a name, description or category, or change the filter.' : 'Change the filter to browse the catalog.'}</p>
       <button className="button" onClick={() => { setQuery(''); setFilter('all'); setProblem(null); search.current?.focus(); }}>Show all widgets</button>
     </div> :
-    <section className="picker-detail" aria-label={`${widget.name} preview`}>
+    <section key={selected} className="picker-detail" aria-label={`${widget.name} preview`}>
       <div className="picker-detail-content" key={selected} ref={detail}>
       <div className="picker-detail-heading"><h3 ref={heading} tabIndex={-1}>{widget.name}</h3><p>{widget.description}</p></div>
       <WidgetSample key={`${selected}-${size}`} id={selected} size={size} appearance={settings.appearance} density={settings.widgetGrid.density} />
