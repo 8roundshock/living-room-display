@@ -305,6 +305,15 @@ a live install you care about without its owner's go-ahead and a saved editor
 
 From the clone directory, in PowerShell:
 
+Use a normal PowerShell window, without **Run as administrator**. Per-user source
+Install/Update and startup commands refuse an elevated split-token window before stopping,
+backing up or replacing anything. Native startup follows the same rule. A backend
+started elevated cannot be verified by the normal Windows screensaver process;
+close the administrator window and rerun the command normally. Normal default
+tokens on systems without split-token elevation keep their existing support. Cleanup commands
+remain available. This guard does not repair an already elevated backend or prove
+automatic activation; preserve its data and use a separately reviewed recovery.
+
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\LivingRoomDisplay.ps1 Install
 ```

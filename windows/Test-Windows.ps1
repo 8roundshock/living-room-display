@@ -66,6 +66,13 @@ try {
     & $lifecycleTest
     if ($LASTEXITCODE -ne 0) { throw 'Lifecycle regression failed.' }
     $passed++
+    $admissionTest = Join-Path $compiled 'StartupAdmissionTests.exe'
+    & $compiler /nologo /target:exe /platform:anycpu "/out:$admissionTest" (Join-Path $PSScriptRoot 'StartupAdmission.cs') (Join-Path $PSScriptRoot 'tests\StartupAdmissionTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Startup-admission regression compilation failed.' }
+    & $admissionTest
+    if ($LASTEXITCODE -ne 0) { throw 'Startup-admission regression failed.' }
+    & (Join-Path $PSScriptRoot 'tests\Test-StartupAdmission.ps1')
+    $passed++
     $exitDeadlineTest = Join-Path $compiled 'SessionExitDeadlineTests.exe'
     & $compiler /nologo /target:exe /platform:anycpu "/out:$exitDeadlineTest" (Join-Path $PSScriptRoot 'SessionStartup.cs') (Join-Path $PSScriptRoot 'tests\SessionExitDeadlineTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Exit-deadline regression compilation failed.' }

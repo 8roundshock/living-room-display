@@ -1,4 +1,21 @@
 # Project status
+## Normal-user startup admission (#552)
+
+Per-user source Install/Update, Start/Editor/Display and EnableIdle now reject an
+elevated caller before their operation lock or any app, backup or Windows-setting
+work. Native entry points that can start the backend reject the same context
+before constructing a runtime or surface. Cleanup and read-only commands remain
+available; Setup keeps its separate admission policy. No environment bypass or
+weaker process-identity fallback was added. The user is told to rerun normally.
+Admission distinguishes an elevated Full split token from a normal Limited or
+Default token, preserving Setup's supported non-split administrator context.
+
+This prevents creating a higher-integrity backend that a normal automatic saver
+cannot verify. Existing elevated processes require separate recovery. Injected
+admission regressions exercise rejection before effects, ordinary startup,
+cleanup and unreadable admission; hosted native compilation, independent review
+and installed/natural-idle acceptance remain separate requirements.
+
 ## Bounded native startup and preparer identity observations (#546, #549)
 
 The source checkpoint bounds the caller's wait for read-only installation,
