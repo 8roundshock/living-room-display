@@ -49,10 +49,18 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
   useEffect(() => {
     if (window.matchMedia('(max-width: 600px)').matches && detailChanged.current) {
       if (mobileDetail) heading.current?.focus();
-      else catalog.current?.querySelector<HTMLElement>('.catalog-item[aria-pressed="true"]')?.focus();
+      else (catalog.current?.querySelector<HTMLElement>('.catalog-item[aria-pressed="true"]') ?? search.current)?.focus();
     }
   }, [mobileDetail, visibleSelection]);
   useEffect(() => { if (visibleSelection === null) setMobileDetail(false); }, [visibleSelection]);
+  useEffect(() => {
+    const compact = window.matchMedia('(max-width: 600px)');
+    const keepFocusedPreview = () => {
+      if (compact.matches && sheet.current?.querySelector('.picker-detail')?.contains(document.activeElement)) setMobileDetail(true);
+    };
+    compact.addEventListener('change', keepFocusedPreview);
+    return () => compact.removeEventListener('change', keepFocusedPreview);
+  }, []);
   useEffect(() => { if (detail.current) detail.current.scrollTop = 0; }, [visibleSelection]);
   useEffect(() => {
     // Initial selection and filtered results scroll only the rail, never the typing user's page.
@@ -92,7 +100,15 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
   const choose = (id: WidgetId) => {
     setSelected(id); setProblem(null); detailChanged.current = true; setMobileDetail(true);
   };
-  return <dialog ref={sheet} className="widget-picker-dialog" aria-labelledby="widget-picker-title" onCancel={event => { event.preventDefault(); onClose(); }}>
+  return <dialog ref={sheet} className="widget-picker-dialog" aria-labelledby="widget-picker-title" onCancel={event => { event.preventDefault(); onClose(); }} onKeyDown={event => {
+    // Match the Home sheets: retain keyboard cycling within the modal instead of reaching browser chrome.
+    if (event.key !== 'Tab' || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+    const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button, input:not([type="hidden"]), select, textarea, a[href], summary, [tabindex]')]
+      .filter(control => control.tabIndex >= 0 && !control.matches(':disabled') && control.checkVisibility());
+    const first = controls[0], last = controls.at(-1);
+    const target = event.shiftKey && document.activeElement === first ? last : !event.shiftKey && document.activeElement === last ? first : null;
+    if (target) { event.preventDefault(); target.focus(); }
+  }}>
   <div className="widget-picker picker-sheet" data-detail={mobileDetail ? '' : undefined}>
     <div className="panel-heading">
       <button className="button picker-back" onClick={() => { detailChanged.current = true; setMobileDetail(false); }}>All widgets</button>

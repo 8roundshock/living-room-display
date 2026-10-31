@@ -106,7 +106,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     const addButton = page.locator('.picker-add');
     assert.equal(await addButton.getAttribute('aria-label'), null);
     assert.equal((await addButton.innerText()).trim(), `Add ${WIDGET_CATALOG[firstUnadded].name}`);
-    assert.equal(await button(`Add ${WIDGET_CATALOG[firstUnadded].name}`).isEnabled(), true);
+    assert.equal(await addButton.isVisible(), false, 'a full board offers explicit make-room choices instead of an Add that can only refuse');
+    assert.equal(await page.locator('.picker-actions .room-fix').count() > 0, true);
     await button(itemName('clock', defaults)).click();
     assert.equal((await addButton.innerText()).trim(), 'Add Clock');
     assert.equal(await button('Add Clock').isDisabled(), true, 'the disabled button is found by its visible text');
@@ -299,7 +300,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     const announcing = () => page.locator('[role="status"], [aria-live]').evaluateAll(nodes => nodes.filter(node => node.textContent.includes('No room')).length);
     async function tryCountdownMedium() {
       await tab('Widgets'); await button('Add widget').click();
-      await button('Preview Countdown').click(); await button('Countdown medium').click(); await button('Add Countdown').click(); await page.clock.runFor(100);
+      await button('Preview Countdown').click(); await button('Countdown medium').click(); await page.clock.runFor(100);
+      assert.equal(await page.locator('.picker-add').isVisible(), false, 'the preflight replaces an impossible Add with explicit room choices');
     }
     await tryCountdownMedium();
     assert.equal(await page.getByText(noRoom, { exact: true }).count(), 1, 'the message is shown once');
@@ -327,7 +329,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await reset(settings => { qaBoard(settings); settings.widgetGrid = fitWidgetFamily(settings.widgetGrid, 'preview', 'small', settings.widgets); });
     await open();
     await tab('Widgets'); await button('Add widget').click();
-    await button('Preview Note').click(); await button('Note medium').click(); await button('Add Note').click(); await page.clock.runFor(100);
+    await button('Preview Note').click(); await button('Note medium').click(); await page.clock.runFor(100);
+    assert.equal(await page.locator('.picker-add').isVisible(), false);
     assert.equal(await page.getByText('No room for Note at medium size.', { exact: true }).count(), 1);
     await button('Try small').click(); await page.locator('.widget-picker').waitFor({ state: 'detached' });
     assert.equal(await canvas('note').getAttribute('data-widget-size'), 'small');
