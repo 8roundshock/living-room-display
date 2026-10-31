@@ -192,10 +192,9 @@ export function WidgetInspector({
     wasOpen = useRef(false),
     added = useRef<WidgetId | null>(null),
     list = useRef<HTMLDivElement>(null);
-  // Closing the picker moves focus only when focus went with it (Escape, Close, Add or a Make room
-  // add); a canvas widget focused while it was open keeps focus. After an add focus lands on the new
-  // widget's row, which the reveal below keeps in view with its settings; otherwise on Add widget,
-  // and a reveal still waiting is dropped so no scroll pushes that button out of view (#339).
+  // A successful add focuses its new row, kept in view with its settings by the reveal below.
+  // Escape and Close keep the dialog's native opener restoration; only a missing focus target
+  // needs the fallback. Drop a pending reveal there so it cannot scroll Add widget away (#339).
   useEffect(() => {
     const closed = wasOpen.current && !pickerOpen, id = added.current;
     wasOpen.current = pickerOpen;

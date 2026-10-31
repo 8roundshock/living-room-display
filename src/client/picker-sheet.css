@@ -84,6 +84,10 @@
 /* At landscape/zoom heights there is not room for a preview and pinned actions.
    Use one detail scroller instead of allowing fixed controls to clip each other. */
 @media (max-height: 440px) {
+  .picker-sheet .picker-sidebar { overflow-y: auto; scrollbar-width: thin; }
+  .picker-sheet .widget-catalog { flex: none; overflow: visible; }
+}
+@media (max-height: 440px), (max-width: 600px) and (max-height: 540px) {
   .picker-sheet .picker-detail { overflow-y: auto; scrollbar-width: thin; }
   .picker-sheet .picker-detail-content { display: block; flex: none; overflow: visible; }
   .studio .picker-sheet .sample-stage { height: 170px; min-height: 170px; }

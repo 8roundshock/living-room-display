@@ -1,4 +1,4 @@
-import { mockWindowsStatus } from './lib/windows-fixture.mjs';
+import { mockWindowsStatus, mockScreenWakeLock } from './lib/windows-fixture.mjs';
 // Calendar, Countdown and Note (#78): grouped picker, settings panels and draft behaviour in the
 // production build. Own ephemeral loopback server and data; synthetic content; screenshots stay in RAM.
 import assert from 'node:assert/strict';
@@ -52,7 +52,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
   }
   async function open({ viewport = { width: 1440, height: 1000 }, route = '/editor' } = {}) {
     await context?.close();
-    context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
+    context = await browser.newContext({ viewport, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion: 'reduce' }); await mockWindowsStatus(context); await mockScreenWakeLock(context);
     page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
@@ -652,7 +652,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await reset();
     const catalogWidgets = catalogBoardDefaults().widgets;
     await context?.close();
-    context = await browser.newContext({ viewport: { width: 1280, height: 720 }, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
+    context = await browser.newContext({ viewport: { width: 1280, height: 720 }, timezoneId: 'America/Toronto', locale: 'en-US', reducedMotion: 'reduce' }); await mockWindowsStatus(context); await mockScreenWakeLock(context);
     page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });

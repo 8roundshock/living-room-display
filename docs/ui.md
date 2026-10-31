@@ -7,7 +7,9 @@ shows a readable grouped catalog beside one synthetic preview, with proportional
 size tiles and explicit Add or make-room actions. On compact screens, choose a
 widget from the catalog, then use All widgets to return without losing search,
 filter or size choices. The sheet keeps its Close control and relevant action
-reachable; the preview can scroll when height is limited.
+reachable. Short phones use one detail scroller so the sample can be seen in full;
+landscape/zoom heights also scroll the entire catalog column. Scrolling to sizes
+or room actions never changes the selected widget or the existing draft.
 
 The native dialog makes the background inert and contains Tab navigation.
 Close/Escape returns to the opener and preserves the existing draft. Adding

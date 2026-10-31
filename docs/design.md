@@ -17,6 +17,13 @@ the new widget's settings. A blocked size offers only explicit, named room fixes
 selecting a widget or size never changes a draft. The existing global Save/Cancel
 still owns persistence.
 
+Independent source visual review found that pinned controls left only a slit of
+the preview at 320×480. Short phones now scroll the complete detail instead;
+landscape/zoom heights likewise scroll the complete catalog. The meaningful
+sample and each explicit action can be viewed separately without changing the
+board. Synthetic render and interaction rechecks passed at both 320×480 and
+640×300; this is source UI evidence, not installed/native acceptance.
+
 Primary guidance checked 2026-10-31: [W3C APG modal dialog](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)
 for focus containment, Escape and logical focus return. The existing
 [Apple widget inspiration](widgets.md#apple-inspiration-and-project-adaptations)

@@ -9,10 +9,13 @@ and cell footprints. A full board exposes the shared explicit make-room choices
 instead of an Add action that can only repeat the refusal. All changes remain
 ordinary cancellable editor drafts.
 
-The production build and 16 focused catalog/room tests pass. Desktop and mobile
-synthetic renders have been inspected in RAM during implementation. Expanded
-modal/focus/reflow browser verification, independent final-head review and CI are
-pending. No installed app or native behavior is changed by this source checkpoint.
+The production build and 16 focused catalog/room tests pass. Local browser runs
+cover modal focus and remote-result recovery, full/available boards, draft Cancel,
+every catalog family, free sizing and short-height scrolling. Independent visual
+review inspected synthetic desktop/mobile renders in RAM, including the repaired
+320×480 preview and 640×300 catalog/actions. Final pushed-head review and CI are
+tracked on PR #555. No installed app or native behavior is changed by this source
+work; installation and actual screensaver acceptance remain separate.
 
 ## Normal-user startup admission (#552)
 

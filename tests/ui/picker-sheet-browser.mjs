@@ -61,10 +61,17 @@ export async function runPickerSheetQa({ playwright, edge, capture = false } = {
         await visible(button('All widgets'), 'Browse return');
         assert.equal(await page.locator('.picker-sidebar').isVisible(), false);
       }
+      if (viewport.width <= 600 && viewport.height <= 540) {
+        const sample = page.locator('.picker-sample');
+        await sample.scrollIntoViewIfNeeded();
+        const preview = await page.locator('.picker-detail').boundingBox(), box = await sample.boundingBox();
+        assert.ok(box.y >= preview.y && box.y + box.height <= preview.y + preview.height, 'a compact preview is fully viewable instead of a clipped slit');
+      }
       const shapes = await page.locator('.family-shape i').evaluateAll(nodes => nodes.map(node => { const box = node.getBoundingClientRect(); return box.width * box.height; }));
       assert.ok(shapes[0] < shapes[1] && shapes[1] < shapes[2], 'World clocks sizes have visibly different footprints');
       await button('World clocks medium').click();
       await visible(button('World clocks medium'), 'size choices');
+      await button('Add World clocks').scrollIntoViewIfNeeded();
       await visible(button('Add World clocks'), 'Add');
       if (viewport.width <= 600) {
         await button('All widgets').click();
@@ -129,6 +136,27 @@ export async function runPickerSheetQa({ playwright, edge, capture = false } = {
     await visible(page.getByRole('heading', { name: 'Calendar', exact: true }), 'remote replacement heading');
     await close();
     checks.push('mobile filtered remote replacement restores visible preview focus without interrupting normal search typing');
+    await open({ width: 320, height: 480 }, true);
+    await button('Add widget to display').click(); await button('Preview World clocks').click();
+    const fullBoardSample = page.locator('.picker-sample');
+    await fullBoardSample.scrollIntoViewIfNeeded();
+    const compactPreview = await page.locator('.picker-detail').boundingBox(), compactSample = await fullBoardSample.boundingBox();
+    assert.ok(compactSample.y >= compactPreview.y && compactSample.y + compactSample.height <= compactPreview.y + compactPreview.height, 'room choices cannot reduce a compact sample to a slit');
+    await button('Switch the grid to Fine').scrollIntoViewIfNeeded(); await visible(button('Switch the grid to Fine'), 'compact room action');
+    await button('Switch the grid to Fine').click(); await sheet().waitFor({ state: 'detached' });
+    await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
+    checks.push('320×480 full board: the complete sample and explicit room action are separately viewable and clickable');
+    for (const viewport of [{ width: 640, height: 300 }, { width: 320, height: 300 }]) {
+      await open(viewport);
+      await button('Add widget to display').click();
+      await button('Preview Photo').click();
+      await button('Photo small').click();
+      await button('Add Photo').scrollIntoViewIfNeeded();
+      await visible(button('Add Photo'), 'short-height Add');
+      await button('Add Photo').click(); await sheet().waitFor({ state: 'detached' });
+      await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
+    }
+    checks.push('640×300 and 320×300: the full catalog and preview actions remain scrollable, clickable and cancellable');
     assert.deepEqual(errors, []);
     return { checks, images };
   } finally {
