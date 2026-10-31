@@ -92,10 +92,12 @@ export async function runContextHelpQa({ playwright, edge, capture = false } = {
     if (capture) images.push({ name: 'editor-motion-1280', bytes: await page.screenshot() });
     await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
-    await help.focus(); await page.keyboard.press('Escape'); await hidden(page);
-    assert.equal(await page.locator('.widget-picker').count(), 1, 'help Escape does not close the picker');
-    await page.locator('.widget-picker button').first().focus();
+    await help.focus(); await hidden(page);
+    assert.equal(await help.evaluate(element => document.activeElement === element), false, 'background help cannot steal modal focus');
+    assert.equal(await page.locator('.widget-picker-dialog').evaluate(element => element.contains(document.activeElement)), true);
     await page.keyboard.press('Escape'); await page.locator('.widget-picker').waitFor({ state: 'detached' });
+    await help.focus(); await page.getByRole('tooltip').waitFor();
+    await page.keyboard.press('Escape'); await hidden(page);
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     assert.match(await page.locator('.widget-picker').innerText(), /Sample content/);
     await page.keyboard.press('Escape');
