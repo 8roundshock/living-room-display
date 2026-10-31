@@ -304,9 +304,9 @@ internal sealed class NativePreviewRetentionProcess : IPreviewRetentionProcess
             {
                 if(!seen.Add(candidate.Id))continue;
                 IntPtr pin=candidate.Handle;
-                if(candidate.HasExited || candidate.SessionId!=session ||
-                    !NativePreviewContext.ExactProcess(candidate,executable,null,true) ||
-                    !String.Equals(NativePreviewLogonSid.ReadProcess(candidate),logon,StringComparison.Ordinal))continue;
+                if(candidate.HasExited || candidate.SessionId!=session)continue;
+                if(!NativePreparationIdentity.RetentionOwner(NativePreviewContext.ExactProcess(candidate,executable,null,true),
+                    !candidate.HasExited,session,candidate.SessionId,logon,NativePreviewLogonSid.ReadProcess(candidate)))continue;
                 var proof=new NativePreviewRetentionProcess(candidate,session);
                 if(!proof.Running)continue;
                 if(selected!=null) { selected.Dispose(); selected=null; return null; } // Ambiguous ownership fails closed.

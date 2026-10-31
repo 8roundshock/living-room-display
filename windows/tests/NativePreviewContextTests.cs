@@ -84,6 +84,22 @@ internal static class NativePreviewContextTests
             Check(!NativePreviewContext.Resolve(Saver(),Saver,absent).Safe,"pre-process desktop-switch gap fails closed without a grace period");
         using(var rejected=new PreviewRetentionIdentity(session => { throw new Exception(); },CancellationToken.None))
             Check(!NativePreviewContext.Resolve(Saver(),Saver,rejected).Safe,"unreadable identity fails closed");
+        const string executable="C:\\fixture\\LivingRoomDisplay.scr", logon="S-1-5-5-42-99";
+        foreach(string command in new string[] { "\""+executable+"\" /s", executable+" /S", executable+" --display", executable+" /s extra", "C:\\other\\LivingRoomDisplay.scr /s" })
+        {
+            bool automatic=NativePreparationIdentity.ExactCommand(command,executable,null,true);
+            Check(NativePreparationIdentity.RetentionOwner(automatic,true,3,3,logon,logon)==(command.EndsWith(" /s") && !command.StartsWith("C:\\other") || command.EndsWith(" /S")),
+                "only exact owned automatic argv permits retention: "+command);
+        }
+        foreach(string mismatch in new string[] { "path/argv","exited","session","logon","unknown logon" })
+            Check(!NativePreparationIdentity.RetentionOwner(mismatch!="path/argv",mismatch!="exited",3,mismatch=="session"?4:3,
+                mismatch=="unknown logon"?null:logon,mismatch=="logon"?"S-1-5-5-42-100":logon),"retention rejects "+mismatch);
+        using(var cancelled=new CancellationTokenSource())
+        {
+            cancelled.Cancel(); int started=0;
+            using(var never=new PreviewRetentionIdentity(session => { started++; return null; },cancelled.Token))
+                Check(!never.Confirm(3) && started==0,"already cancelled discovery cannot start a reader");
+        }
         var release=new ManualResetEvent(false); var entered=new ManualResetEvent(false); var late=new ProcessProof(); int attempts=0;
         using(var bounded=new PreviewRetentionIdentity(session => { Interlocked.Increment(ref attempts); entered.Set(); release.WaitOne(); return late; },CancellationToken.None,30))
         {
@@ -96,6 +112,22 @@ internal static class NativePreviewContextTests
             Check(late.Released.WaitOne(1000) && late.Disposed,"late identity success releases its own pin instead of being adopted");
         }
         release.Dispose(); entered.Dispose(); late.Released.Dispose(); proof.Released.Dispose();
+        using(var cancelled=new CancellationTokenSource())
+        using(var unblock=new ManualResetEvent(false))
+        using(var reading=new ManualResetEvent(false))
+        {
+            var cancelledProof=new ProcessProof();
+            using(var pending=new PreviewRetentionIdentity(session => { reading.Set(); unblock.WaitOne(); return cancelledProof; },cancelled.Token))
+            {
+                var cancelThread=new Thread(()=> { reading.WaitOne(); cancelled.Cancel(); }); cancelThread.IsBackground=true; cancelThread.Start();
+                Check(!pending.Confirm(3),"cancellation during discovery refuses the pending proof");
+                unblock.Set();
+                Check(cancelledProof.Released.WaitOne(1000) && cancelledProof.Disposed,"cancelled discovery disposes a late process pin");
+                Check(!pending.Confirm(3),"late completion cannot reverse cancellation");
+                cancelThread.Join(1000);
+            }
+            cancelledProof.Released.Dispose();
+        }
         Console.WriteLine("Native preparation context: "+assertions+" assertions passed; injected scalars only.");
     }
 }

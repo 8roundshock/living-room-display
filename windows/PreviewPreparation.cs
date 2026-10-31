@@ -189,6 +189,11 @@ internal static class NativePreparationIdentity
         return String.Equals(command.Trim(), "\"" + executable + "\"" + suffix, StringComparison.OrdinalIgnoreCase) ||
             String.Equals(command.Trim(), executable + suffix, StringComparison.OrdinalIgnoreCase);
     }
+    internal static bool RetentionOwner(bool exactAutomatic,bool running,int expectedSession,int actualSession,string expectedLogon,string actualLogon)
+    {
+        return exactAutomatic && running && expectedSession==actualSession && !String.IsNullOrEmpty(expectedLogon) &&
+            String.Equals(expectedLogon,actualLogon,StringComparison.Ordinal);
+    }
 }
 
 // One read-only startup observation. A provider may ignore its own query timeout;

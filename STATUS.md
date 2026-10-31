@@ -1,22 +1,4 @@
 # Project status
-## Retain Last screen during the validated native desktop transition (#519)
-
-The producer now distinguishes an ordinary Default input desktop, where capture
-is allowed, from a validated native screensaver input desktop, where only the
-existing image may remain available. Retention requires the active unlocked
-console session, selected/enabled own saver, actual saver-running flag and a
-live exact `/s` process with a pinned start identity and matching logon/session.
-The process observation has one bounded attempt per desktop episode, never adopts
-a late result, and is followed by fresh desktop/session/selection checks.
-Unknown, locked, disconnected, changed or unowned contexts still clear the image.
-If Windows switches desktops before the own process can be proven, that gap also
-fails closed; no serving grace or new capture was added.
-
-Both native artifacts compile and the source-only Windows suite passes, including
-38 injected context/retention assertions. Independent final-head review and CI
-remain required. No installation or native image acceptance is claimed by this
-source checkpoint; #519 remains open.
-
 ## Normal-user startup admission (#552)
 
 Per-user source Install/Update, Start/Editor/Display and EnableIdle now reject an
@@ -60,6 +42,24 @@ No installed or native operation ran. This repairs source-established blocking
 observations; it does not establish the cause or recovery of any reported screen.
 Remaining synchronous launch/save mutation risk is tracked separately in #547;
 actual native acceptance remains #532/#519.
+
+## Retain Last screen during the validated native desktop transition (#519)
+
+The producer now distinguishes an ordinary Default input desktop, where capture
+is allowed, from a validated native screensaver input desktop, where only the
+existing image may remain available. Retention requires the active unlocked
+console session, selected/enabled own saver, actual saver-running flag and a
+live exact `/s` process with a pinned start identity and matching logon/session.
+The process observation has one bounded attempt per desktop episode, never adopts
+a late result, and is followed by fresh desktop/session/selection checks.
+Unknown, locked, disconnected, changed or unowned contexts still clear the image.
+If Windows switches desktops before the own process can be proven, that gap also
+fails closed; no serving grace or new capture was added.
+
+Both native artifacts compile and the source-only Windows suite passes, including
+52 injected context/retention assertions. Independent final-head review and CI
+remain required. No installation or native image acceptance is claimed by this
+source checkpoint; #519 remains open.
 
 ## Shared latest screenshot file (#544)
 
