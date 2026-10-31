@@ -103,12 +103,24 @@ or reset cadence. Fresh eligibility after invalidation captures immediately.
 
 Capture requires this app's selected/enabled saver and an unlocked local console
 session on the current Default input desktop. Unknown, locked, disconnected or
-other-desktop contexts clear the cache. Actual saver state and the owned ambient
+unvalidated other-desktop contexts clear the cache. Actual saver state and the owned ambient
 mutex exclude capture throughout ambient startup/display. A thirty-second band
 on either side of the validated Windows idle threshold pauses copying; afterwards
 an otherwise safe desktop can resume when video has inhibited the nominal saver.
 Pre/post-copy checks and cancellation retain the same context/actual-timeout
-requirements. No desktop is opened/switched and no power-request inventory is used.
+requirements. No desktop is switched and no power-request inventory is used.
+
+For retention only (#519), the producer may read the receiving input desktop's
+name with `DESKTOP_READOBJECTS`. A known `Screen-saver`/`ScreenSaver` desktop keeps
+the previous image only with an active unlocked same console session, unchanged
+selected/enabled own saver, positive actual saver-running flag and a live pinned
+exact `/s` process in the same logon/session. Process discovery waits at most
+1.5 seconds, once per desktop episode; a blocked reader prevents replacement
+readers and a late result only releases its own handles. Fresh desktop/session/
+selection facts are checked after discovery. Capture still explicitly requires
+receiving Default; no pixels are copied from another desktop. Missing process
+proof during an early desktop switch still clears the image, without a grace
+period or delayed privacy invalidation. Unknown or unreadable facts fail closed.
 
 The backend is the sole file/metadata authority. Child-secret safe observations
 renew the ten-second producer lease; public reads cannot renew it. Unknown,
