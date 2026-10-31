@@ -9,6 +9,12 @@ internal static class StartupAdmissionTests
     {
         try
         {
+            Check(!StartupAdmission.IsElevatedType(1), "normal default token was classified as elevated");
+            Check(StartupAdmission.IsElevatedType(2), "elevated full split token was admitted");
+            Check(!StartupAdmission.IsElevatedType(3), "normal limited split token was refused");
+            bool invalid = false;
+            try { StartupAdmission.IsElevatedType(0); } catch (InvalidOperationException) { invalid = true; }
+            Check(invalid, "unknown token type was admitted");
             foreach (string mode in new[] { "--start", "/c", "/c:123", "--editor", "/s", "--display", "--test-display" })
             {
                 int reads = 0, effects = 0; bool refused = false;

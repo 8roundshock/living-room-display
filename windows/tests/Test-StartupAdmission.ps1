@@ -9,10 +9,12 @@ $script:elevated = $false
 $script:elevationReads = 0
 $script:effects = 0
 $script:readFailure = $false
-function Test-CurrentProcessElevated {
+$script:defaultToken = $false
+function Get-CurrentProcessElevationType {
     $script:elevationReads++
     if ($script:readFailure) { throw 'synthetic unreadable admission' }
-    return $script:elevated
+    if ($script:defaultToken) { return 1 }
+    return $(if ($script:elevated) { 2 } else { 3 })
 }
 function Check([bool]$Value, [string]$Why) {
     $script:assertions++
@@ -38,4 +40,7 @@ foreach ($action in @('Stop','DisableIdle','DisableStartup','Uninstall','Status'
 $script:readFailure = $true; $script:effects = 0; $refused = $false
 try { Invoke-PerUserCommand 'Update' { $script:effects++ } } catch { $refused = $true }
 Check ($refused -and $script:effects -eq 0) 'Unreadable admission fell through to an update.'
+$script:readFailure = $false; $script:defaultToken = $true; $script:elevated = $true; $script:effects = 0
+Invoke-PerUserCommand 'Start' { $script:effects++ }
+Check ($script:effects -eq 1) 'Normal non-split administrator token was refused.'
 Write-Output ($script:assertions.ToString() + ' startup admission assertions passed; injected elevation and effects only, no Windows or app operations.')

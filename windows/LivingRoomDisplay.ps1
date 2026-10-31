@@ -110,12 +110,39 @@ function Assert-Installed {
     if (-not $installed) { throw "The installation marker $marker is damaged (empty or not valid JSON). Run Setup again, or Update from the source clone, to repair it; your data stays in place." }
     if ((Get-MarkerValue $installed 'product') -ne 'living-room-display') { throw 'Installation marker does not match this application.' }
 }
+function Get-CurrentProcessElevationType {
+    if (-not ('LrdStartupAdmissionToken' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+public static class LrdStartupAdmissionToken {
+    [DllImport("advapi32.dll", SetLastError=true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetTokenInformation(IntPtr token, int kind, out int value, int size, out int returned);
+    public static int Read() {
+        using (WindowsIdentity identity = WindowsIdentity.GetCurrent()) {
+            int value, returned;
+            if (!GetTokenInformation(identity.Token, 18, out value, 4, out returned)) throw new Win32Exception();
+            if (returned != 4) throw new InvalidOperationException("The startup token type is unreadable.");
+            return value;
+        }
+    }
+}
+'@
+    }
+    return [LrdStartupAdmissionToken]::Read()
+}
 function Test-CurrentProcessElevated {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    try {
-        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-        return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    } finally { $identity.Dispose() }
+    # Full is an elevated split token. Default also covers supported non-split
+    # administrator sessions, whose ordinary shell and saver share the same token.
+    switch (Get-CurrentProcessElevationType) {
+        1 { return $false }
+        2 { return $true }
+        3 { return $false }
+        default { throw 'The startup token type is unreadable.' }
+    }
 }
 function Invoke-PerUserCommand([string]$Action, [scriptblock]$Body) {
     # Admit before the operation lock, Stop, build, backup, startup or registry writes.

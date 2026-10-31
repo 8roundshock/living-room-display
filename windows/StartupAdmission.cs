@@ -1,4 +1,6 @@
 using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 
 // A per-user backend must remain accessible to Windows' normal screensaver launch.
@@ -16,8 +18,25 @@ internal static class StartupAdmission
     internal static bool IsElevated()
     {
         using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
-            return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+        {
+            int value, returned;
+            if (!GetTokenInformation(identity.Token, 18, out value, 4, out returned)) throw new Win32Exception();
+            if (returned != 4) throw new InvalidOperationException("The startup token type is unreadable.");
+            return IsElevatedType(value);
+        }
     }
+
+    internal static bool IsElevatedType(int value)
+    {
+        // TokenElevationTypeFull only: Default is also used by normal non-split
+        // administrator sessions, which the existing Setup policy supports.
+        if (value < 1 || value > 3) throw new InvalidOperationException("The startup token type is unreadable.");
+        return value == 2;
+    }
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetTokenInformation(IntPtr token, int kind, out int value, int size, out int returned);
 
     internal static int Run(string mode, Func<bool> elevated, Func<int> operation)
     {

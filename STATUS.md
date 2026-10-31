@@ -7,6 +7,8 @@ work. Native entry points that can start the backend reject the same context
 before constructing a runtime or surface. Cleanup and read-only commands remain
 available; Setup keeps its separate admission policy. No environment bypass or
 weaker process-identity fallback was added. The user is told to rerun normally.
+Admission distinguishes an elevated Full split token from a normal Limited or
+Default token, preserving Setup's supported non-split administrator context.
 
 This prevents creating a higher-integrity backend that a normal automatic saver
 cannot verify. Existing elevated processes require separate recovery. Injected
