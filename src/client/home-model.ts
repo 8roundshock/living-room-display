@@ -218,3 +218,8 @@ export function namesList(ids: readonly WidgetId[]): string {
   const names = ids.map(id => WIDGET_CATALOG[id].name);
   return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
+
+/** Both display surfaces can show Home timers; Clock remains the default show action. */
+export function hasTimerDisplay(settings: Pick<Settings, 'widgets'>): boolean {
+  return settings.widgets.clock || settings.widgets.timers;
+}

@@ -156,7 +156,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     await page.waitForFunction(() => document.activeElement?.textContent === '1 min'); // opening the sheet focuses the first preset
     await sheet(page).getByRole('button', { name: 'Start a 10 min timer' }).click();
     await sheet(page).waitFor({ state: 'detached' });
-    assert.match(await status(page).innerText(), /10 min timer started · on your display's clock\./);
+    assert.match(await status(page).innerText(), /10 min timer started · on your display\./);
     assert.equal((await timers()).length, 1);
     const row = page.locator('.home-timer-row').first();
     await page.waitForFunction(() => document.activeElement?.closest('.home-timer-row') !== null); // focus moves to the new row
@@ -438,9 +438,9 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     await reset(settings => { settings.widgets.clock = false; });
     await home(page);
     await action(page, 'timer').click(); await sheet(page).waitFor();
-    await sheet(page).getByText("Timers show in your display's Clock, which is off.").waitFor();
+    await sheet(page).getByText("Clock and Timers are off on your display.").waitFor();
     await sheet(page).getByRole('button', { name: 'Show the clock' }).click();
-    await sheet(page).getByText("Timers show in your display's Clock, which is off.").waitFor({ state: 'detached' });
+    await sheet(page).getByText("Clock and Timers are off on your display.").waitFor({ state: 'detached' });
     assert.equal((await state()).settings.widgets.clock, true);
     await page.keyboard.press('Escape'); await sheet(page).waitFor({ state: 'detached' });
     await reset(settings => {
@@ -462,6 +462,20 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     assert.equal(await page.getByRole('heading', { name: 'Settings', exact: true }).count(), 1);
     assert.equal(new URL(page.url()).pathname + new URL(page.url()).search, '/settings?focus=city');
     checks.push('Show on my display: with the Clock off the Timer sheet offers Show the clock and turns it on; on a full board World clocks says "No room on your display · Make room in Edit display", which opens /editor with the picker on World clocks; /editor?focus=city redirects to Settings with City focused');
+
+    // Dedicated Timers is an equally valid display surface when Clock is off (#565).
+    await reset(settings => {
+      settings.widgets = Object.fromEntries(WIDGET_IDS.map(id => [id, id === 'timers']));
+      settings.widgetGrid.placements.timers = { column: 0, row: 0, size: 'small' };
+    });
+    await home(page); await action(page, 'timer').click(); await sheet(page).waitFor();
+    assert.equal(await sheet(page).getByRole('button', { name: 'Show the clock' }).count(), 0);
+    await sheet(page).getByRole('button', { name: 'Start a 1 min timer' }).click(); await sheet(page).waitFor({ state: 'detached' });
+    assert.match(await status(page).innerText(), /started.*on your display/);
+    assert.equal(await page.locator('.home-card-waiting').filter({ hasText: /Not on your display:.*Clock/ }).count(), 0);
+    await display.goto(base + '/display'); await display.locator('.ambient-timers .timers-digits').waitFor();
+    assert.equal(await display.locator('.ambient-clock').count(), 0);
+    checks.push('Dedicated Timers with Clock off shows Home timers without an off-Clock prompt or waiting cue');
 
     // Concurrency: two Home pages, and a Home add during an Edit display draft.
     await reset();

@@ -23,3 +23,6 @@
 .grid-ambient .collection-dots { display: flex; gap: 1.2cqw; flex-wrap: wrap; color: var(--ambient-accent); }
 .grid-ambient .collection-dots span { width: max(3px, 1cqw); height: max(3px, 1cqw); border: 1px solid currentColor; border-radius: 50%; }
 .grid-ambient .collection-dots .elapsed { opacity: 0.35; }
+
+/* Preserve the reading and all stale-source lines in a small card. */
+.grid-ambient .collection-small:has(.collection-last-known) { gap: 1cqh; }

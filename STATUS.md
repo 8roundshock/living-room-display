@@ -1,5 +1,22 @@
 # Project status
 
+## Combined UI source checkpoint — 2026-11-03 (#565)
+
+PR #568 integrates the independently reviewed Style/discovery head `a6f0c07` and
+Home/Settings head `7629a05` with the fifteen-widget collection. Home treats
+Clock and dedicated Timers as equivalent timer surfaces. The existing default
+board, persisted content model, native activation and capture lifecycle are
+unchanged. The prior installed acceptance below belongs to `8059a19`; these UI
+changes are source work and have not been installed or accepted on the TV.
+
+The integrated production build/typechecks and all 613 source tests pass. Before
+integration, the collection branch passed the complete 70-family widget suite
+(1,022 s), palette suite (99 s) and motion suite (505 s), including zero continuous
+loops on the collection board. A canvas fixture scope error was fixed. Bounded
+collection and integration-sensitive browser checks, combined final-head review
+and current-head CI are the remaining gates. The component evidence below retains
+its original test counts; it does not substitute for the combined gate.
+
 ## Collection source checkpoint — 2026-11-03 (#565)
 
 Fifteen additional optional modules are implemented: Timers, Agenda, Week ahead,
@@ -37,8 +54,8 @@ picker-sheet, catalog-time, daylight, preview, shared-snapshot, studio, palette 
 widgets browser suites pass. The widget run covers 39 families across densities
 and 720p/1080p/4K, including rounded picture-only Last screen and its image states.
 Author RAM-only visual review covered compact naming, deletion Undo, catalog
-filters and all three picture families. Independent final-head review and CI
-remain pending. This is source work only; no installation, native
+filters and all three picture families. Independent component review approved
+`a6f0c07`; final combined review and CI remain on PR #568. This is source work only; no installation, native
 activation or physical-TV claim follows.
 
 ## Home content management and grouped Settings (#463, #483, #564)
@@ -56,7 +73,8 @@ Build, 598 unit tests, focused conflict/retry/close-race checks and the Home/Set
 browser suites passed during author verification. Actual synthetic RAM images
 found and verified a repair for action controls covering a field on short windows:
 list Save/Cancel now occupies its own sheet footer. Final pushed-head CI and
-independent functional/visual review remain tracked on draft PR #567. See
+independent combined review remain tracked on draft PR #568; component review
+approved `7629a05`. See
 [the source evidence and limits](docs/home-settings-refresh.md). No installed app,
 native controls, real location or desktop pixels were used or changed.
 

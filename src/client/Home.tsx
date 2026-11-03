@@ -9,7 +9,7 @@ import { ApiError, NETWORK_ERROR_MESSAGE, api } from './api';
 import { localTimeZone, timeParts, zoneOffsetMinutes } from './astronomy';
 import { civilFromDate, countdownLabel, parseCivil } from './calendar';
 import { readFirstRunDismissed } from './FirstRunCard';
-import { HOME_WIDGETS, longDay, namesList, relativeDay, todayGroups, type ComingUpItem } from './home-model';
+import { HOME_WIDGETS, hasTimerDisplay, longDay, namesList, relativeDay, todayGroups, type ComingUpItem } from './home-model';
 import { HomeSheet, type SheetKind } from './HomeSheets';
 import { SnapshotResumeDialog } from './SnapshotResumeDialog';
 import { homeDraftPending } from './home-drafts';
@@ -158,7 +158,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
   const showing = ACTIVE_WIDGET_IDS.filter(id => displaySettings.widgets[id] && (id !== 'preview' || displaySettings.preview.enabled));
   // Off widgets that Home feeds and that have something to show.
   const waiting = HOME_WIDGETS.filter(id => !displaySettings.widgets[id] && (
-    id === 'clock' ? homeTimers.length > 0 : id === 'reminders' ? groups.pending > 0 : id === 'worldClocks' ? settings.widgetData.worldClocks.length > 0
+    id === 'clock' ? homeTimers.length > 0 && !hasTimerDisplay(displaySettings) : id === 'reminders' ? groups.pending > 0 : id === 'worldClocks' ? settings.widgetData.worldClocks.length > 0
       : id === 'countdown' ? settings.widgetData.countdowns.length > 0 : id === 'note' ? settings.widgetData.note.text.length > 0 : false));
   const waitingWithoutRoom = waiting.filter(id => !showPlacement(displaySettings, id));
 

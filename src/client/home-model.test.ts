@@ -1,10 +1,11 @@
+import { defaultSettings } from '../shared/defaults.ts';
 process.env.TZ = 'America/Toronto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { CountdownEvent, Reminder } from '../shared/contracts.ts';
 import {
   addMonths, dayName, defaultTime, dueAtFor, dueSummary, isPastDay, localDayKey, monthGrid, moveDay, namesList, quickDay, reminderMarks, relativeDay,
-  remindersOn, shiftedMessage, todayGroups,
+  remindersOn, shiftedMessage, todayGroups, hasTimerDisplay,
 } from './home-model.ts';
 
 // 6:42 PM on Tuesday, October 20, 2026 in Toronto (EDT, UTC-4).
@@ -122,4 +123,13 @@ test('#438 Home model formatting builds no Intl formatter once warm', () => {
   assert.equal(constructed, 0);
   assert.equal(namesList(['calendar', 'clock', 'weather']), 'Calendar, Clock and Weather');
   assert.equal(namesList(['note']), 'Note');
+});
+
+test('#565 Clock or dedicated Timers is sufficient for Home timer visibility', () => {
+  const settings = defaultSettings();
+  assert.equal(hasTimerDisplay(settings), true);
+  settings.widgets.clock = false;
+  assert.equal(hasTimerDisplay(settings), false);
+  settings.widgets.timers = true;
+  assert.equal(hasTimerDisplay(settings), true);
 });

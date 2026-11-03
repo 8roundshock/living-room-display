@@ -9,7 +9,7 @@ import { addDays, civilFromDate, countdownLabel, countdownPassed, daysBetween, f
 import { CitySearch } from './CitySearch';
 import { HomeCalendar } from './HomeCalendar';
 import { HomeItemFields, HomeListActions, useHomeListEditor } from './HomeListEditor';
-import { defaultTime, dueAtFor, dueSummary, quickDay, shiftedMessage, type QuickWhen } from './home-model';
+import { defaultTime, dueAtFor, dueSummary, hasTimerDisplay, quickDay, shiftedMessage, type QuickWhen } from './home-model';
 import { makeRoomLink, type HomeContext } from './HomeParts';
 import { Icon } from './icons';
 import { RemindersPanel } from './RemindersPanel';
@@ -145,7 +145,7 @@ function TimerSheet({ context, onClose }: { context: HomeContext; onClose: (focu
   const [label, setLabel] = useDraft('timer.label', () => '');
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
-  const clockOn = settings.widgets.clock;
+  const timersOnDisplay = hasTimerDisplay(settings);
   const full = (context.state.timers ?? []).length >= TIMER_LIMIT;
   async function start(durationMs: number, name = '') {
     if (busy) return;
@@ -156,7 +156,7 @@ function TimerSheet({ context, onClose }: { context: HomeContext; onClose: (focu
       forget('timer.hours', 'timer.minutes', 'timer.seconds', 'timer.label');
       setState(previous => previous ? { ...previous, timers: [...(previous.timers ?? []), timer] } : previous);
       onClose(`.home-timer-row[data-timer-id="${timer.id}"] button`);
-      announce({ text: `${timerPhrase(timer)} started · ${context.settings.widgets.clock ? "on your display's clock." : "your display's Clock is off, so it shows here only."}` });
+      announce({ text: `${timerPhrase(timer)} started · ${hasTimerDisplay(context.settings) ? "on your display." : "Clock and Timers are off, so it shows here only."}` });
     } finally { setBusy(false); }
   }
   function custom(event: FormEvent) {
@@ -169,10 +169,10 @@ function TimerSheet({ context, onClose }: { context: HomeContext; onClose: (focu
   }
   return (
     <>
-      <p className="home-sheet-lede">Counts down silently on your display's clock.</p>
-      {!clockOn && (
+      <p className="home-sheet-lede">Counts down silently on your display.</p>
+      {!timersOnDisplay && (
         <div className="home-notice">
-          <p>Timers show in your display's Clock, which is off.</p>
+          <p>Clock and Timers are off on your display.</p>
           {showPlacement(settings, 'clock')
             ? <button type="button" className="button small" disabled={offline} onClick={() => { void show('clock').then(ok => ok && announce({ text: 'Clock is on your display.' })); }}>Show the clock</button>
             : <a className="home-link" href={makeRoomLink('clock').href}>Make room in Edit display</a>}

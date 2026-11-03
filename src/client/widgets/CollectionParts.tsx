@@ -70,7 +70,7 @@ export function WeatherFooter({ props, readingTime }: { props: WidgetContentProp
   return (
     <div className="collection-footer">
       {old && (
-        <span className="status-caution">
+        <span className="status-caution collection-last-known">
           Last known · {lastKnownLabel(Date.parse(readingTime!), props.now, zone, props.settings.clockFormat)}
           <br />
         </span>
@@ -113,7 +113,7 @@ export function HourValues({
 /** Missing samples break the line; no interpolation across unknown model values. */
 export function Sparkline({ values, label }: { values: (number | null)[]; label: string }) {
   const known = values.filter((value): value is number => value !== null);
-  if (!known.length) return null;
+  if (known.length < 2) return null;
   const low = Math.min(...known),
     high = Math.max(...known),
     range = Math.max(1, high - low);
