@@ -30,8 +30,10 @@ favor predictable choices, concise action labels and controls near their context
 Escape and focus-return behavior. This web adaptation claims no Apple certification.
 Recheck when catalog categories, action scope, focus ownership or viewport styles change.
 Author validation: both typechecks, production build and all 602 source tests pass.
-Synthetic styles, picker-sheet, catalog-time, preview, shared-snapshot and daylight
-browser checks pass. Naming at 1280/390/320/640 widths, deletion Undo, category
+Synthetic styles, picker-sheet, catalog-time, preview, shared-snapshot, daylight,
+studio, palette and the full widgets browser checks pass. The family suite exercises
+39 families across densities and 720p/1080p/4K, including image holds and errors.
+Naming at 1280/390/320/640 widths, deletion Undo, category
 browsing and all three Last screen families were inspected in RAM. Independent
 final-head review, CI and physical-TV acceptance remain separate.
 

@@ -13,10 +13,12 @@ The naming dialog keeps the canvas stable and uses one Cancel/Save pair. Dayligh
 help is contextual, sliders have explicit labels, no-op appearance reset status
 is accurate and concurrent merged visuals receive the correct legacy look label.
 Both typechecks, production build and all 602 source tests pass. The styles,
-picker-sheet, catalog-time, daylight, preview and shared-snapshot browser suites
-pass. Author RAM-only visual review covered compact naming, deletion Undo, catalog
-filters and all three picture families. Full widget QA, independent final-head
-review and CI remain pending. This is source work only; no installation, native
+picker-sheet, catalog-time, daylight, preview, shared-snapshot, studio, palette and full
+widgets browser suites pass. The widget run covers 39 families across densities
+and 720p/1080p/4K, including rounded picture-only Last screen and its image states.
+Author RAM-only visual review covered compact naming, deletion Undo, catalog
+filters and all three picture families. Independent final-head review and CI
+remain pending. This is source work only; no installation, native
 activation or physical-TV claim follows.
 
 ## Native Last screen acceptance — 2026-11-03 (#519)
