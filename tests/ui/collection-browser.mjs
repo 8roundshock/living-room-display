@@ -96,7 +96,7 @@ export async function runCollectionQa({ playwright, edge, capture = false, captu
       state.timers = [0, 1, 2, 3, 4].map(index => ({ ...state.timers[0], id: `timer-${index}`, label: 'Vegetable soup and kitchen clean-up', endsAt: index === 1 ? null : new Date(now + (index === 0 ? -60000 : 480000)).toISOString(), remainingMs: index === 1 ? 240000 : null }));
     }, /Done/);
     await scenario('timeOverlap', 'large', 'four-cities', state => {
-      state.settings.widgetData.worldClocks = ['Europe/London', 'America/New_York', 'America/Toronto', 'Europe/Paris'].map((timezone, index) => ({ id: `place-${index}`, label: ['Central London office', 'New York friends', 'Toronto family', 'Paris studio'][index], timezone, latitude: 0, longitude: 0 }));
+      state.settings.widgetData.worldClocks = ['Europe/London', 'America/New_York', 'America/Toronto', 'Europe/Paris'].map((timezone, index) => ({ id: `place-${index}`, label: `${index + 1} ${'W'.repeat(38)}`, timezone, latitude: 0, longitude: 0 }));
     }, /reference hours/);
     checks.push(`${scenarioCount} saved-weather, provider, populated-alert, long-reminder, mixed-timer and four-city renders fit honestly`);
 
