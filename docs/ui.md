@@ -1,6 +1,12 @@
 # Display studio
 
-## Adding widgets (#554)
+## Adding widgets (#554, #563)
+
+Search and a native Category selector lead discovery. Category options come from
+the active shared catalog; a quieter Show control filters availability. All three
+combine and the result count names the visible widgets. Show all widgets clears
+search, category and availability together, including an empty-result state.
+
 
 Either plus opens a focused Add-widget sheet over the unchanged editor. Desktop
 shows a readable grouped catalog beside one synthetic preview, with proportional
@@ -60,9 +66,10 @@ Schedule has its own guarded draft and Save/Cancel; restoring data is blocked wh
 either settings or schedule edits are pending. No persisted data migration is needed.
 
 Settings uses ordinary document scrolling at every width (#535), independent of
-the editor's fixed-height workspace. Weather and This device form a compact pair
-on wide screens; Schedule and Data & recovery use the full content width below,
-in keyboard reading order. Narrow windows stack all four groups. The page reserves
+the editor's fixed-height workspace. Location & weather occupies the left column;
+Time & units and This device stack on the right (#564). Schedule and Data & recovery
+use the full content width below. Five section links focus each group without
+hiding controls or losing a draft. Narrow windows stack the groups in reading order. The page reserves
 bottom room for its dirty-only Save/Cancel bar so the last controls remain reachable.
 Native focus scrolling also leaves room for that bar at intermediate positions.
 
@@ -185,12 +192,21 @@ buttons, inputs, city search and Reminders panel; every rule of its own names a
     Saved for 3:30 AM."); the repeated autumn hour uses its first occurrence. Days are
     this computer's local days.
   - **World clock** ("Time in another city"): the cities with their time and **Remove**
-    (with Undo), the city search with a Label and **Add clock** (disabled at four,
-    "Up to 4 cities. Remove one to add another."), and "Rename or reorder in Edit
-    display." (#463).
+    (with Undo), inline **Edit** for its label, then the city search with a Label and
+    **Add clock** (disabled at four, "Up to 4 cities. Remove one to add another.").
+    Home's clock chips open this management sheet directly (#463).
   - **Countdown** ("Days until a date"): the dates ("In 7 days", "Passed") with
     **Remove** (with Undo), then Title (1–60), Date (a week ahead), **Every year** and
-    **Add countdown**.
+    **Add countdown**. **Edit** changes title, date and yearly repeat in place;
+    a Coming up row also opens this sheet. Both list editors offer **Move earlier** /
+    **Move later**, and keep **Save edits** / **Cancel edits** in a separate footer
+    above which the fields scroll. Add is disabled while editing; **Remove from draft**
+    is cancellable and sends no request until Save. A merged list over four clocks
+    or twelve countdowns names the limit and blocks Save until resolved. Effective
+    drafts survive sheet close in RAM. Every list Save reads a settings revision and
+    sends a conditional, list-only PATCH; another window's edits merge by item ID,
+    remain visible and require review before saving again. Unrelated preferences
+    stay unchanged. See [source evidence](home-settings-refresh.md).
   - **Note** ("A short message on your display"): 200 characters and 4 lines with a
     "37/200" counter; **Save note** and **Discard** appear only while the trimmed text
     differs from the saved note (and only then does leaving the page prompt); **Clear
@@ -341,9 +357,14 @@ motion or the Off animation level.
   include visual/widget/empty-reminder settings, accent mode and animation; selecting
   one restores its whole board. Editing it shows **Modified**, and the single
   **Save changes** action updates that exact ID while saving all editor drafts.
-  **Save as new** opens an inline name, then **Save new style** creates a new ID and
-  leaves the original untouched. **Manage style** contains Rename and a confirmed
-  deletion staged until Save. It closes when a click or keyboard focus moves outside;
+  **Save as new** opens a compact naming dialog, then **Save new style** creates a new ID and
+  leaves the original untouched. **Manage style** contains Rename, Duplicate style
+  and a confirmed deletion staged until Save. Naming preserves the underlying canvas
+  geometry, contains keyboard focus, and offers one Cancel/Save pair. Escape or Cancel
+  dismisses the name and retains existing visual edits. Duplicate copies the current
+  draft and suggests a unique editable name. Deletion shows schedule consequences;
+  **Undo delete** restores the latest saved record without replacing later edits or
+  resurrecting a style deleted elsewhere. Schedule references remain available for Undo. It closes when a click or keyboard focus moves outside;
   Escape closes it and returns focus to its trigger. Rename and Delete hand focus to
   their input or confirmation, whose cancellation returns to Manage style.
   New/renamed names are validated for case/space-insensitive
@@ -843,26 +864,21 @@ instant (including repeated daylight-saving hours and imported seconds/offsets)
 and any concurrent date update. Explicitly changing or clearing the date still
 saves that selection in the computer's local timezone.
 
-Last screen is a dim optional pre-activation snapshot with capture time, size and
-opacity controls. The UI does not capture. Native/server RAM lifecycle clears it
-on dismissal; live preview/image history is not implemented. Export includes saved
-settings/reminders only, excluding drafts, images and tokens.
-New defaults use 24% snapshot opacity, multiplied by the ambient brightness cap.
-Saved custom values, including the former 8% default, are preserved. A presentation
-filter lifts midtones while preserving exact black/white endpoints; it changes
-neither the RAM PNG nor its alpha. Grid families determine the usable image size;
-the retained legacy `preview.widthPercent` field no longer shrinks that region.
-The image takes the snapshot's own shape at the largest size that fits above one
-caption line, centred in the cell, and "Last screen · 8:40 AM" starts on the image's
-left edge a few pixels below it in every family and density (#225; under 6 px even at
-4K). Under a narrower portrait image the caption keeps one line, running past the
-image's right edge within the cell, with image and caption centred together; the time
-never breaks from its AM/PM (#308). The same holds on the editor canvas at 1280×720 and 390 px: the widget's own frame
-class is distinct from the studio's canvas frame, so it takes none of that frame's border,
-radius or sizing. A newer snapshot that arrives while the display is shown stays hidden until it has
-loaded and decoded, then fades in at Subtle and Lively; Off and reduced motion show it
-as soon as it is ready (#173). The caption's time is formatted once per capture, not on
-every one-second tick (#99).
+Last screen is a dim optional snapshot with size and opacity controls. The UI does
+not capture. Under #544 it reads the same private runtime file as the native display;
+normal dismissal retains it and privacy invalidation clears it. Export excludes images.
+The owner's 2026-11-03 decision (#563) makes an available image picture-only: no visible
+caption or timestamp, with responsive rounded corners and a narrow feathered mask.
+Its full aspect fits the cell without zoom/cropping; portrait images retain their shape.
+Metadata still binds the exact captured image request. Waiting and failed-image states
+retain their accessible Last screen placeholder. No capture or cache lifecycle changes.
+
+New defaults use 24% snapshot opacity, multiplied by ambient brightness. Saved values,
+including the former 8% default, remain unchanged. The presentation filter lifts midtones
+and preserves black/white endpoints without changing source bytes. Grid families determine
+image size; the legacy width setting does not shrink it. A newer image inserted after the
+widget waits for load/decode before fading at Subtle/Lively; Off and reduced motion show
+it as soon as ready. Images retain the shared whole-widget movement and fit behavior.
 
 Clock styles are Outline (default), Digital and Analog. Analog has hands without
 a fixed face/tick ring (#222): two rounded text-colour hands (the hour hand at 30% of
@@ -1138,3 +1154,9 @@ without reserving a blank row. Mobile action errors return to their reserved
 canvas row while it fits in view; otherwise floating placement follows scroll,
 focus and layout changes and must still avoid every canvas action and the current
 control. A visible canvas action alone does not suppress an off-screen error.
+
+The #565 collection's inspector panels describe the existing data source; content
+management stays on Home or the existing World clocks settings. The ambient
+modules expose no controls. Every catalog entry declares only useful families;
+widgets without a useful small family begin at medium. Saved layouts, the default
+board and the Save/Cancel draft behavior remain unchanged.

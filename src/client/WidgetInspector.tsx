@@ -392,14 +392,15 @@ export function WidgetInspector({
                     </label>
                   )}
                   {id === 'preview' && (
-                    <label className="control-block">
+                    <div className="control-block">
                       <span className="control-label">
-                        Snapshot opacity
+                        <label htmlFor="snapshot-opacity">Snapshot opacity</label>
                         <output aria-hidden="true">
                           {Math.round(settings.preview.opacity * 100)}%
                         </output>
                       </span>
                       <input
+                        id="snapshot-opacity"
                         className="range-input"
                         type="range"
                         aria-label="Snapshot opacity"
@@ -417,7 +418,7 @@ export function WidgetInspector({
                           }))
                         }
                       />
-                    </label>
+                    </div>
                   )}
                   {id === 'photo' && (
                     <div className="photo-controls">

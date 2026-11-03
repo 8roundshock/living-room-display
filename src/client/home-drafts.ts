@@ -9,6 +9,10 @@ export function useHomeDraft<T>(key: string, initial: () => T): [T, (value: T, a
   return [value, (next, asDefault = false) => { if (asDefault || !(key in draftBases)) draftBases[key] = asDefault ? next : baseline; drafts[key] = next; setValue(next); }];
 }
 export function forgetHomeDrafts(...keys: string[]): void { for (const key of keys) { delete drafts[key]; delete draftBases[key]; } }
+/** A completed request must not erase a newer draft made after its sheet reopened. */
+export function forgetHomeDraftIf(key: string, expected: unknown): void {
+  if (drafts[key] === expected) forgetHomeDrafts(key);
+}
 export function homeDraftPending(settings: Settings): boolean { return hasHomeDrafts(drafts, draftBases, settings.widgetData.note.text); }
 
 /** Pending Home form choices live only in this document, so leaving must warn before losing them. */

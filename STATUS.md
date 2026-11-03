@@ -1,5 +1,87 @@
 # Project status
 
+## Combined UI source checkpoint — 2026-11-03 (#565)
+
+PR #568 integrates the independently reviewed Style/discovery head `a6f0c07` and
+Home/Settings head `7629a05` with the fifteen-widget collection. Home treats
+Clock and dedicated Timers as equivalent timer surfaces. The existing default
+board, persisted content model, native activation and capture lifecycle are
+unchanged. The prior installed acceptance below belongs to `8059a19`; these UI
+changes are source work and have not been installed or accepted on the TV.
+
+The integrated production build/typechecks and all 613 source tests pass. Before
+integration, the collection branch passed the complete 70-family widget suite
+(1,022 s), palette suite (99 s) and motion suite (505 s), including zero continuous
+loops on the collection board. A canvas fixture scope error was fixed. The integrated bounded collection pass
+now verifies all 31 families, fifteen empty states, 52 populated/old-reading/long-
+label cases, reduced-motion relocation and narrow editors, including visible Done
+paint. Integrated canvas, Settings, styles, picker-sheet, preview and shared-snapshot
+suites pass. Home passes 28 groups after fixing a reproduced deferred-focus race;
+a deterministic regression fails the previous assets and passes the fix. Combined
+final-head review and current-head CI are the remaining gates. The component evidence below retains
+its original test counts; it does not substitute for the combined gate.
+
+## Collection source checkpoint — 2026-11-03 (#565)
+
+Fifteen additional optional modules are implemented: Timers, Agenda, Week ahead,
+Day progress, Year progress, Time overlap, Weather alerts, Hourly temperature,
+Wind, Humidity, Pressure, Visibility, Cloud cover, Precipitation and Quiet scene.
+They are off by default and preserve the existing default board. Planning reads
+existing local data; weather details share the existing bounded Open-Meteo service.
+No new private content fields, screen capture, accounts or installed operations.
+
+Production build/typechecks and all 605 unit/server tests pass. The collection
+matrix passes 279 supported-family/grid/viewport renders at fit 1, fifteen no-data
+states, a complete collection board before/after reduced-motion swapping and
+390/320-pixel editors. Synthetic RAM-only board and compact editor captures were
+inspected, together with all 31 supported families. All 52 populated alert, long
+planning-content and saved-weather cases pass at Balanced/Fine. Shared palette/
+movement suites, independent final-head review and current-head CI are in progress. No installed/native/TV claim.
+
+## Style management and category discovery source checkpoint (#563, #428, #472, #475, #488)
+
+The editor adds current-draft duplication with unique editable names and a local
+delete Undo that restores the latest saved style without replacing later edits.
+Deletion explains affected schedule references. Widget browsing gains a catalog-
+driven category selector that combines with search and availability. Last screen
+is picture-only with responsive rounded, feathered edges under the owner's
+2026-11-03 decision; image lifecycle and capture guards are unchanged.
+
+The naming dialog keeps the canvas stable and uses one Cancel/Save pair. Daylight
+help is contextual, sliders have explicit labels, no-op appearance reset status
+is accurate and concurrent merged visuals receive the correct legacy look label.
+Independent review found a hidden validation reason while naming an invalid draft;
+the dialog now states that reason and directs Cancel back to editing. Desktop,
+narrow and short browser cases verify correction and Save retain the draft.
+Both typechecks, production build and all 602 source tests pass. The styles,
+picker-sheet, catalog-time, daylight, preview, shared-snapshot, studio, palette and full
+widgets browser suites pass. The widget run covers 39 families across densities
+and 720p/1080p/4K, including rounded picture-only Last screen and its image states.
+Author RAM-only visual review covered compact naming, deletion Undo, catalog
+filters and all three picture families. Independent component review approved
+`a6f0c07`; final combined review and CI remain on PR #568. This is source work only; no installation, native
+activation or physical-TV claim follows.
+
+## Home content management and grouped Settings (#463, #483, #564)
+
+Source work adds direct Home editing and keyboard reordering for world clocks and
+countdowns, with retained cancellable drafts, stable IDs and conditional list-only
+settings saves. A concurrent change requires review while preserving local and
+remote item fields. An over-limit merged list blocks Save and offers cancellable
+draft-only removal, addressing the independent review finding on PR #567. Clock chips and Coming up countdowns open management directly.
+Settings groups location/weather, time/units, device, schedule and recovery with
+compact section links and outer-document scrolling. Home Note and timer wording
+receive the small accessibility/copy repairs tracked in #483.
+
+Build, 598 unit tests, focused conflict/retry/close-race checks and the Home/Settings
+browser suites passed during author verification. Actual synthetic RAM images
+found and verified a repair for action controls covering a field on short windows:
+list Save/Cancel now occupies its own sheet footer. Final pushed-head CI and
+independent combined review remain tracked on draft PR #568; component review
+approved `7629a05`. See
+[the source evidence and limits](docs/home-settings-refresh.md). No installed app,
+native controls, real location or desktop pixels were used or changed.
+
 ## Native Last screen acceptance — 2026-11-03 (#519)
 
 Clean source `8059a19d2b57ca5189ac8ac52302af8f2365d06d`, including independently

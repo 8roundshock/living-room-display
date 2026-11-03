@@ -80,14 +80,14 @@ export async function runSharedSnapshotQa({ playwright, edge, capture = false } 
     await page.goto(base + '/display');
     await page.locator('.preview-image').waitFor();
     await page.waitForFunction(() => { const image = document.querySelector('.preview-image'); return image?.complete && image.naturalWidth === 640; });
-    assert.equal(await page.locator('.preview-caption').count(), 1);
+    assert.equal(await page.locator('.preview-caption').count(), 0, 'owner chose a picture-only Last screen');
     const browserBytes = await page.evaluate(async () => [...new Uint8Array(await (await fetch(document.querySelector('.preview-image').src)).arrayBuffer())]);
     assert.deepEqual(Buffer.from(browserBytes), png, 'actual origin-less same-origin browser GET reads the canonical PNG');
     assert.equal(await page.locator('.preview-image').evaluate(image => {
       const canvas = document.createElement('canvas'); canvas.width = 1; canvas.height = 1;
       const context = canvas.getContext('2d'); context.drawImage(image, 0, 0, 1, 1); return context.getImageData(0, 0, 1, 1).data[3];
     }), 255, 'the visual fixture must actually paint opaque pixels');
-    checks.push('Shared renderer loads the exact canonical synthetic PNG and capture caption through the real same-origin browser GET.');
+    checks.push('Shared renderer loads the exact canonical synthetic PNG without a visible caption through the real same-origin browser GET.');
     if (capture) images.push({ label: 'saved', png: await page.screenshot({ type: 'png' }) });
     await page.keyboard.press('f'); await page.waitForFunction(() => document.fullscreenElement !== null);
     assert.notEqual(await page.locator('html').evaluate(element => getComputedStyle(element).cursor), 'none');

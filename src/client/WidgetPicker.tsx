@@ -5,7 +5,7 @@ import { same } from './draft';
 import { RoomNotice } from './FreeSizeControls';
 import { Icon } from './icons';
 import { columnOutlook, listNames, roomProblem, type RoomFix, type RoomProblem } from './make-room';
-import { filteredPickerGroups, filteredPickerSelection, firstPickerSelection, type PickerFilter } from './picker-catalog';
+import { filteredPickerGroups, filteredPickerSelection, firstPickerSelection, pickerGroups, type PickerCategory, type PickerFilter } from './picker-catalog';
 import { WidgetSample } from './WidgetSample';
 import './picker-groups.css';
 import './picker-sheet.css';
@@ -25,6 +25,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
   const [preferred, setSelected] = useState<WidgetId>(() => initial ?? firstPickerSelection(settings.widgets));
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<PickerFilter>('all');
+  const [category, setCategory] = useState<PickerCategory>('all');
   const [sizes, setSizes] = useState<Partial<Record<WidgetId, WidgetSize>>>({});
   const [mobileDetail, setMobileDetail] = useState(false);
   const sheet = useRef<HTMLDialogElement>(null), heading = useRef<HTMLHeadingElement>(null);
@@ -34,7 +35,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
   const close = useRef<HTMLButtonElement>(null), catalog = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null);
   const results = useRef<HTMLDivElement>(null), detail = useRef<HTMLDivElement>(null);
   const resultFocus = useRef<HTMLElement | null>(null);
-  const groups = filteredPickerGroups(settings.widgets, query, filter);
+  const groups = filteredPickerGroups(settings.widgets, query, filter, category);
   const visibleSelection = filteredPickerSelection(groups, preferred);
   const selected = visibleSelection ?? preferred;
   const resultCount = groups.reduce((count, group) => count + group.ids.length, 0);
@@ -80,7 +81,7 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       const top = item.offsetTop - rail.offsetTop, bottom = top + item.offsetHeight;
       if (top < rail.scrollTop || bottom > rail.scrollTop + rail.clientHeight) rail.scrollTop = Math.max(0, top - (rail.clientHeight - item.offsetHeight) / 2);
     }
-  }, [selected, query, filter, visibleSelection, settings.widgets]);
+  }, [selected, query, filter, category, visibleSelection, settings.widgets]);
   const widget = WIDGET_CATALOG[selected];
   const size = sizes[selected] ?? widget.defaultSize;
   const added = settings.widgets[selected];
@@ -128,9 +129,13 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
         <input ref={search} type="search" aria-label="Search widgets" placeholder="Search widgets" value={query} autoComplete="off" spellCheck={false} onChange={event => { setQuery(event.target.value); setProblem(null); }} />
         {query && <button className="icon-button" aria-label="Clear widget search" onClick={() => { setQuery(''); search.current?.focus(); }}><Icon name="close" size={16} /></button>}
       </div>
-      <select aria-label="Filter widgets" value={filter} onChange={event => { setFilter(event.target.value as PickerFilter); setProblem(null); }}>
+      <label className="picker-filter picker-category"><span className="sr-only">Category</span><select aria-label="Widget category" value={category} onChange={event => { setCategory(event.target.value as PickerCategory); setProblem(null); }}>
+        <option value="all">All categories</option>
+        {pickerGroups().map(group => <option key={group.category} value={group.category}>{WIDGET_CATEGORIES[group.category]}</option>)}
+      </select></label>
+      <label className="picker-filter picker-availability"><span>Show</span><select aria-label="Filter widgets" value={filter} onChange={event => { setFilter(event.target.value as PickerFilter); setProblem(null); }}>
         <option value="all">All widgets</option><option value="not-added">Not added</option><option value="on-display">On display</option>
-      </select>
+      </select></label>
     </div>
     <div className="picker-results"><span role="status">{resultCount} {resultCount === 1 ? 'widget' : 'widgets'}</span><span aria-hidden="true">Arrow keys browse</span></div>
     <p className="sr-only" id="picker-keyboard-help">Use arrow keys to browse widgets. Home and End go to the first and last result. Enter opens a preview. Tab moves between controls.</p>
@@ -159,9 +164,9 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
       </div>)}
     </div></div>
     {visibleSelection === null ? <div className="picker-empty">
-      <h3>{filter === 'not-added' && !query.trim() ? 'Every widget is on your display' : 'No matching widgets'}</h3>
+      <h3>{filter === 'not-added' && !query.trim() && category === 'all' ? 'Every widget is on your display' : 'No matching widgets'}</h3>
       <p>{query.trim() ? 'Try a name, description or category, or change the filter.' : 'Change the filter to browse the catalog.'}</p>
-      <button className="button" onClick={() => { setQuery(''); setFilter('all'); setProblem(null); search.current?.focus(); }}>Show all widgets</button>
+      <button className="button" onClick={() => { setQuery(''); setFilter('all'); setCategory('all'); setProblem(null); search.current?.focus(); }}>Show all widgets</button>
     </div> :
     <section key={selected} className="picker-detail" aria-label={`${widget.name} preview`}>
       <div className="picker-detail-content" key={selected} ref={detail}>

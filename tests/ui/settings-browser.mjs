@@ -67,6 +67,21 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.width}: one-axis reflow`);
     }
     record('Wheel and keyboard scrolling reach the final recovery controls in desktop, short and narrow windows without horizontal overflow');
+    await open('/settings');
+    assert.equal(await page.locator('.settings-weather-card').getByRole('combobox', { name: 'Time format', exact: true }).count(), 0);
+    assert.equal(await page.locator('.settings-preferences-card').getByRole('combobox', { name: 'Time format', exact: true }).count(), 1);
+    for (const link of await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link').all()) {
+      const href = await link.getAttribute('href');
+      await link.click();
+      assert.equal(await page.locator(href).evaluate(element => document.activeElement === element), true);
+    }
+    await units().selectOption('imperial');
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Weather', exact: true }).click();
+    assert.equal(await units().inputValue(), 'imperial');
+    await button('Cancel').click();
+    if (capture) { await page.evaluate(() => scrollTo(0, 0)); await page.waitForFunction(() => scrollY === 0); images.push({ name: 'settings-groups-desktop', bytes: await page.screenshot() }); }
+    record('Section links focus their destinations without losing drafts, and time/units live in their own compact group');
+
     for (const viewport of [{ width: 1280, height: 480 }, { width: 390, height: 640 }, { width: 320, height: 480 }]) {
       await open('/settings', viewport);
       await app.store.update(data => { data.settings.savedPresets = [{ id: 'layout-check', name: 'Layout check', visual: getVisual(data.settings) }]; });

@@ -10,7 +10,7 @@ const forecastSchema = z.object({
   utc_offset_seconds: z.number(),
   current: z.object({ time: z.number(), temperature_2m: nullableNumber, apparent_temperature: nullableNumber, weather_code: nullableNumber, is_day: z.number(), wind_speed_10m: nullableNumber }),
   daily: z.object({ time: z.array(z.number()).min(7), weather_code: series, temperature_2m_max: series, temperature_2m_min: series, precipitation_probability_max: series, precipitation_sum: series }),
-  hourly: z.object({ time: z.array(z.number()), precipitation_probability: series, precipitation: series, rain: series, showers: series }),
+  hourly: z.object({ time: z.array(z.number()), precipitation_probability: series, precipitation: series, rain: series, showers: series, temperature_2m: series.optional(), relative_humidity_2m: series.optional(), dew_point_2m: series.optional(), surface_pressure: series.optional(), visibility: series.optional(), cloud_cover: series.optional(), wind_speed_10m: series.optional(), wind_direction_10m: series.optional(), wind_gusts_10m: series.optional() }),
 });
 const geocodeSchema = z.object({ results: z.array(z.unknown()).optional() });
 /** Settings' own name limit, so a chosen city can always be saved (#246). */
@@ -82,7 +82,7 @@ export function emptyWeather(settings: Settings): WeatherState {
 export function normalizeForecast(payload: unknown, settings: Settings, now: number): WeatherState {
   const data = forecastSchema.parse(payload);
   for (const group of [data.daily, data.hourly]) {
-    if (Object.values(group).some(values => values.length !== group.time.length)) throw new Error('Incomplete forecast series');
+    if (Object.values(group).some(values => values !== undefined && values.length !== group.time.length)) throw new Error('Incomplete forecast series');
   }
   const state = emptyWeather(settings);
   if (settings.location.timezone === 'auto') {
@@ -116,6 +116,9 @@ export function normalizeForecast(payload: unknown, settings: Settings, now: num
     };
   }).filter(interval => Date.parse(interval.intervalEnd) > reference);
   state.hourly = state.hourly.slice(0, 24 + state.hourly.filter(interval => Date.parse(interval.intervalEnd) <= now).length);
+  state.details = data.hourly.time.map((time, index) => ({ time: new Date(time * 1000).toISOString(),
+    temperature: data.hourly.temperature_2m?.[index] ?? null, humidity: data.hourly.relative_humidity_2m?.[index] ?? null, dewPoint: data.hourly.dew_point_2m?.[index] ?? null, pressure: data.hourly.surface_pressure?.[index] ?? null, visibility: data.hourly.visibility?.[index] ?? null, cloudCover: data.hourly.cloud_cover?.[index] ?? null, windSpeed: data.hourly.wind_speed_10m?.[index] ?? null, windDirection: data.hourly.wind_direction_10m?.[index] ?? null, windGust: data.hourly.wind_gusts_10m?.[index] ?? null
+  })).filter(reading => Date.parse(reading.time) >= reference - 3600_000).slice(0, 25);
   return state;
 }
 
@@ -168,7 +171,7 @@ export class WeatherService {
       timezone: settings.location.timezone, timeformat: 'unixtime', forecast_days: '7',
       current: 'temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m',
       daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum',
-      hourly: 'precipitation_probability,precipitation,rain,showers',
+      hourly: 'precipitation_probability,precipitation,rain,showers,temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure,visibility,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m',
       temperature_unit: settings.units === 'imperial' ? 'fahrenheit' : 'celsius',
       wind_speed_unit: settings.units === 'imperial' ? 'mph' : 'kmh', precipitation_unit: settings.units === 'imperial' ? 'inch' : 'mm',
     }).toString();

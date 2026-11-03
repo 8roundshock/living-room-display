@@ -19,12 +19,7 @@ const ALLOWED_PROPERTIES = new Set(['transform', 'translate', 'rotate', 'scale',
 const LEVELS = ['off', 'subtle', 'lively'];
 const HOUR = 3_600_000;
 /** Every active widget on one Balanced 12 x 8 board (as in palette-browser.mjs); a newly activated widget must be added here. */
-const FULL_BOARD = {
-  clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
-  sunMoon: { column: 0, row: 2, size: 'medium' }, dynamic: { column: 0, row: 4, size: 'medium' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
-  reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
-  note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
-};
+import { FULL_BOARD, COLLECTION_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
 /** One widget alone at the board's top-left corner. */
 const only = (id, placement) => state => {
   state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id]));
@@ -32,10 +27,10 @@ const only = (id, placement) => state => {
   state.settings.widgetGrid.density = 'balanced';
   state.settings.widgetGrid.placements[id] = typeof placement === 'string' ? { column: 0, row: 0, size: placement } : placement;
 };
-const fullBoard = state => {
-  state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD]));
+const fullBoard = (state, placements = FULL_BOARD) => {
+  state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in placements]));
   state.settings.preview.enabled = true; state.settings.widgetGrid.density = 'balanced';
-  Object.assign(state.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+  Object.assign(state.settings.widgetGrid.placements, structuredClone(placements));
 };
 
 /**
@@ -583,7 +578,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     // Coverage of the merged catalog: every active widget has a widget-checks module (its prepare
     // hook gives it content above) and the full board lists every active widget.
     for (const id of ACTIVE_WIDGET_IDS) assert.ok(WIDGET_CHECKS[id], `${id} needs a tests/ui/widget-checks module`);
-    assert.deepEqual(Object.keys(FULL_BOARD).sort(), [...ACTIVE_WIDGET_IDS].sort(), 'FULL_BOARD lists every active widget');
+    assert.deepEqual([...new Set(WIDGET_BOARDS.flatMap(board => Object.keys(board)))].sort(), [...ACTIVE_WIDGET_IDS].sort(), 'FULL_BOARD lists every active widget');
     const expectedFamilies = ACTIVE_WIDGET_IDS.reduce((sum, id) => sum + widgetSizes(id).length, 0);
     // A free-size Reminders span (#73) from the top edge to the bottom edge.
     const tallReminders = normalizePlacement('reminders', { column: 0, row: 0, size: 'small', span: { columns: 4, rows: 8 } });
@@ -593,10 +588,12 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
         const view = await displayPage({ state: scenario(level(animation)), viewport });
         await midReveal(view.page, `${animation} default board ${viewport.width}`, true);
         await view.close();
-        const board = await displayPage({ state: scenario(state => { level(animation)(state); fullBoard(state); }), viewport });
-        assert.equal(await board.page.locator('.ambient-widget').count(), ACTIVE_WIDGET_IDS.length, 'the full board shows every widget');
+        for (const placements of WIDGET_BOARDS) {
+        const board = await displayPage({ state: scenario(state => { level(animation)(state); fullBoard(state, placements); }), viewport });
+        assert.equal(await board.page.locator('.ambient-widget').count(), Object.keys(placements).length, 'the board shows its widgets');
         await midReveal(board.page, `${animation} full board ${viewport.width}`, true);
         await board.close();
+        }
       }
       for (const id of ACTIVE_WIDGET_IDS) for (const size of widgetSizes(id)) {
         const view = await displayPage({ viewport, state: scenario(state => { level('lively')(state); only(id, size)(state); }) });
@@ -1019,7 +1016,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
       await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await savebar.waitFor({ state: 'detached' });
       await page.getByRole('button', { name: /^Save as new/ }).click();
       await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic lively');
-      await page.getByRole('button', { name: 'Save new style', exact: true }).click(); await savebar.waitFor({ state: 'detached' });
+      await page.getByRole('button', { name: 'Save new style', exact: true }).click(); await page.locator('.style-name-dialog').waitFor({ state: 'hidden' }); await savebar.waitFor({ state: 'detached' });
       await styleChoice.selectOption('');
       await pressed('Off').click();
       await styleChoice.selectOption({ label: 'Synthetic lively' });
@@ -1110,7 +1107,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     }).filter(item => item.fit < 1));
     if (performance) {
       // The default board and a full board of every merged widget (#162), each Off against Lively.
-      for (const [board, arrange] of [['default', () => undefined], ['full', fullBoard]]) {
+      for (const [board, arrange] of [['default', () => undefined], ['full', fullBoard], ['collection', state => fullBoard(state, COLLECTION_BOARD)]]) {
         const result = metrics[board] = {};
         for (const animation of ['off', 'lively']) {
           const view = await displayPage({ clock: false, fixedTime: now, viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3, state: scenario(state => { level(animation)(state); arrange(state); state.weather.current.weatherCode = 61; state.weather.current.isDay = true; }) });
@@ -1128,8 +1125,11 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
         }
         assert.ok(Math.abs(result.lively.LayoutCount - result.off.LayoutCount) <= 3, `${board} LayoutCount ${JSON.stringify(result)}`);
         assert.ok(result.lively.TaskDuration - result.off.TaskDuration <= 0.15, `${board} TaskDuration ${JSON.stringify(result)}`);
-        assert.equal(result.lively.loops, 3, `${board}: rain at Lively runs its three drop loops`);
-        if (board === 'full') assert.ok(result.off.widgets === ACTIVE_WIDGET_IDS.length && result.lively.widgets === ACTIVE_WIDGET_IDS.length, 'the full board shows every widget');
+        assert.equal(result.lively.loops, board === 'collection' ? 0 : 3, `${board}: only weather rain owns continuous drop loops`);
+        if (board !== 'default') {
+          const count = Object.keys(board === 'collection' ? COLLECTION_BOARD : FULL_BOARD).length;
+          assert.ok(result.off.widgets === count && result.lively.widgets === count, `${board} shows all its widgets`);
+        }
         checks.push(`performance over 15 s at 1280×720 ×3, ${board} board: Off ${JSON.stringify(result.off)}; Lively ${JSON.stringify(result.lively)}`);
       }
       // #248/#436 frame budget: at Off with Float gently on (the default), the display draws a frame only when the

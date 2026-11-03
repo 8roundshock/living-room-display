@@ -102,7 +102,9 @@ independent autosave path for a new widget's settings.
 Use isolated synthetic data. Run relevant build/tests and inspect actual rendering
 for each supported family and grid, floating (a translated section) and with Swap
 places on, including reduced motion,
-long content and no-data states. Run the palette harness,
+long content and no-data states. When catalog membership changes, run
+`tests/ui/catalog-sky-browser.mjs` and `tests/ui/catalog-time-browser.mjs` and update
+their explicit category/search expectations. Run the palette harness,
 `tests/ui/palette-browser.mjs`: add a newly active widget to its `FULL_BOARD`, and
 to `ACCENT_SELECTOR` when its accent element is a new kind or to `TEXT_ONLY` when
 it has none. It fails for any painted colour other than the element's accent, the

@@ -19,7 +19,7 @@ const previous: ReadonlySet<string> = new Set(PREVIOUS_RELEASE.widgetIds);
  * silently vacuous. d66832b (#497) knows the 13 ids before Dynamic (#437). A new catalog id belongs here
  * until the baseline knows it: while off it is omitted at rest, and its transform never is written (#135).
  */
-const NOT_IN_PREVIOUS: WidgetId[] = ['dynamic'];
+const NOT_IN_PREVIOUS: WidgetId[] = ['dynamic', 'timers', 'agenda', 'weekAhead', 'dayProgress', 'yearProgress', 'timeOverlap', 'weatherAlerts', 'hourlyTemperature', 'wind', 'humidity', 'pressure', 'visibility', 'cloudCover', 'precipitation', 'quietScene'];
 /** The #78 ids, which bedca44 lacked and every baseline since 3fee844 knows: their keys are always written. */
 const KNOWN_SINCE_3FEE844: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
 const visualOf = ({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview }: Settings): VisualSettings => structuredClone({ appearance, widgets, widgetOverrides, widgetBehavior, widgetGrid, preview });
@@ -45,7 +45,7 @@ test('persisted data reads back to effectively the same settings, and the input 
     const read = dataSchema.parse(written);
     assert.ok(sameEffectiveSettings(read.settings, settings), `${label}: effectively equal`);
     // Identical except hidden placements of disabled ids the previous release lacks, which return to
-    // catalog defaults (none since #263, so the read is identical).
+    // catalog defaults (Dynamic #437 and the optional collection #565).
     const expected = structuredClone(original);
     for (const visual of [expected.settings, ...expected.settings.savedPresets.map(preset => preset.visual)]) {
       for (const id of NOT_IN_PREVIOUS) if (visual.widgets[id] !== true) visual.widgetGrid.placements[id] = defaultWidgetGrid().placements[id];

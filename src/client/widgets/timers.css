@@ -1,0 +1,9 @@
+.grid-ambient .ambient-timers .timers-digits { font-size: calc(max(var(--min-data), min(17cqw, 27cqh)) * var(--font-scale)); line-height: 1.05; font-weight: 400; font-variant-numeric: tabular-nums lining-nums; }
+.grid-ambient .ambient-timers .timers-digits:not(.status-caution) { color: transparent; -webkit-text-stroke: max(1.2px, 0.35cqw) var(--ambient-text); }
+.grid-ambient .ambient-timers .collection-medium .collection-list { flex-direction: row; gap: 5cqw; }
+.grid-ambient .ambient-timers .collection-medium .collection-list li { flex: 1; }
+.grid-ambient .ambient-timers .collection-large .collection-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5cqh 4cqw; }
+.grid-ambient .ambient-timers .collection-large .timers-digits { font-size: calc(max(var(--min-data), min(11cqw, 13cqh)) * var(--font-scale)); }
+
+.grid-ambient .ambient-timers .collection-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.grid-ambient .ambient-timers .collection-large .collection-title { -webkit-line-clamp: 1; }

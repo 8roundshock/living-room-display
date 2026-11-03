@@ -1,0 +1,28 @@
+/* Shared typography only. Each collection module owns its composition. No frames or motion loops. */
+.grid-ambient .collection-face { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; width: 100%; min-width: 0; gap: 3cqh; }
+.grid-ambient .collection-face p { margin: 0; }
+.grid-ambient .collection-label, .grid-ambient .collection-unit, .grid-ambient .collection-detail, .grid-ambient .collection-footer, .grid-ambient .collection-hour-label { color: var(--ambient-accent); font-size: calc(max(var(--min-text), min(4cqw, 7cqh)) * var(--font-scale)); line-height: 1.25; }
+.grid-ambient .collection-small .collection-label, .grid-ambient .collection-small .collection-detail, .grid-ambient .collection-small .collection-footer { font-size: calc(max(var(--min-text), min(6.5cqw, 7cqh)) * var(--font-scale)); }
+.grid-ambient .collection-label { font-weight: 500; }
+.grid-ambient .collection-reading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25em; line-height: 1.1; }
+.grid-ambient .collection-value { font-size: calc(max(var(--min-data), min(16cqw, 30cqh)) * var(--font-scale)); font-weight: 300; font-variant-numeric: tabular-nums lining-nums; letter-spacing: -0.025em; }
+.grid-ambient .collection-small .collection-value { font-size: calc(max(var(--min-data), min(25cqw, 25cqh)) * var(--font-scale)); }
+.grid-ambient .collection-large .collection-value { font-size: calc(max(var(--min-data), min(18cqw, 20cqh)) * var(--font-scale)); }
+.grid-ambient .collection-empty { font-size: calc(max(var(--min-data), min(6cqw, 12cqh)) * var(--font-scale)); line-height: 1.3; overflow-wrap: anywhere; }
+.grid-ambient .collection-footer { overflow-wrap: anywhere; }
+.grid-ambient .collection-hours { display: flex; gap: 3cqw; width: 100%; justify-content: flex-start; }
+.grid-ambient .collection-hour { display: flex; flex-direction: column; gap: 1cqh; min-width: 0; }
+.grid-ambient .collection-hour-value { font-size: calc(max(var(--min-data), min(5cqw, 12cqh)) * var(--font-scale)); white-space: nowrap; }
+.grid-ambient .collection-large .collection-hours { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3cqh 2cqw; }
+.grid-ambient .collection-sparkline { width: 100%; height: 18cqh; color: var(--ambient-accent); overflow: visible; }
+.grid-ambient .collection-sparkline path { fill: none; stroke: currentColor; stroke-width: 1.2; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.grid-ambient .collection-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; width: 100%; gap: 3cqh; }
+.grid-ambient .collection-list li { min-width: 0; }
+.grid-ambient .collection-title { font-size: calc(max(var(--min-data), min(5.8cqw, 12cqh)) * var(--font-scale)); line-height: 1.2; overflow-wrap: anywhere; }
+.grid-ambient .collection-large .collection-title { font-size: calc(max(var(--min-data), min(5.8cqw, 7cqh)) * var(--font-scale)); }
+.grid-ambient .collection-dots { display: flex; gap: 1.2cqw; flex-wrap: wrap; color: var(--ambient-accent); }
+.grid-ambient .collection-dots span { width: max(3px, 1cqw); height: max(3px, 1cqw); border: 1px solid currentColor; border-radius: 50%; }
+.grid-ambient .collection-dots .elapsed { opacity: 0.35; }
+
+/* Preserve the reading and all stale-source lines in a small card. */
+.grid-ambient .collection-small:has(.collection-last-known) { gap: 0.5cqh; }

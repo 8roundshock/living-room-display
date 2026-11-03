@@ -1,0 +1,6 @@
+.grid-ambient .ambient-pressure .collection-value { font-size: calc(max(var(--min-data), min(16cqw, 28cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-pressure .collection-small .collection-value { font-size: calc(max(var(--min-data), min(21cqw, 25cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-pressure .collection-sparkline { height: 12cqh; }
+
+.grid-ambient .ambient-pressure .collection-medium { gap: 1cqh; }
+.grid-ambient .ambient-pressure .collection-medium .collection-value { font-size: calc(max(var(--min-data), min(14cqw, 25cqh)) * var(--font-scale)); }

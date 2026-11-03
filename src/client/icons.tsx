@@ -38,7 +38,17 @@ export type IconName =
   | 'play'
   | 'chevronLeft'
   | 'chevronRight'
-  | 'droplet';
+  | 'droplet'
+  | 'agenda'
+  | 'week'
+  | 'dayProgress'
+  | 'yearProgress'
+  | 'overlap'
+  | 'thermometer'
+  | 'gauge'
+  | 'layeredCloud'
+  | 'umbrella'
+  | 'landscape';
 export type WeatherIconName = 'sun' | 'moon' | 'suncloud' | 'mooncloud' | 'cloud' | 'fog' | 'drizzle' | 'rain' | 'snow' | 'storm';
 /**
  * One movable part of a weather symbol. `glyph` names the simple glyph whose sub-tone the part paints
@@ -99,6 +109,17 @@ function glyph(name: WeatherIconName): ReactNode {
   return <>{GLYPH_PARTS[name].map(part => <Fragment key={part.id}>{part.node}</Fragment>)}</>;
 }
 const paths: Record<IconName, React.ReactNode> = {
+  agenda: <path d="M5 5h2m3 0h9M5 12h2m3 0h9M5 19h2m3 0h9" />,
+  week: <path d="M3 6h18v15H3ZM7 3v5m10-5v5M3 11h18M8 11v10m8-10v10" />,
+  dayProgress: <path d="M12 3a9 9 0 1 1-9 9M12 3v9H3" />,
+  yearProgress: <path d="M3 4h18v16H3ZM7 8h2m4 0h4M7 12h2m4 0h4M7 16h2m4 0h4" />,
+  overlap: <path d="M14 5a7 7 0 1 0 0 14M10 5a7 7 0 1 1 0 14M12 6v12" />,
+  thermometer: <path d="M9 14V5a3 3 0 0 1 6 0v9a5 5 0 1 1-6 0ZM12 8v10m-1 0h2" />,
+  gauge: <path d="M4 18a9 9 0 1 1 16 0M12 13l5-6M8 20h8" />,
+  layeredCloud: <path d="M4 12a4 4 0 0 1 1-8 6 6 0 0 1 11 2 3 3 0 0 1 3 4M5 20h12a4 4 0 0 0 0-8 5 5 0 0 0-9-1 4.5 4.5 0 0 0-3 9" />,
+  umbrella: <path d="M3 12a9 9 0 0 1 18 0H3ZM12 3v16a2 2 0 0 0 4 0" />,
+  landscape: <path d="M2 20l7-12 6 8 3-5 4 9M16 4h1" />,
+
   clock: (
     <>
       <circle cx="12" cy="12" r="8.5" />

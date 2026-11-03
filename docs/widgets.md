@@ -99,7 +99,7 @@ On Balanced 12 × 8 it fills every cell:
 | Clock | 4, 0 | Large (8 × 4) |
 | Weather | 0, 4 | Large (4 × 4) |
 | Forecast | 4, 4 | Large (8 × 2) |
-| Last screen | 4, 6 | Medium (4 × 2) |
+| Last screen | Complete faint desktop, picture-only with responsive rounded and softly feathered edges; no visible timestamp (#563) | Wider complete desktop | Larger complete desktop; retains its aspect without zoom/cropping |
 | Reminders | 8, 6 | Medium (4 × 2) |
 
 Every other widget is off, and every widget stays optional. Hidden widgets wait at
@@ -617,3 +617,46 @@ assets, fonts, frameworks, platform integration or certification.
 | [HIG Typography](https://developer.apple.com/design/human-interface-guidelines/typography) | System type, clear size/weight hierarchy and viewing-distance checks. Small supporting text uses regular/medium weight; enlarged outlined time remains a deliberate sparse treatment. |
 | [HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion) | Purposeful, brief editor feedback; the board floats slowly and never fades out to move (#436), and a swap glides with a brief dim. Reduced motion removes effects while the board still moves in steps. No audio or haptic feedback is introduced. |
 | [Designing your app for the Always On state](https://developer.apple.com/documentation/watchos-apps/designing-your-app-for-the-always-on-state) | The watchOS example replaces large numeral fills with outlines/dim interiors. It supports the clock treatment, not a claim that this TV inherits Apple luminance or panel controls. |
+
+## Optional collection (#565)
+
+Fifteen modules extend the thirteen existing active types. All are off by default;
+the default board and older saved layouts are unchanged. They use the existing
+catalog, per-module Settings/sample hooks, grid/fit, palette and movement. No
+module starts an animation timer, adds an account or creates private content.
+
+| Widget | Families | Purpose and source |
+| --- | --- | --- |
+| Timers | Small, medium, large | One, two or four silent timers from the existing private timer sidecar; running, paused, done and offline remain distinct. Manage on Home. |
+| Agenda | Medium, large | Next two or four pending dated reminders; overdue stays explicit. Manage on Home. |
+| Week ahead | Medium, large | Seven civil-day counts; large adds the first reminder per day. Empty days stay visible. |
+| Day progress | Small, medium | Elapsed fraction and time until this computer's next midnight; medium adds discrete hour marks. DST days can be 23 or 25 hours. |
+| Year progress | Small, medium | Day of year and days after today; medium adds month progression. Leap years use 366 days. |
+| Time overlap | Medium, large | Earliest common weekday 09:00–17:00 reference window in the next 48 hours across this computer and saved World clocks cities; large lists the same instants in each city. Never claims actual availability. |
+| Weather alerts | Medium, large | Existing official Canadian/US notices. Unsupported, unavailable, stale and confirmed quiet states stay distinct. |
+| Hourly temperature | Medium, large | Four or eight model instants, with a sparse temperature line and unknown gaps. |
+| Wind | Small, medium | Model 10 m wind speed, origin direction and preceding-hour maximum gust; medium adds hourly speeds. |
+| Humidity | Small, medium | Outdoor relative humidity and dew point; medium adds hourly percentages. It is not an indoor sensor. |
+| Pressure | Small, medium | Model surface pressure in hPa; medium adds a numeric outlook, without inferred warnings. |
+| Visibility | Small, medium | Model viewing distance in km/miles; medium adds an outlook. It does not assess travel safety. |
+| Cloud cover | Small, medium | Total model cloud area fraction; medium adds hourly coverage. The still cloud glyph identifies the measurement. |
+| Precipitation | Medium, large | Three or six hourly interval amounts and all-precipitation chances. Snow is water equivalent. Unknown never becomes zero. |
+| Quiet scene | Medium, large | Original sparse landscape illustration, changing by this computer's time of day; no astronomical or local-weather claim. |
+
+Weather details reuse the existing forecast request and cache. The server retains
+at most 25 hourly detail instants separately from the existing preceding-hour
+precipitation intervals. A missing field remains null. Forecast widgets filter
+expired rows; current detail widgets never choose a future instant, identify
+readings older than three hours as last known, and retain source/update age and
+stale/offline status. Official field/time/unit semantics were verified against
+[Open-Meteo's forecast documentation](https://open-meteo.com/en/docs) on 2026-11-03.
+
+Only the catalog's additive visibility/placement keys persist. Off defaults and
+hidden placements are omitted by the existing compatibility layer, including
+saved styles and exports; enabling an unknown widget remains an explicit
+frozen-reader rollback exception. Existing local content remains in its original
+stores. API-only weather details and timers never enter settings exports.
+
+Browser coverage uses two non-overlapping synthetic Balanced boards because all
+28 active types cannot share the old full board. Per-family sweeps still cover
+every active ID and every supported family; production grid geometry is unchanged.

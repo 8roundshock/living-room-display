@@ -51,7 +51,7 @@ test('density changes preserve families and every enabled module or reject witho
   for (const id of WIDGET_IDS) assert.equal(fine.placements[id].size, settings.widgetGrid.placements[id].size);
   assert.equal(repackGrid(settings.widgetGrid, 'spacious', settings.widgets), null, '76 occupied cells cannot fit into 48 while preserving all families');
   const allSmall = structuredClone(settings.widgetGrid);
-  for (const id of WIDGET_IDS) allSmall.placements[id].size = 'small';
+  for (const id of WIDGET_IDS) allSmall.placements[id].size = widgetSizes(id)[0]!;
   const compact = repackGrid(allSmall, 'spacious', settings.widgets); assert.ok(compact);
   assert.equal(gridProblem(compact, settings.widgets), null);
 });
@@ -212,7 +212,7 @@ test('a centered single widget visits distant regions rather than remaining lock
 test('long-running full and dense boards remain collision-free and move modules across varied origins', () => {
   for (const density of Object.keys(GRID_DENSITIES) as (keyof typeof GRID_DENSITIES)[]) {
     const settings = catalogBoardDefaults(); settings.widgets.photo = true;
-    if (density === 'spacious') for (const id of WIDGET_IDS) settings.widgetGrid.placements[id].size = 'small';
+    if (density === 'spacious') for (const id of WIDGET_IDS) settings.widgetGrid.placements[id].size = widgetSizes(id)[0]!;
     let grid = repackGrid(settings.widgetGrid, density, settings.widgets); assert.ok(grid);
     const original = structuredClone(grid); const origins = Object.fromEntries(WIDGET_IDS.map(id => [id, new Set<string>()]));
     for (let cycle = 1; cycle <= 32; cycle++) {

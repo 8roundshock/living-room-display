@@ -2,7 +2,7 @@ process.env.TZ = 'America/Toronto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Timer } from '../shared/contracts.ts';
-import { clockTimer, doneAgo, spokenTimeLeft, timeLeft, timerDigits, timerEnds } from './timer.ts';
+import { clockTimer, doneAgo, spokenTimeLeft, timeLeft, timerDigits, timerEnds, timerPhrase } from './timer.ts';
 
 // 6:42 PM on Tuesday, October 20, 2026 in Toronto (EDT).
 const NOW = Date.parse('2026-10-20T22:42:00.000Z');
@@ -10,6 +10,13 @@ function timer(id: string, fields: Partial<Timer>): Timer {
   return { id, label: '', durationMs: 600_000, endsAt: null, remainingMs: null, createdAt: new Date(NOW).toISOString(), updatedAt: new Date(NOW).toISOString(), ...fields };
 }
 const at = (offset: number) => new Date(NOW + offset).toISOString();
+
+test('#483 timer labels already ending in timer are not repeated', () => {
+  assert.equal(timerPhrase({ label: 'Egg timer', durationMs: 60_000 }), 'Egg timer');
+  assert.equal(timerPhrase({ label: 'TEA TIMER ', durationMs: 60_000 }), 'TEA TIMER');
+  assert.equal(timerPhrase({ label: 'Egg', durationMs: 60_000 }), 'Egg timer');
+  assert.equal(timerPhrase({ label: '', durationMs: 300_000 }), '5 min timer');
+});
 
 test('#438 time left rounds whole minutes up above a minute, then counts seconds', () => {
   assert.equal(timeLeft(61_000), '2 min');

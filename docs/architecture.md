@@ -51,7 +51,7 @@ dependency. Node 24 is an active LTS line; existing system runtimes are not repl
 
 | Mode | Intended benefit | Open work |
 | --- | --- | --- |
-| Last-state snapshot, selected for version one | Shows the latest safely captured desktop with its capture time. | Older RAM-only evidence is dated below; current shared-file source and installed/native acceptance remain separate (#544, #519). |
+| Last-state snapshot, selected for version one | Shows the latest safely captured desktop with rounded, softly feathered edges and no visible timestamp (#563). | Older RAM-only evidence is dated below; current shared-file source and installed/native acceptance remain separate (#544, #519). |
 | Live selected-app thumbnail, future work | Shows changing state from an explicitly chosen application. | Capture support, minimized/occluded app behavior, permissions, performance, and avoiding dashboard recursion. |
 
 Owner decision, 2026-10-27 (#544): one private canonical PNG at

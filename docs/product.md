@@ -102,7 +102,9 @@ data and backups; never truncate it in place or create capture history or `.bak`
 copies. Agent/computer-use screenshots remain RAM-only; this exception is solely
 the app's one runtime cache. Selected photos and exports are unchanged.
 
-Label Last screen with its capture time so it cannot be mistaken for a live view.
+Owner decision, 2026-11-03 (#563): show only the Last screen image, with responsive
+rounded and subtly feathered edges and no visible timestamp. Keep the capture time
+as image/version metadata and preserve honest missing/error placeholders.
 Early sign-in lifecycle is #540; #544 replaces the earlier RAM-only handoff.
 Live selected-app preview remains future work. Source/CI checks do not establish
 installed capture or native acceptance. The successful ordinary-cycle result for
@@ -176,3 +178,11 @@ dependency on the owner's accounts, absolute paths, or private memory. See the
 2026-10-20, [#441](https://github.com/8roundshock/living-room-display/issues/441));
 publishing a release is a separate reviewed step. Stars and feedback are optional
 and require the end user's permission before an agent acts on their behalf.
+
+The optional #565 collection adds fifteen widgets (see the collection table in
+[the widget contract](widgets.md)). All remain off on the existing default board.
+They read existing local planning data or the same bounded weather service; no
+new account, permission or external personal-data source is required. Quiet scene
+is a sparse local illustration. Settings and the picker explain sources while the
+ambient face stays passive. Timers work on a board without Clock when its dedicated
+widget is enabled.

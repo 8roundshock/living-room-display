@@ -132,6 +132,7 @@ test('the merged catalog keeps its tone decisions, and every literal data-glyph 
     weather: 'sky', forecast: 'sky', airQuality: 'sky', sunMoon: 'sun', dynamic: 'sky',
     reminders: 'personal', countdown: 'personal', note: 'personal',
     preview: 'stone', photo: 'stone',
+    timers: 'time', agenda: 'personal', weekAhead: 'personal', dayProgress: 'time', yearProgress: 'time', timeOverlap: 'time', weatherAlerts: 'sky', hourlyTemperature: 'sun', wind: 'sky', humidity: 'water', pressure: 'sky', visibility: 'sky', cloudCover: 'sky', precipitation: 'water', quietScene: 'stone',
   });
   // Renderers that hard-code a glyph name (Sun & moon's dot and moon) must use one palette.css maps.
   for (const file of readdirSync(new URL('../client/widgets/', import.meta.url)).filter(name => name.endsWith('.tsx'))) {

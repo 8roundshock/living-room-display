@@ -1,6 +1,6 @@
 // Dense-board relocation (#93): when the bounded search cannot move every widget, a whole-board
-// reflection keeps the composition moving. Geometry is status-agnostic, so every #78 widget (shipped, like
-// Calendar, Countdown and Note, or still planned) is enabled here to model the fuller boards they make common.
+// reflection keeps the composition moving. Geometry is status-agnostic; the historical catalog below
+// preserves the dense regression boards and measured movement thresholds as new widgets are appended.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { WidgetGrid, WidgetId } from '../shared/contracts.ts';
@@ -17,9 +17,12 @@ import {
  * all, and a derived list would have gone silently empty.
  */
 const CATALOG_78: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
+/** Catalog order at the #437 measurements, including retired Rain; the random sequence depends on it. */
+const DENSE_BOARD_IDS: WidgetId[] = ['clock', 'weather', 'rain', 'forecast', 'reminders', 'preview', 'photo', 'worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon', 'dynamic'];
 
 test('the explicit #78 list names catalog ids', () => {
   assert.deepEqual(CATALOG_78.filter(id => !WIDGET_IDS.includes(id)), []);
+  assert.deepEqual(DENSE_BOARD_IDS.filter(id => !WIDGET_IDS.includes(id)), [], 'the historical dense-board ids remain in the catalog');
 });
 
 type Visibility = Partial<Record<WidgetId, boolean>>;
@@ -41,7 +44,7 @@ function symmetric(grid: WidgetGrid, ids: WidgetId[]): boolean {
     return point.column === grid.placements[id].column && point.row === grid.placements[id].row;
   }));
 }
-/** Random dense boards from every catalog id, with a free-size Reminders span grown into leftover cells. */
+/** Random dense boards from the historical catalog, with a free-size Reminders span grown into leftover cells. */
 function denseBoards(density: GridDensity, count: number): { grid: WidgetGrid; enabled: Visibility }[] {
   const boards: { grid: WidgetGrid; enabled: Visibility }[] = [];
   for (let seed = 1; boards.length < count && seed < 4_000; seed++) {
@@ -49,8 +52,8 @@ function denseBoards(density: GridDensity, count: number): { grid: WidgetGrid; e
     let grid: WidgetGrid = { ...defaultSettings().widgetGrid, density };
     const enabled: Visibility = Object.fromEntries(WIDGET_IDS.map(id => [id, false]));
     // Hidden placements must still be in bounds for the chosen density.
-    for (const id of WIDGET_IDS) grid.placements[id] = firstPlacement(grid, id, 'small', {})!;
-    const order = [...WIDGET_IDS].sort(() => next() - 0.5);
+    for (const id of WIDGET_IDS) grid.placements[id] = firstPlacement(grid, id, widgetSizes(id)[0]!, {})!;
+    const order = [...DENSE_BOARD_IDS].sort(() => next() - 0.5);
     for (const id of order) {
       const sizes = [...widgetSizes(id)].sort(() => next() - 0.5);
       for (const size of sizes) {
@@ -166,8 +169,8 @@ test('dense boards move each widget off at least half of its previous cells (#33
   // widget on more than half of its previous cells (all of them when a reflection kept a widget centred on its
   // axis). Now 7 do, on boards whose largest widgets found no such cells within the bounded search. Over 200
   // cycles of the same boards, 72 of 73,600 moves do (1,553 at 3446400), and no composition repeats the one from
-  // two cycles earlier (85 of 7,164 at 3446400). The boards are drawn from every catalog id, so Dynamic (#437)
-  // changed them: 9,000 widget moves, of which 2 keep more than half of their cells (measured 2026-10-20).
+  // two cycles earlier (85 of 7,164 at 3446400). Dynamic (#437) changed the historical catalog used here:
+  // 9,000 widget moves, of which 2 keep more than half of their cells (measured 2026-10-20).
   let moves = 0; const staying: string[] = [];
   for (const density of Object.keys(GRID_DENSITIES) as GridDensity[]) {
     for (const [index, run] of denseRunsFor(density).entries()) {
@@ -301,7 +304,7 @@ test('#435 the full default board relocates as a whole: every widget moves in ev
 test('a 100% full board relocates, and a two-thirds-wide full-height span always has room to travel', () => {
   // Spacious 8 × 6: the 8 × 4 large clock plus four small widgets fill every cell.
   const grid: WidgetGrid = { ...defaultSettings().widgetGrid, density: 'spacious' };
-  for (const id of WIDGET_IDS) grid.placements[id] = firstPlacement(grid, id, 'small', {})!;
+  for (const id of WIDGET_IDS) grid.placements[id] = firstPlacement(grid, id, widgetSizes(id)[0]!, {})!;
   const enabled: Visibility = Object.fromEntries(WIDGET_IDS.map(id => [id, false]));
   const tiles: [WidgetId, number, number, typeof WIDGET_SIZES[number]][] = [['clock', 0, 0, 'large'], ['weather', 0, 4, 'small'], ['rain', 2, 4, 'small'], ['note', 4, 4, 'small'], ['reminders', 6, 4, 'small']];
   for (const [id, column, row, size] of tiles) { grid.placements[id] = { column, row, size }; enabled[id] = true; }
@@ -315,7 +318,7 @@ test('a 100% full board relocates, and a two-thirds-wide full-height span always
   }
   for (const density of Object.keys(GRID_DENSITIES) as GridDensity[]) {
     const lone: WidgetGrid = { ...defaultSettings().widgetGrid, density };
-    for (const id of WIDGET_IDS) lone.placements[id] = firstPlacement(lone, id, 'small', {})!;
+    for (const id of WIDGET_IDS) lone.placements[id] = firstPlacement(lone, id, widgetSizes(id)[0]!, {})!;
     const limits = freeSpanLimits('reminders', density)!;
     const placed = resizeWidgetSpan(lone, 'reminders', limits.max, { reminders: true }); assert.ok(placed);
     const alone: Visibility = { reminders: true }; let last = placed;

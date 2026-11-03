@@ -1,14 +1,40 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
+import { selectScheduledPreset, type PresetSchedule } from '../shared/schedule.ts';
 import { getVisual } from './model.ts';
-import { prepareStyleSave, restoredStyleId, sameVisual } from './style-workflow.ts';
+import { duplicateStyleSuggestion, prepareStyleSave, restoredStyleId, sameVisual, undoStyleDeletion } from './style-workflow.ts';
 
 function example() {
   const settings = defaultSettings();
   settings.savedPresets = [{ id: 'arbitrary:imported/id', name: 'Evening', visual: getVisual(settings) }];
   return settings;
 }
+test('duplicate suggestions distinguish repeated copies, trim to the name limit and ignore case', () => {
+  const base = example();
+  base.savedPresets.push({ ...base.savedPresets[0]!, id: 'copy', name: ' evening COPY ' });
+  assert.equal(duplicateStyleSuggestion(base.savedPresets, 'Evening'), 'Evening copy 2');
+  assert.equal(duplicateStyleSuggestion([], 'x'.repeat(60)).length, 60);
+});
+test('deletion Undo restores the latest record in order without replacing newer draft edits', () => {
+  const base = example(), draft = structuredClone(base); draft.savedPresets = []; draft.appearance.brightness = 0.2;
+  base.savedPresets[0]!.name = 'New remote name';
+  const restored = undoStyleDeletion(base, draft, base.savedPresets[0]!.id, 0);
+  assert.equal(restored.appearance.brightness, 0.2);
+  assert.equal(restored.savedPresets[0]!.name, 'New remote name');
+  assert.deepEqual(draft.savedPresets, []);
+  base.savedPresets = [];
+  assert.throws(() => undoStyleDeletion(base, draft, 'arbitrary:imported/id', 0), /deleted elsewhere/);
+});
+test('deletion and Undo preserve schedule references and restore their existing target', () => {
+  const base = example(), draft = structuredClone(base), id = base.savedPresets[0]!.id;
+  const config: PresetSchedule = { enabled: true, fallbackPresetId: id, rules: [{ id: 'rule', presetId: id, days: [2], start: '00:00', end: '23:59' }] };
+  const before = structuredClone(config); draft.savedPresets = [];
+  assert.deepEqual(selectScheduledPreset(config, draft.savedPresets, new Date('2026-11-03T12:00:00')).missingPresetIds, [id]);
+  const restored = undoStyleDeletion(base, draft, id, 0);
+  assert.equal(selectScheduledPreset(config, restored.savedPresets, new Date('2026-11-03T12:00:00')).presetId, id);
+  assert.deepEqual(config, before);
+});
 test('update retains the explicit ID, unrelated settings and other records without mutating inputs', () => {
   const base = example(), draft = structuredClone(base), original = structuredClone(base);
   draft.appearance.brightness = 0.3; draft.units = 'imperial';
