@@ -129,5 +129,57 @@ export async function checkHomeListEditing({ page, app, reset, home, action, she
   await button('Cancel edits').click(); await button('Edit First submitted').waitFor();
   await page.unroute('**/api/settings'); await close();
   checks.push('A delayed save finishing after sheet close cannot erase a newer draft made after reopening');
+
+  // A remote replacement of a locally edited item must not strand a merged draft over its cap.
+  for (const config of [
+    { key: 'worldClocks', action: 'worldClock', field: 'Clock label', name: 'label', cap: 4, noun: 'clocks' },
+    { key: 'countdowns', action: 'countdown', field: 'Countdown title', name: 'title', cap: 12, noun: 'countdowns' },
+  ]) {
+    const id = index => `${String(index).padStart(8, '0')}-1111-4111-8111-111111111111`;
+    const item = (index, name) => config.key === 'worldClocks'
+      ? { id: id(index), label: name, timezone: 'Europe/London', latitude: 51.5, longitude: -0.1 }
+      : { id: id(index), title: name, date: '2027-08-10', repeatsYearly: false };
+    for (const outcome of ['cancel', 'save']) {
+      await reset(settings => { settings.widgetData[config.key] = Array.from({ length: config.cap }, (_, index) => item(index + 1, `Item ${index + 1}`)); });
+      await home(page); await action(page, config.action).click(); await button('Edit Item 1').click();
+      await sheet(page).getByLabel(config.field, { exact: true }).fill('Local retained');
+      await app.store.update(data => { data.settings.widgetData[config.key] = [...data.settings.widgetData[config.key].slice(1), item(99, 'Remote replacement')]; });
+      await button('Save edits').click();
+      await sheet(page).getByText(`Up to ${config.cap} ${config.noun}. Remove 1 from this draft to save.`, { exact: true }).waitFor();
+      assert.equal(await button('Save edits').isEnabled(), false, `${config.key}: invalid merged draft cannot save`);
+      assert.equal(await sheet(page).locator('.home-list-row').count(), config.cap + 1);
+      if (capture && outcome === 'save') {
+        await page.setViewportSize({ width: 320, height: 480 });
+        images.push({ name: `home-limit-${config.key}`, bytes: await page.screenshot() });
+        await page.setViewportSize({ width: 1280, height: 720 });
+      }
+      await button('Edit Item 2').click();
+      await sheet(page).getByLabel(config.field, { exact: true }).fill('Newer local edit');
+      const beforeRemoval = structuredClone(app.store.snapshot().settings.widgetData[config.key]);
+      let writes = 0;
+      const watch = request => { if (['PATCH', 'POST', 'DELETE'].includes(request.method())) writes++; };
+      page.on('request', watch);
+      await button('Remove from draft: Remote replacement').click();
+      assert.equal(await button('Save edits').isEnabled(), true);
+      assert.deepEqual(app.store.snapshot().settings.widgetData[config.key], beforeRemoval, 'draft removal makes no server change');
+      assert.equal(writes, 0, 'draft removal sends no write'); page.off('request', watch);
+      await close(); await action(page, config.action).click();
+      await button('Edit Local retained').waitFor(); await button('Edit Newer local edit').waitFor();
+      if (outcome === 'cancel') {
+        await button('Cancel edits').click();
+        await button('Edit Remote replacement').waitFor();
+        assert.deepEqual(app.store.snapshot().settings.widgetData[config.key], beforeRemoval, 'Cancel restores the latest server list without writing');
+      } else {
+        await button('Save edits').click(); await sheet(page).locator('.home-list-edit-actions').waitFor({ state: 'detached' });
+        const result = app.store.snapshot().settings.widgetData[config.key];
+        assert.equal(result.length, config.cap);
+        assert.equal(result.find(value => value.id === id(1))[config.name], 'Local retained');
+        assert.equal(result.find(value => value.id === id(2))[config.name], 'Newer local edit');
+        assert.equal(result.some(value => value.id === id(99)), false);
+      }
+      await close();
+    }
+  }
+  checks.push('Merged clock/countdown lists over their caps block Save; explicit draft removal sends no write, survives close, cancels safely, and saves while keeping other newer edits');
   return { checks, images };
 }

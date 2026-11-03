@@ -194,7 +194,9 @@ buttons, inputs, city search and Reminders panel; every rule of its own names a
     **Add countdown**. **Edit** changes title, date and yearly repeat in place;
     a Coming up row also opens this sheet. Both list editors offer **Move earlier** /
     **Move later**, and keep **Save edits** / **Cancel edits** in a separate footer
-    above which the fields scroll. Add/remove are disabled while editing. Effective
+    above which the fields scroll. Add is disabled while editing; **Remove from draft**
+    is cancellable and sends no request until Save. A merged list over four clocks
+    or twelve countdowns names the limit and blocks Save until resolved. Effective
     drafts survive sheet close in RAM. Every list Save reads a settings revision and
     sends a conditional, list-only PATCH; another window's edits merge by item ID,
     remain visible and require review before saving again. Unrelated preferences

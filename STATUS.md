@@ -5,7 +5,8 @@
 Source work adds direct Home editing and keyboard reordering for world clocks and
 countdowns, with retained cancellable drafts, stable IDs and conditional list-only
 settings saves. A concurrent change requires review while preserving local and
-remote item fields. Clock chips and Coming up countdowns open management directly.
+remote item fields. An over-limit merged list blocks Save and offers cancellable
+draft-only removal, addressing the independent review finding on PR #567. Clock chips and Coming up countdowns open management directly.
 Settings groups location/weather, time/units, device, schedule and recovery with
 compact section links and outer-document scrolling. Home Note and timer wording
 receive the small accessibility/copy repairs tracked in #483.

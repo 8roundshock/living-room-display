@@ -3,8 +3,9 @@
 Source checkpoint, 2026-11-03. Home manages world-clock labels and countdown
 names/dates directly in its existing sheets. The selected item exposes keyboard
 Move earlier/later controls, with one Save edits / Cancel edits pair for the list.
-Add and remove stay unavailable during editing, avoiding mixed immediate/draft
-operations. Closing the sheet retains effective edits in RAM.
+Add stays unavailable during editing. Remove becomes **Remove from draft**,
+which changes only the retained list until Save; ordinary Remove/Undo remains an
+immediate action outside editing. Closing the sheet retains effective edits in RAM.
 
 List saves use the existing settings PATCH with a freshly read revision. Another
 window's list changes merge by stable item ID through the editor's existing
@@ -47,3 +48,14 @@ every field and reorder button against that scroller and footer. The Home suite 
 regression also passed in the focused harness. Final pushed-head CI and independent
 functional/visual review remain pending. This source work
 has not changed the installed app, native settings or real private data.
+
+
+## Independent review follow-up: merged-list limits
+
+Review of `7b7b670` reproduced a local edit to an item removed/replaced in another
+window merging into five clocks or thirteen countdowns. Home now blocks Save and
+names how many items must be removed. **Remove from draft** resolves that list
+without a request, keeps other edits and survives sheet close; Cancel restores the
+latest server list. The save handler also refuses an over-limit list. Regression
+cases cover both caps, no-write removal/Cancel and saving with a second newer local
+edit preserved. The existing late-save/reopened-draft regression remains covered.

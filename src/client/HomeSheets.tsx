@@ -293,7 +293,7 @@ function ReminderSheet({ context, onClose }: { context: HomeContext; onClose: (f
 
 function WorldClockSheet({ context }: { context: HomeContext }) {
   const { settings, offline, run, announce, applySettings, focusLater, now } = context;
-  const editor = useHomeListEditor(context, 'worldClocks', settings.widgetData.worldClocks);
+  const editor = useHomeListEditor(context, 'worldClocks', settings.widgetData.worldClocks, MAX_WORLD_CLOCKS);
   const cities = editor.items;
   const [query, setQuery] = useDraft('world.query', () => '');
   const [city, setCity] = useDraft<LocationResult | null>('world.city', () => null);
@@ -342,7 +342,7 @@ function WorldClockSheet({ context }: { context: HomeContext }) {
             <li key={item.id} className={`home-list-row home-manage-row ${editor.editing === item.id ? 'editing' : ''}`} data-item-id={item.id}>
               <span className="home-row-copy"><span className="home-row-title">{item.label}</span><span className="home-row-detail">{safeTime(at, item.timezone, settings.clockFormat)}{item.timezone === local ? ' · same time zone' : ''}</span></span>
               <button type="button" className="home-chip-button home-edit-item" aria-label={`Edit ${item.label}`} aria-expanded={editor.editing === item.id} disabled={offline || editor.busy} onClick={() => editor.edit(item.id)}><Icon name="edit" size={15} /><span className="home-button-text">Edit</span></button>
-              <button type="button" className="home-chip-button" aria-label={`Remove ${item.label}`} disabled={offline || editor.active} onClick={() => { void remove(item, index); }}><Icon name="trash" size={15} /><span className="home-button-text">Remove</span></button>
+              <button type="button" className="home-chip-button" aria-label={`${editor.active ? 'Remove from draft:' : 'Remove'} ${item.label}`} disabled={offline || editor.busy} onClick={() => { if (editor.active) editor.remove(item.id); else void remove(item, index); }}><Icon name="trash" size={15} /><span className="home-button-text">{editor.active ? 'Remove from draft' : 'Remove'}</span></button>
               {editor.editing === item.id && <HomeItemFields name={item.label} index={index} count={cities.length} busy={editor.busy || offline} move={offset => editor.move(item.id, offset)}>
                 <label className="home-field"><span>Clock label</span><input className="text-input" maxLength={40} value={item.label} onChange={event => editor.change(item.id, { label: event.target.value })} /></label>
                 <p className="home-hint">{item.timezone.replaceAll('_', ' ')}</p>
@@ -378,7 +378,7 @@ function safeTime(at: Date, timezone: string, clockFormat: Settings['clockFormat
 
 function CountdownSheet({ context }: { context: HomeContext }) {
   const { settings, offline, run, announce, applySettings, focusLater, now } = context;
-  const editor = useHomeListEditor(context, 'countdowns', settings.widgetData.countdowns);
+  const editor = useHomeListEditor(context, 'countdowns', settings.widgetData.countdowns, 12);
   const events = editor.items;
   const today = civilFromDate(new Date(now));
   const [title, setTitle] = useDraft('countdown.title', () => '');
@@ -431,7 +431,7 @@ function CountdownSheet({ context }: { context: HomeContext }) {
               <li key={item.id} className={`home-list-row home-manage-row ${editor.editing === item.id ? 'editing' : ''}`} data-item-id={item.id}>
                 <span className="home-row-copy"><span className="home-row-title">{item.title}</span><span className="home-row-detail">{detail}{item.repeatsYearly ? ' · every year' : ''}</span></span>
                 <button type="button" className="home-chip-button home-edit-item" aria-label={`Edit ${item.title}`} aria-expanded={editor.editing === item.id} disabled={offline || editor.busy} onClick={() => editor.edit(item.id)}><Icon name="edit" size={15} /><span className="home-button-text">Edit</span></button>
-                <button type="button" className="home-chip-button" aria-label={`Remove ${item.title}`} disabled={offline || editor.active} onClick={() => { void remove(item, index); }}><Icon name="trash" size={15} /><span className="home-button-text">Remove</span></button>
+                <button type="button" className="home-chip-button" aria-label={`${editor.active ? 'Remove from draft:' : 'Remove'} ${item.title}`} disabled={offline || editor.busy} onClick={() => { if (editor.active) editor.remove(item.id); else void remove(item, index); }}><Icon name="trash" size={15} /><span className="home-button-text">{editor.active ? 'Remove from draft' : 'Remove'}</span></button>
                 {editor.editing === item.id && <HomeItemFields name={item.title} index={index} count={events.length} busy={editor.busy || offline} move={offset => editor.move(item.id, offset)}>
                   <label className="home-field"><span>Countdown title</span><input className="text-input" maxLength={60} value={item.title} onChange={event => editor.change(item.id, { title: event.target.value })} /></label>
                   <div className="home-row-fields">
