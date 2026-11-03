@@ -36,12 +36,12 @@ export function HomeSheet({ kind, context, status, onClose }: {
   const dialog = useRef<HTMLDialogElement>(null);
   const submittedControl = useRef<HTMLElement | null>(null);
   const titleId = useId();
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = dialog.current;
     if (!element) return;
     if (!element.open) element.showModal();
     // The first field, else the first control (for Timer, the first preset).
-    window.requestAnimationFrame(() => (element.querySelector<HTMLElement>('[data-autofocus]') ?? element.querySelector<HTMLElement>('input, textarea, button:not(.home-sheet-close)'))?.focus());
+    (element.querySelector<HTMLElement>('[data-autofocus]') ?? element.querySelector<HTMLElement>('input, textarea, button:not(.home-sheet-close)'))?.focus();
     return () => { if (element.open) element.close(); };
   }, []);
   useLayoutEffect(() => {

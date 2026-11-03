@@ -15,8 +15,10 @@ integration, the collection branch passed the complete 70-family widget suite
 loops on the collection board. A canvas fixture scope error was fixed. The integrated bounded collection pass
 now verifies all 31 families, fifteen empty states, 52 populated/old-reading/long-
 label cases, reduced-motion relocation and narrow editors, including visible Done
-paint. Integration-sensitive browser checks, combined final-head review and
-current-head CI are the remaining gates. The component evidence below retains
+paint. Integrated canvas, Settings, styles, picker-sheet, preview and shared-snapshot
+suites pass. Home passes 28 groups after fixing a reproduced deferred-focus race;
+a deterministic regression fails the previous assets and passes the fix. Combined
+final-head review and current-head CI are the remaining gates. The component evidence below retains
 its original test counts; it does not substitute for the combined gate.
 
 ## Collection source checkpoint — 2026-11-03 (#565)

@@ -4,6 +4,64 @@ const ONE = '11111111-1111-4111-8111-111111111111';
 const TWO = '22222222-2222-4222-8222-222222222222';
 const THREE = '33333333-3333-4333-8333-333333333333';
 
+async function focusedAndVisible(page, control, phase) {
+  const handle = await control.elementHandle();
+  await page.waitForFunction(element => {
+    const rect = element.getBoundingClientRect(), body = element.closest('.home-sheet-body').getBoundingClientRect();
+    const footer = document.querySelector('.home-sheet-footer').getBoundingClientRect();
+    return document.activeElement === element && rect.top >= body.top && rect.bottom <= Math.min(body.bottom, footer.top)
+      && element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+  }, handle, { timeout: 3000 }).catch(async error => {
+    const detail = await control.evaluate(element => {
+      const rect = target => target?.getBoundingClientRect().toJSON(), box = element.getBoundingClientRect();
+      return { viewport: { width: innerWidth, height: innerHeight }, expected: element.outerHTML,
+        active: document.activeElement?.outerHTML, rect: rect(element), body: rect(element.closest('.home-sheet-body')),
+        footer: rect(document.querySelector('.home-sheet-footer')),
+        hit: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.outerHTML };
+    });
+    assert.fail(`${phase}: ${error.message}; ${JSON.stringify(detail)}`);
+  });
+}
+
+/** Render delays must not let an earlier Edit intent steal a later field's keyboard focus. */
+export async function checkHomeListFocusRace({ page, action, sheet }) {
+  await page.setViewportSize({ width: 640, height: 300 });
+  await action(page, 'countdown').click();
+  await page.waitForFunction(() => document.activeElement?.id === 'home-countdown-title');
+  // Hold only callbacks scheduled after this user action, then allow the next field to
+  // receive focus before releasing them. The old two-frame focusLater fails deterministically.
+  await page.evaluate(() => {
+    window.homeFocusOriginalRaf = window.requestAnimationFrame.bind(window);
+    window.homeFocusOriginalCancelRaf = window.cancelAnimationFrame.bind(window);
+    window.homeFocusHeldRaf = new Map();
+    let next = 0;
+    window.requestAnimationFrame = callback => { const id = --next; window.homeFocusHeldRaf.set(id, callback); return id; };
+    window.cancelAnimationFrame = id => { if (window.homeFocusHeldRaf.has(id)) window.homeFocusHeldRaf.delete(id); else window.homeFocusOriginalCancelRaf(id); };
+    document.querySelector('.home-sheet .home-edit-item').click();
+  });
+  try {
+    await sheet(page).getByLabel('Countdown title', { exact: true }).fill('Focus stays with the next field');
+    const date = sheet(page).getByLabel('Countdown date', { exact: true });
+    await date.focus();
+    await focusedAndVisible(page, date, 'date before releasing delayed Edit callbacks');
+    await page.evaluate(async () => {
+      window.requestAnimationFrame = window.homeFocusOriginalRaf;
+      window.cancelAnimationFrame = window.homeFocusOriginalCancelRaf;
+      for (const callback of window.homeFocusHeldRaf.values()) window.requestAnimationFrame(callback);
+      await new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))));
+    });
+    await focusedAndVisible(page, date, 'date after releasing delayed Edit callbacks');
+  } finally {
+    await page.evaluate(() => {
+      window.requestAnimationFrame = window.homeFocusOriginalRaf; window.cancelAnimationFrame = window.homeFocusOriginalCancelRaf;
+      delete window.homeFocusHeldRaf; delete window.homeFocusOriginalRaf; delete window.homeFocusOriginalCancelRaf;
+    });
+  }
+  await sheet(page).getByRole('button', { name: 'Cancel edits', exact: true }).click();
+  await page.keyboard.press('Escape'); await sheet(page).waitFor({ state: 'detached' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+}
+
 /** Uses only the parent suite's ephemeral app and synthetic records. Images remain in RAM. */
 export async function checkHomeListEditing({ page, app, reset, home, action, sheet, state, capture = false }) {
   const images = [], checks = [];
@@ -21,6 +79,8 @@ export async function checkHomeListEditing({ page, app, reset, home, action, she
     ];
   });
   await home(page);
+  await checkHomeListFocusRace({ page, action, sheet });
+  checks.push('Releasing delayed Edit rendering callbacks preserves the later date focus and its full visible hit target above the footer');
   await page.getByRole('button', { name: 'Manage London clock', exact: true }).click();
   await button('Edit London').click();
   await page.waitForFunction(() => document.activeElement?.closest('label')?.textContent === 'Clock label');
@@ -95,12 +155,7 @@ export async function checkHomeListEditing({ page, app, reset, home, action, she
     await sheet(page).getByLabel('Countdown title', { exact: true }).fill('Visible draft');
     for (const control of await sheet(page).locator('.home-item-fields input, .home-item-fields button:not(:disabled)').all()) {
       await control.focus();
-      await page.waitForFunction(element => {
-        const rect = element.getBoundingClientRect(), body = element.closest('.home-sheet-body').getBoundingClientRect();
-        const footer = document.querySelector('.home-sheet-footer').getBoundingClientRect();
-        return rect.top >= body.top && rect.bottom <= Math.min(body.bottom, footer.top)
-          && element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
-      }, await control.elementHandle(), { timeout: 3000 });
+      await focusedAndVisible(page, control, 'inline list keyboard focus');
     }
     await button('Save edits').scrollIntoViewIfNeeded();
     assert.equal(await button('Save edits').isVisible(), true);

@@ -15,6 +15,7 @@ export function useHomeListEditor<T extends Item>(context: HomeContext, key: Lis
   const cacheKey = `list.${key}`;
   const [draft, setDraft] = useHomeDraft<Draft<T> | null>(cacheKey, () => null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [focusTarget, setFocusTarget] = useState<{ selector: string; fallback?: string } | null>(null);
   const [busy, setBusy] = useState(false), inFlight = useRef(false), mounted = useRef(true);
   const [message, setMessage] = useState('');
   const live = useRef(draft); live.current = draft;
@@ -28,6 +29,14 @@ export function useHomeListEditor<T extends Item>(context: HomeContext, key: Lis
     live.current = value; setDraft(value);
     if (!value) forgetHomeDrafts(cacheKey);
   }
+  // Focus belongs to the commit that reveals/removes the fields. Deferring it across
+  // animation frames can steal a later Tab/click and scroll that control under the footer.
+  useLayoutEffect(() => {
+    if (!focusTarget) return;
+    const target = document.querySelector<HTMLElement>(focusTarget.selector)
+      ?? (focusTarget.fallback ? document.querySelector<HTMLElement>(focusTarget.fallback) : null);
+    target?.focus();
+  }, [focusTarget]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (!live.current || same(live.current.base, saved)) return;
@@ -56,12 +65,12 @@ export function useHomeListEditor<T extends Item>(context: HomeContext, key: Lis
     if (editing === id) setEditing(null);
     setMessage('Removed from this draft. Save edits to apply.');
     const neighbour = remaining[index] ?? remaining[index - 1];
-    context.focusLater(neighbour ? `.home-list-row[data-item-id="${neighbour.id}"] .home-edit-item` : '.home-list-edit-actions button', '.home-sheet-close');
+    setFocusTarget({ selector: neighbour ? `.home-list-row[data-item-id="${neighbour.id}"] .home-edit-item` : '.home-list-edit-actions button', fallback: '.home-sheet-close' });
   }
   function finish() {
     const id = editing;
     retain(null); setEditing(null); setMessage('');
-    context.focusLater(id ? `.home-list-row[data-item-id="${id}"] .home-edit-item` : '.home-list-row .home-edit-item', key === 'worldClocks' ? '#home-city-search' : '#home-countdown-title');
+    setFocusTarget({ selector: id ? `.home-list-row[data-item-id="${id}"] .home-edit-item` : '.home-list-row .home-edit-item', fallback: key === 'worldClocks' ? '#home-city-search' : '#home-countdown-title' });
   }
   async function save() {
     if (inFlight.current || context.offline || !live.current || live.current.items.length > limit) return;
@@ -101,7 +110,7 @@ export function useHomeListEditor<T extends Item>(context: HomeContext, key: Lis
     } finally { inFlight.current = false; if (mounted.current) setBusy(false); }
   }
   return { items, editing, active, busy, dirty, message, limitMessage, change, move, remove, save, cancel: finish,
-    edit(id: string) { setEditing(id); setMessage(''); context.focusLater(`.home-list-row[data-item-id="${id}"] .home-item-fields input`); },
+    edit(id: string) { setEditing(id); setMessage(''); setFocusTarget({ selector: `.home-list-row[data-item-id="${id}"] .home-item-fields input` }); },
   };
 }
 

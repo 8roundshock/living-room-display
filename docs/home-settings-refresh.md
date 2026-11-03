@@ -59,3 +59,23 @@ without a request, keeps other edits and survives sheet close; Cancel restores t
 latest server list. The save handler also refuses an over-limit list. Regression
 cases cover both caps, no-write removal/Cancel and saving with a second newer local
 edit preserved. The existing late-save/reopened-draft regression remains covered.
+
+
+## Combined release integration and focus regression (#565, #463)
+
+Home recognizes either Clock or dedicated Timers as a timer display. With only
+Timers enabled, its sheet and start message no longer claim that timers are
+confined to an off Clock, and the Home display card has no waiting Clock cue.
+The existing Show Clock action remains the default when neither surface is on.
+A focused synthetic production probe and the full Home suite cover this path.
+
+The combined Home run reproduced a delayed-focus race: Edit queued focus over
+animation frames, which could steal a subsequent date-field focus and scroll it
+behind the footer in a short sheet. List edit/finish/remove focus now belongs to
+the React layout commit, and initial modal focus is synchronous with opening.
+A deterministic test holds then releases queued frames; it failed the prior
+production assets and passed the corrected build. Existing viewport checks now
+also assert the actual focused element and report scalar geometry on failure.
+The final Home run passed all 28 groups. A RAM-only 640×300 inspection confirmed
+the date stayed focused and clear of the footer. No save, concurrency or draft
+retention behavior was removed; exact-head review and CI remain release gates.
