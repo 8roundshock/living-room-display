@@ -306,7 +306,9 @@ motion or the Off animation level.
 
 - **Save changes** atomically persists the visual editor draft, widget
   options, selected local photo and saved styles while preserving unrelated preferences. The bar exists only while
-  effective saved values differ; reverting all edits hides it. Edits made while saving remain unsaved afterward.
+  effective saved values differ or a new-style identity awaits saving; reverting all
+  ordinary edits hides it. A new style remains a draft even when its visuals match
+  the saved board. Edits made while saving remain unsaved afterward.
   Failed saves preserve the draft and return keyboard focus to Save. Untouched fields refresh from server polling.
   Countdowns, world clocks and saved styles merge by item when another editor saved
   them meanwhile (#242): additions and removals from both are kept, an item changed
@@ -314,7 +316,7 @@ motion or the Off animation level.
   changed; a saved style's look counts as one field), and an item removed elsewhere
   but edited here stays. The explicitly selected style has an additional guard: a
   changed/deleted record cannot be overwritten or recreated by saving an old look.
-  **Reload style** (when it still exists) or **Save as new** provides recovery.
+  **Reload style** (when it still exists) or **Duplicate current** provides recovery.
   This editor's order wins only when it moved items; otherwise
   the saved order stays and its own additions follow. A layout edit keeps its whole
   arrangement, but widgets merge too (#350): one removed elsewhere and untouched here is
@@ -368,12 +370,12 @@ motion or the Off animation level.
   size, so labels keep the readability floors. These are virtual **Starter looks**
   in the top **Style** selector, not separate cards or records in the twelve saved
   slots. New installs use the Room look. Choosing one changes the visual draft;
-  **Save as new** can turn it into a normal saved style.
+  **Duplicate current** can turn it into a normal saved style.
 - The same selector lists **Saved styles** and **Current display**. Saved styles
   include visual/widget/empty-reminder settings, accent mode and animation; selecting
   one restores its whole board. Editing it shows **Modified**, and the single
   **Save changes** action updates that exact ID while saving all editor drafts.
-  **Save as new** opens a compact naming dialog, then **Save new style** creates a new ID and
+  **Duplicate current** opens a compact naming dialog, then **Save new style** creates a new ID and
   leaves the original untouched. **Manage style** contains Rename, Duplicate style
   and a confirmed deletion staged until Save. Naming preserves the underlying canvas
   geometry, contains keyboard focus, and offers one Cancel/Save pair. Escape or Cancel
