@@ -3,13 +3,37 @@ import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
 import { selectScheduledPreset, type PresetSchedule } from '../shared/schedule.ts';
 import { getVisual } from './model.ts';
-import { duplicateStyleSuggestion, prepareStyleSave, restoredStyleId, sameVisual, undoStyleDeletion } from './style-workflow.ts';
+import { duplicateStyleSuggestion, newStyleDraft, prepareStyleSave, restoredStyleId, sameVisual, undoStyleDeletion } from './style-workflow.ts';
 
 function example() {
   const settings = defaultSettings();
   settings.savedPresets = [{ id: 'arbitrary:imported/id', name: 'Evening', visual: getVisual(settings) }];
   return settings;
 }
+
+test('new blank styles start independently while retaining personal content and existing styles', () => {
+  const current = example(); current.note = 'Private note'; current.units = 'imperial';
+  current.appearance.brightness = 0.8;
+  const original = structuredClone(current), next = newStyleDraft(current, 'blank');
+  assert.equal(Object.values(next.widgets).some(Boolean), false);
+  assert.equal(next.preview.enabled, false);
+  assert.equal(next.note, 'Private note'); assert.equal(next.units, 'imperial');
+  assert.deepEqual(next.savedPresets, current.savedPresets);
+  assert.deepEqual(current, original);
+  assert.notEqual(next.appearance.brightness, current.appearance.brightness);
+});
+
+test('starter styles use a fresh board and never opt a disabled screenshot back in', () => {
+  const current = example(); current.widgets.clock = false;
+  current.preview.enabled = false; current.widgets.preview = false;
+  for (const start of ['room', 'phone', 'night'] as const) {
+    const next = newStyleDraft(current, start);
+    assert.equal(next.appearance.preset, start);
+    assert.equal(next.widgets.clock, true); assert.equal(next.widgets.calendar, true);
+    assert.equal(next.widgets.preview, false); assert.equal(next.preview.enabled, false);
+    assert.deepEqual(next.savedPresets, current.savedPresets);
+  }
+});
 test('duplicate suggestions distinguish repeated copies, trim to the name limit and ignore case', () => {
   const base = example();
   base.savedPresets.push({ ...base.savedPresets[0]!, id: 'copy', name: ' evening COPY ' });

@@ -22,6 +22,13 @@
 .studio .style-name-dialog input { width: 100%; min-height: 44px; }
 .style-name-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
 .style-name-dialog .inline-message { margin-top: 10px; }
+.style-start-options { border: 0; padding: 0; margin: 20px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.style-start-options legend { color: var(--studio-muted); font-size: 12px; margin-bottom: 8px; }
+.style-start-options .style-start-option { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; text-align: left; }
+.style-start-option strong { font-size: 14px; font-weight: 550; }
+.style-start-option span { color: var(--studio-muted); font-size: 12px; line-height: 1.4; }
+.style-start-option[aria-pressed='true'] { background: #b8a6ef22; border-color: #c9b9f076; }
+.style-copy-current { color: var(--studio-muted); }
 .studio .daylight-status { display: flex; align-items: center; gap: 8px; }
 .studio .daylight-now { margin: 0; }
 .editor-style-bar .studio-savebar[data-naming] { visibility: hidden; }

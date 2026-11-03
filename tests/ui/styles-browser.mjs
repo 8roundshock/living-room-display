@@ -152,7 +152,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       await button('Countdown').click(); await button('Add date').click();
       const title = page.getByRole('textbox', { name: 'Countdown 1 title', exact: true });
       const date = await page.getByLabel('Countdown 1 date', { exact: true }).inputValue();
-      await button('Save as new…').click();
+      await button('Duplicate current…').click();
       await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Countdown style');
       const problem = page.getByRole('dialog').getByRole('alert');
       assert.equal(await problem.innerText(), 'Countdown needs a title. Choose Cancel to return to editing.');
@@ -167,7 +167,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       assert.equal(await title.inputValue(), '', 'Cancel preserves the incomplete countdown for correction');
       assert.equal(await page.getByLabel('Countdown 1 date', { exact: true }).inputValue(), date);
       await title.fill('Weekend trip');
-      await button('Save as new…').click();
+      await button('Duplicate current…').click();
       await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Countdown style');
       assert.equal(await page.locator('#style-draft-problem').count(), 0);
       assert.equal(await button('Save new style').getAttribute('aria-disabled'), 'false');
@@ -190,7 +190,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
     await page.reload(); await choice().waitFor(); assert.equal(await choice().inputValue(), 'saved:alpha:imported/id');
     await page.getByRole('tab', { name: 'Style', exact: true }).click();
     const original = structuredClone(saved().savedPresets[0]);
-    const next = await nudge(); await button('Save as new…').click();
+    const next = await nudge(); await button('Duplicate current…').click();
     await page.getByRole('textbox', { name: 'New style', exact: true }).fill('  evening  ');
     assert.equal(await button('Save new style').getAttribute('aria-disabled'), 'true');
     assert.match(await page.locator('#preset-name-error').innerText(), /already exists/);
@@ -200,7 +200,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
     const added = saved().savedPresets.find(item => item.name === 'Cinema');
     assert.ok(added && added.id !== original.id); assert.equal(added.visual.appearance.brightness, next);
     await page.reload(); await choice().waitFor(); assert.equal(await choice().inputValue(), `saved:${added.id}`);
-    checks.push('Top selector and one Save group; stable update ID; duplicate validation; Save as new preserves original; explicit identity and saved visual survive reload');
+    checks.push('Top selector and one Save group; stable update ID; duplicate validation; Duplicate current preserves original; explicit identity and saved visual survive reload');
 
     await open(); await select('alpha:imported/id'); const dirtyValue = await nudge();
     await select('beta'); await page.getByRole('group', { name: 'Switch style' }).waitFor();
@@ -255,16 +255,16 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       await page.route('**/api/settings', route => route.request().method() === 'PATCH' && refused ? route.fulfill({ status: 503, json: { error: 'Synthetic refused update' } }) : route.continue());
       await button('Save changes').click(); await page.getByText('Synthetic refused update', { exact: true }).waitFor();
       if (mode === 'rename') await button('Cancel').click();
-      await button('Save as new\u2026').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Recovered new');
+      await button('Duplicate current\u2026').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Recovered new');
       refused = false; await button('Save new style').click(); await clean();
-      assert.deepEqual(saved().savedPresets[0], before, `${mode}: original unchanged after failure then Save as new`);
+      assert.deepEqual(saved().savedPresets[0], before, `${mode}: original unchanged after failure then Duplicate current`);
       assert.equal(saved().savedPresets.find(item => item.name === 'Recovered new').visual.appearance.brightness, value);
     }
-    checks.push('Failed selected update and failed rename followed by Save as new preserve the original record byte-for-byte');
+    checks.push('Failed selected update and failed rename followed by Duplicate current preserve the original record byte-for-byte');
 
     for (const mode of ['new', 'rename']) {
       await open(); await select('alpha:imported/id'); const before = structuredClone(saved().savedPresets); await nudge();
-      if (mode === 'new') await button('Save as new\u2026').click();
+      if (mode === 'new') await button('Duplicate current\u2026').click();
       else { await page.locator('.style-management > summary').click(); await button('Rename').click(); }
       await page.getByRole('textbox', { name: mode === 'new' ? 'New style' : 'Style name', exact: true }).fill('Abandoned name');
       let refused = true;
@@ -296,7 +296,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
     await button('Keep editing').click(); await button('Cancel').click(); await clean();
     checks.push('Current display supports Save-and-switch; later edits during a held Save-and-switch prevent the requested switch and remain editable');
 
-    await open(); await button('Save as new\u2026').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('New concurrent name');
+    await open(); await button('Duplicate current\u2026').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('New concurrent name');
     let duplicateCount = 0;
     await page.route('**/api/settings', async route => {
       if (route.request().method() === 'PATCH' && ++duplicateCount === 1)
@@ -317,7 +317,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
     const beforeResetNew = structuredClone(saved().savedPresets[0]);
     await page.locator('summary', { hasText: 'Reset appearance & layout' }).click(); await button('Reset appearance\u2026').click();
     await page.getByRole('group', { name: 'Reset appearance' }).getByRole('button', { name: 'Reset', exact: true }).click();
-    await button('Save as new\u2026').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Reset as new');
+    await button('Duplicate current\u2026').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Reset as new');
     await button('Save new style').click(); await clean(); assert.deepEqual(saved().savedPresets[0], beforeResetNew);
     assert.equal(saved().savedPresets.find(item => item.name === 'Reset as new').visual.appearance.brightness, 0.55);
     checks.push('Visual Save preserves preferences saved elsewhere without a hidden weather draft; Reset appearance retains a new-style intent and preserves its original');
@@ -353,17 +353,17 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
     });
     await button('Save changes').click(); await page.getByText('This style changed elsewhere. Reload it or save as new.', { exact: true }).first().waitFor();
     assert.equal(patchCount, 1); assert.equal(saved().savedPresets[0].visual.appearance.brightness, 0.8);
-    await button('Save as new…').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Recovered');
+    await button('Duplicate current…').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Recovered');
     await button('Save new style').click(); await clean();
     assert.equal(saved().savedPresets[0].visual.appearance.brightness, 0.8); assert.equal(saved().savedPresets.length, 3);
-    checks.push('409 on a remotely changed selected style preserves the remote record and local visual; Save as new recovers without overwriting');
+    checks.push('409 on a remotely changed selected style preserves the remote record and local visual; Duplicate current recovers without overwriting');
 
     await open(settings(), {}, true); await select('alpha:imported/id'); await nudge();
     await app.store.update(data => { data.settings.savedPresets = data.settings.savedPresets.filter(item => item.id !== 'alpha:imported/id'); });
     await page.clock.runFor(30_000);
-    await page.getByText('This style was deleted elsewhere. Save as new to keep your changes.', { exact: true }).waitFor();
+    await page.getByText('This style was deleted elsewhere. Duplicate current to keep your changes.', { exact: true }).waitFor();
     assert.equal(await button('Save changes').getAttribute('aria-disabled'), 'true');
-    await button('Save as new…').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Recovered deletion');
+    await button('Duplicate current…').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Recovered deletion');
     await button('Save new style').click(); await clean();
     assert.equal(saved().savedPresets.some(item => item.id === 'alpha:imported/id'), false);
     checks.push('Polling a deleted selected ID never recreates it; the unsaved look can be saved under a new ID');
@@ -395,7 +395,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       await nudge();
       const selectedBox = await choice().boundingBox();
       assert.ok(selectedBox.width >= 140, `the selected style name remains readable with Modified/actions at ${viewport.width}px: ${JSON.stringify(selectedBox)}`);
-      await button('Save as new…').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic portable style');
+      await button('Duplicate current…').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic portable style');
       for (const target of [page.getByRole('textbox', { name: 'New style', exact: true }), button('Save new style'), button('Cancel')]) {
         const box = await target.boundingBox(); assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= viewport.width + 1, JSON.stringify({ viewport, box }));
       }

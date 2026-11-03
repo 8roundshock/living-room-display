@@ -874,6 +874,14 @@ html.studio-editor {
   appearance: auto;
   padding-right: 10px;
 }
+/* Native Windows select popups do not consistently paint a translucent select's
+   background. Give the popup entries their own opaque, contrasting surface. */
+.studio select { color-scheme: dark; }
+.studio select :is(option, optgroup) { color: #eeeaf5; background-color: #222228; }
+@media (forced-colors: active) {
+  .studio select { color-scheme: light dark; }
+  .studio select :is(option, optgroup) { color: CanvasText; background-color: Canvas; }
+}
 .studio .text-input::placeholder {
   color: #8c8595;
   opacity: 1;
