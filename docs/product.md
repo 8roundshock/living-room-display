@@ -88,7 +88,10 @@ Actual saver/ambient surfaces and the nominal idle-transition band pause capture
 A visible browser display establishes a capture pause before painting; hiding or
 closing it releases that pause. Missing release fails closed; Home's explicit
 resume action requires closing previews first. Unknown/locked/session/configuration/
-disabled contexts or loss of the safe producer delete the cache. Cold backend
+disabled contexts or loss of the safe producer delete the cache. The known native
+screensaver input desktop may retain the previous image only while the producer
+independently verifies the unlocked session and exact own native process; it
+never grants capture there. Cold backend
 startup removes a prior unvalidated file and orphan replacement temp, then the
 next eligible observation captures immediately. Keep the file outside Git, app,
 data and backups; never truncate it in place or create capture history or `.bak`
