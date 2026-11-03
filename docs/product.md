@@ -91,7 +91,11 @@ resume action requires closing previews first. Unknown/locked/session/configurat
 disabled contexts or loss of the safe producer delete the cache. The known native
 screensaver input desktop may retain the previous image only while the producer
 independently verifies the unlocked session and exact own native process; it
-never grants capture there. Cold backend
+never grants capture there. During the known unlocked transition before process
+proof, the backend may keep that one file hidden for a fixed maximum of five
+seconds. All image/state readers report it unavailable and uploads are fenced.
+Only fresh proof for the same configuration, session, actual timeout and producer
+episode reveals it; failure, expiry or changed context deletes it. Cold backend
 startup removes a prior unvalidated file and orphan replacement temp, then the
 next eligible observation captures immediately. Keep the file outside Git, app,
 data and backups; never truncate it in place or create capture history or `.bak`

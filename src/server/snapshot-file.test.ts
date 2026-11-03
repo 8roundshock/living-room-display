@@ -115,3 +115,52 @@ test('linked cache ancestors are rejected and corrupt PNG bytes are never served
     assert.equal(await store.read(first), null); await store.clear();
   } finally { await rm(root, { recursive: true }); }
 });
+
+test('quarantine hides the one file, fences queued uploads and reveals only its matching version', async () => {
+  const f = await fixture();
+  try {
+    const png = photoFixture(3, 2); await f.store.write(png, first, () => true);
+    const pendingRead = f.store.read(first);
+    const queuedUpload = f.store.write(photoFixture(4, 3), second, () => true);
+    const fence = f.store.quarantine();
+    assert.equal(f.store.state().available, false); assert.equal(await f.store.read(), null);
+    assert.equal(await pendingRead, null, 'a read opened before quarantine cannot return its bytes afterward');
+    assert.equal(await queuedUpload, false);
+    assert.deepEqual(await readFile(f.store.path), png, 'the private canonical file remains intact');
+    assert.equal(await f.store.write(photoFixture(), second, () => true), false, 'new uploads cannot replace a hidden file');
+    assert.equal(await f.store.reveal(fence - 1, () => true), false);
+    assert.equal(await f.store.reveal(fence, () => false), false);
+    assert.equal(await f.store.reveal(fence, () => true), true);
+    assert.equal(f.store.state().capturedAt, first); assert.deepEqual((await f.store.read())?.content, png);
+    assert.deepEqual(await readdir(f.directory), [SNAPSHOT_NAME]);
+  } finally { await f.close(); }
+});
+
+test('a rename crossing quarantine cannot resurrect stale held metadata or pixels', async () => {
+  let hold = false, entered!: () => void, finish!: () => void;
+  const committed = new Promise<void>(done => { entered = done; });
+  const released = new Promise<void>(done => { finish = done; });
+  const f = await fixture(async (from, to) => { await rename(from, to); if (hold) { entered(); await released; } });
+  try {
+    await f.store.write(photoFixture(), first, () => true); hold = true;
+    const incoming = f.store.write(photoFixture(3, 2), second, () => true); await committed;
+    const fence = f.store.quarantine();
+    assert.equal(await f.store.read(), null);
+    const reveal = f.store.reveal(fence, () => true);
+    finish(); assert.equal(await incoming, false); assert.equal(await reveal, false);
+    assert.equal(f.store.state().available, false); assert.deepEqual(await readdir(f.directory), []);
+  } finally { finish(); await f.close(); }
+});
+
+test('privacy clear during queued reveal wins and a later frame is not touched by that reveal', async () => {
+  const f = await fixture();
+  try {
+    await f.store.write(photoFixture(), first, () => true);
+    const fence = f.store.quarantine();
+    const reveal = f.store.reveal(fence, () => true);
+    await f.store.clear(); assert.equal(await reveal, false);
+    const next = photoFixture(4, 3); await f.store.write(next, second, () => true);
+    assert.equal(await f.store.reveal(fence, () => true), false);
+    assert.deepEqual((await f.store.read())?.content, next);
+  } finally { await f.close(); }
+});

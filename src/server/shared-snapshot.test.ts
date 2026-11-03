@@ -87,6 +87,147 @@ async function missing(path: string) {
   assert.fail('The owned synthetic snapshot file was not removed');
 }
 
+async function transition(app: Awaited<ReturnType<typeof fixture>>, phase: 'pending' | 'owned' | 'desktop' | 'unsafe',
+  timeout: number, epoch = 1, overrides: Record<string, string> = {}) {
+  const response = await app.request('/api/preview/preparation', 'GET', { ...app.auth(),
+    'X-Preparation-Transition': phase, 'X-Preparation-Transition-Epoch': String(epoch),
+    'X-Preparation-Safe': phase === 'pending' || phase === 'unsafe' ? '0' : '1',
+    'X-Preparation-Capture-Eligible': phase === 'desktop' ? '1' : '0', 'X-Session-Id': '1',
+    'X-Idle-Timeout-Seconds': String(timeout), ...overrides });
+  assert.equal(response.status, 200);
+  return JSON.parse(response.body.toString()) as PreparationConfig & { transitionAccepted: boolean; transitionEpoch: number | null };
+}
+
+test('desktop switch before native process hides then reveals the same file without capturing or uploading', async () => {
+  const app = await fixture();
+  try {
+    const current = await app.config(), image = await app.upload(photoFixture(3, 2), current);
+    const pending = await transition(app, 'pending', current.timeoutSeconds);
+    assert.equal(pending.transitionAccepted, true); assert.equal(pending.transitionEpoch, 1);
+    assert.equal((await app.preview()).available, false);
+    assert.equal(JSON.parse((await app.request('/api/state')).body.toString()).preview.available, false);
+    assert.equal((await app.request('/api/preview/image')).status, 404);
+    assert.equal((await app.request('/api/preview/image', 'HEAD')).status, 404);
+    assert.deepEqual(await readFile(app.file), image.png);
+    assert.equal((await app.upload(photoFixture(4, 3), current)).status, 409, 'old upload epoch is fenced');
+    assert.equal((await app.upload(photoFixture(4, 3), pending as Awaited<ReturnType<typeof app.config>>)).status, 409, 'new generation is still frozen');
+    app.advance(50); // Reproduces the observed desktop-before-process ordering.
+    assert.equal((await transition(app, 'owned', current.timeoutSeconds)).transitionAccepted, true);
+    assert.deepEqual((await app.request('/api/preview/image')).body, image.png);
+    assert.equal((await app.preview()).capturedAt, image.capturedAt);
+    assert.equal((await stat(app.file)).mtime.toISOString(), image.capturedAt);
+    assert.equal((await transition(app, 'pending', current.timeoutSeconds)).transitionAccepted, false, 'a replay cannot re-hide owned pixels');
+    assert.equal((await app.preview()).available, true);
+    await transition(app, 'desktop', current.timeoutSeconds);
+    assert.deepEqual((await app.request('/api/preview/image')).body, image.png, 'normal dismissal retains verified pixels');
+  } finally { await app.close(); }
+});
+
+test('pending cannot extend its fixed deadline, and late ownership cannot revive its deleted image', async () => {
+  const app = await fixture();
+  try {
+    const current = await app.config(); await app.upload(photoFixture(), current);
+    assert.equal((await transition(app, 'pending', current.timeoutSeconds)).transitionAccepted, true);
+    app.advance(4_999);
+    assert.equal((await transition(app, 'pending', current.timeoutSeconds)).transitionAccepted, true);
+    app.advance(1);
+    assert.equal((await transition(app, 'owned', current.timeoutSeconds)).transitionAccepted, false);
+    await missing(app.file);
+    assert.equal((await transition(app, 'pending', current.timeoutSeconds)).transitionAccepted, false);
+    await transition(app, 'desktop', current.timeoutSeconds);
+    app.advance(1_000); const next = await app.upload(photoFixture(4, 3));
+    assert.equal(next.status, 201);
+    assert.equal((await transition(app, 'owned', current.timeoutSeconds)).transitionAccepted, false);
+    assert.deepEqual((await app.request('/api/preview/image')).body, next.png, 'old proof cannot delete a new desktop capture');
+  } finally { await app.close(); }
+});
+
+test('unsafe context, changed session/timeout/configuration and producer loss destroy a pending image', async () => {
+  for (const cause of ['unsafe', 'session', 'timeout', 'configuration', 'producer', 'desktop'] as const) {
+    const app = await fixture();
+    try {
+      const current = await app.config(); await app.upload(photoFixture(), current);
+      assert.equal((await transition(app, 'pending', current.timeoutSeconds)).transitionAccepted, true);
+      if (cause === 'unsafe') await transition(app, 'unsafe', current.timeoutSeconds);
+      if (cause === 'session') await transition(app, 'owned', current.timeoutSeconds, 1, { 'X-Session-Id': '2' });
+      if (cause === 'timeout') await transition(app, 'owned', current.timeoutSeconds + 1);
+      if (cause === 'configuration') await app.store.update(data => { data.settings.preview.opacity = 0.15; });
+      if (cause === 'producer') app.closePreparation();
+      if (cause === 'desktop') await transition(app, 'desktop', current.timeoutSeconds);
+      assert.equal((await app.preview()).available, false);
+      if (cause !== 'producer') assert.equal((await transition(app, 'owned', current.timeoutSeconds)).transitionAccepted, false);
+      await missing(app.file);
+    } finally { await app.close(); }
+  }
+});
+
+test('quarantine deadline removes the private file even with no further requests', async () => {
+  const app = await fixture(false, false);
+  try {
+    const current = await app.config(); await app.upload(photoFixture(), current);
+    assert.equal((await transition(app, 'pending', current.timeoutSeconds)).transitionAccepted, true);
+    await new Promise(done => setTimeout(done, 5_100));
+    await missing(app.file);
+  } finally { await app.close(); }
+});
+
+test('transition binds actual timeout independently of the saved idle preference and ignores older-epoch facts', async () => {
+  const app = await fixture();
+  try {
+    const current = await app.config(), png = photoFixture(3, 2);
+    assert.notEqual(current.timeoutSeconds, 60);
+    const upload = await app.request('/api/preview/preparation', 'POST', { ...app.uploadHeaders(current), 'X-Idle-Timeout-Seconds': '60' }, png);
+    assert.equal(upload.status, 201);
+    assert.equal((await transition(app, 'pending', 60)).transitionAccepted, true);
+    assert.equal((await transition(app, 'owned', 60)).transitionAccepted, true);
+    await transition(app, 'desktop', 60);
+    assert.equal((await transition(app, 'pending', 60, 2)).transitionAccepted, true);
+    assert.equal((await transition(app, 'owned', 999, 1, { 'X-Session-Id': '999' })).transitionAccepted, false);
+    assert.equal((await transition(app, 'pending', 999, 1, { 'X-Session-Id': '999' })).transitionAccepted, false);
+    assert.equal((await transition(app, 'owned', 60, 2)).transitionAccepted, true);
+    assert.deepEqual((await app.request('/api/preview/image')).body, png);
+  } finally { await app.close(); }
+});
+
+test('transition requests remain child-only and pending cannot claim safety or capture permission', async () => {
+  const app = await fixture();
+  try {
+    const current = await app.config(), image = await app.upload(photoFixture(), current);
+    const headers = { ...app.auth(), 'X-Preparation-Transition': 'pending', 'X-Preparation-Transition-Epoch': '1',
+      'X-Preparation-Safe': '0', 'X-Preparation-Capture-Eligible': '0', 'X-Session-Id': '1', 'X-Idle-Timeout-Seconds': String(current.timeoutSeconds) };
+    for (const override of [{ Origin: app.url }, { 'Sec-Fetch-Site': 'same-origin' }, { 'X-LRD-Preparation': '0'.repeat(64) }]) {
+      assert.equal((await app.request('/api/preview/preparation', 'GET', { ...headers, ...override })).status, 403);
+      assert.deepEqual((await app.request('/api/preview/image')).body, image.png);
+    }
+    assert.equal((await transition(app, 'pending', current.timeoutSeconds, 1, { 'X-Preparation-Safe': '1' })).transitionAccepted, false);
+    await missing(app.file);
+    assert.equal((await app.preview()).available, false);
+  } finally { await app.close(); }
+});
+
+test('an upload body already arriving when quarantine begins cannot overwrite the held screenshot', async () => {
+  const app = await fixture();
+  let incoming: ReturnType<typeof httpRequest> | undefined;
+  try {
+    const current = await app.config(), initial = await app.upload(photoFixture(), current);
+    const replacement = photoFixture(4, 3), started = once(app.server, 'request');
+    const completed = new Promise<number>((done, reject) => {
+      incoming = httpRequest(app.url + '/api/preview/preparation', { method: 'POST', headers: {
+        ...app.uploadHeaders(current), 'Content-Length': String(replacement.length),
+      } }, response => { response.resume(); response.on('end', () => done(response.statusCode!)); response.on('error', reject); });
+      incoming.on('error', reject); incoming.write(replacement.subarray(0, 20));
+    });
+    await started;
+    assert.equal((await transition(app, 'pending', current.timeoutSeconds)).transitionAccepted, true);
+    incoming!.end(replacement.subarray(20));
+    assert.equal(await completed, 409);
+    assert.deepEqual(await readFile(app.file), initial.png);
+    assert.equal((await app.request('/api/preview/image')).status, 404);
+    assert.equal((await transition(app, 'owned', current.timeoutSeconds)).transitionAccepted, true);
+    assert.deepEqual((await app.request('/api/preview/image')).body, initial.png);
+  } finally { incoming?.destroy(); await app.close(); }
+});
+
 test('display presence accepts only the existing explicit Vite origins in development mode', async () => {
   for (const development of [false, true]) {
     const app = await fixture(development);

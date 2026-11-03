@@ -69,7 +69,8 @@ internal sealed class NativePreviewPreparer : IDisposable
         string app = Path.GetFullPath(Path.Combine(windows,".."));
         string root = Path.GetFullPath(Path.Combine(app,".."));
         hostPath = Path.Combine(windows,"LivingRoomDisplay.scr");
-        retention=new PreviewRetentionIdentity(session => NativePreviewRetentionProcess.Discover(hostPath,session),stop.Token);
+        retention=new PreviewRetentionIdentity(session => NativePreviewRetentionProcess.Discover(hostPath,session),stop.Token,
+            ()=>checked((long)PreparedSnapshotClient.GetTickCount64()));
         string node = Path.Combine(root,"runtime","node.exe");
         string entry = Path.Combine(app,"dist","server","index.js");
         if (!File.Exists(Path.Combine(root,"installation.json"))) throw new InvalidDataException();
@@ -119,20 +120,35 @@ internal sealed class NativePreviewPreparer : IDisposable
             {
                 var context=NativePreviewContext.Read(hostPath,retention);
                 var config=ReadConfiguration(context); failures=0;
-                var decision=policy.Observe(config.Reading(new PreparationReading {
-                    Readable=context.Readable, Safe=context.Safe,
-                    CaptureAllowed=context.DefaultInput && !context.SaverRunning && !context.AmbientRunning,
-                    InputTick=context.InputTick, IdleMilliseconds=context.IdleMilliseconds,
-                    TimeoutSeconds=context.TimeoutSeconds, SessionId=context.SessionId,
-                    MonotonicMilliseconds=checked((long)PreparedSnapshotClient.GetTickCount64())
-                }));
-                if (decision.Invalidate) { Invalidate(decision.InvalidateActive); config=ReadConfiguration(context); policy.Acknowledge(config.Generation); }
-                else if (decision.InvalidateActive) ClearActive();
-                if (decision.Capture) Capture(config,context);
+                if(context.TransitionPending)
+                {
+                    // The authenticated response confirms the cache is hidden
+                    // before this starts any potentially slow identity query.
+                    policy.ObservationLost();
+                    if(config.TransitionAccepted && config.TransitionEpoch==context.TransitionEpoch)
+                        retention.AcknowledgePending(context.TransitionEpoch);
+                    else { retention.Fail(); Invalidate(true); }
+                }
+                else
+                {
+                    if(context.NativeRetained && (!config.TransitionAccepted || config.TransitionEpoch!=context.TransitionEpoch))
+                        throw new InvalidDataException();
+                    var decision=policy.Observe(config.Reading(new PreparationReading {
+                        Readable=context.Readable, Safe=context.Safe,
+                        CaptureAllowed=context.DefaultInput && !context.SaverRunning && !context.AmbientRunning,
+                        InputTick=context.InputTick, IdleMilliseconds=context.IdleMilliseconds,
+                        TimeoutSeconds=context.TimeoutSeconds, SessionId=context.SessionId,
+                        MonotonicMilliseconds=checked((long)PreparedSnapshotClient.GetTickCount64())
+                    }));
+                    if (decision.Invalidate) { Invalidate(decision.InvalidateActive); config=ReadConfiguration(context); policy.Acknowledge(config.Generation); }
+                    else if (decision.InvalidateActive) ClearActive();
+                    if (decision.Capture) Capture(config,context);
+                }
             }
             catch (OperationCanceledException) { break; }
             catch
             {
+                retention.Fail();
                 Invalidate(true);
                 policy.ObservationLost();
                 if (++failures >= 3) break; // No automatic child restart or capture retry.
@@ -147,6 +163,13 @@ internal sealed class NativePreviewPreparer : IDisposable
         var headers=new Dictionary<string,string> { {"X-Preparation-Safe",context.Readable && context.Safe ? "1" : "0"},
             {"X-Session-Id",context.SessionId.ToString(CultureInfo.InvariantCulture)},
             {"X-Preparation-Capture-Eligible",NativePreviewContext.CaptureCompatible(context,context) ? "1" : "0"} };
+        headers["X-Preparation-Transition"]=context.TransitionPending ? "pending" :
+            context.Readable && context.Safe ? (context.DefaultInput ? "desktop" : "owned") : "unsafe";
+        if(context.TransitionPending || context.NativeRetained)
+        {
+            headers["X-Preparation-Transition-Epoch"]=context.TransitionEpoch.ToString(CultureInfo.InvariantCulture);
+            headers["X-Idle-Timeout-Seconds"]=context.TimeoutSeconds.ToString(CultureInfo.InvariantCulture);
+        }
         var observed=diagnostics.Snapshot();
         if(observed.Sequence>0)
         {
@@ -159,6 +182,8 @@ internal sealed class NativePreviewPreparer : IDisposable
         if (data==null || Convert.ToInt32(data["parentProcessId"])!=parent.Id) throw new InvalidDataException();
         return new PreparationConfiguration { Generation=Convert.ToInt64(data["generation"]), Revision=(string)data["configuration"],
             Enabled=(bool)data["enabled"], CapturePaused=(bool)data["capturePaused"], CaptureRevision=PreparationConfiguration.ReadCaptureRevision(data["captureRevision"]),
+            TransitionAccepted=data.ContainsKey("transitionAccepted") && data["transitionAccepted"] is bool && (bool)data["transitionAccepted"],
+            TransitionEpoch=data.ContainsKey("transitionEpoch") && data["transitionEpoch"]!=null ? PreparationConfiguration.ReadCaptureRevision(data["transitionEpoch"]) : 0,
             TimeoutSeconds=Convert.ToInt32(data["timeoutSeconds"]), LeadSeconds=Convert.ToInt32(data["prepareLeadSeconds"]) };
         }
     }
@@ -289,11 +314,13 @@ internal sealed class NativePreviewRetentionProcess : IPreviewRetentionProcess
     { this.process=process; this.session=session; created=process.StartTime.ToUniversalTime(); }
     public bool Running { get { return !process.HasExited && process.SessionId==session && process.StartTime.ToUniversalTime()==created; } }
     public void Dispose() { process.Dispose(); }
-    internal static IPreviewRetentionProcess Discover(string executable,int session)
+    internal static PreviewRetentionDiscovery Discover(string executable,int session)
     {
         string logon=NativePreviewLogonSid.Read();
         var candidates=new List<Process>();
         NativePreviewRetentionProcess selected=null;
+        Process adopted=null;
+        int matches=0; bool notReady=false;
         try
         {
             // Process names are only a discovery filter, never identity proof.
@@ -304,28 +331,57 @@ internal sealed class NativePreviewRetentionProcess : IPreviewRetentionProcess
             {
                 if(!seen.Add(candidate.Id))continue;
                 IntPtr pin=candidate.Handle;
-                if(candidate.HasExited || candidate.SessionId!=session)continue;
-                if(!NativePreparationIdentity.RetentionOwner(NativePreviewContext.ExactProcess(candidate,executable,null,true),
-                    !candidate.HasExited,session,candidate.SessionId,logon,NativePreviewLogonSid.ReadProcess(candidate)))continue;
+                if(candidate.HasExited)continue;
+                if(candidate.SessionId!=session || !String.Equals(candidate.MainModule.FileName,executable,StringComparison.OrdinalIgnoreCase) ||
+                    !String.Equals(NativePreviewLogonSid.ReadProcess(candidate),logon,StringComparison.Ordinal))
+                    return new PreviewRetentionDiscovery(PreviewDiscoveryKind.Failed);
+                if(++matches>1)return new PreviewRetentionDiscovery(PreviewDiscoveryKind.Failed);
+                var command=ReadAutomaticCommand(candidate,executable);
+                if(command==PreviewDiscoveryKind.Empty) { matches--; continue; }
+                if(command==PreviewDiscoveryKind.NotReady) { notReady=true; continue; }
+                if(command!=PreviewDiscoveryKind.Owned)return new PreviewRetentionDiscovery(PreviewDiscoveryKind.Failed);
+                if(!NativePreparationIdentity.RetentionOwner(true,!candidate.HasExited,session,candidate.SessionId,logon,NativePreviewLogonSid.ReadProcess(candidate)))
+                    return new PreviewRetentionDiscovery(PreviewDiscoveryKind.Failed);
                 var proof=new NativePreviewRetentionProcess(candidate,session);
                 if(!proof.Running)continue;
-                if(selected!=null) { selected.Dispose(); selected=null; return null; } // Ambiguous ownership fails closed.
                 selected=proof;
             }
-            return selected;
+            if(selected!=null) { adopted=selected.process; return new PreviewRetentionDiscovery(PreviewDiscoveryKind.Owned,selected); }
+            return new PreviewRetentionDiscovery(notReady ? PreviewDiscoveryKind.NotReady : PreviewDiscoveryKind.Empty);
         }
-        catch { if(selected!=null)selected.Dispose(); selected=null; return null; }
+        catch { return new PreviewRetentionDiscovery(PreviewDiscoveryKind.Failed); }
         finally
         {
             foreach(var candidate in candidates)
-                if(selected==null || !Object.ReferenceEquals(candidate,selected.process))candidate.Dispose();
+                if(!Object.ReferenceEquals(candidate,adopted))candidate.Dispose();
         }
+    }
+    private static PreviewDiscoveryKind ReadAutomaticCommand(Process process,string executable)
+    {
+        // A successful query with an as-yet absent argv may retry while hidden;
+        // query errors, wrong argv and ambiguous identity never become absence.
+        using(var query=new ManagementObjectSearcher("SELECT CommandLine FROM Win32_Process WHERE ProcessId="+process.Id.ToString(CultureInfo.InvariantCulture)))
+        {
+            query.Options.Timeout=TimeSpan.FromMilliseconds(1000);
+            using(var rows=query.Get())
+            {
+                foreach(ManagementObject row in rows)using(row)
+                {
+                    if(process.HasExited)return PreviewDiscoveryKind.Empty;
+                    string command=row["CommandLine"] as string;
+                    if(String.IsNullOrWhiteSpace(command))return PreviewDiscoveryKind.NotReady;
+                    return NativePreparationIdentity.ExactCommand(command,executable,null,true) ? PreviewDiscoveryKind.Owned : PreviewDiscoveryKind.Failed;
+                }
+            }
+        }
+        return process.HasExited ? PreviewDiscoveryKind.Empty : PreviewDiscoveryKind.NotReady;
     }
 }
 
 internal sealed class NativePreviewContext
 {
-    internal bool Readable, Safe, SaverRunning, AmbientRunning, DefaultInput, SaverInput;
+    internal bool Readable, Safe, SaverRunning, AmbientRunning, DefaultInput, SaverInput, TransitionPending, NativeRetained;
+    internal long TransitionEpoch;
     internal uint InputTick;
     internal int SessionId, TimeoutSeconds;
     internal long IdleMilliseconds;
@@ -383,13 +439,20 @@ internal sealed class NativePreviewContext
     // slower process proof. No unknown transition is given a retention grace.
     internal static NativePreviewContext Resolve(NativePreviewContext first,Func<NativePreviewContext> reread,PreviewRetentionIdentity retention)
     {
-        if(!first.Readable || !first.Safe)return first;
+        if(!first.Readable || !first.Safe) { if(retention!=null)retention.Fail(); return first; }
         if(first.DefaultInput) { if(retention!=null)retention.Reset(); return first; }
-        if(!first.SaverInput || !first.SaverRunning || retention==null || !retention.Confirm(first.SessionId))return new NativePreviewContext();
+        if(!first.SaverInput || retention==null)return new NativePreviewContext();
+        var state=retention.Observe(first.SessionId,first.TimeoutSeconds);
+        if(state==PreviewRetentionState.Failed)return new NativePreviewContext();
+        if(state==PreviewRetentionState.Pending)
+        { first.Safe=false; first.TransitionPending=true; first.TransitionEpoch=retention.Epoch; return first; }
+        if(!first.SaverRunning) { retention.Fail(); return new NativePreviewContext(); }
         var fresh=reread();
-        if(!PrivacyCompatible(first,fresh))return new NativePreviewContext();
+        if(!PrivacyCompatible(first,fresh)) { retention.Fail(); return new NativePreviewContext(); }
         if(fresh.DefaultInput) { retention.Reset(); return fresh; }
-        if(!fresh.SaverInput || !fresh.SaverRunning || !retention.Confirm(fresh.SessionId))return new NativePreviewContext();
+        if(!fresh.SaverInput || !fresh.SaverRunning || retention.Observe(fresh.SessionId,fresh.TimeoutSeconds)!=PreviewRetentionState.Owned)
+        { retention.Fail(); return new NativePreviewContext(); }
+        fresh.NativeRetained=true; fresh.TransitionEpoch=retention.Epoch;
         return fresh;
     }
     private static NativePreviewContext ReadCore(string hostPath)
