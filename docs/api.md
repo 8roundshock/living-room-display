@@ -821,8 +821,9 @@ its capability. `preview.enabled` and the preview widget are saved visual fields
 schedules do not change global idle enablement or Windows selection. See
 [the native contract](windows.md#periodic-automatic-snapshot-538) and
 [early sign-in setup](install.md#start-with-windows-and-the-snapshot-cache-540).
-These are source contracts under #544, not installed capture/native acceptance;
-#519 remains unresolved. Older RAM-only claim evidence is historical.
+These source contracts under #544 do not themselves establish native acceptance.
+The successful ordinary-cycle result for #519 is recorded in [STATUS](../STATUS.md);
+broader recovery checks remain separate. Older RAM-only claim evidence is historical.
 
 ## Persistence and recovery
 

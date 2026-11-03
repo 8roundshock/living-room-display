@@ -105,7 +105,8 @@ the app's one runtime cache. Selected photos and exports are unchanged.
 Label Last screen with its capture time so it cannot be mistaken for a live view.
 Early sign-in lifecycle is #540; #544 replaces the earlier RAM-only handoff.
 Live selected-app preview remains future work. Source/CI checks do not establish
-installed capture or native acceptance; #519 remains unresolved.
+installed capture or native acceptance. The successful ordinary-cycle result for
+#519 is recorded in [STATUS](../STATUS.md); broader recovery checks remain separate.
 
 ## Movement and OLED considerations
 
