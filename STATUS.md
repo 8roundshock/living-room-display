@@ -1,6 +1,6 @@
 # Project status
 
-## Style management and category discovery source checkpoint (#563)
+## Style management and category discovery source checkpoint (#563, #428, #472, #475, #488)
 
 The editor adds current-draft duplication with unique editable names and a local
 delete Undo that restores the latest saved style without replacing later edits.
@@ -9,9 +9,15 @@ driven category selector that combines with search and availability. Last screen
 is picture-only with responsive rounded, feathered edges under the owner's
 2026-11-03 decision; image lifecycle and capture guards are unchanged.
 
-Both typechecks and twelve focused unit tests pass. Browser regression updates,
-RAM-only visual QA, independent final-head review and CI remain pending. This is
-source work only; no installation, native activation or physical-TV claim follows.
+The naming dialog keeps the canvas stable and uses one Cancel/Save pair. Daylight
+help is contextual, sliders have explicit labels, no-op appearance reset status
+is accurate and concurrent merged visuals receive the correct legacy look label.
+Both typechecks, production build and all 601 source tests pass. The styles,
+picker-sheet, catalog-time, daylight, preview and shared-snapshot browser suites
+pass. Author RAM-only visual review covered compact naming, deletion Undo, catalog
+filters and all three picture families. Full widget QA, independent final-head
+review and CI remain pending. This is source work only; no installation, native
+activation or physical-TV claim follows.
 
 ## Native Last screen acceptance — 2026-11-03 (#519)
 

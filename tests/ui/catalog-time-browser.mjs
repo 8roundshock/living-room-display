@@ -134,14 +134,14 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await page.keyboard.press('Shift+Tab'); assert.equal(await focused(), order[groupBoundary], 'Shift+Tab returns to the previewed widget');
     assert.equal(await page.locator('.catalog-item[data-widget-id]').count(), 0, 'rail items carry no data-widget-id (#310)');
     // Search and the availability filter add two stops before the one-stop rail and size choices.
-    // From Close, the first explicit add/room action is at most seven Tab presses away.
+    // From Close, the first explicit add/room action is at most eight Tab presses away.
     await button(itemName(firstUnadded, defaults)).click();
     await button('Close widget picker').focus();
     const path = [];
     const named = () => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent.trim());
-    for (let press = 0; press < 7; press++) { await page.keyboard.press('Tab'); path.push(await named()); }
-    assert.equal(path.at(-1), 'Switch the grid to Fine', `the full-board add action is reached in at most seven Tab presses: ${path.join(' > ')}`);
-    assert.deepEqual(path.slice(0, 3), ['Search widgets', 'Filter widgets', itemName(firstUnadded, defaults)], 'search and filter precede the one rail tab stop');
+    for (let press = 0; press < 8; press++) { await page.keyboard.press('Tab'); path.push(await named()); }
+    assert.equal(path.at(-1), 'Switch the grid to Fine', `the full-board add action is reached in at most eight Tab presses: ${path.join(' > ')}`);
+    assert.deepEqual(path.slice(0, 4), ['Search widgets', 'Widget category', 'Filter widgets', itemName(firstUnadded, defaults)], 'search and filter precede the one rail tab stop');
     await button(itemName('preview', defaults)).click();
     assert.equal(await page.locator('.picker-detail-heading p').innerText(), 'A dim picture of your screen from just before the display starts', 'plain Last screen description (#281)');
     await button(itemName('calendar', defaults)).click(); assert.equal(await button('Calendar medium').getAttribute('aria-pressed'), 'true', 'Calendar is added at medium');

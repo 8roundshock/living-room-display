@@ -1,6 +1,12 @@
 # Display studio
 
-## Adding widgets (#554)
+## Adding widgets (#554, #563)
+
+Search and a native Category selector lead discovery. Category options come from
+the active shared catalog; a quieter Show control filters availability. All three
+combine and the result count names the visible widgets. Show all widgets clears
+search, category and availability together, including an empty-result state.
+
 
 Either plus opens a focused Add-widget sheet over the unchanged editor. Desktop
 shows a readable grouped catalog beside one synthetic preview, with proportional
@@ -341,9 +347,14 @@ motion or the Off animation level.
   include visual/widget/empty-reminder settings, accent mode and animation; selecting
   one restores its whole board. Editing it shows **Modified**, and the single
   **Save changes** action updates that exact ID while saving all editor drafts.
-  **Save as new** opens an inline name, then **Save new style** creates a new ID and
-  leaves the original untouched. **Manage style** contains Rename and a confirmed
-  deletion staged until Save. It closes when a click or keyboard focus moves outside;
+  **Save as new** opens a compact naming dialog, then **Save new style** creates a new ID and
+  leaves the original untouched. **Manage style** contains Rename, Duplicate style
+  and a confirmed deletion staged until Save. Naming preserves the underlying canvas
+  geometry, contains keyboard focus, and offers one Cancel/Save pair. Escape or Cancel
+  dismisses the name and retains existing visual edits. Duplicate copies the current
+  draft and suggests a unique editable name. Deletion shows schedule consequences;
+  **Undo delete** restores the latest saved record without replacing later edits or
+  resurrecting a style deleted elsewhere. Schedule references remain available for Undo. It closes when a click or keyboard focus moves outside;
   Escape closes it and returns focus to its trigger. Rename and Delete hand focus to
   their input or confirmation, whose cancellation returns to Manage style.
   New/renamed names are validated for case/space-insensitive
@@ -843,26 +854,21 @@ instant (including repeated daylight-saving hours and imported seconds/offsets)
 and any concurrent date update. Explicitly changing or clearing the date still
 saves that selection in the computer's local timezone.
 
-Last screen is a dim optional pre-activation snapshot with capture time, size and
-opacity controls. The UI does not capture. Native/server RAM lifecycle clears it
-on dismissal; live preview/image history is not implemented. Export includes saved
-settings/reminders only, excluding drafts, images and tokens.
-New defaults use 24% snapshot opacity, multiplied by the ambient brightness cap.
-Saved custom values, including the former 8% default, are preserved. A presentation
-filter lifts midtones while preserving exact black/white endpoints; it changes
-neither the RAM PNG nor its alpha. Grid families determine the usable image size;
-the retained legacy `preview.widthPercent` field no longer shrinks that region.
-The image takes the snapshot's own shape at the largest size that fits above one
-caption line, centred in the cell, and "Last screen · 8:40 AM" starts on the image's
-left edge a few pixels below it in every family and density (#225; under 6 px even at
-4K). Under a narrower portrait image the caption keeps one line, running past the
-image's right edge within the cell, with image and caption centred together; the time
-never breaks from its AM/PM (#308). The same holds on the editor canvas at 1280×720 and 390 px: the widget's own frame
-class is distinct from the studio's canvas frame, so it takes none of that frame's border,
-radius or sizing. A newer snapshot that arrives while the display is shown stays hidden until it has
-loaded and decoded, then fades in at Subtle and Lively; Off and reduced motion show it
-as soon as it is ready (#173). The caption's time is formatted once per capture, not on
-every one-second tick (#99).
+Last screen is a dim optional snapshot with size and opacity controls. The UI does
+not capture. Under #544 it reads the same private runtime file as the native display;
+normal dismissal retains it and privacy invalidation clears it. Export excludes images.
+The owner's 2026-11-03 decision (#563) makes an available image picture-only: no visible
+caption or timestamp, with responsive rounded corners and a narrow feathered mask.
+Its full aspect fits the cell without zoom/cropping; portrait images retain their shape.
+Metadata still binds the exact captured image request. Waiting and failed-image states
+retain their accessible Last screen placeholder. No capture or cache lifecycle changes.
+
+New defaults use 24% snapshot opacity, multiplied by ambient brightness. Saved values,
+including the former 8% default, remain unchanged. The presentation filter lifts midtones
+and preserves black/white endpoints without changing source bytes. Grid families determine
+image size; the legacy width setting does not shrink it. A newer image inserted after the
+widget waits for load/decode before fading at Subtle/Lively; Off and reduced motion show
+it as soon as ready. Images retain the shared whole-widget movement and fit behavior.
 
 Clock styles are Outline (default), Digital and Analog. Analog has hands without
 a fixed face/tick ring (#222): two rounded text-colour hands (the hour hand at 30% of

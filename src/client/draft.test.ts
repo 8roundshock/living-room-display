@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { defaultSettings } from '../shared/defaults.ts';
 import { catalogBoardDefaults } from '../server/fixtures.ts';
 import { gridProblem, switchGridDensity } from '../shared/widgets.ts';
-import { getVisual } from './model.ts';
+import { getVisual, labelLook, matchingBuiltinPreset } from './model.ts';
 import {
   crowdedOutMessage,
   keepsSavedChanges,
@@ -16,6 +16,17 @@ import {
   settingsChanges,
 } from './draft.ts';
 import { addToGrid } from './make-room.ts';
+
+test('a combined appearance rebase relabels the actual merged look without making labels dirty', () => {
+  const base = defaultSettings(); base.appearance = labelLook({ ...base.appearance, brightness: 0.4 });
+  const local = structuredClone(base), remote = structuredClone(base);
+  local.appearance = labelLook({ ...local.appearance, brightness: 0.55 });
+  remote.appearance = labelLook({ ...remote.appearance, accentMode: 'color', accentColor: '#556677' });
+  const result = rebaseSettings(base, local, remote);
+  assert.equal(result.appearance.preset, matchingBuiltinPreset(result.appearance) ?? 'custom');
+  assert.equal(result.appearance.preset, 'custom');
+  assert.equal(sameEffectiveSettings(result, { ...result, appearance: { ...result.appearance, preset: 'room' } }), true);
+});
 
 test('draft rebase refreshes untouched nested fields and retains local edits', () => {
   const base = defaultSettings(),
@@ -119,7 +130,7 @@ test('a density draft remains a valid atomic layout through a concurrent placeme
   assert.deepEqual(kept.widgets, draft.widgets);
   const back = switchGridDensity(kept.widgetGrid, 'balanced', kept.widgets, compact.history); assert.ok(back);
   assert.deepEqual(back.grid, base.widgetGrid, 'polling does not corrupt density round-trip history');
-  assert.deepEqual(rebaseSettings(base, structuredClone(base), incoming), incoming, 'an untouched layout refreshes as a whole');
+  assert.deepEqual(rebaseSettings(base, structuredClone(base), incoming), { ...incoming, appearance: labelLook(incoming.appearance) }, 'an untouched layout refreshes as a whole, with its canonical look label');
 });
 
 // #350: visibility merges three ways against the draft's own base while the draft keeps its layout.
@@ -239,7 +250,7 @@ test('an automatic location draft yields to a manual city saved elsewhere, as th
   assert.deepEqual(yielded.location, manual.location); assert.equal(yielded.locationSource, 'manual');
   assert.equal(yielded.appearance.brightness, 0.3, 'other edits stay');
   assert.equal(keepsSavedChanges(base, manual, yielded), true, 'so a refused Save can retry by itself');
-  assert.deepEqual(settingsChanges(manual, yielded, true), { appearance: { brightness: 0.3 } });
+  assert.deepEqual(settingsChanges(manual, yielded, true), { appearance: { brightness: 0.3, preset: 'custom' } });
   // A device location chosen explicitly (no guard) is a real conflict with the other window's city.
   assert.equal(keepsSavedChanges(base, manual, kept), false);
 });

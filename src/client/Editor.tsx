@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -233,18 +234,17 @@ function Range({
   /** A control on the label line, before the value (Brightness's mode, #439). */
   extra?: React.ReactNode;
 }) {
-  // A label names its first labelable descendant, so a block with its own control on the label line
-  // is a div; the slider keeps its aria-label name (#466 review).
-  const Block = extra ? 'div' : 'label';
+  const id = useId();
   return (
-    <Block className="control-block">
+    <div className="control-block">
       <span className="control-label">
-        <span>{label}</span>
+        <label htmlFor={id}>{label}</label>
         {extra}
         {/* The slider speaks its own value (aria-valuetext); the visible copy is not announced again. */}
         <output aria-hidden="true">{display ?? value}</output>
       </span>
       <input
+        id={id}
         className="range-input"
         type="range"
         aria-label={label}
@@ -260,7 +260,7 @@ function Range({
           } as React.CSSProperties
         }
       />
-    </Block>
+    </div>
   );
 }
 
@@ -349,6 +349,13 @@ export function Editor({
   const [presetOriginal, setPresetOriginal] = useState<SavedPreset | null>(() =>
     structuredClone(state.settings.savedPresets.find(item => item.id === rememberedStyle(state.settings)) ?? null));
   const [styleMode, setStyleMode] = useState<'update' | 'new' | 'rename'>('update');
+  const styleNameDialog = useRef<HTMLDialogElement>(null);
+  useLayoutEffect(() => {
+    const dialog = styleNameDialog.current;
+    if (!dialog) return;
+    if (styleMode !== 'update' && !dialog.open) dialog.showModal();
+    else if (styleMode === 'update' && dialog.open) dialog.close();
+  }, [styleMode]);
   const newStyleId = useRef<string | null>(null);
   const [builtinSelection, setBuiltinSelection] = useState('');
   const [pendingStyle, setPendingStyle] = useState<string | null>(null);
@@ -448,7 +455,7 @@ export function Editor({
   }, [serverReachedAt]);
   // A lost connection's Retry offer replaces a network failure saying the same thing.
   const alerts: StudioAlert[] = [];
-  if (error && !(error.network && connectionError))
+  if (error && styleMode === 'update' && !(error.network && connectionError))
     alerts.push({ key: `action:${error.text}`, text: error.text, kind: 'action' });
   if (connectionError)
     alerts.push({ key: `connection:${connectionError}`, text: connectionError, kind: 'connection' });
@@ -1305,7 +1312,7 @@ export function Editor({
   }, [section]);
   function confirmResetAppearance() {
     const after = resetAppearance(draftRef.current);
-    const unchanged = sameEffectiveSettings(savedRef.current, after);
+    const unchanged = same(lookOf(savedRef.current.appearance), lookOf(after.appearance));
     setConfirmReset(false);
     // Reset is a visual draft edit of the selected style (or new-style intent).
     // Keep its save target/name, but stop claiming a starter look is selected.
@@ -1416,10 +1423,10 @@ export function Editor({
               {BUILTIN_PRESETS.map(preset => <option key={preset} value={`builtin:${preset}`}>{preset[0].toUpperCase() + preset.slice(1)}</option>)}
             </optgroup>
           </select>
-          {styleModified && styleMode === 'update' && <span className="style-modified">Modified</span>}
+          {styleModified && <span className="style-modified">Modified</span>}
           <InfoTip label="About styles">Saved styles include your look and layout. Starter looks change appearance and keep widgets, motion and Follow daylight.</InfoTip>
-          {styleMode !== 'new' && <button className="button small" disabled={saving || draft.savedPresets.length >= MAX_SAVED_STYLES} onClick={beginNewStyle}>Save as new…</button>}
-          {presetId && styleMode === 'update' && <details ref={styleManagement} className="style-management"
+          <button className="button small" disabled={saving || draft.savedPresets.length >= MAX_SAVED_STYLES} onClick={beginNewStyle}>Save as new…</button>
+          {presetId && <details ref={styleManagement} className="style-management"
             onKeyDown={event => {
               if (event.key !== 'Escape' || event.defaultPrevented || !event.currentTarget.open) return;
               event.preventDefault(); event.stopPropagation(); closeStyleManagement(true);
@@ -1430,16 +1437,27 @@ export function Editor({
               <button className="button small" disabled={saving} onClick={() => { closeStyleManagement(); setConfirmStyleDelete(true); setStyleFocus({ target: '#keep-style' }); }}>Delete style…</button></div>
           </details>}
         </div>
-        {styleMode !== 'update' && <div className="style-name-row" onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); keepEditingStyle(); } }}>
-          <label htmlFor="style-name">{styleMode === 'new' ? 'New style' : 'Style name'}</label>
+        {styleMode !== 'update' && <dialog ref={styleNameDialog} className="style-name-dialog" aria-labelledby="style-name-title" onCancel={event => { event.preventDefault(); if (!saving) keepEditingStyle(); }} onKeyDown={event => {
+          if (event.key !== 'Tab' || event.defaultPrevented) return;
+          const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('input, button')].filter(item => !item.matches(':disabled'));
+          const first = controls[0], last = controls.at(-1);
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }}>
+          <h2 id="style-name-title">{styleMode === 'new' ? 'Save a new style' : 'Rename style'}</h2>
+          <p className="style-name-hint">{styleMode === 'new' ? 'Copies your current layout and appearance, including unsaved changes.' : 'Keeps this style’s identity and saves your current layout and appearance.'}</p>
+          <label className="style-name-field" htmlFor="style-name">{styleMode === 'new' ? 'New style' : 'Style name'}</label>
           <input id="style-name" className="text-input" maxLength={60} required disabled={saving} value={presetName}
             onChange={event => setPresetName(event.target.value)} placeholder="Name" aria-invalid={!!presetConflict}
-            aria-describedby={presetConflict ? 'preset-name-error' : undefined} />
-          <button className="text-button" disabled={saving} onClick={keepEditingStyle}>Keep editing</button>
-          {styleMode === 'new' && <span className="style-name-hint">Copies your current layout and appearance, including unsaved changes.</span>}
-        </div>}
+            aria-describedby={styleProblem && presetName.trim() ? 'preset-name-error' : undefined} />
+          {styleProblem && presetName.trim() && <p className="inline-message error" id="preset-name-error" role="alert">{styleProblem}</p>}
+          {error && error.text !== styleProblem && <p className="inline-message error" role="alert">{error.text}</p>}
+          {saveScope && <p className="style-name-hint">Also saves {saveScope} changes.</p>}
+          <div className="style-name-actions"><button className="button" disabled={saving} onClick={keepEditingStyle}>Cancel</button>
+            <button className="button primary" aria-disabled={saveBlocked} onClick={() => { if (!saveBlocked) void saveSettings(); }}>{saving ? 'Saving…' : styleMode === 'new' ? 'Save new style' : 'Save changes'}</button></div>
+        </dialog>}
         {draft.savedPresets.length >= MAX_SAVED_STYLES && <p className="style-limit">Up to {MAX_SAVED_STYLES} styles.</p>}
-        {styleProblem && (styleMode === 'update' || presetName.trim()) && <p className="inline-message error preset-name-error" id="preset-name-error" role="alert">{styleProblem}</p>}
+        {styleProblem && styleMode === 'update' && <p className="inline-message error preset-name-error" id="selected-style-error" role="alert">{styleProblem}</p>}
         {presetOriginal && selectedStyle && !same(presetOriginal, selectedStyle) &&
           <button className="button small" disabled={saving} onClick={() => chooseStyle(`saved:${selectedStyle.id}`)}>Reload style</button>}
         {confirmStyleDelete && <div className="style-question" role="group" aria-label="Delete style"
@@ -1462,7 +1480,7 @@ export function Editor({
           <button className="button small primary" aria-disabled={saveBlocked} onClick={() => { if (!saveBlocked) void saveAndSwitch(); }}>Save and switch</button>
         </div>}
         <div className="style-notice" role="status">{styleNotice}{deletedStyle && <button className="text-button" disabled={saving} onClick={undoDeleteStyle}>Undo delete</button>}</div>
-        {dirty && <div ref={savebar} className="studio-savebar has-changes">
+        {settingsDirty && <div ref={savebar} className="studio-savebar has-changes" data-naming={styleMode !== 'update' ? '' : undefined} aria-hidden={styleMode !== 'update' ? true : undefined}>
           <span className="save-status" role="status">{saving ? 'Saving…' : draftProblem ?? (styleMode === 'new' ? 'New style' : styleMode === 'rename' ? 'Rename style' : styleSaveIntent().kind === 'update' ? `Updates ${presetOriginal?.name}` : 'Unsaved changes')}</span>
           {saveScope && <span className="style-save-scope">Also saves {saveScope} changes</span>}
           <div><button className="button cancel-settings" disabled={saving} onClick={cancelChanges}>Cancel</button>

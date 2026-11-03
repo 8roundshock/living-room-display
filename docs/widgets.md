@@ -99,7 +99,7 @@ On Balanced 12 × 8 it fills every cell:
 | Clock | 4, 0 | Large (8 × 4) |
 | Weather | 0, 4 | Large (4 × 4) |
 | Forecast | 4, 4 | Large (8 × 2) |
-| Last screen | 4, 6 | Medium (4 × 2) |
+| Last screen | Complete faint desktop, picture-only with responsive rounded and softly feathered edges; no visible timestamp (#563) | Wider complete desktop | Larger complete desktop; retains its aspect without zoom/cropping |
 | Reminders | 8, 6 | Medium (4 × 2) |
 
 Every other widget is off, and every widget stays optional. Hidden widgets wait at

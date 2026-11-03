@@ -3,6 +3,7 @@ import type { DaylightBrightness, Settings } from '../shared/contracts.ts';
 import { isValidTimeZone, timeParts } from './astronomy.ts';
 import { DAYLIGHT_STEP_MS, daylightStatus } from './daylight.ts';
 import { weatherTimeZone } from './format.ts';
+import { InfoTip } from './InfoTip';
 
 /** The current minute, re-rendered just after each minute starts (when the value can change). */
 function useMinute(): number {
@@ -52,13 +53,14 @@ export function DaylightStatus({
           ? ' · the sun stays down today'
           : ` · brightest at ${peak}`}
       </p>
-      <p className="hint">
+      <InfoTip label="How daylight brightness works">
         {status.polar === 'night'
           ? `Stays at Dimmest while the sun is down at ${place}.`
           : status.polar === 'day'
             ? `Peaks at solar noon. The sun is up all day at ${place}, so it stays above Dimmest.`
             : `Peaks at solar noon at ${place} and rests at Dimmest from sunset to sunrise.`}
-      </p>
+        {' Starter looks keep this daylight range. Saved styles restore their saved brightness mode and range.'}
+      </InfoTip>
     </div>
   );
 }

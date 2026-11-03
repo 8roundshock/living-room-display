@@ -129,11 +129,11 @@ export function WidgetPicker({ settings, initial = null, onAdd, onFix, onClose }
         <input ref={search} type="search" aria-label="Search widgets" placeholder="Search widgets" value={query} autoComplete="off" spellCheck={false} onChange={event => { setQuery(event.target.value); setProblem(null); }} />
         {query && <button className="icon-button" aria-label="Clear widget search" onClick={() => { setQuery(''); search.current?.focus(); }}><Icon name="close" size={16} /></button>}
       </div>
-      <label className="picker-filter"><span>Category</span><select aria-label="Widget category" value={category} onChange={event => { setCategory(event.target.value as PickerCategory); setProblem(null); }}>
+      <label className="picker-filter picker-category"><span className="sr-only">Category</span><select aria-label="Widget category" value={category} onChange={event => { setCategory(event.target.value as PickerCategory); setProblem(null); }}>
         <option value="all">All categories</option>
         {pickerGroups().map(group => <option key={group.category} value={group.category}>{WIDGET_CATEGORIES[group.category]}</option>)}
       </select></label>
-      <label className="picker-filter"><span>Show</span><select aria-label="Filter widgets" value={filter} onChange={event => { setFilter(event.target.value as PickerFilter); setProblem(null); }}>
+      <label className="picker-filter picker-availability"><span>Show</span><select aria-label="Filter widgets" value={filter} onChange={event => { setFilter(event.target.value as PickerFilter); setProblem(null); }}>
         <option value="all">All widgets</option><option value="not-added">Not added</option><option value="on-display">On display</option>
       </select></label>
     </div>

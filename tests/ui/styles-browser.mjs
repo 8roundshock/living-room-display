@@ -28,7 +28,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
   const choice = () => page.getByRole('combobox', { name: 'Style', exact: true });
   const brightness = () => page.getByRole('slider', { name: 'Brightness', exact: true });
   const saved = () => app.store.snapshot().settings;
-  async function clean() { await page.locator('.studio-savebar').waitFor({ state: 'detached' }); }
+  async function clean() { await page.locator('.style-name-dialog').waitFor({ state: 'hidden' }); await page.locator('.studio-savebar').waitFor({ state: 'detached' }); }
   async function nudge() { await brightness().focus(); await page.keyboard.press('ArrowLeft'); return Number(await brightness().inputValue()) / 100; }
   function settings() {
     const value = defaultSettings();
@@ -51,6 +51,11 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
   async function select(id) { await choice().selectOption(`saved:${id}`); }
   try {
     await open(); await select('alpha:imported/id');
+    for (const slider of await page.getByRole('slider').all()) {
+      assert.equal(await slider.evaluate(element => element.labels.length), 1, 'each slider has an explicit label');
+      await slider.evaluate(element => element.labels[0].click());
+      assert.equal(await slider.evaluate(element => document.activeElement === element), true, 'label click focuses its slider');
+    }
     const manage = () => page.locator('.style-management');
     const manageTrigger = () => page.locator('#manage-style-trigger');
     const isManaged = () => manage().evaluate(element => element.open);
@@ -59,7 +64,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       await page.locator('.style-management > div').click({ position: { x: 4, y: 20 } });
       assert.equal(await isManaged(), true, 'inside padding does not dismiss the panel');
       await button('Rename').focus(); await page.keyboard.press('Tab');
-      assert.equal(await button('Delete style…').evaluate(element => element === document.activeElement), true);
+      assert.equal(await button('Duplicate style…').evaluate(element => element === document.activeElement), true);
       assert.equal(await isManaged(), true, 'internal keyboard navigation stays open');
       await page.getByRole('heading', { name: 'Your display', exact: true }).click();
       assert.equal(await isManaged(), false, 'outside non-control clicks dismiss repeatedly');
@@ -86,7 +91,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
     await manageTrigger().click(); await button('Rename').click();
     await page.getByRole('textbox', { name: 'Style name', exact: true }).waitFor();
     assert.equal(await page.getByRole('textbox', { name: 'Style name', exact: true }).evaluate(element => element === document.activeElement), true);
-    await button('Keep editing').click();
+    await button('Cancel').click();
     await manageTrigger().click(); await button('Delete style…').click();
     assert.equal(await isManaged(), false);
     assert.equal(await button('Keep style').evaluate(element => element === document.activeElement), true);
@@ -100,6 +105,32 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
     assert.equal(await manageTrigger().evaluate(element => element === document.activeElement), true);
     assert.equal(saved().savedPresets.length, 2, 'dismissal and cancelled confirmation never delete a style');
     checks.push('Manage actions retain rename focus and safe delete confirmation; Escape is scoped to the active disclosure, confirmation or help');
+
+    await open(); await select('alpha:imported/id');
+    const copiedBrightness = await nudge(), beforeCopy = structuredClone(saved().savedPresets[0]);
+    const beforeNaming = await page.locator('.preview-frame').boundingBox();
+    await manageTrigger().click(); await button('Duplicate style…').click();
+    const nameField = page.getByRole('textbox', { name: 'New style', exact: true });
+    assert.equal(await nameField.inputValue(), 'Evening copy');
+    assert.deepEqual(await page.locator('.preview-frame').boundingBox(), beforeNaming, 'naming does not shift or shrink the canvas');
+    await page.keyboard.press('Shift+Tab'); assert.equal(await button('Save new style').evaluate(element => element === document.activeElement), true);
+    await page.keyboard.press('Tab'); assert.equal(await nameField.evaluate(element => element === document.activeElement), true);
+    if (capture) images.push({ name: 'style-duplicate', bytes: await page.screenshot() });
+    await button('Save new style').click(); await clean();
+    assert.deepEqual(saved().savedPresets[0], beforeCopy);
+    assert.equal(saved().savedPresets.find(item => item.name === 'Evening copy').visual.appearance.brightness, copiedBrightness);
+    await manageTrigger().click(); await button('Delete style…').click(); await button('Delete from styles').click();
+    const laterBrightness = await nudge();
+    if (capture) images.push({ name: 'style-deletion-undo', bytes: await page.screenshot() });
+    await button('Undo delete').click();
+    assert.equal(Number(await brightness().inputValue()) / 100, laterBrightness, 'Undo preserves later visual edits');
+    await button('Save changes').click(); await clean();
+    assert.equal(saved().savedPresets.some(item => item.name === 'Evening copy'), true);
+    await select('alpha:imported/id'); await button('Save changes').click(); await clean();
+    await manageTrigger().click(); await button('Delete style…').click(); await button('Delete from styles').click();
+    await button('Save changes').click(); await clean();
+    assert.equal(saved().savedPresets.some(item => item.id === 'alpha:imported/id'), false, 'confirmed deletion persists only on Save');
+    checks.push('Duplicate copies the current draft with an editable unique name and stable canvas; dialog cycles focus; delete Undo retains later edits; Save commits deletion');
 
     await open(settings(), { viewport: { width: 390, height: 700 }, hasTouch: true }); await select('alpha:imported/id');
     await manageTrigger().tap(); assert.equal(await isManaged(), true);
@@ -188,6 +219,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       let refused = true;
       await page.route('**/api/settings', route => route.request().method() === 'PATCH' && refused ? route.fulfill({ status: 503, json: { error: 'Synthetic refused update' } }) : route.continue());
       await button('Save changes').click(); await page.getByText('Synthetic refused update', { exact: true }).waitFor();
+      if (mode === 'rename') await button('Cancel').click();
       await button('Save as new\u2026').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Recovered new');
       refused = false; await button('Save new style').click(); await clean();
       assert.deepEqual(saved().savedPresets[0], before, `${mode}: original unchanged after failure then Save as new`);
@@ -203,6 +235,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       let refused = true;
       await page.route('**/api/settings', route => route.request().method() === 'PATCH' && refused ? route.fulfill({ status: 503, json: { error: 'Synthetic refused name' } }) : route.continue());
       await button(mode === 'new' ? 'Save new style' : 'Save changes').click(); await page.getByText('Synthetic refused name', { exact: true }).waitFor();
+      await button('Cancel').click();
       await choice().selectOption(''); await page.getByRole('group', { name: 'Switch style' }).waitFor();
       await button('Discard and switch').click(); await clean(); assert.equal(await choice().inputValue(), '');
       await nudge(); refused = false; await button('Save changes').click(); await clean();
@@ -247,13 +280,26 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
     await button('Save changes').click(); await clean(); assert.equal(saved().units, 'imperial');
     await page.getByRole('tab', { name: 'Style', exact: true }).click();
     const beforeResetNew = structuredClone(saved().savedPresets[0]);
-    await button('Save as new\u2026').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Reset as new');
     await page.locator('summary', { hasText: 'Reset appearance & layout' }).click(); await button('Reset appearance\u2026').click();
     await page.getByRole('group', { name: 'Reset appearance' }).getByRole('button', { name: 'Reset', exact: true }).click();
-    assert.equal(await page.getByRole('textbox', { name: 'New style', exact: true }).inputValue(), 'Reset as new');
+    await button('Save as new\u2026').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Reset as new');
     await button('Save new style').click(); await clean(); assert.deepEqual(saved().savedPresets[0], beforeResetNew);
     assert.equal(saved().savedPresets.find(item => item.name === 'Reset as new').visual.appearance.brightness, 0.55);
     checks.push('Visual Save preserves preferences saved elsewhere without a hidden weather draft; Reset appearance retains a new-style intent and preserves its original');
+
+    await open(); await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
+    await button('Last screen').click();
+    const opacity = page.getByRole('slider', { name: 'Snapshot opacity', exact: true });
+    assert.equal(await opacity.evaluate(element => element.labels.length), 1);
+    await opacity.focus(); await page.keyboard.press('ArrowLeft');
+    await page.getByRole('tab', { name: 'Style', exact: true }).click();
+    await page.locator('summary', { hasText: 'Reset appearance & layout' }).click(); await button('Reset appearance…').click();
+    await page.getByRole('group', { name: 'Reset appearance' }).getByRole('button', { name: 'Reset', exact: true }).click();
+    await page.getByText('Appearance is back to the defaults.', { exact: true }).waitFor();
+    assert.equal(await page.locator('.studio-savebar').count(), 1, 'unrelated opacity remains a draft');
+    assert.equal(await page.getByText('Appearance reset and saved.', { exact: true }).count(), 0);
+    await button('Cancel').click(); await clean();
+    checks.push('Style and Snapshot opacity sliders have real labels; a no-op appearance reset never falsely reports unrelated drafts saved');
 
     await open(settings(), {}, true); await select('alpha:imported/id'); await nudge();
     await app.store.update(data => { data.settings.savedPresets[0].visual.appearance.brightness = 0.8; data.settings.units = 'imperial'; });
@@ -315,15 +361,15 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       const selectedBox = await choice().boundingBox();
       assert.ok(selectedBox.width >= 140, `the selected style name remains readable with Modified/actions at ${viewport.width}px: ${JSON.stringify(selectedBox)}`);
       await button('Save as new…').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic portable style');
-      for (const target of [choice(), button('Save new style'), button('Cancel')]) {
+      for (const target of [page.getByRole('textbox', { name: 'New style', exact: true }), button('Save new style'), button('Cancel')]) {
         const box = await target.boundingBox(); assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= viewport.width + 1, JSON.stringify({ viewport, box }));
       }
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       assert.equal(await page.locator('.studio-savebar').count(), 1);
       if (capture) images.push({ name: `styles-${viewport.width}`, bytes: await page.screenshot() });
-      await button('Cancel').click(); await clean();
+      await button('Cancel').click(); await button('Cancel').click(); await clean();
     }
-    checks.push('Keyboard selection and inline naming; one Save group with 44 px controls at 1280/390/320/640 px; Cancel and no horizontal overflow');
+    checks.push('Keyboard selection and focused naming dialog; one Save group with 44 px controls at 1280/390/320/640 px; Cancel and no horizontal overflow');
     assert.deepEqual(errors, []); return { checks, images, seconds: Math.round((Date.now() - startedAt) / 1000) };
   } catch (error) {
     console.log(JSON.stringify({ checksCompleted: checks.length, errors, editor: await page.locator('body').innerText().catch(() => '') }));

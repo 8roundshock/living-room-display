@@ -6,6 +6,8 @@ The compact direction keeps the native Style selector and contextual management
 disclosure. A style-card wall would crowd the existing canvas; a custom listbox
 would duplicate native keyboard behavior. Coordinator concept critique selected
 the native approach, with clear current-draft duplication and reversible deletion.
+The installed UI audit found that inline naming grew the toolbar and moved the canvas;
+a compact native naming dialog now preserves that geometry with one Cancel/Save pair.
 Duplicate suggests an editable unique name and includes current unsaved visuals.
 Delete remains staged until Save; Undo restores the latest record without replacing
 later layout edits. Existing schedule references are retained and their consequence
@@ -27,8 +29,11 @@ favor predictable choices, concise action labels and controls near their context
 [modal dialog](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/) inform keyboard,
 Escape and focus-return behavior. This web adaptation claims no Apple certification.
 Recheck when catalog categories, action scope, focus ownership or viewport styles change.
-Source checkpoint: typechecks and twelve focused unit tests pass; browser and
-independent final-head visual review remain pending.
+Author validation: both typechecks, production build and all 601 source tests pass.
+Synthetic styles, picker-sheet, catalog-time, preview, shared-snapshot and daylight
+browser checks pass. Naming at 1280/390/320/640 widths, deletion Undo, category
+browsing and all three Last screen families were inspected in RAM. Independent
+final-head review, CI and physical-TV acceptance remain separate.
 
 ## Snapshot recovery confirmation (#556, 2026-11-03)
 

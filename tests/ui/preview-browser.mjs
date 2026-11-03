@@ -111,13 +111,9 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
         height,
         boxWidth: r.width,
         regionWidth: e.closest('.ambient-widget').getBoundingClientRect().width,
-        // #225: the image takes the cell's limiting dimension, with its caption below it (the frame
-        // keeps 0.15em of the caption size free for the text's overflow).
-        fillsCell:
-          width >= e.closest('.snapshot-body').getBoundingClientRect().width - 1 ||
-          e.closest('.ambient-widget').querySelector('.preview-caption').getBoundingClientRect().bottom >=
-            e.closest('.snapshot-body').getBoundingClientRect().bottom -
-              parseFloat(getComputedStyle(e.closest('.ambient-widget').querySelector('.preview-caption')).fontSize) * 0.15 - 1.5,
+        fillsCell: width >= e.closest('.snapshot-body').getBoundingClientRect().width - 1 ||
+          height >= e.closest('.snapshot-body').getBoundingClientRect().height - 1,
+
       };
     });
     const shot = await decode(

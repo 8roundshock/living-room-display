@@ -244,7 +244,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       current = structuredClone(source); current.settings.appearance.clockStyle = style; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'clock']));
       await open(); if (capture) images.push({ name: `clock-style-${style}`, bytes: await page.locator('[data-widget-id="clock"]').screenshot() });
     }
-    current = structuredClone(source); current.settings.clockFormat = '24h'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'preview'])); await open(); assert.doesNotMatch(await page.locator('.preview-caption').innerText(), /AM|PM/);
+    current = structuredClone(source); current.settings.clockFormat = '24h'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'preview'])); await open(); assert.equal(await page.locator('.preview-caption').count(), 0, 'picture-only in every clock format');
     current = structuredClone(source); current.weather.units.precipitation = 'in'; current.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'weather'])); current.settings.widgetGrid.placements.weather.size = 'medium'; current.weather.hourly.forEach(hour => { hour.rainAmount = 0.03; }); await open(); assert.match(await page.locator('.ambient-weather').innerText(), /in rain/);
     current = structuredClone(source); current.settings.appearance.motionEnabled = false; await page.setViewportSize({ width: 1920, height: 1080 }); await open();
     const inset = await page.locator('.widget-grid-plane').evaluate(el => el.getBoundingClientRect().left / innerWidth); assert.ok(Math.abs(inset - 0.04) < 0.002);
