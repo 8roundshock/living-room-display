@@ -84,7 +84,11 @@ test('new data sources are gated by their saved optional widgets', () => {
   settings.widgets.wind = false;
   settings.widgets.weatherAlerts = true;
   assert.equal(needsAlerts(settings), true);
-  assert.equal(needsForecast(settings), false);
+  assert.equal(needsForecast(settings), false, 'explicit saved weather zone needs no forecast');
+  settings.location.timezone = 'auto';
+  assert.equal(needsForecast(settings), true, 'an alerts-only device location resolves its weather timezone');
+  settings.widgets.weatherAlerts = false;
+  assert.equal(needsForecast(settings), false, 'no consumer means no forecast request');
 });
 
 test('civil progress and reminder buckets respect short and long local days', () => {

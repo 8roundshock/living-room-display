@@ -239,8 +239,8 @@ export async function createApplication(options: ApplicationOptions) {
       const editorView = request.headers['x-lrd-view'] === 'editor';
       if (!effective.preview.enabled || !effective.widgets.preview) clearPreview();
       // The forecast is refreshed only while a saved widget needs it (#352); air quality only while a saved
-      // widget shows it (Air quality, or Dynamic with Air & UV, #437); official alerts only while Dynamic
-      // shows them (#437). Each waits for a due refresh at most briefly (#351). Alerts are API-only: never
+      // widget shows it (Air quality, or Dynamic with Air & UV, #437); official alerts while Weather alerts or Dynamic
+      // shows them (#437, #565). Each waits for a due refresh at most briefly (#351). Alerts are API-only: never
       // stored, exported or logged.
       const [weatherState, airQuality, alertsState] = await Promise.all([
         needsForecast(effective) || (editorView && needsForecast(settings)) ? weather.get(effective) : weather.peek(effective),
