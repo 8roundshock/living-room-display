@@ -32,6 +32,8 @@ internal sealed class PreparationConfiguration
     internal bool Enabled { get; set; }
     internal bool CapturePaused { get; set; }
     internal long CaptureRevision { get; set; }
+    internal bool TransitionAccepted { get; set; }
+    internal long TransitionEpoch { get; set; }
     // The saved preference is not the active Windows deadline. Windows may have
     // been configured independently; never delay preparation until that preference.
     internal int TimeoutSeconds { get; set; }
@@ -242,76 +244,114 @@ internal interface IPreviewRetentionProcess : IDisposable
     bool Running { get; }
 }
 
-// One bounded read-only discovery per non-Default input-desktop episode. A late
-// result only disposes its own handles; it cannot authorize cache retention.
+internal enum PreviewRetentionState { Pending, Owned, Failed }
+internal enum PreviewDiscoveryKind { Empty, NotReady, Owned, Failed }
+internal sealed class PreviewRetentionDiscovery : IDisposable
+{
+    internal PreviewDiscoveryKind Kind;
+    internal IPreviewRetentionProcess Process;
+    internal PreviewRetentionDiscovery(PreviewDiscoveryKind kind,IPreviewRetentionProcess process=null) { Kind=kind; Process=process; }
+    public void Dispose() { if(Process!=null) { Process.Dispose(); Process=null; } }
+}
+
+// A pending episode must be acknowledged as hidden by the backend before any
+// asynchronous identity query starts. Only a completed absence/not-ready result
+// may retry, within the original deadline; blocked/late readers cannot multiply.
 internal sealed class PreviewRetentionIdentity : IDisposable
 {
     private readonly object gate=new object();
-    private readonly Func<int,IPreviewRetentionProcess> discover;
+    private readonly Func<int,PreviewRetentionDiscovery> discover;
     private readonly CancellationToken cancellation;
-    private readonly int milliseconds;
+    private readonly Func<long> now;
+    private readonly int transitionMilliseconds,queryMilliseconds;
     private IPreviewRetentionProcess retained;
-    private bool attempted, inFlight, disposed;
-    private int session;
-    private long epoch;
-    internal PreviewRetentionIdentity(Func<int,IPreviewRetentionProcess> discover,CancellationToken cancellation,int milliseconds=1500)
+    private PreviewRetentionDiscovery completed;
+    private bool active, inFlight, disposed;
+    private int session,timeout;
+    private long epoch, counter,deadline,queryStarted,lastObserved;
+    private PreviewRetentionState state=PreviewRetentionState.Failed;
+    internal PreviewRetentionIdentity(Func<int,PreviewRetentionDiscovery> discover,CancellationToken cancellation,Func<long> now,int transitionMilliseconds=5000,int queryMilliseconds=1500)
     {
-        if(discover==null || milliseconds<=0)throw new ArgumentException();
-        this.discover=discover; this.cancellation=cancellation; this.milliseconds=milliseconds;
+        if(discover==null || now==null || transitionMilliseconds<=0 || queryMilliseconds<=0)throw new ArgumentException();
+        this.discover=discover; this.cancellation=cancellation; this.now=now;
+        this.transitionMilliseconds=transitionMilliseconds; this.queryMilliseconds=queryMilliseconds;
     }
-    internal bool Confirm(int sessionId)
+    internal long Epoch { get { lock(gate)return epoch; } }
+    internal bool IsDiscovering { get { lock(gate)return inFlight; } }
+    private void FailLocked()
+    {
+        state=PreviewRetentionState.Failed;
+        if(retained!=null)retained.Dispose(); retained=null;
+        if(completed!=null)completed.Dispose(); completed=null;
+    }
+    internal void Fail() { lock(gate)FailLocked(); }
+    internal PreviewRetentionState Observe(int sessionId,int timeoutSeconds)
     {
         lock(gate)
         {
-            if(disposed || cancellation.IsCancellationRequested)return false;
-            if(retained!=null)
+            long at=now();
+            if(disposed || cancellation.IsCancellationRequested || at<0 || timeoutSeconds<=0) { FailLocked(); return state; }
+            if(!active)
             {
-                try { if(session==sessionId && retained.Running)return true; } catch { }
-                retained.Dispose(); retained=null;
-                return false;
+                if(counter>=9007199254740991L) { FailLocked(); return state; }
+                active=true; epoch=++counter; session=sessionId; timeout=timeoutSeconds;
+                deadline=at+transitionMilliseconds; lastObserved=at; state=PreviewRetentionState.Pending;
             }
-            if(attempted || inFlight)return false;
-            attempted=true; inFlight=true; session=sessionId;
-            long request=++epoch;
-            var age=Stopwatch.StartNew();
-            bool finished=false, abandoned=false;
-            IPreviewRetentionProcess found=null;
+            if(session!=sessionId || timeout!=timeoutSeconds || at<lastObserved ||
+                state==PreviewRetentionState.Pending && (at>=deadline || inFlight && at-queryStarted>=queryMilliseconds))
+            { FailLocked(); return state; }
+            lastObserved=at;
+            if(state==PreviewRetentionState.Failed)return state;
+            if(completed!=null)
+            {
+                var result=completed; completed=null;
+                if(result.Kind==PreviewDiscoveryKind.Owned)
+                { retained=result.Process; result.Process=null; state=PreviewRetentionState.Owned; }
+                else if(result.Kind!=PreviewDiscoveryKind.Empty && result.Kind!=PreviewDiscoveryKind.NotReady)FailLocked();
+                result.Dispose();
+            }
+            if(state==PreviewRetentionState.Owned)
+            {
+                try { if(retained!=null && retained.Running)return state; } catch { }
+                FailLocked();
+            }
+            return state;
+        }
+    }
+    internal void AcknowledgePending(long acceptedEpoch)
+    {
+        lock(gate)
+        {
+            if(!active || epoch!=acceptedEpoch || Observe(session,timeout)!=PreviewRetentionState.Pending || inFlight || completed!=null)return;
+            inFlight=true; queryStarted=now(); long request=epoch; int expectedSession=session;
             var worker=new Thread(delegate() {
-                IPreviewRetentionProcess result=null;
-                try { result=discover(sessionId); } catch { }
+                PreviewRetentionDiscovery result=null;
+                try { result=discover(expectedSession); } catch { }
+                if(result==null)result=new PreviewRetentionDiscovery(PreviewDiscoveryKind.Failed);
                 lock(gate)
                 {
                     inFlight=false;
-                    if(!disposed && !abandoned && request==epoch)
-                    { found=result; result=null; finished=true; Monitor.PulseAll(gate); }
+                    long at=now();
+                    if(!disposed && active && request==epoch && state==PreviewRetentionState.Pending)
+                    {
+                        if(!cancellation.IsCancellationRequested && at>=queryStarted && at-queryStarted<queryMilliseconds && at<deadline)
+                        { completed=result; result=null; }
+                        else FailLocked();
+                    }
                 }
                 if(result!=null)result.Dispose();
             });
             worker.IsBackground=true; worker.Start();
-            try
-            {
-                while(!finished)
-                {
-                    long remaining=milliseconds-age.ElapsedMilliseconds;
-                    if(disposed || cancellation.IsCancellationRequested || remaining<=0)return false;
-                    Monitor.Wait(gate,(int)Math.Min(remaining,50));
-                }
-                if(disposed || cancellation.IsCancellationRequested || age.ElapsedMilliseconds>=milliseconds || request!=epoch || found==null)return false;
-                if(!found.Running)return false;
-                retained=found; found=null; return true;
-            }
-            finally { abandoned=true; if(found!=null)found.Dispose(); }
         }
     }
     internal void Reset()
     {
         lock(gate)
         {
-            epoch++; attempted=false;
-            if(retained!=null)retained.Dispose(); retained=null;
+            FailLocked(); active=false; epoch=0;
         }
     }
-    public void Dispose() { lock(gate) { disposed=true; Reset(); Monitor.PulseAll(gate); } }
+    public void Dispose() { lock(gate) { disposed=true; Reset(); } }
 }
 
 internal interface IPreparedClaimProcess : IDisposable

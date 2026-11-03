@@ -35,6 +35,12 @@ it when only source checks are authorized. Installer smoke CI sets the disable-o
 The periodic-cache contract (#538) additionally covers first safe capture,
 five-minute monotonic refresh, retention through eligible capture failure,
 safe-producer leases, authoritative freeze/claim and lost-acknowledgement races.
+Native transition coverage (#559) injects clocks, process pins and context facts:
+hide-before-query, empty/not-ready retries, fixed deadlines, cancellation and
+late-result disposal. Backend tests reproduce the desktop-switch-before-process
+ordering, unavailable GET/HEAD/state during quarantine, original-file reveal,
+expiry without another request, and read/rename/upload fences. These tests use
+synthetic bytes and do not establish actual installed native image acceptance.
 Sign-in setup tests (#540) inject all registry boundaries and never write startup
 settings. For package transaction source verification use the explicit safe subset:
 

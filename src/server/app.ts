@@ -24,6 +24,7 @@ import { HOME_SHOWABLE_WIDGETS, showPlacement } from '../shared/show.ts';
 import type { ChangeMarker, Settings, TimersResult, WidgetId } from '../shared/contracts.ts';
 import { PREPARATION_MAX_OBSERVATION_GAP_MS, PreparationController, needsPreviewSupervision, type PreparationOptions, type PreparationView } from './preidle.ts';
 import { SnapshotFile } from './snapshot-file.ts';
+import { SnapshotTransition } from './snapshot-transition.ts';
 import { DisplayPresence } from './display-presence.ts';
 
 // Read once at module load. src/server and the built dist/server both sit two
@@ -109,13 +110,16 @@ export async function createApplication(options: ApplicationOptions) {
   const alerts = new AlertsService(options.fetcher, now, undefined, options.refreshWaitMs ?? REFRESH_WAIT_MS);
   let hostToken = randomBytes(32).toString('hex');
   let previewGeneration = 0;
+  let snapshotTransition: SnapshotTransition | undefined;
   function clearPreview() {
     // Invalidate uploads that began before this clear, even if preview is later enabled again.
     previewGeneration++;
+    snapshotTransition?.invalidate();
     void snapshotFile.clear().catch(() => {});
   }
   function previewState(): PreviewState {
     previewView();
+    snapshotTransition?.check();
     return snapshotFile.state();
   }
   let preparationBoundary = 0;
@@ -151,6 +155,7 @@ export async function createApplication(options: ApplicationOptions) {
       settingsRevision: createHash('sha256').update(JSON.stringify([settingsRevision, marker, preparationBoundary])).digest('hex') };
   }
   const preparation = new PreparationController(options.preparation, previewView, () => {}, now, options.preparationMonotonic, clearPreview);
+  snapshotTransition = new SnapshotTransition(snapshotFile, () => preparation.invalidate(true), options.preparationMonotonic);
   function preparationRequest(request: IncomingMessage) {
     if (request.headers.origin || Object.keys(request.headers).some(key => key.startsWith('sec-fetch-')) ||
         !preparation.authorized(request.headers['x-lrd-preparation'])) throw new HttpError(403, 'Preparation helper access only');
@@ -457,14 +462,47 @@ export async function createApplication(options: ApplicationOptions) {
           }
         }
         const config = preparation.config();
-        if (request.headers['x-preparation-safe'] === '1' && config.enabled) {
+        let transitionAccepted = false, transitionEpoch: number | null = null;
+        const transition = request.headers['x-preparation-transition'];
+        if (transition === 'pending' || transition === 'owned') {
+          const fields = z.object({
+            epoch: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+            session: z.coerce.number().int().min(0).max(0x7fffffff),
+            timeout: z.coerce.number().int().positive().max(0x7fffffff),
+          }).safeParse({ epoch: request.headers['x-preparation-transition-epoch'], session: request.headers['x-session-id'], timeout: request.headers['x-idle-timeout-seconds'] });
+          // Pending proves context only, never ownership. Safe:0 also makes an
+          // accidentally older backend refuse this new protocol rather than serve.
+          if (!fields.success || !config.enabled || request.headers['x-preparation-capture-eligible'] !== '0' ||
+              request.headers['x-preparation-safe'] !== (transition === 'pending' ? '0' : '1')) preparation.invalidate(true);
+          else {
+            const { epoch, session, timeout } = fields.data;
+            transitionEpoch = epoch;
+            const capability = String(request.headers['x-lrd-preparation']);
+            const stamp = preparation.snapshot.metadata();
+            if (snapshotTransition!.stale(capability, epoch, transition)) { /* A superseded proof cannot mutate newer pixels or their lease. */ }
+            else if (stamp && (stamp.sessionId !== session || stamp.timeoutSeconds !== timeout)) preparation.invalidate(true);
+            else {
+              preparation.snapshot.observe(session);
+              preparation.snapshot.freeze(); // Fence uploads before hiding/acknowledging the transition.
+              const binding = { capability, epoch, session, timeout,
+                configuration: config.configuration, generation: preparation.snapshot.generation };
+              transitionAccepted = transition === 'pending' ? snapshotTransition!.pending(binding) :
+                await snapshotTransition!.owned(binding, () => {
+                  const fresh = preparation.config();
+                  return fresh.enabled && fresh.configuration === binding.configuration && fresh.generation === binding.generation;
+                });
+            }
+          }
+        } else if ((transition === undefined || transition === 'desktop') && request.headers['x-preparation-safe'] === '1' && config.enabled) {
+          snapshotTransition!.desktop(); // An abandoned, unrevealed hold is cleared, never exposed on desktop return.
           const session = z.coerce.number().int().min(0).max(0x7fffffff).parse(request.headers['x-session-id']);
           preparation.snapshot.observe(session);
           if (request.headers['x-preparation-freeze'] === '1') preparation.snapshot.freeze();
           else if (request.headers['x-preparation-capture-eligible'] === '1') preparation.snapshot.resume();
         } else preparation.invalidate(true);
         json(response, 200, { ...config, generation: preparation.snapshot.generation, frame: null,
-          capturePaused: displayPresence.paused, captureRevision: displayPresence.revision }); return;
+          capturePaused: displayPresence.paused, captureRevision: displayPresence.revision,
+          transitionAccepted, transitionEpoch }); return;
       }
       if (method === 'DELETE') {
         if (request.headers['x-invalidate-active-only'] === '1') { /* Ordinary input retains the latest file. */ }

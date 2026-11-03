@@ -61,9 +61,34 @@ observations; it does not establish the cause or recovery of any reported screen
 Remaining synchronous launch/save mutation risk is tracked separately in #547;
 actual native acceptance remains #532/#519.
 
+## Quarantine Last screen across native process startup (#559)
+
+Installed verification of PR #557 reproduced a narrower race: Windows changed
+the input desktop and the cache was cleared about 50 ms before the native process
+existed. Widgets and physical dismissal worked, but Last screen did not. The
+earlier source checks did not establish native image acceptance; #519 stays open.
+
+The producer now reports a known unlocked screensaver transition before starting
+identity discovery. The backend immediately hides the existing image from every
+reader and fences uploads while retaining that one file for at most five seconds.
+Only an acknowledged, matching episode can start one asynchronous identity query.
+Confirmed absence or a not-yet-readable command may retry within that original
+deadline; failures, ambiguity, cancellation and late results cannot become proof.
+Fresh exact native ownership and unchanged context reveal the original image and
+capture time. Lock, unknown context, configuration/session/timeout change,
+producer loss, return before proof or expiry clear the hidden file. Capture still
+requires the receiving Default desktop. No extra image, file history, grace
+serving, or capture on the screensaver desktop is introduced.
+
+Both production native artifacts compile and the source-only Windows suite
+passes, including 87 injected context/discovery assertions. Backend regression
+tests reproduce the startup ordering and exercise quarantine/read/upload/expiry
+fences. Independent final-head review, CI and a newly installed native acceptance
+test remain required; this checkpoint is source evidence only.
+
 ## Retain Last screen during the validated native desktop transition (#519)
 
-The producer now distinguishes an ordinary Default input desktop, where capture
+PR #557 distinguished an ordinary Default input desktop, where capture
 is allowed, from a validated native screensaver input desktop, where only the
 existing image may remain available. Retention requires the active unlocked
 console session, selected/enabled own saver, actual saver-running flag and a
@@ -74,10 +99,10 @@ Unknown, locked, disconnected, changed or unowned contexts still clear the image
 If Windows switches desktops before the own process can be proven, that gap also
 fails closed; no serving grace or new capture was added.
 
-Both native artifacts compile and the source-only Windows suite passes, including
-52 injected context/retention assertions. Independent final-head review and CI
-remain required. No installation or native image acceptance is claimed by this
-source checkpoint; #519 remains open.
+Its independently reviewed head and CI passed before merge and installation.
+The 52 injected context/retention assertions covered the intended fail-closed
+startup gap; actual native verification subsequently hit that gap. #559 above
+addresses it without making unverified pixels available; #519 remains open.
 
 ## Shared latest screenshot file (#544)
 

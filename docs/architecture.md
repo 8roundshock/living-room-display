@@ -67,6 +67,17 @@ safe-producer lease loss deletes it; cold startup removes a prior unknown file
 and fixed orphan temp before the next eligible capture. There is no truncation,
 history or `.bak`, and the cache is outside app/data/backups/Git.
 
+The native startup gap uses a child-authenticated quarantine (#559). A known,
+unlocked screensaver input desktop may request `pending` with capture and serving
+permission both false. The backend hides the sole existing file and fences all
+read/upload publication before acknowledging its epoch. One bounded asynchronous
+identity reader starts only after that acknowledgement; completed absence or
+incomplete argv may retry within the original five-second deadline. Exact live
+native ownership plus fresh context may reveal the same file. The backend owns
+an independent deadline and binds the epoch to child capability, configuration,
+generation, session and actual Windows timeout. Stale proof, lock, unknown state,
+producer loss or expiry cannot expose or resurrect the hidden image.
+
 A browser display pauses capture before painting to avoid recursion; an
 unconfirmed close remains paused until explicit recovery after previews close.
 Child-only publication and existing local HTTP security boundaries remain.

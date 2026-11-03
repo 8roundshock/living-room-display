@@ -4,7 +4,7 @@ import type { PreviewState } from '../shared/contracts.ts';
 
 export const SNAPSHOT_NAME = 'last-screen.png';
 const EMPTY: PreviewState = { available: false, capturedAt: null, width: null, height: null };
-export type SnapshotPhase = 'empty' | 'capture-started' | 'saved' | 'write-failed' | 'cleared' | 'clear-failed';
+export type SnapshotPhase = 'empty' | 'capture-started' | 'saved' | 'quarantined' | 'write-failed' | 'cleared' | 'clear-failed';
 
 /** One app-owned PNG, outside data/backups. No pixels are retained after a request. */
 export class SnapshotFile {
@@ -13,6 +13,7 @@ export class SnapshotFile {
   readonly #changed: () => void;
   readonly #replace: typeof rename;
   #state: PreviewState = { ...EMPTY };
+  #held: PreviewState | null = null;
   #generation = 0;
   #queue: Promise<unknown> = Promise.resolve();
   #phase: SnapshotPhase = 'empty';
@@ -47,10 +48,43 @@ export class SnapshotFile {
   state(): PreviewState { return { ...this.#state }; }
   pipeline() { return { phase: this.#phase, writes: this.#writes, failures: this.#failures }; }
   captureStarted() { this.#phase = 'capture-started'; }
+  /** Hide synchronously and fence every earlier read/upload without copying the PNG. */
+  quarantine(): number {
+    this.#generation++;
+    if (!this.#held) this.#held = this.#state;
+    const visible = this.#state.available;
+    this.#state = { ...EMPTY }; this.#phase = 'quarantined';
+    if (visible) this.#changed();
+    return this.#generation;
+  }
+  /** Restore only the held version after pending IO and fresh owner/epoch checks. */
+  reveal(fence: number, allowed: () => boolean): Promise<boolean> {
+    const task = this.#queue.catch(() => {}).then(async () => {
+      const held = this.#held;
+      const current = () => fence === this.#generation && held !== null && this.#held === held && allowed();
+      if (!current()) return false;
+      if (held!.available) {
+        try {
+          await this.#plainAncestors(this.path);
+          const handle = await open(this.path, 'r');
+          try {
+            const stat = await handle.stat();
+            if (!stat.isFile() || stat.size < 33 || stat.size > 4 * 1024 * 1024 || stat.mtime.toISOString() !== held!.capturedAt) return false;
+          } finally { await handle.close(); }
+        } catch { return false; }
+      }
+      if (!current()) return false;
+      this.#state = held!; this.#held = null;
+      this.#phase = held!.available ? 'saved' : 'empty'; this.#changed();
+      return true;
+    });
+    this.#queue = task;
+    return task;
+  }
   clear() {
     this.#generation++;
     const visible = this.#state.available;
-    this.#state = { ...EMPTY }; this.#phase = 'cleared';
+    this.#state = { ...EMPTY }; this.#held = null; this.#phase = 'cleared';
     if (visible) this.#changed();
     this.#queue = this.#queue.catch(() => {}).then(async () => {
       await this.#remove(this.path); await this.#remove(this.#temporary);
@@ -63,7 +97,7 @@ export class SnapshotFile {
     const task = this.#queue.catch(() => {}).then(async () => {
       let temporaryExists = false;
       try {
-        if (generation !== this.#generation || !allowed()) return false;
+        if (generation !== this.#generation || this.#held !== null || !allowed()) return false;
         const captured = new Date(capturedAt);
         if (!Number.isFinite(captured.getTime()) || content.length < 33 ||
             !content.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
@@ -74,18 +108,18 @@ export class SnapshotFile {
         const handle = await open(this.#temporary, 'wx', 0o600); temporaryExists = true;
         try { await handle.writeFile(content); await handle.utimes(captured, captured); await handle.sync(); }
         finally { await handle.close(); }
-        if (generation !== this.#generation || !allowed()) return false;
+        if (generation !== this.#generation || this.#held !== null || !allowed()) return false;
         // Windows viewers can briefly hold the old file. Never truncate as a fallback.
         for (let attempt = 0; ; attempt++) {
           try { await this.#replace(this.#temporary, this.path); temporaryExists = false; break; }
           catch (error) {
             if (attempt >= 2 || !['EPERM', 'EACCES', 'EBUSY'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
             await new Promise(done => setTimeout(done, 20));
-            if (generation !== this.#generation || !allowed()) return false;
+            if (generation !== this.#generation || this.#held !== null || !allowed()) return false;
           }
         }
-        if (generation !== this.#generation || !allowed()) {
-          const visible = this.#state.available; this.#state = { ...EMPTY }; this.#phase = 'cleared';
+        if (generation !== this.#generation || this.#held !== null || !allowed()) {
+          const visible = this.#state.available; this.#state = { ...EMPTY }; this.#held = null; this.#phase = 'cleared';
           if (visible) this.#changed();
           await this.#remove(this.path); return false;
         }
