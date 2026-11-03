@@ -25,4 +25,4 @@
 .grid-ambient .collection-dots .elapsed { opacity: 0.35; }
 
 /* Preserve the reading and all stale-source lines in a small card. */
-.grid-ambient .collection-small:has(.collection-last-known) { gap: 1cqh; }
+.grid-ambient .collection-small:has(.collection-last-known) { gap: 0.5cqh; }

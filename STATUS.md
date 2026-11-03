@@ -12,9 +12,11 @@ changes are source work and have not been installed or accepted on the TV.
 The integrated production build/typechecks and all 613 source tests pass. Before
 integration, the collection branch passed the complete 70-family widget suite
 (1,022 s), palette suite (99 s) and motion suite (505 s), including zero continuous
-loops on the collection board. A canvas fixture scope error was fixed. Bounded
-collection and integration-sensitive browser checks, combined final-head review
-and current-head CI are the remaining gates. The component evidence below retains
+loops on the collection board. A canvas fixture scope error was fixed. The integrated bounded collection pass
+now verifies all 31 families, fifteen empty states, 52 populated/old-reading/long-
+label cases, reduced-motion relocation and narrow editors, including visible Done
+paint. Integration-sensitive browser checks, combined final-head review and
+current-head CI are the remaining gates. The component evidence below retains
 its original test counts; it does not substitute for the combined gate.
 
 ## Collection source checkpoint — 2026-11-03 (#565)
