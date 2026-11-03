@@ -102,7 +102,9 @@ data and backups; never truncate it in place or create capture history or `.bak`
 copies. Agent/computer-use screenshots remain RAM-only; this exception is solely
 the app's one runtime cache. Selected photos and exports are unchanged.
 
-Label Last screen with its capture time so it cannot be mistaken for a live view.
+Owner decision, 2026-11-03 (#563): show only the Last screen image, with responsive
+rounded and subtly feathered edges and no visible timestamp. Keep the capture time
+as image/version metadata and preserve honest missing/error placeholders.
 Early sign-in lifecycle is #540; #544 replaces the earlier RAM-only handoff.
 Live selected-app preview remains future work. Source/CI checks do not establish
 installed capture or native acceptance. The successful ordinary-cycle result for

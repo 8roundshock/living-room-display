@@ -81,7 +81,7 @@ import { WidgetInspector, useHeldPointers, widgetListOrder, type InspectorReveal
 import { ANIMATION_LABELS, ANIMATION_LEVELS, usePrefersReducedMotion } from './useMotion';
 import { MotionSentence } from './ScreenSettings';
 import { InfoTip } from './InfoTip';
-import { prepareStyleSave, restoredStyleId, sameVisual, type StyleSaveIntent } from './style-workflow';
+import { duplicateStyleSuggestion, prepareStyleSave, restoredStyleId, sameVisual, undoStyleDeletion, type StyleSaveIntent } from './style-workflow';
 import { WIDGET_MODULES } from './widgets/registry';
 import { preparePhoto, type PhotoDraft } from './photo';
 import { StudioHeader } from './StudioHeader';
@@ -354,6 +354,7 @@ export function Editor({
   const [pendingStyle, setPendingStyle] = useState<string | null>(null);
   const [styleNotice, setStyleNotice] = useState('');
   const [confirmStyleDelete, setConfirmStyleDelete] = useState(false);
+  const [deletedStyle, setDeletedStyle] = useState<{ id: string; name: string; index: number } | null>(null);
   const styleManagement = useRef<HTMLDetailsElement>(null);
   function closeStyleManagement(returnFocus = false) {
     const panel = styleManagement.current;
@@ -669,7 +670,7 @@ export function Editor({
     setPresetId(selected);
     setPresetOriginal(structuredClone(savedRef.current.savedPresets.find(item => item.id === selected) ?? null));
     setStyleMode('update'); newStyleId.current = null; setBuiltinSelection('');
-    setPendingStyle(null); setStyleNotice(''); setConfirmStyleDelete(false);
+    setPendingStyle(null); setStyleNotice(''); setConfirmStyleDelete(false); setDeletedStyle(null);
     setPresetName('');
     setError(null);
   }
@@ -1122,7 +1123,7 @@ export function Editor({
       setPresetId(selectedRecord ? selected : '');
       setPresetOriginal(structuredClone(selectedRecord ?? null));
       setStyleMode('update'); setPresetName(''); newStyleId.current = null;
-      setStyleNotice(''); setConfirmStyleDelete(false);
+      setStyleNotice(''); setConfirmStyleDelete(false); setDeletedStyle(null);
       try {
         if (selectedRecord && sameVisual(selectedRecord.visual, getVisual(received))) localStorage.setItem(STYLE_SELECTION_KEY, selectedRecord.id);
         else localStorage.removeItem(STYLE_SELECTION_KEY);
@@ -1157,7 +1158,7 @@ export function Editor({
   /** A selection changes the visual draft; only the top Save action persists it. */
   function applyStyleChoice(choice: string, discard = false) {
     let next = structuredClone(draftRef.current);
-    if (discard) next = { ...next, ...getVisual(savedRef.current), savedPresets: structuredClone(savedRef.current.savedPresets) };
+    if (discard) { next = { ...next, ...getVisual(savedRef.current), savedPresets: structuredClone(savedRef.current.savedPresets) }; setDeletedStyle(null); }
     let selected: SavedPreset | null = null;
     if (choice.startsWith('saved:')) {
       selected = next.savedPresets.find(item => item.id === choice.slice(6)) ?? null;
@@ -1185,6 +1186,11 @@ export function Editor({
     setStyleMode('new'); setPendingStyle(null); setConfirmStyleDelete(false); setStyleNotice('');
     setStyleFocus({ target: '#style-name', edit: true });
   }
+  function duplicateStyle() {
+    closeStyleManagement();
+    beginNewStyle();
+    setPresetName(duplicateStyleSuggestion(draftRef.current.savedPresets, presetOriginal?.name ?? 'Style'));
+  }
   function renameStyle() {
     if (!presetOriginal) return;
     closeStyleManagement();
@@ -1196,9 +1202,21 @@ export function Editor({
     setStyleFocus({ target: '#saved-style-select' });
   }
   function deletePreset() {
+    const index = draftRef.current.savedPresets.findIndex(item => item.id === presetId);
+    const record = draftRef.current.savedPresets[index];
+    if (!record) return;
+    setDeletedStyle({ id: record.id, name: record.name, index });
     change(previous => ({ ...previous, savedPresets: previous.savedPresets.filter(item => item.id !== presetId) }));
     setPresetId(''); setPresetOriginal(null); setPresetName(''); setStyleMode('update');
     setConfirmStyleDelete(false); setStyleNotice('Style will be deleted when you save.');
+    setStyleFocus({ target: '#saved-style-select', edit: true });
+  }
+  function undoDeleteStyle() {
+    if (!deletedStyle) return;
+    try {
+      const next = undoStyleDeletion(savedRef.current, draftRef.current, deletedStyle.id, deletedStyle.index);
+      change(() => next); setStyleNotice(`${deletedStyle.name} restored. Your current display is unchanged.`); setDeletedStyle(null);
+    } catch (caught) { setStyleNotice(caught instanceof Error ? caught.message : 'Could not restore this style.'); }
     setStyleFocus({ target: '#saved-style-select', edit: true });
   }
   async function saveAndSwitch() {
@@ -1341,6 +1359,8 @@ export function Editor({
   // #344: a typed name another saved style already uses (without case or surrounding spaces).
   const presetConflict = styleMode === 'update' ? null : duplicateStyleName(draft.savedPresets, presetName, styleMode === 'new' ? newStyleId.current ?? undefined : presetId);
   const selectedStyle = draft.savedPresets.find(item => item.id === presetId);
+  const scheduledStyleUses = state.schedule?.config.rules.filter(rule => rule.presetId === presetId).length ?? 0;
+  const scheduledFallback = state.schedule?.config.fallbackPresetId === presetId;
   const styleModified = !!presetId && !!presetOriginal && !sameVisual(presetOriginal.visual, getVisual(draft));
   let styleProblem: string | null = null;
   try { prepareStyleSave(savedRef.current, draftRef.current, styleSaveIntent()); }
@@ -1406,15 +1426,17 @@ export function Editor({
             }}>
             <summary id="manage-style-trigger" className="button small">Manage style</summary>
             <div><button className="button small" disabled={saving} onClick={renameStyle}>Rename</button>
+              <button className="button small" disabled={saving || draft.savedPresets.length >= MAX_SAVED_STYLES} onClick={duplicateStyle}>Duplicate style…</button>
               <button className="button small" disabled={saving} onClick={() => { closeStyleManagement(); setConfirmStyleDelete(true); setStyleFocus({ target: '#keep-style' }); }}>Delete style…</button></div>
           </details>}
         </div>
-        {styleMode !== 'update' && <div className="style-name-row">
+        {styleMode !== 'update' && <div className="style-name-row" onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); keepEditingStyle(); } }}>
           <label htmlFor="style-name">{styleMode === 'new' ? 'New style' : 'Style name'}</label>
           <input id="style-name" className="text-input" maxLength={60} required disabled={saving} value={presetName}
             onChange={event => setPresetName(event.target.value)} placeholder="Name" aria-invalid={!!presetConflict}
             aria-describedby={presetConflict ? 'preset-name-error' : undefined} />
           <button className="text-button" disabled={saving} onClick={keepEditingStyle}>Keep editing</button>
+          {styleMode === 'new' && <span className="style-name-hint">Copies your current layout and appearance, including unsaved changes.</span>}
         </div>}
         {draft.savedPresets.length >= MAX_SAVED_STYLES && <p className="style-limit">Up to {MAX_SAVED_STYLES} styles.</p>}
         {styleProblem && (styleMode === 'update' || presetName.trim()) && <p className="inline-message error preset-name-error" id="preset-name-error" role="alert">{styleProblem}</p>}
@@ -1427,6 +1449,7 @@ export function Editor({
             setStyleFocus({ target: '#manage-style-trigger' });
           }}>
           <span>Delete {selectedStyle?.name}? Your current display stays.</span>
+          {(scheduledStyleUses > 0 || scheduledFallback) && <span className="style-delete-impact">After Save, {scheduledStyleUses > 0 ? `${scheduledStyleUses} schedule ${scheduledStyleUses === 1 ? 'rule will' : 'rules will'} skip this style` : ''}{scheduledStyleUses > 0 && scheduledFallback ? ' and ' : ''}{scheduledFallback ? 'the schedule fallback will use your current display' : ''}.</span>}
             <button id="keep-style" className="button small" disabled={saving} onClick={() => {
               setConfirmStyleDelete(false); setStyleFocus({ target: '#manage-style-trigger' });
             }}>Keep style</button>
@@ -1438,7 +1461,7 @@ export function Editor({
           <button className="button small" disabled={saving} onClick={() => applyStyleChoice(pendingStyle, true)}>Discard and switch</button>
           <button className="button small primary" aria-disabled={saveBlocked} onClick={() => { if (!saveBlocked) void saveAndSwitch(); }}>Save and switch</button>
         </div>}
-        {styleNotice && <p className="style-notice" role="status">{styleNotice}</p>}
+        <div className="style-notice" role="status">{styleNotice}{deletedStyle && <button className="text-button" disabled={saving} onClick={undoDeleteStyle}>Undo delete</button>}</div>
         {dirty && <div ref={savebar} className="studio-savebar has-changes">
           <span className="save-status" role="status">{saving ? 'Saving…' : draftProblem ?? (styleMode === 'new' ? 'New style' : styleMode === 'rename' ? 'Rename style' : styleSaveIntent().kind === 'update' ? `Updates ${presetOriginal?.name}` : 'Unsaved changes')}</span>
           {saveScope && <span className="style-save-scope">Also saves {saveScope} changes</span>}

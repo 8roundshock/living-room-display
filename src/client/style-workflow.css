@@ -14,10 +14,16 @@
 .studio .style-choice { width: 210px; max-width: 100%; min-height: 44px; }
 .style-modified { color: #b9b2ed; font-size: 12px; }
 .style-name-row { flex-basis: 100%; }
+.style-name-hint { color: var(--studio-muted); font-size: 12px; }
 .studio .style-name-row input { width: 240px; max-width: 100%; }
 .style-management { position: relative; }
 .style-management > summary { list-style: none; cursor: pointer; }
-.style-management > div { position: absolute; z-index: 22; right: 0; top: calc(100% + 4px); display: flex; gap: 6px; padding: 8px; border-radius: 12px; background: #28262f; box-shadow: 0 8px 20px #0008; width: max-content; max-width: calc(100vw - 32px); }
+.style-management > div { position: absolute; z-index: 22; right: 0; top: calc(100% + 4px); display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid #ffffff12; border-radius: 14px; background: #28262f; box-shadow: 0 8px 20px #0008; width: 190px; max-width: calc(100vw - 32px); }
+.style-management > div > button { justify-content: flex-start; border-color: transparent; background: transparent; }
+.style-management > div > button:last-child { border-top: 1px solid #ffffff0d; border-radius: 0 0 8px 8px; }
+.style-delete-impact { flex-basis: 100%; color: var(--studio-muted); }
+.style-notice:empty { display: none; }
+.style-notice .text-button { margin-left: 8px; }
 .style-question { flex-basis: 100%; }
 .style-limit, .style-notice, .editor-style-bar .inline-message { flex-basis: 100%; margin: 0; font-size: 12px; }
 .editor-style-bar .studio-savebar {

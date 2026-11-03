@@ -1,5 +1,18 @@
 # Project status
 
+## Style management and category discovery source checkpoint (#563)
+
+The editor adds current-draft duplication with unique editable names and a local
+delete Undo that restores the latest saved style without replacing later edits.
+Deletion explains affected schedule references. Widget browsing gains a catalog-
+driven category selector that combines with search and availability. Last screen
+is picture-only with responsive rounded, feathered edges under the owner's
+2026-11-03 decision; image lifecycle and capture guards are unchanged.
+
+Both typechecks and twelve focused unit tests pass. Browser regression updates,
+RAM-only visual QA, independent final-head review and CI remain pending. This is
+source work only; no installation, native activation or physical-TV claim follows.
+
 ## Native Last screen acceptance — 2026-11-03 (#519)
 
 Clean source `8059a19d2b57ca5189ac8ac52302af8f2365d06d`, including independently

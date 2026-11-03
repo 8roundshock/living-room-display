@@ -1,5 +1,35 @@
 # Display studio design
 
+## Style management, categories and picture edges (#563, 2026-11-03)
+
+The compact direction keeps the native Style selector and contextual management
+disclosure. A style-card wall would crowd the existing canvas; a custom listbox
+would duplicate native keyboard behavior. Coordinator concept critique selected
+the native approach, with clear current-draft duplication and reversible deletion.
+Duplicate suggests an editable unique name and includes current unsaved visuals.
+Delete remains staged until Save; Undo restores the latest record without replacing
+later layout edits. Existing schedule references are retained and their consequence
+is described before deletion, so Undo also restores their usable target.
+
+Widget discovery gains a native Category selector sourced from the active catalog.
+Search, category and availability combine; Show all resets all three. The catalog
+and its one preview retain modal focus and the compact browse/detail flow.
+
+The owner's 2026-11-03 decision makes Last screen picture-only: no visible capture
+timestamp. Responsive rounded corners and a narrow edge mask soften its boundary
+against black. Metadata still binds the exact image request; capture, opacity,
+decode holds, error placeholders and the private file lifecycle are unchanged.
+
+Primary guidance checked 2026-11-03: [Apple HIG Pickers](https://developer.apple.com/design/human-interface-guidelines/pickers)
+and [Menus](https://developer.apple.com/design/human-interface-guidelines/menus)
+favor predictable choices, concise action labels and controls near their context.
+[W3C APG disclosure](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/) and
+[modal dialog](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/) inform keyboard,
+Escape and focus-return behavior. This web adaptation claims no Apple certification.
+Recheck when catalog categories, action scope, focus ownership or viewport styles change.
+Source checkpoint: typechecks and twelve focused unit tests pass; browser and
+independent final-head visual review remain pending.
+
 ## Snapshot recovery confirmation (#556, 2026-11-03)
 
 A compact modal uses Home's established sheet styling and one instruction to
