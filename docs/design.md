@@ -1,5 +1,22 @@
 # Display studio design
 
+## Snapshot recovery confirmation (#556, 2026-11-03)
+
+A compact modal uses Home's established sheet styling and one instruction to
+close every browser display. An inline confirmation would weaken the focus
+boundary around explicit capture consent; reusing the quick-action form would
+couple this small recovery action to unrelated Home context. Independent concept
+review selected a dedicated native HTML dialog with Cancel first, a deliberate
+Resume snapshots action and logical focus return. Closing a pending dialog only
+dismisses its UI; it cannot undo a request already sent.
+
+Primary guidance checked 2026-11-03: [W3C APG modal dialog](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)
+for labelled instructions, least-destructive initial focus, Tab containment,
+Escape and focus return. The existing narrow-screen bottom sheet keeps both
+actions reachable; desktop, 320×480, 640×300 and failure states were inspected
+with synthetic source data and images in RAM. Recheck when confirmation copy,
+focus ownership, request handling or viewport styles change.
+
 ## Add-widget sheet (#554, 2026-10-31)
 
 The Add-widget flow now has a dedicated responsive sheet. The inline discovery

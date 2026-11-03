@@ -284,7 +284,7 @@ function SnapshotStatus({ disconnected, clockFormat }: { disconnected: boolean; 
   const { pipeline } = snapshot;
   const resume = async () => {
     // Owned by this status panel, so dismissing/reopening the dialog cannot duplicate an in-flight POST.
-    if (inFlight.current || disconnected) return;
+    if (inFlight.current) return;
     inFlight.current = true; ++readSequence.current;
     setResuming(true); setResumeError(''); setMessage('Resuming snapshots…');
     try {
@@ -304,7 +304,7 @@ function SnapshotStatus({ disconnected, clockFormat }: { disconnected: boolean; 
     <p>Capture: {pipeline.capture.phase.replaceAll('-', ' ')} · {pipeline.capture.attempts} attempts · {pipeline.capture.failures} failed</p>
     <p>File: {pipeline.phase.replaceAll('-', ' ')} · {pipeline.writes} saved · {pipeline.failures} failed</p>
     {pipeline.display.paused && <p>Capture paused while a browser display is open.</p>}
-    {pipeline.display.needsResume && <button ref={resumeButton} type="button" className="button" aria-haspopup="dialog" aria-disabled={resuming || disconnected || undefined} onClick={() => { if (!inFlight.current && !disconnected) { setResumeError(''); setConfirmResume(true); } }}>Resume snapshots</button>}
+    {pipeline.display.needsResume && <button ref={resumeButton} type="button" className="button" aria-haspopup="dialog" aria-disabled={resuming || undefined} onClick={() => { if (!inFlight.current) { setResumeError(''); setConfirmResume(true); } }}>Resume snapshots</button>}
     {message && !confirmResume && <p role="status">{message}</p>}
     {confirmResume && <SnapshotResumeDialog pending={resuming} error={resumeError} onConfirm={() => { void resume(); }} onClose={() => setConfirmResume(false)} returnFocus={() => {
       const target = resumeButton.current ?? summary.current;

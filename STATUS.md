@@ -84,8 +84,11 @@ source checkpoint; #519 remains open.
 Home's explicit recovery confirmation now uses an accessible in-app dialog
 (#556), with Cancel first, focus return and a dismissible pending state. Only
 confirmation sends the existing authorized resume request; duplicate submissions
-and stale status reads are fenced. Source browser/race checks and independent
-final-head review are pending. This does not change capture or native guards.
+and stale status reads are fenced. The production build, eight focused API tests
+and eight synthetic browser groups pass, including compact layouts, dismissal,
+explicit retry and delayed-status races. Desktop, 320×480, 640×300 and error
+states were inspected in RAM. Independent final-head review and CI remain
+required. This does not change capture or native guards.
 
 The owner chose one overwritten app screenshot file on 2026-10-27, replacing
 this app's earlier RAM-only requirement. Source now publishes one atomic PNG at

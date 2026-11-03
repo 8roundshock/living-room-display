@@ -134,6 +134,12 @@ Errors stay available for an explicit retry. A successful request is not relabel
 as failure when the following status refresh fails. Focus returns to Resume
 snapshots, or Last screen when the action is no longer needed.
 
+`tests/ui/snapshot-resume-browser.mjs` checks this flow using an isolated source
+server, synthetic device facts and a mocked wake lock. It covers compact modal
+geometry, Tab/focus, no-action dismissals, same-turn double activation, pending
+dismissal, explicit retry, refresh failure and delayed pre-submit status reads.
+It never opens a display, requests fullscreen or captures the desktop.
+
 Home (`<div class="studio home-page">`, `src/client/Home.tsx`) is for day-to-day use
 beside the display rather than for setting it up. It reuses the studio's tokens,
 buttons, inputs, city search and Reminders panel; every rule of its own names a

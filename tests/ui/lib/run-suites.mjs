@@ -39,6 +39,7 @@ export const SETS = {
     'settings', // #517: app-wide preferences, destination/draft guards and recovery.
     'schedule', 'motion-preview', // #514/#515: isolated schedule and deterministic preview contracts.
     'picker-sheet', // #554: modal add flow, responsive size previews and draft/focus contracts.
+    'snapshot-resume', // #556: explicit in-app consent, pending/retry races and accessible focus.
   ],
   scheduled: ['motion', 'weather', 'palette'], // 219, 81, 68
 };
