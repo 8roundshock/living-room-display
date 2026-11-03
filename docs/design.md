@@ -8,6 +8,8 @@ would duplicate native keyboard behavior. Coordinator concept critique selected
 the native approach, with clear current-draft duplication and reversible deletion.
 The installed UI audit found that inline naming grew the toolbar and moved the canvas;
 a compact native naming dialog now preserves that geometry with one Cancel/Save pair.
+Blocked saves state the draft validation reason inside the modal and describe the
+Save button with it; Cancel returns to editing with the incomplete draft retained.
 Duplicate suggests an editable unique name and includes current unsaved visuals.
 Delete remains staged until Save; Undo restores the latest record without replacing
 later layout edits. Existing schedule references are retained and their consequence

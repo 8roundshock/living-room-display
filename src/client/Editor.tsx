@@ -1451,10 +1451,11 @@ export function Editor({
             onChange={event => setPresetName(event.target.value)} placeholder="Name" aria-invalid={!!presetConflict}
             aria-describedby={styleProblem && presetName.trim() ? 'preset-name-error' : undefined} />
           {styleProblem && presetName.trim() && <p className="inline-message error" id="preset-name-error" role="alert">{styleProblem}</p>}
+          {draftProblem && <p className="inline-message error" id="style-draft-problem" role="alert">{draftProblem}. Choose Cancel to return to editing.</p>}
           {error && error.text !== styleProblem && <p className="inline-message error" role="alert">{error.text}</p>}
           {saveScope && <p className="style-name-hint">Also saves {saveScope} changes.</p>}
           <div className="style-name-actions"><button className="button" disabled={saving} onClick={keepEditingStyle}>Cancel</button>
-            <button className="button primary" aria-disabled={saveBlocked} onClick={() => { if (!saveBlocked) void saveSettings(); }}>{saving ? 'Saving…' : styleMode === 'new' ? 'Save new style' : 'Save changes'}</button></div>
+            <button className="button primary" aria-disabled={saveBlocked} aria-describedby={draftProblem ? 'style-draft-problem' : undefined} onClick={() => { if (!saveBlocked) void saveSettings(); }}>{saving ? 'Saving…' : styleMode === 'new' ? 'Save new style' : 'Save changes'}</button></div>
         </dialog>}
         {draft.savedPresets.length >= MAX_SAVED_STYLES && <p className="style-limit">Up to {MAX_SAVED_STYLES} styles.</p>}
         {styleProblem && styleMode === 'update' && <p className="inline-message error preset-name-error" id="selected-style-error" role="alert">{styleProblem}</p>}

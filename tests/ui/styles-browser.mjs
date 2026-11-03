@@ -143,6 +143,41 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
     assert.equal(await button('Add widget to display').evaluate(element => element === document.activeElement), true, 'picker keeps its own Escape/focus behavior');
     checks.push('Touch dismissal permits switching editor controls and opening a picker whose Escape behavior remains independent');
 
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 320, height: 480 }, { width: 640, height: 360 }]) {
+      const value = defaultSettings();
+      for (const id of Object.keys(value.widgets)) value.widgets[id] = id === 'countdown';
+      value.preview.enabled = false;
+      await open(value, { viewport });
+      await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
+      await button('Countdown').click(); await button('Add date').click();
+      const title = page.getByRole('textbox', { name: 'Countdown 1 title', exact: true });
+      const date = await page.getByLabel('Countdown 1 date', { exact: true }).inputValue();
+      await button('Save as new…').click();
+      await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Countdown style');
+      const problem = page.getByRole('dialog').getByRole('alert');
+      assert.equal(await problem.innerText(), 'Countdown needs a title. Choose Cancel to return to editing.');
+      assert.equal(await button('Save new style').getAttribute('aria-disabled'), 'true');
+      assert.equal(await button('Save new style').getAttribute('aria-describedby'), await problem.getAttribute('id'));
+      const box = await problem.boundingBox();
+      assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height, `draft error remains in the naming dialog: ${JSON.stringify({ viewport, box })}`);
+      await button('Save new style').focus(); await page.keyboard.press('Enter');
+      assert.equal(saved().savedPresets.length, 0, 'blocked Save never persists the incomplete draft');
+      if (capture) images.push({ name: `styles-invalid-${viewport.width}`, bytes: await page.screenshot() });
+      await button('Cancel').click();
+      assert.equal(await title.inputValue(), '', 'Cancel preserves the incomplete countdown for correction');
+      assert.equal(await page.getByLabel('Countdown 1 date', { exact: true }).inputValue(), date);
+      await title.fill('Weekend trip');
+      await button('Save as new…').click();
+      await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Countdown style');
+      assert.equal(await page.locator('#style-draft-problem').count(), 0);
+      assert.equal(await button('Save new style').getAttribute('aria-disabled'), 'false');
+      await button('Save new style').click(); await clean();
+      assert.equal(saved().savedPresets[0].name, 'Countdown style');
+      assert.equal(saved().widgetData.countdowns[0].title, 'Weekend trip');
+      assert.equal(saved().widgetData.countdowns[0].date, date);
+    }
+    checks.push('Naming explains invalid drafts at desktop, narrow and short sizes; blocked Save writes nothing; Cancel preserves the incomplete countdown; correction permits saving the new style');
+
     await open();
     assert.equal(await choice().inputValue(), '');
     assert.equal(await page.locator('.preset-list').count(), 0);

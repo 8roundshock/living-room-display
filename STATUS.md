@@ -12,6 +12,9 @@ is picture-only with responsive rounded, feathered edges under the owner's
 The naming dialog keeps the canvas stable and uses one Cancel/Save pair. Daylight
 help is contextual, sliders have explicit labels, no-op appearance reset status
 is accurate and concurrent merged visuals receive the correct legacy look label.
+Independent review found a hidden validation reason while naming an invalid draft;
+the dialog now states that reason and directs Cancel back to editing. Desktop,
+narrow and short browser cases verify correction and Save retain the draft.
 Both typechecks, production build and all 602 source tests pass. The styles,
 picker-sheet, catalog-time, daylight, preview, shared-snapshot, studio, palette and full
 widgets browser suites pass. The widget run covers 39 families across densities
