@@ -634,7 +634,7 @@
 }
 
 /* Saved content is managed where it is shown, with one cancellable list draft. */
-.home-clock-link { display: flex; align-items: center; gap: 6px; cursor: pointer; min-height: 36px; font: inherit; }
+.home-clock-link { display: flex; align-items: center; gap: 6px; cursor: pointer; min-height: 44px; font: inherit; }
 .home-clock-link svg { color: var(--studio-muted); }
 .home-manage-row { flex-wrap: wrap; }
 .home-manage-row > .home-row-copy { flex-basis: 45%; }
@@ -644,7 +644,9 @@
 .home-item-fields .home-hint { margin: 0; }
 .home-item-order { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .home-item-order > span { width: 100%; color: var(--studio-muted); font-size: 12px; }
-.home-list-edit-actions { position: sticky; bottom: 0; z-index: 2; padding: 10px 0; background: var(--studio-bg, #151419); border-bottom: 1px solid #ffffff14; }
+.home-sheet-footer { flex: none; }
+.home-sheet-footer:empty { display: none; }
+.home-list-edit-actions { padding: 10px 22px 14px; background: #17181d; border-top: 1px solid #ffffff14; }
 .home-list-edit-actions .home-sheet-actions { margin: 0; }
 .home-list-edit-actions .home-hint { margin: 0 0 10px; }
 .home-add-title { font-size: 14px; font-weight: 600; margin: 24px 0 12px; }

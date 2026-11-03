@@ -107,6 +107,7 @@ export function HomeSheet({ kind, context, status, onClose }: {
         }} onFocusCapture={event => {
           if (submittedControl.current && event.target !== submittedControl.current) submittedControl.current = null;
         }}>{content}</div>
+        <div className="home-sheet-footer" />
         {status}
       </div>
     </dialog>

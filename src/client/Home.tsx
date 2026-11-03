@@ -163,7 +163,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
   const waitingWithoutRoom = waiting.filter(id => !showPlacement(displaySettings, id));
 
   const actions: { kind: SheetKind; label: string; description: string; icon: IconName }[] = [
-    { kind: 'timer', label: 'Timer', description: "Counts down on your display's clock", icon: 'timer' },
+    { kind: 'timer', label: 'Timer', description: 'Counts down on your display', icon: 'timer' },
     { kind: 'reminder', label: 'Reminder', description: 'With or without a time', icon: 'check' },
     { kind: 'calendar', label: 'Calendar', description: 'Pick a day; it becomes a reminder', icon: 'calendar' },
     { kind: 'worldClock', label: 'World clock', description: 'Time in another city', icon: 'globe' },
@@ -186,7 +186,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
             {settings.locationSource === 'fallback' && !firstRunDismissed && (
               <p className="home-first-run">
                 <Icon name="location" size={15} />
-                <span>Weather shows {settings.location.name} until you choose your city.</span>{' '}
+                <span>{settings.location.name} · default weather location</span>{' '}
                 <a className="home-link" href="/settings?focus=city">Choose your city</a>
               </p>
             )}
@@ -199,7 +199,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
                 </button>
               ))}
             </div>
-            <TodayList context={context} groups={groups} timers={homeTimers} warning={warning} onDismissWarning={() => setDismissedWarning(state.timersWarning ?? null)} openAll={open('allReminders')} />
+            <TodayList context={context} groups={groups} timers={homeTimers} warning={warning} onDismissWarning={() => setDismissedWarning(state.timersWarning ?? null)} openAll={open('allReminders')} openCountdown={open('countdown')} />
           </div>
           <DisplayCard state={state} showing={showing} waiting={waiting} waitingWithoutRoom={waitingWithoutRoom} disconnected={disconnected} displayControls={displayControls} />
         </div>
@@ -315,8 +315,8 @@ function SnapshotStatus({ disconnected, clockFormat }: { disconnected: boolean; 
 
 // Today -------------------------------------------------------------------------------------------
 
-function TodayList({ context, groups, timers, warning, onDismissWarning, openAll }: {
-  context: HomeContext; groups: ReturnType<typeof todayGroups>; timers: Timer[]; warning: string | null; onDismissWarning: () => void; openAll: (event: { currentTarget: HTMLElement }) => void;
+function TodayList({ context, groups, timers, warning, onDismissWarning, openAll, openCountdown }: {
+  context: HomeContext; groups: ReturnType<typeof todayGroups>; timers: Timer[]; warning: string | null; onDismissWarning: () => void; openAll: (event: { currentTarget: HTMLElement }) => void; openCountdown: (event: { currentTarget: HTMLElement }) => void;
 }) {
   const { state, now } = context;
   const empty = !timers.length && !warning && !groups.due.length && !groups.anytime.length && !groups.comingUp.length;
@@ -343,7 +343,7 @@ function TodayList({ context, groups, timers, warning, onDismissWarning, openAll
       )}
       {groups.comingUp.length > 0 && (
         <TodayGroup title="Coming up">
-          {groups.comingUp.map(item => item.reminder ? <ReminderRow key={item.id} reminder={item.reminder} context={context} /> : <CountdownRow key={item.id} item={item} now={now} />)}
+          {groups.comingUp.map(item => item.reminder ? <ReminderRow key={item.id} reminder={item.reminder} context={context} /> : <CountdownRow key={item.id} item={item} now={now} onManage={openCountdown} />)}
         </TodayGroup>
       )}
       <button type="button" className="home-all-reminders" aria-haspopup="dialog" onClick={openAll}>
@@ -364,13 +364,14 @@ function TodayGroup({ title, children }: { title: string; children: ReactNode })
   );
 }
 
-function CountdownRow({ item, now }: { item: ComingUpItem; now: number }) {
+function CountdownRow({ item, now, onManage }: { item: ComingUpItem; now: number; onManage: (event: { currentTarget: HTMLElement }) => void }) {
   const date = parseCivil(item.day)!;
   const days = Math.round((Date.UTC(date.year, date.month - 1, date.day) - Date.UTC(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate())) / 86_400_000);
   return (
     <li className="home-row">
       <span className="home-row-icon" aria-hidden="true"><Icon name="hourglass" size={16} /></span>
       <span className="home-row-copy"><span className="home-row-title">{item.title}</span><span className="home-row-detail">{days > 1 ? `In ${countdownLabel(days).text}` : countdownLabel(days).text} · {relativeDay(item.day, now)}</span></span>
+      <button type="button" className="home-chip-button" aria-label={`Manage ${item.title} countdown`} aria-haspopup="dialog" onClick={onManage}><Icon name="edit" size={15} /><span className="home-button-text">Edit</span></button>
     </li>
   );
 }

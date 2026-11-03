@@ -123,7 +123,7 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
       if ((event.target as HTMLElement).closest('.settings-savebar')) return;
       lastControl.current = event.target as HTMLElement;
     }}>
-      <div className="settings-heading"><div><p className="eyebrow">Your preferences</p><h1>Settings</h1></div></div>
+      <div className="settings-heading"><h1>Settings</h1></div>
       {(error || connectionError) && <div className="settings-alert" role="alert"><span>{error || connectionError}</span>{error && <button className="icon-button" aria-label="Dismiss message" onClick={() => setError('')}><Icon name="close" size={15} /></button>}</div>}
       <nav className="settings-nav" aria-label="Settings sections">
         <a href="#weather-heading">Weather</a><a href="#preferences-heading">Time &amp; units</a><a href="#device-heading">This device</a><a href="#settings-schedule">Schedule</a><a href="#settings-recovery">Data &amp; recovery</a>

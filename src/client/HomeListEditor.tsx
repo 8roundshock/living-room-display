@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { AppState, Settings } from '../shared/contracts';
 import { apiTagged, rememberRevision, settingsConflict } from './api';
 import { rebaseDraft, same } from './draft';
-import { forgetHomeDrafts, useHomeDraft } from './home-drafts';
+import { forgetHomeDraftIf, forgetHomeDrafts, useHomeDraft } from './home-drafts';
 import type { HomeContext } from './HomeParts';
 
 type ListKey = 'worldClocks' | 'countdowns';
@@ -70,7 +71,7 @@ export function useHomeListEditor<T extends Item>(context: HomeContext, key: Lis
       const result = await apiTagged<Settings>('/api/settings', { method: 'PATCH', headers: { 'If-Match': latest.etag }, body: JSON.stringify({ widgetData: { [key]: submitted.items } }) });
       rememberRevision(result.body, result.etag); context.applySettings(result.body);
       // The sheet may have closed during the request. Clear its RAM draft in either case.
-      forgetHomeDrafts(cacheKey);
+      forgetHomeDraftIf(cacheKey, submitted);
       if (mounted.current) finish();
       context.announce({ text: key === 'worldClocks' ? 'World clocks saved.' : 'Countdowns saved.' });
     } catch (caught) {
@@ -108,12 +109,19 @@ export function HomeListActions({ editor, offline, invalid }: {
   editor: Pick<ReturnType<typeof useHomeListEditor>, 'active' | 'busy' | 'dirty' | 'message' | 'save' | 'cancel'>;
   offline: boolean; invalid: string | null;
 }) {
-  if (!editor.active) return null;
-  return <div className="home-list-edit-actions">
+  const anchor = useRef<HTMLSpanElement>(null), [footer, setFooter] = useState<HTMLElement | null>(null);
+  const saveButton = useRef<HTMLButtonElement>(null), retryFocus = useRef(false);
+  useLayoutEffect(() => { setFooter(anchor.current?.closest('dialog')?.querySelector<HTMLElement>('.home-sheet-footer') ?? null); }, []);
+  useEffect(() => {
+    if (editor.busy || !retryFocus.current) return;
+    retryFocus.current = false;
+    if (!document.activeElement || document.activeElement === document.body || document.activeElement === saveButton.current) saveButton.current?.focus();
+  }, [editor.busy]);
+  return <><span ref={anchor} hidden />{editor.active && footer && createPortal(<div className="home-list-edit-actions">
     {(invalid || editor.message) && <p className="home-hint" role="status">{invalid || editor.message}</p>}
     <div className="home-sheet-actions">
       <button type="button" className="button" disabled={editor.busy} onClick={editor.cancel}>{editor.dirty ? 'Cancel edits' : 'Done editing'}</button>
-      {editor.dirty && <button type="button" className="button primary" disabled={editor.busy || offline || !!invalid} onClick={() => void editor.save()}>{editor.busy ? 'Saving…' : 'Save edits'}</button>}
+      {editor.dirty && <button ref={saveButton} type="button" className="button primary" disabled={editor.busy || offline || !!invalid} onClick={() => { retryFocus.current = true; void editor.save(); }}>{editor.busy ? 'Saving…' : 'Save edits'}</button>}
     </div>
-  </div>;
+  </div>, footer)}</>;
 }

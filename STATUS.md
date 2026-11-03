@@ -1,5 +1,23 @@
 # Project status
 
+## Home content management and grouped Settings (#463, #483, #564)
+
+Source work adds direct Home editing and keyboard reordering for world clocks and
+countdowns, with retained cancellable drafts, stable IDs and conditional list-only
+settings saves. A concurrent change requires review while preserving local and
+remote item fields. Clock chips and Coming up countdowns open management directly.
+Settings groups location/weather, time/units, device, schedule and recovery with
+compact section links and outer-document scrolling. Home Note and timer wording
+receive the small accessibility/copy repairs tracked in #483.
+
+Build, 598 unit tests, focused conflict/retry/close-race checks and the Home/Settings
+browser suites passed during author verification. Actual synthetic RAM images
+found and verified a repair for action controls covering a field on short windows:
+list Save/Cancel now occupies its own sheet footer. Final pushed-head CI and
+independent functional/visual review remain tracked on draft PR #567. See
+[the source evidence and limits](docs/home-settings-refresh.md). No installed app,
+native controls, real location or desktop pixels were used or changed.
+
 ## Native Last screen acceptance — 2026-11-03 (#519)
 
 Clean source `8059a19d2b57ca5189ac8ac52302af8f2365d06d`, including independently

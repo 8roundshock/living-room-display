@@ -17,6 +17,7 @@ import { keepPagesLocal } from './lib/local-only.mjs';
 import { checkHomeNoteSync } from './lib/home-note-sync.mjs';
 import { checkHomeDisplayCard } from './lib/home-display-card.mjs';
 import { checkHomeSheetKeyboard } from './lib/home-sheet-keyboard.mjs';
+import { checkHomeListEditing } from './lib/home-list-editing.mjs';
 
 /** 6:42 PM on Tuesday, October 20, 2026 in Toronto. */
 const NOW = Date.parse('2026-10-20T22:42:00.000Z');
@@ -109,6 +110,9 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     assert.equal((await fetch(`${base}/`)).headers.get('permissions-policy'), 'geolocation=()');
     checks.push('/ is Home ("Still · Home", Pages nav with aria-current), /editor is Edit display ("Still · Edit display", its tabs), an unknown path opens Home; both headers target the one still-display window without rel=noreferrer');
 
+    const listEditing = await checkHomeListEditing({ page, app, reset, home, action, sheet, state, capture });
+    checks.push(...listEditing.checks); images.push(...listEditing.images);
+
     // Above the fold at 1280 × 720 and reflow at 390 and 320 px --------------------------------------
     await reset(settings => { settings.widgetData.worldClocks = [{ id: '11111111-1111-4111-8111-111111111111', label: 'Synthetic London', timezone: 'Europe/London', latitude: 51.5, longitude: -0.1 }]; });
     await fetch(`${base}/api/reminders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'Synthetic call', dueAt: new Date(serverNow() + 3_600_000).toISOString() }) });
@@ -120,7 +124,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     assert.equal(fold.count, 6);
     for (const [name, value] of Object.entries(fold)) if (typeof value === 'number' && name !== 'count') assert.ok(value <= 720, `${name} is above the fold at 1280×720 (${value})`);
     assert.ok(fold.actionHeights.every(height => height >= 64), `compact quick actions are at least 64 px tall ${fold.actionHeights}`);
-    assert.match(await page.locator('.home-chips').innerText(), /Synthetic London 11:42 PM · \+5 h/);
+    assert.match(await page.locator('.home-chips').innerText(), /Synthetic London\s+11:42 PM · \+5 h/);
     if (capture) images.push({ name: 'home-1280x720', bytes: await page.screenshot() });
     for (const viewport of EDGE_VIEWPORTS) {
       await page.setViewportSize(viewport); await page.waitForTimeout(100);
@@ -304,9 +308,9 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     await sheet(page).getByRole('button', { name: 'Add clock' }).click();
     await sheet(page).getByRole('button', { name: 'Remove Synthetic Tokyo' }).waitFor();
     assert.equal((await state()).settings.widgetData.worldClocks.at(-1).timezone, 'Asia/Tokyo');
-    assert.match(await sheet(page).getByText('Rename or reorder in').innerText(), /Edit display/);
+    assert.equal(await sheet(page).getByRole('button', { name: 'Edit Synthetic Tokyo', exact: true }).isVisible(), true);
     await page.keyboard.press('Escape'); await sheet(page).waitFor({ state: 'detached' });
-    assert.match(await page.locator('.home-chips').innerText(), /Synthetic Tokyo \d{1,2}:\d{2} AM · \+13 h/);
+    assert.match(await page.locator('.home-chips').innerText(), /Synthetic Tokyo\s+\d{1,2}:\d{2} AM · \+13 h/);
     checks.push('World clock: a mocked city search adds "Synthetic Tokyo" with its zone; Home\'s chip reads its time and "+13 h"');
 
     // Countdown: add, remove and Undo.
@@ -328,6 +332,8 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
     assert.equal(await sheet(page).getByRole('button', { name: 'Save note' }).count(), 0);
     await note.fill('Synthetic dinner at seven   ');
     assert.equal(await sheet(page).locator('#home-note-count').innerText(), '28/200');
+    assert.equal(await sheet(page).locator('#home-note-count').getAttribute('aria-live'), null);
+    assert.doesNotMatch(await sheet(page).locator('.home-note').evaluate(element => getComputedStyle(element).fontFamily), /monospace/);
     await sheet(page).getByRole('button', { name: 'Discard' }).click();
     assert.equal(await note.inputValue(), ''); assert.equal(await sheet(page).getByRole('button', { name: 'Save note' }).count(), 0);
     await note.fill('Synthetic dinner at seven');

@@ -34,6 +34,16 @@ Primary guidance consulted 2026-11-03:
 These are adaptations for a local web app, not vendor certification. Recheck when
 page groups, modal containment or list persistence changes.
 
-The initial production build passed. Browser regression coverage, synthetic RAM
-image inspection and independent final-head review are pending. This source work
+Production build and all 598 unit tests passed. The Settings browser suite passed
+13 groups, including section focus, short/narrow scrolling, concurrent saves and
+recovery. Focused Home checks cover rename/re-date/reorder, cancellation, retained
+drafts, remote additions/field edits, a write racing the revision read, failed-save
+retry, stable IDs and edited-item Remove/Undo.
+
+Actual synthetic RAM images were inspected at 1280×720, 390×640, 320×480 and
+640×300. A sticky action row initially obscured a field on short windows; the
+replacement footer is outside the scrolling body. Focused assertions now check
+every field and reorder button against that scroller and footer. The Home suite passed 24 groups and Settings passed 13; the delayed-close/newer-draft
+regression also passed in the focused harness. Final pushed-head CI and independent
+functional/visual review remain pending. This source work
 has not changed the installed app, native settings or real private data.
