@@ -69,6 +69,12 @@ export async function runCollectionQa({ playwright, edge, capture = false, captu
         single(id, size, density); update(current); await open('/display');
         const result = await fit(id, `${id}/${size}/${name}/${density}`);
         if (expected) assert.match(result.text, expected, `${id}/${name} honest content`);
+        if (id === 'timers' && name === 'mixed') {
+          const paint = await page.locator('.timers-digits.status-caution').evaluate(element => ({ color: getComputedStyle(element).color, caution: getComputedStyle(element.closest('.ambient')).getPropertyValue('--ambient-caution').trim(), stroke: getComputedStyle(element).webkitTextStrokeWidth }));
+          const caution = Number.parseInt(paint.caution.slice(1), 16);
+          assert.equal(paint.color, `rgb(${caution >> 16}, ${(caution >> 8) & 255}, ${caution & 255})`, 'Done is visibly painted in the shared status tone');
+          assert.equal(paint.stroke, '0px', 'Done does not keep the running-timer outline');
+        }
         scenarioCount++;
         if (capture && density === 'balanced') images.push({ name: `${id}-${name}`, bytes: await page.locator(`[data-widget-id="${id}"]`).screenshot() });
       }
