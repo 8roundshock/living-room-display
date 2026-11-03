@@ -61,8 +61,9 @@ export async function runSharedSnapshotQa({ playwright, edge, capture = false } 
     clock.mono += 21_000;
     await page.reload(); await page.locator('summary').filter({ hasText: /^Last screen$/ }).waitFor();
     await page.locator('summary').filter({ hasText: /^Last screen$/ }).click();
-    page.once('dialog', dialog => dialog.accept());
+    page.on('dialog', async dialog => { errors.push(`Unexpected browser-native ${dialog.type()} dialog`); await dialog.dismiss(); });
     await page.getByRole('button', { name: 'Resume snapshots', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Resume snapshots?', exact: true }).getByRole('button', { name: 'Resume snapshots', exact: true }).click();
     await page.getByRole('status').filter({ hasText: 'Snapshots resumed.' }).waitFor();
     assert.equal((await (await fetch(base + '/api/preview')).json()).pipeline.display.paused, false);
     checks.push('Real browser-generated fetch headers accept start, heartbeat, normal release and explicit Home recovery.');

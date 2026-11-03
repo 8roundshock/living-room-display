@@ -126,6 +126,14 @@ Markdown was unavailable to this review tool. Recheck on interaction or layout c
 
 ## Home
 
+**Resume snapshots** in Last screen opens an in-app confirmation (#556). Close
+every browser display first, then explicitly confirm. Cancel, Escape and Close
+dismiss the prompt without sending a request. Once submitted, Close dismisses
+only the message; the pending request remains guarded against duplicate sends.
+Errors stay available for an explicit retry. A successful request is not relabeled
+as failure when the following status refresh fails. Focus returns to Resume
+snapshots, or Last screen when the action is no longer needed.
+
 Home (`<div class="studio home-page">`, `src/client/Home.tsx`) is for day-to-day use
 beside the display rather than for setting it up. It reuses the studio's tokens,
 buttons, inputs, city search and Reminders panel; every rule of its own names a
