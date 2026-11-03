@@ -45,9 +45,9 @@ Actual synthetic RAM images were inspected at 1280×720, 390×640, 320×480 and
 640×300. A sticky action row initially obscured a field on short windows; the
 replacement footer is outside the scrolling body. Focused assertions now check
 every field and reorder button against that scroller and footer. The Home suite passed 24 groups and Settings passed 13; the delayed-close/newer-draft
-regression also passed in the focused harness. Final pushed-head CI and independent
-functional/visual review remain pending. This source work
-has not changed the installed app, native settings or real private data.
+regression also passed in the focused harness. These component counts precede the
+combined release results below. This source verification did not change the
+installed app, native settings or real private data.
 
 
 ## Independent review follow-up: merged-list limits
@@ -78,4 +78,8 @@ production assets and passed the corrected build. Existing viewport checks now
 also assert the actual focused element and report scalar geometry on failure.
 The final Home run passed all 28 groups. A RAM-only 640×300 inspection confirmed
 the date stayed focused and clear of the footer. No save, concurrency or draft
-retention behavior was removed; exact-head review and CI remain release gates.
+retention behavior was removed. Independent [final-head review](https://github.com/8roundshock/living-room-display/pull/568#issuecomment-6609434364)
+approved `8795aa0`, whose complete [browser suite](https://github.com/8roundshock/living-room-display/actions/runs/41673547132)
+and [Windows/Linux application checks](https://github.com/8roundshock/living-room-display/actions/runs/41673547174)
+passed before PR #568 merged. This source evidence does not establish installed
+or physical-TV acceptance.
