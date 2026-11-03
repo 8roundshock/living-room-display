@@ -81,5 +81,7 @@ the date stayed focused and clear of the footer. No save, concurrency or draft
 retention behavior was removed. Independent [final-head review](https://github.com/8roundshock/living-room-display/pull/568#issuecomment-6609434364)
 approved `8795aa0`, whose complete [browser suite](https://github.com/8roundshock/living-room-display/actions/runs/41673547132)
 and [Windows/Linux application checks](https://github.com/8roundshock/living-room-display/actions/runs/41673547174)
-passed before PR #568 merged. This source evidence does not establish installed
-or physical-TV acceptance.
+passed before PR #568 merged. The subsequent installation and ordinary-browser
+verification of `712ce80` are recorded in [STATUS](../STATUS.md); neither this
+source evidence nor that browser review establishes new native or physical-TV
+acceptance.

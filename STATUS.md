@@ -1,6 +1,6 @@
 # Project status
 
-## Combined UI source release — 2026-11-03 (#565)
+## Combined UI release — 2026-11-03 (#565)
 
 Merged PR #568 integrates the independently reviewed Style/discovery head `a6f0c07` and
 Home/Settings head `7629a05` with the fifteen-widget collection. Home treats
@@ -26,6 +26,16 @@ and [Windows/Linux application checks](https://github.com/8roundshock/living-roo
 PRs #568, #566 and #567 are merged; main `712ce80` retains the reviewed release
 tree. The component evidence below keeps its original scopes and test counts;
 these source checks do not establish installed or physical-TV acceptance.
+
+Release `712ce80` was installed successfully on 2026-11-03 through the
+independently reviewed updater. Installed files, recovery copy, application health
+and frontend assets were verified; native activation settings stayed unchanged.
+An ordinary-browser review inspected Home, Settings, the editor and picker in RAM.
+It verified all 28 catalog entries, Pictures filtering, the Quiet scene preview,
+style-modal Cancel and Settings section navigation. Last screen showed its image
+with the rounded, softened picture-only treatment. This was not a new native
+screensaver or physical-TV acceptance run; the dated `8059a19` acceptance below
+retains its original scope.
 
 ## Collection source checkpoint — 2026-11-03 (#565)
 
@@ -91,7 +101,7 @@ native controls, real location or desktop pixels were used or changed.
 ## Native Last screen acceptance — 2026-11-03 (#519)
 
 Clean source `8059a19d2b57ca5189ac8ac52302af8f2365d06d`, including independently
-reviewed PRs #560/#561 and their passing CI, is installed. During a natural
+reviewed PRs #560/#561 and their passing CI, was installed for this dated check. During a natural
 Windows screensaver cycle, the owner confirmed that the screenshot appeared and
 physical mouse movement returned to the desktop. Separately, the bound observer
 recorded 90 active samples with the same snapshot file present, no missing or
