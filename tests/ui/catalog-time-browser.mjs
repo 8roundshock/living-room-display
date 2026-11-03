@@ -204,15 +204,15 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await button('Preview Note').click();
     assert.equal(await page.locator('.picker-detail').evaluate(element => element.scrollTop), 0, 'selecting another widget returns its title/sample to the top');
     await search().fill('Pictures');
-    assert.deepEqual(await names(), [itemName('preview', defaults), itemName('photo', defaults)], 'category text is searchable');
+    assert.deepEqual(await names(), [itemName('preview', defaults), itemName('photo', defaults), itemName('quietScene', defaults)], 'category text is searchable');
     assert.equal(await search().evaluate(element => element === document.activeElement), true, 'filtering keeps typing focus');
     assert.deepEqual(await tabStops(), [itemName('preview', defaults)], 'a filtered-away selection falls back to the first result');
     await search().press('Home'); await search().press('ArrowRight'); await search().press('End');
     assert.equal(await search().evaluate(element => element === document.activeElement), true, 'text editing keys never enter the rail');
     assert.deepEqual(await tabStops(), [itemName('preview', defaults)]);
     await filter().selectOption('not-added');
-    assert.deepEqual(await names(), ['Preview Photo']);
-    assert.equal(await page.locator('.picker-results [role="status"]').innerText(), '1 widget');
+    assert.deepEqual(await names(), ['Preview Photo', 'Preview Quiet scene']);
+    assert.equal(await page.locator('.picker-results [role="status"]').innerText(), '2 widgets');
     await button('Photo large').click();
     const sizeDescription = await button('Photo large').getAttribute('aria-describedby');
     assert.equal(await page.locator(`#${sizeDescription}`).innerText(), '4 columns by 4 rows on the 12 by 8 grid.');
@@ -266,7 +266,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
       settings.widgetGrid.density = 'fine';
       for (const id of ACTIVE_WIDGET_IDS) settings.widgets[id] = false;
       for (const id of ACTIVE_WIDGET_IDS) {
-        settings.widgetGrid = addToGrid(settings.widgetGrid, id, 'small', settings.widgets);
+        settings.widgetGrid = addToGrid(settings.widgetGrid, id, widgetSizes(id)[0], settings.widgets);
         assert.ok(settings.widgetGrid, `${id} fits the all-added synthetic board`);
         settings.widgets[id] = true;
       }

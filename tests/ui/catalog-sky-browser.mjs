@@ -13,6 +13,7 @@ import { createApplication } from '../../src/server/app.ts';
 import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { ACTIVE_WIDGET_IDS, GRID_DENSITIES, WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { CITIES } from './widget-checks/worldClocks.mjs';
+import { COLLECTION_BOARD } from './lib/boards.mjs';
 
 const GEOCODER = {
   lon: { id: 201, name: 'London', latitude: 51.51, longitude: -0.13, timezone: 'Europe/London', admin1: 'England', country: 'United Kingdom' },
@@ -99,9 +100,10 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     // Air quality and Sun & moon under Weather & sky, beside the other units' widgets.
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     const groupItems = name => page.getByRole('group', { name, exact: true }).locator('.catalog-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label').replace(/^Preview /, '').replace(/, on your display$/, '')));
-    assert.deepEqual(await groupItems('Time'), ['Clock', 'World clocks', 'Calendar']);
-    assert.deepEqual(await groupItems('Weather & sky'), ['Weather', 'Forecast', 'Air quality', 'Sun & moon', 'Dynamic']);
-    assert.deepEqual(await groupItems('Personal'), ['Reminders', 'Countdown', 'Note']);
+    assert.deepEqual(await groupItems('Time'), ['Clock', 'World clocks', 'Calendar', 'Timers', 'Day progress', 'Year progress', 'Time overlap']);
+    assert.deepEqual(await groupItems('Weather & sky'), ['Weather', 'Forecast', 'Air quality', 'Sun & moon', 'Dynamic', 'Weather alerts', 'Hourly temperature', 'Wind', 'Humidity', 'Pressure', 'Visibility', 'Cloud cover', 'Precipitation']);
+    assert.deepEqual(await groupItems('Personal'), ['Reminders', 'Countdown', 'Note', 'Agenda', 'Week ahead']);
+    assert.deepEqual(await groupItems('Pictures'), ['Last screen', 'Photo', 'Quiet scene']);
     await page.getByRole('button', { name: 'Close widget picker', exact: true }).click(); await page.clock.runFor(200);
     checks.push('Grouped picker (#157): World clocks under Time; Air quality and Sun & moon under Weather & sky');
     await addWidget(page, 'World clocks');
@@ -233,56 +235,62 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     }
     checks.push('390/320 px reflow: keyboard-focused World clocks fields stay visible below the top Style and Save toolbar, receive clicks and have no horizontal overflow');
 
-    // #417/#436 every active widget at small size with Swap places on: the board floats, every swap's new cells stay
-    // collision-free and inside the screen, nothing fades, and swaps continue with reduced motion (dimmed, no glide).
-    await reset(settings => {
-      settings.appearance.rearrange = true;
-      settings.widgetBehavior.reminders.hideWhenEmpty = false;
-      settings.widgetData.worldClocks = structuredClone(CITIES);
-      const { columns } = GRID_DENSITIES.balanced;
-      ACTIVE_WIDGET_IDS.forEach((id, index) => {
-        settings.widgets[id] = true;
-        settings.widgetGrid.placements[id] = { column: (index * 2) % columns, row: Math.floor(index * 2 / columns) * 2, size: 'small' };
+    // Preserve the #417/#436 Small board; #565 additions use their smallest supported families on a second board.
+    // Every swap's cells stay collision-free and inside the screen, including with reduced motion (dimmed, no glide).
+    const { columns } = GRID_DENSITIES.balanced;
+    const historicalSmallBoard = Object.fromEntries([
+      'clock', 'weather', 'forecast', 'reminders', 'preview', 'photo', 'worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon', 'dynamic',
+    ].map((id, index) => [id, { column: (index * 2) % columns, row: Math.floor(index * 2 / columns) * 2, size: 'small' }]));
+    const swapBoards = { historical: historicalSmallBoard, collection: COLLECTION_BOARD };
+    assert.deepEqual(Object.values(swapBoards).flatMap(board => Object.keys(board)).sort(), [...ACTIVE_WIDGET_IDS].sort(), 'the swap boards cover every active widget exactly once');
+    for (const [boardName, placements] of Object.entries(swapBoards)) {
+      await reset(settings => {
+        settings.appearance.rearrange = true;
+        settings.widgetBehavior.reminders.hideWhenEmpty = false;
+        settings.widgetData.worldClocks = structuredClone(CITIES);
+        for (const id of WIDGET_IDS) settings.widgets[id] = id in placements;
+        Object.assign(settings.widgetGrid.placements, structuredClone(placements));
       });
-    });
-    for (const reducedMotion of ['no-preference', 'reduce']) for (const viewport of [{ width: 1280, height: 720 }, { width: 3840, height: 2160 }]) {
-      ({ context, page } = await open({ route: '/display', viewport, reducedMotion }));
-      const phases = [];
-      const check = async label => {
-        const result = await page.evaluate(() => {
-          // Each widget's cell: its box without the #436 float translation (its content floats inside it).
-          const cell = element => { const r = element.getBoundingClientRect(), [x, y] = getComputedStyle(element).translate.split(' ').map(value => parseFloat(value) || 0); return { left: r.left - (x ?? 0), top: r.top - (y ?? 0), right: r.right - (x ?? 0), bottom: r.bottom - (y ?? 0) }; };
-          const boxes = [...document.querySelectorAll('.ambient-widget')].map(element => ({ id: element.dataset.widgetId, r: cell(element) })), bad = [];
-          for (const { id, r } of boxes) if (r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) bad.push(`${id} outside`);
-          for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
-            const a = boxes[i].r, b = boxes[j].r;
-            if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1) bad.push(`${boxes[i].id}/${boxes[j].id} overlap`);
-          }
-          const plane = document.querySelector('.ambient-content');
-          return { bad, ids: boxes.map(box => box.id), composition: document.querySelector('.ambient').dataset.composition, fading: plane.classList.contains('fading'), opacity: getComputedStyle(plane).opacity };
-        });
-        assert.deepEqual(result.bad, [], `${reducedMotion} ${viewport.width} ${label}`);
-        phases.push({ label, ...result });
-        return result;
-      };
-      const rest = await check('rest');
-      for (const id of ['worldClocks', 'airQuality', 'sunMoon']) assert.ok(rest.ids.includes(id), `${id} renders on the dense board`);
-      for (let cycle = 0; cycle < 4; cycle++) {
-        await page.clock.runFor(179_000 - (cycle ? 1_000 : 0));
-        const before = await check(`cycle ${cycle} floating`);
-        assert.equal(before.composition, String(cycle), 'no swap before the interval');
-        await page.clock.runFor(2_000); // the swap (and, with reduced motion, its 0.6 s dim)
-        // Glides run in real time; finish them to read the new cells at rest.
-        await page.evaluate(() => { for (const animation of document.getAnimations()) if (animation.id === 'lrd-glide') animation.finish(); });
-        const swapped = await check(`cycle ${cycle} swapped`);
-        assert.equal(swapped.composition, String(cycle + 1), 'one swap each interval');
-        for (const phase of [before, swapped]) { assert.equal(phase.fading, false, 'never fades'); assert.equal(phase.opacity, '1', 'the plane stays at opacity 1'); }
+      for (const reducedMotion of ['no-preference', 'reduce']) for (const viewport of [{ width: 1280, height: 720 }, { width: 3840, height: 2160 }]) {
+        ({ context, page } = await open({ route: '/display', viewport, reducedMotion }));
+        const phases = [];
+        const check = async label => {
+          const result = await page.evaluate(() => {
+            // Each widget's cell: its box without the #436 float translation (its content floats inside it).
+            const cell = element => { const r = element.getBoundingClientRect(), [x, y] = getComputedStyle(element).translate.split(' ').map(value => parseFloat(value) || 0); return { left: r.left - (x ?? 0), top: r.top - (y ?? 0), right: r.right - (x ?? 0), bottom: r.bottom - (y ?? 0) }; };
+            const boxes = [...document.querySelectorAll('.ambient-widget')].map(element => ({ id: element.dataset.widgetId, r: cell(element) })), bad = [];
+            for (const { id, r } of boxes) if (r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) bad.push(`${id} outside`);
+            for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+              const a = boxes[i].r, b = boxes[j].r;
+              if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1) bad.push(`${boxes[i].id}/${boxes[j].id} overlap`);
+            }
+            const plane = document.querySelector('.ambient-content');
+            return { bad, ids: boxes.map(box => box.id), composition: document.querySelector('.ambient').dataset.composition, fading: plane.classList.contains('fading'), opacity: getComputedStyle(plane).opacity };
+          });
+          assert.deepEqual(result.bad, [], `${boardName} ${reducedMotion} ${viewport.width} ${label}`);
+          phases.push({ label, ...result });
+          return result;
+        };
+        const rest = await check('rest');
+        const expectedVisible = boardName === 'historical' ? ['worldClocks', 'airQuality', 'sunMoon'] : Object.keys(placements);
+        for (const id of expectedVisible) assert.ok(rest.ids.includes(id), `${id} renders on the ${boardName} dense board`);
+        for (let cycle = 0; cycle < 4; cycle++) {
+          await page.clock.runFor(179_000 - (cycle ? 1_000 : 0));
+          const before = await check(`cycle ${cycle} floating`);
+          assert.equal(before.composition, String(cycle), 'no swap before the interval');
+          await page.clock.runFor(2_000); // the swap (and, with reduced motion, its 0.6 s dim)
+          // Glides run in real time; finish them to read the new cells at rest.
+          await page.evaluate(() => { for (const animation of document.getAnimations()) if (animation.id === 'lrd-glide') animation.finish(); });
+          const swapped = await check(`cycle ${cycle} swapped`);
+          assert.equal(swapped.composition, String(cycle + 1), 'one swap each interval');
+          for (const phase of [before, swapped]) { assert.equal(phase.fading, false, 'never fades'); assert.equal(phase.opacity, '1', 'the plane stays at opacity 1'); }
+        }
+        assert.ok(new Set(phases.map(phase => phase.composition)).size >= 5, 'swaps continue, including with reduced motion');
+        if (viewport.width === 1280) images.push({ label: `Dense ${boardName} board ${reducedMotion}`, bytes: await page.screenshot({ type: 'png', animations: 'disabled' }) });
+        await context.close();
       }
-      assert.ok(new Set(phases.map(phase => phase.composition)).size >= 5, 'swaps continue, including with reduced motion');
-      if (viewport.width === 1280) images.push({ label: `Dense small board ${reducedMotion}`, bytes: await page.screenshot({ type: 'png', animations: 'disabled' }) });
-      await context.close();
     }
-    checks.push(`All active widgets small (${ACTIVE_WIDGET_IDS.length}) with Swap places on (#436): before and after every swap the cells are collision-free and inside the screen and the plane stays at opacity 1, at 1280×720 and 4K, with and without reduced motion`);
+    checks.push(`All active widgets (${ACTIVE_WIDGET_IDS.length}) on the historical Small board and collection board with Swap places on (#436): before and after every swap the cells are collision-free and inside the screen and the plane stays at opacity 1, at 1280×720 and 4K, with and without reduced motion`);
     assert.deepEqual(errors, []);
     return { checks, images };
   } finally {

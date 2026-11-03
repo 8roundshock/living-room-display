@@ -170,11 +170,15 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
       if (capture) images.push({ name: `schedule-${width}`, bytes: await settingsPage.screenshot() });
     }
     checks.push('Desktop, 390px and 320px layouts have no horizontal overflow and keep 44px form/reorder/touch targets.');
-    for (const manualOn of [true, false]) {
+    for (const { manualOn, scheduledClock, scheduledTimers } of [
+      { manualOn: true, scheduledClock: false, scheduledTimers: false },
+      { manualOn: false, scheduledClock: true, scheduledTimers: false },
+      { manualOn: false, scheduledClock: false, scheduledTimers: true },
+    ]) {
       const value = defaultSettings(); value.preview.enabled = false;
       for (const id of Object.keys(value.widgets)) value.widgets[id] = manualOn && (id === 'clock' || id === 'reminders');
       const { appearance, widgets, widgetGrid, widgetOverrides, widgetBehavior, preview } = value;
-      value.savedPresets = [{ id: 'visibility', name: 'Synthetic visibility', visual: { appearance, widgets: { ...widgets, clock: !manualOn, reminders: !manualOn }, widgetGrid, widgetOverrides, widgetBehavior, preview } }];
+      value.savedPresets = [{ id: 'visibility', name: 'Synthetic visibility', visual: { appearance, widgets: { ...widgets, clock: scheduledClock, timers: scheduledTimers, reminders: !manualOn }, widgetGrid, widgetOverrides, widgetBehavior, preview } }];
       await app.store.update(data => { data.settings = value; data.reminders = []; });
       await request('/api/schedule', 'PUT', { enabled: true, fallbackPresetId: 'visibility', rules: [] });
       const current = await context.newPage(); await current.goto(base + '/'); await current.locator('.home-page').waitFor();
@@ -190,15 +194,16 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
         assert.doesNotMatch(await status.innerText(), /in Reminders on your display/);
       } else await status.getByText(/in Reminders on your display/).waitFor();
       await current.locator('[data-action="timer"]').click();
-      assert.equal(await current.getByRole('button', { name: 'Show the clock', exact: true }).count(), manualOn ? 1 : 0);
+      const timerOnDisplay = scheduledClock || scheduledTimers;
+      assert.equal(await current.getByRole('button', { name: 'Show the clock', exact: true }).count(), timerOnDisplay ? 0 : 1);
       await current.getByRole('button', { name: 'Start a 1 min timer', exact: true }).click();
       await current.locator('.home-sheet').waitFor({ state: 'detached' });
-      await status.getByText(manualOn ? /Clock is off, so it shows here only/ : /on your display's clock/).waitFor();
+      await status.getByText(timerOnDisplay ? /on your display\./ : /Clock and Timers are off, so it shows here only/).waitFor();
       assert.equal(showWrites, 0, 'effective visibility never causes an unnecessary manual-layout write');
       assert.deepEqual(app.store.snapshot().settings.widgets, value.widgets);
       await current.close();
     }
-    checks.push('Home reminder/timer results use effective scheduled visibility in both directions; manual layout is preserved and already-shown widgets cause no Show write.');
+    checks.push('Home reminder/timer results use effective scheduled visibility in both directions, including Timers with Clock off; manual layout is preserved and already-shown widgets cause no Show write.');
     assert.deepEqual(errors, []);
     return { checks, images, outside };
   } catch (error) {
