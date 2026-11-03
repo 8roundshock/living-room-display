@@ -195,7 +195,7 @@ export type AlertsProvider = 'eccc' | 'nws';
 export type AlertsSource = 'Environment and Climate Change Canada' | 'US National Weather Service';
 /**
  * Official weather alerts for the saved weather location (#437). API-only: never persisted, exported or
- * logged. `off` means no request was made (Dynamic or its alerts are off); `unsupported` means neither
+ * logged. `off` means no enabled alert consumer requested data; `unsupported` means neither
  * provider covers the place, which never reads as "no alerts".
  */
 export interface AlertsState {

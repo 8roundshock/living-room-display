@@ -1,5 +1,5 @@
 .grid-ambient .ambient-cloudCover .cloud-cover-heading { display: flex; align-items: center; gap: 3cqw; }
-.grid-ambient .ambient-cloudCover .cloud-cover-heading > svg { width: 16cqw; height: 20cqh; color: var(--ambient-accent); }
+.grid-ambient .ambient-cloudCover .cloud-cover-heading > .weather-glyph { width: 16cqw; height: 20cqh; color: var(--ambient-accent); }
 
 .grid-ambient .ambient-cloudCover .collection-medium { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'label label' 'reading hours' 'detail hours' 'footer footer'; align-items: center; gap: 1cqh 3cqw; }
 .grid-ambient .ambient-cloudCover .collection-medium > .collection-label { grid-area: label; }

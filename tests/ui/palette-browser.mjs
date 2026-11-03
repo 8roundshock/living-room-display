@@ -27,8 +27,8 @@ const RAIN_SELECTOR = '.weather-hint, .rain-detail, .rain-hours, .rain-bar, .rai
 const ACCENT_SELECTOR = '.ambient-label, .preview-caption, .weather-context, .metric-label, .countdown-unit, .collection-label';
 /** Widgets whose display face is primary content only (Note's text), so nothing in them is tinted; their section still resolves the tone. */
 const TEXT_ONLY = new Set(['note']);
-/** Every active widget on one Balanced 12 x 8 board, every cell used; a newly activated widget must be added here. */
-import { FULL_BOARD, COLLECTION_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
+/** Two bounded Balanced boards together cover every active widget. */
+import { FULL_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
 const PALETTE_RGB = new Set(Object.values(NATIVE_PALETTE).map((tone) => rgb(tone.hex)));
 
 /** Typed color properties may serialize as rgb() even when authored in hex; compare their color. */

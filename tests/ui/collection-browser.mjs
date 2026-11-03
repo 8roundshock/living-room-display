@@ -76,8 +76,8 @@ export async function runCollectionQa({ playwright, edge, capture = false, captu
     for (const id of ['wind', 'humidity', 'pressure', 'visibility', 'cloudCover']) for (const size of widgetSizes(id)) {
       await scenario(id, size, 'saved', state => {
         state.weather.status = 'stale'; state.weather.updatedAt = new Date(now - 86400_000).toISOString();
-        state.weather.details = state.weather.details.map(reading => ({ ...reading, time: new Date(Date.parse(reading.time) - 86400_000).toISOString() }));
-      }, /Saved forecast/);
+        state.weather.details = state.weather.details.map(reading => ({ ...reading, time: new Date(Date.parse(reading.time) - 2 * 86400_000).toISOString() }));
+      }, /Last known[\s\S]*Saved forecast/);
     }
     const provider = state => { state.alerts = { status: 'fresh', provider: 'eccc', source: 'Environment and Climate Change Canada', sourceUrl: 'https://weather.gc.ca/', area: 'Sample area', checkedAt: new Date(now).toISOString(), error: null, alerts: [] }; };
     for (const size of widgetSizes('weatherAlerts')) {

@@ -1107,7 +1107,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
     }).filter(item => item.fit < 1));
     if (performance) {
       // The default board and a full board of every merged widget (#162), each Off against Lively.
-      for (const [board, arrange] of [['default', () => undefined], ['full', fullBoard]]) {
+      for (const [board, arrange] of [['default', () => undefined], ['full', fullBoard], ['collection', state => fullBoard(state, COLLECTION_BOARD)]]) {
         const result = metrics[board] = {};
         for (const animation of ['off', 'lively']) {
           const view = await displayPage({ clock: false, fixedTime: now, viewport: { width: 1280, height: 720 }, deviceScaleFactor: 3, state: scenario(state => { level(animation)(state); arrange(state); state.weather.current.weatherCode = 61; state.weather.current.isDay = true; }) });
@@ -1125,8 +1125,11 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
         }
         assert.ok(Math.abs(result.lively.LayoutCount - result.off.LayoutCount) <= 3, `${board} LayoutCount ${JSON.stringify(result)}`);
         assert.ok(result.lively.TaskDuration - result.off.TaskDuration <= 0.15, `${board} TaskDuration ${JSON.stringify(result)}`);
-        assert.equal(result.lively.loops, 3, `${board}: rain at Lively runs its three drop loops`);
-        if (board === 'full') assert.ok(result.off.widgets === Object.keys(FULL_BOARD).length && result.lively.widgets === Object.keys(FULL_BOARD).length, 'the full board shows every widget');
+        assert.equal(result.lively.loops, board === 'collection' ? 0 : 3, `${board}: only weather rain owns continuous drop loops`);
+        if (board !== 'default') {
+          const count = Object.keys(board === 'collection' ? COLLECTION_BOARD : FULL_BOARD).length;
+          assert.ok(result.off.widgets === count && result.lively.widgets === count, `${board} shows all its widgets`);
+        }
         checks.push(`performance over 15 s at 1280×720 ×3, ${board} board: Off ${JSON.stringify(result.off)}; Lively ${JSON.stringify(result.lively)}`);
       }
       // #248/#436 frame budget: at Off with Float gently on (the default), the display draws a frame only when the

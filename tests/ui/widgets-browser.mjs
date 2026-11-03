@@ -29,8 +29,8 @@ const FLOOR_FIT_ALLOWANCES = { 'note/small': '#291' };
  * construct none.
  */
 const INTL_TICK_ALLOWANCES = {};
-/** Every active widget on one Balanced 12 x 8 board (as in motion-browser.mjs). */
-import { FULL_BOARD, COLLECTION_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
+/** Two Balanced boards cover the active catalog without changing production geometry. */
+import { FULL_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
 
 /** Counts ResizeObserver and Intl constructions and style changes on .widget-content (an init script). */
 function instrumentFit() {
@@ -266,12 +266,12 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     // #99/#249: the full board at rest on the real clock. The one-second tick re-renders every widget, but
     // no widget re-creates an observer, refits or writes its style, and nothing extends beyond its box.
     const fitMetrics = {};
-    for (const [label, viewport, deviceScaleFactor, fontScale] of [['1280×720 ×3, Text 125%', { width: 1280, height: 720 }, 3, 1.25], ['3840×2160 ×1, Text 100%', { width: 3840, height: 2160 }, 1, 1], ['3840×2160 ×1, Text 125%', { width: 3840, height: 2160 }, 1, 1.25]]) {
+    for (const [label, viewport, deviceScaleFactor, fontScale] of [['1280×720 ×3, Text 125%', { width: 1280, height: 720 }, 3, 1.25], ['3840×2160 ×1, Text 100%', { width: 3840, height: 2160 }, 1, 1], ['3840×2160 ×1, Text 125%', { width: 3840, height: 2160 }, 1, 1.25]]) for (const [boardIndex, placements] of WIDGET_BOARDS.entries()) {
       const restContext = await browser.newContext({ viewport, deviceScaleFactor, timezoneId: 'America/Toronto' }); await mockWindowsStatus(restContext); await mockScreenWakeLock(restContext);
       try {
         const state = structuredClone(source); state.settings.appearance.fontScale = fontScale;
-        state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD])); state.settings.preview.enabled = true; state.settings.widgetGrid.density = 'balanced';
-        Object.assign(state.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+        state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in placements])); state.settings.preview.enabled = true; state.settings.widgetGrid.density = 'balanced';
+        Object.assign(state.settings.widgetGrid.placements, structuredClone(placements));
         await restContext.addInitScript(instrumentFit);
         await restContext.route('**/api/state', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(state) }));
         await restContext.route(/\/api\/(photo|preview)\/image\?/, route => route.fulfill({ contentType: 'image/png', body: image }));
@@ -292,8 +292,8 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
         const start = await sample(); const started = performance.now();
         await restPage.waitForTimeout(5_000);
         const end = await sample(); const seconds = (performance.now() - started) / 1000;
-        const result = fitMetrics[label] = { widgets: end.widgets.length, belowFit1: end.widgets.filter(widget => widget.fit < 1).map(widget => `${widget.id} ${widget.fit.toFixed(4)}`), resizeObservers: end.counts.resizeObservers - start.counts.resizeObservers, styleMutations: end.counts.styleMutations - start.counts.styleMutations, layoutsPerSecond: Number(((end.layouts - start.layouts) / seconds).toFixed(2)) };
-        assert.equal(result.widgets, Object.keys(FULL_BOARD).length, `${label}: the full board shows every widget`);
+        const result = fitMetrics[`${boardIndex}: ${label}`] = { widgets: end.widgets.length, belowFit1: end.widgets.filter(widget => widget.fit < 1).map(widget => `${widget.id} ${widget.fit.toFixed(4)}`), resizeObservers: end.counts.resizeObservers - start.counts.resizeObservers, styleMutations: end.counts.styleMutations - start.counts.styleMutations, layoutsPerSecond: Number(((end.layouts - start.layouts) / seconds).toFixed(2)) };
+        assert.equal(result.widgets, Object.keys(placements).length, `${label}: the full board shows every widget`);
         assert.equal(result.resizeObservers, 0, `${label}: no ResizeObserver is created while the clock ticks ${JSON.stringify(result)}`);
         assert.equal(result.styleMutations, 0, `${label}: no widget refits or writes its style while nothing changes ${JSON.stringify(result)}`);
         assert.ok(result.layoutsPerSecond <= 0.5, `${label}: about zero layouts per second ${JSON.stringify(result)}`);
@@ -328,10 +328,12 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
         if (INTL_TICK_ALLOWANCES[id]) assert.ok(intlPerTick[id] > 0, `${id} constructs no Intl formatter per tick any more: remove its ${INTL_TICK_ALLOWANCES[id]} allowance`);
         else assert.equal(intlPerTick[id], 0, `${id} constructs ${intlPerTick[id]} Intl formatters per tick within one minute`);
       }
-      state = structuredClone(source); state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in FULL_BOARD])); state.settings.preview.enabled = true;
-      Object.assign(state.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
-      intlPerTick.fullBoard = await perTick();
-      if (!Object.keys(INTL_TICK_ALLOWANCES).length) assert.equal(intlPerTick.fullBoard, 0, 'the full board constructs no Intl formatter per tick within one minute');
+      for (const [boardIndex, placements] of WIDGET_BOARDS.entries()) {
+        state = structuredClone(source); state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key in placements])); state.settings.preview.enabled = true;
+        Object.assign(state.settings.widgetGrid.placements, structuredClone(placements));
+        intlPerTick[`board${boardIndex}`] = await perTick();
+        if (!Object.keys(INTL_TICK_ALLOWANCES).length) assert.equal(intlPerTick[`board${boardIndex}`], 0, 'the full board constructs no Intl formatter per tick within one minute');
+      }
     } finally { await intlContext.close(); }
     checks.push(`#99 Intl constructions per tick within one minute: ${JSON.stringify(intlPerTick)}; still allowed: ${Object.entries(INTL_TICK_ALLOWANCES).map(([id, ticket]) => `${id} (${ticket})`).join(', ') || 'none'}`);
 
