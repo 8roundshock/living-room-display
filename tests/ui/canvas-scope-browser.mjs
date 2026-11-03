@@ -221,10 +221,10 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
       const view = await editor({ viewport });
       const label = `${viewport.width}×${viewport.height}`;
       for (const placements of WIDGET_BOARDS) {
-      await inspect(view.page, fullBoard(undefined, placements), `full board with a snapshot and a photo at ${label}`, { expect: Object.keys(placements) });
-      await inspect(view.page, fullBoard(stale, placements), `full board with saved weather and air quality at ${label}`, { expect: Object.keys(placements) });
-      await inspect(view.page, fullBoard(placeholders, placements), `full board of editor-only placeholders at ${label}`);
-      await inspect(view.page, fullBoard(undefined, placements), `full board in Edit layout at ${label}`, { expect: Object.keys(placements), editLayout: true });
+        await inspect(view.page, fullBoard(undefined, placements), `full board with a snapshot and a photo at ${label}`, { expect: Object.keys(placements) });
+        await inspect(view.page, fullBoard(stale, placements), `full board with saved weather and air quality at ${label}`, { expect: Object.keys(placements) });
+        await inspect(view.page, fullBoard(placeholders, placements), `full board of editor-only placeholders at ${label}`);
+        await inspect(view.page, fullBoard(undefined, placements), `full board in Edit layout at ${label}`, { expect: Object.keys(placements), editLayout: true });
       }
       await inspect(view.page, structuredClone(source), `default board at ${label}`);
       await view.close();
@@ -239,8 +239,10 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
     for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
       const view = await editor({ viewport });
       const label = `${viewport.width}×${viewport.height}`;
-      await inspectHome(view.page, fullBoard(withTimer), `Home status for the full board with a timer at ${label}`);
-      await inspectHome(view.page, fullBoard(placeholders, placements), `Home status for an empty full board at ${label}`);
+      for (const placements of WIDGET_BOARDS) {
+        await inspectHome(view.page, fullBoard(withTimer, placements), `Home status for a full board with a timer at ${label}`);
+        await inspectHome(view.page, fullBoard(placeholders, placements), `Home status for an empty full board at ${label}`);
+      }
       await view.close();
     }
     checks.push("Home's full/empty-board summaries at 1280×720 and390×844 retain display actions without mounting an ambient renderer");
