@@ -1,0 +1,3 @@
+.grid-ambient .ambient-yearProgress .year-progress-months { display: flex; gap: 2cqw; font-size: calc(max(var(--min-text), 3.4cqw) * var(--font-scale)); color: var(--ambient-accent); }
+.grid-ambient .ambient-yearProgress .year-progress-months .past { opacity: 0.4; }
+.grid-ambient .ambient-yearProgress .year-progress-months .current { color: var(--ambient-text); }

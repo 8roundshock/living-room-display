@@ -1,0 +1,2 @@
+.grid-ambient .ambient-wind .wind-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4cqw; }
+.grid-ambient .ambient-wind .wind-direction { color: var(--ambient-accent); font-size: calc(max(var(--min-data), min(10cqw, 20cqh)) * var(--font-scale)); }

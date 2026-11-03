@@ -147,11 +147,21 @@ export interface RainInterval {
   /** Rain plus showers; probability above includes snow and other precipitation. */
   rainAmount: number | null;
 }
+/** Hourly model instants, separate from preceding-hour precipitation intervals. API-only. */
+export interface WeatherDetailReading {
+  time: string; temperature: number | null; humidity: number | null; dewPoint: number | null;
+  pressure: number | null; visibility: number | null; cloudCover: number | null;
+  windSpeed: number | null; windDirection: number | null;
+  /** Maximum during the hour ending at `time`, in WeatherState.units.windSpeed. */
+  windGust: number | null;
+}
 export interface WeatherState {
   status: 'fresh' | 'stale' | 'unavailable'; updatedAt: string | null; error: string | null;
   source: 'Open-Meteo'; sourceUrl: string; location: LocationSettings;
   units: { temperature: '°C' | '°F'; windSpeed: 'km/h' | 'mph'; precipitation: 'mm' | 'in' };
   current: WeatherCurrent | null; daily: WeatherDay[]; hourly: RainInterval[];
+  /** Surface pressure in hPa, visibility in metres; other units follow `units`. */
+  details?: WeatherDetailReading[];
   /** API-only, never persisted (#351): a provider request for this state is still in flight, so ask again soon. */
   refreshing?: boolean;
 }

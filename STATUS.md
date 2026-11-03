@@ -1,5 +1,20 @@
 # Project status
 
+## Collection source checkpoint — 2026-11-03 (#565)
+
+Fifteen additional optional modules are implemented: Timers, Agenda, Week ahead,
+Day progress, Year progress, Time overlap, Weather alerts, Hourly temperature,
+Wind, Humidity, Pressure, Visibility, Cloud cover, Precipitation and Quiet scene.
+They are off by default and preserve the existing default board. Planning reads
+existing local data; weather details share the existing bounded Open-Meteo service.
+No new private content fields, screen capture, accounts or installed operations.
+
+At the initial source checkpoint, production build/typechecks and seven focused
+catalog/rollback/civil-time/provider tests pass. Multi-board browser harness
+updates, fit/palette/movement/compact visual QA, independent final-head review and
+current-head CI remain incomplete. This is not installed/native/TV acceptance.
+
+
 ## Native Last screen acceptance — 2026-11-03 (#519)
 
 Clean source `8059a19d2b57ca5189ac8ac52302af8f2365d06d`, including independently

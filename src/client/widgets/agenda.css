@@ -1,0 +1,4 @@
+.grid-ambient .ambient-agenda .collection-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.grid-ambient .ambient-agenda .collection-medium .collection-list { flex-direction: row; gap: 5cqw; }
+.grid-ambient .ambient-agenda .collection-medium .collection-list li { flex: 1; }
+.grid-ambient .ambient-agenda .collection-large .collection-list { gap: 4cqh; }

@@ -1,0 +1,3 @@
+.grid-ambient .ambient-timeOverlap .collection-detail { overflow-wrap: anywhere; }
+.grid-ambient .ambient-timeOverlap .collection-large .collection-list { gap: 3cqh; }
+.grid-ambient .ambient-timeOverlap .collection-large .collection-title { font-size: calc(max(var(--min-data), 4.7cqw) * var(--font-scale)); }

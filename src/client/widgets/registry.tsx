@@ -16,6 +16,21 @@ import { NoteWidget } from './Note.tsx';
 import { AirQualityWidget } from './AirQuality.tsx';
 import { SunMoonWidget } from './SunMoon.tsx';
 import { DynamicWidget } from './Dynamic.tsx';
+import { TimersWidget } from './Timers.tsx';
+import { AgendaWidget } from './Agenda.tsx';
+import { WeekAheadWidget } from './WeekAhead.tsx';
+import { DayProgressWidget } from './DayProgress.tsx';
+import { YearProgressWidget } from './YearProgress.tsx';
+import { TimeOverlapWidget } from './TimeOverlap.tsx';
+import { WeatherAlertsWidget } from './WeatherAlerts.tsx';
+import { HourlyTemperatureWidget } from './HourlyTemperature.tsx';
+import { WindWidget } from './Wind.tsx';
+import { HumidityWidget } from './Humidity.tsx';
+import { PressureWidget } from './Pressure.tsx';
+import { VisibilityWidget } from './Visibility.tsx';
+import { CloudCoverWidget } from './CloudCover.tsx';
+import { PrecipitationWidget } from './Precipitation.tsx';
+import { QuietSceneWidget } from './QuietScene.tsx';
 import { guardedRenderer, reportWidgetError } from './WidgetBoundary.tsx';
 
 export type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
@@ -36,6 +51,22 @@ const MODULES: Record<WidgetId, WidgetModule> = {
   airQuality: AirQualityWidget,
   sunMoon: SunMoonWidget,
   dynamic: DynamicWidget,
+  timers: TimersWidget,
+  agenda: AgendaWidget,
+  weekAhead: WeekAheadWidget,
+  dayProgress: DayProgressWidget,
+  yearProgress: YearProgressWidget,
+  timeOverlap: TimeOverlapWidget,
+  weatherAlerts: WeatherAlertsWidget,
+  hourlyTemperature: HourlyTemperatureWidget,
+  wind: WindWidget,
+  humidity: HumidityWidget,
+  pressure: PressureWidget,
+  visibility: VisibilityWidget,
+  cloudCover: CloudCoverWidget,
+  precipitation: PrecipitationWidget,
+  quietScene: QuietSceneWidget,
+
 };
 /**
  * The modules every surface uses. Each renderer runs inside its own error boundary (#318), so the ambient

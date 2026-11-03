@@ -1,0 +1,2 @@
+.grid-ambient .ambient-visibility .collection-value { font-size: calc(max(var(--min-data), min(16cqw, 25cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-visibility .collection-small .collection-value { font-size: calc(max(var(--min-data), min(19cqw, 23cqh)) * var(--font-scale)); }

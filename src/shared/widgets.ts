@@ -53,6 +53,21 @@ export const WIDGET_CATALOG = {
   sunMoon: { name: 'Sun & moon', description: 'Daylight and moon phase', icon: 'sunrise', category: 'weather', tone: 'sun', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 8, row: 6 } },
   // #437 (docs/widgets.md "Dynamic (#437)"): optional and off by default.
   dynamic: { name: 'Dynamic', description: 'What matters now, or a calm rotation', icon: 'sparkles', category: 'weather', tone: 'sky', sizes: standard, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 2, row: 4 } },
+  timers: { name: 'Timers', description: 'Silent timers, with room for every countdown', icon: 'hourglass', category: 'time', tone: 'time', sizes: standard, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  agenda: { name: 'Agenda', description: 'Your next dated reminders, in order', icon: 'check', category: 'personal', tone: 'personal', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  weekAhead: { name: 'Week ahead', description: 'Seven days of reminders at a glance', icon: 'calendar', category: 'personal', tone: 'personal', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  dayProgress: { name: 'Day progress', description: 'How much of your local day remains', icon: 'clock', category: 'time', tone: 'time', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  yearProgress: { name: 'Year progress', description: 'The year in days and months', icon: 'calendar', category: 'time', tone: 'time', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  timeOverlap: { name: 'Time overlap', description: 'Find shared daytime across your saved cities', icon: 'globe', category: 'time', tone: 'time', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  weatherAlerts: { name: 'Weather alerts', description: 'Official Canadian and US weather notices', icon: 'cloud', category: 'weather', tone: 'sky', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  hourlyTemperature: { name: 'Hourly temperature', description: 'See how the next hours warm or cool', icon: 'forecast', category: 'weather', tone: 'sun', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  wind: { name: 'Wind', description: 'Direction, speed and hourly gusts', icon: 'air', category: 'weather', tone: 'sky', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  humidity: { name: 'Humidity', description: 'Outdoor moisture and dew point', icon: 'rain', category: 'weather', tone: 'water', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  pressure: { name: 'Pressure', description: 'Surface pressure and its forecast trend', icon: 'air', category: 'weather', tone: 'sky', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  visibility: { name: 'Visibility', description: 'Model viewing distance through the next hours', icon: 'cloud', category: 'weather', tone: 'sky', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  cloudCover: { name: 'Cloud cover', description: 'How much of the sky the model covers', icon: 'cloud', category: 'weather', tone: 'sky', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  precipitation: { name: 'Precipitation', description: 'Hourly amount and chance of all precipitation', icon: 'rain', category: 'weather', tone: 'water', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  quietScene: { name: 'Quiet scene', description: 'An illustrated landscape for a quiet moment', icon: 'photo', category: 'pictures', tone: 'stone', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
 } satisfies Record<string, WidgetDefinition>;
 export type WidgetKind = keyof typeof WIDGET_CATALOG;
 /** Every id, including planned and retired ones: schemas and geometry need them all. */
@@ -712,7 +727,7 @@ export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<Widg
  */
 export function needsForecast(settings: Pick<VisualSettings, 'widgets'> & { location: { timezone: string } }): boolean {
   const on = (id: WidgetId) => !!settings.widgets[id] && isActiveWidget(id);
-  return on('weather') || on('forecast') || on('dynamic') || (settings.location.timezone === 'auto' && (on('sunMoon') || on('airQuality')));
+  return ['hourlyTemperature', 'wind', 'humidity', 'pressure', 'visibility', 'cloudCover', 'precipitation'].some(id => on(id as WidgetId)) || on('weather') || on('forecast') || on('dynamic') || (settings.location.timezone === 'auto' && (on('sunMoon') || on('airQuality')));
 }
 
 /**
@@ -725,5 +740,5 @@ export function needsAirQuality(settings: Pick<VisualSettings, 'widgets'> & { wi
 }
 /** Whether a board needs official weather alerts (#437): Dynamic with its alerts source, as saved. */
 export function needsAlerts(settings: Pick<VisualSettings, 'widgets'> & { widgetData: { dynamic: { alerts: boolean } } }): boolean {
-  return !!settings.widgets.dynamic && isActiveWidget('dynamic') && settings.widgetData.dynamic.alerts;
+  return !!settings.widgets.weatherAlerts || (!!settings.widgets.dynamic && isActiveWidget('dynamic') && settings.widgetData.dynamic.alerts);
 }
