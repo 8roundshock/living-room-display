@@ -1,13 +1,13 @@
 # Project status
 
-## Combined UI source checkpoint — 2026-11-03 (#565)
+## Combined UI release — 2026-11-03 (#565)
 
-PR #568 integrates the independently reviewed Style/discovery head `a6f0c07` and
+Merged PR #568 integrates the independently reviewed Style/discovery head `a6f0c07` and
 Home/Settings head `7629a05` with the fifteen-widget collection. Home treats
 Clock and dedicated Timers as equivalent timer surfaces. The existing default
 board, persisted content model, native activation and capture lifecycle are
-unchanged. The prior installed acceptance below belongs to `8059a19`; these UI
-changes are source work and have not been installed or accepted on the TV.
+unchanged. The prior installed acceptance below belongs to `8059a19` and does not
+establish physical-TV acceptance of this UI release.
 
 The integrated production build/typechecks and all 613 source tests pass. Before
 integration, the collection branch passed the complete 70-family widget suite
@@ -17,9 +17,25 @@ now verifies all 31 families, fifteen empty states, 52 populated/old-reading/lon
 label cases, reduced-motion relocation and narrow editors, including visible Done
 paint. Integrated canvas, Settings, styles, picker-sheet, preview and shared-snapshot
 suites pass. Home passes 28 groups after fixing a reproduced deferred-focus race;
-a deterministic regression fails the previous assets and passes the fix. Combined
-final-head review and current-head CI are the remaining gates. The component evidence below retains
-its original test counts; it does not substitute for the combined gate.
+a deterministic regression fails the previous assets and passes the fix.
+
+Independent [final-head review](https://github.com/8roundshock/living-room-display/pull/568#issuecomment-6609434364)
+approved `8795aa0210d81eba860aed7debf418d37b949115`. That exact head passed all three
+CI checks: the complete [pull-request browser suite](https://github.com/8roundshock/living-room-display/actions/runs/41673547132)
+and [Windows/Linux application checks](https://github.com/8roundshock/living-room-display/actions/runs/41673547174).
+PRs #568, #566 and #567 are merged; main `712ce80` retains the reviewed release
+tree. The component evidence below keeps its original scopes and test counts;
+these source checks do not establish installed or physical-TV acceptance.
+
+Release `712ce80` was installed successfully on 2026-11-03 through the
+independently reviewed updater. Installed files, recovery copy, application health
+and frontend assets were verified; native activation settings stayed unchanged.
+An ordinary-browser review inspected Home, Settings, the editor and picker in RAM.
+It verified all 28 catalog entries, Pictures filtering, the Quiet scene preview,
+style-modal Cancel and Settings section navigation. Last screen showed its image
+with the rounded, softened picture-only treatment. This was not a new native
+screensaver or physical-TV acceptance run; the dated `8059a19` acceptance below
+retains its original scope.
 
 ## Collection source checkpoint — 2026-11-03 (#565)
 
@@ -35,8 +51,9 @@ matrix passes 279 supported-family/grid/viewport renders at fit 1, fifteen no-da
 states, a complete collection board before/after reduced-motion swapping and
 390/320-pixel editors. Synthetic RAM-only board and compact editor captures were
 inspected, together with all 31 supported families. All 52 populated alert, long
-planning-content and saved-weather cases pass at Balanced/Fine. Shared palette/
-movement suites, independent final-head review and current-head CI are in progress. No installed/native/TV claim.
+planning-content and saved-weather cases pass at Balanced/Fine. The shared suites,
+final review and CI subsequently passed as recorded in the combined release above.
+No installed/native/TV claim follows from this source checkpoint.
 
 ## Style management and category discovery source checkpoint (#563, #428, #472, #475, #488)
 
@@ -59,7 +76,7 @@ widgets browser suites pass. The widget run covers 39 families across densities
 and 720p/1080p/4K, including rounded picture-only Last screen and its image states.
 Author RAM-only visual review covered compact naming, deletion Undo, catalog
 filters and all three picture families. Independent component review approved
-`a6f0c07`; final combined review and CI remain on PR #568. This is source work only; no installation, native
+`a6f0c07`; final combined review and CI passed on merged PR #568. This is source work only; no installation, native
 activation or physical-TV claim follows.
 
 ## Home content management and grouped Settings (#463, #483, #564)
@@ -76,16 +93,15 @@ receive the small accessibility/copy repairs tracked in #483.
 Build, 598 unit tests, focused conflict/retry/close-race checks and the Home/Settings
 browser suites passed during author verification. Actual synthetic RAM images
 found and verified a repair for action controls covering a field on short windows:
-list Save/Cancel now occupies its own sheet footer. Final pushed-head CI and
-independent combined review remain tracked on draft PR #568; component review
-approved `7629a05`. See
+list Save/Cancel now occupies its own sheet footer. Component review approved
+`7629a05`; final combined review and CI passed on merged PR #568. See
 [the source evidence and limits](docs/home-settings-refresh.md). No installed app,
 native controls, real location or desktop pixels were used or changed.
 
 ## Native Last screen acceptance — 2026-11-03 (#519)
 
 Clean source `8059a19d2b57ca5189ac8ac52302af8f2365d06d`, including independently
-reviewed PRs #560/#561 and their passing CI, is installed. During a natural
+reviewed PRs #560/#561 and their passing CI, was installed for this dated check. During a natural
 Windows screensaver cycle, the owner confirmed that the screenshot appeared and
 physical mouse movement returned to the desktop. Separately, the bound observer
 recorded 90 active samples with the same snapshot file present, no missing or
