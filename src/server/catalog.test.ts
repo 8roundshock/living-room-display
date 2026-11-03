@@ -24,8 +24,8 @@ import type { Settings, WidgetId } from '../shared/contracts.ts';
 const FOUNDATION_IDS = ['clock', 'weather', 'rain', 'forecast', 'reminders', 'preview', 'photo'] as WidgetId[];
 /** The six #78 ids, appended after the foundation ids in this order; each unit activated its own (deleted `status`). */
 const NEW_IDS = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'] as WidgetId[];
-/** Ids appended after the #78 ones, each by its own ticket: Dynamic (#437). */
-const LATER_IDS = ['dynamic'] as WidgetId[];
+/** Ids appended after the #78 ones: Dynamic (#437) and the optional collection (#565). */
+const LATER_IDS = ['dynamic', 'timers', 'agenda', 'weekAhead', 'dayProgress', 'yearProgress', 'timeOverlap', 'weatherAlerts', 'hourlyTemperature', 'wind', 'humidity', 'pressure', 'visibility', 'cloudCover', 'precipitation', 'quietScene'] as WidgetId[];
 /** Ids still reserved; computed so that activating an entry (deleting its status) needs no edit here. */
 const PLANNED = WIDGET_IDS.filter(isPlannedWidget);
 const definition = (id: WidgetId): WidgetDefinition => WIDGET_CATALOG[id];

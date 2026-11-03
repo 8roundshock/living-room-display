@@ -16,7 +16,7 @@ import { WIDGET_CHECKS } from './widget-checks/index.mjs';
 import { waitForWidgetFit } from './lib/fit-readiness.mjs';
 
 /** Renderers that read the weather or air-quality status or the connection; the others render the same when stale or offline. */
-const STATUS_WIDGETS = { weather: ['stale', 'offline'], forecast: ['stale', 'offline'], airQuality: ['stale', 'offline'], reminders: ['offline'], dynamic: ['stale', 'offline'] };
+const STATUS_WIDGETS = { ...Object.fromEntries(['wind', 'humidity', 'pressure', 'visibility', 'cloudCover', 'hourlyTemperature', 'precipitation', 'weatherAlerts'].map(id => [id, ['stale', 'offline']])), agenda: ['offline'], weekAhead: ['offline'], timers: ['offline'], weather: ['stale', 'offline'], forecast: ['stale', 'offline'], airQuality: ['stale', 'offline'], reminders: ['offline'], dynamic: ['stale', 'offline'] };
 /**
  * #221, #283: at Text 100% every family must render at fit 1 (a zoom-out shrinks its labels and values
  * whether or not one sits exactly on a floor). These families still zoom out; each allowance names the
@@ -30,12 +30,7 @@ const FLOOR_FIT_ALLOWANCES = { 'note/small': '#291' };
  */
 const INTL_TICK_ALLOWANCES = {};
 /** Every active widget on one Balanced 12 x 8 board (as in motion-browser.mjs). */
-const FULL_BOARD = {
-  clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
-  sunMoon: { column: 0, row: 2, size: 'medium' }, dynamic: { column: 0, row: 4, size: 'medium' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
-  reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
-  note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
-};
+import { FULL_BOARD, COLLECTION_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
 
 /** Counts ResizeObserver and Intl constructions and style changes on .widget-content (an init script). */
 function instrumentFit() {
@@ -142,6 +137,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       if (status === 'stale') {
         current.weather = { ...current.weather, status: 'stale', updatedAt: new Date(now - 5 * 3_600_000).toISOString() };
         current.airQuality = { ...current.airQuality, status: 'stale', updatedAt: new Date(now - 2 * 3_600_000).toISOString() };
+        if (current.alerts) current.alerts = { ...current.alerts, status: 'stale' };
       }
       await statusPage.setViewportSize(viewport);
       // An offline display has loaded once and then failed its 30 s refresh.
@@ -297,7 +293,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
         await restPage.waitForTimeout(5_000);
         const end = await sample(); const seconds = (performance.now() - started) / 1000;
         const result = fitMetrics[label] = { widgets: end.widgets.length, belowFit1: end.widgets.filter(widget => widget.fit < 1).map(widget => `${widget.id} ${widget.fit.toFixed(4)}`), resizeObservers: end.counts.resizeObservers - start.counts.resizeObservers, styleMutations: end.counts.styleMutations - start.counts.styleMutations, layoutsPerSecond: Number(((end.layouts - start.layouts) / seconds).toFixed(2)) };
-        assert.equal(result.widgets, ACTIVE_WIDGET_IDS.length, `${label}: the full board shows every widget`);
+        assert.equal(result.widgets, Object.keys(FULL_BOARD).length, `${label}: the full board shows every widget`);
         assert.equal(result.resizeObservers, 0, `${label}: no ResizeObserver is created while the clock ticks ${JSON.stringify(result)}`);
         assert.equal(result.styleMutations, 0, `${label}: no widget refits or writes its style while nothing changes ${JSON.stringify(result)}`);
         assert.ok(result.layoutsPerSecond <= 0.5, `${label}: about zero layouts per second ${JSON.stringify(result)}`);

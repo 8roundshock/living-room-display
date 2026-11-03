@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { COLLECTION_WIDGET_IDS, compass, currentDetail, dayProgress, distance, reminderWeek, timeOverlap, upcomingDetails, yearProgress } from './collection.ts';
+import { COLLECTION_WIDGET_IDS, alertStartLabel, compass, currentDetail, dayProgress, distance, reminderWeek, timeOverlap, upcomingDetails, yearProgress } from './collection.ts';
 import { ACTIVE_WIDGET_IDS, defaultWidgetGrid, defaultWidgetVisibility, needsAlerts, needsForecast, WIDGET_CATALOG } from '../shared/widgets.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import { emptyWeather } from '../server/weather.ts';
@@ -65,4 +65,11 @@ test('detail readers never use future instants as current or expired instants as
   assert.equal(currentDetail(weather, now)?.time, weather.details[0]!.time); assert.equal(upcomingDetails(weather, now)[0]?.time, weather.details[1]!.time);
   assert.equal(compass(359), 'N'); assert.equal(compass(225), 'SW'); assert.equal(compass(null), '—');
   assert.equal(distance(1609.344, true), '1.0 mi'); assert.equal(distance(1000, false), '1.0 km'); assert.equal(distance(null, false), '—');
+});
+test('future alert starts use the saved weather zone and selected 12/24-hour format', () => {
+  const at = '2026-11-03T21:30:00Z';
+  assert.match(alertStartLabel(at, 'America/Toronto', '12h'), /4:30.*PM/);
+  assert.match(alertStartLabel(at, 'America/Toronto', '24h'), /16:30/);
+  assert.match(alertStartLabel(at, 'Europe/London', '24h'), /21:30/);
+  assert.match(alertStartLabel('2026-11-04T05:00:00Z', 'America/Toronto', '24h'), /00:00/);
 });

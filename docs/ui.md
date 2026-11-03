@@ -1138,3 +1138,9 @@ without reserving a blank row. Mobile action errors return to their reserved
 canvas row while it fits in view; otherwise floating placement follows scroll,
 focus and layout changes and must still avoid every canvas action and the current
 control. A visible canvas action alone does not suppress an off-screen error.
+
+The #565 collection's inspector panels describe the existing data source; content
+management stays on Home or the existing World clocks settings. The ambient
+modules expose no controls. Every catalog entry declares only useful families;
+widgets without a useful small family begin at medium. Saved layouts, the default
+board and the Save/Cancel draft behavior remain unchanged.

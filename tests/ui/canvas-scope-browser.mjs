@@ -20,7 +20,7 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_IDS, widgetSizes } from '../../src/shared/widgets.ts';
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
-import { FULL_BOARD } from './lib/boards.mjs';
+import { FULL_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
 import { keepPagesLocal } from './lib/local-only.mjs';
 
 /**
@@ -120,7 +120,7 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
     // reminders, a photo and a snapshot) from its tests/ui/widget-checks module.
     for (const id of ACTIVE_WIDGET_IDS) assert.ok(WIDGET_CHECKS[id], `${id} needs a tests/ui/widget-checks module`);
     for (const check of Object.values(WIDGET_CHECKS)) check.prepare?.(source, { now });
-    assert.deepEqual(Object.keys(FULL_BOARD).sort(), [...ACTIVE_WIDGET_IDS].sort(), 'FULL_BOARD (tests/ui/lib/boards.mjs) places every active widget; add a new one there');
+    assert.deepEqual([...new Set(WIDGET_BOARDS.flatMap(board => Object.keys(board)))].sort(), [...ACTIVE_WIDGET_IDS].sort(), 'FULL_BOARD (tests/ui/lib/boards.mjs) places every active widget; add a new one there');
     assert.ok(source.preview.available && source.photo.available, 'the synthetic state has a snapshot and a photo');
     // A valid mid-grey PNG (filter type 0 on every scanline, opaque), so Photo and Last screen paint.
     const pixels = Buffer.alloc((320 * 4 + 1) * 200, 90);
@@ -152,11 +152,11 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
       state.settings.widgetGrid.placements[id] = { column: 0, row: 0, size };
       return state;
     };
-    const fullBoard = (mutate) => {
+    const fullBoard = (mutate, placements = FULL_BOARD) => {
       const state = structuredClone(source);
-      state.settings.widgets = Object.fromEntries(WIDGET_IDS.map((key) => [key, key in FULL_BOARD]));
+      state.settings.widgets = Object.fromEntries(WIDGET_IDS.map((key) => [key, key in placements]));
       state.settings.preview.enabled = true; state.settings.widgetGrid.density = 'balanced';
-      Object.assign(state.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+      Object.assign(state.settings.widgetGrid.placements, structuredClone(placements));
       mutate?.(state);
       return state;
     };
@@ -220,10 +220,12 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
     for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
       const view = await editor({ viewport });
       const label = `${viewport.width}×${viewport.height}`;
-      await inspect(view.page, fullBoard(), `full board with a snapshot and a photo at ${label}`, { expect: ACTIVE_WIDGET_IDS });
-      await inspect(view.page, fullBoard(stale), `full board with saved weather and air quality at ${label}`, { expect: ACTIVE_WIDGET_IDS });
-      await inspect(view.page, fullBoard(placeholders), `full board of editor-only placeholders at ${label}`);
-      await inspect(view.page, fullBoard(), `full board in Edit layout at ${label}`, { expect: ACTIVE_WIDGET_IDS, editLayout: true });
+      for (const placements of WIDGET_BOARDS) {
+      await inspect(view.page, fullBoard(undefined, placements), `full board with a snapshot and a photo at ${label}`, { expect: Object.keys(placements) });
+      await inspect(view.page, fullBoard(stale, placements), `full board with saved weather and air quality at ${label}`, { expect: Object.keys(placements) });
+      await inspect(view.page, fullBoard(placeholders, placements), `full board of editor-only placeholders at ${label}`);
+      await inspect(view.page, fullBoard(undefined, placements), `full board in Edit layout at ${label}`, { expect: Object.keys(placements), editLayout: true });
+      }
       await inspect(view.page, structuredClone(source), `default board at ${label}`);
       await view.close();
     }
@@ -237,8 +239,8 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
     for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
       const view = await editor({ viewport });
       const label = `${viewport.width}×${viewport.height}`;
-      await inspectHome(view.page, fullBoard(withTimer), `Home status for the full board with a timer at ${label}`, { expect: ACTIVE_WIDGET_IDS });
-      await inspectHome(view.page, fullBoard(placeholders), `Home status for an empty full board at ${label}`);
+      await inspectHome(view.page, fullBoard(withTimer), `Home status for the full board with a timer at ${label}`);
+      await inspectHome(view.page, fullBoard(placeholders, placements), `Home status for an empty full board at ${label}`);
       await view.close();
     }
     checks.push("Home's full/empty-board summaries at 1280×720 and390×844 retain display actions without mounting an ambient renderer");

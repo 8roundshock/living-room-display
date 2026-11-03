@@ -9,11 +9,13 @@ They are off by default and preserve the existing default board. Planning reads
 existing local data; weather details share the existing bounded Open-Meteo service.
 No new private content fields, screen capture, accounts or installed operations.
 
-At the initial source checkpoint, production build/typechecks and seven focused
-catalog/rollback/civil-time/provider tests pass. Multi-board browser harness
-updates, fit/palette/movement/compact visual QA, independent final-head review and
-current-head CI remain incomplete. This is not installed/native/TV acceptance.
-
+Production build/typechecks and all 605 unit/server tests pass. The collection
+matrix passes 279 supported-family/grid/viewport renders at fit 1, fifteen no-data
+states, a complete collection board before/after reduced-motion swapping and
+390/320-pixel editors. Synthetic RAM-only board and compact editor captures were
+inspected, together with all 31 supported families. All 52 populated alert, long
+planning-content and saved-weather cases pass at Balanced/Fine. Shared palette/
+movement suites, independent final-head review and current-head CI are in progress. No installed/native/TV claim.
 
 ## Native Last screen acceptance — 2026-11-03 (#519)
 

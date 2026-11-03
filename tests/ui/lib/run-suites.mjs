@@ -41,7 +41,7 @@ export const SETS = {
     'picker-sheet', // #554: modal add flow, responsive size previews and draft/focus contracts.
     'snapshot-resume', // #556: explicit in-app consent, pending/retry races and accessible focus.
   ],
-  scheduled: ['motion', 'weather', 'palette'], // 219, 81, 68
+  scheduled: ['motion', 'weather', 'palette', 'collection'], // 219, 81, 68
 };
 
 export function checkSets() {

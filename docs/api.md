@@ -878,3 +878,17 @@ Dynamic, sources other than all on, or a saved style made while it was on are a
 the next reader bump (#130). API
 responses (`/api/state`, the `PATCH /api/settings` response and the native session)
 always include every key. See [rollback compatibility](install.md#additive-data-and-rollback-compatibility-84).
+
+### Hourly detail readings (#565)
+
+`weather.details` is an API-only array of at most 25 hourly readings. `time` is an
+ISO instant, separate from the precipitation `intervalStart`/`intervalEnd` pairs.
+Nullable fields are `temperature`, `humidity`, `dewPoint`, `pressure`, `visibility`,
+`cloudCover`, `windSpeed`, `windDirection` and `windGust`. Temperature/dew point and
+wind use the response's chosen units; humidity/cloud cover are percentages,
+pressure is surface pressure in hPa, visibility is metres, direction is degrees.
+Gust is the maximum during the hour ending at the reading's time. Missing optional
+provider series produce nulls, while malformed/incomplete supplied series reject
+the refresh and retain the last successful state. The existing timeout/cache and
+forecast-demand gates apply. Weather alerts also request the existing official
+alert service when their dedicated widget is enabled.

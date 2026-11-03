@@ -2,3 +2,5 @@
 .grid-ambient .ambient-agenda .collection-medium .collection-list { flex-direction: row; gap: 5cqw; }
 .grid-ambient .ambient-agenda .collection-medium .collection-list li { flex: 1; }
 .grid-ambient .ambient-agenda .collection-large .collection-list { gap: 4cqh; }
+
+.grid-ambient .ambient-agenda .collection-large .collection-title { -webkit-line-clamp: 1; }

@@ -1,2 +1,5 @@
 .grid-ambient .ambient-weatherAlerts .collection-title { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .grid-ambient .ambient-weatherAlerts .collection-large .collection-list { gap: 5cqh; }
+
+.grid-ambient .ambient-weatherAlerts .collection-large .collection-title { -webkit-line-clamp: 2; }
+.grid-ambient .ambient-weatherAlerts .collection-large .collection-detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

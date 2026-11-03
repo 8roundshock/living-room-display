@@ -111,7 +111,7 @@ const NEW_AT_REST = Object.keys(AT_REST.appearance).filter(key => !(key in PREVI
 
 const REQUIRED_OMISSIONS = { appearance: ['daylightBrightness', 'rearrange'], sections: ['screen'] } as const;
 
-test('#272 known omitted values stay readable; new appearance keys and Dynamic require omission', () => {
+test('#272 known omitted values stay readable; new appearance keys and unknown widgets require omission', () => {
   // Default data with every omitted value present: colour accent, Subtle and the default widgetData sections,
   // in settings and in a saved style. Decision (#272): keep the omission; nothing on disk changes format here.
   // Dynamic's default sources (#437) are the exception: d66832b rejects the section, so its omission is required.
@@ -138,12 +138,12 @@ test('#272 known omitted values stay readable; new appearance keys and Dynamic r
   }
   for (const key of REQUIRED_OMISSIONS.sections) delete written.settings[key];
   assert.deepEqual(written.settings.widgetData, colorAccentDefaults().widgetData, 'every default widgetData section is written');
-  assertPreviousReaderRejects('data', written, 'the default Dynamic sources and the off Dynamic id written in state.json');
-  // Required, not optional, for Dynamic (#437): its default sources, and its off visibility, transform and
-  // hidden placement in settings and saved styles.
+  assertPreviousReaderRejects('data', written, 'the default Dynamic sources and the off unknown widget ids written in state.json');
+  // Required, not optional: Dynamic's default sources (#437), plus off visibility, transforms and hidden
+  // placements for Dynamic and the collection (#565) in settings and saved styles.
   delete written.settings.widgetData.dynamic;
   for (const visual of [written.settings, written.settings.savedPresets[0].visual]) {
-    delete visual.widgets.dynamic; delete visual.widgetOverrides.dynamic; delete visual.widgetGrid.placements.dynamic;
+    for (const id of WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id))) { delete visual.widgets[id]; delete visual.widgetOverrides[id]; delete visual.widgetGrid.placements[id]; }
   }
   assertPreviousReaderAccepts('data', written, 'every other omitted value written in state.json');
   const exported = { version: written.version, exportedAt: new Date(0).toISOString(), settings: written.settings, reminders: [] };
@@ -464,7 +464,7 @@ test('#135 a non-identity transform for a #78 id, sent by PATCH or import, stays
   // persistableSettings writes every transform of an id the previous release knows, and never one for an id
   // it lacks (the #135 rule, #437: Dynamic). Planned ids are the case #135 guards against.
   assert.deepEqual(WIDGET_IDS.filter(isPlannedWidget), [], 'the catalog has no planned ids');
-  assert.deepEqual(WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id)), ['dynamic'], 'the ids the previous release lacks: their transforms are never written (#135), see the #437 test below');
+  assert.deepEqual(WIDGET_IDS.filter(id => !(PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id)), ['dynamic', 'timers', 'agenda', 'weekAhead', 'dayProgress', 'yearProgress', 'timeOverlap', 'weatherAlerts', 'hourlyTemperature', 'wind', 'humidity', 'pressure', 'visibility', 'cloudCover', 'precipitation', 'quietScene'], 'the ids the previous release lacks: their transforms are never written (#135), see the #437 test below');
   const directory = await temporary('lrd-rollback-135-'), target = await temporary('lrd-rollback-135-import-');
   await seedColorAccentData(directory); await seedColorAccentData(target);
   const app = await application(directory), imported = await application(target);

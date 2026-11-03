@@ -2,7 +2,7 @@
 .grid-ambient .ambient-weekAhead .week-ahead-day { display: flex; flex-direction: column; align-items: flex-start; gap: 2cqh; min-width: 0; }
 .grid-ambient .ambient-weekAhead .week-ahead-date { font-size: calc(max(var(--min-data), min(7cqw, 18cqh)) * var(--font-scale)); }
 .grid-ambient .ambient-weekAhead .week-ahead-count { font-size: calc(max(var(--min-data), min(5cqw, 12cqh)) * var(--font-scale)); color: var(--ambient-accent); }
-.grid-ambient .ambient-weekAhead .collection-large .week-ahead-days { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3cqh 5cqw; }
+.grid-ambient .ambient-weekAhead .collection-large .week-ahead-days { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2cqh 5cqw; }
 .grid-ambient .ambient-weekAhead .collection-large .week-ahead-day { display: grid; grid-template-columns: 1fr auto auto; gap: 1cqh 1cqw; align-items: baseline; }
-.grid-ambient .ambient-weekAhead .collection-large .week-ahead-date { font-size: calc(max(var(--min-data), 6cqw) * var(--font-scale)); }
-.grid-ambient .ambient-weekAhead .week-ahead-title { grid-column: 1 / -1; font-size: calc(max(var(--min-text), 3.8cqw) * var(--font-scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid-ambient .ambient-weekAhead .collection-large .week-ahead-date { font-size: calc(max(var(--min-data), 5cqw) * var(--font-scale)); }
+.grid-ambient .ambient-weekAhead .week-ahead-title { grid-column: 1 / -1; font-size: calc(max(var(--min-text), 3.2cqw) * var(--font-scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

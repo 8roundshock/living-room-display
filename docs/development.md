@@ -471,3 +471,10 @@ The Setup build is reproducible from a clean commit
   InstallPackage transaction with synthetic packages and mocked process, port
   and health boundaries, and `windows/installer/tests/Test-InstallerPolicy.ps1`
   (static `.iss`, pin and workflow rules).
+
+The `collection` browser suite (#565) checks all fifteen additions at every
+supported family/grid and 720p/1080p/4K, honest no-data faces, a dense synthetic
+board and reduced-motion relocation, plus compact editor widths. `capture: true`
+returns images in memory to its caller. It never writes screenshot files. The
+existing palette, widget, canvas-scope and motion suites retain their full family
+sweeps and use multiple synthetic boards for catalog coverage.

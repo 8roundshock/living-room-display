@@ -19,7 +19,7 @@ test('picker catalog keeps category order and every active widget exactly once',
 test('picker searches names, descriptions and categories, using every trimmed word', () => {
   const widgets = defaultSettings().widgets;
   assert.deepEqual(ids(filteredPickerGroups(widgets, '  WORLD   cities ', 'all')), ['worldClocks']);
-  assert.deepEqual(ids(filteredPickerGroups(widgets, 'Pictures', 'all')), ['preview', 'photo']);
+  assert.deepEqual(ids(filteredPickerGroups(widgets, 'Pictures', 'all')), ['preview', 'photo', 'quietScene']);
   assert.deepEqual(ids(filteredPickerGroups(widgets, 'moon sky', 'all')), ['sunMoon']);
   assert.deepEqual(ids(filteredPickerGroups(widgets, 'no such widget', 'all')), []);
   assert.deepEqual(ids(filteredPickerGroups(widgets, ' \t ', 'all')), ids(pickerGroups()));
@@ -31,11 +31,11 @@ test('picker filters the current draft without changing it and combines query wi
     const result = ids(filteredPickerGroups(widgets, '', filter));
     assert.deepEqual(result, ids(pickerGroups()).filter(id => widgets[id] === (filter === 'on-display')));
   }
-  assert.deepEqual(ids(filteredPickerGroups(widgets, 'Pictures', 'not-added')), ['photo']);
+  assert.deepEqual(ids(filteredPickerGroups(widgets, 'Pictures', 'not-added')), ['photo', 'quietScene']);
   assert.deepEqual(ids(filteredPickerGroups(widgets, 'Pictures', 'on-display')), ['preview']);
   assert.deepEqual(widgets, before);
   const changed = { ...widgets, photo: true };
-  assert.deepEqual(ids(filteredPickerGroups(changed, 'Pictures', 'not-added')), []);
+  assert.deepEqual(ids(filteredPickerGroups(changed, 'Pictures', 'not-added')), ['quietScene']);
   assert.deepEqual(ids(filteredPickerGroups(changed, 'Pictures', 'on-display')), ['preview', 'photo']);
 });
 

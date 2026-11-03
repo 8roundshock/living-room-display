@@ -830,3 +830,16 @@ automatic feedback is sent. Stars and external feedback need your permission.
 > and clean stop. Keep idle off until compatibility checks pass. Preserve my
 > screensaver and lock settings. Do not change repository visibility, send feedback
 > or star the repository on my behalf.
+
+### Fifteen-widget collection rollback (#565)
+
+The new IDs are `timers`, `agenda`, `weekAhead`, `dayProgress`, `yearProgress`,
+`timeOverlap`, `weatherAlerts`, `hourlyTemperature`, `wind`, `humidity`, `pressure`,
+`visibility`, `cloudCover`, `precipitation` and `quietScene`. With these widgets off,
+the existing omission policy removes their visibility, hidden placement and legacy
+transform keys from files/exports and saved styles; the frozen d66832b reader
+accepts that data. Enabling any of these IDs in settings or a saved style is an
+explicit rollback exception: the strict older reader rejects the unknown enabled
+ID. Disable it in settings and every saved style before a rollback requiring that
+reader. No new private widgetData section is added. Hourly weather details remain
+API-only, and timer contents stay in the existing sidecar outside exports.

@@ -58,3 +58,6 @@ export function distance(metres: number | null, imperial: boolean): string {
   const value = metres / (imperial ? 1609.344 : 1000);
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${imperial ? 'mi' : 'km'}`;
 }
+export function alertStartLabel(instant: string, timeZone: string, format: '12h' | '24h'): string {
+  return dateTimeFormat('en', { timeZone, weekday: 'short', hour: 'numeric', minute: '2-digit', hourCycle: format === '12h' ? 'h12' : 'h23' }).format(new Date(instant));
+}

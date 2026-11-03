@@ -24,16 +24,11 @@ const LEGACY_SAND = '#b8a17a';
 /** Weather's rain visuals, the only elements that may paint the --weather-rain hook (#213). */
 const RAIN_SELECTOR = '.weather-hint, .rain-detail, .rain-hours, .rain-bar, .rain-bar-unknown';
 /** The first accent-coloured element of a widget: its label, else a caption, context line or unit. */
-const ACCENT_SELECTOR = '.ambient-label, .preview-caption, .weather-context, .metric-label, .countdown-unit';
+const ACCENT_SELECTOR = '.ambient-label, .preview-caption, .weather-context, .metric-label, .countdown-unit, .collection-label';
 /** Widgets whose display face is primary content only (Note's text), so nothing in them is tinted; their section still resolves the tone. */
 const TEXT_ONLY = new Set(['note']);
 /** Every active widget on one Balanced 12 x 8 board, every cell used; a newly activated widget must be added here. */
-const FULL_BOARD = {
-  clock: { column: 0, row: 0, size: 'medium' }, worldClocks: { column: 4, row: 0, size: 'medium' }, weather: { column: 8, row: 0, size: 'large' },
-  sunMoon: { column: 0, row: 2, size: 'medium' }, dynamic: { column: 0, row: 4, size: 'medium' }, calendar: { column: 4, row: 2, size: 'medium' }, airQuality: { column: 4, row: 4, size: 'medium' },
-  reminders: { column: 8, row: 4, size: 'medium' }, forecast: { column: 0, row: 6, size: 'medium' }, countdown: { column: 4, row: 6, size: 'small' },
-  note: { column: 6, row: 6, size: 'small' }, preview: { column: 8, row: 6, size: 'small' }, photo: { column: 10, row: 6, size: 'small' },
-};
+import { FULL_BOARD, COLLECTION_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
 const PALETTE_RGB = new Set(Object.values(NATIVE_PALETTE).map((tone) => rgb(tone.hex)));
 
 /** Typed color properties may serialize as rgb() even when authored in hex; compare their color. */
@@ -124,7 +119,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     // from its tests/ui/widget-checks module, so a widget with no module fails here, loudly.
     for (const id of ACTIVE_WIDGET_IDS) assert.ok(WIDGET_CHECKS[id], `${id} needs a tests/ui/widget-checks module`);
     for (const check of Object.values(WIDGET_CHECKS)) check.prepare?.(source, { now });
-    assert.deepEqual(Object.keys(FULL_BOARD).sort(), [...ACTIVE_WIDGET_IDS].sort(), 'FULL_BOARD places every active widget; add a new one there');
+    assert.deepEqual([...new Set(WIDGET_BOARDS.flatMap(board => Object.keys(board)))].sort(), [...ACTIVE_WIDGET_IDS].sort(), 'FULL_BOARD places every active widget; add a new one there');
     const at = new Date(now - 20 * 60000).toISOString();
     source.reminders[0].dueAt = new Date(now - 26 * 3600000).toISOString(); // one overdue row: "Overdue" keeps the status tone
     // Countdown's "Today" and "Tomorrow" are words with no unit, so the sweep counts days (the word case is checked below).
@@ -169,9 +164,10 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
         next.settings.widgetGrid.placements[only] = { column: 0, row: 0, size: size ?? WIDGET_CATALOG[only].defaultSize };
       }
       if (board) {
-        next.settings.widgets = Object.fromEntries(WIDGET_IDS.map((key) => [key, key in FULL_BOARD]));
+        const placements = board === true ? FULL_BOARD : board;
+        next.settings.widgets = Object.fromEntries(WIDGET_IDS.map((key) => [key, key in placements]));
         next.settings.preview.enabled = true; next.settings.widgetGrid.density = 'balanced';
-        Object.assign(next.settings.widgetGrid.placements, structuredClone(FULL_BOARD));
+        Object.assign(next.settings.widgetGrid.placements, structuredClone(placements));
       }
       return next;
     };
@@ -212,13 +208,13 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
 
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       await page.setViewportSize(viewport);
-      for (const mode of ['native', 'color']) {
-        current = state({ mode, board: true }); photoMissing = false;
+      for (const mode of ['native', 'color']) for (const [boardIndex, board] of WIDGET_BOARDS.entries()) {
+        current = state({ mode, board }); photoMissing = false;
         await open();
         const all = await sections(page);
-        assert.deepEqual(all.map((section) => section.id).sort(), [...ACTIVE_WIDGET_IDS].sort(), `${mode} full board at ${viewport.width}px renders every active widget`);
+        assert.deepEqual(all.map((section) => section.id).sort(), Object.keys(board).sort(), `${mode} full board at ${viewport.width}px renders every active widget`);
         for (const section of all) await assertSection(section, mode, `${mode} full board at ${viewport.width}px`, page.locator(`[data-widget-id="${section.id}"]`));
-        await keep(`full-board-${mode}-${viewport.width}`, await page.screenshot());
+        await keep(`full-board-${boardIndex}-${mode}-${viewport.width}`, await page.screenshot());
       }
     }
     checks.push(`A full Balanced board with all ${ACTIVE_WIDGET_IDS.length} active widgets at 1280x720, 1080p and 4K in both modes: every section's tone, accent element and paints as above; captured in RAM for visual inspection`);
@@ -616,7 +612,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     const canvas = p.locator('.preview-surface');
     assert.equal(await canvas.locator('.ambient').getAttribute('data-accent-mode'), 'native');
     const onCanvas = await sections(canvas);
-    assert.deepEqual(onCanvas.map((section) => section.id).sort(), [...ACTIVE_WIDGET_IDS].sort(), 'the canvas renders every active widget');
+    assert.deepEqual(onCanvas.map((section) => section.id).sort(), Object.keys(FULL_BOARD).sort(), 'the canvas renders every active widget');
     for (const section of onCanvas) assert.equal(section.tone, sampleExpected('native', WIDGET_CATALOG[section.id].tone), `canvas ${section.id} tone`);
     // An empty Note shows its editor-only placeholder, whose label takes the personal tone.
     assert.equal(await canvas.locator('.ambient-note .note-placeholder .ambient-label').evaluate((el) => getComputedStyle(el).color), sampleExpected('native', 'personal'), 'empty Note placeholder label');

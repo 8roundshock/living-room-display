@@ -176,3 +176,11 @@ dependency on the owner's accounts, absolute paths, or private memory. See the
 2026-10-20, [#441](https://github.com/8roundshock/living-room-display/issues/441));
 publishing a release is a separate reviewed step. Stars and feedback are optional
 and require the end user's permission before an agent acts on their behalf.
+
+The optional #565 collection adds fifteen widgets (see the collection table in
+[the widget contract](widgets.md)). All remain off on the existing default board.
+They read existing local planning data or the same bounded weather service; no
+new account, permission or external personal-data source is required. Quiet scene
+is a sparse local illustration. Settings and the picker explain sources while the
+ambient face stays passive. Timers work on a board without Clock when its dedicated
+widget is enabled.

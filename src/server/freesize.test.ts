@@ -260,11 +260,11 @@ test('custom spans compose with the #74 Rain merge and the #93 reflection fallba
 const CATALOG_78: WidgetId[] = ['worldClocks', 'calendar', 'countdown', 'note', 'airQuality', 'sunMoon'];
 
 test('containment: boards with spans are readable by the previous release, and deleting every span keeps a valid layout it reads', () => {
-  // The previous release (d66832b) knows the span (#211) and every active widget except Dynamic (#437),
-  // whose enabled state is a documented rollback exception: it stays off here, so each acceptance below is
-  // about the span and the board around it.
+  // The previous release (d66832b) knows the span (#211), but lacks Dynamic (#437) and the collection (#565).
+  // Their enabled states are documented rollback exceptions: they stay off here, so each acceptance below
+  // is about the span and the board around it.
   const known = (id: WidgetId) => (PREVIOUS_RELEASE.widgetIds as readonly string[]).includes(id);
-  assert.deepEqual(ACTIVE_WIDGET_IDS.filter(id => !known(id)), ['dynamic'], 'the ids the previous release lacks are turned off before the acceptance checks');
+  assert.deepEqual(ACTIVE_WIDGET_IDS.filter(id => !known(id)), ['dynamic', 'timers', 'agenda', 'weekAhead', 'dayProgress', 'yearProgress', 'timeOverlap', 'weatherAlerts', 'hourlyTemperature', 'wind', 'humidity', 'pressure', 'visibility', 'cloudCover', 'precipitation', 'quietScene'], 'the ids the previous release lacks are turned off before the acceptance checks');
   assert.deepEqual(CATALOG_78.filter(id => !ACTIVE_WIDGET_IDS.includes(id)), [], 'every #78 widget is active and takes part');
   const next = random(73); let withSpans = 0, besideNewWidgets = 0;
   for (let iteration = 0; iteration < 60; iteration++) {
