@@ -125,20 +125,26 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
     }}>
       <div className="settings-heading"><div><p className="eyebrow">Your preferences</p><h1>Settings</h1></div></div>
       {(error || connectionError) && <div className="settings-alert" role="alert"><span>{error || connectionError}</span>{error && <button className="icon-button" aria-label="Dismiss message" onClick={() => setError('')}><Icon name="close" size={15} /></button>}</div>}
+      <nav className="settings-nav" aria-label="Settings sections">
+        <a href="#weather-heading">Weather</a><a href="#preferences-heading">Time &amp; units</a><a href="#device-heading">This device</a><a href="#settings-schedule">Schedule</a><a href="#settings-recovery">Data &amp; recovery</a>
+      </nav>
       <div className="settings-sections">
-        <section className="settings-card" aria-labelledby="weather-heading">
-          <div className="settings-section-title"><Icon name="location" size={19} /><h2 id="weather-heading">Weather</h2><InfoTip label="About weather location">Only a rounded area is kept. Device location is requested only when you choose it; a city works without location access.</InfoTip></div>
+        <section className="settings-card settings-weather-card" aria-labelledby="weather-heading">
+          <div className="settings-section-title"><Icon name="location" size={19} /><h2 id="weather-heading" tabIndex={-1}>Location &amp; weather</h2><InfoTip label="About weather location">Only a rounded area is kept. Device location is requested only when you choose it; a city works without location access.</InfoTip></div>
           <div className="current-location"><div><strong>{draft.location.name}</strong><span>{draft.locationSource === 'device' ? 'Approximate device area' : draft.locationSource === 'fallback' ? 'Default location' : 'Chosen city'}</span></div>{!same(saved.location, draft.location) && <span className="draft-badge">Draft</span>}</div>
           <div className="city-field"><label className="field-label" htmlFor="city-search">City</label><CitySearch value={query} onChange={setQuery} onSelect={selectCity} disabled={saving} label="City" description="Type two or more letters to search for a city" /></div>
           <div className="settings-location-actions"><button className="button small" disabled={saving || locating} onClick={() => void locate()}><Icon name="location" size={15} />{locating ? 'Finding your area…' : 'Use device location'}</button>{locating && <button className="text-button" onClick={() => { lookup.current++; setLocating(false); setLocationMessage(''); }}>Cancel lookup</button>}</div>
           <p className="inline-message" role="status">{locationMessage}</p>
-          <div className="settings-fields"><label><span className="field-label">Units</span><select className="select-input" value={draft.units} onChange={event => change({ units: event.target.value as Settings['units'] })}><option value="metric">°C · metric</option><option value="imperial">°F · imperial</option></select></label><label><span className="field-label">Time format</span><select className="select-input" value={draft.clockFormat} onChange={event => change({ clockFormat: event.target.value as Settings['clockFormat'] })}><option value="12h">12-hour</option><option value="24h">24-hour</option></select></label></div>
           <div className={`settings-weather-age weather-status-row ${state.weather.status}`}><span className="status-dot" /><span className="weather-status-text"><span>{state.weather.status === 'fresh' ? ageLabel(state.weather.updatedAt) : state.weather.status === 'stale' ? `Saved forecast · ${ageLabel(state.weather.updatedAt).toLowerCase()}` : 'Forecast unavailable'}</span>{state.weather.error && <span className="weather-status-error">{state.weather.error}</span>}</span></div>
           <a className="weather-credit" href={state.weather.sourceUrl} target="_blank" rel="noreferrer">Forecast estimates by Open-Meteo</a>
         </section>
-        <section className="settings-card" aria-labelledby="device-heading"><h2 id="device-heading">This device</h2><ScreenSettings keepAwake={draft.screen.keepAwake} active onKeepAwake={value => change({ screen: { ...live.current.screen, keepAwake: value } })} /></section>
-        <div className="settings-card settings-schedule-card"><ScheduleSettings snapshot={state.schedule} presets={saved.savedPresets} editor={scheduleEditor} setState={setState} reload={reload} /></div>
-        <DataRecovery dirty={dirty || saving || scheduleEditor.dirty} clockFormat={draft.clockFormat} reload={reload} />
+        <section className="settings-card settings-preferences-card" aria-labelledby="preferences-heading">
+          <h2 id="preferences-heading" tabIndex={-1}>Time &amp; units</h2>
+          <div className="settings-fields"><label><span className="field-label">Units</span><select className="select-input" value={draft.units} onChange={event => change({ units: event.target.value as Settings['units'] })}><option value="metric">°C · metric</option><option value="imperial">°F · imperial</option></select></label><label><span className="field-label">Time format</span><select className="select-input" value={draft.clockFormat} onChange={event => change({ clockFormat: event.target.value as Settings['clockFormat'] })}><option value="12h">12-hour</option><option value="24h">24-hour</option></select></label></div>
+        </section>
+        <section className="settings-card" aria-labelledby="device-heading"><h2 id="device-heading" tabIndex={-1}>This device</h2><ScreenSettings keepAwake={draft.screen.keepAwake} active onKeepAwake={value => change({ screen: { ...live.current.screen, keepAwake: value } })} /></section>
+        <div id="settings-schedule" tabIndex={-1} className="settings-card settings-schedule-card"><ScheduleSettings snapshot={state.schedule} presets={saved.savedPresets} editor={scheduleEditor} setState={setState} reload={reload} /></div>
+        <div id="settings-recovery" tabIndex={-1} className="settings-recovery-section"><DataRecovery dirty={dirty || saving || scheduleEditor.dirty} clockFormat={draft.clockFormat} reload={reload} /></div>
       </div>
       <p className="settings-status" role="status">{message}</p>
     </main>

@@ -628,9 +628,28 @@
   margin-top: 4px;
 }
 .home-note {
+  font-family: inherit;
   min-height: 120px;
   resize: vertical;
 }
+
+/* Saved content is managed where it is shown, with one cancellable list draft. */
+.home-clock-link { display: flex; align-items: center; gap: 6px; cursor: pointer; min-height: 36px; font: inherit; }
+.home-clock-link svg { color: var(--studio-muted); }
+.home-manage-row { flex-wrap: wrap; }
+.home-manage-row > .home-row-copy { flex-basis: 45%; }
+.home-manage-row > .home-chip-button { padding-inline: 10px; }
+.home-manage-row.editing { padding: 12px; margin-inline: -12px; border-radius: 12px; background: #ffffff05; }
+.home-item-fields { flex: 1 0 100%; display: grid; gap: 12px; padding: 8px 0 0; min-width: 0; }
+.home-item-fields .home-hint { margin: 0; }
+.home-item-order { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.home-item-order > span { width: 100%; color: var(--studio-muted); font-size: 12px; }
+.home-list-edit-actions { position: sticky; bottom: 0; z-index: 2; padding: 10px 0; background: var(--studio-bg, #151419); border-bottom: 1px solid #ffffff14; }
+.home-list-edit-actions .home-sheet-actions { margin: 0; }
+.home-list-edit-actions .home-hint { margin: 0 0 10px; }
+.home-add-title { font-size: 14px; font-weight: 600; margin: 24px 0 12px; }
+.home-empty-copy { color: var(--studio-muted); line-height: 1.5; margin: 0 0 20px; }
+@media (max-width: 600px) { .home-clock-link { min-height: 44px; } }
 .home-note-count {
   margin: -6px 0 6px;
   color: var(--studio-muted);

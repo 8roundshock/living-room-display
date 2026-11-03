@@ -181,7 +181,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
               <h1 className="home-date"><span className="sr-only">Home · </span>{longDay(date)}</h1>
               <span className="home-time">{time}</span>
             </div>
-            <WorldClockChips cities={settings.widgetData.worldClocks} minute={minute} clockFormat={settings.clockFormat} />
+            <WorldClockChips cities={settings.widgetData.worldClocks} minute={minute} clockFormat={settings.clockFormat} onManage={open('worldClock')} />
             <ScheduleStatus snapshot={state.schedule} presets={settings.savedPresets} setState={setState} reload={reload} />
             {settings.locationSource === 'fallback' && !firstRunDismissed && (
               <p className="home-first-run">
@@ -224,7 +224,7 @@ export function Home({ state, setState, connectionError, disconnected, reload }:
   }
 }
 
-function WorldClockChips({ cities, minute, clockFormat }: { cities: Settings['widgetData']['worldClocks']; minute: number; clockFormat: Settings['clockFormat'] }) {
+function WorldClockChips({ cities, minute, clockFormat, onManage }: { cities: Settings['widgetData']['worldClocks']; minute: number; clockFormat: Settings['clockFormat']; onManage: (event: { currentTarget: HTMLElement }) => void }) {
   const chips = useMemo(() => {
     const at = new Date(minute), local = localTimeZone();
     return cities.flatMap(city => {
@@ -238,7 +238,7 @@ function WorldClockChips({ cities, minute, clockFormat }: { cities: Settings['wi
   if (!chips.length) return null;
   return (
     <ul className="home-chips" aria-label="World clocks">
-      {chips.map(chip => <li key={chip.id} className="home-chip"><span className="home-chip-label">{chip.label}</span> {chip.time} · {chip.offset}</li>)}
+      {chips.map(chip => <li key={chip.id}><button type="button" className="home-chip home-clock-link" aria-label={`Manage ${chip.label} clock`} aria-haspopup="dialog" onClick={onManage}><span className="home-chip-label">{chip.label}</span> {chip.time} · {chip.offset}<Icon name="edit" size={12} /></button></li>)}
     </ul>
   );
 }

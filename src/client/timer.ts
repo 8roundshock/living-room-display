@@ -93,5 +93,5 @@ export function spokenTimeLeft(ms: number): string {
 /** How Home names a timer in a sentence or a control: "Pasta timer", or "10 min timer" without a label. */
 export function timerPhrase(timer: Pick<Timer, 'label' | 'durationMs'>): string {
   const label = timer.label.trim();
-  return label ? `${label} timer` : timerName(timer);
+  return label ? (/\btimer$/i.test(label) ? label : `${label} timer`) : timerName(timer);
 }

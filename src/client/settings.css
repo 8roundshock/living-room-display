@@ -7,6 +7,13 @@
 .settings-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
 .settings-heading .eyebrow { margin: 0 0 5px; color: var(--studio-muted); font-size: 12px; }
 .settings-heading h1 { font-size: 30px; letter-spacing: -.04em; margin: 0; }
+.settings-nav { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: -8px 0 24px; }
+.settings-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 10px; color: var(--studio-muted); font-size: 13px; text-decoration: none; }
+.settings-nav a:hover, .settings-nav a:focus-visible { background: #ffffff08; color: var(--studio-text); }
+.settings-main :is(h2[id], #settings-schedule, #settings-recovery) { scroll-margin-top: 24px; }
+.settings-weather-card { grid-row: span 2; }
+.settings-recovery-section { grid-column: 1 / -1; min-width: 0; }
+.settings-preferences-card .settings-fields { margin-top: 0; }
 .settings-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
 .settings-card { border: 1px solid #ffffff14; background: #ffffff04; border-radius: 18px; padding: 24px; min-width: 0; }
 .settings-schedule-card, .settings-card.data-disclosure { grid-column: 1 / -1; }
@@ -36,6 +43,7 @@
 @media (max-width: 700px) {
   .settings-main { width: calc(100% - 28px); padding-top: 26px; }
   .settings-sections { grid-template-columns: minmax(0, 1fr); }
+  .settings-weather-card { grid-row: auto; }
   .settings-card { padding: 20px; }
   .settings-savebar { bottom: 12px; width: calc(100% - 24px); justify-content: flex-end; padding-left: 12px; }
   .settings-savebar > span { margin-right: auto; white-space: normal; }
