@@ -261,6 +261,10 @@ test('display presence ignores business wall-clock jumps but actual elapsed expi
     assert.equal((await elapsed.display({ action: 'heartbeat', id })).status, 409);
     const status = JSON.parse((await elapsed.request('/api/preview')).body.toString()).pipeline.display;
     assert.deepEqual(status, { paused: true, needsResume: true });
+    assert.equal((await elapsed.display({ action: 'resume' })).status, 400, 'explicit close-all confirmation is required');
+    assert.equal((await elapsed.display({ action: 'resume', confirmedAllClosed: false })).status, 400);
+    assert.equal((await elapsed.display({ action: 'resume', confirmedAllClosed: true }, { 'Content-Type': 'application/json' })).status, 403, 'confirmation never bypasses same-origin display authorization');
+    assert.deepEqual(JSON.parse((await elapsed.request('/api/preview')).body.toString()).pipeline.display, { paused: true, needsResume: true });
     assert.equal((await elapsed.display({ action: 'resume', confirmedAllClosed: true })).status, 204);
   } finally { await elapsed.close(); }
 });

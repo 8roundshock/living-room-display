@@ -418,6 +418,10 @@
 .home-sheet-calendar {
   width: min(640px, calc(100vw - 32px));
 }
+.snapshot-resume-dialog { width: min(460px, calc(100vw - 32px)); }
+.snapshot-resume-dialog .home-sheet-lede { margin-top: 8px; line-height: 1.5; }
+.snapshot-resume-dialog .home-sheet-actions { justify-content: flex-end; }
+.snapshot-resume-dialog button[aria-disabled='true'] { opacity: .5; cursor: wait; }
 .home-sheet-allReminders {
   width: min(520px, calc(100vw - 32px));
 }

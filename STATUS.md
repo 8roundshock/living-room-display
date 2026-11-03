@@ -106,6 +106,15 @@ addresses it without making unverified pixels available; #519 remains open.
 
 ## Shared latest screenshot file (#544)
 
+Home's explicit recovery confirmation now uses an accessible in-app dialog
+(#556), with Cancel first, focus return and a dismissible pending state. Only
+confirmation sends the existing authorized resume request; duplicate submissions
+and stale status reads are fenced. The production build, eight focused API tests
+and eight synthetic browser groups pass, including compact layouts, dismissal,
+explicit retry and delayed-status races. Desktop, 320×480, 640×300 and error
+states were inspected in RAM. Independent final-head review and CI remain
+required. This does not change capture or native guards.
+
 The owner chose one overwritten app screenshot file on 2026-10-27, replacing
 this app's earlier RAM-only requirement. Source now publishes one atomic PNG at
 `run/cache/last-screen.png`, outside data backups and application generations.

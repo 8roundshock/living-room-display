@@ -11,6 +11,7 @@ import { civilFromDate, countdownLabel, parseCivil } from './calendar';
 import { readFirstRunDismissed } from './FirstRunCard';
 import { HOME_WIDGETS, longDay, namesList, relativeDay, todayGroups, type ComingUpItem } from './home-model';
 import { HomeSheet, type SheetKind } from './HomeSheets';
+import { SnapshotResumeDialog } from './SnapshotResumeDialog';
 import { homeDraftPending } from './home-drafts';
 import { ReminderRow, makeRoomLink, type HomeContext, type StatusMessage } from './HomeParts';
 import { reminderFormPending } from './RemindersPanel';
@@ -265,28 +266,50 @@ function DisplayCard({ state, showing, waiting, waitingWithoutRoom, disconnected
 function SnapshotStatus({ disconnected, clockFormat }: { disconnected: boolean; clockFormat: Settings['clockFormat'] }) {
   const [snapshot, setSnapshot] = useState<{ available: boolean; capturedAt: string | null; pipeline?: { phase: string; writes: number; failures: number; capture: { phase: string; attempts: number; failures: number }; display: { paused: boolean; needsResume: boolean } } } | null>(null);
   const [message, setMessage] = useState('');
+  const [confirmResume, setConfirmResume] = useState(false), [resuming, setResuming] = useState(false), [resumeError, setResumeError] = useState('');
+  const inFlight = useRef(false), mounted = useRef(false), readSequence = useRef(0);
+  const resumeButton = useRef<HTMLButtonElement>(null), summary = useRef<HTMLElement>(null);
+  const refresh = useCallback(async () => {
+    const sequence = ++readSequence.current;
+    const value = await api<NonNullable<typeof snapshot>>('/api/preview');
+    if (mounted.current && sequence === readSequence.current) setSnapshot(value);
+  }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; ++readSequence.current; }; }, []);
   useEffect(() => {
-    let stopped = false;
-    const read = () => { if (!disconnected && document.visibilityState === 'visible') void api<NonNullable<typeof snapshot>>('/api/preview').then(value => { if (!stopped) setSnapshot(value); }).catch(() => {}); };
+    const read = () => { if (!disconnected && !inFlight.current && document.visibilityState === 'visible') void refresh().catch(() => {}); };
     read(); const timer = window.setInterval(read, 5_000);
-    return () => { stopped = true; window.clearInterval(timer); };
-  }, [disconnected]);
+    return () => { ++readSequence.current; window.clearInterval(timer); };
+  }, [disconnected, refresh]);
   if (!snapshot?.pipeline) return null;
   const { pipeline } = snapshot;
   const resume = async () => {
-    if (!window.confirm('Close every browser display first, then resume desktop snapshots?')) return;
+    // Owned by this status panel, so dismissing/reopening the dialog cannot duplicate an in-flight POST.
+    if (inFlight.current) return;
+    inFlight.current = true; ++readSequence.current;
+    setResuming(true); setResumeError(''); setMessage('Resuming snapshots…');
     try {
       await api('/api/preview/display', { method: 'POST', headers: { 'X-LRD-Display': '1' }, body: JSON.stringify({ action: 'resume', confirmedAllClosed: true }) });
-      setSnapshot(await api<NonNullable<typeof snapshot>>('/api/preview')); setMessage('Snapshots resumed.');
-    } catch { setMessage('Could not resume snapshots. Try again.'); }
+      if (!mounted.current) return;
+      ++readSequence.current;
+      // The acknowledged action succeeded even when its optional status refresh cannot be read.
+      setSnapshot(previous => previous?.pipeline ? { ...previous, pipeline: { ...previous.pipeline, display: { paused: false, needsResume: false } } } : previous);
+      setConfirmResume(false); setMessage('Snapshots resumed.');
+      void refresh().catch(() => {});
+    } catch {
+      if (mounted.current) { setResumeError('Could not resume snapshots. Try again.'); setMessage('Could not resume snapshots. Try again.'); }
+    } finally { inFlight.current = false; if (mounted.current) setResuming(false); }
   };
-  return <details className="home-card-waiting"><summary>Last screen</summary>
+  return <details className="home-card-waiting"><summary ref={summary}>Last screen</summary>
     <p>{snapshot.available && snapshot.capturedAt ? `Saved ${timeOfDay(new Date(snapshot.capturedAt), clockFormat)}` : 'No snapshot saved yet.'}</p>
     <p>Capture: {pipeline.capture.phase.replaceAll('-', ' ')} · {pipeline.capture.attempts} attempts · {pipeline.capture.failures} failed</p>
     <p>File: {pipeline.phase.replaceAll('-', ' ')} · {pipeline.writes} saved · {pipeline.failures} failed</p>
     {pipeline.display.paused && <p>Capture paused while a browser display is open.</p>}
-    {pipeline.display.needsResume && <button type="button" className="button" onClick={() => { void resume(); }}>Resume snapshots</button>}
-    {message && <p role="status">{message}</p>}
+    {pipeline.display.needsResume && <button ref={resumeButton} type="button" className="button" aria-haspopup="dialog" aria-disabled={resuming || undefined} onClick={() => { if (!inFlight.current) { setResumeError(''); setConfirmResume(true); } }}>Resume snapshots</button>}
+    {message && !confirmResume && <p role="status">{message}</p>}
+    {confirmResume && <SnapshotResumeDialog pending={resuming} error={resumeError} onConfirm={() => { void resume(); }} onClose={() => setConfirmResume(false)} returnFocus={() => {
+      const target = resumeButton.current ?? summary.current;
+      if (target?.isConnected) target.focus();
+    }} />}
   </details>;
 }
 
