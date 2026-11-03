@@ -1438,10 +1438,11 @@ export function Editor({
           <label className="style-choice-label" htmlFor="saved-style-select">Style</label>
           <select id="saved-style-select" className="select-input style-choice" disabled={saving}
             value={styleMode === 'draft-new' ? 'new-draft' : presetId ? `saved:${presetId}` : builtinSelection ? `builtin:${builtinSelection}` : ''}
-            onChange={event => chooseStyle(event.target.value)}>
+            onChange={event => event.target.value === 'duplicate' ? beginNewStyle() : chooseStyle(event.target.value)}>
             <option value="">Current display</option>
             {styleMode === 'draft-new' && <option value="new-draft" disabled>{presetName.trim()} · New draft</option>}
             <option value="create" disabled={styleMode === 'draft-new' || draft.savedPresets.length >= MAX_SAVED_STYLES}>Create new style…</option>
+            <option value="duplicate" disabled={styleMode === 'draft-new' || draft.savedPresets.length >= MAX_SAVED_STYLES}>Duplicate current…</option>
             {!!presetId && !selectedStyle && <option value={`saved:${presetId}`} disabled>Deleted style</option>}
             {!!draft.savedPresets.length && <optgroup label="Saved styles">
               {draft.savedPresets.map((preset, index) => <option key={preset.id} value={`saved:${preset.id}`}>
@@ -1454,7 +1455,7 @@ export function Editor({
           </select>
           {styleModified && <span className="style-modified">Modified</span>}
           <InfoTip label="About styles">Create a new style from a blank board or starter. Duplicate current copies your look and layout, including unsaved changes.</InfoTip>
-          <button className="button small" disabled={saving || styleMode === 'draft-new' || draft.savedPresets.length >= MAX_SAVED_STYLES} onClick={() => chooseStyle('create')}>Create new style</button>
+          <button className="button small style-create-new" disabled={saving || styleMode === 'draft-new' || draft.savedPresets.length >= MAX_SAVED_STYLES} onClick={() => chooseStyle('create')}>Create new style</button>
           <button className="button small style-copy-current" disabled={saving || styleMode === 'draft-new' || draft.savedPresets.length >= MAX_SAVED_STYLES} onClick={beginNewStyle}>Duplicate current…</button>
           {presetId && <details ref={styleManagement} className="style-management"
             onKeyDown={event => {

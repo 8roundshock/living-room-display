@@ -9,6 +9,8 @@ returns to the saved display. Blank has no widgets. Starters use a fresh default
 board and their look, retaining personal content and the existing screenshot
 choice. Starting from a modified style first offers Keep editing, Discard or Save.
 **Duplicate current** separately copies the existing layout and appearance.
+In compact desktop windows, both creation actions are in the **Style** menu;
+the toolbar leaves room for Save/Cancel without moving the canvas.
 
 Category, availability and other native select options have an opaque dark
 surface and matching light text. Forced-color mode retains system colors and

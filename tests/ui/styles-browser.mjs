@@ -50,6 +50,35 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
   }
   async function select(id) { await choice().selectOption(`saved:${id}`); }
   try {
+    for (const width of [701, 760, 1024, 1050]) {
+      for (const selected of [false, true]) {
+        await open(settings(), { viewport: { width, height: 600 } });
+        if (selected) await select('alpha:imported/id');
+        const before = await page.locator('.preview-frame').boundingBox();
+        await nudge(); await button('Save changes').waitFor();
+        assert.deepEqual(await page.locator('.preview-frame').boundingBox(), before, `${width}px: dirty ${selected ? 'selected' : 'current'} style keeps canvas geometry`);
+        if (selected) {
+          assert.equal(await page.locator('.style-modified').innerText(), 'Modified');
+          assert.equal(await page.locator('#manage-style-trigger').isVisible(), true);
+        }
+        await choice().selectOption('duplicate');
+        await page.getByRole('dialog', { name: 'Duplicate current style', exact: true }).waitFor();
+        await page.keyboard.press('Escape');
+        assert.equal(await choice().evaluate(el => el === document.activeElement), true, 'compact duplicate Cancel returns to visible Style selector');
+        await button('Cancel').click(); await clean();
+      }
+      await choice().selectOption('create');
+      await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Compact new style');
+      await button('Start editing').click();
+      assert.equal(await choice().inputValue(), 'new-draft');
+      assert.equal(await choice().locator('option[value="create"]').isDisabled(), true);
+      assert.equal(await choice().locator('option[value="duplicate"]').isDisabled(), true);
+      if (capture && width === 760) images.push({ name: 'compact-style-draft-760', bytes: await page.screenshot() });
+      await button('Cancel').click(); await clean();
+      await choice().selectOption('create'); await page.keyboard.press('Escape');
+      assert.equal(await choice().evaluate(el => el === document.activeElement), true, 'compact creation Cancel returns to visible Style selector');
+    }
+    checks.push('Compact desktop keeps current/Modified saved-style canvas geometry stable and exposes keyboard creation/duplication with visible Cancel focus at701/760/1024/1050px');
     await open();
     const beforeCreate = structuredClone(saved());
     await button('Create new style').click();

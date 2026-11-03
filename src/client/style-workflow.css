@@ -82,6 +82,10 @@
 @media (min-width: 701px) and (max-width: 1050px) {
   .editor-style-bar { padding-inline: 14px; gap: 8px; }
   .studio .style-choice { width: 140px; }
+  .style-choice-row { gap: 6px; }
+  /* The Style menu keeps both actions available without pushing Save onto a
+     new row. Save already identifies the modified style, so its badge is redundant. */
+  .style-choice-row > :is(.style-create-new, .style-copy-current, .style-modified) { display: none; }
 }
 @media (max-width: 700px) {
   .studio.editor-with-styles { padding-bottom: 24px; }
