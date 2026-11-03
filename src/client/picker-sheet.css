@@ -20,6 +20,10 @@
 .picker-sheet .panel-heading .icon-button { margin-left: auto; width: 44px; height: 44px; border-radius: 50%; background: #ffffff08; }
 .picker-sheet .picker-back { display: none; }
 .picker-sheet .picker-discovery { grid-template-columns: minmax(0, 1fr); }
+.picker-sheet .picker-filter { display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 6px; min-width: 0; }
+.picker-sheet .picker-filter > span { color: #a9a3b5; font-size: 12px; }
+.picker-sheet .picker-filter.picker-category { grid-template-columns: minmax(0, 1fr); }
+.picker-sheet .picker-availability select { background: transparent; border-color: transparent; font-size: 12px; }
 .picker-sheet .picker-discovery :is(input, select) { background: #ffffff06; font-size: 14px; border: 1px solid #ffffff12; border-radius: 12px; }
 .picker-sheet .picker-search input { padding-left: 14px; }
 .picker-sheet .picker-results { margin: 10px 2px 16px; font-size: 12px; }
@@ -76,7 +80,8 @@
   .studio .picker-sheet .sample-stage { flex: 1 0 180px; min-height: 180px; height: 180px; }
   .picker-sheet .picker-empty { overflow-y: auto; }
   .picker-sheet .picker-footnote { margin-top: 8px; }
-  .picker-sheet .picker-discovery { grid-template-columns: minmax(0, 1fr) 126px; }
+  .picker-sheet .picker-discovery { grid-template-columns: minmax(0, 1fr); }
+  .picker-sheet .picker-filter { grid-template-columns: 64px minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
   .studio .picker-sheet { transition: none; }

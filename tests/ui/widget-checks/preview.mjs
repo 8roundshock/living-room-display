@@ -9,70 +9,51 @@ const PORTRAIT = (() => { const pixels = Buffer.alloc((90 * 4 + 1) * 160, 120); 
 const SMALL_TV = { width: 1280, height: 720 };
 
 export const id = 'preview';
-export const selectors = ['.preview-caption'];
+export const selectors = ['.preview-image'];
 export function prepare(state, { now }) {
   state.preview = { available: true, capturedAt: new Date(now).toISOString(), width: 320, height: 200 };
 }
 
 async function reload(page) { await page.reload(); await page.locator('.display-page').waitFor(); await page.clock.runFor(100); }
 
-/** The drawn image (object-fit: contain) against its caption and the cell's content box (#225). */
+/** Complete image geometry and the softened picture-only treatment. */
 function anchoring(widget) {
   return widget.evaluate(async section => {
     const image = section.querySelector('.preview-image'); await image.decode();
-    const box = image.getBoundingClientRect(), shape = image.naturalWidth / image.naturalHeight;
-    const width = Math.min(box.width, box.height * shape), height = width / shape;
-    const drawn = { left: box.left + (box.width - width) / 2, top: box.top + (box.height - height) / 2, width, height };
-    const element = section.querySelector('.preview-caption'), caption = element.getBoundingClientRect(), body = section.querySelector('.snapshot-body').getBoundingClientRect();
-    // The frame reserves 0.15em below the caption line for its text overflow, centred.
-    const slack = parseFloat(getComputedStyle(element).fontSize) * 0.15 + 1.5;
+    const box = image.getBoundingClientRect(), body = section.querySelector('.snapshot-body').getBoundingClientRect();
+    const shell = getComputedStyle(section.querySelector('.preview-image-shell'));
     return {
-      fit: new DOMMatrix(getComputedStyle(section.querySelector('.widget-content')).transform).a, objectFit: getComputedStyle(image).objectFit,
-      left: caption.left - drawn.left, gap: caption.top - (drawn.top + drawn.height),
-      fillsWidth: drawn.width >= body.width - 1, fillsHeight: caption.bottom >= body.bottom - slack, inside: drawn.left >= body.left - 0.5 && drawn.left + drawn.width <= body.right + 0.5 && caption.bottom <= body.bottom + 1.5,
+      fit: new DOMMatrix(getComputedStyle(section.querySelector('.widget-content')).transform).a,
+      objectFit: getComputedStyle(image).objectFit,
+      fillsWidth: box.width >= body.width - 1, fillsHeight: box.height >= body.height - 1,
+      inside: box.left >= body.left - 0.5 && box.right <= body.right + 0.5 && box.top >= body.top - 0.5 && box.bottom <= body.bottom + 1.5,
+      radius: parseFloat(shell.borderTopLeftRadius), mask: shell.maskImage,
+      caption: !!section.querySelector('.preview-caption'),
     };
   });
 }
-
-/** The caption's lines (distinct line boxes of its text), its right edge against the cell's content box, and whether its time phrase broke. */
-function captionLayout(widget) {
-  return widget.evaluate(section => {
-    const lines = element => { const range = document.createRange(); range.selectNodeContents(element); return [...range.getClientRects()].filter(rect => rect.width > 0); };
-    const caption = section.querySelector('.preview-caption'), text = lines(caption), style = getComputedStyle(section);
-    return {
-      lines: new Set(text.map(rect => Math.round(rect.top))).size, timeLines: new Set(lines(section.querySelector('.preview-caption-time')).map(rect => Math.round(rect.top))).size,
-      overflow: Math.max(...text.map(rect => rect.right)) - (section.getBoundingClientRect().right - parseFloat(style.paddingRight)), text: caption.textContent,
-    };
-  });
-}
-
 function assertAnchored(result, label) {
-  assert.equal(result.objectFit, 'contain', `${label}: the complete screen, never cropped`);
+  assert.equal(result.objectFit, 'contain', `${label}: screen keeps its aspect without cropping`);
   assert.equal(result.fit, 1, `${label}: fits without zooming out`);
-  assert.ok(Math.abs(result.left) <= 1, `${label}: caption starts on the image's left edge (${result.left})`);
-  assert.ok(result.gap >= 0 && result.gap <= 6, `${label}: caption ${result.gap} px below the image`);
-  assert.ok(result.fillsWidth || result.fillsHeight, `${label}: the image takes the cell's limiting dimension`);
-  assert.ok(result.inside, `${label}: image and caption stay inside the cell`);
+  assert.ok(result.fillsWidth || result.fillsHeight, `${label}: image fills the limiting dimension`);
+  assert.ok(result.inside, `${label}: image stays inside its cell`);
+  assert.ok(result.radius > 0 && result.mask !== 'none', `${label}: rounded and softly feathered edges`);
+  assert.equal(result.caption, false, `${label}: no visible timestamp or caption`);
 }
 
-/**
- * The editor canvas sits in the studio's own `.preview-frame` (Editor.tsx); the widget's frame must take
- * none of its chrome or sizing, so the snapshot fits at fit 1 with its caption anchored and visible
- * (#286 review: a shared class zoomed the widget out to 0.488 and pushed the caption out of the cell).
- */
 async function assertEditorCanvas(page, base, label) {
   await page.goto(`${base}/editor`);
   const widget = page.locator('.preview-screen [data-widget-id="preview"]');
   await widget.locator('.preview-image').waitFor(); await page.clock.runFor(300);
   const chrome = await widget.evaluate(section => {
-    const frame = getComputedStyle(section.querySelector('.preview-image-shell').parentElement), caption = section.querySelector('.preview-caption').getBoundingClientRect();
+    const frame = getComputedStyle(section.querySelector('.preview-image-shell').parentElement), caption = section.querySelector('.preview-image').getBoundingClientRect();
     const canvas = section.closest('.preview-frame')?.getBoundingClientRect();
     return {
       canvasFrames: document.querySelectorAll('.preview-frame').length, border: frame.borderTopWidth, radius: frame.borderTopLeftRadius, shadow: frame.boxShadow, overflow: frame.overflow,
-      captionInCanvas: Boolean(canvas) && caption.width > 0 && caption.height > 0 && caption.left >= canvas.left && caption.right <= canvas.right && caption.top >= canvas.top && caption.bottom <= canvas.bottom,
+      imageInCanvas: Boolean(canvas) && caption.width > 0 && caption.height > 0 && caption.left >= canvas.left && caption.right <= canvas.right && caption.top >= canvas.top && caption.bottom <= canvas.bottom,
     };
   });
-  assert.deepEqual(chrome, { canvasFrames: 1, border: '0px', radius: '0px', shadow: 'none', overflow: 'visible', captionInCanvas: true }, `${label}: the snapshot frame takes none of the editor canvas frame's chrome and its caption is visible`);
+  assert.deepEqual(chrome, { canvasFrames: 1, border: '0px', radius: '0px', shadow: 'none', overflow: 'visible', imageInCanvas: true }, `${label}: the snapshot frame takes none of the editor canvas frame's chrome and its image is visible`);
   assertAnchored(await anchoring(widget), label);
 }
 
@@ -80,11 +61,7 @@ export async function family({ widget, size, density, viewport }) {
   assertAnchored(await anchoring(widget), `last screen ${size}/${density} ${viewport.width}`);
 }
 
-/**
- * #308: a portrait (9:16) snapshot keeps "Last screen · 12:57 PM" on one line, from the image's left edge and
- * past its right edge but within the cell, at fit 1 at Text 100% in every family and density; and at any Text
- * size the time and its period never part. A page route serves the 9:16 image.
- */
+/** Portrait and landscape snapshots keep the same full-image geometry. */
 async function portraitCaption(page, state, now, views) {
   const setup = (size, density, fontScale, portrait) => {
     state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'preview'])); state.settings.preview.enabled = true;
@@ -101,17 +78,14 @@ async function portraitCaption(page, state, now, views) {
         setup(size, density, 1, true); await reload(page);
         const widget = page.locator('[data-widget-id="preview"]'), label = `last screen 9:16 ${size}/${density} ${view.width}`;
         assertAnchored(await anchoring(widget), label);
-        const caption = await captionLayout(widget);
-        assert.ok(caption.lines === 1 && caption.overflow <= 0.5, `${label}: "${caption.text}" on one line inside the cell ${JSON.stringify(caption)}`);
         cases++;
       }
-      // The narrowest family (Fine small) at every Text size, portrait and landscape: the time never breaks inside.
+      // The narrowest family (Fine small) at every Text size, portrait and landscape: text size cannot shrink the picture.
       for (const portrait of [true, false]) {
         if (!portrait) await page.unroute('**/api/preview/image?*');
         for (const fontScale of [1, 1.25, 1.5]) {
           setup('small', 'fine', fontScale, portrait); await reload(page);
-          const caption = await captionLayout(page.locator('[data-widget-id="preview"]'));
-          assert.equal(caption.timeLines, 1, `Fine small ${portrait ? '9:16' : '16:10'} Text ${fontScale * 100}% ${view.width}: the time stays whole ${JSON.stringify(caption)}`);
+          assertAnchored(await anchoring(page.locator('[data-widget-id="preview"]')), `Fine small ${portrait ? '9:16' : '16:10'} Text ${fontScale * 100}% ${view.width}`);
           cases++;
         }
       }
@@ -123,7 +97,7 @@ async function portraitCaption(page, state, now, views) {
 export async function sweep({ page, viewport, state, base, now }) {
   const portraitCases = await portraitCaption(page, state, now, viewport.width === 1920 ? [SMALL_TV, viewport] : [viewport]);
   await page.setViewportSize(viewport);
-  const portraitSummary = `Last screen 9:16 snapshot: caption on one line from the image's left edge (±1 px, ≤ 6 px below, inside the cell) at fit 1 in every family and density, and "h:mm AM" whole at Text 100–150% (Fine small, 9:16 and 16:10); ${portraitCases} cases at ${viewport.width === 1920 ? '720p and 1080p' : `${viewport.width}×${viewport.height}`} (#308)`;
+  const portraitSummary = `Picture-only portrait/landscape snapshots retain rounded feathered edges, fit 1 and full-cell bounds in ${portraitCases} cases at ${viewport.width}px, with Text 100�150%.`;
   if (viewport.width !== 1920) return portraitSummary;
   const authored = structuredClone(state);
   const only = (target, { size = 'medium', density = 'balanced', animation = 'off' } = {}) => {
@@ -177,5 +151,5 @@ export async function sweep({ page, viewport, state, base, now }) {
     setup: (target, animation) => only(target, { animation }),
     swap(target) { const next = new Date(Date.parse(target.preview.capturedAt) + 60_000).toISOString(); target.preview = { ...target.preview, capturedAt: next }; return encodeURIComponent(next); },
   });
-  return `Last screen caption on the drawn image's left edge (±1 px), ≤ 6 px below, image filling the limiting dimension, fit 1, in every family and density at 720p/1080p/4K, and in the editor canvas (authored board and every family) at 1280×720 and 390 px with none of the canvas frame's chrome; the editor placeholder uses ≥ 60% of the content width, or one line, in every family and density (${placeholder.map(item => `${Math.round(item.share * 100)}%/${item.lines}`).join(' ')}, #276); no per-tick caption formatter; a 1.5 s delayed new snapshot (${levels.join(', ')}) holds at 0 until loaded at Subtle/Lively and shows at once at Off/reduced motion. ${portraitSummary}`;
+  return `Picture-only Last screen fits every family and density at 720p/1080p/4K and editor 1280/390px; rounded mask, no caption, no canvas chrome; placeholder width retained; no per-tick formatter; delayed image hold checked at ${levels.join(', ')}. ${portraitSummary}`;
 }

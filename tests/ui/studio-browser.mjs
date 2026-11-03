@@ -191,6 +191,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
   const beginNewStyle = (page) => page.getByRole('button', { name: /^Save as new/ }).click();
   const saveNewStyle = (page) => page.getByRole('button', { name: 'Save new style', exact: true });
   async function saved(page) {
+    await page.locator('.style-name-dialog').waitFor({ state: 'hidden' });
     await page.locator('.studio-savebar, .settings-savebar').waitFor({ state: 'detached' });
   }
   /** The focused control's accessible name (aria-label, else its text), or BODY when focus was lost. */
@@ -491,7 +492,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.equal(await styleName.getAttribute('aria-invalid'), 'true');
     assert.equal(await styleName.getAttribute('aria-describedby'), 'preset-name-error');
     await styleName.fill('Second synthetic');
-    assert.equal(await page.locator('.preset-name-error').count(), 0, 'a new name clears the refusal');
+    assert.equal(await page.locator('#preset-name-error').count(), 0, 'a new name clears the refusal');
     await saveNewStyle(page).focus();
     await page.keyboard.press('Enter');
     await saved(page);

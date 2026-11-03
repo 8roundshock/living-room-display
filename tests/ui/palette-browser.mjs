@@ -24,7 +24,7 @@ const LEGACY_SAND = '#b8a17a';
 /** Weather's rain visuals, the only elements that may paint the --weather-rain hook (#213). */
 const RAIN_SELECTOR = '.weather-hint, .rain-detail, .rain-hours, .rain-bar, .rain-bar-unknown';
 /** The first accent-coloured element of a widget: its label, else a caption, context line or unit. */
-const ACCENT_SELECTOR = '.ambient-label, .preview-caption, .weather-context, .metric-label, .countdown-unit, .collection-label';
+const ACCENT_SELECTOR = '.ambient-label, .weather-context, .metric-label, .countdown-unit, .collection-label';
 /** Widgets whose display face is primary content only (Note's text), so nothing in them is tinted; their section still resolves the tone. */
 const TEXT_ONLY = new Set(['note']);
 /** Two bounded Balanced boards together cover every active widget. */
@@ -90,7 +90,8 @@ async function assertWidgetSection(section, mode, label, locator, expected) {
   const role = WIDGET_CATALOG[section.id].tone;
   assert.equal(section.tone, expected(mode, role), `${label}: ${section.id} resolves its accent to ${mode === 'native' ? role : 'the accent'}`);
   if (TEXT_ONLY.has(section.id)) assert.equal(section.accent, null, `${label}: ${section.id} is listed as text-only but has an accent element`);
-  else if (section.accent !== null || section.id !== 'photo') {
+  // Loaded images are picture-only; an unavailable image's existing label still has its tone checked.
+  else if (section.accent !== null || !['photo', 'preview'].includes(section.id)) {
     assert.ok(section.accent, `${label}: ${section.id} has an accent element (${ACCENT_SELECTOR}); extend ACCENT_SELECTOR or TEXT_ONLY for a new widget`);
     assert.equal(section.accent, expected(mode, role), `${label}: ${section.id} accent element`);
   }
@@ -473,7 +474,9 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
 
     await p.getByRole('button', { name: /^Save as new/ }).click();
     await p.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic native');
-    await p.getByRole('button', { name: 'Save new style', exact: true }).click(); await saveBar(p).waitFor({ state: 'detached' });
+    await p.getByRole('button', { name: 'Save new style', exact: true }).click();
+    await p.locator('.style-name-dialog').waitFor({ state: 'hidden' });
+    await saveBar(p).waitFor({ state: 'detached' });
     assert.equal(app.store.snapshot().settings.savedPresets[0].visual.appearance.accentMode, 'native');
     // Edit Current display so saving Sage does not update the selected saved style in place.
     await p.getByRole('combobox', { name: 'Style', exact: true }).selectOption('');

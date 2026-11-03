@@ -45,3 +45,23 @@ export function restoredStyleId(settings: Settings, remembered: string | null): 
   const preset = settings.savedPresets.find(item => item.id === remembered);
   return preset && sameVisual(preset.visual, getVisual(settings)) ? preset.id : '';
 }
+
+/** A duplicate starts from the current draft; its suggested name stays editable. */
+export function duplicateStyleSuggestion(presets: readonly SavedPreset[], source: string): string {
+  for (let number = 1; ; number++) {
+    const suffix = number === 1 ? ' copy' : ` copy ${number}`;
+    const name = source.trim().slice(0, 60 - suffix.length).trimEnd() + suffix;
+    if (!duplicateStyleName([...presets], name)) return name;
+  }
+}
+
+/** Undo only a local deletion, using the latest saved record rather than stale metadata. */
+export function undoStyleDeletion(base: Settings, draft: Settings, id: string, index: number): Settings {
+  const record = base.savedPresets.find(item => item.id === id);
+  if (!record) throw new Error('This style was deleted elsewhere. Your current display is unchanged.');
+  if (draft.savedPresets.some(item => item.id === id)) return draft;
+  if (draft.savedPresets.length >= MAX_SAVED_STYLES) throw new Error(`Up to ${MAX_SAVED_STYLES} styles. Delete one before restoring this style.`);
+  const next = structuredClone(draft);
+  next.savedPresets.splice(Math.min(index, next.savedPresets.length), 0, structuredClone(record));
+  return next;
+}

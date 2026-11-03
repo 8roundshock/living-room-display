@@ -17,6 +17,30 @@ inspected, together with all 31 supported families. All 52 populated alert, long
 planning-content and saved-weather cases pass at Balanced/Fine. Shared palette/
 movement suites, independent final-head review and current-head CI are in progress. No installed/native/TV claim.
 
+## Style management and category discovery source checkpoint (#563, #428, #472, #475, #488)
+
+The editor adds current-draft duplication with unique editable names and a local
+delete Undo that restores the latest saved style without replacing later edits.
+Deletion explains affected schedule references. Widget browsing gains a catalog-
+driven category selector that combines with search and availability. Last screen
+is picture-only with responsive rounded, feathered edges under the owner's
+2026-11-03 decision; image lifecycle and capture guards are unchanged.
+
+The naming dialog keeps the canvas stable and uses one Cancel/Save pair. Daylight
+help is contextual, sliders have explicit labels, no-op appearance reset status
+is accurate and concurrent merged visuals receive the correct legacy look label.
+Independent review found a hidden validation reason while naming an invalid draft;
+the dialog now states that reason and directs Cancel back to editing. Desktop,
+narrow and short browser cases verify correction and Save retain the draft.
+Both typechecks, production build and all 602 source tests pass. The styles,
+picker-sheet, catalog-time, daylight, preview, shared-snapshot, studio, palette and full
+widgets browser suites pass. The widget run covers 39 families across densities
+and 720p/1080p/4K, including rounded picture-only Last screen and its image states.
+Author RAM-only visual review covered compact naming, deletion Undo, catalog
+filters and all three picture families. Independent final-head review and CI
+remain pending. This is source work only; no installation, native
+activation or physical-TV claim follows.
+
 ## Native Last screen acceptance — 2026-11-03 (#519)
 
 Clean source `8059a19d2b57ca5189ac8ac52302af8f2365d06d`, including independently

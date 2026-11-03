@@ -11,6 +11,8 @@ import { createApplication } from '../../src/server/app.ts';
 import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { addToGrid } from '../../src/client/make-room.ts';
+import { pickerGroups } from '../../src/client/picker-catalog.ts';
+import { WIDGET_CATALOG } from '../../src/shared/widgets.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
 
@@ -101,6 +103,20 @@ export async function runPickerSheetQa({ playwright, edge, capture = false } = {
       checks.push(`${viewport.width}×${viewport.height}: sheet bounds, inert background, keyboard containment, retained query/size, distinct size shapes, add focus and draft Cancel`);
     }
     await open({ width: 1280, height: 720 }, true);
+    await button('Add widget to display').click();
+    const category = page.getByRole('combobox', { name: 'Widget category' });
+    for (const group of pickerGroups()) {
+      await category.selectOption(group.category);
+      assert.deepEqual(await page.locator('.catalog-item > span').allTextContents(), group.ids.map(id => WIDGET_CATALOG[id].name));
+      assert.equal(await page.locator('.picker-results [role="status"]').innerText(), `${group.ids.length} ${group.ids.length === 1 ? 'widget' : 'widgets'}`);
+    }
+    await page.getByRole('searchbox', { name: 'Search widgets' }).fill('no such widget');
+    await button('Show all widgets').click();
+    assert.equal(await category.inputValue(), 'all');
+    assert.equal(await page.locator('.catalog-item').count(), pickerGroups().flatMap(group => group.ids).length);
+    if (capture) images.push({ name: 'picker-categories', bytes: await page.screenshot() });
+    await close();
+    checks.push('Every catalog category, exact result counts, combined empty search and one-action reset remain reachable');
     const full = snapshot();
     await button('Add widget to display').click();
     assert.equal(await page.locator('.picker-add').isVisible(), false, 'a full board does not offer an Add that only repeats a refusal');

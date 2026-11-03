@@ -5,6 +5,7 @@ import type {
   WidgetId,
 } from '../shared/contracts.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, isActiveWidget, placementFits } from '../shared/widgets.ts';
+import { labelLook } from './model.ts';
 
 export function same(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
@@ -240,6 +241,7 @@ export function rebaseSettingsReport(
       draft.appearance.daylightBrightness,
     );
   }
+  result.appearance = labelLook(result.appearance);
   return { settings: result, crowdedOut };
 }
 

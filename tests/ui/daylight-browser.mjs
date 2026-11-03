@@ -190,7 +190,7 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     assert.deepEqual([await axName('#brightness-mode-fixed'), await axName('#brightness-mode-daylight'), await axName('input[aria-label="Brightness"]')], ['Fixed', 'Follow daylight', 'Brightness'], 'Chromium names each control on its own');
     await cdp.detach();
     const fixedLine = page.locator('.control-block', { has: slider('Brightness') }).locator('.control-label');
-    await fixedLine.locator('> span:first-child').click();
+    await fixedLine.locator('> label:first-child').click();
     await fixedLine.locator('output').click(); await page.clock.runFor(200);
     assert.notEqual(await page.evaluate(() => document.activeElement?.id), 'brightness-mode-fixed', 'clicking the name or value does not press Fixed');
     assert.equal(await savebar().count(), 0);
@@ -214,7 +214,10 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     assert.equal(await slider('Brightness').count(), 0);
     assert.deepEqual([await slider('Dimmest').inputValue(), await slider('Brightest').inputValue()], ['28', '70'], 'starts at Night’s 28% and Phone’s 70%');
     assert.match(await status(), /Now 70% · brightest at 1:02\sPM/);
-    assert.match(await status(), /weather location \(Toronto\)/);
+    await button('How daylight brightness works').click();
+    assert.match(await page.getByRole('tooltip').innerText(), /weather location \(Toronto\)/);
+    assert.match(await page.getByRole('tooltip').innerText(), /Starter looks keep this daylight range/);
+    await page.keyboard.press('Escape');
     const followed = await canvas();
     assert.deepEqual([followed.mode, followed.value], ['daylight', 0.7], 'the canvas shows the current value at once');
     assert.doesNotMatch(followed.transition, /filter [1-9]/, 'the editor canvas has no glide');
@@ -267,9 +270,13 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     await reset(settings => { settings.location = { ...TROMSO }; settings.appearance.daylightBrightness = RANGE; });
     await open('/editor', { time: '2026-12-21T10:45:00Z' }); await styleTab();
     assert.match(await status(), /Now 20% · the sun stays down today/);
-    assert.match(await status(), /Stays at Dimmest while the sun is down/);
+    await button('How daylight brightness works').click();
+    assert.match(await page.getByRole('tooltip').innerText(), /Stays at Dimmest while the sun is down/);
+    await page.keyboard.press('Escape');
     await open('/editor', { time: '2026-06-21T22:45:00Z' }); await styleTab();
-    assert.match(await status(), /The sun is up all day/);
+    await button('How daylight brightness works').click();
+    assert.match(await page.getByRole('tooltip').innerText(), /The sun is up all day/);
+    await page.keyboard.press('Escape');
     checks.push('polar night reads “Now 20% · the sun stays down today”; polar day says the sun is up all day');
 
     // 7. 390 and 320 px: no horizontal overflow in either mode.

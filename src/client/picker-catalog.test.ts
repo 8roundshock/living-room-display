@@ -49,3 +49,12 @@ test('filtered selection stays visible, falls back in catalog order, and clears 
   assert.deepEqual(filteredPickerGroups(all, '', 'not-added'), []);
   assert.equal(firstPickerSelection(all), ids(pickerGroups())[0]);
 });
+
+test('every catalog category is independently browsable and composes with search and availability', () => {
+  const widgets = defaultSettings().widgets;
+  for (const group of pickerGroups()) {
+    assert.deepEqual(ids(filteredPickerGroups(widgets, '', 'all', group.category)), group.ids);
+    assert.deepEqual(ids(filteredPickerGroups(widgets, '', 'not-added', group.category)), group.ids.filter(id => !widgets[id]));
+    assert.deepEqual(ids(filteredPickerGroups(widgets, 'no such widget', 'all', group.category)), []);
+  }
+});

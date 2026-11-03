@@ -14,10 +14,28 @@
 .studio .style-choice { width: 210px; max-width: 100%; min-height: 44px; }
 .style-modified { color: #b9b2ed; font-size: 12px; }
 .style-name-row { flex-basis: 100%; }
+.style-name-hint { color: var(--studio-muted); font-size: 13px; line-height: 1.5; margin: 10px 0 18px; }
+.style-name-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; margin: auto; padding: 24px; color: #eeeaf5; background: #222228; border: 1px solid #ffffff18; border-radius: 22px; box-shadow: 0 24px 80px #0009; }
+.style-name-dialog::backdrop { background: #08080ba3; backdrop-filter: blur(5px); }
+.style-name-dialog h2 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+.style-name-field { display: block; font-size: 12px; color: var(--studio-muted); margin-bottom: 8px; }
+.studio .style-name-dialog input { width: 100%; min-height: 44px; }
+.style-name-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.style-name-dialog .inline-message { margin-top: 10px; }
+.studio .daylight-status { display: flex; align-items: center; gap: 8px; }
+.studio .daylight-now { margin: 0; }
+.editor-style-bar .studio-savebar[data-naming] { visibility: hidden; }
 .studio .style-name-row input { width: 240px; max-width: 100%; }
 .style-management { position: relative; }
 .style-management > summary { list-style: none; cursor: pointer; }
-.style-management > div { position: absolute; z-index: 22; right: 0; top: calc(100% + 4px); display: flex; gap: 6px; padding: 8px; border-radius: 12px; background: #28262f; box-shadow: 0 8px 20px #0008; width: max-content; max-width: calc(100vw - 32px); }
+.style-management > div { position: absolute; z-index: 22; right: 0; top: calc(100% + 4px); display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid #ffffff12; border-radius: 14px; background: #28262f; box-shadow: 0 8px 20px #0008; width: 190px; max-width: calc(100vw - 32px); }
+.style-management > div > button { justify-content: flex-start; border-color: transparent; background: transparent; }
+.style-management > div > button:last-child { border-top: 1px solid #ffffff0d; border-radius: 0 0 8px 8px; }
+.style-delete-impact { flex-basis: 100%; color: var(--studio-muted); }
+.style-notice:empty { display: none; }
+.style-notice .text-button { margin-left: 8px; }
+.editor-style-bar .style-notice { flex: 0 1 auto; display: flex; align-items: center; gap: 4px; }
+.editor-style-bar .style-notice:empty { display: none; }
 .style-question { flex-basis: 100%; }
 .style-limit, .style-notice, .editor-style-bar .inline-message { flex-basis: 100%; margin: 0; font-size: 12px; }
 .editor-style-bar .studio-savebar {
