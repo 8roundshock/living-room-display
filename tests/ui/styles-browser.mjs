@@ -50,17 +50,25 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
   }
   async function select(id) { await choice().selectOption(`saved:${id}`); }
   try {
-    for (const width of [701, 760, 1024, 1050]) {
-      for (const selected of [false, true]) {
-        await open(settings(), { viewport: { width, height: 600 } });
-        if (selected) await select('alpha:imported/id');
+    for (const width of [701, 760, 1024, 1050, 1051, 1100, 1200, 1201, 1280]) {
+      for (const selectedName of [null, 'Review style', 'A'.repeat(60)]) {
+        const value = settings();
+        if (selectedName) value.savedPresets[0].name = selectedName;
+        await open(value, { viewport: { width, height: 600 } });
+        if (selectedName) await select('alpha:imported/id');
         const before = await page.locator('.preview-frame').boundingBox();
         await nudge(); await button('Save changes').waitFor();
-        assert.deepEqual(await page.locator('.preview-frame').boundingBox(), before, `${width}px: dirty ${selected ? 'selected' : 'current'} style keeps canvas geometry`);
-        if (selected) {
+        assert.deepEqual(await page.locator('.preview-frame').boundingBox(), before, `${width}px: dirty ${selectedName ?? 'current'} style keeps canvas geometry`);
+        for (const label of ['Cancel', 'Save changes']) {
+          const box = await button(label).boundingBox();
+          assert.ok(box.x >= 0 && box.x + box.width <= width && box.y >= 0 && box.y + box.height <= 600, `${width}px: ${label} stays visible`);
+        }
+        if (selectedName) {
           assert.equal(await page.locator('.style-modified').innerText(), 'Modified');
           assert.equal(await page.locator('#manage-style-trigger').isVisible(), true);
+          assert.equal(await page.locator('.studio-savebar .save-status').getAttribute('title'), `Updates ${selectedName}`, 'the full selected style name remains available');
         }
+        if (capture && selectedName?.length === 60 && [701, 1051, 1201].includes(width)) images.push({ name: `style-long-name-${width}`, bytes: await page.screenshot() });
         await choice().selectOption('duplicate');
         await page.getByRole('dialog', { name: 'Duplicate current style', exact: true }).waitFor();
         await page.keyboard.press('Escape');
@@ -73,12 +81,16 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       assert.equal(await choice().inputValue(), 'new-draft');
       assert.equal(await choice().locator('option[value="create"]').isDisabled(), true);
       assert.equal(await choice().locator('option[value="duplicate"]').isDisabled(), true);
+      await page.getByRole('tab', { name: 'Style', exact: true }).click();
+      const newDraftFrame = await page.locator('.preview-frame').boundingBox();
+      await nudge();
+      assert.deepEqual(await page.locator('.preview-frame').boundingBox(), newDraftFrame, `${width}px: editing a new style keeps canvas geometry`);
       if (capture && width === 760) images.push({ name: 'compact-style-draft-760', bytes: await page.screenshot() });
       await button('Cancel').click(); await clean();
       await choice().selectOption('create'); await page.keyboard.press('Escape');
       assert.equal(await choice().evaluate(el => el === document.activeElement), true, 'compact creation Cancel returns to visible Style selector');
     }
-    checks.push('Compact desktop keeps current/Modified saved-style canvas geometry stable and exposes keyboard creation/duplication with visible Cancel focus at701/760/1024/1050px');
+    checks.push('Current, selected and new-style canvas geometry stays stable across 701–1280px, both compact breakpoint edges and 60-character names; Save/Cancel, full status text and keyboard creation/duplication remain available');
     await open();
     const beforeCreate = structuredClone(saved());
     await button('Create new style').click();

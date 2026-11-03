@@ -67,6 +67,9 @@
   .studio.editor-with-styles { display: flex; flex-direction: column; }
   .editor-with-styles > .studio-header { width: 100%; flex: none; }
   .editor-style-bar { flex: none; }
+  .editor-style-bar .studio-savebar { flex: 1 1 0; flex-wrap: nowrap; }
+  .editor-style-bar .studio-savebar > div { flex: 0 0 auto; }
+  .editor-style-bar .save-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .editor-with-styles > .studio-workspace { width: 100%; flex: 1; min-height: 0; height: auto; padding-bottom: 18px; }
   .editor-with-styles .studio-workspace > .inspector { height: 100%; }
   .editor-with-styles .canvas-column { padding-bottom: 0; }
@@ -79,7 +82,7 @@
   .editor-with-styles .weather-status-row { margin-top: 16px; }
   .editor-with-styles .weather-credit { margin-bottom: 12px; }
 }
-@media (min-width: 701px) and (max-width: 1050px) {
+@media (min-width: 701px) and (max-width: 1200px) {
   .editor-style-bar { padding-inline: 14px; gap: 8px; }
   .studio .style-choice { width: 140px; }
   .style-choice-row { gap: 6px; }

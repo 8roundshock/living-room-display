@@ -1427,6 +1427,7 @@ export function Editor({
   // layout message shows in the canvas line. The announcer speaks each one once either way (#311).
   const listShown = section === 'Widgets' && !pickerOpen;
   const canvasMessage = layoutMessage && (layoutMessage.where === 'canvas' || !listShown) ? layoutMessage.text : '';
+  const saveStatus = saving ? 'Saving…' : draftProblem ?? (styleMode === 'new' || creatingStyle ? 'New style' : styleMode === 'rename' ? 'Rename style' : styleSaveIntent().kind === 'update' ? `Updates ${presetOriginal?.name}` : 'Unsaved changes');
   return (
     <div
       className="studio editor-with-styles"
@@ -1519,7 +1520,7 @@ export function Editor({
         </div>}
         <div className="style-notice" role="status">{styleNotice}{deletedStyle && <button className="text-button" disabled={saving} onClick={undoDeleteStyle}>Undo delete</button>}</div>
         {(settingsDirty || styleMode === 'draft-new') && <div ref={savebar} className="studio-savebar has-changes" data-naming={namingStyle ? '' : undefined} aria-hidden={namingStyle ? true : undefined}>
-          <span className="save-status" role="status">{saving ? 'Saving…' : draftProblem ?? (styleMode === 'new' || creatingStyle ? 'New style' : styleMode === 'rename' ? 'Rename style' : styleSaveIntent().kind === 'update' ? `Updates ${presetOriginal?.name}` : 'Unsaved changes')}</span>
+          <span className="save-status" role="status" title={saveStatus}>{saveStatus}</span>
           {saveScope && <span className="style-save-scope">Also saves {saveScope} changes</span>}
           <div><button className="button cancel-settings" disabled={saving} onClick={cancelChanges}>Cancel</button>
             {pendingStyle === null && <button className="button primary" aria-disabled={saveBlocked} onClick={() => { if (!saveBlocked) void saveSettings(); }}>
