@@ -66,9 +66,10 @@ Schedule has its own guarded draft and Save/Cancel; restoring data is blocked wh
 either settings or schedule edits are pending. No persisted data migration is needed.
 
 Settings uses ordinary document scrolling at every width (#535), independent of
-the editor's fixed-height workspace. Weather and This device form a compact pair
-on wide screens; Schedule and Data & recovery use the full content width below,
-in keyboard reading order. Narrow windows stack all four groups. The page reserves
+the editor's fixed-height workspace. Location & weather occupies the left column;
+Time & units and This device stack on the right (#564). Schedule and Data & recovery
+use the full content width below. Five section links focus each group without
+hiding controls or losing a draft. Narrow windows stack the groups in reading order. The page reserves
 bottom room for its dirty-only Save/Cancel bar so the last controls remain reachable.
 Native focus scrolling also leaves room for that bar at intermediate positions.
 
@@ -191,12 +192,21 @@ buttons, inputs, city search and Reminders panel; every rule of its own names a
     Saved for 3:30 AM."); the repeated autumn hour uses its first occurrence. Days are
     this computer's local days.
   - **World clock** ("Time in another city"): the cities with their time and **Remove**
-    (with Undo), the city search with a Label and **Add clock** (disabled at four,
-    "Up to 4 cities. Remove one to add another."), and "Rename or reorder in Edit
-    display." (#463).
+    (with Undo), inline **Edit** for its label, then the city search with a Label and
+    **Add clock** (disabled at four, "Up to 4 cities. Remove one to add another.").
+    Home's clock chips open this management sheet directly (#463).
   - **Countdown** ("Days until a date"): the dates ("In 7 days", "Passed") with
     **Remove** (with Undo), then Title (1–60), Date (a week ahead), **Every year** and
-    **Add countdown**.
+    **Add countdown**. **Edit** changes title, date and yearly repeat in place;
+    a Coming up row also opens this sheet. Both list editors offer **Move earlier** /
+    **Move later**, and keep **Save edits** / **Cancel edits** in a separate footer
+    above which the fields scroll. Add is disabled while editing; **Remove from draft**
+    is cancellable and sends no request until Save. A merged list over four clocks
+    or twelve countdowns names the limit and blocks Save until resolved. Effective
+    drafts survive sheet close in RAM. Every list Save reads a settings revision and
+    sends a conditional, list-only PATCH; another window's edits merge by item ID,
+    remain visible and require review before saving again. Unrelated preferences
+    stay unchanged. See [source evidence](home-settings-refresh.md).
   - **Note** ("A short message on your display"): 200 characters and 4 lines with a
     "37/200" counter; **Save note** and **Discard** appear only while the trimmed text
     differs from the saved note (and only then does leaving the page prompt); **Clear

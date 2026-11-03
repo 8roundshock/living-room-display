@@ -8,6 +8,7 @@ import { formatTime, localTimeZone } from './astronomy';
 import { addDays, civilFromDate, countdownLabel, countdownPassed, daysBetween, formatCivil, nextOccurrence, parseCivil } from './calendar';
 import { CitySearch } from './CitySearch';
 import { HomeCalendar } from './HomeCalendar';
+import { HomeItemFields, HomeListActions, useHomeListEditor } from './HomeListEditor';
 import { defaultTime, dueAtFor, dueSummary, quickDay, shiftedMessage, type QuickWhen } from './home-model';
 import { makeRoomLink, type HomeContext } from './HomeParts';
 import { Icon } from './icons';
@@ -106,6 +107,7 @@ export function HomeSheet({ kind, context, status, onClose }: {
         }} onFocusCapture={event => {
           if (submittedControl.current && event.target !== submittedControl.current) submittedControl.current = null;
         }}>{content}</div>
+        <div className="home-sheet-footer" />
         {status}
       </div>
     </dialog>
@@ -211,7 +213,7 @@ export async function addReminder(context: HomeContext, text: string, dueAt: str
   context.setState(previous => previous ? { ...previous, reminders: [...previous.reminders, reminder] } : previous);
   const shown = await showAfterSave(context, 'reminders', showWanted);
   if (shown === 'failed') return reminder;
-  const where = shown === 'off' ? ' Reminders is off on your display.' : ' · in Reminders on your display.';
+  const where = shown === 'off' ? '. Reminders is off on your display.' : ' · in Reminders on your display.';
   context.announce({ text: `${dueAt ? `Added for ${dueSummary(dueAt, Date.now(), context.state.settings.clockFormat)}` : 'Added'}${where}${note ? ` ${note}` : ''}` });
   return reminder;
 }
@@ -291,7 +293,8 @@ function ReminderSheet({ context, onClose }: { context: HomeContext; onClose: (f
 
 function WorldClockSheet({ context }: { context: HomeContext }) {
   const { settings, offline, run, announce, applySettings, focusLater, now } = context;
-  const cities = settings.widgetData.worldClocks;
+  const editor = useHomeListEditor(context, 'worldClocks', settings.widgetData.worldClocks, MAX_WORLD_CLOCKS);
+  const cities = editor.items;
   const [query, setQuery] = useDraft('world.query', () => '');
   const [city, setCity] = useDraft<LocationResult | null>('world.city', () => null);
   const [label, setLabel] = useDraft('world.label', () => '');
@@ -336,18 +339,26 @@ function WorldClockSheet({ context }: { context: HomeContext }) {
       {cities.length > 0 && (
         <ul className="home-list" aria-label="Your cities">
           {cities.map((item, index) => (
-            <li key={item.id} className="home-list-row" data-item-id={item.id}>
+            <li key={item.id} className={`home-list-row home-manage-row ${editor.editing === item.id ? 'editing' : ''}`} data-item-id={item.id}>
               <span className="home-row-copy"><span className="home-row-title">{item.label}</span><span className="home-row-detail">{safeTime(at, item.timezone, settings.clockFormat)}{item.timezone === local ? ' · same time zone' : ''}</span></span>
-              <button type="button" className="home-chip-button" aria-label={`Remove ${item.label}`} disabled={offline} onClick={() => { void remove(item, index); }}><Icon name="trash" size={15} /><span className="home-button-text">Remove</span></button>
+              <button type="button" className="home-chip-button home-edit-item" aria-label={`Edit ${item.label}`} aria-expanded={editor.editing === item.id} disabled={offline || editor.busy} onClick={() => editor.edit(item.id)}><Icon name="edit" size={15} /><span className="home-button-text">Edit</span></button>
+              <button type="button" className="home-chip-button" aria-label={`${editor.active ? 'Remove from draft:' : 'Remove'} ${item.label}`} disabled={offline || editor.busy} onClick={() => { if (editor.active) editor.remove(item.id); else void remove(item, index); }}><Icon name="trash" size={15} /><span className="home-button-text">{editor.active ? 'Remove from draft' : 'Remove'}</span></button>
+              {editor.editing === item.id && <HomeItemFields name={item.label} index={index} count={cities.length} busy={editor.busy || offline} move={offset => editor.move(item.id, offset)}>
+                <label className="home-field"><span>Clock label</span><input className="text-input" maxLength={40} value={item.label} onChange={event => editor.change(item.id, { label: event.target.value })} /></label>
+                <p className="home-hint">{item.timezone.replaceAll('_', ' ')}</p>
+              </HomeItemFields>}
             </li>
           ))}
         </ul>
       )}
+      <HomeListActions editor={editor} offline={offline} invalid={cities.some(item => !item.label.trim()) ? 'Each clock needs a label.' : null} />
+      {!cities.length && <p className="home-empty-copy">Keep another city close. Add its clock below.</p>}
+      <h3 className="home-add-title">Add a clock</h3>
       <form className="home-form" onSubmit={add} noValidate>
-        <fieldset className="home-fieldset" disabled={offline || busy || full}>
+        <fieldset className="home-fieldset" disabled={offline || busy || full || editor.active}>
           <div className="home-field">
             <label htmlFor="home-city-search">City</label>
-            <CitySearch id="home-city-search" value={query} onChange={value => { setQuery(value); setProblem(''); }} onSelect={chosen => { setCity(chosen); setQuery(chosen.name); setLabel(chosen.name); }} disabled={offline || busy || full} description="Type two or more letters to search for a city" />
+            <CitySearch id="home-city-search" value={query} onChange={value => { setQuery(value); setProblem(''); }} onSelect={chosen => { setCity(chosen); setQuery(chosen.name); setLabel(chosen.name); }} disabled={offline || busy || full || editor.active} description="Type two or more letters to search for a city" />
           </div>
           <label className="home-field"><span>Label</span><input className="text-input" maxLength={40} value={label} onChange={event => setLabel(event.target.value)} /></label>
           {problem && <p className="home-problem" role="alert">{problem}</p>}
@@ -356,7 +367,6 @@ function WorldClockSheet({ context }: { context: HomeContext }) {
           <div className="home-sheet-actions"><button type="submit" className="button primary">Add clock</button></div>
         </fieldset>
       </form>
-      <p className="home-hint">Rename or reorder in <a className="home-link" href="/editor">Edit display</a>.</p>
     </>
   );
 }
@@ -368,7 +378,8 @@ function safeTime(at: Date, timezone: string, clockFormat: Settings['clockFormat
 
 function CountdownSheet({ context }: { context: HomeContext }) {
   const { settings, offline, run, announce, applySettings, focusLater, now } = context;
-  const events = settings.widgetData.countdowns;
+  const editor = useHomeListEditor(context, 'countdowns', settings.widgetData.countdowns, 12);
+  const events = editor.items;
   const today = civilFromDate(new Date(now));
   const [title, setTitle] = useDraft('countdown.title', () => '');
   const [date, setDate] = useDraft('countdown.date', () => formatCivil(addDays(civilFromDate(new Date()), 7)));
@@ -417,16 +428,27 @@ function CountdownSheet({ context }: { context: HomeContext }) {
             const next = nextOccurrence(item, today), days = next ? daysBetween(today, next) : null;
             const detail = countdownPassed(item, today) || days === null ? 'Passed' : days > 1 ? `In ${countdownLabel(days).text}` : countdownLabel(days).text;
             return (
-              <li key={item.id} className="home-list-row" data-item-id={item.id}>
+              <li key={item.id} className={`home-list-row home-manage-row ${editor.editing === item.id ? 'editing' : ''}`} data-item-id={item.id}>
                 <span className="home-row-copy"><span className="home-row-title">{item.title}</span><span className="home-row-detail">{detail}{item.repeatsYearly ? ' · every year' : ''}</span></span>
-                <button type="button" className="home-chip-button" aria-label={`Remove ${item.title}`} disabled={offline} onClick={() => { void remove(item, index); }}><Icon name="trash" size={15} /><span className="home-button-text">Remove</span></button>
+                <button type="button" className="home-chip-button home-edit-item" aria-label={`Edit ${item.title}`} aria-expanded={editor.editing === item.id} disabled={offline || editor.busy} onClick={() => editor.edit(item.id)}><Icon name="edit" size={15} /><span className="home-button-text">Edit</span></button>
+                <button type="button" className="home-chip-button" aria-label={`${editor.active ? 'Remove from draft:' : 'Remove'} ${item.title}`} disabled={offline || editor.busy} onClick={() => { if (editor.active) editor.remove(item.id); else void remove(item, index); }}><Icon name="trash" size={15} /><span className="home-button-text">{editor.active ? 'Remove from draft' : 'Remove'}</span></button>
+                {editor.editing === item.id && <HomeItemFields name={item.title} index={index} count={events.length} busy={editor.busy || offline} move={offset => editor.move(item.id, offset)}>
+                  <label className="home-field"><span>Countdown title</span><input className="text-input" maxLength={60} value={item.title} onChange={event => editor.change(item.id, { title: event.target.value })} /></label>
+                  <div className="home-row-fields">
+                    <label className="home-field"><span>Countdown date</span><input className="text-input" type="date" min="1900-01-01" max="2200-12-31" value={item.date} onChange={event => editor.change(item.id, { date: event.target.value })} /></label>
+                    <label className="home-switch home-inline-switch"><input type="checkbox" role="switch" checked={item.repeatsYearly} onChange={event => editor.change(item.id, { repeatsYearly: event.target.checked })} /><span>Repeat every year</span></label>
+                  </div>
+                </HomeItemFields>}
               </li>
             );
           })}
         </ul>
       )}
+      <HomeListActions editor={editor} offline={offline} invalid={events.some(item => !item.title.trim() || !parseCivil(item.date) || Number(item.date.slice(0, 4)) < 1900 || Number(item.date.slice(0, 4)) > 2200) ? 'Each countdown needs a title and a date between 1900 and 2200.' : null} />
+      {!events.length && <p className="home-empty-copy">Give an upcoming day a place to count down.</p>}
+      <h3 className="home-add-title">Add a countdown</h3>
       <form className="home-form" onSubmit={add} noValidate>
-        <fieldset className="home-fieldset" disabled={offline || busy || full}>
+        <fieldset className="home-fieldset" disabled={offline || busy || full || editor.active}>
           <label className="home-field"><span>Title</span><input id="home-countdown-title" data-autofocus="true" className="text-input" maxLength={60} value={title} onChange={event => { setTitle(event.target.value); setProblem(null); }} aria-invalid={problem?.field === 'title'} /></label>
           <div className="home-row-fields">
             <label className="home-field"><span>Date</span><input id="home-countdown-date" className="text-input" type="date" min="1900-01-01" max="2200-12-31" value={date} onChange={event => { setDate(event.target.value); setProblem(null); }} aria-invalid={problem?.field === 'date'} /></label>
@@ -488,7 +510,7 @@ function NoteSheet({ context }: { context: HomeContext }) {
           <span>Note</span>
           <textarea data-autofocus="true" className="text-input home-note" rows={4} value={text} onChange={event => setText(limitNote(event.target.value))} aria-describedby="home-note-count" />
         </label>
-        <p className="home-note-count" id="home-note-count" aria-live="polite">{limitNote(text).length}/{NOTE_MAX_LENGTH}</p>
+        <p className="home-note-count" id="home-note-count">{limitNote(text).length}/{NOTE_MAX_LENGTH}</p>
         <ShowSwitch id="note" settings={settings} checked={showWanted} onChange={setShowWanted} />
         <div className="home-sheet-actions">
           {differs && <button type="submit" className="button primary">Save note</button>}
