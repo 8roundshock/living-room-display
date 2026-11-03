@@ -52,6 +52,49 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
     });
   }
   try {
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 640 }, { width: 640, height: 300 }]) {
+      await open('/settings', viewport); await units().waitFor();
+      for (const label of await page.locator('.settings-fields .field-label').all()) {
+        const size = await label.boundingBox();
+        assert.ok(size.height < 30, `${viewport.width}: preference names stay on one line`);
+      }
+      const search = page.getByRole('searchbox', { name: 'Find a setting', exact: true });
+      const searchArea = page.getByRole('search', { name: 'Find a setting', exact: true });
+      const before = structuredClone(saved());
+      let fileChoosers = 0; page.on('filechooser', () => { fileChoosers++; });
+      await units().selectOption('imperial');
+      await search.fill('temperature');
+      assert.equal(await searchArea.getByRole('button', { name: 'Units Time & units', exact: true }).count(), 1);
+      await search.press('Enter');
+      await page.waitForFunction(() => document.activeElement?.id === 'settings-units');
+      await reachable(units(), `${viewport.width}: search focuses an unobscured units control`);
+      assert.equal(await units().inputValue(), 'imperial', 'search retains the dirty settings value');
+      assert.deepEqual(saved(), before, 'search does not save a draft');
+      await search.fill('clock'); await search.press('ArrowDown'); await page.keyboard.press('Enter');
+      await page.waitForFunction(() => document.activeElement?.id === 'settings-clock-format');
+      await reachable(format(), `${viewport.width}: keyboard search focuses time format`);
+      await search.fill('backup');
+      await reachable(search, `${viewport.width}: returning to search keeps its field fully visible`);
+      if (capture) images.push({ name: `settings-search-${viewport.width}`, bytes: await page.screenshot() });
+      await search.press('ArrowDown'); await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
+      assert.equal(await button('Restore from backup…').evaluate(element => document.activeElement === element), true);
+      await reachable(button('Restore from backup…'), `${viewport.width}: search reaches recovery above savebar`);
+      assert.equal(fileChoosers, 0, 'finding restore does not open a file chooser');
+      await search.fill('gps'); await search.press('Enter');
+      assert.equal(await button('Use device location').evaluate(element => document.activeElement === element), true);
+      assert.equal(await page.evaluate(() => window.syntheticLocationCalls), 0, 'finding device location does not request access');
+      await search.fill('not-a-setting'); await page.getByText('No matching settings', { exact: true }).waitFor();
+      await button('Clear settings search').click(); assert.equal(await search.inputValue(), '');
+      await search.fill('city'); await search.press('Escape'); assert.equal(await search.inputValue(), '');
+      assert.equal(await search.evaluate(element => document.activeElement === element), true);
+      assert.equal(await units().inputValue(), 'imperial');
+      await button('Cancel').click(); await clean(); assert.deepEqual(saved(), before);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.width}: search reflows without sideways scroll`);
+    }
+    await open('/settings?focus=city');
+    await page.waitForFunction(() => document.activeElement?.id === 'city-search');
+    record('Find a setting supports everyday terms, keyboard selection, clear/no-match states and unobscured focus without saving drafts or running location/recovery actions');
+
     for (const viewport of [{ width: 1280, height: 480 }, { width: 760, height: 480 }, { width: 390, height: 720 }, { width: 320, height: 480 }]) {
       await open('/settings', viewport); await units().waitFor();
       await page.mouse.move(viewport.width / 2, viewport.height / 2);
@@ -68,6 +111,7 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
     }
     record('Wheel and keyboard scrolling reach the final recovery controls in desktop, short and narrow windows without horizontal overflow');
     await open('/settings');
+    assert.ok((await page.locator('#settings-schedule').boundingBox()).y < 600, 'ordinary Settings reaches Schedule in the first 720px screen');
     assert.equal(await page.locator('.settings-weather-card').getByRole('combobox', { name: 'Time format', exact: true }).count(), 0);
     assert.equal(await page.locator('.settings-preferences-card').getByRole('combobox', { name: 'Time format', exact: true }).count(), 1);
     for (const link of await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link').all()) {
@@ -92,6 +136,11 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
       await page.getByRole('checkbox', { name: 'Monday', exact: true }).check();
       await page.getByLabel('From', { exact: true }).fill('08:00');
       await page.getByLabel('Until', { exact: true }).fill('12:00');
+      const search = page.getByRole('searchbox', { name: 'Find a setting', exact: true });
+      await search.fill('temperature'); await search.press('Enter');
+      assert.equal(await units().inputValue(), 'imperial');
+      assert.equal(await page.getByLabel('From', { exact: true }).inputValue(), '08:00');
+      assert.equal(await page.getByLabel('Until', { exact: true }).inputValue(), '12:00');
       await page.keyboard.press('Control+End');
       await reachable(button('Restore from backup…'), `${viewport.width}: expanded schedule recovery clears the dirty savebar`);
       // Keep the earlier pointer interaction from holding unrelated hover help over Tab targets.

@@ -1,5 +1,33 @@
 # Display studio design
 
+## Explicit creation and native popup readability (#570, 2026-11-03)
+
+Create new style opens a compact naming/starting-point dialog and then returns
+to the normal canvas as an unsaved new-style draft. This keeps the familiar editor
+and provides a clean start. A full-page wizard would add a second editor path;
+requiring duplication first obscures creation. Independent concept critique
+selected the compact dialog with a distinct Duplicate current action. Cancel and
+dirty-switch decisions use the existing transaction guards; a new identity remains
+dirty even when its starting visuals match the saved board.
+
+The root already requested a dark color scheme, but translucent select surfaces
+left native popup entries without a paired opaque background. Options and groups
+now define their own foreground/background. Forced colors use CanvasText/Canvas
+and automatic adjustment. Native menu pixels are OS-dependent: computed colors
+and keyboard checks are distinct from actual opened-popup screenshot evidence.
+In-app browser tab captures omit the native popup; do not call those images proof
+of its visible entries. Headless Edge captures can include the actual opened
+popup and are used separately for visual review.
+
+Primary guidance checked 2026-11-03:
+[MDN option styling](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/option)
+describes platform-dependent legacy option styling;
+[W3C modal-dialog pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)
+informs focus containment, Escape, and return to the next editing control.
+Recheck when replacing native controls, changing naming/save ownership, or moving
+the editor to a new browser platform. Validation and final-head evidence live on
+[PR #572](https://github.com/8roundshock/living-room-display/pull/572).
+
 ## Style management, categories and picture edges (#563, 2026-11-03)
 
 The compact direction keeps the native Style selector and contextual management

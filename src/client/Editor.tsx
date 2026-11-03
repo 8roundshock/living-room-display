@@ -348,11 +348,11 @@ export function Editor({
     [presetId, setPresetId] = useState(() => rememberedStyle(state.settings));
   const [presetOriginal, setPresetOriginal] = useState<SavedPreset | null>(() =>
     structuredClone(state.settings.savedPresets.find(item => item.id === rememberedStyle(state.settings)) ?? null));
-  const [styleMode, setStyleMode] = useState<'update' | 'new' | 'rename' | 'create' | 'draft-new'>('update');
+  const [styleMode, setStyleMode] = useState<'update' | 'new' | 'rename' | 'create' | 'draft-new' | 'draft-name'>('update');
   const [newStyleStart, setNewStyleStart] = useState<NewStyleStart>('blank');
-  const namingReturnMode = useRef<'update' | 'draft-new'>('update');
-  const namingStyle = styleMode === 'new' || styleMode === 'rename' || styleMode === 'create';
-  const creatingStyle = styleMode === 'create' || styleMode === 'draft-new';
+  const draftNameBefore = useRef('');
+  const namingStyle = styleMode === 'new' || styleMode === 'rename' || styleMode === 'create' || styleMode === 'draft-name';
+  const creatingStyle = styleMode === 'create' || styleMode === 'draft-new' || styleMode === 'draft-name';
   const styleNameDialog = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
     const dialog = styleNameDialog.current;
@@ -1171,8 +1171,13 @@ export function Editor({
     let next = structuredClone(draftRef.current);
     if (discard) { next = { ...next, ...getVisual(savedRef.current), savedPresets: structuredClone(savedRef.current.savedPresets) }; setDeletedStyle(null); }
     if (choice === 'create') {
-      if (discard) change(() => next);
-      namingReturnMode.current = 'update';
+      if (discard) {
+        change(() => next); cancelPhoto(); updatePhoto(undefined);
+        const retained = savedRef.current.savedPresets.find(item => item.id === presetId && sameVisual(item.visual, getVisual(savedRef.current)));
+        const selected = retained?.id ?? rememberedStyle(savedRef.current);
+        setPresetId(selected); setPresetOriginal(structuredClone(savedRef.current.savedPresets.find(item => item.id === selected) ?? null));
+        setBuiltinSelection('');
+      }
       setStyleMode('create'); setPresetName(''); newStyleId.current = crypto.randomUUID();
       setNewStyleStart('blank'); setPendingStyle(null); setConfirmStyleDelete(false); setStyleNotice('');
       setStyleFocus({ target: '#style-name', edit: true });
@@ -1195,13 +1200,12 @@ export function Editor({
     setPendingStyle(null); setConfirmStyleDelete(false); setStyleNotice('');
   }
   function chooseStyle(choice: string) {
-    if (!sameVisual(getVisual(savedRef.current), getVisual(draftRef.current)) || styleMode !== 'update' || !same(savedRef.current.savedPresets, draftRef.current.savedPresets)) {
+    if (!sameVisual(getVisual(savedRef.current), getVisual(draftRef.current)) || styleMode !== 'update' || !same(savedRef.current.savedPresets, draftRef.current.savedPresets) || (choice === 'create' && photoChanged)) {
       setPendingStyle(choice); setStyleNotice(''); return;
     }
     applyStyleChoice(choice);
   }
   function beginNewStyle() {
-    namingReturnMode.current = 'update';
     if (styleMode !== 'new') { newStyleId.current = crypto.randomUUID(); setPresetName(''); }
     setStyleMode('new'); setPendingStyle(null); setConfirmStyleDelete(false); setStyleNotice('');
     setStyleFocus({ target: '#style-name', edit: true });
@@ -1223,13 +1227,12 @@ export function Editor({
   function renameStyle() {
     if (!presetOriginal) return;
     closeStyleManagement();
-    namingReturnMode.current = 'update';
     setPresetName(presetOriginal.name); setStyleMode('rename'); setConfirmStyleDelete(false);
     setStyleFocus({ target: '#style-name', edit: true });
   }
   function keepEditingStyle() {
-    setStyleMode(namingReturnMode.current);
-    if (namingReturnMode.current === 'update') { setPresetName(''); newStyleId.current = null; }
+    if (styleMode === 'draft-name') { setStyleMode('draft-new'); setPresetName(draftNameBefore.current); }
+    else { setStyleMode('update'); setPresetName(''); newStyleId.current = null; }
     setStyleFocus({ target: '#saved-style-select' });
   }
   function deletePreset() {
@@ -1438,7 +1441,7 @@ export function Editor({
             onChange={event => chooseStyle(event.target.value)}>
             <option value="">Current display</option>
             {styleMode === 'draft-new' && <option value="new-draft" disabled>{presetName.trim()} · New draft</option>}
-            <option value="create" disabled={draft.savedPresets.length >= MAX_SAVED_STYLES}>Create new style…</option>
+            <option value="create" disabled={styleMode === 'draft-new' || draft.savedPresets.length >= MAX_SAVED_STYLES}>Create new style…</option>
             {!!presetId && !selectedStyle && <option value={`saved:${presetId}`} disabled>Deleted style</option>}
             {!!draft.savedPresets.length && <optgroup label="Saved styles">
               {draft.savedPresets.map((preset, index) => <option key={preset.id} value={`saved:${preset.id}`}>
@@ -1471,9 +1474,9 @@ export function Editor({
           if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
           else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
         }}>
-          <h2 id="style-name-title">{styleMode === 'create' ? 'Create new style' : styleMode === 'new' ? 'Duplicate current style' : 'Rename style'}</h2>
-          <p className="style-name-hint">{styleMode === 'create' ? 'Choose a starting point, then make it yours. Your display changes only when you save.' : styleMode === 'new' ? 'Copies your current layout and appearance, including unsaved changes.' : 'Keeps this style’s identity and saves your current layout and appearance.'}</p>
-          <label className="style-name-field" htmlFor="style-name">{styleMode === 'new' || styleMode === 'create' ? 'New style' : 'Style name'}</label>
+          <h2 id="style-name-title">{styleMode === 'create' ? 'Create new style' : styleMode === 'draft-name' ? 'Name new style' : styleMode === 'new' ? 'Duplicate current style' : 'Rename style'}</h2>
+          <p className="style-name-hint">{styleMode === 'create' ? 'Choose a starting point, then make it yours. Your display changes only when you save.' : styleMode === 'draft-name' ? 'Choose a unique name. Your style stays a draft.' : styleMode === 'new' ? 'Copies your current layout and appearance, including unsaved changes.' : 'Keeps this style’s identity and saves your current layout and appearance.'}</p>
+          <label className="style-name-field" htmlFor="style-name">{styleMode === 'new' || creatingStyle ? 'New style' : 'Style name'}</label>
           <input id="style-name" className="text-input" maxLength={60} required disabled={saving} value={presetName}
             onChange={event => setPresetName(event.target.value)} placeholder="Name" aria-invalid={!!presetConflict}
             aria-describedby={styleProblem && presetName.trim() ? 'preset-name-error' : undefined} />
@@ -1482,15 +1485,16 @@ export function Editor({
             {([['blank', 'Blank', 'Choose your own widgets'], ['room', 'Room', 'A balanced everyday board'], ['phone', 'Phone', 'A clearer, brighter look'], ['night', 'Night', 'A softer, dimmer look']] as const).map(([start, label, detail]) =>
               <button key={start} type="button" className="button style-start-option" aria-pressed={newStyleStart === start} onClick={() => setNewStyleStart(start)}><strong>{label}</strong><span>{detail}</span></button>)}
           </fieldset>}
-          {draftProblem && styleMode !== 'create' && <p className="inline-message error" id="style-draft-problem" role="alert">{draftProblem}. Choose Cancel to return to editing.</p>}
+          {draftProblem && !creatingStyle && <p className="inline-message error" id="style-draft-problem" role="alert">{draftProblem}. Choose Cancel to return to editing.</p>}
           {error && error.text !== styleProblem && <p className="inline-message error" role="alert">{error.text}</p>}
-          {saveScope && styleMode !== 'create' && <p className="style-name-hint">Also saves {saveScope} changes.</p>}
+          {saveScope && !creatingStyle && <p className="style-name-hint">Also saves {saveScope} changes.</p>}
           <div className="style-name-actions"><button className="button" disabled={saving} onClick={keepEditingStyle}>Cancel</button>
             {styleMode === 'create' ? <button className="button primary" disabled={saving || !!styleProblem || draft.savedPresets.length >= MAX_SAVED_STYLES} onClick={startNewStyle}>Start editing</button> :
+            styleMode === 'draft-name' ? <button className="button primary" disabled={!!styleProblem} onClick={() => { setStyleMode('draft-new'); setStyleFocus({ target: '#saved-style-select' }); }}>Done</button> :
             <button className="button primary" aria-disabled={saveBlocked} aria-describedby={draftProblem ? 'style-draft-problem' : undefined} onClick={() => { if (!saveBlocked) void saveSettings(); }}>{saving ? 'Saving…' : styleMode === 'new' ? 'Save new style' : 'Save changes'}</button>}</div>
         </dialog>}
         {draft.savedPresets.length >= MAX_SAVED_STYLES && <p className="style-limit">Up to {MAX_SAVED_STYLES} styles.</p>}
-        {styleProblem && !namingStyle && <p className="inline-message error preset-name-error" id="selected-style-error" role="alert">{styleProblem}{styleMode === 'draft-new' && <button className="text-button" onClick={() => { namingReturnMode.current = 'draft-new'; setStyleMode('new'); setStyleFocus({ target: '#style-name', edit: true }); }}>Change name</button>}</p>}
+        {styleProblem && !namingStyle && <p className="inline-message error preset-name-error" id="selected-style-error" role="alert">{styleProblem}{styleMode === 'draft-new' && <button className="text-button" onClick={() => { draftNameBefore.current = presetName; setStyleMode('draft-name'); setStyleFocus({ target: '#style-name', edit: true }); }}>Change name</button>}</p>}
         {presetOriginal && selectedStyle && !same(presetOriginal, selectedStyle) &&
           <button className="button small" disabled={saving} onClick={() => chooseStyle(`saved:${selectedStyle.id}`)}>Reload style</button>}
         {confirmStyleDelete && <div className="style-question" role="group" aria-label="Delete style"

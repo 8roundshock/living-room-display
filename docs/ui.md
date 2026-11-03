@@ -1,5 +1,21 @@
 # Display studio
 
+## Creating styles and finding settings (#570, #571)
+
+**Create new style** is available beside the Style selector and inside its menu.
+Choose a name and Blank, Room, Phone or Night, then **Start editing**. This starts
+an unsaved independent draft; **Save new style** publishes it and **Cancel**
+returns to the saved display. Blank has no widgets. Starters use a fresh default
+board and their look, retaining personal content and the existing screenshot
+choice. Starting from a modified style first offers Keep editing, Discard or Save.
+**Duplicate current** separately copies the existing layout and appearance.
+
+Category, availability and other native select options have an opaque dark
+surface and matching light text. Forced-color mode retains system colors and
+native keyboard behavior. Settings uses compact rows and **Find a setting** to
+jump directly to an existing control without changing its draft; see
+[the Settings interaction notes](settings-usability.md).
+
 ## Adding widgets (#554, #563)
 
 Search and a native Category selector lead discovery. Category options come from
@@ -54,7 +70,7 @@ send `geolocation=()`. Lookup happens only after the user's explicit action. Leg
 Home owns daily actions and reminder management. Its compact display summary lists
 what is shown and offers Edit/Open actions, without rendering a second ambient canvas.
 Edit display owns Style/Widgets, the visual canvas and local movement preview. Saved
-styles remain at the top with Save changes and Save as new. App-wide city, units,
+styles remain at the top with Create new style, Duplicate current and Save changes. App-wide city, units,
 time format, screen-awake preference, schedule configuration and data recovery belong
 to Settings. Appearance/layout resets remain visual editor drafts.
 

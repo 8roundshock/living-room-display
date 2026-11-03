@@ -50,6 +50,121 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
   }
   async function select(id) { await choice().selectOption(`saved:${id}`); }
   try {
+    await open();
+    const beforeCreate = structuredClone(saved());
+    await button('Create new style').click();
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Evening');
+    assert.equal(await button('Start editing').isDisabled(), true, 'duplicate name cannot start a new draft');
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('My empty style');
+    if (capture) images.push({ name: 'create-new-style', bytes: await page.screenshot() });
+    await button('Start editing').click();
+    await page.locator('.style-name-dialog').waitFor({ state: 'detached' });
+    assert.equal(await choice().inputValue(), 'new-draft');
+    assert.equal(await page.getByRole('region', { name: 'Clock', exact: true }).count(), 0);
+    assert.deepEqual(saved(), beforeCreate, 'starting an empty style never publishes it');
+    await button('Cancel').click(); await clean();
+    assert.deepEqual(saved(), beforeCreate);
+    await choice().selectOption('create');
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('A new room');
+    await page.getByRole('button', { name: 'Room A balanced everyday board', exact: true }).click();
+    await button('Start editing').click();
+    await page.locator('.style-name-dialog').waitFor({ state: 'detached' });
+    await button('Save new style').click(); await clean();
+    assert.equal(saved().savedPresets.length, 3, 'a matching starter can still be saved as a new identity');
+    assert.deepEqual(saved().savedPresets.slice(0, 2), beforeCreate.savedPresets);
+    assert.equal(saved().savedPresets[2].name, 'A new room');
+    checks.push('Create new offers a named Blank or starter, starts an unpublished independent draft, safely cancels and saves a distinct style even when visuals match');
+
+    await open(); await select('alpha:imported/id');
+    const dirtyBrightness = await nudge();
+    await button('Create new style').click();
+    await page.getByRole('group', { name: 'Switch style', exact: true }).waitFor();
+    await button('Keep editing').click();
+    assert.equal(Number(await brightness().inputValue()) / 100, dirtyBrightness);
+    await button('Create new style').click(); await button('Discard and switch').click();
+    await button('Cancel').click(); await clean();
+    assert.equal(saved().savedPresets.length, 2);
+    assert.equal(await choice().inputValue(), 'saved:alpha:imported/id', 'discard preserves the selected style when its saved visual matches the restored display');
+    checks.push('New-style entry explicitly resolves a dirty selected style and cancelling the chooser preserves its saved identity');
+
+    await open(); await select('alpha:imported/id'); await nudge(); await button('Save changes').click(); await clean();
+    await button('Create new style').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Another draft');
+    await button('Start editing').click();
+    assert.equal(await choice().locator('option[value="create"]').isDisabled(), true);
+    assert.equal(await button('Create new style').isDisabled(), true);
+    await button('Cancel').click(); await clean();
+    assert.equal(await choice().inputValue(), 'saved:alpha:imported/id', 'cancelling a new draft returns to the remembered saved style');
+    checks.push('A new draft cannot recursively create another; Cancel returns to the remembered saved-style identity');
+
+    await open();
+    const beforeFailedCreate = structuredClone(saved());
+    await button('Create new style').click();
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Empty and mine');
+    await button('Start editing').click();
+    let refuseNew = true;
+    await page.route('**/api/settings', route => route.request().method() === 'PATCH' && refuseNew ? route.fulfill({ status: 503, json: { error: 'New style save refused' } }) : route.continue());
+    await button('Save new style').click(); await page.getByRole('alert').filter({ hasText: 'New style save refused' }).waitFor();
+    assert.deepEqual(saved(), beforeFailedCreate);
+    assert.equal(await choice().inputValue(), 'new-draft');
+    refuseNew = false; await button('Save new style').click(); await clean();
+    assert.equal(saved().savedPresets.at(-1).name, 'Empty and mine');
+    assert.equal(Object.values(saved().widgets).some(Boolean), false);
+    assert.deepEqual(saved().savedPresets.slice(0, 2), beforeFailedCreate.savedPresets);
+    checks.push('A new blank style survives a failed save, visibly explains failure and retries with the same independent identity');
+
+    await open(settings(), {}, true);
+    await button('Create new style').click();
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Concurrent new');
+    await page.getByRole('button', { name: 'Room A balanced everyday board', exact: true }).click();
+    await button('Start editing').click();
+    await select('beta'); await page.getByRole('group', { name: 'Switch style' }).waitFor();
+    await button('Keep editing').click();
+    assert.equal(await choice().inputValue(), 'new-draft', 'new identity remains dirty even if its starting look matches saved visuals');
+    await app.store.update(data => { data.settings.savedPresets.push({ id: 'remote-new', name: 'Concurrent new', visual: getVisual(data.settings) }); });
+    await page.clock.runFor(30_000);
+    await page.locator('#selected-style-error').waitFor();
+    assert.equal(await button('Save new style').getAttribute('aria-disabled'), 'true');
+    await button('Change name').click();
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Independent new');
+    await button('Cancel').click();
+    assert.equal(await choice().inputValue(), 'new-draft', 'closing the name correction retains the new-style draft');
+    assert.equal(await button('Save new style').getAttribute('aria-disabled'), 'true', 'Cancel restores the original conflicting name');
+    await button('Change name').click();
+    await page.getByRole('heading', { name: 'Name new style', exact: true }).waitFor();
+    await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Independent new');
+    if (capture) images.push({ name: 'new-style-rename', bytes: await page.screenshot() });
+    await page.getByRole('dialog', { name: 'Name new style', exact: true }).getByRole('button', { name: 'Done', exact: true }).click();
+    assert.equal(saved().savedPresets.length, 3, 'Done only changes the local draft name');
+    await button('Save new style').click(); await clean();
+    assert.equal(saved().savedPresets.length, 4); assert.equal(saved().savedPresets.at(-1).name, 'Independent new');
+    assert.equal(saved().savedPresets.some(item => item.id === 'remote-new'), true);
+    checks.push('Concurrent name collisions block new-style saving, retain the draft and remote record, and allow a corrected name without overwriting either original');
+
+    for (const colorScheme of ['light', 'dark']) {
+      await open(settings(), { colorScheme });
+      await button('Add widget to display').click();
+      for (const label of ['Widget category', 'Filter widgets']) {
+        const control = page.getByRole('combobox', { name: label, exact: true });
+        const colors = await control.evaluate(el => {
+          const option = el.options[0], style = getComputedStyle(option);
+          return { scheme: getComputedStyle(el).colorScheme, foreground: style.color, background: style.backgroundColor };
+        });
+        assert.equal(colors.scheme, 'dark');
+        assert.equal(colors.foreground, 'rgb(238, 234, 245)');
+        assert.equal(colors.background, 'rgb(34, 34, 40)');
+        const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => value / 255).map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+        const lights = [luminance(colors.foreground), luminance(colors.background)].sort((a, b) => b - a);
+        assert.ok((lights[0] + 0.05) / (lights[1] + 0.05) >= 4.5, `${label}: option text meets normal text contrast`);
+        await control.focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+        assert.notEqual(await control.inputValue(), 'all', `${label}: keyboard selects a real option`);
+      }
+      await button('Close widget picker').click();
+    }
+    await open(settings(), { forcedColors: 'active' });
+    const forced = await choice().evaluate(el => ({ adjust: getComputedStyle(el.options[0]).forcedColorAdjust, fg: getComputedStyle(el.options[0]).color, bg: getComputedStyle(el.options[0]).backgroundColor }));
+    assert.equal(forced.adjust, 'auto'); assert.notEqual(forced.fg, forced.bg);
+    checks.push('Category and availability option surfaces have opaque paired colors for light/dark preferences, native keyboard selection, and preserved forced-color adjustment');
+
     await open(); await select('alpha:imported/id');
     for (const slider of await page.getByRole('slider').all()) {
       assert.equal(await slider.evaluate(element => element.labels.length), 1, 'each slider has an explicit label');
@@ -351,7 +466,7 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       if (route.request().method() === 'PATCH') { patchCount++; if (!conflictInjected) { conflictInjected = true; await app.store.update(data => { data.settings.savedPresets[0].visual.appearance.brightness = 0.8; }); } }
       await route.continue();
     });
-    await button('Save changes').click(); await page.getByText('This style changed elsewhere. Reload it or save as new.', { exact: true }).first().waitFor();
+    await button('Save changes').click(); await page.getByText('This style changed elsewhere. Reload it or duplicate current.', { exact: true }).first().waitFor();
     assert.equal(patchCount, 1); assert.equal(saved().savedPresets[0].visual.appearance.brightness, 0.8);
     await button('Duplicate current…').click(); await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Recovered');
     await button('Save new style').click(); await clean();
@@ -389,9 +504,9 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
     assert.equal(new Set(placements.slice(-8).map(item => `${item.floating}:${item.height}`)).size, 1, 'long errors settle instead of oscillating between inline and floating heights');
     checks.push('Long save errors settle in a short viewport without a floating/inline height loop or lost draft');
 
-    for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 700 }, { width: 320, height: 640 }, { width: 640, height: 360 }]) {
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 700 }, { width: 320, height: 480 }, { width: 640, height: 300 }]) {
       await open(settings(), { viewport, hasTouch: viewport.width < 700 });
-      await choice().focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+      await select('alpha:imported/id');
       await nudge();
       const selectedBox = await choice().boundingBox();
       assert.ok(selectedBox.width >= 140, `the selected style name remains readable with Modified/actions at ${viewport.width}px: ${JSON.stringify(selectedBox)}`);
@@ -403,6 +518,20 @@ export async function runStylesQa({ playwright, edge, capture = false } = {}) {
       assert.equal(await page.locator('.studio-savebar').count(), 1);
       if (capture) images.push({ name: `styles-${viewport.width}`, bytes: await page.screenshot() });
       await button('Cancel').click(); await button('Cancel').click(); await clean();
+      await button('Create new style').click();
+      await page.getByRole('textbox', { name: 'New style', exact: true }).fill('New portable style');
+      const dialogBox = await page.locator('.style-name-dialog').boundingBox();
+      for (const card of await page.locator('.style-start-option').all()) {
+        const cardBox = await card.boundingBox();
+        assert.ok(cardBox.x >= dialogBox.x && cardBox.x + cardBox.width <= dialogBox.x + dialogBox.width, 'starter card stays inside the dialog');
+        assert.equal(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'starter text wraps instead of clipping');
+      }
+      await button('Start editing').scrollIntoViewIfNeeded();
+      const action = await button('Start editing').boundingBox();
+      assert.ok(action.y >= 0 && action.y + action.height <= viewport.height + 1 && action.height >= 44, 'new-style action stays reachable in short windows');
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      if (capture) images.push({ name: `create-style-${viewport.width}`, bytes: await page.screenshot() });
+      await button('Cancel').click(); await clean();
     }
     checks.push('Keyboard selection and focused naming dialog; one Save group with 44 px controls at 1280/390/320/640 px; Cancel and no horizontal overflow');
     assert.deepEqual(errors, []); return { checks, images, seconds: Math.round((Date.now() - startedAt) / 1000) };

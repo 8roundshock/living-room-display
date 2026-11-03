@@ -1,5 +1,16 @@
 # Project status
 
+## Style creation and Settings follow-up — 2026-11-03 (#570, #571)
+
+The follow-up to #568 gives native select options explicit contrasting surfaces
+and adds Create new style from Blank or a starter before editing. New styles stay
+independent drafts until Save, with Duplicate current as the separate copy action.
+Settings gains compact rows and Find a setting navigation with existing guarded
+drafts. Source, review and delivery evidence is tracked on
+[PR #572](https://github.com/8roundshock/living-room-display/pull/572) and its
+linked tickets. These UI changes do not change native activation or snapshot
+lifecycle; the dated installation/native evidence below retains its original scope.
+
 ## Combined UI release — 2026-11-03 (#565)
 
 Merged PR #568 integrates the independently reviewed Style/discovery head `a6f0c07` and

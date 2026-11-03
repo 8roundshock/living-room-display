@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { AppState, LocationResult, Settings, WeatherState } from '../shared/contracts';
 import { api, apiTagged, rememberRevision, revisionOf, settingsConflict } from './api';
 import { CitySearch } from './CitySearch';
@@ -12,6 +12,7 @@ import { ScreenSettings } from './ScreenSettings';
 import { ScheduleSettings, useScheduleDraft } from './ScheduleSettings';
 import { StudioHeader } from './StudioHeader';
 import { useDisplayWindow } from './displayWindow';
+import { findSettings, type SettingsSearchItem } from './settings-search';
 import './settings.css';
 
 export function SettingsPage({ state, setState, connectionError, reload }: {
@@ -27,6 +28,24 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
   const [query, setQuery] = useState(''), [locationMessage, setLocationMessage] = useState('');
   const [locating, setLocating] = useState(false), lookup = useRef(0), mounted = useRef(true);
   const lastControl = useRef<HTMLElement | null>(null);
+  const [settingsQuery, setSettingsQuery] = useState(''), [searchOpen, setSearchOpen] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null), searchDestination = useRef<string | null>(null);
+  const searchResults = findSettings(settingsQuery);
+  function jumpToSetting(item: SettingsSearchItem) {
+    searchDestination.current = item.selector; setSearchOpen(false); setSettingsQuery('');
+  }
+  useLayoutEffect(() => {
+    if (!searchDestination.current) return;
+    const element = document.querySelector<HTMLElement>(searchDestination.current);
+    searchDestination.current = null;
+    element?.focus({ preventScroll: true }); element?.scrollIntoView({ block: 'center' });
+  }, [settingsQuery, searchOpen]);
+  useLayoutEffect(() => {
+    const input = searchInput.current;
+    if (!searchOpen || !input || document.activeElement !== input) return;
+    const bounds = input.getBoundingClientRect();
+    if (bounds.top < 16 || bounds.bottom > window.innerHeight - 124) input.scrollIntoView({ block: 'start' });
+  }, [settingsQuery, searchOpen]);
   const controls = useDisplayWindow();
   const dirty = !same(settingsChanges(saved, draft), {});
   const scheduleEditor = useScheduleDraft(state.schedule);
@@ -123,7 +142,21 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
       if ((event.target as HTMLElement).closest('.settings-savebar')) return;
       lastControl.current = event.target as HTMLElement;
     }}>
-      <div className="settings-heading"><h1>Settings</h1></div>
+      <div className="settings-heading"><h1>Settings</h1>
+        <form className="settings-search" role="search" aria-label="Find a setting" onSubmit={event => { event.preventDefault(); if (searchResults[0]) jumpToSetting(searchResults[0]); }} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false); }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setSettingsQuery(''); setSearchOpen(false); searchInput.current?.focus(); } }}>
+          <div className="settings-search-field">
+            <input ref={searchInput} type="search" aria-label="Find a setting" placeholder="Find a setting" value={settingsQuery} onFocus={() => setSearchOpen(true)} onChange={event => { setSettingsQuery(event.target.value); setSearchOpen(true); }} onKeyDown={event => {
+              if (event.key === 'Escape') { event.preventDefault(); setSettingsQuery(''); setSearchOpen(false); }
+              if (event.key === 'ArrowDown' && searchOpen && searchResults.length) { event.preventDefault(); event.currentTarget.form?.querySelector<HTMLButtonElement>('.settings-search-result')?.focus(); }
+            }} aria-describedby={searchOpen && settingsQuery.trim() ? 'settings-search-status' : undefined} />
+            {settingsQuery && <button type="button" className="icon-button" aria-label="Clear settings search" onClick={() => { setSettingsQuery(''); searchInput.current?.focus(); }}><Icon name="close" size={16} /></button>}
+          </div>
+          {searchOpen && settingsQuery.trim() && <div className="settings-search-results">
+            <p id="settings-search-status" role="status">{searchResults.length ? `${searchResults.length} ${searchResults.length === 1 ? 'setting' : 'settings'}` : 'No matching settings'}</p>
+            {searchResults.length > 0 && <ul>{searchResults.map(item => <li key={item.id}><button type="button" className="settings-search-result" onClick={() => jumpToSetting(item)}><span>{item.label}<small>{item.section}</small></span><Icon name="chevronRight" size={15} /></button></li>)}</ul>}
+          </div>}
+        </form>
+      </div>
       {(error || connectionError) && <div className="settings-alert" role="alert"><span>{error || connectionError}</span>{error && <button className="icon-button" aria-label="Dismiss message" onClick={() => setError('')}><Icon name="close" size={15} /></button>}</div>}
       <nav className="settings-nav" aria-label="Settings sections">
         <a href="#weather-heading">Weather</a><a href="#preferences-heading">Time &amp; units</a><a href="#device-heading">This device</a><a href="#settings-schedule">Schedule</a><a href="#settings-recovery">Data &amp; recovery</a>
@@ -133,16 +166,16 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
           <div className="settings-section-title"><Icon name="location" size={19} /><h2 id="weather-heading" tabIndex={-1}>Location &amp; weather</h2><InfoTip label="About weather location">Only a rounded area is kept. Device location is requested only when you choose it; a city works without location access.</InfoTip></div>
           <div className="current-location"><div><strong>{draft.location.name}</strong><span>{draft.locationSource === 'device' ? 'Approximate device area' : draft.locationSource === 'fallback' ? 'Default location' : 'Chosen city'}</span></div>{!same(saved.location, draft.location) && <span className="draft-badge">Draft</span>}</div>
           <div className="city-field"><label className="field-label" htmlFor="city-search">City</label><CitySearch value={query} onChange={setQuery} onSelect={selectCity} disabled={saving} label="City" description="Type two or more letters to search for a city" /></div>
-          <div className="settings-location-actions"><button className="button small" disabled={saving || locating} onClick={() => void locate()}><Icon name="location" size={15} />{locating ? 'Finding your area…' : 'Use device location'}</button>{locating && <button className="text-button" onClick={() => { lookup.current++; setLocating(false); setLocationMessage(''); }}>Cancel lookup</button>}</div>
+          <div className="settings-location-actions"><button id="settings-device-location" className="button small" disabled={saving || locating} onClick={() => void locate()}><Icon name="location" size={15} />{locating ? 'Finding your area…' : 'Use device location'}</button>{locating && <button className="text-button" onClick={() => { lookup.current++; setLocating(false); setLocationMessage(''); }}>Cancel lookup</button>}</div>
           <p className="inline-message" role="status">{locationMessage}</p>
           <div className={`settings-weather-age weather-status-row ${state.weather.status}`}><span className="status-dot" /><span className="weather-status-text"><span>{state.weather.status === 'fresh' ? ageLabel(state.weather.updatedAt) : state.weather.status === 'stale' ? `Saved forecast · ${ageLabel(state.weather.updatedAt).toLowerCase()}` : 'Forecast unavailable'}</span>{state.weather.error && <span className="weather-status-error">{state.weather.error}</span>}</span></div>
           <a className="weather-credit" href={state.weather.sourceUrl} target="_blank" rel="noreferrer">Forecast estimates by Open-Meteo</a>
         </section>
         <section className="settings-card settings-preferences-card" aria-labelledby="preferences-heading">
           <h2 id="preferences-heading" tabIndex={-1}>Time &amp; units</h2>
-          <div className="settings-fields"><label><span className="field-label">Units</span><select className="select-input" value={draft.units} onChange={event => change({ units: event.target.value as Settings['units'] })}><option value="metric">°C · metric</option><option value="imperial">°F · imperial</option></select></label><label><span className="field-label">Time format</span><select className="select-input" value={draft.clockFormat} onChange={event => change({ clockFormat: event.target.value as Settings['clockFormat'] })}><option value="12h">12-hour</option><option value="24h">24-hour</option></select></label></div>
+          <div className="settings-fields"><label><span className="field-label">Units</span><select id="settings-units" className="select-input" value={draft.units} onChange={event => change({ units: event.target.value as Settings['units'] })}><option value="metric">°C · metric</option><option value="imperial">°F · imperial</option></select></label><label><span className="field-label">Time format</span><select id="settings-clock-format" className="select-input" value={draft.clockFormat} onChange={event => change({ clockFormat: event.target.value as Settings['clockFormat'] })}><option value="12h">12-hour</option><option value="24h">24-hour</option></select></label></div>
         </section>
-        <section className="settings-card" aria-labelledby="device-heading"><h2 id="device-heading" tabIndex={-1}>This device</h2><ScreenSettings keepAwake={draft.screen.keepAwake} active onKeepAwake={value => change({ screen: { ...live.current.screen, keepAwake: value } })} /></section>
+        <section className="settings-card settings-device-card" aria-labelledby="device-heading"><h2 id="device-heading" tabIndex={-1}>This device</h2><ScreenSettings keepAwake={draft.screen.keepAwake} active onKeepAwake={value => change({ screen: { ...live.current.screen, keepAwake: value } })} /></section>
         <div id="settings-schedule" tabIndex={-1} className="settings-card settings-schedule-card"><ScheduleSettings snapshot={state.schedule} presets={saved.savedPresets} editor={scheduleEditor} setState={setState} reload={reload} /></div>
         <div id="settings-recovery" tabIndex={-1} className="settings-recovery-section"><DataRecovery dirty={dirty || saving || scheduleEditor.dirty} clockFormat={draft.clockFormat} reload={reload} /></div>
       </div>

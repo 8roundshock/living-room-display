@@ -476,7 +476,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     const styleName = page.getByRole('textbox', { name: 'New style', exact: true });
     const savedOptions = () => styleSelect(page).locator('optgroup[label="Saved styles"] option');
     await page.getByRole('button', { name: 'About styles', exact: true }).focus();
-    assert.match(await page.getByRole('tooltip').innerText(), /Saved styles include your look and layout/);
+    assert.match(await page.getByRole('tooltip').innerText(), /Create a new style from a blank board or starter/);
     await page.keyboard.press('Escape');
     assert.equal(await styleName.count(), 0, 'the new-name form closes after saving');
     assert.equal(
