@@ -1,7 +1,22 @@
 import type { SavedPreset, Settings, VisualSettings } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import { same, sameEffectiveSettings } from './draft.ts';
-import { duplicateStyleName, getVisual, MAX_SAVED_STYLES } from './model.ts';
+import { applyBuiltinPreset, duplicateStyleName, getVisual, MAX_SAVED_STYLES } from './model.ts';
+
+export type NewStyleStart = 'blank' | 'room' | 'phone' | 'night';
+
+/** Fresh visual settings, keeping personal content and the existing capture choice. */
+export function newStyleDraft(current: Settings, start: NewStyleStart): Settings {
+  const defaults = defaultSettings();
+  const next = { ...structuredClone(current), ...getVisual(defaults) };
+  next.preview = { ...current.preview, enabled: start !== 'blank' && current.preview.enabled && current.widgets.preview };
+  next.widgets.preview = next.preview.enabled;
+  if (start === 'blank') {
+    for (const id of Object.keys(next.widgets) as (keyof Settings['widgets'])[]) next.widgets[id] = false;
+    return next;
+  }
+  return applyBuiltinPreset(next, start);
+}
 
 export type StyleSaveIntent =
   | { kind: 'current' }
@@ -21,12 +36,12 @@ export function prepareStyleSave(base: Settings, draft: Settings, intent: StyleS
   const name = (intent.kind === 'new' ? intent.name : intent.name ?? intent.original.name).trim();
   if (!name || name.length > 60) throw new Error('Use a style name from 1 to 60 characters.');
   if (intent.kind === 'update') {
-    if (!current) throw new Error('This style was deleted elsewhere. Save as new to keep your changes.');
-    if (!same(current, intent.original)) throw new Error('This style changed elsewhere. Reload it or save as new.');
+    if (!current) throw new Error('This style was deleted elsewhere. Duplicate current to keep your changes.');
+    if (!same(current, intent.original)) throw new Error('This style changed elsewhere. Reload it or duplicate current.');
   }
   const record = { id: intent.id, name, visual: getVisual(draft) };
   if (intent.kind === 'new' && current && !same(current, record))
-    throw new Error('This style changed elsewhere. Save as new with another name.');
+    throw new Error('This style changed elsewhere. Duplicate current with another name.');
   const list = draft.savedPresets.filter(item => item.id !== intent.id);
   const duplicate = duplicateStyleName(list, name);
   // Existing imported duplicate names are preserved when updating without renaming.

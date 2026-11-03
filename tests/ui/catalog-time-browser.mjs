@@ -493,7 +493,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     assert.deepEqual(added(), board, 'Room keeps Calendar, Countdown and Note enabled and in place');
     await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night'); await save();
     assert.deepEqual(added(), board, 'Night keeps them too');
-    await page.getByRole('button', { name: /^Save as new/ }).click();
+    await page.getByRole('button', { name: /^Duplicate current/ }).click();
     await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic style');
     await button('Save new style').click(); await savebar().waitFor({ state: 'detached' });
     await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:room'); await save();

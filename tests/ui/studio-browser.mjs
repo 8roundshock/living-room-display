@@ -188,7 +188,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     page.getByRole('button', { name: 'Cancel', exact: true });
   const styleSelect = (page) => page.getByRole('combobox', { name: 'Style', exact: true });
   const chooseStarter = (page, name) => styleSelect(page).selectOption(`builtin:${name}`);
-  const beginNewStyle = (page) => page.getByRole('button', { name: /^Save as new/ }).click();
+  const beginNewStyle = (page) => page.getByRole('button', { name: /^Duplicate current/ }).click();
   const saveNewStyle = (page) => page.getByRole('button', { name: 'Save new style', exact: true });
   async function saved(page) {
     await page.locator('.style-name-dialog').waitFor({ state: 'hidden' });
@@ -476,7 +476,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     const styleName = page.getByRole('textbox', { name: 'New style', exact: true });
     const savedOptions = () => styleSelect(page).locator('optgroup[label="Saved styles"] option');
     await page.getByRole('button', { name: 'About styles', exact: true }).focus();
-    assert.match(await page.getByRole('tooltip').innerText(), /Saved styles include your look and layout/);
+    assert.match(await page.getByRole('tooltip').innerText(), /Create a new style from a blank board or starter/);
     await page.keyboard.press('Escape');
     assert.equal(await styleName.count(), 0, 'the new-name form closes after saving');
     assert.equal(
@@ -538,12 +538,12 @@ export async function runStudioQa({ playwright, edge } = {}) {
       await page.locator('.style-limit').innerText(),
       'Up to 12 styles.',
     );
-    assert.equal(await page.getByRole('button', { name: /^Save as new/ }).isDisabled(), true, 'no thirteenth style');
+    assert.equal(await page.getByRole('button', { name: /^Duplicate current/ }).isDisabled(), true, 'no thirteenth style');
     assert.equal(await savedOptions().count(), 12, 'starter looks do not consume saved style slots');
     await app.store.patchSettings({ savedPresets: [] });
     await page.clock.runFor(30001);
     await page.locator('.style-limit').waitFor({ state: 'detached' });
-    assert.equal(await page.getByRole('button', { name: /^Save as new/ }).isEnabled(), true);
+    assert.equal(await page.getByRole('button', { name: /^Duplicate current/ }).isEnabled(), true);
     await styleSelect(page).selectOption('');
     checks.push(
       '#344/#343 top styles: contextual scope help, new-name form clears on Save, duplicate names (case/trim) are refused inline with aria-invalid, 12 saved styles exclude starters, selected Save preserves identity/name, and new/delete actions return focus to Style; deletion remains a draft until Save',

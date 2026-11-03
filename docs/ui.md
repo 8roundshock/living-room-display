@@ -1,5 +1,23 @@
 # Display studio
 
+## Creating styles and finding settings (#570, #571)
+
+**Create new style** is available beside the Style selector and inside its menu.
+Choose a name and Blank, Room, Phone or Night, then **Start editing**. This starts
+an unsaved independent draft; **Save new style** publishes it and **Cancel**
+returns to the saved display. Blank has no widgets. Starters use a fresh default
+board and their look, retaining personal content and the existing screenshot
+choice. Starting from a modified style first offers Keep editing, Discard or Save.
+**Duplicate current** separately copies the existing layout and appearance.
+In compact desktop windows, both creation actions are in the **Style** menu;
+the toolbar leaves room for Save/Cancel without moving the canvas.
+
+Category, availability and other native select options have an opaque dark
+surface and matching light text. Forced-color mode retains system colors and
+native keyboard behavior. Settings uses compact rows and **Find a setting** to
+jump directly to an existing control without changing its draft; see
+[the Settings interaction notes](settings-usability.md).
+
 ## Adding widgets (#554, #563)
 
 Search and a native Category selector lead discovery. Category options come from
@@ -54,7 +72,7 @@ send `geolocation=()`. Lookup happens only after the user's explicit action. Leg
 Home owns daily actions and reminder management. Its compact display summary lists
 what is shown and offers Edit/Open actions, without rendering a second ambient canvas.
 Edit display owns Style/Widgets, the visual canvas and local movement preview. Saved
-styles remain at the top with Save changes and Save as new. App-wide city, units,
+styles remain at the top with Create new style, Duplicate current and Save changes. App-wide city, units,
 time format, screen-awake preference, schedule configuration and data recovery belong
 to Settings. Appearance/layout resets remain visual editor drafts.
 
@@ -290,7 +308,9 @@ motion or the Off animation level.
 
 - **Save changes** atomically persists the visual editor draft, widget
   options, selected local photo and saved styles while preserving unrelated preferences. The bar exists only while
-  effective saved values differ; reverting all edits hides it. Edits made while saving remain unsaved afterward.
+  effective saved values differ or a new-style identity awaits saving; reverting all
+  ordinary edits hides it. A new style remains a draft even when its visuals match
+  the saved board. Edits made while saving remain unsaved afterward.
   Failed saves preserve the draft and return keyboard focus to Save. Untouched fields refresh from server polling.
   Countdowns, world clocks and saved styles merge by item when another editor saved
   them meanwhile (#242): additions and removals from both are kept, an item changed
@@ -298,7 +318,7 @@ motion or the Off animation level.
   changed; a saved style's look counts as one field), and an item removed elsewhere
   but edited here stays. The explicitly selected style has an additional guard: a
   changed/deleted record cannot be overwritten or recreated by saving an old look.
-  **Reload style** (when it still exists) or **Save as new** provides recovery.
+  **Reload style** (when it still exists) or **Duplicate current** provides recovery.
   This editor's order wins only when it moved items; otherwise
   the saved order stays and its own additions follow. A layout edit keeps its whole
   arrangement, but widgets merge too (#350): one removed elsewhere and untouched here is
@@ -352,12 +372,12 @@ motion or the Off animation level.
   size, so labels keep the readability floors. These are virtual **Starter looks**
   in the top **Style** selector, not separate cards or records in the twelve saved
   slots. New installs use the Room look. Choosing one changes the visual draft;
-  **Save as new** can turn it into a normal saved style.
+  **Duplicate current** can turn it into a normal saved style.
 - The same selector lists **Saved styles** and **Current display**. Saved styles
   include visual/widget/empty-reminder settings, accent mode and animation; selecting
   one restores its whole board. Editing it shows **Modified**, and the single
   **Save changes** action updates that exact ID while saving all editor drafts.
-  **Save as new** opens a compact naming dialog, then **Save new style** creates a new ID and
+  **Duplicate current** opens a compact naming dialog, then **Save new style** creates a new ID and
   leaves the original untouched. **Manage style** contains Rename, Duplicate style
   and a confirmed deletion staged until Save. Naming preserves the underlying canvas
   geometry, contains keyboard focus, and offers one Cancel/Save pair. Escape or Cancel

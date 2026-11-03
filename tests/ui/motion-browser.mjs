@@ -1014,7 +1014,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
         assert.equal(await pressed('Lively').getAttribute('aria-pressed'), 'true', `${preset} keeps the level`);
       }
       await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await savebar.waitFor({ state: 'detached' });
-      await page.getByRole('button', { name: /^Save as new/ }).click();
+      await page.getByRole('button', { name: /^Duplicate current/ }).click();
       await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic lively');
       await page.getByRole('button', { name: 'Save new style', exact: true }).click(); await page.locator('.style-name-dialog').waitFor({ state: 'hidden' }); await savebar.waitFor({ state: 'detached' });
       await styleChoice.selectOption('');

@@ -472,7 +472,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
     assert.equal(await p.getByRole('button', { name: /^Custom colour/ }).count(), 0, "a built-in style's own single colour is not offered as a custom colour (#151)");
     checks.push('Phone, Room and Night apply and save Native with their own brightness and accent colour; the canvas resolves Lilac, Mist and Rose tones');
 
-    await p.getByRole('button', { name: /^Save as new/ }).click();
+    await p.getByRole('button', { name: /^Duplicate current/ }).click();
     await p.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic native');
     await p.getByRole('button', { name: 'Save new style', exact: true }).click();
     await p.locator('.style-name-dialog').waitFor({ state: 'hidden' });

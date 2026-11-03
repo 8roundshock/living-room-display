@@ -359,11 +359,36 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     await status(page).getByText('Completed “Take a walk”', { exact: true }).waitFor();
     assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Plan the long weekend', 'checking off another reminder keeps the edit');
     await page.clock.runFor(1300);
-    // Saving an edit for a reminder completed elsewhere: the cross-tab 409 keeps its message, then
-    // the refreshed list shows it checked off and Save waits until it is restored.
-    const response = await fetch(`${base}/api/reminders/${id(3)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed: true }) });
-    assert.equal(response.status, 200);
-    await page.getByRole('button', { name: 'Save reminder', exact: true }).click();
+    // #574: send from the normally enabled form before remote completion, then hold that real
+    // PATCH until completion and refresh have both arrived. Completing first and then clicking
+    // raced the legitimate refresh-first guard, which disables Save instead of sending a 409.
+    const editedUrl = `${base}/api/reminders/${id(3)}`;
+    let releaseEdit;
+    const editGate = new Promise(resolve => { releaseEdit = resolve; });
+    const holdEdit = async route => {
+      if (route.request().method() !== 'PATCH') return route.fallback();
+      await editGate;
+      await route.continue();
+    };
+    await page.route(editedUrl, holdEdit);
+    try {
+      const [request] = await Promise.all([
+        page.waitForRequest(request => request.url() === editedUrl && request.method() === 'PATCH', { timeout: 5000 }),
+        page.getByRole('button', { name: 'Save reminder', exact: true }).click(),
+      ]);
+      assert.equal(request.postDataJSON().text, 'Plan the long weekend', 'the normally enabled form sends the actual edit');
+      const response = await fetch(editedUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed: true }), signal: AbortSignal.timeout(5000) });
+      assert.equal(response.status, 200);
+      await page.clock.runFor(30_000);
+      await page.getByText('Checked off. Undo or restore it to edit.', { exact: true }).waitFor();
+      assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Plan the long weekend', 'refresh during the held edit retains typed text');
+      const conflict = page.waitForResponse(response => response.url() === editedUrl && response.request().method() === 'PATCH', { timeout: 5000 });
+      releaseEdit();
+      assert.equal((await conflict).status(), 409, 'the real server refuses the stale edit after remote completion');
+    } finally {
+      releaseEdit();
+      await page.unroute(editedUrl, holdEdit);
+    }
     await page.locator('.home-sheet-status.error, [role="alert"]').getByText('This reminder was completed elsewhere. Restore it to edit.', { exact: true }).waitFor();
     assert.equal(stored('Plan the weekend').completed, true);
     assert.equal(stored('Plan the long weekend'), undefined);
@@ -382,6 +407,32 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
     assert.equal(stored('Plan the long weekend').completed, false);
     await focusIs(page, 'Edit: Plan the long weekend', 'after Save, focus returns to the row’s Edit button (#230)');
     checks.push('editing happens in place under “Edit reminder” with no circle for that row; another check-off keeps the edit; a cross-tab completion keeps its 409 message, then Save waits (“Checked off. Undo or restore it to edit.”) until a restore, and saves the kept edit');
+
+    // The opposite order is also correct: refresh before submission prevents the write entirely.
+    await page.getByRole('button', { name: 'Edit: Plan the long weekend', exact: true }).click();
+    await page.getByLabel('Reminder', { exact: true }).fill('Unsaved after remote completion');
+    let refreshedEditWrites = 0;
+    const countEdit = request => { if (request.url() === editedUrl && request.method() === 'PATCH') refreshedEditWrites++; };
+    page.on('request', countEdit);
+    try {
+      const response = await fetch(editedUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed: true }), signal: AbortSignal.timeout(5000) });
+      assert.equal(response.status, 200);
+      await page.clock.runFor(30_000);
+      await page.getByText('Checked off. Undo or restore it to edit.', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: 'Save reminder', exact: true }).isDisabled(), true);
+      await page.getByLabel('Reminder', { exact: true }).press('Enter');
+      await page.waitForTimeout(100); // Bounded quiet interval for any incorrectly submitted request.
+      assert.equal(refreshedEditWrites, 0, 'refresh-first blocks submission without a forced click or write');
+      assert.equal(await page.getByLabel('Reminder', { exact: true }).inputValue(), 'Unsaved after remote completion');
+      assert.equal(stored('Plan the long weekend').completed, true);
+      assert.equal(stored('Unsaved after remote completion'), undefined);
+    } finally { page.off('request', countEdit); }
+    await page.getByRole('button', { name: /^History \(/ }).click();
+    await page.getByRole('button', { name: 'Restore: Plan the long weekend', exact: true }).click();
+    await status(page).getByText('Restored “Plan the long weekend”', { exact: true }).waitFor();
+    await page.getByRole('button', { name: /^Up next \(/ }).click();
+    await page.getByRole('button', { name: 'Discard', exact: true }).click();
+    checks.push('#574 both orderings are explicit: a held real edit receives409 after remote completion/refresh; refresh before submit disables Save, sends no edit on Enter and retains the typed draft');
 
     // Discard and Escape abandon only the form and return focus (#230, #236).
     const before = JSON.stringify(app.store.snapshot().reminders);

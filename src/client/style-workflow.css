@@ -22,6 +22,13 @@
 .studio .style-name-dialog input { width: 100%; min-height: 44px; }
 .style-name-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
 .style-name-dialog .inline-message { margin-top: 10px; }
+.style-start-options { border: 0; padding: 0; margin: 20px 0 0; min-inline-size: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.style-start-options legend { color: var(--studio-muted); font-size: 12px; margin-bottom: 8px; }
+.style-start-options .style-start-option { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; white-space: normal; gap: 4px; padding: 12px; text-align: left; }
+.style-start-option strong { font-size: 14px; font-weight: 550; }
+.style-start-option span { color: var(--studio-muted); font-size: 12px; line-height: 1.4; }
+.style-start-option[aria-pressed='true'] { background: #b8a6ef22; border-color: #c9b9f076; }
+.style-copy-current { color: var(--studio-muted); }
 .studio .daylight-status { display: flex; align-items: center; gap: 8px; }
 .studio .daylight-now { margin: 0; }
 .editor-style-bar .studio-savebar[data-naming] { visibility: hidden; }
@@ -60,6 +67,9 @@
   .studio.editor-with-styles { display: flex; flex-direction: column; }
   .editor-with-styles > .studio-header { width: 100%; flex: none; }
   .editor-style-bar { flex: none; }
+  .editor-style-bar .studio-savebar { flex: 1 1 0; flex-wrap: nowrap; }
+  .editor-style-bar .studio-savebar > div { flex: 0 0 auto; }
+  .editor-style-bar .save-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .editor-with-styles > .studio-workspace { width: 100%; flex: 1; min-height: 0; height: auto; padding-bottom: 18px; }
   .editor-with-styles .studio-workspace > .inspector { height: 100%; }
   .editor-with-styles .canvas-column { padding-bottom: 0; }
@@ -72,9 +82,13 @@
   .editor-with-styles .weather-status-row { margin-top: 16px; }
   .editor-with-styles .weather-credit { margin-bottom: 12px; }
 }
-@media (min-width: 701px) and (max-width: 1050px) {
+@media (min-width: 701px) and (max-width: 1200px) {
   .editor-style-bar { padding-inline: 14px; gap: 8px; }
   .studio .style-choice { width: 140px; }
+  .style-choice-row { gap: 6px; }
+  /* The Style menu keeps both actions available without pushing Save onto a
+     new row. Save already identifies the modified style, so its badge is redundant. */
+  .style-choice-row > :is(.style-create-new, .style-copy-current, .style-modified) { display: none; }
 }
 @media (max-width: 700px) {
   .studio.editor-with-styles { padding-bottom: 24px; }

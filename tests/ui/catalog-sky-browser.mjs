@@ -157,7 +157,7 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night');
     await save(page).click(); await clean(page);
     assert.equal(app.store.snapshot().settings.widgetData.worldClocks.length, 3, 'a built-in style keeps world clocks');
-    await page.getByRole('button', { name: /^Save as new/ }).click();
+    await page.getByRole('button', { name: /^Duplicate current/ }).click();
     await page.getByRole('textbox', { name: 'New style', exact: true }).fill('Synthetic evening');
     await page.getByRole('button', { name: 'Save new style', exact: true }).click(); await clean(page);
     await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:room');
