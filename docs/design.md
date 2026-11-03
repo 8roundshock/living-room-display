@@ -29,7 +29,7 @@ favor predictable choices, concise action labels and controls near their context
 [modal dialog](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/) inform keyboard,
 Escape and focus-return behavior. This web adaptation claims no Apple certification.
 Recheck when catalog categories, action scope, focus ownership or viewport styles change.
-Author validation: both typechecks, production build and all 601 source tests pass.
+Author validation: both typechecks, production build and all 602 source tests pass.
 Synthetic styles, picker-sheet, catalog-time, preview, shared-snapshot and daylight
 browser checks pass. Naming at 1280/390/320/640 widths, deletion Undo, category
 browsing and all three Last screen families were inspected in RAM. Independent

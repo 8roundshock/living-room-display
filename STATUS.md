@@ -12,7 +12,7 @@ is picture-only with responsive rounded, feathered edges under the owner's
 The naming dialog keeps the canvas stable and uses one Cancel/Save pair. Daylight
 help is contextual, sliders have explicit labels, no-op appearance reset status
 is accurate and concurrent merged visuals receive the correct legacy look label.
-Both typechecks, production build and all 601 source tests pass. The styles,
+Both typechecks, production build and all 602 source tests pass. The styles,
 picker-sheet, catalog-time, daylight, preview and shared-snapshot browser suites
 pass. Author RAM-only visual review covered compact naming, deletion Undo, catalog
 filters and all three picture families. Full widget QA, independent final-head
