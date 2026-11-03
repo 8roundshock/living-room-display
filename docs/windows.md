@@ -114,13 +114,16 @@ For retention only (#519), the producer may read the receiving input desktop's
 name with `DESKTOP_READOBJECTS`. A known `Screen-saver`/`ScreenSaver` desktop keeps
 the previous image only with an active unlocked same console session, unchanged
 selected/enabled own saver, positive actual saver-running flag and a live pinned
-exact `/s` process in the same logon/session. Process discovery waits at most
-1.5 seconds, once per desktop episode; a blocked reader prevents replacement
-readers and a late result only releases its own handles. Fresh desktop/session/
-selection facts are checked after discovery. Capture still explicitly requires
-receiving Default; no pixels are copied from another desktop. Missing process
-proof during an early desktop switch still clears the image, without a grace
-period or delayed privacy invalidation. Unknown or unreadable facts fail closed.
+exact `/s` process in the same logon/session. Before that process exists, a known
+unlocked transition hides the sole cached file from all readers and fences uploads
+for a fixed maximum of five seconds (#559). Only a matching backend acknowledgement
+starts asynchronous discovery. One query is bounded to 1.5 seconds; confirmed
+absence or incomplete argv can retry within the original episode deadline. A
+blocked reader prevents replacement readers; late results release their own handles.
+Fresh desktop/session/selection and exact process proof reveal the original file.
+Failure, expiry or changed context clears it. Capture still requires receiving
+Default; no pixels are copied from another desktop and unverified pixels are
+never served. Unknown or unreadable facts fail closed.
 
 The backend is the sole file/metadata authority. Child-secret safe observations
 renew the ten-second producer lease; public reads cannot renew it. Unknown,
@@ -144,9 +147,10 @@ hide/close releases the pause; missing release remains paused until the user
 closes previews and explicitly resumes snapshots from Home. Fixed capture
 events/counters stay in RAM, with no private strings or pixel logging.
 The timestamp remains honest after a failed refresh. These source contracts and
-CI checks do not prove installed capture, protected-content support or physical
-native acceptance; #519 remains unresolved. Earlier RAM-only claim evidence is
-historical, and native dismissal/cursor/deadline behavior is unchanged.
+CI checks do not prove installed capture or protected-content support. The dated
+ordinary-cycle native image and mouse-dismissal acceptance is recorded in
+[STATUS](../STATUS.md); #532's broader recovery checks remain open. Earlier
+RAM-only claim evidence is historical.
 
 For source/CI safety, `LRD_PREVIEW_PREPARER_DISABLED=1` is a disable-only override
 used by installer smoke checks. It cannot enable the watcher or bypass any guard.

@@ -1,4 +1,22 @@
 # Project status
+
+## Native Last screen acceptance — 2026-11-03 (#519)
+
+Clean source `8059a19d2b57ca5189ac8ac52302af8f2365d06d`, including independently
+reviewed PRs #560/#561 and their passing CI, is installed. During a natural
+Windows screensaver cycle, the owner confirmed that the screenshot appeared and
+physical mouse movement returned to the desktop. Separately, the bound observer
+recorded 90 active samples with the same snapshot file present, no missing or
+unknown samples, native exit code 0, and restoration of the normal idle timeout
+with other activation values unchanged. Pixel visibility and physical dismissal
+come from the owner's report, not from those scalar checks.
+
+This completes #519 under the current shared-file contract (#544). #532 remains
+open: this ordinary mouse cycle does not verify keyboard dismissal, cold-start
+activation or recovery from every previously reported stuck surface. The sections
+below retain earlier source-checkpoint evidence and its original limitations;
+this dated acceptance supersedes their pending #519 runtime status.
+
 ## Focused Add-widget sheet (#554)
 
 Source work opens Add widget in its own responsive modal sheet, preserving the
@@ -59,14 +77,15 @@ Windows compilation/test results and independent final-head review are pending.
 No installed or native operation ran. This repairs source-established blocking
 observations; it does not establish the cause or recovery of any reported screen.
 Remaining synchronous launch/save mutation risk is tracked separately in #547;
-actual native acceptance remains #532/#519.
+#532 retains broader recovery acceptance; #519's ordinary-cycle acceptance is above.
 
 ## Quarantine Last screen across native process startup (#559)
 
 Installed verification of PR #557 reproduced a narrower race: Windows changed
 the input desktop and the cache was cleared about 50 ms before the native process
 existed. Widgets and physical dismissal worked, but Last screen did not. The
-earlier source checks did not establish native image acceptance; #519 stays open.
+earlier source checks did not establish native image acceptance; later acceptance
+is recorded above.
 
 The producer now reports a known unlocked screensaver transition before starting
 identity discovery. The backend immediately hides the existing image from every
@@ -83,8 +102,8 @@ serving, or capture on the screensaver desktop is introduced.
 Both production native artifacts compile and the source-only Windows suite
 passes, including 87 injected context/discovery assertions. Backend regression
 tests reproduce the startup ordering and exercise quarantine/read/upload/expiry
-fences. Independent final-head review, CI and a newly installed native acceptance
-test remain required; this checkpoint is source evidence only.
+fences. Independent final-head review and all ten CI checks passed for PR #561;
+its installed native acceptance is recorded above.
 
 ## Retain Last screen during the validated native desktop transition (#519)
 
@@ -102,7 +121,8 @@ fails closed; no serving grace or new capture was added.
 Its independently reviewed head and CI passed before merge and installation.
 The 52 injected context/retention assertions covered the intended fail-closed
 startup gap; actual native verification subsequently hit that gap. #559 above
-addresses it without making unverified pixels available; #519 remains open.
+addresses it without making unverified pixels available. Later native acceptance
+is recorded above.
 
 ## Shared latest screenshot file (#544)
 
@@ -138,8 +158,8 @@ clear, six-minute native retention and upload fencing. Deterministic file tests
 cover replacement failure, linked paths and actual in-flight rename/pause/privacy
 races. The real headless browser flow passes with explicit device/wake-lock mocks;
 opaque-image and missing-image boards were inspected in RAM. Independent final-head
-review and applicable CI remain required. No installed capture/native acceptance
-is established; #519 remains unresolved.
+review and applicable CI were still required at that source checkpoint. Those
+checks did not establish native acceptance; the later result is recorded above.
 
 The first integrated browser CI exposed four contract/clock regressions. Widget
 and grid checks now assert the intentional missing-image placeholder; movement
@@ -186,8 +206,8 @@ AUTO never creates or rewrites the data preference. Explicit CLI startup choices
 are retained in complete data backups. Mocked source install transactions pass.
 Package test-isolation correction #543 supplies synthetic child status facts and
 a source-only mode excluding three OS integration cases; hosted CI retains the
-full cases. Final head review/CI remain required. No installed capture or native
-session acceptance is established; #519 remains open.
+full cases. Final head review/CI were still required at that source checkpoint.
+Those checks did not establish native acceptance; the later result is above.
 
 ## Native widget-first reveal (#539)
 
@@ -277,8 +297,9 @@ killed older handshake arriving late remains an availability limit in #534.
 
 All 558 unit tests, both TypeScript checks and the production build pass. No actual
 native session, desktop or installed operation was used. Independent final-head
-review, applicable CI and actual native acceptance remain required. #532 and #519
-remain open; this is not an exclusive diagnosis of the reported black screen or a
+review, applicable CI and actual native acceptance were still required at that
+source checkpoint. #532 remains open; #519's later acceptance is above. This is
+not an exclusive diagnosis of the reported black screen or a
 completed installation. PR #531's claim-pipe correction is already in this source
 base, distinct from the version-bound older installation report.
 
@@ -307,11 +328,11 @@ PID, scalar framing and first-instance refusal. Existing policy, context, claim,
 encoding and fake lifecycle/runtime checks also pass, and both production binaries
 compile without execution. Independent final-head review, applicable CI and actual
 automatic Last screen acceptance remain required; source checks do not establish
-installed capture or rendering. #519 remains open.
+installed capture or rendering. #519's later native acceptance is recorded above.
 
 ## Automatic Last screen after timer drift (#519)
 
-Automatic acceptance remains unsuccessful after source `70673ea`: the reported
+Automatic acceptance was unsuccessful at source `70673ea`: the reported
 activation reached the ambient widgets without a recognizable Last screen image,
 after a grey interval of unmeasured duration. The separate startup investigation
 remains in #503; this change does not establish that interval's cause.
@@ -330,7 +351,7 @@ Source-only Windows checks pass: 47 preparation-policy and six actual production
 context-comparison assertions, existing fake lifecycle/claim/runtime tests and
 synthetic RAM-only encoding. Both production binaries compile without execution.
 This confirms a blocking source mechanism, not the exclusive cause of black
-pixels or actual capture/claim/render acceptance. #519 remains open.
+pixels or actual capture/claim/render acceptance. Later native acceptance is above.
 
 ## Workspace native-scroll fixture readiness (#523)
 

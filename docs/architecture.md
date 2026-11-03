@@ -84,7 +84,8 @@ Child-only publication and existing local HTTP security boundaries remain.
 The general RAM-only rule for agent screenshots is unchanged. An owned per-user
 sign-in entry supports an opted-in install (#540); source/test servers stay inert.
 Keep the thumbnail dim, adjustable, movable and toggleable. Current source/CI
-evidence is not installed/native acceptance; #519 remains unresolved.
+evidence is not installed/native acceptance. The successful ordinary-cycle result
+for #519 is recorded in [STATUS](../STATUS.md); broader recovery checks remain separate.
 
 Historical evidence for the previous RAM-only implementation: native capture and
 rendered preview were inspected in RAM on a 3840x2160 Windows 10 setup on 2026-10-18;
