@@ -17,6 +17,7 @@ function ThemeSequence({ scene, still, exclusions, inkRevision }: { scene: Theme
   const [seed] = useState(() => still ? 579 : Math.floor(Date.now() / 1000));
   const root = useRef<HTMLDivElement>(null);
   const measuredSize = useRef('');
+  const [resizeRevision, setResizeRevision] = useState(0);
   const [marks, setMarks] = useState<{ generation: number; born: number; index: number; left: number; top: number; size: number; box: ThemeRect; obscured: boolean }[]>([]);
   const definition = THEME_SCENES[scene.motif], { slots, interval } = themeCadence(scene.motif);
   useEffect(() => {
@@ -24,6 +25,14 @@ function ThemeSequence({ scene, still, exclusions, inkRevision }: { scene: Theme
     const timer = window.setInterval(() => setTick(value => value + 1), interval);
     return () => window.clearInterval(timer);
   }, [interval, still]);
+  useLayoutEffect(() => {
+    const element = root.current; if (!element) return;
+    // Keep one observer per mounted scene. Re-observing every slot renewal delivers
+    // another initial callback and duplicates placement/style work despite no resize.
+    const observer = new ResizeObserver(() => setResizeRevision(value => value + 1));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   useLayoutEffect(() => {
     const element = root.current; if (!element) return;
     const place = () => {
@@ -50,9 +59,8 @@ function ThemeSequence({ scene, still, exclusions, inkRevision }: { scene: Theme
     };
     // Widget fit/layout effects have committed before this frame; no continuous frame loop.
     const frame = requestAnimationFrame(place);
-    const resize = new ResizeObserver(place); resize.observe(element);
-    return () => { cancelAnimationFrame(frame); resize.disconnect(); };
-  }, [tick, still, definition, exclusions, seed, slots, inkRevision]);
+    return () => cancelAnimationFrame(frame);
+  }, [tick, still, definition, exclusions, seed, slots, inkRevision, resizeRevision]);
   return <div ref={root} className="ambient-theme" aria-hidden="true" data-theme-motif={scene.motif} data-theme-source={scene.source} data-theme-quiet={scene.quiet || undefined}
     data-theme-still={still || undefined} data-theme-tick={tick} data-theme-interval={interval} data-theme-motion={definition.motion}
     style={{ '--theme-tint': scene.tint, '--theme-companion': scene.companion, '--theme-duration': `${THEME_ACTIVE_MS}ms`, '--theme-retire-duration': `${THEME_RETIRE_MS}ms` } as CSSProperties}>

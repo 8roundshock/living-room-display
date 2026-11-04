@@ -24,7 +24,13 @@ keeps all eleven tested scenes present at 1080p/4K. This was a fix, not a blind 
 
 The isolated theme suite covers demonstrations, compact controls, typography
 growth, 30-second floating/step swaps, finite slot lifetimes and bounded ongoing
-work. Corrected-head independent visual/code review and CI belong to
+work. Its first corrected candidate exceeded the style-recalculation limit by
+one (16 against 15). Keeping one resize observer per mounted scene removes the
+duplicate initial callback on each slot renewal; the completed ten-group suite
+then passed with the original limit (2 layouts, 15 style recalculations, about
+15 ms main-thread work, zero paints and 23 layers in the 4.2-second active sample).
+Swap assertions explicitly seek CSS ages, require visible marks, and include a
+deliberate overlap negative control. Corrected-head independent visual/code review and CI belong to
 [PR #581](https://github.com/8roundshock/living-room-display/pull/581). No
 installation, capture or native behavior changed.
 
