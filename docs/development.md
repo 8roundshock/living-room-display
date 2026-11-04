@@ -478,3 +478,13 @@ board and reduced-motion relocation, plus compact editor widths. `capture: true`
 returns images in memory to its caller. It never writes screenshot files. The
 existing palette, widget, canvas-scope and motion suites retain their full family
 sweeps and use multiple synthetic boards for catalog coverage.
+
+The `themes` pull-request suite (#575) runs an isolated synthetic source server.
+It checks mode/calendar draft transactions, small editor layouts, distinct scenes
+at 1080p/4K, finite staggered slot lifetimes, reduced-motion restarts, real Dangi
+fixtures and bounded CDP main-thread/layer observations. `capture: true` returns
+RAM-only images with each decorative animation sampled at its actual staggered
+age. It never opens the installed app, invokes native activation or captures a
+desktop. The Dynamic suite additionally covers holiday opt-in with themes Off,
+direct shared calendar controls and long holiday labels. General hardware/power
+budgets and physical-TV acceptance remain separate work.

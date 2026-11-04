@@ -71,7 +71,7 @@ export function persistableSettings(settings: Settings): PersistableSettings {
   if (widgetData && typeof widgetData === 'object') {
     const defaults = (defaultSettings() as unknown as Loose).widgetData as Loose | undefined ?? {};
     for (const key of Object.keys(widgetData)) if (isDeepStrictEqual(widgetData[key], defaults[key])) delete widgetData[key];
-    // Older readers know Dynamic's original sources, but not the opt-in holiday source.
+    // Readers with Dynamic's original sources need no new holiday key while it is off.
     if (widgetData.dynamic?.holidays === false) delete widgetData.dynamic.holidays;
     if (!Object.keys(widgetData).length) delete result.widgetData;
   }

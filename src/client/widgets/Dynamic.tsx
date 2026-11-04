@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { AlertsState, AppState, DynamicSources, RainInterval, Settings } from '../../shared/contracts.ts';
 import { needsAlerts } from '../../shared/widgets.ts';
-import { HOLIDAY_REGION_NAMES } from '../../shared/holidays.ts';
+import { HolidayCalendars } from '../HolidayCalendars';
 import {
   DYNAMIC_ROWS_MAX, chooseDynamic, dynamicSignals, dynamicSummary, memoizeDynamicSignals, rotationSlot,
   type DynamicCard, type DynamicChoice, type DynamicGlyph, type DynamicInput, type DynamicPhrase, type DynamicPrevious, type DynamicSignals,
@@ -230,9 +230,7 @@ function DynamicSettings({ settings, onChange, saving, state, saved }: WidgetSet
         </label>
         <p className="hint dynamic-source-hint" id={`dynamic-${source.key}-hint`}>{source.hint}</p>
         {source.key === 'alerts' && sources.alerts && <p className="hint dynamic-alerts-status">{alertsStatusLine(settings, saved, state?.alerts, now)}</p>}
-        {source.key === 'holidays' && sources.holidays && <p className="hint">{settings.appearance.theme.calendars.length
-          ? settings.appearance.theme.calendars.map(region => HOLIDAY_REGION_NAMES[region]).join(' · ')
-          : 'Choose a calendar in Themes.'}</p>}
+        {source.key === 'holidays' && sources.holidays && <HolidayCalendars value={settings.appearance.theme.calendars} disabled={saving} onChange={calendars => onChange(previous => ({ ...previous, appearance: { ...previous.appearance, theme: { ...previous.appearance.theme, calendars } } }))} />}
       </div>)}
     </fieldset>
     <p className="hint">Stays on what matters most, such as an official warning, a storm or rain starting soon, and otherwise shows one calm card each minute. Uses your weather location ({settings.location.name}). Forecasts and model estimates are not official warnings.</p>

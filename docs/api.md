@@ -871,7 +871,8 @@ weather, snapshot pixels, and native tokens are excluded. Store backups privatel
 
 At rest, `state.json`, `state.backup.json` and exports omit additive values while
 they equal the current read default: `appearance.accentMode` `color`,
-`appearance.animation` `subtle`, `appearance.daylightBrightness` `null` (Fixed,
+`appearance.animation` `subtle`, `appearance.theme` Off with all three calendars,
+`appearance.daylightBrightness` `null` (Fixed,
 #439), default `widgetData` sections, and disabled widget ids the previous installed
 release does not know. The previous release (`d66832b`) reads `accentMode`, `animation`
 and pre-Dynamic `widgetData`, so omitting those values is optional (#272). It does
@@ -899,3 +900,15 @@ provider series produce nulls, while malformed/incomplete supplied series reject
 the refresh and retain the last successful state. The existing timeout/cache and
 forecast-demand gates apply. Weather alerts also request the existing official
 alert service when their dedicated widget is enabled.
+
+### Ambient themes and holiday sources (#575, #458)
+
+`appearance.theme` is `{ mode: 'off' | 'weather' | 'seasonal' | 'combined',
+calendars: ('CA' | 'KR' | 'RU')[] }`. Missing persisted fields default to Off with
+all three calendars. Calendar entries are unique; an empty list keeps seasons.
+Settings patches replace this small object completely; saved styles and their
+scheduled activation use the same appearance field. The default is omitted at
+rest; non-default choices are a documented older-reader rollback exception.
+`widgetData.dynamic.holidays` defaults false and is omitted while false. It uses
+the same calendar list and adds offline today/tomorrow cards only when opted in.
+Weather details remain API-only and are excluded from private settings exports.

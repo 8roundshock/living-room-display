@@ -152,7 +152,7 @@ test('exports include non-default widgetData and imports restore it', async () =
 });
 
 test('#437 Dynamic sources: all on by default, merged by PATCH, at least one kept on, strict keys, read and exported like any section', async () => {
-  const allOn = { weather: true, alerts: true, air: true, sky: true, personal: true };
+  const allOn = { weather: true, alerts: true, air: true, sky: true, personal: true, holidays: false };
   assert.deepEqual(defaultSettings().widgetData.dynamic, allOn);
   assert.deepEqual(settingsSchema.parse(withData({})).widgetData.dynamic, allOn, 'a missing section reads the default');
   assert.deepEqual(settingsSchema.parse(withData({ dynamic: { air: false } })).widgetData.dynamic, { ...allOn, air: false }, 'missing keys read as on');
@@ -182,7 +182,8 @@ test('#437 Dynamic sources: all on by default, merged by PATCH, at least one kep
     assert.equal('widgetData' in (await (await send('GET', '/api/export')).json()).settings, false, 'the default section is left out of exports');
     assert.equal((await send('PATCH', '/api/settings', { widgetData: { dynamic: { air: false } } })).status, 200);
     const exported = await (await send('GET', '/api/export')).json();
-    assert.deepEqual(exported.settings.widgetData, { dynamic: { ...allOn, air: false } }, 'a changed section is exported whole');
+    const { holidays: _omittedHoliday, ...legacySources } = allOn;
+    assert.deepEqual(exported.settings.widgetData, { dynamic: { ...legacySources, air: false } }, 'false holiday source is omitted from a changed legacy section');
     assert.equal((await send('PATCH', '/api/settings', { widgetData: { dynamic: { air: true } } })).status, 200);
     assert.equal((await send('POST', '/api/import', exported)).status, 200);
     assert.deepEqual(app.store.snapshot().settings.widgetData.dynamic, { ...allOn, air: false }, 'import restores it');

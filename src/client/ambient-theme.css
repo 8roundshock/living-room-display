@@ -1,0 +1,19 @@
+.ambient-theme { position: absolute; inset: 0; overflow: hidden; pointer-events: none; contain: layout style; color: var(--theme-tint); opacity: calc(var(--ambient-brightness, .55) * .36); }
+.theme-mark { position: absolute; width: clamp(8px, 1.45cqmin, 31px); height: clamp(8px, 1.45cqmin, 31px); fill: none; stroke: currentColor; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; transform: scale(var(--theme-scale)); opacity: 0; animation: theme-float var(--theme-duration) ease-in-out 1 both; }
+.theme-mark path, .theme-mark circle { vector-effect: non-scaling-stroke; stroke-width: 1px; }
+.ambient-theme[data-theme-motif='rain'] .theme-mark, .ambient-theme[data-theme-motif='storm'] .theme-mark { height: clamp(12px, 3cqmin, 60px); width: clamp(5px, .7cqmin, 16px); animation-name: theme-rain; }
+.ambient-theme[data-theme-motif='fog'] .theme-mark, .ambient-theme[data-theme-motif='wind'] .theme-mark { width: clamp(28px, 7cqmin, 145px); height: clamp(8px, 1.8cqmin, 40px); animation-name: theme-wind; }
+.ambient-theme[data-theme-motif='remembrance'] { opacity: calc(var(--ambient-brightness, .55) * .2); }
+@keyframes theme-float { 0%,100% { opacity: 0; transform: translate3d(0,0,0) rotate(-8deg) scale(var(--theme-scale)); } 20%,75% { opacity: .85; } 100% { transform: translate3d(1.2cqw,var(--theme-travel),0) rotate(9deg) scale(var(--theme-scale)); } }
+@keyframes theme-rain { 0%,100% { opacity: 0; } 15%,70% { opacity: .7; } from { transform: translate3d(0,-1cqh,0); } to { transform: translate3d(-1cqw,7cqh,0); } }
+@keyframes theme-wind { 0%,100% { opacity: 0; } 25%,70% { opacity: .6; } from { transform: translate3d(-1cqw,0,0); } to { transform: translate3d(5cqw,.5cqh,0); } }
+/* Keep decorative work absent when motion is disabled, including OS changes after mounting. */
+@media (prefers-reduced-motion: reduce) { .ambient-theme { display: none; } }
+.theme-controls { margin: 0 0 18px; }
+.theme-controls .theme-mode { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.theme-controls select { min-width: 0; max-width: 70%; min-height: 44px; }
+.theme-calendars { display: flex; flex-wrap: wrap; gap: 0 14px; border: 0; margin: 8px 0 0; padding: 0; }
+.theme-calendars legend { font-size: 11px; color: var(--text-muted, #b6adbf); }
+.theme-calendars label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 12px; }
+.theme-current { margin: 5px 0 0; color: #b6adbf; font-size: 12px; line-height: 1.45; }
+.theme-current small { display: block; color: #938b9b; font-size: 11px; }

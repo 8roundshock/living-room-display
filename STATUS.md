@@ -1,5 +1,31 @@
 # Project status
 
+## Optional atmosphere, holiday cards and hourly weather — 2026-11-04 (#575, #458, #452)
+
+[PR #576](https://github.com/8roundshock/living-room-display/pull/576) combines three
+features after a full 146-ticket backlog audit. Eighteen completed or superseded
+tickets were closed with evidence; remaining native, installation and performance
+acceptance stays tracked. The product decisions for #92/#107 are in `docs/product.md`.
+
+Style adds Off (default), Weather, Seasonal & holidays and Combined. Combined
+falls back to seasonal/holiday scenery when weather is quiet or unavailable;
+fresh notable current or near-forecast conditions take priority. Dim sparse
+motifs keep true black, with at most eight small SVG slots and finite staggered
+motion. System reduced motion and Animation Off remove the layer. Canada, Korea
+and Russia calendars share direct controls with optional Dynamic holiday cards;
+Korean lunar dates use verified Dangi, with an explicit degraded-runtime message.
+Dynamic severe weather now follows hourly instants instead of the daily worst
+code and distinguishes wind gust intervals and saved forecast age.
+
+The integrated production build/typechecks and 649 source tests pass. Synthetic
+browser verification covers appearance drafts, compact controls, holiday/weather
+scenes, real Dangi, slot restart/cadence and bounded compositor observations;
+final-head review and CI evidence are recorded on the PR. Default data retains
+the frozen rollback reader; non-default theme/calendar and enabled holiday-source
+exceptions are documented in `docs/install.md`. Source work changes no capture,
+native activation or installer code and establishes no new installed/native
+acceptance. The dated installation and TV evidence below keeps its original scope.
+
 ## Style creation and Settings follow-up — 2026-11-03 (#570, #571)
 
 The follow-up to #568 gives native select options explicit contrasting surfaces

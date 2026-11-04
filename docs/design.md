@@ -304,6 +304,12 @@ and the [UX role guide](roles/ux.md) for verification and future work.
 
 ## Dynamic emphasis
 
+Whole-screen atmosphere is a separate optional Style choice. It stays behind
+widgets and respects the same Save/Cancel, scheduled styles and motion settings.
+Use the bounded motif and calendar contracts in [Ambient themes](ambient-themes.md)
+when extending it; do not add bright fills, flashing storms or persistent borders.
+Dynamic's opt-in holiday cards share its calendars without requiring visual themes.
+
 Dynamic (#437) must make an official warning or a storm starting soon noticeable from the
 couch without adding light. Urgency comes from words, rank and size only: the warning or
 focus card leads, its headline takes the elevated step (`min(8cqw, 11cqh)` in small and

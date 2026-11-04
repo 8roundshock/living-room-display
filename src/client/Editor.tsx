@@ -50,6 +50,7 @@ import {
 } from './model';
 import { defaultDaylightRange } from './daylight';
 import { DaylightStatus } from './DaylightStatus';
+import { ThemeControls } from './ThemeControls';
 import {
   crowdedOutMessage,
   keepsSavedChanges,
@@ -1732,6 +1733,7 @@ export function Editor({
             {section === 'Style' && (
               <>
                 <h2>Make it yours</h2>
+                <ThemeControls settings={draft} weather={state.weather} saving={saving} disconnected={!!connectionError} onChange={theme => change(previous => withAppearance(previous, { theme }))} />
                 {/* #439: Fixed (one level) or Follow daylight (Dimmest to Brightest, peaking at
                     solar noon). The mode sits on the label line, so the default Fixed tab keeps
                     its height at 1280×720. */}

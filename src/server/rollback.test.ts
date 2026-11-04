@@ -109,7 +109,7 @@ test('negative controls: the previous release still rejects an unknown key and i
 const KNOWN_AT_REST = Object.keys(AT_REST.appearance).filter(key => key in PREVIOUS_AT_REST.appearance) as (keyof typeof AT_REST.appearance)[];
 const NEW_AT_REST = Object.keys(AT_REST.appearance).filter(key => !(key in PREVIOUS_AT_REST.appearance)) as (keyof typeof AT_REST.appearance)[];
 
-const REQUIRED_OMISSIONS = { appearance: ['daylightBrightness', 'rearrange'], sections: ['screen'] } as const;
+const REQUIRED_OMISSIONS = { appearance: ['daylightBrightness', 'rearrange', 'theme'], sections: ['screen'] } as const;
 
 test('#272 known omitted values stay readable; new appearance keys and unknown widgets require omission', () => {
   // Default data with every omitted value present: colour accent, Subtle and the default widgetData sections,

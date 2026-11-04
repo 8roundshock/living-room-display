@@ -9,15 +9,16 @@ preview, Save/Cancel, saved styles and scheduled styles share the same choice.
 Independent coordinator concept critique chose one native Theme selector in the
 Style inspector over scene cards (too tall) or an automatic-only switch (hides
 the requested modes). The choices are Off, Weather, Seasonal & holidays and
-Combined. Seasonal/Combined reveal Canada, Korea and Russia checkboxes. Empty
-calendars still keep seasons. Combined means “Seasonal until noteworthy weather
+Combined. Seasonal/Combined reveal Canada, Korea and Russia checkboxes. Dynamic's
+opt-in Holidays source exposes the same choices directly, including with themes
+Off. Empty calendars still keep seasons. Combined means “Seasonal until noteworthy weather
 is near.” The resolved scene distinguishes current conditions from forecasts.
 
 One sparse layer sits behind widgets. Its small motifs stay dim against true
 black, without full-screen fills, blur, persistent borders, lightning flashes or
 audio. Weather chooses the geometry; a seasonal or celebratory tint can remain.
 Commemorations use restrained marks rather than celebratory particles. Off does
-not mount the layer; reduced motion and Animation Off remove its motion. This
+not mount the layer; reduced motion and Animation Off remove it entirely. This
 does not promise OLED burn-in prevention or substitute for weather alerts.
 
 Primary guidance checked 2026-11-04: [Apple HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion)
@@ -37,8 +38,43 @@ holiday source is opt-in and omitted when false. Enabling it is likewise an
 explicit older-reader rollback exception. No historical compatibility fixture is
 modified to make a new feature pass.
 
-## Verification status
+## Resolution and motion
 
-Foundation checkpoint only. Calendar, weather integration, rendered scenes,
-source/browser checks and independent final-head review are still in progress.
-No installation or native acceptance is claimed.
+Weather uses fresh, connected readings for the selected location. Current codes
+must be at most 90 minutes old; forecast conditions look ahead three hours.
+Hourly codes are instants, while gusts describe the preceding hour. Only a wholly
+upcoming gust interval produces “expected soon.” Wind and gust thresholds are
+shared with Dynamic. Stale, disconnected or unknown weather falls back to seasons
+and holidays in Combined; Weather alone becomes quiet. This is decoration, not an
+official warning. Enabling Weather or Combined requests the existing forecast
+even if all weather widgets are hidden; it adds no provider or faster polling.
+
+Seasons follow the configured location's hemisphere. Holiday dates follow the
+computer's civil date, with selectable curated calendars documented in
+[Holiday calendar](holiday-calendar.md). Major holidays have bounded lead windows;
+commemorations take precedence over festive anticipation. Unsupported Korean
+lunar-date runtimes show a brief limitation; fixed dates and seasons remain.
+
+Each mark uses one finite 12-second transform/opacity animation. Eight weather
+slots renew one at a time every two seconds, six holiday slots every three seconds,
+or five fog/commemoration slots every four seconds. A slot lives 16–20 seconds,
+so it becomes invisible before replacement. Initial marks fade in individually;
+motif changes and motion resumption start a fresh sequence. Only a few marks are
+visible at once. This provides continuous sparse atmosphere without a per-frame
+JavaScript loop; it does not claim zero continuous GPU work or unchanged energy use.
+The editor's normal canvas stays still; Preview movement shows the atmosphere.
+
+## Source verification
+
+The dedicated `themes` browser suite uses an ephemeral source server and synthetic
+dates/weather. It verifies Save/Cancel, shared calendar controls, 44px keyboard
+targets, 320/390px and short editors, holiday/weather geometry at 1080p and 4K,
+reduced-motion behavior, steady/initial slot lifetimes and real browser Dangi.
+Its optional images are returned in RAM, never saved. Bounded CDP samples compare
+active atmosphere with motion off; the general performance budget remains #364.
+Calendar and weather units exercise lunar dates, lead-window expiry, stale data,
+hourly hazards, DST and gust intervals. Persistence checks retain the frozen reader.
+
+Final pushed-head review and CI evidence belong to [PR #576](https://github.com/8roundshock/living-room-display/pull/576).
+These are source checks; no installation or native/physical-TV acceptance is
+established by the theme suite.

@@ -10,6 +10,8 @@ import { Icon } from './icons.tsx';
 import { MotionContext, usePrefersReducedMotion, type MotionState } from './useMotion.ts';
 import { useWakeLock } from './useWakeLock.ts';
 import { leaveDisplay, liveOpener } from './displayWindow.ts';
+import { AmbientTheme } from './AmbientTheme.tsx';
+import { resolveTheme } from './ambient-theme.ts';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
 
 export interface WidgetGesture { id: WidgetId; x: number; y: number; width?: number; height?: number }
@@ -504,6 +506,8 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   useLayoutEffect(() => { if (controlled) stopReveal(); }, [controlled, stopReveal]);
   const motion = useMemo<MotionState>(() => ({ plan, revealEpoch: reveal.epoch, revealing: reveal.active }), [plan, reveal.epoch, reveal.active]);
   const animation = plan.valueTransitions ? plan.level : 'off';
+  const themeMinute = Math.floor(now.getTime() / 60_000);
+  const themeScene = useMemo(() => resolveTheme(settings, state.weather, new Date(themeMinute * 60_000), disconnected), [settings.appearance.theme, settings.location.latitude, settings.location.longitude, state.weather, disconnected, themeMinute]);
 
   // Follow daylight (#439): one value per minute at the weather location. The ambient page glides to
   // it (widgets.css); editor canvases follow the draft at once. Fixed renders `brightness` unchanged.
@@ -542,6 +546,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       data-wake-lock={embedded ? undefined : wakeLock}
     >
       <MotionContext.Provider value={motion}>
+        <AmbientTheme scene={themeScene} animated={!reducedMotion && !layoutEditing && settings.appearance.animation !== 'off'} />
         <div
           ref={plane}
           className={['ambient-content', 'widget-grid-plane', reveal.active ? 'revealing' : ''].filter(Boolean).join(' ')}

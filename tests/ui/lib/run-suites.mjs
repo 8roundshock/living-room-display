@@ -40,6 +40,7 @@ export const SETS = {
     'schedule', 'motion-preview', // #514/#515: isolated schedule and deterministic preview contracts.
     'picker-sheet', // #554: modal add flow, responsive size previews and draft/focus contracts.
     'snapshot-resume', // #556: explicit in-app consent, pending/retry races and accessible focus.
+    'themes', // #575: optional atmosphere, calendar choices and bounded decorative motion.
   ],
   scheduled: ['motion', 'weather', 'palette', 'collection'], // 219, 81, 68
 };
