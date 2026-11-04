@@ -1,17 +1,23 @@
-.ambient-theme { position: absolute; inset: 0; overflow: hidden; pointer-events: none; contain: layout style; color: var(--theme-tint); opacity: calc(var(--ambient-brightness, .55) * .72); }
+.ambient-theme { position: absolute; inset: 0; overflow: hidden; pointer-events: none; contain: layout style; opacity: calc(var(--ambient-brightness, .55) * .95); }
 .theme-placement { position: absolute; transition: opacity var(--theme-retire-duration) ease; }
 .theme-placement[data-theme-obscured] { opacity: 0; }
-.theme-mark { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; opacity: 0; animation: theme-float var(--theme-duration) ease-in-out 1 both; }
-.theme-mark path { vector-effect: non-scaling-stroke; stroke-width: clamp(1.1px, .19cqmin, 4px); }
-.theme-mark .theme-companion { color: var(--theme-companion); stroke-width: clamp(.8px, .11cqmin, 2.2px); opacity: .8; }
-.ambient-theme[data-theme-source='weather'] .theme-mark path { stroke-width: clamp(.9px, .13cqmin, 2.6px); }
-.ambient-theme[data-theme-motion='rain'] .theme-mark { animation-name: theme-rain; }
-.ambient-theme[data-theme-motion='wind'] .theme-mark { animation-name: theme-wind; }
+.theme-mark { width: 100%; height: 100%; fill: none; color: var(--theme-tint); stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; opacity: 0; animation: theme-travel var(--theme-duration) ease-in-out 1 both; }
+.theme-mark path { vector-effect: non-scaling-stroke; stroke-width: clamp(1.2px, .21cqmin, 4.4px); }
+.theme-mark .theme-companion { color: var(--theme-companion); stroke-width: clamp(1px, .16cqmin, 3.2px); }
+.theme-mark .theme-accent { color: var(--theme-accent); stroke-width: clamp(1.1px, .18cqmin, 3.6px); }
+.theme-mark .theme-wash { fill: var(--theme-tint); stroke: none; opacity: .13; }
+.ambient-theme[data-theme-source='weather'] .theme-mark path { stroke-width: clamp(1px, .15cqmin, 3px); }
 .ambient-theme[data-theme-quiet] { opacity: calc(var(--ambient-brightness, .55) * .38); }
-.ambient-theme[data-theme-still] .theme-mark { animation: none; opacity: .85; }
-@keyframes theme-float { 0% { opacity: 0; transform: translate3d(0,0,0) rotate(0); } 20%,75% { opacity: .85; } 100% { opacity: 0; transform: translate3d(1cqw,1.8cqh,0) rotate(var(--theme-turn)); } }
-@keyframes theme-rain { 0% { opacity: 0; transform: translate3d(0,-1cqh,0); } 15%,70% { opacity: .7; } 100% { opacity: 0; transform: translate3d(-1cqw,2cqh,0); } }
-@keyframes theme-wind { 0% { opacity: 0; transform: translate3d(0,0,0); } 25%,70% { opacity: .7; } 100% { opacity: 0; transform: translate3d(1.5cqw,.5cqh,0); } }
+.ambient-theme[data-theme-quiet] .theme-wash { display: none; }
+.ambient-theme[data-theme-still] .theme-mark { animation: none; opacity: 1; }
+@keyframes theme-travel {
+  0% { opacity: 0; transform: var(--theme-step-0); }
+  18%,82% { opacity: 1; }
+  25% { transform: var(--theme-step-1); }
+  50% { transform: var(--theme-step-2); }
+  75% { transform: var(--theme-step-3); }
+  100% { opacity: 0; transform: var(--theme-step-4); }
+}
 @media (prefers-reduced-motion: reduce) { .ambient-theme { display: none; } }
 .theme-controls { margin: 0 0 18px; }
 .theme-controls .theme-mode { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

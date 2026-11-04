@@ -16,6 +16,11 @@ The #579 refinement separates major visual celebrations from factual holiday
 cards, uses larger sparse original contours, and makes the normal editor's
 enabled atmosphere visible as a still sample. Try a scene is a labelled local
 illustration; it never changes the saved display, information time or weather.
+Owner direction, 2026-11-04 (#582): keep the cultural identity and controls, but
+make every scene materially richer in colour, visible forms and characteristic
+motion. Judge the default at 26% brightness as well as 36%; this is an aesthetic
+target, not permission to change saved brightness. Dominant black, readable
+widgets, quiet dates and reduced-motion behavior remain constraints.
 
 Source: owner's project brief and preview request, reviewed 2026-10-18. These
 requirements describe the intended product; [STATUS.md](../STATUS.md) records

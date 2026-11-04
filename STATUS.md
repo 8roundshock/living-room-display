@@ -1,5 +1,17 @@
 # Project status
 
+## Richer atmosphere styling — 2026-11-04 (#582)
+
+The owner requested a complete richer pass after #579: more colour, more visible
+forms and characteristic motion across all 23 scenes, directly visible at 26%
+brightness. The first source candidate adds three-tone art roles, local subtle
+fills, multi-scale compositions and eight finite motion profiles. Registry
+waypoints supply both actual transforms and reserved movement bounds. Quiet
+dates keep neutral colours, lower density and smaller travel. No settings schema,
+calendar facts, preview controls or installation/native behavior changes.
+Build, focused regression and independent visual results will be recorded on
+the new integration PR; this checkpoint is not final visual acceptance.
+
 ## Cultural atmosphere refinement — 2026-11-04 (#579)
 
 Separate Canada, Korea and Russia research informed an explicit major-scene,

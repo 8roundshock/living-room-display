@@ -1,6 +1,6 @@
 # Ambient themes
 
-Work tracked in #579 (visual/cultural refinement), following #575, with #452
+Work tracked in #582 (richer colour/composition/motion), following #579 and #575, with #452
 hourly weather and #458 holiday cards. Themes default to Off; existing selections
 are preserved. A theme is part of the visual style, so the editor
 preview, Save/Cancel, saved styles and scheduled styles share the same choice.
@@ -29,7 +29,16 @@ fir/ornaments, broad New Year arcs or the Russian tree, and an Orthodox Christma
 star. Seollal uses an open-centred rectangular kite, Chuseok a separated full-moon
 circle and harvest forms, and Buddha's Birthday lotus lanterns.
 
-One sparse layer sits behind widgets. Its larger contours stay dim against true
+Owner direction, 2026-11-04 (#582), asks for noticeably more colour, more visible
+forms and richer characteristic movement across all 23 scenes. The chosen pass
+uses three prominent palette roles and multi-scale contours with small local
+13%-opacity fills, instead of a particle-count-only change or broad filled
+vignettes. Global brightness stays authoritative; compare at 26% and 36% rather
+than raising saved settings. A feature form recurs every third seasonal birth,
+with distinct smaller companions between it. Winter crystals, summer flowers,
+Maslenitsa pancake stacks and geometric Pascha eggs improve silhouette identity.
+
+One bounded layer sits behind widgets. Its larger contours stay dim against true
 black, without full-screen fills, blur, persistent borders, lightning flashes or
 audio. Weather chooses the geometry; a seasonal or celebratory tint can remain.
 Exact selected quiet dates use neutral seasonal/weather contours. Off does
@@ -70,16 +79,23 @@ computer's civil date, with selectable curated calendars documented in
 commemorations take precedence over festive anticipation. Unsupported Korean
 lunar-date runtimes show a brief limitation; fixed dates and seasons remain.
 
-Each mark uses one finite 12-second transform/opacity animation. Eight weather
-slots renew one at a time every two seconds, four seasonal/holiday slots every
-four seconds, or five fog/wind slots every four seconds. A slot lives 16–20 seconds,
+Each mark uses one finite 12-second transform/opacity animation. Twelve weather
+slots renew one at a time every 1.2 seconds, nine seasonal/holiday slots every
+1.6 seconds, or eight fog slots every two seconds. Exact quiet dates keep four
+slots at four-second intervals, neutral colour, no fills and reduced travel.
+A slot lives 14.4–16 seconds,
 so it becomes invisible before replacement. Initial marks fade in individually;
 motif changes and motion resumption start a fresh sequence. Only a few marks are
-visible at once. This provides continuous sparse atmosphere without a per-frame
+visible at once. This provides continuous atmosphere without a per-frame
 JavaScript loop; it does not claim zero continuous GPU work or unchanged energy use.
 The normal editor immediately shows a representative still scene when enabled
 and motion is allowed; Preview movement runs the same finite sequence. Animation
 Off and system reduced motion remove both and explain why in Style.
+Eight registry motion profiles provide five actual waypoints each: sway, flutter,
+rise, drift, rain, snow, mist and wind. The renderer passes these to finite CSS
+transforms; placement derives its bounds from the same waypoints, maximum
+interpolated rotation and stroke extent. Per-mark scale/direction variation stays
+inside those bounds. No frame-by-frame script, paint animation or flashing.
 
 Try a scene occupies the existing canvas caption and opens a compact native
 grouped select. Its Preview/display-unchanged label stays visible until Automatic

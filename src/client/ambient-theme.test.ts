@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
 import type { WeatherState, WeatherDetailReading } from '../shared/contracts.ts';
 import { resolveTheme, previewTheme, placeThemeMark, themeMotionTimes, themeLocalDate, themeParticle, themeWeatherKind, themeCadence, THEME_ACTIVE_MS, THEME_PARTICLES_MAX } from './ambient-theme.ts';
-import { THEME_SCENES, THEME_SCENE_IDS, QUIET_PALETTE } from '../shared/theme-registry.ts';
+import { THEME_SCENES, THEME_SCENE_IDS, THEME_MOTIONS, QUIET_PALETTE, QUIET_THEME } from '../shared/theme-registry.ts';
 import { floatPath, stepPath, widgetTrack } from '../shared/float.ts';
 const now = new Date('2026-12-20T18:30:00Z');
 function fixture() {
@@ -69,7 +69,7 @@ test('gust scenery uses a wholly upcoming preceding-hour interval and unit-aware
   weather.details[0]!.windGust=31; assert.equal(resolveTheme(settings,weather,now)?.motif,'wind');
 });
 test('bounded particles vary without randomness and every slot expires before replacement', () => {
-  assert.ok(THEME_PARTICLES_MAX <= 8);
+  assert.ok(THEME_PARTICLES_MAX <= 12);
   for (const motif of THEME_SCENE_IDS) {
     const {slots,interval}=themeCadence(motif); assert.ok(slots*interval>THEME_ACTIVE_MS); assert.ok(slots<=THEME_PARTICLES_MAX);
   }
@@ -89,10 +89,33 @@ test('minor civic cards retain the season; selected exact quiet days constrain w
 });
 
 test('scene illustrations are complete local registry choices with no implied live forecast', () => {
+  assert.equal(THEME_SCENE_IDS.length, 23);
+  assert.deepEqual(['Seasons', 'Celebrations', 'Weather'].map(group => THEME_SCENE_IDS.filter(id => THEME_SCENES[id].group === group).length), [4,14,5]);
   for (const id of THEME_SCENE_IDS) {
     const scene=previewTheme(id),definition=THEME_SCENES[id];
     assert.equal(scene.motif,id); assert.equal(scene.forecast,false); assert.equal(scene.holiday,null);
     assert.equal(scene.tint,definition.palette[0]); assert.ok(definition.art.length>0);
+    assert.equal(scene.accent,definition.palette[2]);
+    assert.equal(new Set(definition.palette).size,3);
+    assert.ok(definition.art.every(art => art.primary && (art.secondary || art.accent)), `${id} has layered original forms`);
+    assert.ok(definition.still >= 6, `${id} has a fuller still composition`);
+    assert.deepEqual(themeCadence(id,true), {slots:QUIET_THEME.slots,interval:QUIET_THEME.interval});
+  }
+});
+
+test('every motion profile reserves intermediate rotation, travel and stroke extents', () => {
+  for (const [name,frames] of Object.entries(THEME_MOTIONS)) for (const direction of [-1,1]) {
+    const motion=frames.map(frame=>({...frame,x:frame.x*direction,turn:frame.turn*direction}));
+    assert.equal(motion.length,5); assert.ok(motion.every(frame=>Math.abs(frame.turn)<45));
+    const placed=placeThemeMark(0,582,1920,1080,151,[],motion)!; assert.ok(placed);
+    for(let frame=0;frame<4;frame++) for(let fraction=0;fraction<=1;fraction+=.05) {
+      const from=motion[frame]!,to=motion[frame+1]!;
+      const angle=(from.turn+(to.turn-from.turn)*fraction)*Math.PI/180;
+      const extent=placed.size*(Math.abs(Math.cos(angle))+Math.abs(Math.sin(angle)))/2+3;
+      const x=placed.left+placed.size/2+(from.x+(to.x-from.x)*fraction)*19.2;
+      const y=placed.top+placed.size/2+(from.y+(to.y-from.y)*fraction)*10.8;
+      assert.ok(x-extent>=placed.box.left&&x+extent<=placed.box.right&&y-extent>=placed.box.top&&y+extent<=placed.box.bottom, `${name} reserves interpolation including stroke`);
+    }
   }
 });
 
