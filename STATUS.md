@@ -40,9 +40,14 @@ at 1280×720 (512px content / 494px viewport). Extending the existing desktop
 redundant-heading treatment above Theme restores the default no-scroll layout,
 without reducing control targets or hiding phone headings; the new focused
 assertion rejects the old assets. Theme and daylight suites pass this correction
-with RAM-only control inspection. Forecast readiness is being handled under #431;
-prior approvals remain historical until the corrected head is reviewed and its
-complete applicable CI passes.
+with RAM-only control inspection. The #431 correction separates the secondary
+status browser context, fake clock and routed data from the main family fixture;
+the original harness fails its deterministic clock-isolation regression and the
+corrected bounded Forecast/Agenda matrix passes 117 cases. The exact original
+missing-node cause and broader #431 repeated-load acceptance remain open, with
+new failure diagnostics preserving the case, rendering state and request history.
+Earlier approvals are historical; corrected-head review and complete CI evidence
+belong to PR #576 rather than an assumption that the first failed run was harmless.
 
 ## Style creation and Settings follow-up — 2026-11-03 (#570, #571)
 
