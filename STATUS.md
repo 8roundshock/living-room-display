@@ -17,7 +17,7 @@ Korean lunar dates use verified Dangi, with an explicit degraded-runtime message
 Dynamic severe weather now follows hourly instants instead of the daily worst
 code and distinguishes wind gust intervals and saved forecast age.
 
-The integrated production build/typechecks and 649 source tests pass. Synthetic
+The integrated production build/typechecks and 652 source tests pass. Synthetic
 browser verification covers appearance drafts, compact controls, holiday/weather
 scenes, real Dangi, slot restart/cadence and bounded compositor observations;
 final-head review and CI evidence are recorded on the PR. Default data retains

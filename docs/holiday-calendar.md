@@ -6,6 +6,7 @@ calendar preferences go to a holiday service. Holiday cards are separately opted
 in under Dynamic and share the theme calendar selections even with themes off.
 Dates follow the display computer's civil date. This is a decorative observance
 calendar, **not a statutory employment, school, tax or bank-closure schedule**.
+Canadian provincial/territorial coverage is tracked separately in #578.
 
 `src/shared/holidays.ts` is the authority. It computes recurring dates for
 1900–2199 and retains at most twelve calculated years in memory. Gregorian rules
