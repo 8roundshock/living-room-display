@@ -14,15 +14,17 @@ update; the app never invents replacement days or claims an official feed.
 
 ## Coverage
 
+The bundled set contains 43 national, cultural and commemorative observances.
+
 | Calendar | Public dates and selected observances |
 | --- | --- |
 | Canada | New Year, Good Friday, Easter Monday, Victoria Day, Canada Day, Labour Day, Truth and Reconciliation, Thanksgiving, Remembrance Day, Christmas and Boxing Day; selected cultural/commemorative dates are Valentine's Day, Flag Day, National Indigenous Peoples Day, Easter and Halloween. |
 | Korea | New Year, Independence Movement Day, Labour Day, Children's Day, Memorial Day, Constitution Day, Liberation Day, National Foundation Day, Hangeul Day and Christmas; lunar Seollal, Buddha's Birthday and Chuseok; selected traditional dates Jeongwol Daeboreum, Dano and Chilseok. |
-| Russia | New Year holidays, Orthodox Christmas, Defender of the Fatherland Day, International Women's Day, Spring and Labour Day, Victory Day, Russia Day and Unity Day; Old New Year is a selected cultural observance. |
+| Russia | New Year holidays, Orthodox Christmas, Defender of the Fatherland Day, International Women's Day, Spring and Labour Day, Victory Day, Russia Day and Unity Day; selected cultural observances are Old New Year, Orthodox Easter (Pascha) and Maslenitsa. |
 
 Canadian provincial/territorial dates, substitute weekdays, one-off election or
-government holidays, Russian Orthodox Easter/Maslenitsa and other regional or
-religious calendars are not included. Calendar selections describe culture and
+government holidays and other regional or religious calendars are not included.
+Calendar selections describe culture and
 observances; they do not infer a person's religion, nationality or location.
 Observance records distinguish public, cultural and commemorative dates.
 
@@ -50,8 +52,16 @@ Chuseok have a seven-day approach; Canada Day has two days. Seollal and Chuseok
 include the ordinary day before and after their central dates. Other observances
 appear on their day. No theme lingers indefinitely after its window.
 
+Orthodox Easter uses the Julian ecclesiastical calculation converted to the
+Gregorian civil date, including the changing century offset (14 days from 2100,
+not a hardcoded 13). Its seven-day approach uses restrained spring scenery.
+Maslenitsa uses that same date authority: the Monday 55 days before Pascha through
+the Sunday 49 days before it, with no extra approach or trailing days.
+
 An actual observance beats an approaching one. An actual quiet commemoration
-comes first; then explicit priority, distance from the central date and stable id
+comes first, then a holiday on its central day beats a generic ongoing festival
+window (for example Women's Day during Maslenitsa). Explicit priority, distance
+from the central date and stable id then
 resolve overlaps, independent of checkbox ordering. Remembrance, Truth and
 Reconciliation and memorial dates use quiet remembrance treatment, never party
 effects. Dynamic says Today/Tomorrow with a country label and never calls these
@@ -78,5 +88,13 @@ no source prose, images, live scraping or remote asset dependency is bundled.
   reproduced or predicted.
 - [US Naval Observatory Easter algorithm](https://aa.usno.navy.mil/faq/easter)
   documents the Oudin Gregorian calculation used for Canada's Easter-related dates.
+- [Orthodox Church in America Paschal cycle](https://www.oca.org/fs/paschal-cycle)
+  supplies independent Pascha and Cheesefare Sunday reference dates for 2026–2030.
+  [dateutil's Easter documentation](https://dateutil.readthedocs.io/en/stable/easter.html)
+  describes the Julian calculation with conversion to Gregorian dates; this
+  application implements the short calendar arithmetic without a new dependency.
+- [Russian Ethnographic Museum Maslenitsa entry](https://ethnomuseum.ru/collections/ethnocalendar/february/maslenica-maslenichnaya-nedelya-syrnaya-nedelya/)
+  identifies the cultural festival and its February 16–22, 2026 week, used as an
+  independent full-window fixture.
 
 This calendar adds no capture, installed-app, network or native-lifecycle behavior.

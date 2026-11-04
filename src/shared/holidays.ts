@@ -54,6 +54,18 @@ export function westernEaster(year: number): string {
   return fixed(year, month, day);
 }
 
+/** Julian ecclesiastical Pascha converted to a Gregorian civil date, with its changing century offset. */
+export function orthodoxEaster(year: number): string {
+  if (!Number.isInteger(year) || year < MIN_YEAR || year > MAX_YEAR) throw new RangeError('Unsupported calendar year');
+  const moon = (19 * (year % 19) + 15) % 30;
+  const nextSunday = (2 * (year % 4) + 4 * (year % 7) - moon + 34) % 7;
+  const index = moon + nextSunday + 114;
+  const julianMonth = Math.floor(index / 31), julianDay = index % 31 + 1;
+  // Pascha is after February, so the current year's Gregorian century correction applies.
+  const calendarOffset = Math.floor(year / 100) - Math.floor(year / 400) - 2;
+  return shiftHolidayDate(fixed(year, julianMonth, julianDay), calendarOffset);
+}
+
 let dangi: Intl.DateTimeFormat | null | undefined;
 /** No Chinese-calendar fallback: the Korean and Chinese dates differ in some years, including 2027. */
 function koreanFormatter(): Intl.DateTimeFormat | null {
@@ -134,6 +146,11 @@ function buildYear(year: number): readonly Observance[] {
   add('RU', 'new-year', 'New Year holidays', fixed(year, 1, 1), 'new-year', { priority: 80, leadDays: 5, endDate: fixed(year, 1, 8) });
   add('RU', 'christmas', 'Orthodox Christmas', fixed(year, 1, 7), 'christmas', { priority: 95, leadDays: 6 });
   add('RU', 'old-new-year', 'Old New Year', fixed(year, 1, 14), 'new-year', { category: 'cultural' });
+  const pascha = orthodoxEaster(year);
+  add('RU', 'easter', 'Orthodox Easter', pascha, 'spring', { category: 'cultural', priority: 75, leadDays: 7 });
+  add('RU', 'maslenitsa', 'Maslenitsa', shiftHolidayDate(pascha, -49), 'spring', {
+    category: 'cultural', priority: 70, startDate: shiftHolidayDate(pascha, -55), endDate: shiftHolidayDate(pascha, -49),
+  });
   add('RU', 'defender', 'Defender of the Fatherland Day', fixed(year, 2, 23), 'remembrance', { ...quiet, shortName: 'Defender’s Day' });
   add('RU', 'women', 'International Women’s Day', fixed(year, 3, 8), 'spring');
   add('RU', 'spring-labour', 'Spring and Labour Day', fixed(year, 5, 1), 'spring');
@@ -154,17 +171,20 @@ export function observancesForYear(year: number, regions: readonly HolidayRegion
   return values.filter(value => regions.includes(value.region));
 }
 
-/** Actual quiet observances outrank festive anticipation; actual dates then priority/distance/id break ties. */
+/** Quiet commemorations win, then actual central dates, ongoing holidays, and festive anticipation. */
 export function holidayWindow(date: string, regions: readonly HolidayRegion[] = HOLIDAY_REGIONS): HolidayWindow | null {
   if (!validDate(date)) return null;
   const year = Number(date.slice(0, 4));
   const candidates = [year - 1, year, year + 1].flatMap(value => observancesForYear(value, regions)).flatMap(observance => {
-    if (date < shiftHolidayDate(observance.date, -observance.leadDays) || date > observance.endDate) return [];
+    const approach = shiftHolidayDate(observance.date, -observance.leadDays);
+    const starts = approach < observance.startDate ? approach : observance.startDate;
+    if (date < starts || date > observance.endDate) return [];
     const phase = date < observance.startDate ? 'approaching' as const : 'today' as const;
     return [{ observance, phase }];
   });
   candidates.sort((a, b) => Number(b.phase === 'today' && b.observance.kind === 'commemoration') - Number(a.phase === 'today' && a.observance.kind === 'commemoration')
-    || Number(b.phase === 'today') - Number(a.phase === 'today') || b.observance.priority - a.observance.priority
+    || Number(b.phase === 'today') - Number(a.phase === 'today')
+    || Number(b.observance.date === date) - Number(a.observance.date === date) || b.observance.priority - a.observance.priority
     || Math.abs(Date.parse(a.observance.date) - Date.parse(date)) - Math.abs(Date.parse(b.observance.date) - Date.parse(date))
     || a.observance.id.localeCompare(b.observance.id));
   return candidates[0] ?? null;
