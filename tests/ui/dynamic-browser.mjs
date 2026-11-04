@@ -340,7 +340,8 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
           if (await page.getByRole('button', { name: 'Dynamic', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'Dynamic', exact: true }).click();
           const panel = page.locator('.widget-option.selected');
           const labels = await panel.locator('.dynamic-sources label.toggle-row > span').allInnerTexts();
-          assert.deepEqual(labels, ['Weather', 'Official weather alerts', 'Air & UV', 'Sun & moon', 'Reminders & countdowns']);
+          assert.deepEqual(labels, ['Weather', 'Official weather alerts', 'Air & UV', 'Sun & moon', 'Reminders & countdowns', 'Holidays']);
+          assert.equal(await panel.getByRole('checkbox', { name: 'Holidays', exact: true }).isChecked(), false, 'holidays are explicitly opted in');
           for (const label of labels) {
             const box = await panel.getByRole('checkbox', { name: label, exact: true }).boundingBox();
             assert.ok(box.width >= 44 && box.height >= 44, `${label} toggle is a 44 px target`);
@@ -378,7 +379,7 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
         await page.locator('.widget-option.selected').getByRole('checkbox', { name: 'Reminders & countdowns', exact: true }).uncheck();
         await page.getByRole('button', { name: 'Save changes', exact: true }).click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
         assert.equal(world.app.store.snapshot().settings.widgets.dynamic, true);
-        assert.deepEqual(world.app.store.snapshot().settings.widgetData.dynamic, { weather: true, alerts: true, air: true, sky: true, personal: false });
+        assert.deepEqual(world.app.store.snapshot().settings.widgetData.dynamic, { weather: true, alerts: true, air: true, sky: true, personal: false, holidays: false });
         await page.reload(); await page.locator('.preview-surface').waitFor(); await page.clock.runFor(500);
         await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
         await page.getByRole('button', { name: 'Dynamic', exact: true }).click();
@@ -389,6 +390,38 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
         await keep('F-panel-saved-1280', await panel.screenshot());
         await view.close();
         checks.push('F. Editor at 1280×720 and 390 px: Dynamic in the Weather & sky picker group with its description and a synthetic sample ("Rain likely 11 AM–3 PM"; large adds "Sunset 6:29 PM" and the full moon; no alert, reminder or countdown); five labelled 44 px toggles with their hints and the city; "Alerts are checked after you save." before Save and "Covers City of Toronto · no alerts now · checked …" after; the summary line; a toggle and its reversal; all off blocks Save with "Dynamic needs at least one thing to show"; Cancel saves nothing; Save and reload persist; the canvas holds its first card');
+      } finally { await world.close(); }
+    }
+    // ---- G. Offline holidays use actual browser Dangi, shared calendar choices and every content family.
+    {
+      const world = await scenario({ forecast: forecast() }, settings => {
+        settings.widgetData.dynamic = { weather: false, alerts: false, air: false, sky: false, personal: false, holidays: true };
+        settings.appearance.theme.calendars = ['KR'];
+        settings.appearance.theme.mode = 'off';
+        settings.screen.keepAwake = false;
+      });
+      try {
+        world.server.now = Date.parse('2027-02-07T17:00:00Z');
+        for (const viewport of VIEWPORTS) for (const size of SIZES) {
+          await world.place(size);
+          const view = await open(world, { viewport, time: world.server.now });
+          try {
+            assert.equal(await attr(view.page, 'data-dynamic-kind'), 'holiday-today');
+            assert.equal(await widgetOf(view.page).locator('.dynamic-headline').innerText(), 'Seollal');
+            assert.match(await widgetOf(view.page).innerText(), /Today/);
+            assert.match(await widgetOf(view.page).innerText(), /Korea/);
+            withinBox(await facts(view.page), `Korean holiday ${size} ${viewport.width}`);
+            const resolved = await view.page.evaluate(() => {
+              const calendar = new Intl.DateTimeFormat('en-u-ca-dangi', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric' });
+              return { calendar: calendar.resolvedOptions().calendar, dates: ['2027-02-07', '2027-05-13', '2027-09-15'].map(date => {
+                const parts = calendar.formatToParts(new Date(`${date}T12:00:00Z`));
+                return `${parts.find(part => part.type === 'month').value}/${parts.find(part => part.type === 'day').value}`;
+              }) };
+            });
+            assert.deepEqual(resolved, { calendar: 'dangi', dates: ['1/1', '4/8', '8/15'] }, 'actual browser Korean calendar matches published 2027 dates');
+          } finally { await view.close(); }
+        }
+        checks.push('G. Opt-in Korean holiday cards show Seollal Today with themes off, fit every family at720p/4K, and actual browser Dangi matches the published2027 Seollal/Buddha/Chuseok dates');
       } finally { await world.close(); }
     }
     assert.deepEqual(errors, []);
