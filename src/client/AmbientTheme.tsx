@@ -1,41 +1,65 @@
-import { memo, useEffect, useState, type CSSProperties } from 'react';
-import { THEME_ACTIVE_MS, themeCadence, themeParticle, type ThemeMotif, type ThemeScene } from './ambient-theme';
+import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { THEME_ACTIVE_MS, THEME_SCENES } from '../shared/theme-registry';
+import { placeThemeMark, themeCadence, type ThemeRect, type ThemeScene } from './ambient-theme';
 import './ambient-theme.css';
 
-function Mark({ motif }: { motif: ThemeMotif }) {
-  if (motif === 'rain' || motif === 'storm') return <path d="M16 3 9 24" />;
-  if (motif === 'fog' || motif === 'wind') return <path d={motif === 'fog' ? 'M1 14 Q14 7 29 14 M5 20 Q18 14 27 20' : 'M1 19 Q9 9 20 13 T29 8'} />;
-  if (motif === 'snow' || motif === 'winter') return <path d="M15 4v22M5.5 9.5l19 11M5.5 20.5l19-11M12 6l3 3 3-3M12 24l3-3 3 3" />;
-  if (motif === 'autumn' || motif === 'harvest') return <path d="M7 23C3 11 14 4 25 4c1 12-5 21-18 19Zm0 0L22 7M12 18l-1-7M16 14l6-1" />;
-  if (motif === 'halloween') return <path d="m2 14 5-7 4 5 3-5 2 0 3 5 4-5 5 7-6-1-4 5-3-2-3 2-4-5Z" />;
-  if (motif === 'christmas') return <path d="m15 3-6 7h4l-7 8h6l-8 8h22l-8-8h6l-7-8h4Z" />;
-  if (motif === 'lanterns') return <path d="M10 5h10M10 25h10M15 2v3m0 20v4M10 6c-7 4-7 14 0 18h10c7-4 7-14 0-18Zm5 0v18M10 6c-3 6-3 12 0 18m10-18c3 6 3 12 0 18" />;
-  if (motif === 'remembrance') return <path d="M15 27V14M15 19c-6 0-8-4-8-4 6-1 8 4 8 4Zm0-5c-8 0-10-10-5-10 3 0 5 4 5 4s2-4 5-4c5 0 3 10-5 10Z" />;
-  if (motif === 'spring') return <path d="M15 16C1 12 7 1 15 12 23 1 29 12 15 16Zm0 0c13-2 12 10 0 5-12 5-13-7 0-5Zm0 5v7" />;
-  if (motif === 'summer') return <><circle cx="15" cy="15" r="2" /><path d="M15 7v2m0 12v2M7 15h2m12 0h2" /></>;
-  return <path d="m15 3 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z" />;
-}
+type Exclusions = () => readonly ThemeRect[];
+interface ThemeProps { scene: ThemeScene | null; animated: boolean; still?: boolean; exclusions: Exclusions; layoutKey: string }
 
-/** Unmount the sequence when inactive so resumed motion always starts a fresh cadence. */
-export const AmbientTheme = memo(function AmbientTheme({ scene, animated }: { scene: ThemeScene | null; animated: boolean }) {
-  return scene && animated ? <ThemeSequence key={scene.motif} scene={scene} /> : null;
+/** Static editor art is explicit; disabled/reduced display motion never mounts a sequence. */
+export const AmbientTheme = memo(function AmbientTheme({ scene, animated, still = false, exclusions, layoutKey }: ThemeProps) {
+  return scene && (animated || still) ? <ThemeSequence key={`${scene.motif}:${still}:${layoutKey}`} scene={scene} still={still} exclusions={exclusions} /> : null;
 });
 
-/** A few staggered finite animations; one expired slot renews every 2–4 seconds. */
-function ThemeSequence({ scene }: { scene: ThemeScene }) {
+/** Finite transform/opacity animations. Placement reads only at slot renewal or resize. */
+function ThemeSequence({ scene, still, exclusions }: { scene: ThemeScene; still: boolean; exclusions: Exclusions }) {
   const [tick, setTick] = useState(0);
-  const [seed] = useState(() => Math.floor(Date.now() / 1000));
-  const { slots, interval } = themeCadence(scene.motif);
+  const [seed] = useState(() => still ? 579 : Math.floor(Date.now() / 1000));
+  const root = useRef<HTMLDivElement>(null);
+  const measuredSize = useRef('');
+  const [marks, setMarks] = useState<{ generation: number; index: number; left: number; top: number; size: number; box: ThemeRect }[]>([]);
+  const definition = THEME_SCENES[scene.motif], { slots, interval } = themeCadence(scene.motif);
   useEffect(() => {
+    if (still) return;
     const timer = window.setInterval(() => setTick(value => value + 1), interval);
     return () => window.clearInterval(timer);
-  }, [interval]);
-  return <div className="ambient-theme" aria-hidden="true" data-theme-motif={scene.motif} data-theme-source={scene.source} data-theme-tick={tick} data-theme-interval={interval}
-    style={{ '--theme-tint': scene.tint, '--theme-duration': `${THEME_ACTIVE_MS}ms` } as CSSProperties}>
-    {Array.from({ length: Math.min(tick + 1, slots) }, (_, index) => {
-      const generation = tick - ((tick - index) % slots);
-      const point = themeParticle(index, seed + generation);
-      return <svg key={generation} data-theme-generation={generation} className="theme-mark" viewBox="0 0 30 30" preserveAspectRatio="none" style={{ left: `${point.x}%`, top: `${point.y}%`, '--theme-scale': point.scale, '--theme-travel': `${point.travel}cqh` } as CSSProperties}><Mark motif={scene.motif} /></svg>;
+  }, [interval, still]);
+  useLayoutEffect(() => {
+    const element = root.current; if (!element) return;
+    const place = () => {
+      const { width, height } = element.getBoundingClientRect();
+      const nextSize = `${width}:${height}`, resize = measuredSize.current !== nextSize;
+      measuredSize.current = nextSize;
+      const occupied = [...exclusions()];
+      setMarks(previous => {
+        const next = resize || still ? [] : previous.filter(mark => tick - mark.generation < slots);
+        occupied.push(...next.map(mark => mark.box));
+        const count = still ? 3 : 1;
+        for (let index = 0; index < count; index++) {
+          const generation = still ? index : tick;
+          if (next.some(mark => mark.generation === generation)) continue;
+          const artIndex = generation % definition.art.length;
+          const size = Math.min(width, height) * definition.size / 100 * (artIndex === 0 ? 1 : .58);
+          const point = placeThemeMark(generation, seed + generation, width, height, size, occupied);
+          if (point) { next.push({ generation, index: artIndex, ...point }); occupied.push(point.box); }
+        }
+        return [...next];
+      });
+    };
+    // Widget fit/layout effects have committed before this frame; no continuous frame loop.
+    const frame = requestAnimationFrame(place);
+    const resize = new ResizeObserver(place); resize.observe(element);
+    return () => { cancelAnimationFrame(frame); resize.disconnect(); };
+  }, [tick, still, definition, exclusions, seed, slots]);
+  return <div ref={root} className="ambient-theme" aria-hidden="true" data-theme-motif={scene.motif} data-theme-source={scene.source} data-theme-quiet={scene.quiet || undefined}
+    data-theme-still={still || undefined} data-theme-tick={tick} data-theme-interval={interval} data-theme-motion={definition.motion}
+    style={{ '--theme-tint': scene.tint, '--theme-companion': scene.companion, '--theme-duration': `${THEME_ACTIVE_MS}ms` } as CSSProperties}>
+    {marks.map(mark => {
+      const art = definition.art[mark.index]!;
+      return <svg key={mark.generation} data-theme-generation={mark.generation} data-theme-anchor={mark.index === 0 || undefined} className="theme-mark" viewBox="0 0 100 100"
+        style={{ left: mark.left, top: mark.top, width: mark.size, height: mark.size, '--theme-turn': `${mark.generation % 2 ? 5 : -5}deg` } as CSSProperties}>
+        <path d={art.primary} />{art.secondary && <path className="theme-companion" d={art.secondary} />}
+      </svg>;
     })}
   </div>;
 }

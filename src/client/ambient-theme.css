@@ -1,13 +1,14 @@
-.ambient-theme { position: absolute; inset: 0; overflow: hidden; pointer-events: none; contain: layout style; color: var(--theme-tint); opacity: calc(var(--ambient-brightness, .55) * .36); }
-.theme-mark { position: absolute; width: clamp(8px, 1.45cqmin, 31px); height: clamp(8px, 1.45cqmin, 31px); fill: none; stroke: currentColor; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; transform: scale(var(--theme-scale)); opacity: 0; animation: theme-float var(--theme-duration) ease-in-out 1 both; }
-.theme-mark path, .theme-mark circle { vector-effect: non-scaling-stroke; stroke-width: 1px; }
-.ambient-theme[data-theme-motif='rain'] .theme-mark, .ambient-theme[data-theme-motif='storm'] .theme-mark { height: clamp(12px, 3cqmin, 60px); width: clamp(5px, .7cqmin, 16px); animation-name: theme-rain; }
-.ambient-theme[data-theme-motif='fog'] .theme-mark, .ambient-theme[data-theme-motif='wind'] .theme-mark { width: clamp(28px, 7cqmin, 145px); height: clamp(8px, 1.8cqmin, 40px); animation-name: theme-wind; }
-.ambient-theme[data-theme-motif='remembrance'] { opacity: calc(var(--ambient-brightness, .55) * .2); }
-@keyframes theme-float { 0%,100% { opacity: 0; transform: translate3d(0,0,0) rotate(-8deg) scale(var(--theme-scale)); } 20%,75% { opacity: .85; } 100% { transform: translate3d(1.2cqw,var(--theme-travel),0) rotate(9deg) scale(var(--theme-scale)); } }
-@keyframes theme-rain { 0%,100% { opacity: 0; } 15%,70% { opacity: .7; } from { transform: translate3d(0,-1cqh,0); } to { transform: translate3d(-1cqw,7cqh,0); } }
-@keyframes theme-wind { 0%,100% { opacity: 0; } 25%,70% { opacity: .6; } from { transform: translate3d(-1cqw,0,0); } to { transform: translate3d(5cqw,.5cqh,0); } }
-/* Keep decorative work absent when motion is disabled, including OS changes after mounting. */
+.ambient-theme { position: absolute; inset: 0; overflow: hidden; pointer-events: none; contain: layout style; color: var(--theme-tint); opacity: calc(var(--ambient-brightness, .55) * .72); }
+.theme-mark { position: absolute; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; opacity: 0; animation: theme-float var(--theme-duration) ease-in-out 1 both; }
+.theme-mark path { vector-effect: non-scaling-stroke; stroke-width: clamp(.9px, .13cqmin, 2.6px); }
+.theme-mark .theme-companion { color: var(--theme-companion); stroke-width: clamp(.7px, .09cqmin, 1.8px); opacity: .8; }
+.ambient-theme[data-theme-motion='rain'] .theme-mark { animation-name: theme-rain; }
+.ambient-theme[data-theme-motion='wind'] .theme-mark { animation-name: theme-wind; }
+.ambient-theme[data-theme-quiet] { opacity: calc(var(--ambient-brightness, .55) * .38); }
+.ambient-theme[data-theme-still] .theme-mark { animation: none; opacity: .85; }
+@keyframes theme-float { 0% { opacity: 0; transform: translate3d(0,0,0) rotate(0); } 20%,75% { opacity: .85; } 100% { opacity: 0; transform: translate3d(1cqw,1.8cqh,0) rotate(var(--theme-turn)); } }
+@keyframes theme-rain { 0% { opacity: 0; transform: translate3d(0,-1cqh,0); } 15%,70% { opacity: .7; } 100% { opacity: 0; transform: translate3d(-1cqw,2cqh,0); } }
+@keyframes theme-wind { 0% { opacity: 0; transform: translate3d(0,0,0); } 25%,70% { opacity: .7; } 100% { opacity: 0; transform: translate3d(1.5cqw,.5cqh,0); } }
 @media (prefers-reduced-motion: reduce) { .ambient-theme { display: none; } }
 .theme-controls { margin: 0 0 18px; }
 .theme-controls .theme-mode { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -17,3 +18,11 @@
 .theme-calendars label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 12px; }
 .theme-current { margin: 5px 0 0; color: #b6adbf; font-size: 12px; line-height: 1.45; }
 .theme-current small { display: block; color: #938b9b; font-size: 11px; }
+.theme-try { position: relative; min-width: 0; max-width: 100%; margin: 0; }
+.studio .theme-try summary { min-height: 44px; color: #b6adbf; font-size: 12px; }
+.theme-try summary strong { font-size: 12px; font-weight: 500; }
+.theme-try summary small { display: block; color: #b6adbf; font-size: 10px; margin-top: 2px; }
+.theme-try-panel { position: absolute; z-index: 15; left: 0; bottom: calc(100% + 6px); width: min(320px, calc(100vw - 40px)); max-height: min(300px, 65dvh); overflow: auto; padding: 14px; border: 1px solid #ffffff24; border-radius: 14px; background: #16141e; box-shadow: 0 8px 24px #0008; }
+.theme-try select { width: 100%; max-width: 100%; }
+.theme-demo-label { margin: 0; color: #ccbddd; font-size: 12px; }
+.theme-demo-return { min-height: 44px; }

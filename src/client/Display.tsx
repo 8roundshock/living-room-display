@@ -11,7 +11,8 @@ import { MotionContext, usePrefersReducedMotion, type MotionState } from './useM
 import { useWakeLock } from './useWakeLock.ts';
 import { leaveDisplay, liveOpener } from './displayWindow.ts';
 import { AmbientTheme } from './AmbientTheme.tsx';
-import { resolveTheme } from './ambient-theme.ts';
+import { previewTheme, resolveTheme, type ThemeRect } from './ambient-theme.ts';
+import type { ThemeSceneId } from '../shared/theme-registry.ts';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
 
 export interface WidgetGesture { id: WidgetId; x: number; y: number; width?: number; height?: number }
@@ -160,7 +161,7 @@ export { dimSeconds } from '../shared/movementTimeline.ts';
 /** The lowest opacity a moving widget reaches; the plane itself always stays at 1. */
 export { SWAP_DIM } from '../shared/movementTimeline.ts';
 
-export function AmbientDisplay({ state, settings = state.settings, embedded = false, native = false, disconnected = false, compositionOverride, layoutEditing = false, photoPreview, gesture, motionSurface = 'editing', revealNonce, previewSeconds }: {
+export function AmbientDisplay({ state, settings = state.settings, embedded = false, native = false, disconnected = false, compositionOverride, layoutEditing = false, photoPreview, gesture, motionSurface = 'editing', revealNonce, previewSeconds, themePreview }: {
   state: AppState; settings?: Settings; embedded?: boolean; native?: boolean; disconnected?: boolean; compositionOverride?: number; layoutEditing?: boolean; photoPreview?: string | null; gesture?: WidgetGesture | null;
   /** Embedded canvases only: `editing` (the default) keeps widgets still; `preview` shows the draft Animation level. */
   motionSurface?: 'preview' | 'editing';
@@ -168,6 +169,8 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   revealNonce?: number;
   /** Editor-only movement clock. Never controls the live display, information time, or polling. */
   previewSeconds?: number;
+  /** Editor-only illustration. Never alters information time, actual weather or saved settings. */
+  themePreview?: ThemeSceneId | null;
 }) {
   const [now, setNow] = useState(() => new Date()); const [cycle, setCycle] = useState(0); const [interacting, setInteracting] = useState(false);
   // #436 Swap places without animation: the widgets about to move, dimmed (never below SWAP_DIM) while they move.
@@ -508,6 +511,19 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   const animation = plan.valueTransitions ? plan.level : 'off';
   const themeMinute = Math.floor(now.getTime() / 60_000);
   const themeScene = useMemo(() => resolveTheme(settings, state.weather, new Date(themeMinute * 60_000), disconnected), [settings.appearance.theme, settings.location.latitude, settings.location.longitude, state.weather, disconnected, themeMinute]);
+  const themeExclusions = useCallback((): ThemeRect[] => {
+    const bounds = root.current?.getBoundingClientRect(); if (!bounds) return [];
+    return [...registry.current.values()].map(entry => {
+      const rect = entry.section.getBoundingClientRect(), style = getComputedStyle(entry.section);
+      const scale = rect.width / entry.section.clientWidth;
+      // Measure ink rather than whole grid cells. Reserve breathing room around reading areas.
+      const margin = Math.min(bounds.width, bounds.height) * .018;
+      return { left: rect.left - bounds.left + (parseFloat(style.paddingLeft) + entry.slack.left) * scale - margin,
+        top: rect.top - bounds.top + (parseFloat(style.paddingTop) + entry.slack.top) * scale - margin,
+        right: rect.right - bounds.left - (parseFloat(style.paddingRight) + entry.slack.right) * scale + margin,
+        bottom: rect.bottom - bounds.top - (parseFloat(style.paddingBottom) + entry.slack.bottom) * scale + margin };
+    });
+  }, []);
 
   // Follow daylight (#439): one value per minute at the weather location. The ambient page glides to
   // it (widgets.css); editor canvases follow the draft at once. Fixed renders `brightness` unchanged.
@@ -546,7 +562,10 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       data-wake-lock={embedded ? undefined : wakeLock}
     >
       <MotionContext.Provider value={motion}>
-        <AmbientTheme scene={themeScene} animated={!reducedMotion && !layoutEditing && settings.appearance.animation !== 'off'} />
+        <AmbientTheme scene={embedded && themePreview ? previewTheme(themePreview) : themeScene}
+          animated={!reducedMotion && !layoutEditing && settings.appearance.animation !== 'off'}
+          still={embedded && layoutEditing && !reducedMotion && settings.appearance.animation !== 'off'}
+          exclusions={themeExclusions} layoutKey={layoutKey} />
         <div
           ref={plane}
           className={['ambient-content', 'widget-grid-plane', reveal.active ? 'revealing' : ''].filter(Boolean).join(' ')}

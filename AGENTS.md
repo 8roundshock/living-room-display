@@ -21,6 +21,9 @@ This is an independent project, not a personal-memory workspace.
    They include copy/paste user prompts, privacy rules, and a fork workflow.
 6. For widget work, read [the shared widget contract](docs/widgets.md) and apply
    the repository-local [widget creation skill](.agents/skills/living-room-widget/SKILL.md).
+7. For whole-screen seasonal, holiday or weather artwork and preview work, read
+   [the theme contract](docs/ambient-themes.md) and apply the repository-local
+   [theme creation skill](.agents/skills/living-room-theme/SKILL.md).
 
 The selected architecture is a custom local web dashboard with a Windows
 idle/screensaver helper. Implementation is authorized and in progress;

@@ -1,5 +1,20 @@
 # Project status
 
+## Cultural atmosphere design checkpoint — 2026-11-04 (#579)
+
+Separate Canada, Korea and Russia research informed an explicit major-scene,
+card-only and quiet-day policy. Original larger contour compositions and the
+normal editor's still atmosphere preview now compile with a local Try a scene
+control. The central registry owns art, palette, cadence and holiday eligibility;
+the date module retains factual calendar records and calculations. Christmas's
+November 15 approach is an explicit product choice, not an official calendar rule.
+
+Both typechecks, the production build and 27 focused theme/calendar tests pass.
+The calendar worker compared all 12,900 factual observance records for 1900–2199
+against the base and found no date/content changes. Actual browser visual passes,
+interaction regressions, final-head review and CI are still pending at this
+checkpoint. No installation, capture or native behavior changed.
+
 ## Optional atmosphere, holiday cards and hourly weather — 2026-11-04 (#575, #458, #452)
 
 [PR #576](https://github.com/8roundshock/living-room-display/pull/576) combines three

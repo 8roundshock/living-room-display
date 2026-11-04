@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
 import type { WeatherState, WeatherDetailReading } from '../shared/contracts.ts';
-import { resolveTheme, themeLocalDate, themeParticle, themeWeatherKind, themeCadence, THEME_ACTIVE_MS, THEME_PARTICLES_MAX } from './ambient-theme.ts';
+import { resolveTheme, previewTheme, placeThemeMark, themeLocalDate, themeParticle, themeWeatherKind, themeCadence, THEME_ACTIVE_MS, THEME_PARTICLES_MAX } from './ambient-theme.ts';
+import { THEME_SCENES, THEME_SCENE_IDS, QUIET_PALETTE } from '../shared/theme-registry.ts';
 const now = new Date('2026-12-20T18:30:00Z');
 function fixture() {
   const settings = defaultSettings(); settings.appearance.theme.mode = 'combined';
@@ -56,7 +57,8 @@ test('holiday lead windows expire and commemorations stay restrained', () => {
   const { settings, weather } = fixture(); settings.appearance.theme.mode='seasonal'; settings.appearance.theme.calendars=['CA'];
   assert.equal(resolveTheme(settings, weather, now, false, '2026-10-25')?.motif, 'halloween');
   assert.equal(resolveTheme(settings, weather, now, false, '2026-11-01')?.motif, 'autumn');
-  assert.equal(resolveTheme(settings, weather, now, false, '2026-11-11')?.motif, 'remembrance');
+  const quiet = resolveTheme(settings, weather, now, false, '2026-11-11');
+  assert.equal(quiet?.motif, 'autumn'); assert.equal(quiet?.quiet, true); assert.equal(quiet?.tint, QUIET_PALETTE[0]);
 });
 test('gust scenery uses a wholly upcoming preceding-hour interval and unit-aware threshold', () => {
   const {settings,weather}=fixture(); settings.appearance.theme.mode='weather';
@@ -67,9 +69,37 @@ test('gust scenery uses a wholly upcoming preceding-hour interval and unit-aware
 });
 test('bounded particles vary without randomness and every slot expires before replacement', () => {
   assert.ok(THEME_PARTICLES_MAX <= 8);
-  for (const motif of ['rain','snow','fog','remembrance','christmas'] as const) {
+  for (const motif of THEME_SCENE_IDS) {
     const {slots,interval}=themeCadence(motif); assert.ok(slots*interval>THEME_ACTIVE_MS); assert.ok(slots<=THEME_PARTICLES_MAX);
   }
   for(let index=0;index<THEME_PARTICLES_MAX;index++) { const a=themeParticle(index,123); assert.deepEqual(a,themeParticle(index,123)); assert.notDeepEqual(a,themeParticle(index,124)); assert.ok(a.x>=3&&a.x<95&&a.y>=3&&a.y<86); }
   assert.equal(themeLocalDate(new Date(2026,0,2,0,1)), '2026-01-02');
+});
+
+test('minor civic cards retain the season; selected exact quiet days constrain weather without suppressing it', () => {
+  const {settings,weather}=fixture(); settings.appearance.theme.mode='seasonal';
+  assert.equal(resolveTheme(settings,weather,now,false,'2026-11-04')?.motif,'autumn');
+  assert.equal(resolveTheme(settings,weather,now,false,'2026-11-14')?.motif,'autumn');
+  assert.equal(resolveTheme(settings,weather,now,false,'2026-11-15')?.motif,'christmas');
+  settings.appearance.theme.mode='combined'; weather.current!.weatherCode=95;
+  const scene=resolveTheme(settings,weather,now,false,'2026-11-11')!;
+  assert.equal(scene.motif,'storm'); assert.equal(scene.quiet,true); assert.equal(scene.tint,QUIET_PALETTE[0]);
+  settings.appearance.theme.calendars=['KR']; assert.equal(resolveTheme(settings,weather,now,false,'2026-11-11')?.quiet,false);
+});
+
+test('scene illustrations are complete local registry choices with no implied live forecast', () => {
+  for (const id of THEME_SCENE_IDS) {
+    const scene=previewTheme(id),definition=THEME_SCENES[id];
+    assert.equal(scene.motif,id); assert.equal(scene.forecast,false); assert.equal(scene.holiday,null);
+    assert.equal(scene.tint,definition.palette[0]); assert.ok(definition.art.length>0);
+  }
+});
+
+test('placement respects reading areas and its motion envelope, omitting art when the board is full', () => {
+  const exclusions=[{left:0,top:0,right:1000,bottom:780}];
+  const spot=placeThemeMark(0,579,1920,1080,151,exclusions)!;
+  assert.ok(spot); assert.ok(spot.box.left>=1000||spot.box.top>=780);
+  assert.ok(spot.box.left>=0&&spot.box.top>=0&&spot.box.right<=1920&&spot.box.bottom<=1080);
+  assert.equal(placeThemeMark(0,579,1920,1080,151,[{left:0,top:0,right:1920,bottom:1080}]),null);
+  assert.deepEqual(spot,placeThemeMark(0,579,1920,1080,151,exclusions));
 });
