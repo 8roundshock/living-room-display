@@ -34,6 +34,8 @@ function ecccAlert(id, name, type = 'warning', hours = 8) {
 function forecast({ todayCode = 3, wetHours = [], chance = 0 } = {}) {
   const payload = forecastFixture();
   payload.daily.weather_code[0] = todayCode;
+  // Conditions are hourly instants; rain amounts below still describe the preceding hour.
+  payload.hourly.weather_code = payload.hourly.time.map(time => wetHours.includes(Math.round((time - payload.hourly.time[0]) / 3600)) ? todayCode : 3);
   const start = payload.hourly.time[0];
   payload.hourly.precipitation_probability = payload.hourly.time.map(time => wetHours.includes(Math.round((time - start) / 3600)) ? 80 : chance);
   payload.hourly.precipitation = payload.hourly.time.map(time => wetHours.includes(Math.round((time - start) / 3600)) ? 1.2 : 0);
@@ -173,7 +175,7 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
           await view.page.clock.runFor(3_000);
           const result = await facts(view.page);
           assert.equal(await attr(view.page, 'data-dynamic-mode'), 'focus'); assert.equal(await attr(view.page, 'data-dynamic-kind'), 'storm-today');
-          assert.equal(await widgetOf(view.page).locator('.dynamic-headline').innerText(), size === 'small' ? 'Storms today' : 'Thunderstorms in today’s forecast');
+          assert.equal(await widgetOf(view.page).locator('.dynamic-headline').innerText(), size === 'small' ? 'Storms expected' : 'Thunderstorms expected');
           if (size === 'large') {
             const rows = await widgetOf(view.page).locator('.dynamic-also li:not(.dynamic-overflow)').allInnerTexts();
             assert.ok(rows.length >= 2 && rows.length <= 3, `large rows: ${rows.join(' | ')}`);
@@ -184,7 +186,7 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
           await keep(`B-focus-${size}-${viewport.width}`, await widgetOf(view.page).screenshot());
           await view.close();
         }
-        checks.push('B. Focus: "Thunderstorms in today\'s forecast" (small "Storms today") pinned with "+2 more" (rain soon and a reminder due in 30 min) in small and medium and as rows in large, at 720p and 4K: fit 1, no cut headline, nothing outside the widget, one card, no running animation at rest');
+        checks.push('B. Focus: "Thunderstorms expected" (small "Storms expected") pinned with "+2 more" (rain soon and a reminder due in 30 min) in small and medium and as rows in large, at 720p and 4K: fit 1, no cut headline, nothing outside the widget, one card, no running animation at rest');
       } finally { await world.close(); }
     }
 
@@ -378,7 +380,7 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
         await page.locator('.widget-option.selected').getByRole('checkbox', { name: 'Reminders & countdowns', exact: true }).uncheck();
         await page.getByRole('button', { name: 'Save changes', exact: true }).click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
         assert.equal(world.app.store.snapshot().settings.widgets.dynamic, true);
-        assert.deepEqual(world.app.store.snapshot().settings.widgetData.dynamic, { weather: true, alerts: true, air: true, sky: true, personal: false });
+        assert.deepEqual(world.app.store.snapshot().settings.widgetData.dynamic, { weather: true, alerts: true, air: true, sky: true, personal: false, holidays: false });
         await page.reload(); await page.locator('.preview-surface').waitFor(); await page.clock.runFor(500);
         await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
         await page.getByRole('button', { name: 'Dynamic', exact: true }).click();

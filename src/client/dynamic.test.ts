@@ -17,7 +17,7 @@ const NOW = Date.parse('2026-10-20T13:30:00Z');
 const iso = (ms: number) => new Date(ms).toISOString();
 type Hour = { chance?: number | null; amount?: number | null; rain?: number | null };
 
-function weather(options: { now?: number; status?: WeatherState['status']; units?: 'metric' | 'imperial'; timezone?: string; latitude?: number; longitude?: number; updatedAt?: number | null; current?: Partial<NonNullable<WeatherState['current']>> | null; days?: Partial<WeatherState['daily'][number]>[]; hours?: (index: number) => Hour; hourCount?: number; today?: string } = {}): WeatherState {
+function weather(options: { now?: number; status?: WeatherState['status']; units?: 'metric' | 'imperial'; timezone?: string; latitude?: number; longitude?: number; updatedAt?: number | null; current?: Partial<NonNullable<WeatherState['current']>> | null; days?: Partial<WeatherState['daily'][number]>[]; hours?: (index: number) => Hour; hourCount?: number; codes?: (index: number) => number | null; gusts?: (index: number) => number | null; today?: string } = {}): WeatherState {
   const now = options.now ?? NOW, start = now - now % HOUR, imperial = options.units === 'imperial';
   const today = options.today ?? '2026-10-20';
   const day = (offset: number) => { const date = new Date(`${today}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + offset); return date.toISOString().slice(0, 10); };
@@ -27,6 +27,7 @@ function weather(options: { now?: number; status?: WeatherState['status']; units
     units: imperial ? { temperature: '°F', windSpeed: 'mph', precipitation: 'in' } : { temperature: '°C', windSpeed: 'km/h', precipitation: 'mm' },
     current: options.current === null ? null : { time: iso(start), temperature: 14, feelsLike: 13, weatherCode: 3, isDay: true, windSpeed: 8, ...options.current },
     daily: Array.from({ length: 7 }, (_, index) => ({ date: day(index), weatherCode: 3, temperatureMax: 17, temperatureMin: 9, precipitationProbability: 10, precipitationAmount: 0, ...options.days?.[index] })),
+    details: Array.from({ length: options.hourCount ?? 24 }, (_, index) => ({ time: iso(start + index * HOUR), weatherCode: options.codes?.(index) ?? null, windGust: options.gusts?.(index) ?? null, temperature: null, humidity: null, dewPoint: null, pressure: null, visibility: null, cloudCover: null, windSpeed: null, windDirection: null })),
     hourly: Array.from({ length: options.hourCount ?? 24 }, (_, index) => {
       const hour = options.hours?.(index) ?? {};
       return { intervalStart: iso(start + index * HOUR), intervalEnd: iso(start + (index + 1) * HOUR), precipitationProbability: hour.chance === undefined ? 0 : hour.chance, precipitationAmount: hour.amount === undefined ? (hour.rain ?? 0) : hour.amount, rainAmount: hour.rain === undefined ? 0 : hour.rain };
@@ -102,7 +103,7 @@ test('heat stops at 18:00 in the weather city', () => {
 
 const wet = (from: number, to: number, chance = 80, rain = 1) => (index: number) => index >= from && index < to ? { chance, rain } : {};
 
-test('hazards: a condition now beats today\'s forecast of it; heavy rain gives way to a rain-now card; a dry rest of today drops it', () => {
+test('hazards use remaining hourly codes, retain current conditions and defer heavy rain to a rain-now card', () => {
   const now = signal({ weather: weather({ current: { weatherCode: 95 }, days: [{ weatherCode: 95 }], hours: wet(4, 8) }) });
   assert.deepEqual(all(now).filter(card => card.id === 'weather:hazard').map(card => card.kind), ['storm-now'], 'one hazard card, the condition now');
   assert.equal(find(now, 'weather:hazard')?.headline, 'Thunderstorms');
@@ -110,15 +111,14 @@ test('hazards: a condition now beats today\'s forecast of it; heavy rain gives w
   assert.equal(find(signal({ weather: weather({ current: { weatherCode: 96 } }) }), 'weather:hazard')?.compact, 'Storms with hail');
   assert.equal(find(signal({ weather: weather({ current: { weatherCode: 66 } }) }), 'weather:hazard')?.headline, 'Freezing rain', 'freezing uses the condition label');
   assert.equal(find(signal({ weather: weather({ current: { weatherCode: 75 } }) }), 'weather:hazard')?.score, DYNAMIC_SCORES.heavySnowNow);
-  const today = signal({ weather: weather({ days: [{ weatherCode: 95 }], hours: wet(4, 8, 70) }) });
+  const today = signal({ weather: weather({ days: [{ weatherCode: 95 }], hours: wet(4, 8, 70), codes: i => i >= 4 && i <= 7 ? 95 : 3 }) });
   const storm = find(today, 'weather:hazard')!;
-  assert.deepEqual([storm.kind, storm.tier, storm.headline, storm.compact, storm.detail, storm.detailCompact], ['storm-today', 'focus', 'Thunderstorms in today’s forecast', 'Storms today', 'Up to 70% chance · rest of today', 'Up to 70% chance']);
+  assert.deepEqual([storm.kind, storm.tier, storm.headline, storm.compact, storm.detail, storm.detailCompact], ['storm-today', 'focus', 'Thunderstorms expected', 'Storms expected', 'Around 1 PM–4 PM', null]);
   assert.equal(find(signal({ weather: weather({ days: [{ weatherCode: 95 }] }) }), 'weather:hazard'), undefined, 'the rest of today is dry: no storm card');
-  const untimed = find(signal({ weather: weather({ days: [{ weatherCode: 95 }], hourCount: 0 }) }), 'weather:hazard')!;
-  assert.deepEqual([untimed.tier, untimed.detail], ['notable', 'Timing unavailable']);
+  assert.equal(find(signal({ weather: weather({ days: [{ weatherCode: 95 }], hourCount: 0 }) }), 'weather:hazard'), undefined, 'daily worst code with no hourly timing does not imply a remaining storm');
   // Heavy rain: suppressed by a rain-now or rain-soon card, shown otherwise when the rest of the day is wet.
   assert.equal(find(signal({ weather: weather({ current: { weatherCode: 65 }, hours: wet(0, 4) }) }), 'weather:hazard'), undefined, 'rain now covers it');
-  const heavy = find(signal({ weather: weather({ days: [{ weatherCode: 82 }], hours: index => index >= 9 && index < 11 ? { chance: 50, rain: 2 } : index < 9 ? { chance: 35 } : {} }) }), 'weather:hazard')!;
+  const heavy = find(signal({ weather: weather({ days: [{ weatherCode: 82 }], codes: i => i >= 9 && i <= 10 ? 82 : 3, hours: index => index >= 9 && index < 11 ? { chance: 50, rain: 2 } : index < 9 ? { chance: 35 } : {} }) }), 'weather:hazard')!;
   assert.deepEqual([heavy.kind, heavy.score], ['heavy-rain', DYNAMIC_SCORES.heavyRain]);
   assert.deepEqual(restOfToday(weather({ hours: wet(14, 16) }), NOW, TZ).wet, true, 'an evening hour of today counts');
   assert.deepEqual(restOfToday(weather({ hours: wet(15, 17) }), NOW, TZ).wet, false, 'hours after midnight are tomorrow');
@@ -303,13 +303,13 @@ test('chooseDynamic: tie-break, modulo, the latch, a new focus card breaking it,
   assert.deepEqual(ties.focus.map(card => card.start), [NOW + 20 * MINUTE, NOW + 20 * MINUTE, NOW + 40 * MINUTE]);
   assert.ok(ids[0]! < ids[1]!, 'equal score and start: the id decides');
   // Focus: the strongest is pinned whatever the slot; the others and the notable cards follow, then calm filler.
-  const focus = signal({ weather: weather({ days: [{ weatherCode: 95 }], hours: wet(3, 7, 80) }), reminders: [reminder(NOW + 30 * MINUTE)], onBoard: { weather: true, sunMoon: true, airQuality: true } });
+  const focus = signal({ weather: weather({ days: [{ weatherCode: 95 }], codes: i => i >= 3 && i < 7 ? 95 : 3, hours: wet(3, 7, 80) }), reminders: [reminder(NOW + 30 * MINUTE)], onBoard: { weather: true, sunMoon: true, airQuality: true } });
   for (const slot of [0, 1, 7]) assert.equal(chooseDynamic(focus, slot, null, 3).lead!.kind, 'storm-today');
   const pinned = chooseDynamic(focus, 0, null, 3);
   assert.equal(pinned.mode, 'focus'); assert.equal(pinned.more, 2, 'rain soon and the reminder');
   assert.deepEqual(pinned.also.map(card => card.kind).slice(0, 2), ['rain-soon', 'reminder-soon']);
   assert.equal(pinned.also.length, 3, 'calm filler after them, never counted as more');
-  assert.equal(dynamicSummary(pinned), 'Now showing: Storms today. Next: Rain soon, Reminder due soon.');
+  assert.equal(dynamicSummary(pinned), 'Now showing: Storms expected. Next: Rain soon, Reminder due soon.');
   // Rotation: notable by score, then calm in order; slot modulo the rotation; the latch holds within a slot.
   const rotate = signal({ onBoard: { weather: true, forecast: true }, countdowns: [countdown('1', '2026-10-21')] });
   const rotation = [...rotate.notable, ...rotate.calm].map(card => card.id);
@@ -354,8 +354,8 @@ test('wording guard: no forecast, model or personal card ever sounds official; o
     { weather: weather({ current: { weatherCode: 96, windSpeed: 60, feelsLike: -30 }, days: [{ weatherCode: 95, temperatureMax: 35 }, { weatherCode: 66, temperatureMin: -25 }], hours: wet(0, 3) }) },
     { weather: weather({ current: { weatherCode: 75, windSpeed: 40 }, days: [{ weatherCode: 82 }, { weatherCode: 75, temperatureMax: 33 }], hours: wet(3, 6, 40) }), airQuality: air({ aqi: 220, uv: () => 9 }) },
     { weather: weather({ hours: wet(9, 11) }), airQuality: air({ aqi: 120 }) },
-    { weather: weather({ days: [{ weatherCode: 82 }], hours: index => index >= 9 && index < 11 ? { chance: 50, rain: 2 } : index < 9 ? { chance: 35 } : {} }) },
-    { weather: weather({ days: [{ weatherCode: 95 }], hourCount: 0 }), airQuality: air({ aqi: 70, scale: 'european' }), airScale: 'european', reminders: [reminder(NOW - 30 * MINUTE)] },
+    { weather: weather({ days: [{ weatherCode: 82 }], codes: i => i >= 9 && i <= 10 ? 82 : 3, hours: index => index >= 9 && index < 11 ? { chance: 50, rain: 2 } : index < 9 ? { chance: 35 } : {} }) },
+    { weather: weather({ days: [{ weatherCode: 95 }], codes: i => i === 2 ? 95 : 3 }), airQuality: air({ aqi: 70, scale: 'european' }), airScale: 'european', reminders: [reminder(NOW - 30 * MINUTE)] },
     { weather: weather({ hours: index => index === 2 ? { chance: 40 } : {} }), reminders: [reminder(NOW + 30 * MINUTE), reminder(NOW - 5 * HOUR), reminder(NOW + 3 * HOUR)], countdowns: [countdown('1', '2026-10-20'), countdown('2', '2026-10-21'), countdown('3', '2026-11-02')] },
     { now: Date.parse('2026-10-20T21:30:00Z'), weather: weather({ now: Date.parse('2026-10-20T21:30:00Z') }) },
     { now: Date.parse('2026-10-26T01:00:00Z'), weather: weather({ now: Date.parse('2026-10-26T01:00:00Z'), today: '2026-10-25' }) },
@@ -395,4 +395,53 @@ test('every card names a source word, a tone and a label', () => {
     assert.ok(['water', 'sun', 'time', 'personal', 'sky'].includes(card.tone), `${card.id} tone`);
     assert.ok(card.label.length > 0);
   }
+});
+
+
+test('#452 a passed storm cannot be kept alive by later drizzle or a daily worst code', () => {
+  const past = weather({ days: [{ weatherCode: 95 }], current: { weatherCode: 51 }, codes: i => i === 0 ? 95 : 51, hours: wet(4, 6) });
+  assert.equal(find(signal({ weather: past }), 'weather:hazard'), undefined);
+  assert.equal(find(signal({ weather: { ...past, details: undefined } }), 'weather:hazard'), undefined, 'missing hourly codes never fall back to a daily worst');
+  assert.equal(find(signal({ weather: weather({ days: [{ weatherCode: 3 }], codes: i => i === 3 ? 95 : 3 }) }), 'weather:hazard')?.detail, 'Around 12 PM', 'a single instantaneous sample does not invent an extra hour');
+});
+
+test('#452 current and upcoming different families may both appear, without duplicating a family', () => {
+  const signals = signal({ weather: weather({ current: { weatherCode: 75 }, codes: i => i === 2 ? 75 : i >= 3 && i <= 5 ? 95 : 3 }) });
+  const hazards = all(signals).filter(card => card.id.startsWith('weather:hazard'));
+  assert.deepEqual(hazards.map(card => [card.id, card.kind]), [['weather:hazard', 'heavySnow-now'], ['weather:hazard-later', 'storm-today']]);
+  assert.equal(hazards[1]!.detail, 'Around 12 PM–2 PM');
+});
+
+test('#452 gust thresholds are unit-specific and never labelled as a current sustained observation', () => {
+  for (const units of ['metric', 'imperial'] as const) {
+    const thresholds = DYNAMIC_THRESHOLDS[units];
+    const gust = (value: number) => find(signal({ weather: weather({ units, gusts: i => i === 1 ? value : null }) }), 'weather:wind');
+    assert.equal(gust(thresholds.GUST_STRONG)?.kind, 'gust-strong');
+    assert.equal(gust(thresholds.GUST_STRONG - 0.1)?.kind, 'gusty');
+    assert.equal(gust(thresholds.GUST_BREEZY)?.kind, 'gusty');
+    assert.equal(gust(thresholds.GUST_BREEZY - 0.1), undefined);
+    assert.match(gust(thresholds.GUST_STRONG)!.detail!, /^Up to .*9 AM–10 AM$/);
+    assert.doesNotMatch(gust(thresholds.GUST_STRONG)!.detail!, /Now/);
+    assert.equal(gust(thresholds.GUST_STRONG)!.provenance, 'Forecast estimate');
+  }
+  assert.equal(find(signal({ weather: weather({ gusts: i => i === 0 ? 100 : null }) }), 'weather:wind'), undefined, 'past gust interval expired');
+  const upcoming = find(signal({ weather: weather({ gusts: i => i === 3 ? 80 : null }) }), 'weather:wind')!;
+  assert.equal(upcoming.detail, 'Up to 80 km/h · 11 AM–12 PM');
+});
+
+test('#452 saved/offline hourly hazards retain caution and never say Now', () => {
+  for (const disconnected of [false, true]) {
+    const signals = signal({ disconnected, weather: weather({ status: 'stale', codes: i => i === 2 ? 95 : 3, gusts: i => i === 3 ? 80 : null }) });
+    for (const id of ['weather:hazard', 'weather:wind']) {
+      const card = find(signals, id)!; assert.ok(card); assert.equal(card.age?.caution, true);
+      assert.match(card.age!.text, disconnected ? /^Offline/ : /^Saved forecast/);
+      assert.doesNotMatch(card.detail!, /Now/);
+    }
+  }
+});
+
+test('#452 weather timing labels distinguish a repeated hour at DST fallback', () => {
+  const now = Date.parse('2026-11-01T04:30:00Z');
+  const storm = find(signal({ now, weather: weather({ now, today: '2026-11-01', codes: i => i === 1 || i === 2 ? 95 : 3 }) }), 'weather:hazard')!;
+  assert.equal(storm.detail, 'Around 1 AM GMT-4–1 AM GMT-5');
 });

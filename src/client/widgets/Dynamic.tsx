@@ -208,7 +208,7 @@ function DynamicSettings({ settings, onChange, saving, state, saved }: WidgetSet
     const { settings: last, onChange: change, saved: baseline } = latest.current;
     if (anySource(last.widgetData.dynamic)) return;
     change(previous => anySource(previous.widgetData.dynamic) ? previous
-      : { ...previous, widgetData: { ...previous.widgetData, dynamic: baseline && anySource(baseline.widgetData.dynamic) ? { ...baseline.widgetData.dynamic } : { weather: true, alerts: true, air: true, sky: true, personal: true } } });
+      : { ...previous, widgetData: { ...previous.widgetData, dynamic: baseline && anySource(baseline.widgetData.dynamic) ? { ...baseline.widgetData.dynamic } : { weather: true, alerts: true, air: true, sky: true, personal: true, holidays: false } } });
   }, []);
   const now = Date.now();
   const summary = useMemo(() => {
@@ -253,7 +253,7 @@ export const DynamicWidget: WidgetModule = {
       intervalStart: new Date(start + index * HOUR).toISOString(), intervalEnd: new Date(start + (index + 1) * HOUR).toISOString(),
       precipitationProbability: chance, precipitationAmount: SAMPLE_RAIN[index]!, rainAmount: SAMPLE_RAIN[index]!,
     }));
-    const next = { ...settings, widgetData: { ...settings.widgetData, countdowns: [], dynamic: { weather: true, alerts: false, air: false, sky: true, personal: false } } };
+    const next = { ...settings, widgetData: { ...settings.widgetData, countdowns: [], dynamic: { weather: true, alerts: false, air: false, sky: true, personal: false, holidays: false } } };
     const weather = { ...state.weather, hourly, location: { name: 'Sample City', latitude: 43.65, longitude: -79.38, timezone: 'America/Toronto' } };
     return { state: { ...state, settings: next, weather, reminders: [], alerts: OFF_ALERTS }, settings: next };
   },
