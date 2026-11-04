@@ -1,7 +1,10 @@
 .ambient-theme { position: absolute; inset: 0; overflow: hidden; pointer-events: none; contain: layout style; color: var(--theme-tint); opacity: calc(var(--ambient-brightness, .55) * .72); }
-.theme-mark { position: absolute; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; opacity: 0; animation: theme-float var(--theme-duration) ease-in-out 1 both; }
-.theme-mark path { vector-effect: non-scaling-stroke; stroke-width: clamp(.9px, .13cqmin, 2.6px); }
-.theme-mark .theme-companion { color: var(--theme-companion); stroke-width: clamp(.7px, .09cqmin, 1.8px); opacity: .8; }
+.theme-placement { position: absolute; transition: opacity var(--theme-retire-duration) ease; }
+.theme-placement[data-theme-obscured] { opacity: 0; }
+.theme-mark { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; opacity: 0; animation: theme-float var(--theme-duration) ease-in-out 1 both; }
+.theme-mark path { vector-effect: non-scaling-stroke; stroke-width: clamp(1.1px, .19cqmin, 4px); }
+.theme-mark .theme-companion { color: var(--theme-companion); stroke-width: clamp(.8px, .11cqmin, 2.2px); opacity: .8; }
+.ambient-theme[data-theme-source='weather'] .theme-mark path { stroke-width: clamp(.9px, .13cqmin, 2.6px); }
 .ambient-theme[data-theme-motion='rain'] .theme-mark { animation-name: theme-rain; }
 .ambient-theme[data-theme-motion='wind'] .theme-mark { animation-name: theme-wind; }
 .ambient-theme[data-theme-quiet] { opacity: calc(var(--ambient-brightness, .55) * .38); }
@@ -26,3 +29,8 @@
 .theme-try select { width: 100%; max-width: 100%; }
 .theme-demo-label { margin: 0; color: #ccbddd; font-size: 12px; }
 .theme-demo-return { min-height: 44px; }
+/* Upward overlays collide with the editor's sticky toolbar on compact screens. */
+@media (max-width: 700px), (max-height: 520px) {
+  .theme-try[open] { flex-basis: 100%; }
+  .theme-try-panel { position: static; width: 100%; max-height: none; margin-top: 4px; }
+}

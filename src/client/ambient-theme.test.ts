@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
 import type { WeatherState, WeatherDetailReading } from '../shared/contracts.ts';
-import { resolveTheme, previewTheme, placeThemeMark, themeLocalDate, themeParticle, themeWeatherKind, themeCadence, THEME_ACTIVE_MS, THEME_PARTICLES_MAX } from './ambient-theme.ts';
+import { resolveTheme, previewTheme, placeThemeMark, themeMotionTimes, themeLocalDate, themeParticle, themeWeatherKind, themeCadence, THEME_ACTIVE_MS, THEME_PARTICLES_MAX } from './ambient-theme.ts';
 import { THEME_SCENES, THEME_SCENE_IDS, QUIET_PALETTE } from '../shared/theme-registry.ts';
+import { floatPath, stepPath, widgetTrack } from '../shared/float.ts';
 const now = new Date('2026-12-20T18:30:00Z');
 function fixture() {
   const settings = defaultSettings(); settings.appearance.theme.mode = 'combined';
@@ -102,4 +103,15 @@ test('placement respects reading areas and its motion envelope, omitting art whe
   assert.ok(spot.box.left>=0&&spot.box.top>=0&&spot.box.right<=1920&&spot.box.bottom<=1080);
   assert.equal(placeThemeMark(0,579,1920,1080,151,[{left:0,top:0,right:1920,bottom:1080}]),null);
   assert.deepEqual(spot,placeThemeMark(0,579,1920,1080,151,exclusions));
+});
+
+test('finite-lifetime motion samples bound every float/step point including the shortest30s boundary', () => {
+  for (const interval of [30,180]) for (const seconds of [0,18,29,29.99,30,179]) for (const floating of [true,false]) for (const track of [{lead:0,phase:0},widgetTrack(4)]) {
+    const points=themeMotionTimes(seconds,interval,floating?track.phase:0).map(at=>floating?floatPath(at,interval,track):stepPath(at,interval,track));
+    const bounds={left:Math.min(...points.map(p=>p.x)),right:Math.max(...points.map(p=>p.x)),top:Math.min(...points.map(p=>p.y)),bottom:Math.max(...points.map(p=>p.y))};
+    for(let offset=0;offset<=12.2;offset+=.07) {
+      const point=floating?floatPath(seconds+offset,interval,track):stepPath(seconds+offset,interval,track);
+      assert.ok(point.x>=bounds.left-1e-9&&point.x<=bounds.right+1e-9&&point.y>=bounds.top-1e-9&&point.y<=bounds.bottom+1e-9,`${interval}/${seconds}/${floating}: point stays in reserved space`);
+    }
+  }
 });

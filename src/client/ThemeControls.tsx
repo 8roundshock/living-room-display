@@ -37,9 +37,7 @@ export function ThemePreviewControls({ value, onChange, motionAllowed }: { value
           {THEME_SCENE_IDS.filter(id => THEME_SCENES[id].group === group).map(id => <option key={id} value={id}>{THEME_SCENES[id].label}</option>)}
         </optgroup>)}
       </select>
-      <p className="theme-current">Illustration only. Your display, date and weather stay unchanged.
-        {!motionAllowed && <small>Atmosphere is hidden while Animation is Off or your system reduces motion.</small>}
-      </p>
+      {!motionAllowed && <p className="theme-current">Atmosphere is hidden while Animation is Off or your system reduces motion.</p>}
       {value && <button type="button" className="text-button theme-demo-return" onClick={() => onChange(null)}>Return to Automatic</button>}
     </div>
   </details>;

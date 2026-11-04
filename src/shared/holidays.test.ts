@@ -128,6 +128,15 @@ test('NewYear crosses the year boundary and ends on the selected ordinary holida
   assert.equal(holidayWindow('2027-01-14', ['RU']), null, 'Old New Year card does not restart the background');
 });
 
+test('selected Russian NewYear art wins the shared scene independently of calendar checkbox order', () => {
+  for (const date of ['2026-12-27','2027-01-01']) {
+    assert.equal(holidayWindow(date,['CA','KR','RU'])?.observance.id,'ru:new-year');
+    assert.deepEqual(holidayWindow(date,['CA','KR','RU']),holidayWindow(date,['RU','KR','CA']));
+    assert.equal(holidayWindow(date,['CA','KR'])?.observance.id,'ca:new-year');
+  }
+  assert.equal(holidayWindow('2027-01-07',['CA','KR','RU'])?.observance.id,'ru:christmas');
+});
+
 test('only selected exact quiet days constrain scenes; card classification remains independent', () => {
   const quietDays = [
     ['2026-04-03', 'CA', 'ca:good-friday'], ['2026-09-30', 'CA', 'ca:reconciliation'],

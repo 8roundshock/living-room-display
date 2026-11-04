@@ -59,6 +59,9 @@ export const THEME_SCENES = {
 export type ThemeSceneId = keyof typeof THEME_SCENES;
 export const THEME_SCENE_IDS = Object.keys(THEME_SCENES) as ThemeSceneId[];
 export const THEME_ACTIVE_MS = 12_000;
+export const THEME_RETIRE_MS = 180;
+/** Include the smooth retirement and one paint allowance in future reading-space bounds. */
+export const THEME_CLEARANCE_SECONDS = (THEME_ACTIVE_MS + THEME_RETIRE_MS + 20) / 1000;
 export const THEME_PARTICLES_MAX = 8;
 export const QUIET_PALETTE = ['#858f94', '#798788'] as const;
 
@@ -86,7 +89,8 @@ export const HOLIDAY_SCENE_POLICY: Readonly<Record<string, HolidayScenePolicy>> 
   'kr:seollal': major('seollal', 90, 7), 'kr:daeboreum': card,
   'kr:buddha': major('lotus-lanterns', 65, 3), 'kr:dano': card, 'kr:chilseok': card,
   'kr:chuseok': major('chuseok', 85, 7),
-  'ru:new-year': major('new-year-tree', 80, 5), 'ru:christmas': major('orthodox-christmas', 95, 6),
+  // A selected Russian calendar supplies the shared New Year tree; still only one scene.
+  'ru:new-year': major('new-year-tree', 81, 5), 'ru:christmas': major('orthodox-christmas', 95, 6),
   'ru:old-new-year': card, 'ru:easter': major('pascha', 75, 7), 'ru:maslenitsa': major('maslenitsa', 70),
   'ru:defender': card, 'ru:women': major('mimosa', 65, 2), 'ru:spring-labour': card,
   'ru:victory': quiet, 'ru:russia': card, 'ru:unity': card,

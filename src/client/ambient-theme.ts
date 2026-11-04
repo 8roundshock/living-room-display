@@ -1,7 +1,7 @@
 import type { Settings, WeatherState } from '../shared/contracts.ts';
 import { holidayWindow, seasonForDate } from '../shared/holidays.ts';
 import { defaultTheme } from '../shared/themes.ts';
-import { QUIET_PALETTE, THEME_SCENES, type ThemeSceneId } from '../shared/theme-registry.ts';
+import { QUIET_PALETTE, THEME_SCENES, THEME_CLEARANCE_SECONDS, type ThemeSceneId } from '../shared/theme-registry.ts';
 import { DYNAMIC_THRESHOLDS } from './dynamic.ts';
 import { gustForecastSpells } from './weather-hazards.ts';
 
@@ -93,12 +93,20 @@ export function themeParticle(index: number, cycle: number) {
 }
 
 export interface ThemeRect { left: number; top: number; right: number; bottom: number }
+/** A path is monotone between its waypoint boundaries. Sampling both sides also
+ * bounds step motion without reading layout on animation frames. */
+export function themeMotionTimes(seconds: number, interval: number, phase = 0, horizon = THEME_CLEARANCE_SECONDS): number[] {
+  const end = seconds + horizon, values = [seconds, end];
+  let boundary = (Math.floor(seconds / interval + phase) + 1 - phase) * interval;
+  for (; boundary <= end; boundary += interval) values.push(Math.max(seconds, boundary - .001), boundary);
+  return values;
+}
 /** Search bounded negative space, including a mark's motion envelope. A crowded layout
  * may omit a mark; it never paints over a reading area to meet a decorative count. */
 export function placeThemeMark(index: number, cycle: number, width: number, height: number, size: number, exclusions: readonly ThemeRect[]) {
   const inset = Math.min(width, height) * .012;
   for (const factor of [1, .78, .6]) {
-    const extent = size * factor, travel = Math.min(width, height) * .025;
+    const extent = size * factor, travel = Math.max(width * .015, height * .025);
     const envelope = extent * 1.12 + travel;
     for (let candidate = 0; candidate < 54; candidate++) {
       const point = themeParticle(index + candidate * 3, cycle + candidate * 17);

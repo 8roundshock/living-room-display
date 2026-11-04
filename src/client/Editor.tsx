@@ -367,7 +367,7 @@ export function Editor({
   const newStyleId = useRef<string | null>(null);
   const [builtinSelection, setBuiltinSelection] = useState('');
   const themeChoice = JSON.stringify(draft.appearance.theme);
-  useEffect(() => { setThemePreview(null); }, [themeChoice, presetId, builtinSelection]);
+  useLayoutEffect(() => { setThemePreview(null); }, [themeChoice, presetId, builtinSelection]);
   const [pendingStyle, setPendingStyle] = useState<string | null>(null);
   const [styleNotice, setStyleNotice] = useState('');
   const [confirmStyleDelete, setConfirmStyleDelete] = useState(false);
@@ -1741,7 +1741,7 @@ export function Editor({
             {section === 'Style' && (
               <>
                 <h2>Make it yours</h2>
-                <ThemeControls settings={draft} weather={state.weather} saving={saving} disconnected={!!connectionError} onChange={theme => change(previous => withAppearance(previous, { theme }))} />
+                <ThemeControls settings={draft} weather={state.weather} saving={saving} disconnected={!!connectionError} onChange={theme => { setThemePreview(null); change(previous => withAppearance(previous, { theme })); }} />
                 {/* #439: Fixed (one level) or Follow daylight (Dimmest to Brightest, peaking at
                     solar noon). The mode sits on the label line, so the default Fixed tab keeps
                     its height at 1280×720. */}

@@ -1,6 +1,6 @@
 # Project status
 
-## Cultural atmosphere design checkpoint — 2026-11-04 (#579)
+## Cultural atmosphere refinement — 2026-11-04 (#579)
 
 Separate Canada, Korea and Russia research informed an explicit major-scene,
 card-only and quiet-day policy. Original larger contour compositions and the
@@ -9,11 +9,24 @@ control. The central registry owns art, palette, cadence and holiday eligibility
 the date module retains factual calendar records and calculations. Christmas's
 November 15 approach is an explicit product choice, not an official calendar rule.
 
-Both typechecks, the production build and 27 focused theme/calendar tests pass.
+Both typechecks, the production build, all 661 source tests and 29 focused
+theme/calendar tests pass.
 The calendar worker compared all 12,900 factual observance records for 1900–2199
-against the base and found no date/content changes. Actual browser visual passes,
-interaction regressions, final-head review and CI are still pending at this
-checkpoint. No installation, capture or native behavior changed.
+against the base and found no date/content changes. The first independent RAM
+visual pass verified current-date preview and dark native menu contrast, then
+found a compact upward chooser clipped behind the sticky toolbar and delicate
+low-brightness contours. Compact controls now follow document flow and principal
+contours have a stronger hierarchy. Code review found ink-growth and pending
+step-swap clearance gaps; measured invalidation and bounded lifetime envelopes
+correct them. A blanket motion reserve initially hid default-board Christmas;
+the explicit browser assertion failed, and the lifetime-bounded correction now
+keeps all eleven tested scenes present at 1080p/4K. This was a fix, not a blind retry.
+
+The isolated theme suite covers demonstrations, compact controls, typography
+growth, 30-second floating/step swaps, finite slot lifetimes and bounded ongoing
+work. Corrected-head independent visual/code review and CI belong to
+[PR #581](https://github.com/8roundshock/living-room-display/pull/581). No
+installation, capture or native behavior changed.
 
 ## Optional atmosphere, holiday cards and hourly weather — 2026-11-04 (#575, #458, #452)
 

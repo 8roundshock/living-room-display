@@ -21,18 +21,22 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
   app.server.listen(0,'127.0.0.1'); await once(app.server,'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const browser = await chromium.launch({ executablePath: edge, headless: true });
-  const images=[],checks=[],errors=[]; let context,page,source,clock;
+  const images=[],checks=[],errors=[],writes=[]; let context,page,source,clock;
   const record = text => { checks.push(text); console.log(`PASS: ${text}`); };
   const saved = () => app.store.snapshot().settings;
   const button = name => page.getByRole('button',{name,exact:true});
-  async function open({date='2026-12-20T18:30:00Z',mode='off',code=0,reduced='no-preference',animation='subtle',viewport={width:1280,height:720},path='/editor',calendars=['CA','KR','RU']}={}) {
+  async function open({date='2026-12-20T18:30:00Z',mode='off',code=0,reduced='no-preference',animation='subtle',viewport={width:1280,height:720},path='/editor',calendars=['CA','KR','RU'],empty=false,brightness=.36,float=false,swap=false,interval=180,only}={}) {
     await context?.close(); clock=new Date(date); const settings=defaultSettings(); settings.appearance.theme={mode,calendars}; settings.appearance.motionEnabled=false; settings.appearance.animation=animation;
+    settings.appearance.brightness=brightness;
+    settings.appearance.motionEnabled=float; settings.appearance.rearrange=swap; settings.appearance.motionIntervalSeconds=interval;
+    if(empty) { for(const id of Object.keys(settings.widgets)) settings.widgets[id]=false; settings.preview.enabled=false; }
+    if(only) { for(const id of Object.keys(settings.widgets)) settings.widgets[id]=only.includes(id); settings.preview.enabled=false; }
     await app.store.update(data=>{data.settings=settings;data.reminders=[];});
     source=await(await fetch(base+'/api/state')).json(); source.weather={...source.weather,status:'fresh',updatedAt:date,error:null,location:settings.location,details:[],daily:[],hourly:[],current:{time:date,temperature:4,feelsLike:2,weatherCode:code,isDay:true,windSpeed:8}};
     context=await browser.newContext({viewport,timezoneId:'America/Toronto',reducedMotion:reduced}); await keepPagesLocal(context,base); await mockScreenWakeLock(context);
     await context.route('**/api/state',route=>route.fulfill({json:{...source,settings:saved()}}));
     await context.route('**/api/weather',route=>route.fulfill({json:source.weather}));
-    page=await context.newPage(); page.on('pageerror',e=>errors.push(e.message)); await page.clock.install({time:clock});
+    page=await context.newPage(); page.on('pageerror',e=>errors.push(e.message)); page.on('request',request=>{if(['PUT','PATCH','POST','DELETE'].includes(request.method()))writes.push(request.url());}); await page.clock.install({time:clock});
     await page.goto(base+path); await page.locator(path==='/editor'?'.studio-header':'.widget-grid-plane').waitFor();
     if(path==='/editor') await page.getByRole('tab',{name:'Style',exact:true}).click();
   }
@@ -42,6 +46,21 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     await page.evaluate(()=>document.getAnimations().forEach(a=>{const target=a.effect?.target;if(target instanceof Element&&!target.closest('.ambient-theme')&&a.effect.getTiming().iterations!==Infinity)a.finish();}));
     await page.locator('.ambient-theme').evaluateAll(layers=>layers.forEach(layer=>layer.querySelectorAll('.theme-mark').forEach(mark=>mark.getAnimations().forEach(a=>{a.pause();a.currentTime=(Number(layer.dataset.themeTick)-Number(mark.dataset.themeGeneration))*Number(layer.dataset.themeInterval)+1000;}))));
     if(capture) images.push({name,bytes:await page.screenshot()});
+  }
+  async function readingIntersections() {
+    return page.evaluate(()=>{
+      const readings=[],range=document.createRange();
+      const walk=node=>{for(const child of node.childNodes) {
+        if(child.nodeType===Node.TEXT_NODE&&child.textContent?.trim()) {range.selectNodeContents(child); readings.push(...range.getClientRects());}
+        else if(child instanceof Element&&!child.classList.contains('sr-only')) {
+          if(child.matches('svg,img,canvas,picture,video,[role="img"]')) readings.push(child.getBoundingClientRect()); else walk(child);
+        }
+      }};
+      document.querySelectorAll('.widget-content').forEach(walk);
+      return [...document.querySelectorAll('.theme-mark')].filter(mark=>Number(getComputedStyle(mark).opacity)>.02&&Number(getComputedStyle(mark.parentElement).opacity)>.5).flatMap(mark=>{
+        const r=mark.getBoundingClientRect(); return readings.filter(b=>b.width>0&&b.height>0&&r.left<b.right&&r.right>b.left&&r.top<b.bottom&&r.bottom>b.top).map(()=>mark.dataset.themeGeneration);
+      });
+    });
   }
   try {
     await open(); assert.equal(await page.locator('.ambient-theme').count(),0);
@@ -59,6 +78,29 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     assert.deepEqual(saved().appearance.theme,{mode:'combined',calendars:['CA','KR']});
     await page.reload(); await page.getByRole('tab',{name:'Style',exact:true}).click(); assert.equal(await choice.inputValue(),'combined');
     record('Theme and calendars are cancellable drafts, save once and survive reload');
+    await open({date:'2026-11-04T18:30:00Z',mode:'seasonal'});
+    await page.locator('.ambient-theme[data-theme-still]').waitFor(); await page.clock.runFor(50);
+    assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-motif'),'autumn');
+    assert.ok(await page.locator('.theme-mark').count()>0,'ordinary editor visibly represents the current season');
+    assert.equal(await page.locator('.ambient-theme').evaluate(layer=>layer.getAnimations({subtree:true}).length),0,'normal preview is still');
+    await photo('november4-ordinary-editor');
+    await open(); const writeCount=writes.length;
+    await page.locator('.theme-try summary').click();
+    const sample=page.getByRole('combobox',{name:'Scene preview',exact:true}); await sample.selectOption('christmas');
+    await page.clock.runFor(50);
+    assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-motif'),'christmas');
+    assert.match(await page.locator('.theme-try summary').innerText(),/Preview: Christmas\s+Display unchanged/);
+    assert.equal(saved().appearance.theme.mode,'off'); assert.equal(await page.locator('.studio-savebar').count(),0); assert.equal(writes.length,writeCount);
+    await sample.selectOption('rain'); assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-motif'),'rain');
+    assert.equal(source.weather.current.weatherCode,0,'weather illustration does not change actual weather');
+    await button('Return to Automatic').click(); assert.equal(await page.locator('.ambient-theme').count(),0);
+    await sample.selectOption('chuseok'); await page.getByRole('combobox',{name:'Theme',exact:true}).selectOption('seasonal');
+    assert.equal(await sample.inputValue(),'automatic','changing the saved-mode draft clears demonstration');
+    await sample.selectOption('seollal'); await button('Cancel').click(); assert.equal(await sample.inputValue(),'automatic');
+    await sample.selectOption('autumn'); await page.getByRole('combobox',{name:'Theme',exact:true}).selectOption('seasonal');
+    await sample.selectOption('seollal'); await page.getByRole('checkbox',{name:'Korea',exact:true}).uncheck(); assert.equal(await sample.inputValue(),'automatic');
+    await sample.focus(); await page.keyboard.press('Escape'); assert.equal(await page.locator('.theme-try').getAttribute('open'),null);
+    record('November4 shows still autumn immediately; labelled scene demonstrations withThemeOff neither dirty nor write and reset onmode/calendar/Cancel');
     for(const viewport of [{width:1280,height:720},{width:390,height:844},{width:320,height:480},{width:640,height:300}]) {
       await open({mode:'combined',viewport}); const select=page.getByRole('combobox',{name:'Theme',exact:true}); await select.scrollIntoViewIfNeeded();
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
@@ -67,21 +109,51 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
       assert.equal(treatment.appearance,'auto');assert.ok(treatment.radius>=12,'Theme uses the established rounded native select treatment');
       await select.focus(); await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
       assert.equal(await select.inputValue(),'weather'); await button('Cancel').click(); await select.scrollIntoViewIfNeeded();
+      await page.locator('.theme-try summary').scrollIntoViewIfNeeded(); await page.locator('.theme-try summary').click();
+      const sample=page.getByRole('combobox',{name:'Scene preview',exact:true}); await sample.selectOption('christmas');
+      const previewBox=await sample.boundingBox(); assert.ok(previewBox.height>=44&&previewBox.x>=0&&previewBox.x+previewBox.width<=viewport.width+1);
+      if(viewport.width<=700||viewport.height<=520) assert.equal(await page.locator('.theme-try-panel').evaluate(element=>getComputedStyle(element).position),'static','compact chooser follows document flow instead of clipping behind sticky toolbar');
+      await sample.scrollIntoViewIfNeeded(); assert.ok(await sample.evaluate(element=>{const r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return hit===element||element.contains(hit);}), 'scene control centre is unobstructed');
+      await button('Return to Automatic').scrollIntoViewIfNeeded(); assert.ok(await button('Return to Automatic').isVisible());
       await photo(`theme-editor-${viewport.width}x${viewport.height}`);
     }
     record('Native keyboard selection,44px targets and no horizontal overflow at desktop,phone and short-window sizes');
-    const scenes=[['christmas','2026-12-20T18:30:00Z','seasonal',0,'christmas','holiday'],['rain-christmas','2026-12-20T18:30:00Z','combined',63,'rain','weather'],['quiet-autumn','2026-11-05T18:30:00Z','combined',0,'autumn','season'],['remembrance','2026-11-11T18:30:00Z','seasonal',0,'remembrance','holiday'],['snow','2026-12-20T18:30:00Z','weather',73,'snow','weather'],['fog','2026-12-20T18:30:00Z','weather',45,'fog','weather'],['halloween','2026-10-25T18:30:00Z','seasonal',0,'halloween','holiday']];
+    const scenes=[['christmas','2026-12-20T18:30:00Z','seasonal',0,'christmas','holiday'],['rain-christmas','2026-12-20T18:30:00Z','combined',63,'rain','weather'],['quiet-autumn','2026-11-04T18:30:00Z','combined',0,'autumn','season'],['remembrance','2026-11-11T18:30:00Z','seasonal',0,'autumn','holiday'],['snow','2026-12-20T18:30:00Z','weather',73,'snow','weather'],['fog','2026-12-20T18:30:00Z','weather',45,'fog','weather'],['halloween','2026-10-25T18:30:00Z','seasonal',0,'halloween','holiday'],['seollal','2027-02-07T18:30:00Z','seasonal',0,'seollal','holiday'],['chuseok','2027-09-15T18:30:00Z','seasonal',0,'chuseok','holiday'],['lotus','2027-05-13T18:30:00Z','seasonal',0,'lotus-lanterns','holiday'],['orthodox-christmas','2027-01-07T18:30:00Z','seasonal',0,'orthodox-christmas','holiday']];
     for(const viewport of [{width:1920,height:1080},{width:3840,height:2160}]) for(const [name,date,mode,code,motif,origin] of scenes) {
       await open({date,mode,code,path:'/display',viewport}); await page.locator('.ambient-theme').waitFor();
       assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-motif'),motif); assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-source'),origin);
       const geometry=await page.locator('.ambient-theme').evaluate(layer=>({count:layer.querySelectorAll('svg').length,background:getComputedStyle(layer.closest('.ambient')).backgroundColor,filter:getComputedStyle(layer).filter,opacity:Number(getComputedStyle(layer).opacity),marks:[...layer.querySelectorAll('svg')].map(mark=>{const r=mark.getBoundingClientRect();return{width:r.width,height:r.height};})}));
-      assert.ok(geometry.count<=8&&geometry.opacity<=.36); assert.equal(geometry.background,'rgb(0, 0, 0)'); assert.equal(geometry.filter,'none'); assert.ok(geometry.marks.every(mark=>mark.width<viewport.width*.1&&mark.height<viewport.height*.1));
+      assert.ok(geometry.count<=8&&geometry.opacity<=.72); assert.equal(geometry.background,'rgb(0, 0, 0)'); assert.equal(geometry.filter,'none'); assert.ok(geometry.marks.every(mark=>mark.width<viewport.width*.2&&mark.height<viewport.height*.2));
       await photo(`${name}-${viewport.width}`);
+      assert.ok(await page.locator('.theme-mark').count()>0,`${name} retains a visible scene on the default board`);
     }
-    record('Distinct holiday,combined,rain,snow,fog and commemoration scenes keep true black with at most8 small dim marks at1080p/4K');
+    record('Distinct cultural/seasonal/weather/quiet scenes keep true black and bounded larger dim contours on the default board at1080p/4K');
+    await open({mode:'seasonal'}); await page.clock.runFor(100); assert.deepEqual(await readingIntersections(),[]);
+    await page.getByRole('slider',{name:'Text size',exact:true}).focus(); await page.keyboard.press('End'); await page.clock.runFor(400);
+    assert.deepEqual(await readingIntersections(),[],'growing typography invalidates still reading-space placement');
+    for(const float of [false,true]) {
+      await open({mode:'weather',code:63,path:'/display',viewport:{width:1920,height:1080},float,swap:true,interval:30,only:['clock']});
+      await page.clock.runFor(29_900);
+      let visibleSamples=0;
+      for(let step=0;step<16;step++) {
+        await page.clock.runFor(100);
+        // Browser CSS time is independent of the fake clock: sample real finite ages explicitly.
+        visibleSamples+=await page.locator('.theme-mark').evaluateAll(marks=>{let count=0;for(const mark of marks) {
+          for(const animation of mark.getAnimations()) {animation.pause();animation.currentTime=Math.max(0,performance.now()-Number(mark.dataset.themeBorn));}
+          if(Number(getComputedStyle(mark).opacity)>.02&&Number(getComputedStyle(mark.parentElement).opacity)>.5)count++;
+        }return count;});
+        assert.deepEqual(await readingIntersections(),[],`${float?'glide':'pending dim/step'} swap reading clearance at30s+${step/10}`);
+      }
+      assert.ok(visibleSamples>0,`${float?'glide':'step'} clearance inspected visible CSS marks, not an empty/transparent layer`);
+      assert.equal(await page.locator('.ambient').getAttribute('data-composition'),'1','the shortest supported swap completed');
+      // Negative control: deliberately place an opaque mark over a clock glyph. The detector must reject it.
+      await page.evaluate(()=>{const mark=document.querySelector('.theme-mark'),text=document.querySelector('.ambient-clock svg')??document.querySelector('.clock-date'); const target=text.getBoundingClientRect(),root=mark.closest('.ambient').getBoundingClientRect();mark.style.animation='none';mark.style.opacity='1';mark.parentElement.style.cssText=`left:${target.left-root.left}px;top:${target.top-root.top}px;width:80px;height:80px;opacity:1;transition:none`;});
+      assert.ok((await readingIntersections()).length>0,'negative control detects a mark deliberately intersecting clock ink');
+    }
+    record('Typography growth and30s floating/step swaps retain reading clearance across the pending dim boundary');
     for(const options of [{reduced:'reduce'},{animation:'off'},{mode:'off'}]) { await open({mode:'combined',path:'/display',...options}); assert.equal(await page.locator('.ambient-theme').count(),0); }
     record('Off,AnimationOff and system reduced motion mount no decorative layer');
-    await open({mode:'weather',code:63,path:'/display'}); await page.locator('.theme-mark').first().waitFor();
+    await open({mode:'weather',code:63,path:'/display',empty:true}); await page.locator('.theme-mark').first().waitFor();
     assert.equal(await page.locator('.theme-mark').count(),1,'initial atmosphere fades in one mark at a time');
     const firstMark=await page.locator('.theme-mark').first().elementHandle();
     await page.clock.runFor(11_900);
@@ -95,33 +167,36 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     await page.locator('.ambient-theme').evaluate(layer=>layer.getAnimations({subtree:true}).forEach(a=>a.finish()));
     assert.ok(await page.locator('.theme-mark').evaluateAll(marks=>marks.every(mark=>getComputedStyle(mark).opacity==='0')));
     record('Staggered finite12s animations touch only transform/opacity and expired slots alone renew with at most8 nodes');
-    await open({date:'2026-12-20T18:30:55Z',mode:'weather',code:63,path:'/display'});
-    const lateMount=await page.locator('.theme-mark').first().getAttribute('style');
+    await open({date:'2026-12-20T18:30:55Z',mode:'weather',code:63,path:'/display',empty:true}); await page.locator('.theme-mark').first().waitFor();
+    const placement=()=>page.locator('.theme-mark').first().evaluate(mark=>mark.parentElement.getAttribute('style'));
+    const lateMount=await placement();
     await page.clock.runFor(5100);
-    assert.equal(await page.locator('.theme-mark').first().getAttribute('style'),lateMount,'a wall-clock minute never interrupts the initial burst');
+    assert.equal(await placement(),lateMount,'a wall-clock minute never interrupts the initial burst');
     await page.clock.runFor(11_000);
-    assert.notEqual(await page.locator('.theme-mark').first().getAttribute('style'),lateMount,'the placement renews after its full relative minute');
-    await open({date:'2026-12-20T18:30:55Z',mode:'combined',code:63});
+    assert.notEqual(await placement(),lateMount,'the placement renews after its full relative slot lifetime');
+    await open({date:'2026-12-20T18:30:55Z',mode:'combined',code:63,empty:true});
     await button('Preview movement').click();
     await page.clock.runFor(15_900);
     await page.getByRole('combobox',{name:'Theme',exact:true}).selectOption('seasonal');
     assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-motif'),'christmas');
+    await page.locator('.theme-mark').first().waitFor();
     const originalMark=await page.locator('.theme-mark').first().elementHandle();
-    const changedMotif=await page.locator('.theme-mark').first().getAttribute('style');
+    const changedMotif=await placement();
     assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-tick'),'0');
     await page.clock.runFor(5100);
-    assert.equal(await page.locator('.theme-mark').first().getAttribute('style'),changedMotif,'a new motif also gets its full burst across a minute boundary');
+    assert.equal(await placement(),changedMotif,'a new motif also gets its full burst across a minute boundary');
     assert.ok(await originalMark.evaluate(mark=>mark.isConnected),'the existing live CSS animation is not replaced by the old deadline');
     await page.emulateMedia({reducedMotion:'reduce'}); await page.locator('.ambient-theme').waitFor({state:'detached'});
-    await page.emulateMedia({reducedMotion:'no-preference'}); await page.locator('.ambient-theme').waitFor(); assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-tick'),'0');
+    await page.emulateMedia({reducedMotion:'no-preference'}); await page.locator('.theme-mark').first().waitFor(); assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-tick'),'0');
     assert.equal(await page.locator('.theme-mark').count(),1,'resuming motion starts a fresh sequence');
     await page.getByRole('combobox',{name:'Theme',exact:true}).selectOption('off');
     await page.getByRole('combobox',{name:'Theme',exact:true}).selectOption('combined');
+    await page.locator('.theme-mark').first().waitFor();
     assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-tick'),'0');
     assert.equal(await page.locator('.theme-mark').first().evaluate(mark=>getComputedStyle(mark).animationDelay),'0s','new marks fade in from zero');
     record('Near-boundary mount,motif changes and Off/reduced-motion resume keep fresh slot ages and do not cut active marks');
     // Real-time, bounded compositor observation. Synthetic page time stays fixed; no desktop probes.
-    await open({mode:'weather',code:63,path:'/display'}); await page.locator('.theme-mark').first().waitFor();
+    await open({mode:'weather',code:63,path:'/display',empty:true}); await page.locator('.theme-mark').first().waitFor();
     await page.clock.runFor(24_000);
     await page.locator('.ambient-theme').evaluate(layer=>layer.querySelectorAll('.theme-mark').forEach(mark=>mark.getAnimations().forEach(a=>{a.currentTime=(Number(layer.dataset.themeTick)-Number(mark.dataset.themeGeneration))*Number(layer.dataset.themeInterval);})));
     const cdp=await context.newCDPSession(page); await cdp.send('Performance.enable');

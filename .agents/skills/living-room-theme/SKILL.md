@@ -32,7 +32,8 @@ palette, size, finite motion budget), then an explicit observance policy such as
 `major('new-scene-id', 65, 3)`. The final argument is anticipation days, a product
 choice; the factual central date remains in the calendar. A card-only addition
 needs no art. Update sources and test start/day/end, overlap, deselection and the
-return to the season. Shared Christmas/New Year must remain a single scene.
+return to the season. CA/KR share Christmas/New Year art; a selected Russian
+calendar can supply its distinct New Year tree. Resolve one scene at a time.
 
 Keep dominant true black, no full-screen tint/blur, no flashes/audio, clear widget
 text and bounded SVG nodes. Tune from real RAM images at low brightness and

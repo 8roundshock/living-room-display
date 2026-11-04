@@ -78,7 +78,10 @@ retain their existing factual card classification but are card-only visually.
 Quiet comes first; a major holiday on its central date then beats an ongoing
 major window, followed by anticipation. Explicit priority, distance and stable
 id resolve remaining ties independent of checkbox ordering. Shared Christmas
-and New Year choices produce one scene. Dynamic says Today/Tomorrow with a country label and never calls these
+and New Year choices produce one scene. When Russia is selected, its evergreen
+New Year scene has a one-point product priority over the CA/KR arc scene; this
+is a visual choice, not a ranking of cultures. Orthodox Christmas still wins on
+January 7. Dynamic says Today/Tomorrow with a country label and never calls these
 official alerts or promises a long weekend. Weather theme precedence is decided
 by the separate theme resolver, using fresh, relevant forecast data.
 

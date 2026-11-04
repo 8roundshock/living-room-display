@@ -1,8 +1,8 @@
 # Ambient themes
 
 Work tracked in #579 (visual/cultural refinement), following #575, with #452
-hourly weather and #458 holiday cards. Existing
-installations keep themes Off. A theme is part of the visual style, so the editor
+hourly weather and #458 holiday cards. Themes default to Off; existing selections
+are preserved. A theme is part of the visual style, so the editor
 preview, Save/Cancel, saved styles and scheduled styles share the same choice.
 
 ## Design decision (2026-11-04)
@@ -19,7 +19,12 @@ Independent cultural research and concept critique for #579 compared enlarged
 repeated icons, a fixed botanical vignette and migrating contour compositions.
 The chosen composition has a recognizable original anchor plus simpler companion
 marks. The renderer measures widget reading areas and searches bounded negative
-space; a crowded board can omit a mark. Three distinct winter festivities use
+space; a crowded board can omit a mark. It reserves only the finite mark lifetime,
+using the existing float/step waypoints and upcoming swap destination, including
+the pending dim-before-step window. Typography/content measurement invalidates
+still placement; an existing animated mark that becomes unsafe fades smoothly
+without restarting other slots. This conservative retirement can precede its
+natural expiry. There are no per-frame layout reads. Three distinct winter festivities use
 fir/ornaments, broad New Year arcs or the Russian tree, and an Orthodox Christmas
 star. Seollal uses an open-centred rectangular kite, Chuseok a separated full-moon
 circle and harvest forms, and Buddha's Birthday lotus lanterns.
@@ -83,6 +88,9 @@ saved mode, dates, weather or display. This is local editor state, cleared by
 Cancel, mode/calendar/style changes, layout editing and leaving. It never makes
 the draft dirty or adds a persistence field. The collapsed control keeps the
 default Style inspector's 720px height budget.
+On narrow/short windows the expanded chooser follows document flow, so the sticky
+style toolbar cannot cover its label/select. The native popup retains the app's
+explicit dark option/optgroup contrast.
 
 ## Extension authority
 
@@ -110,6 +118,8 @@ active atmosphere with motion off; the general performance budget remains #364.
 Calendar and weather units exercise lunar dates, lead-window expiry, stale data,
 hourly hazards, DST and gust intervals. Persistence checks retain the frozen reader.
 
-Final pushed-head review and CI evidence belong to [PR #576](https://github.com/8roundshock/living-room-display/pull/576).
-These are source checks; no installation or native/physical-TV acceptance is
-established by the theme suite.
+The original foundation's review/CI evidence belongs to [PR #576](https://github.com/8roundshock/living-room-display/pull/576).
+The cultural refinement's current-head visual review, focused regressions and CI
+belong to [PR #581](https://github.com/8roundshock/living-room-display/pull/581).
+These are source checks; the theme suite establishes no installation or
+native/physical-TV acceptance.
