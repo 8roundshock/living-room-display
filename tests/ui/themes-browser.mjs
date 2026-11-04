@@ -115,6 +115,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
       if(viewport.width<=700||viewport.height<=520) assert.equal(await page.locator('.theme-try-panel').evaluate(element=>getComputedStyle(element).position),'static','compact chooser follows document flow instead of clipping behind sticky toolbar');
       await sample.scrollIntoViewIfNeeded(); assert.ok(await sample.evaluate(element=>{const r=element.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return hit===element||element.contains(hit);}), 'scene control centre is unobstructed');
       await button('Return to Automatic').scrollIntoViewIfNeeded(); assert.ok(await button('Return to Automatic').isVisible());
+      assert.ok((await button('Return to Automatic').boundingBox()).height>=44,'Automatic return keeps a44px target under compact toolbar rules');
       await photo(`theme-editor-${viewport.width}x${viewport.height}`);
     }
     record('Native keyboard selection,44px targets and no horizontal overflow at desktop,phone and short-window sizes');

@@ -28,7 +28,7 @@
 .theme-try-panel { position: absolute; z-index: 15; left: 0; bottom: calc(100% + 6px); width: min(320px, calc(100vw - 40px)); max-height: min(300px, 65dvh); overflow: auto; padding: 14px; border: 1px solid #ffffff24; border-radius: 14px; background: #16141e; box-shadow: 0 8px 24px #0008; }
 .theme-try select { width: 100%; max-width: 100%; }
 .theme-demo-label { margin: 0; color: #ccbddd; font-size: 12px; }
-.theme-demo-return { min-height: 44px; }
+.studio .theme-try .theme-demo-return { min-height: 44px; }
 /* Upward overlays collide with the editor's sticky toolbar on compact screens. */
 @media (max-width: 700px), (max-height: 520px) {
   .theme-try[open] { flex-basis: 100%; }
