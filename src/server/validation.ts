@@ -7,6 +7,7 @@ import { ANIMATION_LEVELS } from '../shared/motion.ts';
 import { KEEP_DONE_MS, TIMER_ADD_MAX_MS, TIMER_LABEL_MAX, TIMER_LIMIT, TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts';
 import { checkPhotoUpload, photoAssetSchema, photoAssetShape } from './photo.ts';
 import { AT_REST } from './persistence.ts';
+import { defaultTheme, HOLIDAY_CALENDARS, THEME_MODES } from '../shared/themes.ts';
 
 const widgetShape = <T>(factory: (id: WidgetId) => T) => Object.fromEntries(WIDGET_IDS.map(id => [id, factory(id)])) as Record<WidgetId, T>;
 function legacyWidgets(value: unknown) {
@@ -37,6 +38,7 @@ const daylightBrightness = z.object({ dimmest: brightnessLevel, brightest: brigh
 // Field schemas carry no defaults: zod applies .default() inside .partial(), which made a
 // brightness-only PATCH reset a saved clock style (#83). Only the persisted reader fills defaults.
 const appearanceFields = {
+  theme: z.object({ mode: z.enum(THEME_MODES), calendars: z.array(z.enum(HOLIDAY_CALENDARS)).max(3).refine(values => new Set(values).size === values.length, 'Choose each calendar once') }).strict(),
   preset: z.enum(['phone', 'room', 'night', 'custom']), accentColor: color, textColor: color,
   brightness: brightnessLevel, fontScale: z.number().min(0.7).max(1.5),
   fontFamily: z.enum(['sans', 'serif', 'mono']), layout: z.enum(['balanced', 'minimal', 'weather-first']),
@@ -56,6 +58,7 @@ const appearance = z.object({
   animation: appearanceFields.animation.default(AT_REST.appearance.animation),
   daylightBrightness: appearanceFields.daylightBrightness.default(AT_REST.appearance.daylightBrightness),
   rearrange: appearanceFields.rearrange.default(AT_REST.appearance.rearrange),
+  theme: appearanceFields.theme.default(defaultTheme),
 }).strict();
 /** PATCH: exactly the supplied keys, never a default. */
 const appearancePatch = z.object(appearanceFields).strict().partial();
@@ -116,9 +119,10 @@ export const DYNAMIC_SOURCES_PROBLEM = 'Dynamic needs at least one source';
 const dynamicSources = z.object({
   weather: z.boolean().default(true), alerts: z.boolean().default(true), air: z.boolean().default(true),
   sky: z.boolean().default(true), personal: z.boolean().default(true),
+  holidays: z.boolean().default(false),
 }).strict().refine(value => Object.values(value).some(Boolean), DYNAMIC_SOURCES_PROBLEM)
-  .default(() => ({ weather: true, alerts: true, air: true, sky: true, personal: true }));
-const dynamicSourcesPatch = z.object({ weather: z.boolean(), alerts: z.boolean(), air: z.boolean(), sky: z.boolean(), personal: z.boolean() }).strict().partial();
+  .default(() => ({ weather: true, alerts: true, air: true, sky: true, personal: true, holidays: false }));
+const dynamicSourcesPatch = z.object({ weather: z.boolean(), alerts: z.boolean(), air: z.boolean(), sky: z.boolean(), personal: z.boolean(), holidays: z.boolean() }).strict().partial();
 /** Persisted settings and imports only: never part of visualShape, so saved styles never contain it. */
 const widgetData = z.object({
   worldClocks: worldClocks.default(() => []),
