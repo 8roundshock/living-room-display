@@ -70,6 +70,15 @@ function statusCue(locator) {
   });
 }
 
+/** Independent display contract: minutes below an hour, then whole hours/days. */
+function expectedAge(minutes) {
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)} hr ago`;
+  const days = Math.floor(minutes / 1440);
+  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+}
+
 export async function family({ page, widget, size, density, viewport, state }) {
   const text = await widget.innerText();
   assert.match(text, /Air quality/); assert.match(text, /US AQI/); assert.match(text, /\b42\b/); assert.match(text, /Good/);
@@ -77,7 +86,7 @@ export async function family({ page, widget, size, density, viewport, state }) {
   // the age is read against the page clock; the one-second tick may lag it by up to a second.
   const clockNow = await page.evaluate(() => Date.now());
   const ages = [clockNow, clockNow - 1000].map(at => Math.floor((at - Date.parse(state.airQuality.updatedAt)) / 60_000));
-  assert.ok(ages.some(age => text.includes(`Model est. · ${age} min ago`)), `age matches the page clock (${ages.join(' or ')} min): ${text}`);
+  assert.ok(ages.some(age => text.includes(`Model est. · ${expectedAge(age)}`)), `age matches the page clock (${ages.map(expectedAge).join(' or ')}): ${text}`);
   assert.match(text, /CAMS · Open-Meteo/); assert.doesNotMatch(text, /Saved estimate|Last known/, 'a fresh reading is not qualified');
   assert.equal(await widget.locator('.air-reading').getAttribute('data-air-reading'), 'current');
   if (size === 'small') assert.doesNotMatch(text, /Mostly/);
@@ -112,7 +121,8 @@ export async function family({ page, widget, size, density, viewport, state }) {
   state.airQuality = { ...structuredClone(fresh), status: 'stale', updatedAt: new Date(fetched + 30 * 60_000).toISOString(), current: { ...fresh.current, time: new Date(fetched).toISOString(), aqi: 42, uvIndex: 7 }, hourly: old }; await reload(page);
   const saved = page.locator('.ambient-airQuality');
   const estimate = await saved.innerText();
-  assert.match(await saved.locator('.air-age').innerText(), /^Saved reading · 9 hr ago$/);
+  const savedMinutes = Math.floor((await page.evaluate(() => Date.now()) - Date.parse(state.airQuality.updatedAt)) / 60_000);
+  assert.equal(await saved.locator('.air-age').innerText(), `Saved reading · ${expectedAge(savedMinutes)}`);
   assert.match(estimate, /\b44\b/, 'the AQI is this hour\'s saved estimate'); assert.doesNotMatch(estimate, /\b42\b/);
   assert.equal(await saved.locator('.air-qualifier').innerText(), 'Saved estimate');
   assert.equal(await saved.locator('.air-reading').getAttribute('data-air-reading'), 'estimate');
@@ -216,6 +226,20 @@ export async function sweep({ page, viewport, state, base, now }) {
         finally { await own.unroute('**/api/state'); }
       }
       return widget;
+    }
+    if (viewport.width === 1920) {
+      // #431: status clocks no longer accidentally reset the main clock. Keep exact age wording
+      // valid beyond 59 minutes, and test the public boundaries without aging current/hourly data.
+      const boundaries = [[0, 'just now'], [1, '1 min ago'], [59, '59 min ago'], [60, '1 hr ago'], [69, '1 hr ago'], [1439, '23 hr ago'], [1440, '1 day ago'], [2880, '2 days ago']];
+      for (const size of ['small', 'medium', 'large']) for (const [minutes, age] of boundaries) {
+        const air = airQualityFixture(now, state.weather.location);
+        air.updatedAt = new Date(now - minutes * 60_000).toISOString();
+        if (minutes >= 180) air.status = 'stale';
+        const widget = await render(viewport, 'balanced', size, air);
+        assert.equal(expectedAge(minutes), age, `${size}/${minutes}: independent age expectation`);
+        assert.equal(await widget.locator('.air-age').innerText(), `${air.status === 'stale' ? 'Saved reading' : 'Model est.'} · ${age}`, `${size}/${minutes}: exact elapsed-age wording`);
+        cases++;
+      }
     }
     for (const view of views) for (const density of Object.keys(GRID_DENSITIES)) for (const size of ['small', 'medium']) {
       const fresh = () => airQualityFixture(now, state.weather.location);
