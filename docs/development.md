@@ -149,7 +149,19 @@ widgets suites keep their own copies of that board until
 [#388](https://github.com/8roundshock/living-room-display/issues/388).
 The widgets suite is the longest: 10–12 minutes on the owner's PC on 2026-10-19 with
 other suites running, and up to 30 minutes when several widgets suites share the
-machine. Its display loads therefore wait up to 90 s for a specific element (#306).
+machine. Air-quality reloads and the status page's navigation/shell wait allow up
+to 90 s (#306); other widget loads still use their existing timeouts. Unifying
+those readiness waits remains part of #431.
+
+The stale/offline status page uses its own browser context, fake clock and routed
+state (#431/#415). It must neither advance the main family's clock nor compete
+with that page through the real single-display BroadcastChannel. The suite checks
+clock isolation deterministically and reports the case, load stage, rendered
+widget IDs, presence/retirement shell and recent fixture requests on a status
+readiness failure. `widgets-browser.mjs --status-only` runs the existing Forecast
+and Agenda family/status cases across all densities and 720p/1080p/4K, for a bounded
+check of the previously failing stage. It supplements the full suite; it does not
+replace full widget coverage or #431's repeated-load acceptance.
 
 ## Browser suites
 
