@@ -117,6 +117,8 @@ Its optional images are returned in RAM, never saved. Bounded CDP samples compar
 active atmosphere with motion off; the general performance budget remains #364.
 Calendar and weather units exercise lunar dates, lead-window expiry, stale data,
 hourly hazards, DST and gust intervals. Persistence checks retain the frozen reader.
+Canvas preview control changes also run the existing `workspace` browser suite
+for alert clearance, dirty-state and scroll interactions alongside `themes`.
 
 The original foundation's review/CI evidence belongs to [PR #576](https://github.com/8roundshock/living-room-display/pull/576).
 The cultural refinement's current-head visual review, focused regressions and CI

@@ -34,6 +34,19 @@ deliberate overlap negative control. Corrected-head independent visual/code revi
 [PR #581](https://github.com/8roundshock/living-room-display/pull/581). No
 installation, capture or native behavior changed.
 
+Full CI on `c172589` passed 25 browser suites, including themes, but Workspace
+mistook the closed scene disclosure's hidden select for a visible control: the
+native element retained a layout box although only its summary was exposed.
+The correction excludes only descendants hidden by closed disclosures and adds
+the visible summary to the existing overlap and centre-hit checks. Open select
+and Automatic controls, selected-but-collapsed state, storage/action alerts and
+an opaque-control negative check guard against reduced coverage. The theme skill
+and contract now require Workspace alongside themes for canvas-control changes.
+The corrected full Workspace suite passes across its desktop, phone and short
+viewports; the original geometry/centre-hit assertions remain intact. A compact
+action-alert scroll probe found no real preview-control overlap, so this follow-up
+changes the test's native-disclosure handling rather than production UI behavior.
+
 ## Optional atmosphere, holiday cards and hourly weather — 2026-11-04 (#575, #458, #452)
 
 [PR #576](https://github.com/8roundshock/living-room-display/pull/576) combines three

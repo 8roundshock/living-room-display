@@ -61,15 +61,26 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   // #227: an alert has its own row; every canvas action stays visible and clickable beside it.
   async function alertClear(viewport, label) {
     const alert = page.locator('.studio-error'); await alert.waitFor();
-    for (const control of await page.locator('.canvas-heading-actions button, .canvas-toolbar button, .canvas-toolbar select').all()) {
+    const checked = [];
+    for (const control of await page.locator('.canvas-heading-actions button, .canvas-toolbar button, .canvas-toolbar select, .canvas-toolbar summary').all()) {
+      // Native closed details can retain descendant boxes (and CSS visibility: visible).
+      // Only its first summary is exposed; open disclosures still get every hit test.
+      if (await control.evaluate(element => {
+        for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          if (ancestor instanceof HTMLDetailsElement && !ancestor.open &&
+            !ancestor.querySelector(':scope > summary')?.contains(element)) return true;
+        }
+        return false;
+      })) continue;
       await control.scrollIntoViewIfNeeded();
       // Virtual frames alone can precede the browser's native scroll delivery (#523).
       await waitForNativeRender(page);
       await page.clock.runFor(32);
-      const name = await control.evaluate(element => element.getAttribute('aria-label') || element.textContent.trim());
+      const name = await control.evaluate(element => element.getAttribute('aria-label') || element.labels?.[0]?.textContent.trim() || element.textContent.trim());
       const box = await control.boundingBox(), alertBox = await alert.boundingBox();
       assert.ok(!overlaps(box, alertBox), `${label}: the alert must not overlap ${name}: ${JSON.stringify({ box, alertBox })}`);
       assert.equal(await control.evaluate(element => { const r = element.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return element === hit || element.contains(hit); }), true, `${label}: ${name} must be the topmost element at its centre`);
+      checked.push(name);
     }
     if (viewport.width > 700) {
       const alertBox = await alert.boundingBox(), aside = await page.locator('.inspector').boundingBox(), toolbar = await page.locator('.canvas-toolbar').boundingBox();
@@ -79,12 +90,41 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
       const bar = page.locator('.studio-savebar');
       if (await bar.count()) assert.ok(!overlaps(alertBox, await bar.boundingBox()), `${label}: the alert stays clear of the Save bar`);
     }
+    return checked;
+  }
+  async function sceneAlertClear(viewport, label, negativeControl = false) {
+    const summary = page.locator('.theme-try summary');
+    const closed = await alertClear(viewport, `${label}, closed scene chooser`);
+    assert.ok(closed.includes('Try a scene'), 'the collapsed summary is checked');
+    assert.ok(!closed.includes('Scene preview'), 'the closed disclosure select is not exposed');
+    await summary.click(); await page.getByLabel('Scene preview', { exact: true }).selectOption('autumn');
+    const opened = await alertClear(viewport, `${label}, open scene chooser`);
+    assert.ok(opened.includes('Preview: AutumnDisplay unchanged'), 'the open summary is checked');
+    assert.ok(opened.includes('Scene preview'), 'the open select is checked');
+    assert.ok(opened.includes('Return to Automatic'), 'the open return action is checked');
+    if (negativeControl) {
+      // A sibling opaque overlay must still fail the real centre-hit assertion.
+      await summary.evaluate(element => {
+        const overlay = document.createElement('div'); overlay.dataset.alertOcclusionProbe = '';
+        Object.assign(overlay.style, { position: 'absolute', inset: '0 auto auto 0', width: `${element.offsetWidth}px`, height: `${element.offsetHeight}px`, background: '#16141e', zIndex: '9999' });
+        element.parentElement.append(overlay);
+      });
+      await assert.rejects(alertClear(viewport, `${label}, deliberate visible occlusion`), /Preview: AutumnDisplay unchanged must be the topmost element at its centre/);
+      await page.locator('[data-alert-occlusion-probe]').evaluate(element => element.remove());
+      await alertClear(viewport, `${label}, occlusion removed`);
+    }
+    await summary.click();
+    const collapsed = await alertClear(viewport, `${label}, selected scene collapsed`);
+    assert.ok(collapsed.includes('Preview: AutumnDisplay unchanged'), 'the selected collapsed summary remains checked');
+    assert.ok(!collapsed.includes('Scene preview') && !collapsed.includes('Return to Automatic'), 'only closed descendants are excluded');
+    await summary.click(); await button('Return to Automatic').click(); await summary.click();
   }
   async function alertRows(viewport) {
     // A storage warning: actions stay clickable, and a dismissed warning stays hidden through polls.
     await page.route('**/api/state', async route => { const response = await route.fetch(); await route.fulfill({ response, json: { ...(await response.json()), storageWarning: 'Synthetic storage warning' } }); });
     await page.reload(); await page.getByRole('alert').filter({ hasText: 'Synthetic storage warning' }).waitFor();
-    await alertClear(viewport, `${viewport.width}x${viewport.height} storage warning`);
+    await sceneAlertClear(viewport, `${viewport.width}x${viewport.height} storage warning`, viewport.width === 1280 && viewport.height === 720);
+    assert.equal(await page.locator('.studio-savebar').count(), 0, 'opening, selecting and closing scenes beside an alert leaves the draft clean');
     await button('Preview movement').click();
     assert.equal(await button('Back to layout').getAttribute('aria-pressed'), 'true', 'Preview movement is clickable while an alert shows');
     await alertClear(viewport, `${viewport.width}x${viewport.height} storage warning with arrangements`);
@@ -102,6 +142,13 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     await alertClear(viewport, `${viewport.width}x${viewport.height} connection loss`);
     await page.unroute('**/api/state');
     await button('Retry').click(); await page.locator('.studio-error').waitFor({ state: 'detached' });
+    // A failed Save can float on compact screens while the preview controls are visible.
+    await tab('Style'); await page.getByRole('slider', { name: 'Brightness', exact: true }).focus(); await page.keyboard.press('ArrowRight');
+    await page.route('**/api/settings', route => route.abort()); await button('Save changes').click();
+    await page.locator('.studio-error-action').waitFor();
+    await sceneAlertClear(viewport, `${viewport.width}x${viewport.height} failed Save`);
+    await page.unroute('**/api/settings'); await button('Dismiss message').click(); await button('Cancel').click();
+    await page.locator('.studio-savebar').waitFor({ state: 'detached' });
     // A rejected photo, with the Save bar showing for the added Photo widget.
     await tab('Widgets'); await button('Add widget').click(); await button('Preview Photo').click();
     if (viewport.width <= 700) await button('Photo large').click();
@@ -112,6 +159,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     // Adding a widget opened Edit layout; leaving it is the next successful action, which clears the error.
     await button('Done').click(); await page.locator('.studio-error').waitFor({ state: 'detached' });
     await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
+    checks.push(`${viewport.width}x${viewport.height}: closed scene disclosures expose only their summary; opened scene/select/Automatic controls remain clear and topmost beside storage and failed-Save alerts, without dirtying the preview${viewport.width === 1280 && viewport.height === 720 ? '; a deliberate opaque summary overlay is rejected' : ''}`);
   }
   // #231: the weather note under the canvas is never covered by the Save bar.
   async function weatherNoteClear(viewport) {

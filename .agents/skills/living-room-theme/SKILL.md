@@ -50,7 +50,9 @@ and concurrent changes. Keep 44px targets and the default 720px Style fit.
 
 Follow `docs/development.md` for builds and isolated synthetic browser QA; inspect
 actual dense/empty-board images and narrow/short controls in RAM. Update the
-themes suite and focused calendar/resolver regressions. Installation, desktop
-capture, native acceptance and physical-TV viewing are separate scopes. Obtain
+themes suite and focused calendar/resolver regressions. Canvas preview control
+changes must also run `workspace` for alerts, dirty state and scroll interactions.
+Installation, desktop capture, native acceptance and physical-TV viewing are
+separate scopes. Obtain
 independent concept and visual critique, refine the result, then independently
 review the exact final pushed head under the normal repository workflow.
