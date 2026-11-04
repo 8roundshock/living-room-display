@@ -350,6 +350,9 @@ export function settingsChanges(
     patch.appearance.daylightBrightness = structuredClone(
       draft.appearance.daylightBrightness,
     );
+  // Theme is one validated object; a partial nested difference is not a valid PATCH.
+  if (patch.appearance && 'theme' in patch.appearance)
+    patch.appearance.theme = structuredClone(draft.appearance.theme);
   if (patch.widgetGrid?.placements && !patch.widgetGrid.density) {
     for (const id of Object.keys(
       patch.widgetGrid.placements,

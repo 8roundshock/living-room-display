@@ -1,6 +1,7 @@
 import type { GridDensity, WidgetKind, WidgetSize, WidgetSpan } from './widgets.ts';
 import type { AccentMode } from './palette.ts';
 import type { AnimationLevel } from './motion.ts';
+import type { ThemeSettings } from './themes.ts';
 export type WidgetId = WidgetKind;
 /**
  * `span` is a custom whole-cell size, only for free-size widgets (#73) and only when it differs from
@@ -35,6 +36,8 @@ export interface AppearanceSettings {
   daylightBrightness: DaylightBrightness | null;
   /** Swap places (#436): widgets trade cells every interval, gliding without going dark. Off by default; omitted at rest while off. */
   rearrange: boolean;
+  /** Optional whole-screen atmosphere; saved with the visual style. */
+  theme: ThemeSettings;
 }
 export interface WidgetTransform { offsetX: number; offsetY: number; scale: number }
 export interface WidgetBehavior { reminders: { hideWhenEmpty: boolean } }
@@ -59,7 +62,7 @@ export interface WorldClockCity { id: string; label: string; timezone: string; l
 /** `date` is a civil YYYY-MM-DD date. */
 export interface CountdownEvent { id: string; title: string; date: string; repeatsYearly: boolean }
 /** What the Dynamic widget may show (#437); at least one is on. All on is the default, omitted at rest. */
-export interface DynamicSources { weather: boolean; alerts: boolean; air: boolean; sky: boolean; personal: boolean }
+export interface DynamicSources { weather: boolean; alerts: boolean; air: boolean; sky: boolean; personal: boolean; holidays: boolean }
 /** Per-widget content for #78 and #437; not part of saved styles. */
 export interface WidgetDataSettings {
   worldClocks: WorldClockCity[];
@@ -149,6 +152,8 @@ export interface RainInterval {
 }
 /** Hourly model instants, separate from preceding-hour precipitation intervals. API-only. */
 export interface WeatherDetailReading {
+  /** WMO condition at this forecast instant; optional for older API fixtures. */
+  weatherCode?: number | null;
   time: string; temperature: number | null; humidity: number | null; dewPoint: number | null;
   pressure: number | null; visibility: number | null; cloudCover: number | null;
   windSpeed: number | null; windDirection: number | null;
