@@ -26,6 +26,13 @@ exceptions are documented in `docs/install.md`. Source work changes no capture,
 native activation or installer code and establishes no new installed/native
 acceptance. The dated installation and TV evidence below keeps its original scope.
 
+The first Studio attempt exposed #577, a pre-existing disclosure-opening race:
+both the base and candidate briefly put Typography over the laid-out Swap places
+hit point while the native clipping boundary expands. The test now waits for
+that actual boundary, with a deterministic held-boundary regression. The original
+failure and baseline comparison remain recorded; a passing retry alone was not
+treated as resolution.
+
 ## Style creation and Settings follow-up — 2026-11-03 (#570, #571)
 
 The follow-up to #568 gives native select options explicit contrasting surfaces

@@ -1,4 +1,6 @@
 import { mockWindowsStatus, mockScreenWakeLock } from './lib/windows-fixture.mjs';
+import { waitForDisclosureReady } from './lib/disclosure-readiness.mjs';
+import { verifyDisclosureBarrier } from './lib/disclosure-readiness-regression.mjs';
 // Production Edge interaction regressions. Own ephemeral loopback server/data;
 // synthetic provider and device responses only. Screenshots are RAM buffers.
 import assert from 'node:assert/strict';
@@ -277,6 +279,8 @@ export async function runStudioQa({ playwright, edge } = {}) {
     assert.equal(result.audio, 0);
   }
   try {
+    await verifyDisclosureBarrier(browser);
+    checks.push('#577 disclosure readiness observes the actual opening clipping boundary and native rendering, including a deliberately held pseudo-element boundary');
     await reset();
     let { page, context } = await open();
     // #438: the shared header: the brand goes Home, the Pages nav marks Edit display, and Open
@@ -1014,6 +1018,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await tab(page, 'Style');
     await page.getByRole('slider', { name: 'Text size', exact: true }).fill('125');
     await page.locator('summary', { hasText: 'Motion' }).click();
+    await waitForDisclosureReady(page, page.locator('.motion-disclosure'));
     await page
       .getByRole('checkbox', { name: 'Float gently', exact: true })
       .uncheck();
@@ -1071,6 +1076,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
 
     // #240, #436: plain Motion wording, with the stable structure other suites rely on.
     await page.locator('summary', { hasText: 'Motion' }).click();
+    await waitForDisclosureReady(page, page.locator('.motion-disclosure'));
     const motionBody = page.locator('.motion-disclosure .disclosure-body');
     await motionBody.getByRole('checkbox', { name: 'Float gently', exact: true }).waitFor();
     await motionBody.getByRole('slider', { name: 'Move every', exact: true }).waitFor();

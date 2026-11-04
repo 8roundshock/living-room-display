@@ -12,7 +12,7 @@ export function ThemeControls({ settings, weather, disconnected, onChange, savin
   const reduced = usePrefersReducedMotion(), scene = resolveTheme(settings, weather, now, disconnected);
   const showCalendars = theme.mode === 'seasonal' || theme.mode === 'combined' || settings.widgetData.dynamic.holidays;
   return <div className="theme-controls">
-    <label className="theme-mode"><span className="field-label">Theme</span><select aria-label="Theme" disabled={saving} value={theme.mode} onChange={event => onChange({ ...theme, mode: event.target.value as ThemeSettings['mode'] })}>
+    <label className="theme-mode"><span className="field-label">Theme</span><select className="select-input" aria-label="Theme" disabled={saving} value={theme.mode} onChange={event => onChange({ ...theme, mode: event.target.value as ThemeSettings['mode'] })}>
       {THEME_MODES.map(mode => <option key={mode} value={mode}>{THEME_LABELS[mode]}</option>)}
     </select></label>
     {showCalendars && <HolidayCalendars value={theme.calendars} disabled={saving} onChange={calendars => onChange({ ...theme, calendars })} />}

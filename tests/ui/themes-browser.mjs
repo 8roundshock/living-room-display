@@ -59,6 +59,8 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
       await open({mode:'combined',viewport}); const select=page.getByRole('combobox',{name:'Theme',exact:true}); await select.scrollIntoViewIfNeeded();
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       const box=await select.boundingBox(); assert.ok(box.height>=44&&box.x>=0&&box.x+box.width<=viewport.width+1);
+      const treatment=await select.evaluate(element=>({appearance:getComputedStyle(element).appearance,radius:parseFloat(getComputedStyle(element).borderRadius)}));
+      assert.equal(treatment.appearance,'auto');assert.ok(treatment.radius>=12,'Theme uses the established rounded native select treatment');
       await select.focus(); await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
       assert.equal(await select.inputValue(),'weather'); await button('Cancel').click(); await select.scrollIntoViewIfNeeded();
       await photo(`theme-editor-${viewport.width}x${viewport.height}`);

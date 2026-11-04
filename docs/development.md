@@ -488,3 +488,12 @@ age. It never opens the installed app, invokes native activation or captures a
 desktop. The Dynamic suite additionally covers holiday opt-in with themes Off,
 direct shared calendar controls and long holiday labels. General hardware/power
 budgets and physical-TV acceptance remain separate work.
+
+The Studio Motion checks use `waitForDisclosureReady` before interacting with
+newly opened content (#577). Chromium can report a child's final box while the
+native `::details-content` clipping boundary still crosses it; that internal
+transition is not exposed by `getAnimations()` or transition events. The helper
+waits for real ResizeObserver geometry to reveal all direct content children,
+then a native rendering turn. A held clipping-boundary regression rejects an
+immediate no-op barrier. Do not substitute virtual time, force-clicks or blind
+retries for this readiness check.
