@@ -1,6 +1,42 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { holidayWindow, koreanCalendarAvailable, observancesForYear, seasonForDate, shiftHolidayDate, westernEaster } from './holidays.ts';
+import { holidayWindow, koreanCalendarAvailable, observancesForYear, orthodoxEaster, seasonForDate, shiftHolidayDate, westernEaster } from './holidays.ts';
+
+test('Orthodox Pascha and Maslenitsa agree with published 2026–2030 dates', () => {
+  const expected = [
+    [2026, '2026-04-12', '2026-02-16', '2026-02-22'],
+    [2027, '2027-05-02', '2027-03-08', '2027-03-14'],
+    [2028, '2028-04-16', '2028-02-21', '2028-02-27'],
+    [2029, '2029-04-08', '2029-02-12', '2029-02-18'],
+    [2030, '2030-04-28', '2030-03-04', '2030-03-10'],
+  ] as const;
+  for (const [year, easter, start, end] of expected) {
+    assert.equal(orthodoxEaster(year), easter);
+    const values = observancesForYear(year, ['RU']);
+    const pascha = values.find(value => value.id === 'ru:easter')!, week = values.find(value => value.id === 'ru:maslenitsa')!;
+    assert.deepEqual([pascha.date, pascha.category, pascha.themeKey, pascha.leadDays], [easter, 'cultural', 'spring', 7]);
+    assert.deepEqual([week.startDate, week.date, week.endDate, week.category], [start, end, end, 'cultural']);
+    assert.equal(holidayWindow(shiftHolidayDate(start, -1), ['RU']), null, 'no extra Maslenitsa anticipation');
+    assert.equal(holidayWindow(end, ['RU'])?.observance.id, 'ru:maslenitsa');
+    assert.notEqual(holidayWindow(shiftHolidayDate(end, 1), ['RU'])?.observance.id, 'ru:maslenitsa', 'ends after the Sunday');
+  }
+});
+
+test('Orthodox calculation advances the Julian/Gregorian difference at2100 without a fixed13-day assumption', () => {
+  assert.deepEqual([orthodoxEaster(1900), orthodoxEaster(2000), orthodoxEaster(2099), orthodoxEaster(2100), orthodoxEaster(2101)],
+    ['1900-04-22', '2000-04-30', '2099-04-12', '2100-05-02', '2101-04-24']);
+  for (let year = 1900; year <= 2199; year++) assert.equal(new Date(`${orthodoxEaster(year)}T12:00:00Z`).getUTCDay(), 0, `${year}: remains Sunday across century boundaries`);
+});
+
+test('the entire Maslenitsa week appears, but exact-day holidays and quiet commemorations take precedence', () => {
+  for (let offset = 0; offset <= 6; offset++) assert.equal(holidayWindow(shiftHolidayDate('2026-02-16', offset), ['RU'])?.observance.id, 'ru:maslenitsa');
+  assert.equal(holidayWindow('2027-03-08', ['RU'])?.observance.id, 'ru:women', 'Women’s Day beats the ongoing multi-day window');
+  assert.equal(holidayWindow('2027-03-09', ['RU'])?.observance.id, 'ru:maslenitsa', 'the week resumes the next day');
+  assert.equal(holidayWindow('2028-02-23', ['RU'])?.observance.id, 'ru:defender', 'quiet commemoration stays first');
+  assert.equal(holidayWindow('2026-04-05', ['RU'])?.observance.id, 'ru:easter', 'Pascha seven-day approach starts');
+  assert.equal(holidayWindow('2026-04-13', ['RU']), null, 'Pascha ends after its day');
+  assert.equal(observancesForYear(2026).length, 43, 'curated national and cultural coverage');
+});
 
 test('Canadian moving dates follow Gregorian calendar rules across future years', () => {
   const dates = (year: number) => Object.fromEntries(observancesForYear(year, ['CA']).map(value => [value.id, value.date]));
