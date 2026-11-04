@@ -1,4 +1,5 @@
 import type { AirQualityState, AlertsState, CountdownEvent, DynamicSources, Reminder, Settings, WeatherAlert, WeatherState, WidgetId } from '../shared/contracts.ts';
+import { HOLIDAY_REGIONS, HOLIDAY_REGION_NAMES, koreanCalendarAvailable, observancesForYear, shiftHolidayDate, type HolidayRegion } from '../shared/holidays.ts';
 import { AIR_CREDIT, SCALE_LABELS, aqiCategory, uvCategory } from './air-categories.ts';
 import { airAgeSegments, airReadingView, upcomingAirHours } from './airHourly.ts';
 import { addDays, civilDateKey, formatDuration, localTimeZone, moonPhase, nextMoonEvent, sunDay, zoneFormatter, type MoonPhase } from './astronomy.ts';
@@ -6,6 +7,8 @@ import { countdownRows } from './calendar.ts';
 import { ageLabel, civilDate, compactWeatherTime, lastKnownTime, NBSP, temperature, todayForecast, weatherTimeZone } from './format.ts';
 import { conditionLabel } from './weather-conditions.ts';
 import { rainOutlook, rainOutlookCopy, rainThreshold } from './weather-outlook.ts';
+import { gustForecastSpells, hazardFamily as familyOf, weatherHazardSpells, type WeatherHazardFamily as Family } from './weather-hazards.ts';
+export { HAZARD_FAMILIES } from './weather-hazards.ts';
 
 /**
  * The Dynamic widget's engine (#437): what matters now, from data the display already has, ranked by a
@@ -21,8 +24,8 @@ export const DYNAMIC_ROTATE_MS = 60_000;
 export const DYNAMIC_ROWS_MAX = 3;
 const MINUTE = 60_000;
 export const DYNAMIC_THRESHOLDS = {
-  metric: { HEAT_HIGH: 32, COLD_FEELS: -27, COLD_LOW: -20, WIND_STRONG: 50, WIND_BREEZY: 39 },
-  imperial: { HEAT_HIGH: 90, COLD_FEELS: -17, COLD_LOW: -4, WIND_STRONG: 31, WIND_BREEZY: 24 },
+  metric: { HEAT_HIGH: 32, COLD_FEELS: -27, COLD_LOW: -20, WIND_STRONG: 50, WIND_BREEZY: 39, GUST_STRONG: 70, GUST_BREEZY: 50 },
+  imperial: { HEAT_HIGH: 90, COLD_FEELS: -17, COLD_LOW: -4, WIND_STRONG: 31, WIND_BREEZY: 24, GUST_STRONG: 43, GUST_BREEZY: 31 },
   /** "Hot today" stops at this hour in the weather city. */
   HEAT_UNTIL_HOUR: 18,
   AQI: { us: { notable: 101, focus: 151 }, european: { notable: 61, focus: 81 } },
@@ -37,14 +40,6 @@ export const DYNAMIC_THRESHOLDS = {
   /** "Next countdown" in the calm rotation is at least this many days away (sooner ones are notable). */
   COUNTDOWN_CALM_MIN_DAYS: 2,
 } as const;
-
-/** WMO codes per hazard family. */
-export const HAZARD_FAMILIES = {
-  hail: [96, 99], storm: [95], freezing: [56, 57, 66, 67], heavySnow: [75, 86], heavyRain: [65, 82],
-} as const satisfies Record<string, readonly number[]>;
-type Family = keyof typeof HAZARD_FAMILIES;
-const familyOf = (code: number | null | undefined): Family | null => code == null ? null
-  : (Object.keys(HAZARD_FAMILIES) as Family[]).find(family => (HAZARD_FAMILIES[family] as readonly number[]).includes(code)) ?? null;
 
 /** The fixed scores (section 4 of the #437 spec). Higher wins; ties go to the earlier start, then the id. */
 export const DYNAMIC_SCORES = {
@@ -63,7 +58,7 @@ export type DynamicTone = 'water' | 'sun' | 'time' | 'personal' | 'sky';
 /** What the card's glyph slot draws; the renderer turns it into WeatherGlyph, Icon or MoonGlyph. */
 export type DynamicGlyph =
   | { kind: 'weather'; code: number; isDay: boolean }
-  | { kind: 'icon'; name: 'alert' | 'air' | 'wind' | 'sun' | 'sunrise' | 'moon' | 'check' | 'hourglass' | 'snow'; glyph?: 'sun' | 'moon' | 'snow' }
+  | { kind: 'icon'; name: 'alert' | 'air' | 'wind' | 'sun' | 'sunrise' | 'moon' | 'check' | 'hourglass' | 'snow' | 'calendar'; glyph?: 'sun' | 'moon' | 'snow' }
   | { kind: 'moon'; phase: MoonPhase; southern: boolean };
 export interface DynamicPhrase { text: string; caution: boolean }
 export interface DynamicCard {
@@ -133,6 +128,8 @@ export interface DynamicInput {
   disconnected: boolean;
   /** This computer's zone, for reminders and countdowns (defaults to the browser's). */
   localTimeZone?: string;
+  /** Same calendar choices as whole-screen themes, independent of whether those themes are enabled. */
+  holidayCalendars?: readonly HolidayRegion[];
 }
 
 const BANNED = /\b(warning|warnings|alert|alerts|watch|watches|advisory|advisories)\b/i;
@@ -244,6 +241,15 @@ function localHour(now: number, timeZone: string): number {
   return Number(zoneFormatter(timeZone, { hour: '2-digit', hourCycle: 'h23' }).format(new Date(now))) % 24;
 }
 
+/** Range labels retain both offsets if the local clock repeats or skips an hour (#452). */
+function forecastWindow(start: number, end: number, ctx: Context): string {
+  if (start === end) return ctx.when(start);
+  const offset = zoneFormatter(ctx.tz, { timeZoneName: 'shortOffset' });
+  const zone = (time: number) => offset.formatToParts(new Date(time)).find(part => part.type === 'timeZoneName')?.value;
+  if (zone(start) !== zone(end)) return `${ctx.when(start)} ${zone(start)}–${ctx.when(end)} ${zone(end)}`;
+  return `${ctx.when(start)}–${ctx.when(end)}`;
+}
+
 function weatherCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   const { weather, sources, disconnected } = ctx.input;
   if (!sources.weather) return [];
@@ -267,7 +273,6 @@ function weatherCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   const today = todayForecast(weather.daily, tz, now);
   const tomorrowDate = addDays(civilDate(now, tz), 1);
   const tomorrow = weather.daily.find(day => day.date.slice(0, 10) === tomorrowDate);
-  const rest = restOfToday(weather, now, tz);
   const outlook = rainOutlook(weather, now);
   const full = rainOutlookCopy(outlook, tz, ctx.input.clockFormat, now, 'full');
   const compact = rainOutlookCopy(outlook, tz, ctx.input.clockFormat, now, 'compact');
@@ -300,57 +305,61 @@ function weatherCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
     }));
   }
 
-  // Hazards: one card, the strongest. A condition now beats today's forecast of it; today's forecast
-  // counts only while the rest of the day is wet; heavy rain gives way to a rain-now or rain-soon card.
-  const hazards: DynamicCard[] = [];
+  // Current conditions and upcoming hourly samples have separate evidence. Today's daily worst code
+  // cannot establish an upcoming hazard: a morning storm may already have passed (#452).
+  const hazards: Array<DynamicCard & { family: Family }> = [];
   const nowFamily = current ? familyOf(current.weatherCode) : null;
-  if (current && nowFamily && nowFamily !== 'heavyRain') {
+  if (current && nowFamily && (nowFamily !== 'heavyRain' || !rainNear)) {
     const words = HAZARD_WORDS[nowFamily].now ?? [conditionLabel(current.weatherCode), conditionLabel(current.weatherCode)];
-    hazards.push(card({
-      id: 'weather:hazard', source: 'weather', kind: `${nowFamily}-now`, tier: 'focus', score: NOW_SCORES[nowFamily]!, start: now,
+    hazards.push({ ...card({
+      id: 'weather:hazard', source: 'weather', kind: nowFamily === 'heavyRain' ? 'heavy-rain' : `${nowFamily}-now`, tier: 'focus', score: NOW_SCORES[nowFamily] ?? DYNAMIC_SCORES.heavyRain, start: now,
       kicker: 'Weather', headline: words[0], compact: words[1], detail: asOf, glyph: { kind: 'weather', code: current.weatherCode!, isDay: current.isDay },
       tone: toneForCode(current.weatherCode), ...estimate, label: words[1],
-    }));
+    }), family: nowFamily });
   }
-  const todayFamily = familyOf(today?.weatherCode);
-  if (today && todayFamily && todayFamily !== 'heavyRain' && todayFamily !== nowFamily) {
-    const [headline, short] = HAZARD_WORDS[todayFamily].today(today.weatherCode!);
-    const glyph: DynamicGlyph = { kind: 'weather', code: today.weatherCode!, isDay: true };
-    if (!rest.hasData) {
-      hazards.push(card({
-        id: 'weather:hazard', source: 'weather', kind: `${todayFamily}-today`, tier: 'notable', score: DYNAMIC_SCORES.hazardUntimed, start: null,
-        kicker: 'Weather', headline, compact: short, detail: 'Timing unavailable', glyph, tone: toneForCode(today.weatherCode), ...estimate, label: short,
-      }));
-    } else if (rest.wet) {
-      hazards.push(card({
-        id: 'weather:hazard', source: 'weather', kind: `${todayFamily}-today`, tier: 'focus', score: TODAY_SCORES[todayFamily]!, start: rest.firstWet,
-        kicker: 'Weather', headline, compact: short, detail: rest.peak === null ? 'Rest of today' : `Up to ${rest.peak}% chance${NBSP}·${NBSP}rest of today`,
-        detailCompact: rest.peak === null ? null : `Up to ${rest.peak}% chance`,
-        glyph, tone: toneForCode(today.weatherCode), ...estimate, time: rest.firstWet !== null ? ctx.time(Math.max(rest.firstWet, now)) : null, label: short,
-      }));
-    }
+  const seenFamilies = new Set<Family>();
+  if (nowFamily) seenFamilies.add(nowFamily);
+  for (const spell of weatherHazardSpells(weather, now)) {
+    if (civilDate(spell.start, tz) !== civilDate(now, tz) || seenFamilies.has(spell.family) || (spell.family === 'heavyRain' && rainNear)) continue;
+    seenFamilies.add(spell.family);
+    const name = spell.family === 'freezing' ? conditionLabel(spell.code) : HAZARD_WORDS[spell.family].label;
+    const short = spell.family === 'storm' ? 'Storms' : spell.family === 'hail' ? 'Storms with hail' : name;
+    hazards.push({ ...card({
+      id: 'weather:hazard', source: 'weather', kind: spell.family === 'heavyRain' ? 'heavy-rain' : `${spell.family}-today`, tier: 'focus', score: TODAY_SCORES[spell.family] ?? DYNAMIC_SCORES.heavyRain, start: spell.start,
+      kicker: 'Weather', headline: `${name} expected`, compact: `${short} expected`, detail: `Around ${forecastWindow(spell.start, spell.end, ctx)}`,
+      glyph: { kind: 'weather', code: spell.code, isDay: true }, tone: toneForCode(spell.code), ...estimate, time: ctx.time(spell.start), label: `${short} expected`,
+    }), family: spell.family });
   }
-  const heavyRainCode = current && nowFamily === 'heavyRain' ? current.weatherCode : todayFamily === 'heavyRain' ? today!.weatherCode : null;
-  if (heavyRainCode !== null && !rainNear && rest.wet) {
-    hazards.push(card({
-      id: 'weather:hazard', source: 'weather', kind: 'heavy-rain', tier: 'focus', score: DYNAMIC_SCORES.heavyRain, start: rest.firstWet,
-      kicker: 'Weather', headline: 'Heavy rain in today’s forecast', compact: 'Heavy rain today',
-      detail: rest.peak === null ? 'Rest of today' : `Up to ${rest.peak}% chance${NBSP}·${NBSP}rest of today`, detailCompact: rest.peak === null ? null : `Up to ${rest.peak}% chance`,
-      glyph: { kind: 'weather', code: heavyRainCode, isDay: true }, tone: 'water', ...estimate, label: 'Heavy rain today',
-    }));
-  }
-  if (hazards.length) cards.push(hazards.sort(byRank)[0]!);
+  // At most two different families: an upcoming storm need not disappear behind heavy snow now.
+  hazards.sort(byRank).slice(0, 2).forEach((hazard, index) => {
+    const { family: _family, ...result } = hazard;
+    cards.push({ ...result, id: index === 0 ? 'weather:hazard' : 'weather:hazard-later' });
+  });
 
-  // Wind and cold from the current reading.
+  // Keep sustained wind distinct from gusts. The latter is a forecast maximum during the preceding
+  // hour, including an interval still in progress, never an instantaneous current wind observation.
+  const winds: DynamicCard[] = [];
   if (current?.windSpeed != null) {
     const wind = Math.round(current.windSpeed), unit = weather.units.windSpeed;
     const strong = current.windSpeed >= thresholds.WIND_STRONG, windy = current.windSpeed >= thresholds.WIND_BREEZY;
-    if (strong || windy) cards.push(card({
+    if (strong || windy) winds.push(card({
       id: 'weather:wind', source: 'weather', kind: strong ? 'wind-strong' : 'windy', tier: strong ? 'focus' : 'notable', score: strong ? DYNAMIC_SCORES.windStrong : DYNAMIC_SCORES.windy, start: now,
       kicker: 'Weather', headline: strong ? 'Strong wind' : 'Windy', compact: strong ? 'Strong wind' : 'Windy', value: `${wind}`,
       detail: `${wind}${NBSP}${unit}${NBSP}·${NBSP}${asOf}`, glyph: { kind: 'icon', name: 'wind' }, tone: 'sky', ...estimate, label: strong ? 'Strong wind' : 'Windy',
     }));
   }
+  const gustToday = (spell: { start: number }) => civilDate(Math.max(spell.start, now), tz) === civilDate(now, tz);
+  const gusts = gustForecastSpells(weather, now, thresholds.GUST_STRONG).find(gustToday) ?? gustForecastSpells(weather, now, thresholds.GUST_BREEZY).find(gustToday);
+  if (gusts && civilDate(Math.max(gusts.start, now), tz) === civilDate(now, tz)) {
+    const strong = gusts.peak >= thresholds.GUST_STRONG, value = Math.round(gusts.peak);
+    winds.push(card({
+      id: 'weather:wind', source: 'weather', kind: strong ? 'gust-strong' : 'gusty', tier: strong ? 'focus' : 'notable', score: strong ? DYNAMIC_SCORES.windStrong : DYNAMIC_SCORES.windy, start: Math.max(gusts.start, now),
+      kicker: 'Weather', headline: strong ? 'Strong gusts expected' : 'Gusty weather expected', compact: strong ? 'Strong gusts' : 'Gusty weather', value: `${value}`,
+      detail: `Up to ${value}${NBSP}${weather.units.windSpeed}${NBSP}·${NBSP}${forecastWindow(gusts.start, gusts.end, ctx)}`,
+      glyph: { kind: 'icon', name: 'wind' }, tone: 'sky', ...estimate, label: strong ? 'Strong gusts' : 'Gusty weather',
+    }));
+  }
+  if (winds.length) cards.push(winds.sort(byRank)[0]!);
   if (current?.feelsLike != null && current.feelsLike <= thresholds.COLD_FEELS) {
     cards.push(card({
       id: 'weather:cold', source: 'weather', kind: 'cold-feels', tier: 'focus', score: DYNAMIC_SCORES.coldFeels, start: now,
@@ -573,6 +582,39 @@ function personalCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   return cards;
 }
 
+// ---- Offline holidays -------------------------------------------------------------------------------
+
+/** Holiday cards never displace a weather hazard, official alert or due reminder. */
+export const HOLIDAY_SCORES = { today: 760, tomorrow: 750 } as const;
+function holidayCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
+  if (!ctx.input.sources.holidays) return [];
+  const regions = ctx.input.holidayCalendars ?? HOLIDAY_REGIONS;
+  if (regions.includes('KR') && !koreanCalendarAvailable()) statuses.push({ source: 'holidays', text: 'Korean lunar dates unavailable', caution: true, smallRank: 6, degraded: true });
+  const today = civilDate(ctx.now, ctx.local), tomorrow = shiftHolidayDate(today, 1), year = Number(today.slice(0, 4));
+  const dates = [year, year + 1].flatMap(value => observancesForYear(value, regions));
+  const cards = new Map<string, DynamicCard>();
+  for (const observance of dates) {
+    const current = today >= observance.startDate && today <= observance.endDate;
+    if (!current && tomorrow !== observance.startDate) continue;
+    const when = current ? 'Today' : 'Tomorrow';
+    const key = `${observance.name}:${observance.date}`;
+    const existing = cards.get(key), country = HOLIDAY_REGION_NAMES[observance.region];
+    if (existing) {
+      existing.provenance = `${existing.provenance}${NBSP}·${NBSP}${country}`;
+      existing.provenanceShort = existing.provenance;
+      continue;
+    }
+    cards.set(key, card({
+      id: `holiday:${observance.id}:${observance.date}`, source: 'holidays', kind: current ? 'holiday-today' : 'holiday-tomorrow',
+      tier: 'notable', score: current ? HOLIDAY_SCORES.today : HOLIDAY_SCORES.tomorrow,
+      kicker: observance.kind === 'commemoration' ? 'Observance' : 'Holiday', headline: observance.name, compact: observance.shortName,
+      detail: when, time: when, glyph: { kind: 'icon', name: 'calendar' }, tone: 'time',
+      provenance: country, provenanceShort: country, label: `${observance.shortName} ${when.toLowerCase()}`,
+    }));
+  }
+  return [...cards.values()];
+}
+
 // ---- Signals, selection and rotation ----------------------------------------------------------------
 
 /** Calm order, and the widget whose presence on the board makes each one redundant. */
@@ -599,7 +641,7 @@ export function dynamicSignals(input: DynamicInput): DynamicSignals {
   };
   const statuses: DynamicStatus[] = [];
   if (input.disconnected) statuses.push({ source: 'connection', text: 'Offline', caution: true, smallRank: 0, degraded: true });
-  const cards = [...alertCards(ctx, statuses), ...weatherCards(ctx, statuses), ...airCards(ctx, statuses), ...skyCards(ctx), ...personalCards(ctx, statuses)];
+  const cards = [...alertCards(ctx, statuses), ...weatherCards(ctx, statuses), ...airCards(ctx, statuses), ...skyCards(ctx), ...personalCards(ctx, statuses), ...holidayCards(ctx, statuses)];
   const tier = (name: DynamicTier) => cards.filter(item => item.tier === name).sort(byRank);
   const calmCards = CALM_ORDER.flatMap(({ id }) => cards.filter(item => item.tier === 'calm' && item.id === id));
   const kept = calmCards.filter(item => !CALM_ORDER.find(entry => entry.id === item.id)!.skipWith.some(widget => input.onBoard[widget]));
@@ -617,7 +659,7 @@ export function memoizeDynamicSignals(): (input: DynamicInput) => DynamicSignals
   let last: { key: unknown[]; value: DynamicSignals } | null = null;
   return input => {
     const minute = Math.floor(input.now / MINUTE);
-    const key = [input.weather, input.airQuality, input.alerts, input.reminders, input.countdowns, input.sources, input.onBoard, input.clockFormat, input.airScale, minute, input.disconnected, input.localTimeZone];
+    const key = [input.weather, input.airQuality, input.alerts, input.reminders, input.countdowns, input.sources, input.onBoard, input.clockFormat, input.airScale, minute, input.disconnected, input.localTimeZone, input.holidayCalendars];
     if (last && key.every((value, index) => Object.is(value, last!.key[index]))) return last.value;
     last = { key, value: dynamicSignals({ ...input, now: minute * MINUTE }) };
     return last.value;

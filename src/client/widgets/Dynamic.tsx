@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { AlertsState, AppState, DynamicSources, RainInterval, Settings } from '../../shared/contracts.ts';
 import { needsAlerts } from '../../shared/widgets.ts';
+import { HolidayCalendars } from '../HolidayCalendars';
 import {
   DYNAMIC_ROWS_MAX, chooseDynamic, dynamicSignals, dynamicSummary, memoizeDynamicSignals, rotationSlot,
   type DynamicCard, type DynamicChoice, type DynamicGlyph, type DynamicInput, type DynamicPhrase, type DynamicPrevious, type DynamicSignals,
@@ -30,6 +31,7 @@ function signalsInput(state: AppState, settings: Settings, now: number, disconne
     weather: state.weather, airQuality: state.airQuality, alerts: state.alerts ?? OFF_ALERTS, reminders: state.reminders,
     countdowns: settings.widgetData.countdowns, sources: settings.widgetData.dynamic, onBoard: settings.widgets,
     clockFormat: settings.clockFormat, airScale: settings.widgetData.airQuality.scale, now, disconnected,
+    holidayCalendars: settings.appearance.theme.calendars,
   };
 }
 
@@ -138,7 +140,7 @@ function Dynamic({ state, settings, size, now, embedded, disconnected }: WidgetC
   const minute = Math.floor(now.getTime() / MINUTE) * MINUTE;
   // Everything that formats a time is rebuilt once per minute and data change (#99, #185).
   const signals = useMemo(() => dynamicSignals(signalsInput(state, settings, minute, disconnected)),
-    [state.weather, state.airQuality, state.alerts, state.reminders, settings.widgetData.countdowns, settings.widgetData.dynamic, settings.widgets, settings.clockFormat, settings.widgetData.airQuality.scale, minute, disconnected]);
+    [state.weather, state.airQuality, state.alerts, state.reminders, settings.widgetData.countdowns, settings.widgetData.dynamic, settings.widgets, settings.clockFormat, settings.widgetData.airQuality.scale, settings.appearance.theme.calendars, minute, disconnected]);
   const slot = rotationSlot(now.getTime(), embedded);
   const previous = useRef<DynamicPrevious | null>(null);
   const choice = chooseDynamic(signals, slot, previous.current, size === 'large' ? DYNAMIC_ROWS_MAX : 2);
@@ -181,6 +183,7 @@ const SOURCES: { key: keyof DynamicSources; label: string; hint: string }[] = [
   { key: 'air', label: 'Air & UV', hint: 'Air quality and UV index · model estimate' },
   { key: 'sky', label: 'Sun & moon', hint: 'Sunrise, sunset and the full moon' },
   { key: 'personal', label: 'Reminders & countdowns', hint: 'Shows their titles on the display' },
+  { key: 'holidays', label: 'Holidays', hint: 'Today and tomorrow · offline calendar' },
 ];
 export const DYNAMIC_DRAFT_PROBLEM = 'Dynamic needs at least one thing to show';
 const anySource = (sources: DynamicSources) => Object.values(sources).some(Boolean);
@@ -208,7 +211,7 @@ function DynamicSettings({ settings, onChange, saving, state, saved }: WidgetSet
     const { settings: last, onChange: change, saved: baseline } = latest.current;
     if (anySource(last.widgetData.dynamic)) return;
     change(previous => anySource(previous.widgetData.dynamic) ? previous
-      : { ...previous, widgetData: { ...previous.widgetData, dynamic: baseline && anySource(baseline.widgetData.dynamic) ? { ...baseline.widgetData.dynamic } : { weather: true, alerts: true, air: true, sky: true, personal: true } } });
+      : { ...previous, widgetData: { ...previous.widgetData, dynamic: baseline && anySource(baseline.widgetData.dynamic) ? { ...baseline.widgetData.dynamic } : { weather: true, alerts: true, air: true, sky: true, personal: true, holidays: false } } });
   }, []);
   const now = Date.now();
   const summary = useMemo(() => {
@@ -227,6 +230,7 @@ function DynamicSettings({ settings, onChange, saving, state, saved }: WidgetSet
         </label>
         <p className="hint dynamic-source-hint" id={`dynamic-${source.key}-hint`}>{source.hint}</p>
         {source.key === 'alerts' && sources.alerts && <p className="hint dynamic-alerts-status">{alertsStatusLine(settings, saved, state?.alerts, now)}</p>}
+        {source.key === 'holidays' && sources.holidays && <HolidayCalendars value={settings.appearance.theme.calendars} disabled={saving} onChange={calendars => onChange(previous => ({ ...previous, appearance: { ...previous.appearance, theme: { ...previous.appearance.theme, calendars } } }))} />}
       </div>)}
     </fieldset>
     <p className="hint">Stays on what matters most, such as an official warning, a storm or rain starting soon, and otherwise shows one calm card each minute. Uses your weather location ({settings.location.name}). Forecasts and model estimates are not official warnings.</p>
@@ -253,7 +257,7 @@ export const DynamicWidget: WidgetModule = {
       intervalStart: new Date(start + index * HOUR).toISOString(), intervalEnd: new Date(start + (index + 1) * HOUR).toISOString(),
       precipitationProbability: chance, precipitationAmount: SAMPLE_RAIN[index]!, rainAmount: SAMPLE_RAIN[index]!,
     }));
-    const next = { ...settings, widgetData: { ...settings.widgetData, countdowns: [], dynamic: { weather: true, alerts: false, air: false, sky: true, personal: false } } };
+    const next = { ...settings, widgetData: { ...settings.widgetData, countdowns: [], dynamic: { weather: true, alerts: false, air: false, sky: true, personal: false, holidays: false } } };
     const weather = { ...state.weather, hourly, location: { name: 'Sample City', latitude: 43.65, longitude: -79.38, timezone: 'America/Toronto' } };
     return { state: { ...state, settings: next, weather, reminders: [], alerts: OFF_ALERTS }, settings: next };
   },

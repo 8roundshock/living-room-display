@@ -149,7 +149,24 @@ widgets suites keep their own copies of that board until
 [#388](https://github.com/8roundshock/living-room-display/issues/388).
 The widgets suite is the longest: 10–12 minutes on the owner's PC on 2026-10-19 with
 other suites running, and up to 30 minutes when several widgets suites share the
-machine. Its display loads therefore wait up to 90 s for a specific element (#306).
+machine. Air-quality reloads and the status page's navigation/shell wait allow up
+to 90 s (#306); other widget loads still use their existing timeouts. Unifying
+those readiness waits remains part of #431.
+
+The stale/offline status page uses its own browser context, fake clock and routed
+state (#431/#415). It must neither advance the main family's clock nor compete
+with that page through the real single-display BroadcastChannel. The suite checks
+clock isolation deterministically and reports the case, load stage, rendered
+widget IDs, presence/retirement shell and recent fixture requests on a status
+readiness failure. `widgets-browser.mjs --status-only` runs the existing Forecast
+and Agenda family/status cases across all densities and 720p/1080p/4K, for a bounded
+check of the previously failing stage. It supplements the full suite; it does not
+replace full widget coverage or #431's repeated-load acceptance.
+
+Air-quality age assertions follow the public minutes/hours/days wording even when
+other family checks have advanced the main clock. Literal boundary renders cover
+59/60/69 minutes and one/two days; the saved-reading assertion uses its actual
+elapsed age rather than assuming the fixture is still within the first hour.
 
 ## Browser suites
 
@@ -478,3 +495,22 @@ board and reduced-motion relocation, plus compact editor widths. `capture: true`
 returns images in memory to its caller. It never writes screenshot files. The
 existing palette, widget, canvas-scope and motion suites retain their full family
 sweeps and use multiple synthetic boards for catalog coverage.
+
+The `themes` pull-request suite (#575) runs an isolated synthetic source server.
+It checks mode/calendar draft transactions, small editor layouts, distinct scenes
+at 1080p/4K, finite staggered slot lifetimes, reduced-motion restarts, real Dangi
+fixtures and bounded CDP main-thread/layer observations. `capture: true` returns
+RAM-only images with each decorative animation sampled at its actual staggered
+age. It never opens the installed app, invokes native activation or captures a
+desktop. The Dynamic suite additionally covers holiday opt-in with themes Off,
+direct shared calendar controls and long holiday labels. General hardware/power
+budgets and physical-TV acceptance remain separate work.
+
+The Studio Motion checks use `waitForDisclosureReady` before interacting with
+newly opened content (#577). Chromium can report a child's final box while the
+native `::details-content` clipping boundary still crosses it; that internal
+transition is not exposed by `getAnimations()` or transition events. The helper
+waits for real ResizeObserver geometry to reveal all direct content children,
+then a native rendering turn. A held clipping-boundary regression rejects an
+immediate no-op barrier. Do not substitute virtual time, force-clicks or blind
+retries for this readiness check.

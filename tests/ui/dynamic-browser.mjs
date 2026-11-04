@@ -34,6 +34,8 @@ function ecccAlert(id, name, type = 'warning', hours = 8) {
 function forecast({ todayCode = 3, wetHours = [], chance = 0 } = {}) {
   const payload = forecastFixture();
   payload.daily.weather_code[0] = todayCode;
+  // Conditions are hourly instants; rain amounts below still describe the preceding hour.
+  payload.hourly.weather_code = payload.hourly.time.map(time => wetHours.includes(Math.round((time - payload.hourly.time[0]) / 3600)) ? todayCode : 3);
   const start = payload.hourly.time[0];
   payload.hourly.precipitation_probability = payload.hourly.time.map(time => wetHours.includes(Math.round((time - start) / 3600)) ? 80 : chance);
   payload.hourly.precipitation = payload.hourly.time.map(time => wetHours.includes(Math.round((time - start) / 3600)) ? 1.2 : 0);
@@ -173,7 +175,7 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
           await view.page.clock.runFor(3_000);
           const result = await facts(view.page);
           assert.equal(await attr(view.page, 'data-dynamic-mode'), 'focus'); assert.equal(await attr(view.page, 'data-dynamic-kind'), 'storm-today');
-          assert.equal(await widgetOf(view.page).locator('.dynamic-headline').innerText(), size === 'small' ? 'Storms today' : 'Thunderstorms in today’s forecast');
+          assert.equal(await widgetOf(view.page).locator('.dynamic-headline').innerText(), size === 'small' ? 'Storms expected' : 'Thunderstorms expected');
           if (size === 'large') {
             const rows = await widgetOf(view.page).locator('.dynamic-also li:not(.dynamic-overflow)').allInnerTexts();
             assert.ok(rows.length >= 2 && rows.length <= 3, `large rows: ${rows.join(' | ')}`);
@@ -184,7 +186,7 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
           await keep(`B-focus-${size}-${viewport.width}`, await widgetOf(view.page).screenshot());
           await view.close();
         }
-        checks.push('B. Focus: "Thunderstorms in today\'s forecast" (small "Storms today") pinned with "+2 more" (rain soon and a reminder due in 30 min) in small and medium and as rows in large, at 720p and 4K: fit 1, no cut headline, nothing outside the widget, one card, no running animation at rest');
+        checks.push('B. Focus: "Thunderstorms expected" (small "Storms expected") pinned with "+2 more" (rain soon and a reminder due in 30 min) in small and medium and as rows in large, at 720p and 4K: fit 1, no cut headline, nothing outside the widget, one card, no running animation at rest');
       } finally { await world.close(); }
     }
 
@@ -340,7 +342,18 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
           if (await page.getByRole('button', { name: 'Dynamic', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'Dynamic', exact: true }).click();
           const panel = page.locator('.widget-option.selected');
           const labels = await panel.locator('.dynamic-sources label.toggle-row > span').allInnerTexts();
-          assert.deepEqual(labels, ['Weather', 'Official weather alerts', 'Air & UV', 'Sun & moon', 'Reminders & countdowns']);
+          assert.deepEqual(labels, ['Weather', 'Official weather alerts', 'Air & UV', 'Sun & moon', 'Reminders & countdowns', 'Holidays']);
+          assert.equal(await panel.getByRole('checkbox', { name: 'Holidays', exact: true }).isChecked(), false, 'holidays are explicitly opted in');
+          await panel.getByRole('checkbox', { name: 'Holidays', exact: true }).check();
+          await panel.getByRole('checkbox', { name: 'Russia', exact: true }).uncheck();
+          assert.equal(world.app.store.snapshot().settings.appearance.theme.mode, 'off');
+          assert.deepEqual(world.app.store.snapshot().settings.appearance.theme.calendars, ['CA', 'KR', 'RU'], 'calendar draft has not been saved');
+          await page.getByRole('tab', { name: 'Style', exact: true }).click();
+          assert.equal(await page.getByRole('combobox', { name: 'Theme', exact: true }).inputValue(), 'off');
+          assert.equal(await page.getByRole('checkbox', { name: 'Russia', exact: true }).isChecked(), false, 'holiday-only choices are directly available and shared with Style');
+          await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
+          await panel.getByRole('checkbox', { name: 'Russia', exact: true }).check();
+          await panel.getByRole('checkbox', { name: 'Holidays', exact: true }).uncheck();
           for (const label of labels) {
             const box = await panel.getByRole('checkbox', { name: label, exact: true }).boundingBox();
             assert.ok(box.width >= 44 && box.height >= 44, `${label} toggle is a 44 px target`);
@@ -378,7 +391,7 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
         await page.locator('.widget-option.selected').getByRole('checkbox', { name: 'Reminders & countdowns', exact: true }).uncheck();
         await page.getByRole('button', { name: 'Save changes', exact: true }).click(); await page.locator('.studio-savebar').waitFor({ state: 'detached' });
         assert.equal(world.app.store.snapshot().settings.widgets.dynamic, true);
-        assert.deepEqual(world.app.store.snapshot().settings.widgetData.dynamic, { weather: true, alerts: true, air: true, sky: true, personal: false });
+        assert.deepEqual(world.app.store.snapshot().settings.widgetData.dynamic, { weather: true, alerts: true, air: true, sky: true, personal: false, holidays: false });
         await page.reload(); await page.locator('.preview-surface').waitFor(); await page.clock.runFor(500);
         await page.getByRole('tab', { name: 'Widgets', exact: true }).click();
         await page.getByRole('button', { name: 'Dynamic', exact: true }).click();
@@ -388,7 +401,50 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
         assert.equal(await page.locator('.studio-savebar').count(), 0, 'clean after reload');
         await keep('F-panel-saved-1280', await panel.screenshot());
         await view.close();
-        checks.push('F. Editor at 1280×720 and 390 px: Dynamic in the Weather & sky picker group with its description and a synthetic sample ("Rain likely 11 AM–3 PM"; large adds "Sunset 6:29 PM" and the full moon; no alert, reminder or countdown); five labelled 44 px toggles with their hints and the city; "Alerts are checked after you save." before Save and "Covers City of Toronto · no alerts now · checked …" after; the summary line; a toggle and its reversal; all off blocks Save with "Dynamic needs at least one thing to show"; Cancel saves nothing; Save and reload persist; the canvas holds its first card');
+        checks.push('F. Editor at 1280×720 and 390 px: Dynamic picker and sizes; six labelled 44 px source toggles; holiday calendars directly reachable with themes Off and shared with Style; source hints and saved alert state; draft reversal, all-off validation, Cancel, Save and reload; the canvas holds its first card');
+      } finally { await world.close(); }
+    }
+    // ---- G. Offline holidays use actual browser Dangi, shared calendar choices and every content family.
+    {
+      const world = await scenario({ forecast: forecast() }, settings => {
+        settings.widgetData.dynamic = { weather: false, alerts: false, air: false, sky: false, personal: false, holidays: true };
+        settings.appearance.theme.calendars = ['KR'];
+        settings.appearance.theme.mode = 'off';
+        settings.screen.keepAwake = false;
+      });
+      try {
+        world.server.now = Date.parse('2027-02-07T17:00:00Z');
+        for (const viewport of VIEWPORTS) for (const size of SIZES) {
+          await world.place(size);
+          const view = await open(world, { viewport, time: world.server.now });
+          try {
+            assert.equal(await attr(view.page, 'data-dynamic-kind'), 'holiday-today');
+            assert.equal(await widgetOf(view.page).locator('.dynamic-headline').innerText(), 'Seollal');
+            assert.match(await widgetOf(view.page).innerText(), /Today/);
+            assert.match(await widgetOf(view.page).innerText(), /Korea/);
+            withinBox(await facts(view.page), `Korean holiday ${size} ${viewport.width}`);
+            const resolved = await view.page.evaluate(() => {
+              const calendar = new Intl.DateTimeFormat('en-u-ca-dangi', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric' });
+              return { calendar: calendar.resolvedOptions().calendar, dates: ['2027-02-07', '2027-05-13', '2027-09-15'].map(date => {
+                const parts = calendar.formatToParts(new Date(`${date}T12:00:00Z`));
+                return `${parts.find(part => part.type === 'month').value}/${parts.find(part => part.type === 'day').value}`;
+              }) };
+            });
+            assert.deepEqual(resolved, { calendar: 'dangi', dates: ['1/1', '4/8', '8/15'] }, 'actual browser Korean calendar matches published 2027 dates');
+          } finally { await view.close(); }
+        }
+        checks.push('G. Opt-in Korean holiday cards show Seollal Today with themes off, fit every family at720p/4K, and actual browser Dangi matches the published2027 Seollal/Buddha/Chuseok dates');
+        world.server.now = Date.parse('2026-09-30T17:00:00Z');
+        await world.app.store.update(data => { data.settings.appearance.theme.calendars = ['CA']; });
+        for (const size of ['small', 'medium']) {
+          await world.place(size);
+          const view = await open(world, { viewport: { width: 1280, height: 720 }, time: world.server.now });
+          try {
+            assert.equal(await widgetOf(view.page).locator('.dynamic-headline').innerText(), size === 'small' ? 'Truth and Reconciliation' : 'National Day for Truth and Reconciliation');
+            withinBox(await facts(view.page), `Long holiday ${size} at 720p`);
+          } finally { await view.close(); }
+        }
+        checks.push('H. Truth and Reconciliation keeps its complete compact name without clipping in small and medium at720p');
       } finally { await world.close(); }
     }
     assert.deepEqual(errors, []);

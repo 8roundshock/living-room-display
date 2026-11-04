@@ -725,9 +725,9 @@ export function composeWidgetGrid(grid: WidgetGrid, enabled: Partial<Record<Widg
  * refreshes the forecast for /api/state only then; the editor asks for it itself otherwise. Dynamic
  * (#437) always needs it: its weather cards, and the place and zone its sun and moon use.
  */
-export function needsForecast(settings: Pick<VisualSettings, 'widgets'> & { location: { timezone: string } }): boolean {
+export function needsForecast(settings: Pick<VisualSettings, 'widgets'> & { location: { timezone: string }; appearance?: VisualSettings['appearance'] }): boolean {
   const on = (id: WidgetId) => !!settings.widgets[id] && isActiveWidget(id);
-  return ['hourlyTemperature', 'wind', 'humidity', 'pressure', 'visibility', 'cloudCover', 'precipitation'].some(id => on(id as WidgetId)) || on('weather') || on('forecast') || on('dynamic') || (settings.location.timezone === 'auto' && (on('sunMoon') || on('airQuality') || on('weatherAlerts')));
+  return settings.appearance?.theme?.mode === 'weather' || settings.appearance?.theme?.mode === 'combined' || ['hourlyTemperature', 'wind', 'humidity', 'pressure', 'visibility', 'cloudCover', 'precipitation'].some(id => on(id as WidgetId)) || on('weather') || on('forecast') || on('dynamic') || (settings.location.timezone === 'auto' && (on('sunMoon') || on('airQuality') || on('weatherAlerts')));
 }
 
 /**

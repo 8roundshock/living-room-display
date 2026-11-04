@@ -104,7 +104,7 @@ export function HourValues({
           <span className="collection-hour-label">
             {compactWeatherTime(hour.time, zone, props.settings.clockFormat)}
           </span>
-          <TransitionText className="collection-hour-value" value={format(hour[field])} />
+          <TransitionText className="collection-hour-value" value={format(hour[field] ?? null)} />
         </div>
       ))}
     </div>

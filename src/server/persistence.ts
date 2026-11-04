@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Settings } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import { WIDGET_IDS } from '../shared/widgets.ts';
+import { defaultTheme } from '../shared/themes.ts';
 
 /**
  * The installed release whose strict reader must still accept what this build writes (#84).
@@ -24,7 +25,7 @@ export const PREVIOUS_RELEASE = {
  * `rearrange` (#436, Swap places) is such a key: d66832b does not know it, so its omission while off
  * is required, and Swap places on is a documented rollback exception (docs/install.md).
  */
-export const AT_REST = { appearance: { accentMode: 'color', animation: 'subtle', daylightBrightness: null, rearrange: false } } as const;
+export const AT_REST = { appearance: { accentMode: 'color', animation: 'subtle', daylightBrightness: null, rearrange: false, theme: defaultTheme() } } as const;
 /**
  * Top-level settings sections omitted at rest while they equal their defaults, like the widgetData
  * sections. `screen` (#436, Keep the screen on) is unknown to d66832b, so turning it off is a
@@ -41,7 +42,7 @@ const previousIds: ReadonlySet<string> = new Set(PREVIOUS_RELEASE.widgetIds);
 function omitVisual(visual: Loose): void {
   const appearance = visual.appearance as Loose | undefined;
   if (appearance) {
-    for (const [key, value] of Object.entries(AT_REST.appearance)) if (appearance[key] === value) delete appearance[key];
+    for (const [key, value] of Object.entries(AT_REST.appearance)) if (isDeepStrictEqual(appearance[key], value)) delete appearance[key];
   }
   for (const id of WIDGET_IDS) {
     if (previousIds.has(id)) continue;
@@ -70,6 +71,8 @@ export function persistableSettings(settings: Settings): PersistableSettings {
   if (widgetData && typeof widgetData === 'object') {
     const defaults = (defaultSettings() as unknown as Loose).widgetData as Loose | undefined ?? {};
     for (const key of Object.keys(widgetData)) if (isDeepStrictEqual(widgetData[key], defaults[key])) delete widgetData[key];
+    // Readers with Dynamic's original sources need no new holiday key while it is off.
+    if (widgetData.dynamic?.holidays === false) delete widgetData.dynamic.holidays;
     if (!Object.keys(widgetData).length) delete result.widgetData;
   }
   const defaults = defaultSettings() as unknown as Loose;

@@ -599,24 +599,31 @@ personal card uses the words warning, alert, watch or advisory (a unit test chec
 | Feels very cold now | −27 °C | −17 °F |
 | Very cold tomorrow: daily low | −20 °C | −4 °F |
 | Strong wind / windy now | 50 / 39 km/h | 31 / 24 mph |
+| Strong / breezy forecast gusts (preceding-hour maximum) | 70 / 50 km/h | 43 / 31 mph |
 | AQI focus / notable | US 151 / 101; European 81 / 61 | |
 | UV among today's upcoming readings | 6 | |
 | Reminder due soon / recently overdue | 60 / 120 min (at most 3 reminder cards) | |
 | Sunrise or sunset soon / full moon "tonight" from | 60 min / 180 min before sunset | |
 
-A rest of today is wet when a remaining hourly interval of the weather city's civil today
-has a 30% chance or a measurable amount (0.1 mm or 0.004 in). Hazard families by WMO code:
-hail 96/99, storm 95, freezing 56/57/66/67, heavy snow 75/86, heavy rain 65/82.
+Today's forecast hazard cards use remaining hourly condition samples (#452), never the daily worst
+code plus unrelated later precipitation. Families by WMO code: hail 96/99, storm 95, freezing 56/57/66/67,
+heavy snow 75/86, heavy rain 65/82. Adjacent matching hourly samples form a range of forecast instants;
+a single sample says Around followed by its time, without inventing an extra hour. Missing codes
+produce no timed hazard. A current reading keeps the shared last-known rule and Now/As of distinction.
+Up to two different families may show, so heavy snow now need not hide a storm expected later.
+Gust ranges use actual preceding-hour intervals and expire at the end, with Up to wording and the
+existing forecast/saved/offline provenance. Tomorrow's daily condition remains a future-day summary.
+Repeated/skipped DST hour endpoints include their UTC offsets.
 
 | Tier | Score: card |
 | --- | --- |
 | Alert | 1100: an official warning (several take turns, one per minute, "1 of 2") |
-| Focus (the top one stays) | 1010 official watch; 1000 hail now; 990 thunderstorms now; 985 freezing rain or drizzle now; 980 heavy snow now; 970 / 960 / 955 / 950 hail, storms, freezing, heavy snow in today's forecast (wet rest of today, no "now" card of that family); 945 official advisory; 940 rain likely now; 930 rain likely within 6 hours; 925 heavy rain today (no rain now or soon card); 920 unhealthy air; 915 strong wind; 910 feels very cold; 905 hot today; 900 a reminder due within the hour or overdue by up to two |
-| Notable (rotates first) | 885 official statement; 880 rain possible now or soon; 870 rain later (6–12 hours); 865 today's hazard without hourly timing ("Timing unavailable"); 860 severe weather tomorrow; 850 air unhealthy for sensitive groups; 840 high UV; 830 windy; 825 hot or very cold tomorrow; 820 / 815 a countdown today / tomorrow; 810 a reminder later today; 805 a reminder overdue by more than two hours; 800 sunrise or sunset within the hour; 790 full moon tonight; 780 precipitation possible |
+| Focus (the top one stays) | 1010 official watch; 1000 hail now; 990 thunderstorms now; 985 freezing rain or drizzle now; 980 heavy snow now; 970 / 960 / 955 / 950 hail, storms, freezing, heavy snow in today's hourly forecast (no current card of that family); 945 official advisory; 940 rain likely now; 930 rain likely within 6 hours; 925 heavy rain today (no rain now or soon card); 920 unhealthy air; 915 strong wind or forecast gusts; 910 feels very cold; 905 hot today; 900 a reminder due within the hour or overdue by up to two |
+| Notable (rotates first) | 885 official statement; 880 rain possible now or soon; 870 rain later (6–12 hours); 860 severe weather tomorrow; 850 air unhealthy for sensitive groups; 840 high UV; 830 windy or gusty forecast; 825 hot or very cold tomorrow; 820 / 815 a countdown today / tomorrow; 810 a reminder later today; 805 a reminder overdue by more than two hours; 800 sunrise or sunset within the hour; 790 full moon tonight; 780 precipitation possible |
 | Calm (fixed order) | conditions; today's high and low; dry for 12 hours (fresh, connected and complete only); the next sunrise or sunset (or the polar day or night); the next full or new moon; the next countdown at least 2 days away; good or moderate air. Each is skipped while the widget that already shows it is on the board (Weather; Weather or Forecast; Weather; Sun & moon; Sun & moon; Countdown; Air quality), unless that would leave nothing |
 
 Ties go to the earlier start, then the id. Card ids stay stable (`alert:<id>`,
-`weather:hazard`, `weather:rain`, `reminder:<id>`, `countdown:<id>`, `sky:sun`, …), so a swap
+`weather:hazard`, `weather:hazard-later`, `weather:rain`, `reminder:<id>`, `countdown:<id>`, `sky:sun`, …), so a swap
 follows the thing, not its wording.
 
 **Selection** (`chooseDynamic`). Warnings first; otherwise the top focus card stays put with
@@ -864,7 +871,8 @@ weather, snapshot pixels, and native tokens are excluded. Store backups privatel
 
 At rest, `state.json`, `state.backup.json` and exports omit additive values while
 they equal the current read default: `appearance.accentMode` `color`,
-`appearance.animation` `subtle`, `appearance.daylightBrightness` `null` (Fixed,
+`appearance.animation` `subtle`, `appearance.theme` Off with all three calendars,
+`appearance.daylightBrightness` `null` (Fixed,
 #439), default `widgetData` sections, and disabled widget ids the previous installed
 release does not know. The previous release (`d66832b`) reads `accentMode`, `animation`
 and pre-Dynamic `widgetData`, so omitting those values is optional (#272). It does
@@ -884,11 +892,23 @@ always include every key. See [rollback compatibility](install.md#additive-data-
 `weather.details` is an API-only array of at most 25 hourly readings. `time` is an
 ISO instant, separate from the precipitation `intervalStart`/`intervalEnd` pairs.
 Nullable fields are `temperature`, `humidity`, `dewPoint`, `pressure`, `visibility`,
-`cloudCover`, `windSpeed`, `windDirection` and `windGust`. Temperature/dew point and
+`cloudCover`, `windSpeed`, `windDirection`, `windGust` and `weatherCode` (#452). Temperature/dew point and
 wind use the response's chosen units; humidity/cloud cover are percentages,
 pressure is surface pressure in hPa, visibility is metres, direction is degrees.
-Gust is the maximum during the hour ending at the reading's time. Missing optional
+Weather code is the WMO condition at the reading instant; gust is the maximum during the hour ending at that instant. These distinct semantics follow the [Open-Meteo hourly definitions](https://open-meteo.com/en/docs), checked 2026-11-04. Codes and gusts are reused by Dynamic and weather themes, with no extra request or faster polling. Missing optional
 provider series produce nulls, while malformed/incomplete supplied series reject
 the refresh and retain the last successful state. The existing timeout/cache and
 forecast-demand gates apply. Weather alerts also request the existing official
 alert service when their dedicated widget is enabled.
+
+### Ambient themes and holiday sources (#575, #458)
+
+`appearance.theme` is `{ mode: 'off' | 'weather' | 'seasonal' | 'combined',
+calendars: ('CA' | 'KR' | 'RU')[] }`. Missing persisted fields default to Off with
+all three calendars. Calendar entries are unique; an empty list keeps seasons.
+Settings patches replace this small object completely; saved styles and their
+scheduled activation use the same appearance field. The default is omitted at
+rest; non-default choices are a documented older-reader rollback exception.
+`widgetData.dynamic.holidays` defaults false and is omitted while false. It uses
+the same calendar list and adds offline today/tomorrow cards only when opted in.
+Weather details remain API-only and are excluded from private settings exports.

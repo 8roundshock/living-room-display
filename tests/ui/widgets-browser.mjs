@@ -62,7 +62,7 @@ function floorReport(widget) {
   });
 }
 
-export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
+export async function runWidgetQa({ playwright, edge, capture = false, statusOnly = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const directory = await mkdtemp(join(tmpdir(), 'lrd-widgets-'));
   const now = Date.parse('2026-10-18T13:00:00Z');
@@ -72,7 +72,8 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
   const browser = await chromium.launch({ executablePath: edge, headless: true });
   const checks = [], images = [], errors = [];
   try {
-    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' }); await mockWindowsStatus(context); await mockScreenWakeLock(context);
+    const contextOptions = { viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' };
+    const context = await browser.newContext(contextOptions); await mockWindowsStatus(context); await mockScreenWakeLock(context);
     const source = await (await fetch(`${base}/api/state`)).json();
     // Every active widget has a check module (tests/ui/widget-checks); their prepare hooks give it content.
     for (const id of ACTIVE_WIDGET_IDS) assert.ok(WIDGET_CHECKS[id], `${id} needs a tests/ui/widget-checks module`);
@@ -121,34 +122,80 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
       state.settings.widgetGrid.placements[id] = { column: 0, row: 0, size };
       return state;
     };
-    // #221: stale and offline variants render on their own page, so the main page's clock (which
-    // the family hooks read) never moves for them. Chromium delays rendering frames, and with them
+    // #431/#415: Playwright clocks and BroadcastChannels belong to a browser context, not a page.
+    // Status cases need their own context AND response state: their offline poll must not advance
+    // the main clock, replace its widget, or make these fixtures retire one another as real displays.
+    // Chromium delays rendering frames, and with them
     // ResizeObserver delivery, in a background tab, so whichever page is in use is brought to the
     // front: the family hooks (the Reminders remeasure checks, #216) wait on real frames.
-    const statusPage = await context.newPage(); statusPage.on('pageerror', error => errors.push(error.message));
+    const statusContext = await browser.newContext(contextOptions);
+    await mockWindowsStatus(statusContext); await mockScreenWakeLock(statusContext);
+    let statusCurrent = structuredClone(source), statusOffline = false, statusCase = 'clock isolation';
+    const statusEvents = []; let statusRequestSequence = 0;
+    const statusEvent = event => { statusEvents.push(event); if (statusEvents.length > 30) statusEvents.shift(); };
+    await statusContext.route('**/api/state', async route => {
+      statusEvent({ type: 'state', sequence: ++statusRequestSequence, case: statusCase, status: statusOffline ? 503 : 200, enabled: Object.keys(statusCurrent.settings.widgets).filter(id => statusCurrent.settings.widgets[id]) });
+      await route.fulfill({ status: statusOffline ? 503 : 200, contentType: 'application/json', body: JSON.stringify(statusOffline ? { error: 'Synthetic unavailable state' } : statusCurrent) });
+    });
+    await statusContext.route('**/api/photo/image?*', route => route.fulfill({ contentType: 'image/png', body: image }));
+    await statusContext.route('**/api/preview/image?*', route => route.fulfill({ contentType: 'image/png', body: image }));
+    const statusPage = await statusContext.newPage();
+    statusPage.on('pageerror', error => { errors.push(error.message); statusEvent({ type: 'pageerror', message: error.message }); });
+    statusPage.on('requestfailed', request => statusEvent({ type: 'requestfailed', path: new URL(request.url()).pathname, reason: request.failure()?.errorText }));
+    statusPage.on('response', response => {
+      const path = new URL(response.url()).pathname;
+      if (path === '/api/preview/display' || response.status() >= 400) statusEvent({ type: 'response', path, status: response.status() });
+    });
     await statusPage.clock.install({ time: new Date(now) });
+    // A deterministic regression for the formerly shared clock. No wall-clock tolerance or retry.
+    await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now()) + 1_000));
+    const mainTime = await page.evaluate(() => Date.now());
+    await statusPage.clock.setSystemTime(new Date(now - 30_000));
+    await statusPage.clock.runFor(30_100);
+    assert.equal(await page.evaluate(() => Date.now()), mainTime, '#431: a status case cannot change the main page clock');
+    await page.clock.setSystemTime(new Date(now));
+    checks.push('#431 independent status context: offline clock advances leave the main page clock unchanged');
     await page.bringToFront();
     async function statusReport(id, size, density, viewport, status) {
+      const before = await page.evaluate(() => Date.now());
       await statusPage.bringToFront();
-      try { return await renderStatus(id, size, density, viewport, status); } finally { await page.bringToFront(); }
+      try { return await renderStatus(id, size, density, viewport, status); } finally {
+        await page.bringToFront();
+        assert.equal(await page.evaluate(() => Date.now()), before, `${statusCase}: status clock stays isolated`);
+        assert.equal(await page.locator('.display-retired').count(), 0, `${statusCase}: status fixture cannot retire the main display`);
+      }
     }
     async function renderStatus(id, size, density, viewport, status) {
-      current = familyState(id, size, density);
+      statusCase = `${id}/${size}/${density}/${viewport.width}x${viewport.height}/${status}`;
+      statusEvents.length = 0; statusOffline = false;
+      statusCurrent = familyState(id, size, density);
       if (status === 'stale') {
-        current.weather = { ...current.weather, status: 'stale', updatedAt: new Date(now - 5 * 3_600_000).toISOString() };
-        current.airQuality = { ...current.airQuality, status: 'stale', updatedAt: new Date(now - 2 * 3_600_000).toISOString() };
-        if (current.alerts) current.alerts = { ...current.alerts, status: 'stale' };
+        statusCurrent.weather = { ...statusCurrent.weather, status: 'stale', updatedAt: new Date(now - 5 * 3_600_000).toISOString() };
+        statusCurrent.airQuality = { ...statusCurrent.airQuality, status: 'stale', updatedAt: new Date(now - 2 * 3_600_000).toISOString() };
+        if (statusCurrent.alerts) statusCurrent.alerts = { ...statusCurrent.alerts, status: 'stale' };
       }
       await statusPage.setViewportSize(viewport);
       // An offline display has loaded once and then failed its 30 s refresh.
       await statusPage.clock.setSystemTime(new Date(status === 'offline' ? now - 30_000 : now));
       // #306: on a machine shared with other suites a display load has exceeded the default 30 s here; allow its real cost.
-      await statusPage.goto(base + '/display', { timeout: 90_000 }); await statusPage.locator('.display-page').waitFor({ timeout: 90_000 }); await statusPage.clock.runFor(100);
-      const widget = statusPage.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
+      const started = performance.now(); let stage = 'navigation';
+      const widget = statusPage.locator(`[data-widget-id="${id}"]`);
+      try {
+        await statusPage.goto(base + '/display', { timeout: 90_000 }); stage = 'display shell';
+        await statusPage.locator('.display-page').waitFor({ timeout: 90_000 }); stage = 'widget readiness';
+        await statusPage.clock.runFor(100); await widget.waitFor();
+      } catch (error) {
+        const rendered = await statusPage.evaluate(() => ({
+          widgets: [...document.querySelectorAll('[data-widget-id]')].map(element => element.getAttribute('data-widget-id')),
+          retired: Boolean(document.querySelector('.display-retired')), visibility: document.visibilityState,
+          body: document.body.innerText.slice(0, 1500), clock: Date.now(),
+        })).catch(() => ({ closed: statusPage.isClosed() }));
+        throw new Error(`${statusCase} failed at ${stage} after ${Math.round(performance.now() - started)}ms; ${JSON.stringify({ rendered, events: statusEvents })}`, { cause: error });
+      }
       if (status === 'offline') {
-        mode = 'error'; await statusPage.clock.runFor(30_000);
+        statusOffline = true; await statusPage.clock.runFor(30_000);
         for (let attempt = 0; !/offline/i.test(await widget.innerText()); attempt++) { assert.ok(attempt < 100, `${id}/${size} shows its offline state`); await statusPage.waitForTimeout(20); }
-        mode = 'ready';
+        statusOffline = false;
       } else assert.match(await widget.innerText(), /Saved/, `${id}/${size} shows its stale state`);
       return floorReport(widget);
     }
@@ -170,7 +217,7 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
     // their 1080p pass, so they run at 1080p and 4K only.
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
       await page.setViewportSize(viewport);
-      for (const density of Object.keys(GRID_DENSITIES)) for (const id of ACTIVE_WIDGET_IDS) for (const size of widgetSizes(id)) {
+      for (const density of Object.keys(GRID_DENSITIES)) for (const id of (statusOnly ? ['forecast', 'agenda'] : ACTIVE_WIDGET_IDS)) for (const size of widgetSizes(id)) {
         current = familyState(id, size, density);
         await open(); const widget = page.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
         await waitForWidgetFit(page, `[data-widget-id="${id}"]`, { label: `${id}/${size}/${density}/${viewport.width}x${viewport.height}` });
@@ -193,15 +240,20 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
         for (const status of STATUS_WIDGETS[id] ?? []) floorCheck(id, size, density, viewport, status, await statusReport(id, size, density, viewport, status));
       }
       // Checks beyond the families (tests/ui/widget-checks sweep hooks) run once per viewport.
-      if (viewport.width !== 1280) for (const check of Object.values(WIDGET_CHECKS)) if (check.sweep) {
+      if (!statusOnly && viewport.width !== 1280) for (const check of Object.values(WIDGET_CHECKS)) if (check.sweep) {
         current = structuredClone(source);
         const summary = await check.sweep({ page, viewport, state: current, base, now });
         if (summary && !checks.includes(summary)) checks.push(summary);
       }
     }
+    if (statusOnly) {
+      assert.deepEqual(floorFailures, []); assert.deepEqual(errors, []);
+      checks.push(`Forecast/Agenda status probe: ${floorCases} fresh/stale/offline family cases across three densities and 720p/1080p/4K`);
+      return { checks, images, clockFonts };
+    }
     assert.ok(clockFonts.large > clockFonts.medium * 1.4, `Large clock should be visibly larger: ${JSON.stringify(clockFonts)}`);
     checks.push(`All ${familyCount} widget families × 3 densities × 720p/1080p/4K: bounds, useful content, no frames/fills, tone classes, photo crops, whole-screen snapshot`);
-    await statusPage.close();
+    await statusContext.close();
     assert.deepEqual(floorFailures, [], '#221, #283: every family renders at fit 1 at Text 100% (a tracked exception needs its own ticket and an allowance)');
     assert.deepEqual(Object.entries(FLOOR_FIT_ALLOWANCES).filter(([key]) => !allowancesUsed.has(key)).map(([key, ticket]) => `${key} (${ticket})`), [], 'these families now render at fit 1 at Text 100%: remove their allowances');
     checks.push(`#221/#283 fit at Text 100%: ${floorCases} family × density × 720p/1080p/4K × fresh/stale/offline cases (${flooredCases} with an element on a floor) render at fit 1, except ${allowedCases.length} tracked cases: ${allowedCases.join('; ')}`);
@@ -435,6 +487,6 @@ export async function runWidgetQa({ playwright, edge, capture = false } = {}) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { values } = parseArgs({ options: { playwright: { type: 'string' }, edge: { type: 'string' } } });
-  const result = await runWidgetQa(values); console.log(JSON.stringify({ checks: result.checks, clockFonts: result.clockFonts, fitMetrics: result.fitMetrics, intlPerTick: result.intlPerTick }, null, 2));
+  const { values } = parseArgs({ options: { playwright: { type: 'string' }, edge: { type: 'string' }, 'status-only': { type: 'boolean' } } });
+  const result = await runWidgetQa({ ...values, statusOnly: values['status-only'] }); console.log(JSON.stringify({ checks: result.checks, clockFonts: result.clockFonts, fitMetrics: result.fitMetrics, intlPerTick: result.intlPerTick }, null, 2));
 }

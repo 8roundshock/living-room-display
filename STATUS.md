@@ -1,5 +1,58 @@
 # Project status
 
+## Optional atmosphere, holiday cards and hourly weather — 2026-11-04 (#575, #458, #452)
+
+[PR #576](https://github.com/8roundshock/living-room-display/pull/576) combines three
+features after a full 146-ticket backlog audit. Eighteen completed or superseded
+tickets were closed with evidence; remaining native, installation and performance
+acceptance stays tracked. The product decisions for #92/#107 are in `docs/product.md`.
+
+Style adds Off (default), Weather, Seasonal & holidays and Combined. Combined
+falls back to seasonal/holiday scenery when weather is quiet or unavailable;
+fresh notable current or near-forecast conditions take priority. Dim sparse
+motifs keep true black, with at most eight small SVG slots and finite staggered
+motion. System reduced motion and Animation Off remove the layer. Canada, Korea
+and Russia calendars share direct controls with optional Dynamic holiday cards;
+Korean lunar dates use verified Dangi, with an explicit degraded-runtime message.
+Dynamic severe weather now follows hourly instants instead of the daily worst
+code and distinguishes wind gust intervals and saved forecast age.
+
+The integrated production build/typechecks and 652 source tests pass. Synthetic
+browser verification covers appearance drafts, compact controls, holiday/weather
+scenes, real Dangi, slot restart/cadence and bounded compositor observations;
+final-head review and CI evidence are recorded on the PR. Default data retains
+the frozen rollback reader; non-default theme/calendar and enabled holiday-source
+exceptions are documented in `docs/install.md`. Source work changes no capture,
+native activation or installer code and establishes no new installed/native
+acceptance. The dated installation and TV evidence below keeps its original scope.
+
+The first Studio attempt exposed #577, a pre-existing disclosure-opening race:
+both the base and candidate briefly put Typography over the laid-out Swap places
+hit point while the native clipping boundary expands. The test now waits for
+that actual boundary, with a deterministic held-boundary regression. The original
+failure and baseline comparison remain recorded; a passing retry alone was not
+treated as resolution.
+
+The first full CI run on reviewed `15d142f` passed 24 of 26 browser suites but
+failed the default Style height budget and a Forecast secondary status-page wait.
+It was not merged or automatically rerun. The Style regression reproduced exactly
+at 1280×720 (512px content / 494px viewport). Extending the existing desktop
+redundant-heading treatment above Theme restores the default no-scroll layout,
+without reducing control targets or hiding phone headings; the new focused
+assertion rejects the old assets. Theme and daylight suites pass this correction
+with RAM-only control inspection. The #431 correction separates the secondary
+status browser context, fake clock and routed data from the main family fixture;
+the original harness fails its deterministic clock-isolation regression and the
+corrected bounded Forecast/Agenda matrix passes 117 cases. The exact original
+missing-node cause and broader #431 repeated-load acceptance remain open, with
+new failure diagnostics preserving the case, rendering state and request history.
+The isolated-clock full Widgets attempt later exposed a minute-only Air-quality
+test expectation after 767 seconds. Its hour/day wording and saved-reading age
+assertions now match actual elapsed time, with old/fixed boundary evidence and
+24 literal rendered boundary cases. The app's age formatting did not change.
+Earlier approvals are historical; corrected-head review and complete CI evidence
+belong to PR #576 rather than an assumption that the first failed run was harmless.
+
 ## Style creation and Settings follow-up — 2026-11-03 (#570, #571)
 
 The follow-up to #568 gives native select options explicit contrasting surfaces

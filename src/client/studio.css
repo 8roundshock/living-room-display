@@ -1932,7 +1932,7 @@ html.studio-editor {
   .studio summary { min-height: 44px; }
   .inspector-panel { padding-block: 14px 10px; }
   /* The Style tab already names this panel; keep its heading for assistive tech only. */
-  .inspector-panel > h2:has(+ .preset-list) {
+  .inspector-panel > h2:has(+ :is(.preset-list, .theme-controls)) {
     position: absolute;
     width: 1px;
     height: 1px;
