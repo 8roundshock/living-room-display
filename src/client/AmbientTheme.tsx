@@ -8,7 +8,7 @@ interface ThemeProps { scene: ThemeScene | null; animated: boolean; still?: bool
 
 /** Static editor art is explicit; disabled/reduced display motion never mounts a sequence. */
 export const AmbientTheme = memo(function AmbientTheme({ scene, animated, still = false, exclusions, layoutKey, inkRevision }: ThemeProps) {
-  return scene && (animated || still) ? <ThemeSequence key={`${scene.motif}:${still}:${layoutKey}`} scene={scene} still={still} exclusions={exclusions} inkRevision={inkRevision} /> : null;
+  return scene && (animated || still) ? <ThemeSequence key={`${scene.motif}:${scene.quiet}:${still}:${layoutKey}`} scene={scene} still={still} exclusions={exclusions} inkRevision={inkRevision} /> : null;
 });
 
 /** Finite transform/opacity animations. Placement reads only at slot renewal or resize. */
@@ -51,10 +51,10 @@ function ThemeSequence({ scene, still, exclusions, inkRevision }: { scene: Theme
           if (next.some(mark => mark.generation === generation)) continue;
           // A feature returns every third birth. The intervening companions cycle
           // through distinct forms/colours rather than all becoming tiny veins.
-          const feature = definition.group !== 'Weather' && generation % 3 === 0;
-          const artIndex = feature || definition.art.length === 1 ? 0 : definition.group === 'Weather' ? generation % definition.art.length : 1 + (Math.floor(generation / 3) * 2 + generation % 3 - 1) % (definition.art.length - 1);
+          const feature = generation % 3 === 0;
+          const artIndex = feature || definition.art.length === 1 ? 0 : 1 + (Math.floor(generation / 3) * 2 + generation % 3 - 1) % (definition.art.length - 1);
           const art = definition.art[artIndex]!;
-          const size = Math.min(width, height) * definition.size / 100 * (feature || definition.group === 'Weather' ? 1 : [.44, .55, .65][generation % 3]!);
+          const size = Math.min(width, height) * definition.size / 100 * (feature ? 1 : (definition.group === 'Weather' ? [.75, .7, .85] : [.44, .55, .65])[generation % 3]!);
           const scale = (scene.quiet ? QUIET_THEME.motionScale : 1) * (.8 + generation % 3 * .1);
           const motion = art.motion ?? definition.motion;
           const mirror = ['sway', 'flutter', 'rise', 'snow'].includes(motion) && generation % 2 ? -1 : 1;

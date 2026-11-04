@@ -6,8 +6,9 @@
 .theme-mark .theme-companion { color: var(--theme-companion); stroke-width: clamp(1px, .16cqmin, 3.2px); }
 .theme-mark .theme-accent { color: var(--theme-accent); stroke-width: clamp(1.1px, .18cqmin, 3.6px); }
 .theme-mark .theme-wash { fill: var(--theme-tint); stroke: none; opacity: .13; }
-.ambient-theme[data-theme-source='weather'] .theme-mark path { stroke-width: clamp(1px, .15cqmin, 3px); }
+.ambient-theme[data-theme-source='weather'] .theme-mark path { stroke-width: clamp(1.3px, .24cqmin, 4.8px); }
 .ambient-theme[data-theme-quiet] { opacity: calc(var(--ambient-brightness, .55) * .38); }
+.ambient-theme[data-theme-quiet] .theme-mark path { stroke-width: clamp(1px, .16cqmin, 3.2px); }
 .ambient-theme[data-theme-quiet] .theme-wash { display: none; }
 .ambient-theme[data-theme-still] .theme-mark { animation: none; opacity: 1; }
 @keyframes theme-travel {

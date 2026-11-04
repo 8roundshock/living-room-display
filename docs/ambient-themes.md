@@ -37,6 +37,10 @@ vignettes. Global brightness stays authoritative; compare at 26% and 36% rather
 than raising saved settings. A feature form recurs every third seasonal birth,
 with distinct smaller companions between it. Winter crystals, summer flowers,
 Maslenitsa pancake stacks and geometric Pascha eggs improve silhouette identity.
+The first visual pass found weather still disproportionately faint; the second
+uses a broader feature every third birth, smaller companions and stronger coloured
+strokes. Rain has droplets/ripples and streaks, snow readable crystal groups,
+storms curled cloud/rain, fog three separated ribbons and wind leaves/currents.
 
 One bounded layer sits behind widgets. Its larger contours stay dim against true
 black, without full-screen fills, blur, persistent borders, lightning flashes or
@@ -85,8 +89,8 @@ slots renew one at a time every 1.2 seconds, nine seasonal/holiday slots every
 slots at four-second intervals, neutral colour, no fills and reduced travel.
 A slot lives 14.4–16 seconds,
 so it becomes invisible before replacement. Initial marks fade in individually;
-motif changes and motion resumption start a fresh sequence. Only a few marks are
-visible at once. This provides continuous atmosphere without a per-frame
+motif changes, quiet-day transitions and motion resumption start a fresh sequence.
+Several forms stay visible at once. This provides continuous atmosphere without a per-frame
 JavaScript loop; it does not claim zero continuous GPU work or unchanged energy use.
 The normal editor immediately shows a representative still scene when enabled
 and motion is allowed; Preview movement runs the same finite sequence. Animation
@@ -130,14 +134,20 @@ dates/weather. It verifies Save/Cancel, shared calendar controls, 44px keyboard
 targets, 320/390px and short editors, holiday/weather geometry at 1080p and 4K,
 reduced-motion behavior, steady/initial slot lifetimes and real browser Dangi.
 Its optional images are returned in RAM, never saved. Bounded CDP samples compare
-active atmosphere with motion off; the general performance budget remains #364.
+active atmosphere with motion off. Faster births use the prior allowance of 15
+style recalculations per two renewals (rounded up), with five while idle; the
+4.2-second sample also caps renewals, task time, layout, paint and layer count.
+A deliberate per-frame style invalidation must fail that budget. This is a
+per-renewal adaptation, not an unchanged absolute work allowance; the general
+performance budget remains #364.
 Calendar and weather units exercise lunar dates, lead-window expiry, stale data,
 hourly hazards, DST and gust intervals. Persistence checks retain the frozen reader.
 Canvas preview control changes also run the existing `workspace` browser suite
 for alert clearance, dirty-state and scroll interactions alongside `themes`.
 
 The original foundation's review/CI evidence belongs to [PR #576](https://github.com/8roundshock/living-room-display/pull/576).
-The cultural refinement's current-head visual review, focused regressions and CI
-belong to [PR #581](https://github.com/8roundshock/living-room-display/pull/581).
+The cultural refinement's review and CI belong to [PR #581](https://github.com/8roundshock/living-room-display/pull/581).
+The richer styling pass's all-scene comparisons, focused regressions and current-head
+review/CI belong to [PR #583](https://github.com/8roundshock/living-room-display/pull/583).
 These are source checks; the theme suite establishes no installation or
 native/physical-TV acceptance.
