@@ -46,6 +46,10 @@ the original harness fails its deterministic clock-isolation regression and the
 corrected bounded Forecast/Agenda matrix passes 117 cases. The exact original
 missing-node cause and broader #431 repeated-load acceptance remain open, with
 new failure diagnostics preserving the case, rendering state and request history.
+The isolated-clock full Widgets attempt later exposed a minute-only Air-quality
+test expectation after 767 seconds. Its hour/day wording and saved-reading age
+assertions now match actual elapsed time, with old/fixed boundary evidence and
+24 literal rendered boundary cases. The app's age formatting did not change.
 Earlier approvals are historical; corrected-head review and complete CI evidence
 belong to PR #576 rather than an assumption that the first failed run was harmless.
 

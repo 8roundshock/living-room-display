@@ -163,6 +163,11 @@ and Agenda family/status cases across all densities and 720p/1080p/4K, for a bou
 check of the previously failing stage. It supplements the full suite; it does not
 replace full widget coverage or #431's repeated-load acceptance.
 
+Air-quality age assertions follow the public minutes/hours/days wording even when
+other family checks have advanced the main clock. Literal boundary renders cover
+59/60/69 minutes and one/two days; the saved-reading assertion uses its actual
+elapsed age rather than assuming the fixture is still within the first hour.
+
 ## Browser suites
 
 The movement-preview mode-reset step (#537) waits for both the native range and
