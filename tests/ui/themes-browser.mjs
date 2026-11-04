@@ -12,6 +12,7 @@ import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
+import { waitForNativeRender } from './lib/native-render.mjs';
 
 export async function runThemesQa({ playwright, edge, capture = false } = {}) {
   const started = Date.now(), { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -44,6 +45,9 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
   }
   try {
     await open(); assert.equal(await page.locator('.ambient-theme').count(),0);
+    await waitForNativeRender(page);
+    const defaultFit=await page.locator('.inspector-panel').evaluate(panel=>({client:panel.clientHeight,scroll:panel.scrollHeight}));
+    assert.ok(defaultFit.scroll<=defaultFit.client+1,`Default Style fits at1280x720: ${JSON.stringify(defaultFit)}`);
     const choice=page.getByRole('combobox',{name:'Theme',exact:true}); await choice.selectOption('combined');
     await button('Save changes').waitFor(); assert.equal(saved().appearance.theme.mode,'off');
     assert.equal(await page.getByRole('checkbox',{name:'Canada',exact:true}).isChecked(),true);

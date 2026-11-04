@@ -33,6 +33,17 @@ that actual boundary, with a deterministic held-boundary regression. The origina
 failure and baseline comparison remain recorded; a passing retry alone was not
 treated as resolution.
 
+The first full CI run on reviewed `15d142f` passed 24 of 26 browser suites but
+failed the default Style height budget and a Forecast secondary status-page wait.
+It was not merged or automatically rerun. The Style regression reproduced exactly
+at 1280×720 (512px content / 494px viewport). Extending the existing desktop
+redundant-heading treatment above Theme restores the default no-scroll layout,
+without reducing control targets or hiding phone headings; the new focused
+assertion rejects the old assets. Theme and daylight suites pass this correction
+with RAM-only control inspection. Forecast readiness is being handled under #431;
+prior approvals remain historical until the corrected head is reviewed and its
+complete applicable CI passes.
+
 ## Style creation and Settings follow-up — 2026-11-03 (#570, #571)
 
 The follow-up to #568 gives native select options explicit contrasting surfaces
