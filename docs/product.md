@@ -12,6 +12,10 @@ is retired; unfinished acceptance in #7, #532, #156 and #446 remains open.
 Whole-screen weather, seasonal/holiday and combined atmosphere is tracked in #575,
 with accurate hourly forecast timing (#452) and optional holiday cards (#458).
 See [theme design and compatibility](ambient-themes.md).
+The #579 refinement separates major visual celebrations from factual holiday
+cards, uses larger sparse original contours, and makes the normal editor's
+enabled atmosphere visible as a still sample. Try a scene is a labelled local
+illustration; it never changes the saved display, information time or weather.
 
 Source: owner's project brief and preview request, reviewed 2026-10-18. These
 requirements describe the intended product; [STATUS.md](../STATUS.md) records

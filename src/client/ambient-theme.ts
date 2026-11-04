@@ -1,24 +1,20 @@
 import type { Settings, WeatherState } from '../shared/contracts.ts';
-import { holidayWindow, seasonForDate, type HolidayThemeKey, type Season } from '../shared/holidays.ts';
+import { holidayWindow, seasonForDate } from '../shared/holidays.ts';
 import { defaultTheme } from '../shared/themes.ts';
+import { QUIET_PALETTE, THEME_SCENES, THEME_CLEARANCE_SECONDS, type ThemeSceneId } from '../shared/theme-registry.ts';
 import { DYNAMIC_THRESHOLDS } from './dynamic.ts';
 import { gustForecastSpells } from './weather-hazards.ts';
 
 export type WeatherMotif = 'rain' | 'snow' | 'storm' | 'fog' | 'wind';
-export type ThemeMotif = WeatherMotif | HolidayThemeKey | Season;
-export interface ThemeScene { motif: ThemeMotif; tint: string; label: string; source: 'weather' | 'season' | 'holiday'; holiday: string | null; forecast: boolean }
+export type ThemeMotif = ThemeSceneId;
+export interface ThemeScene { motif: ThemeMotif; tint: string; companion: string; label: string; source: 'weather' | 'season' | 'holiday'; holiday: string | null; forecast: boolean; quiet: boolean }
 const HOUR = 3_600_000;
 export const THEME_WEATHER_HORIZON = 3 * HOUR;
-export const THEME_ACTIVE_MS = 12_000;
-export const THEME_PARTICLES_MAX = 8;
+export { THEME_ACTIVE_MS, THEME_PARTICLES_MAX } from '../shared/theme-registry.ts';
 export function themeCadence(motif: ThemeMotif) {
-  if (motif === 'fog' || motif === 'remembrance') return { slots: 5, interval: 4000 };
-  if (['rain', 'snow', 'storm', 'wind'].includes(motif)) return { slots: 8, interval: 2000 };
-  return { slots: 6, interval: 3000 };
+  const { slots, interval } = THEME_SCENES[motif];
+  return { slots, interval };
 }
-const SEASON_TINT = { spring: '#718b7a', summer: '#8e875e', autumn: '#9a7459', winter: '#788b9f' };
-const HOLIDAY_TINT: Record<HolidayThemeKey, string> = { 'new-year': '#9a8a67', christmas: '#829780', halloween: '#a1744b', spring: '#9b7e91', harvest: '#aa8959', lanterns: '#a2836a', celebration: '#9299a5', remembrance: '#767f87' };
-const WEATHER_TINT: Record<WeatherMotif, string> = { rain: '#788ea3', snow: '#94a0ae', storm: '#7e829c', fog: '#78848b', wind: '#80958e' };
 const RANK: Record<WeatherMotif, number> = { storm: 5, snow: 4, rain: 3, wind: 2, fog: 1 };
 const WEATHER_LABEL: Record<WeatherMotif, string> = { rain: 'Rain', snow: 'Snow', storm: 'Storms', fog: 'Fog', wind: 'Wind' };
 
@@ -67,16 +63,26 @@ export function resolveTheme(settings: Settings, weather: WeatherState, now: Dat
   const seasonal = theme.mode === 'seasonal' || theme.mode === 'combined';
   const holiday = seasonal ? holidayWindow(civilDate, theme.calendars) : null;
   const season = seasonForDate(civilDate, settings.location.latitude < 0 ? 'south' : 'north');
-  const baseline: ThemeScene = holiday ? {
-    motif: holiday.observance.themeKey, tint: HOLIDAY_TINT[holiday.observance.themeKey],
-    label: `${holiday.observance.shortName}${holiday.phase === 'approaching' ? ' season' : ''}`,
-    source: 'holiday', holiday: holiday.observance.name, forecast: false,
-  } : { motif: season, tint: SEASON_TINT[season], label: `${season[0]!.toUpperCase()}${season.slice(1)}`, source: 'season', holiday: null, forecast: false };
+  const quiet = holiday?.policy.role === 'quiet';
+  const motif = holiday?.policy.role === 'major' ? holiday.policy.scene : season;
+  const palette = quiet ? QUIET_PALETTE : THEME_SCENES[motif].palette;
+  const baseline: ThemeScene = { motif, tint: palette[0], companion: palette[1],
+    label: holiday ? `${holiday.observance.shortName}${quiet ? ' · quiet season' : holiday.phase === 'approaching' ? ' season' : ''}` : THEME_SCENES[season].label,
+    source: holiday ? 'holiday' : 'season', holiday: holiday?.observance.name ?? null, forecast: false, quiet };
   const weatherEffect = theme.mode === 'weather' || theme.mode === 'combined' ? weatherScene(weather, settings, now.getTime(), disconnected) : null;
   if (!weatherEffect) return seasonal ? baseline : null;
-  return { motif: weatherEffect.motif, tint: theme.mode === 'combined' && holiday ? baseline.tint : WEATHER_TINT[weatherEffect.motif],
+  const weatherPalette = quiet ? QUIET_PALETTE : theme.mode === 'combined' && holiday ? palette : THEME_SCENES[weatherEffect.motif].palette;
+  return { motif: weatherEffect.motif, tint: weatherPalette[0], companion: weatherPalette[1], quiet,
     label: `${WEATHER_LABEL[weatherEffect.motif]}${weatherEffect.forecast ? ' expected soon' : ' now'}${holiday ? ` · ${holiday.observance.shortName}` : ''}`,
     source: 'weather', holiday: holiday?.observance.name ?? null, forecast: weatherEffect.forecast };
+}
+
+/** A local illustration only: never invent a date or modify forecast/settings to demonstrate art. */
+export function previewTheme(motif: ThemeSceneId): ThemeScene {
+  const definition = THEME_SCENES[motif];
+  return { motif, tint: definition.palette[0], companion: definition.palette[1], label: definition.label,
+    source: definition.group === 'Weather' ? 'weather' : definition.group === 'Seasons' ? 'season' : 'holiday',
+    holiday: null, forecast: false, quiet: false };
 }
 
 /** Stable nonrandom coordinates avoid hydration/layout jitter and vary each minute. */
@@ -84,4 +90,33 @@ export function themeParticle(index: number, cycle: number) {
   const seed = (index * 97 + ((cycle % 997) + 997) % 997 * 31) % 997;
   return { x: 3 + (seed * 73 % 997) / 997 * 91, y: 3 + (seed * 137 % 997) / 997 * 82,
     scale: 0.6 + (seed % 7) / 10, travel: 1.5 + (index % 5) * 0.7 };
+}
+
+export interface ThemeRect { left: number; top: number; right: number; bottom: number }
+/** A path is monotone between its waypoint boundaries. Sampling both sides also
+ * bounds step motion without reading layout on animation frames. */
+export function themeMotionTimes(seconds: number, interval: number, phase = 0, horizon = THEME_CLEARANCE_SECONDS): number[] {
+  const end = seconds + horizon, values = [seconds, end];
+  let boundary = (Math.floor(seconds / interval + phase) + 1 - phase) * interval;
+  for (; boundary <= end; boundary += interval) values.push(Math.max(seconds, boundary - .001), boundary);
+  return values;
+}
+/** Search bounded negative space, including a mark's motion envelope. A crowded layout
+ * may omit a mark; it never paints over a reading area to meet a decorative count. */
+export function placeThemeMark(index: number, cycle: number, width: number, height: number, size: number, exclusions: readonly ThemeRect[]) {
+  const inset = Math.min(width, height) * .012;
+  for (const factor of [1, .78, .6]) {
+    const extent = size * factor, travel = Math.max(width * .015, height * .025);
+    const envelope = extent * 1.12 + travel;
+    for (let candidate = 0; candidate < 54; candidate++) {
+      const point = themeParticle(index + candidate * 3, cycle + candidate * 17);
+      const left = inset + point.x / 100 * Math.max(0, width - envelope - inset * 2);
+      const top = inset + point.y / 100 * Math.max(0, height - envelope - inset * 2);
+      const box = { left: left - travel, top: top - travel, right: left + envelope, bottom: top + envelope };
+      if (box.left < 0 || box.top < 0 || box.right > width || box.bottom > height) continue;
+      if (exclusions.some(rect => box.left < rect.right && box.right > rect.left && box.top < rect.bottom && box.bottom > rect.top)) continue;
+      return { left, top, size: extent, box };
+    }
+  }
+  return null;
 }

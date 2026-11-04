@@ -50,7 +50,8 @@ import {
 } from './model';
 import { defaultDaylightRange } from './daylight';
 import { DaylightStatus } from './DaylightStatus';
-import { ThemeControls } from './ThemeControls';
+import { ThemeControls, ThemePreviewControls } from './ThemeControls';
+import type { ThemeSceneId } from '../shared/theme-registry';
 import {
   crowdedOutMessage,
   keepsSavedChanges,
@@ -313,6 +314,7 @@ export function Editor({
     );
   }
   const [movementPreview, setMovementPreview] = useState(false);
+  const [themePreview, setThemePreview] = useState<ThemeSceneId | null>(null);
   const [selectedWidget, setSelectedWidget] = useState<WidgetId | null>(null);
   const selectedRef = useRef<WidgetId | null>(null);
   useHeldPointers();
@@ -320,6 +322,7 @@ export function Editor({
   const [reveal, setReveal] = useState<InspectorReveal | null>(null);
   const [layoutEditing, setLayoutEditing] = useState(deepLink.add !== null),
     [pickerOpen, setPickerOpen] = useState(deepLink.add !== null);
+  useEffect(() => { if (layoutEditing) setThemePreview(null); }, [layoutEditing]);
   const pickerOpener = useRef<HTMLElement | null>(null);
   const [gridPreview, setGridPreview] = useState<WidgetGrid | null>(null);
   // Layout messages (#311, #341): one visible copy (the canvas line, or the Widgets list for an edit
@@ -363,6 +366,8 @@ export function Editor({
   }, [namingStyle]);
   const newStyleId = useRef<string | null>(null);
   const [builtinSelection, setBuiltinSelection] = useState('');
+  const themeChoice = JSON.stringify(draft.appearance.theme);
+  useLayoutEffect(() => { setThemePreview(null); }, [themeChoice, presetId, builtinSelection]);
   const [pendingStyle, setPendingStyle] = useState<string | null>(null);
   const [styleNotice, setStyleNotice] = useState('');
   const [confirmStyleDelete, setConfirmStyleDelete] = useState(false);
@@ -667,6 +672,7 @@ export function Editor({
   }, [dirty]);
   /** Puts the draft and its local editing state back to the saved settings. */
   function resetDraft() {
+    setThemePreview(null);
     cancelPhoto();
     updatePhoto(undefined);
     setGridPreview(null);
@@ -1169,6 +1175,7 @@ export function Editor({
   }
   /** A selection changes the visual draft; only the top Save action persists it. */
   function applyStyleChoice(choice: string, discard = false) {
+    setThemePreview(null);
     let next = structuredClone(draftRef.current);
     if (discard) { next = { ...next, ...getVisual(savedRef.current), savedPresets: structuredClone(savedRef.current.savedPresets) }; setDeletedStyle(null); }
     if (choice === 'create') {
@@ -1569,6 +1576,7 @@ export function Editor({
                 embedded
                 disconnected={connectionError !== null}
                 previewSeconds={movementPreview && !layoutEditing ? movementClock.seconds : undefined}
+                themePreview={themePreview}
                 layoutEditing={layoutEditing || !movementPreview}
                 gesture={gridGesture}
                 motionSurface={layoutEditing ? 'editing' : 'preview'}
@@ -1600,7 +1608,7 @@ export function Editor({
           </div>
           </div>
           <div className="canvas-toolbar">
-            {!layoutEditing && <span>{movementPreview ? 'Movement preview' : 'Layout preview'}</span>}
+            {!layoutEditing && <ThemePreviewControls value={themePreview} onChange={setThemePreview} motionAllowed={!editorReducedMotion && draft.appearance.animation !== 'off'} />}
             {layoutEditing ? (
               <label className="grid-density-control">
                 {/* #345: a short visible label; the select keeps its full accessible name. */}
@@ -1733,7 +1741,7 @@ export function Editor({
             {section === 'Style' && (
               <>
                 <h2>Make it yours</h2>
-                <ThemeControls settings={draft} weather={state.weather} saving={saving} disconnected={!!connectionError} onChange={theme => change(previous => withAppearance(previous, { theme }))} />
+                <ThemeControls settings={draft} weather={state.weather} saving={saving} disconnected={!!connectionError} onChange={theme => { setThemePreview(null); change(previous => withAppearance(previous, { theme })); }} />
                 {/* #439: Fixed (one level) or Follow daylight (Dimmest to Brightest, peaking at
                     solar noon). The mode sits on the label line, so the default Fixed tab keeps
                     its height at 1280×720. */}

@@ -11,7 +11,8 @@ import { MotionContext, usePrefersReducedMotion, type MotionState } from './useM
 import { useWakeLock } from './useWakeLock.ts';
 import { leaveDisplay, liveOpener } from './displayWindow.ts';
 import { AmbientTheme } from './AmbientTheme.tsx';
-import { resolveTheme } from './ambient-theme.ts';
+import { previewTheme, resolveTheme, themeMotionTimes, type ThemeRect } from './ambient-theme.ts';
+import { THEME_CLEARANCE_SECONDS, type ThemeSceneId } from '../shared/theme-registry.ts';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
 
 export interface WidgetGesture { id: WidgetId; x: number; y: number; width?: number; height?: number }
@@ -70,7 +71,7 @@ function inkSlack(area: HTMLElement, body: HTMLElement, fit: number): Slack {
 
 const snap = (value: number, dpr: number) => Math.round(value * dpr) / dpr;
 
-function Widget({ id, settings, children, index, revealOrder, style, registry }: { id: WidgetId; settings: Settings; children: ReactNode; index: number; revealOrder: number; style: CSSProperties; registry: FloatRegistry }) {
+function Widget({ id, settings, children, index, revealOrder, style, registry, onInkChange }: { id: WidgetId; settings: Settings; children: ReactNode; index: number; revealOrder: number; style: CSSProperties; registry: FloatRegistry; onInkChange: () => void }) {
   const region = useRef<HTMLElement>(null); const content = useRef<HTMLDivElement>(null); const [fit, setFit] = useState(1); const current = useRef(1);
   // Content first shown with the widget never animates; later insertions (a changed value, a new
   // reminder) may transition in through @starting-style once the widget has settled (#76).
@@ -87,7 +88,9 @@ function Widget({ id, settings, children, index, revealOrder, style, registry }:
   useLayoutEffect(() => {
     const area = region.current, body = content.current; if (!area || !body) return;
     const entry: FloatEntry = { section: area, slack: NO_SLACK, offset: null, measure: () => {
-      entry.slack = inkSlack(area, body, current.current);
+      const nextSlack = inkSlack(area, body, current.current);
+      const changed = (Object.keys(nextSlack) as (keyof Slack)[]).some(side => Math.abs(nextSlack[side] - entry.slack[side]) > .25);
+      entry.slack = nextSlack;
       // A longer line must not wait for the next float tick, or ease back through neighbouring
       // content for seconds (#479). Clamp now, in the same measurement that sees it grow.
       if (entry.offset) {
@@ -98,6 +101,7 @@ function Widget({ id, settings, children, index, revealOrder, style, registry }:
           entry.offset = safe;
         }
       }
+      if (changed) onInkChange();
     } };
     const update = () => {
       const computed = getComputedStyle(area);
@@ -123,7 +127,7 @@ function Widget({ id, settings, children, index, revealOrder, style, registry }:
     const mutation = new MutationObserver(update); mutation.observe(body, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     update();
     return () => { resize.disconnect(); mutation.disconnect(); refit.current = () => undefined; if (registry.get(id) === entry) registry.delete(id); };
-  }, [id, registry]);
+  }, [id, registry, onInkChange]);
   const { fontScale, fontFamily } = settings.appearance;
   const fontKey = useRef(`${fontScale}:${fontFamily}`);
   useLayoutEffect(() => {
@@ -160,7 +164,7 @@ export { dimSeconds } from '../shared/movementTimeline.ts';
 /** The lowest opacity a moving widget reaches; the plane itself always stays at 1. */
 export { SWAP_DIM } from '../shared/movementTimeline.ts';
 
-export function AmbientDisplay({ state, settings = state.settings, embedded = false, native = false, disconnected = false, compositionOverride, layoutEditing = false, photoPreview, gesture, motionSurface = 'editing', revealNonce, previewSeconds }: {
+export function AmbientDisplay({ state, settings = state.settings, embedded = false, native = false, disconnected = false, compositionOverride, layoutEditing = false, photoPreview, gesture, motionSurface = 'editing', revealNonce, previewSeconds, themePreview }: {
   state: AppState; settings?: Settings; embedded?: boolean; native?: boolean; disconnected?: boolean; compositionOverride?: number; layoutEditing?: boolean; photoPreview?: string | null; gesture?: WidgetGesture | null;
   /** Embedded canvases only: `editing` (the default) keeps widgets still; `preview` shows the draft Animation level. */
   motionSurface?: 'preview' | 'editing';
@@ -168,6 +172,8 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   revealNonce?: number;
   /** Editor-only movement clock. Never controls the live display, information time, or polling. */
   previewSeconds?: number;
+  /** Editor-only illustration. Never alters information time, actual weather or saved settings. */
+  themePreview?: ThemeSceneId | null;
 }) {
   const [now, setNow] = useState(() => new Date()); const [cycle, setCycle] = useState(0); const [interacting, setInteracting] = useState(false);
   // #436 Swap places without animation: the widgets about to move, dimmed (never below SWAP_DIM) while they move.
@@ -252,24 +258,37 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   // The latest render's values for timers that outlive it.
   const latestBoard = useRef({ grid, visible, cycle, composeFor });
   latestBoard.current = { grid, visible, cycle, composeFor };
+  const swapClock = useRef(0);
+  const nextSwapDeadline = useRef(0);
   // Swap places (#436): every interval the next composition (#395's variety) replaces the board. With a
   // glide the layout effect below animates it; otherwise the widgets that move dim first, move while
   // dimmed and brighten again. Nothing else changes opacity, so the screen never goes dark.
   useEffect(() => {
     if (!swapping) return;
+    swapClock.current = performance.now();
+    nextSwapDeadline.current = swapClock.current + motionIntervalSeconds * 1000;
+    const completeSwap = () => {
+      // Advance only when the pending dim actually commits its destination. A delayed
+      // timer leaves an overdue deadline, conservatively reserving that imminent move.
+      const elapsed = performance.now() - swapClock.current;
+      nextSwapDeadline.current = swapClock.current + (Math.floor(elapsed / (motionIntervalSeconds * 1000)) + 1) * motionIntervalSeconds * 1000;
+      setCycle(value => value + 1); setDimmed(NONE);
+    };
     let pending: number | undefined;
     const timer = window.setInterval(() => {
       window.clearTimeout(pending);
-      if (dimMs === 0) { setCycle(value => value + 1); return; }
+      if (dimMs === 0) { completeSwap(); return; }
       const board = latestBoard.current, next = board.composeFor(board.cycle + 1);
       setDimmed(new Set(board.visible.filter(id => board.grid.placements[id].column !== next.placements[id].column || board.grid.placements[id].row !== next.placements[id].row)));
-      pending = window.setTimeout(() => { setCycle(value => value + 1); setDimmed(NONE); }, dimMs);
+      pending = window.setTimeout(completeSwap, dimMs);
     }, motionIntervalSeconds * 1000);
     return () => { window.clearInterval(timer); window.clearTimeout(pending); setDimmed(NONE); };
   }, [swapping, dimMs, motionIntervalSeconds]);
 
   const plane = useRef<HTMLDivElement>(null), root = useRef<HTMLDivElement>(null);
   const registry = useRef<FloatRegistry>(new Map());
+  const [themeInkRevision, setThemeInkRevision] = useState(0);
+  const notifyThemeInk = useCallback(() => setThemeInkRevision(value => value + 1), []);
   // Glides in progress: a later change of settings or visibility snaps them to the new rectangles.
   const glides = useRef<Animation[]>([]);
   const shown = useRef<{ grid: WidgetGrid; cycle: number; layout: string } | null>(null);
@@ -508,6 +527,57 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   const animation = plan.valueTransitions ? plan.level : 'off';
   const themeMinute = Math.floor(now.getTime() / 60_000);
   const themeScene = useMemo(() => resolveTheme(settings, state.weather, new Date(themeMinute * 60_000), disconnected), [settings.appearance.theme, settings.location.latitude, settings.location.longitude, state.weather, disconnected, themeMinute]);
+  const themePreviewFrame = useRef({ time: previewTime, phase: previewFrame.phase, transition: previewFrame.transition });
+  themePreviewFrame.current = { time: previewTime, phase: previewFrame.phase, transition: previewFrame.transition };
+  const themePreviewBucket = controlled ? Math.floor(previewTime / 4) : 0;
+  const themeExclusions = useCallback((): ThemeRect[] => {
+    const bounds = root.current?.getBoundingClientRect(), board = plane.current; if (!bounds || !board) return [];
+    const boardBounds = board.getBoundingClientRect();
+    const boardX = boardBounds.left - bounds.left - board.offsetLeft, boardY = boardBounds.top - bounds.top - board.offsetTop;
+    const seconds = controlled ? themePreviewFrame.current.time : floatClock.current ? (performance.now() - floatClock.current.start) / 1000 : 0;
+    const boardPositions = themeMotionTimes(seconds, motionIntervalSeconds).map(at => {
+      const point = floating ? floatPath(at, motionIntervalSeconds) : stepPath(at, motionIntervalSeconds);
+      return { x: point.x * FLOAT_TRAVEL * bounds.width, y: point.y * FLOAT_TRAVEL * bounds.height };
+    });
+    const pendingPreviewSwap = controlled && themePreviewFrame.current.phase === 'dim' && effectiveCycle < themePreviewFrame.current.transition;
+    const nextSwapIn = controlled ? pendingPreviewSwap ? 0 : motionIntervalSeconds - themePreviewFrame.current.time % motionIntervalSeconds
+      : (nextSwapDeadline.current - performance.now()) / 1000;
+    const future = swapsAllowed && nextSwapIn <= THEME_CLEARANCE_SECONDS ? controlled ? previewBoard(effectiveCycle + 1) : latestBoard.current.composeFor(effectiveCycle + 1) : null;
+    const inTransit = controlled ? themePreviewFrame.current.phase !== 'still' : glides.current.some(animation => animation.playState === 'running');
+    return [...registry.current].map(([id, entry]) => {
+      const rect = entry.section.getBoundingClientRect(), style = getComputedStyle(entry.section);
+      const scale = rect.width / entry.section.clientWidth;
+      // Bound only the mark's lifetime, using the same waypoint functions as widget motion.
+      const margin = Math.min(bounds.width, bounds.height) * .018;
+      const ink = { left: rect.left - bounds.left + (parseFloat(style.paddingLeft) + entry.slack.left) * scale - margin,
+        top: rect.top - bounds.top + (parseFloat(style.paddingTop) + entry.slack.top) * scale - margin,
+        right: rect.right - bounds.left - (parseFloat(style.paddingRight) + entry.slack.right) * scale + margin,
+        bottom: rect.bottom - bounds.top - (parseFloat(style.paddingBottom) + entry.slack.bottom) * scale + margin };
+      if (layoutEditing) return ink;
+      const range = floatRange(entry.slack, bounds.width, bounds.height, window.devicePixelRatio || 1);
+      const offset = entry.offset ?? { x: 0, y: 0 };
+      const track = widgetTrack(WIDGET_IDS.indexOf(id));
+      const positions = themeMotionTimes(seconds, motionIntervalSeconds, floating ? track.phase : 0).map(at =>
+        widgetFloatTarget(at, motionIntervalSeconds, floating, track, range, entry.slack, window.devicePixelRatio || 1));
+      const loX = Math.min(boardX, ...boardPositions.map(point => point.x)) + Math.min(offset.x, ...positions.map(point => point.x));
+      const hiX = Math.max(boardX, ...boardPositions.map(point => point.x)) + Math.max(offset.x, ...positions.map(point => point.x));
+      const loY = Math.min(boardY, ...boardPositions.map(point => point.y)) + Math.min(offset.y, ...positions.map(point => point.y));
+      const hiY = Math.max(boardY, ...boardPositions.map(point => point.y)) + Math.max(offset.y, ...positions.map(point => point.y));
+      const box = { left: ink.left - boardX - offset.x + loX - 1, right: ink.right - boardX - offset.x + hiX + 1,
+        top: ink.top - boardY - offset.y + loY - 1, bottom: ink.bottom - boardY - offset.y + hiY + 1 };
+      if (future || inTransit) {
+        // At most one swap can begin during a mark's life (minimum interval30s).
+        // Reserve the swept box through current/next cells, including a glide already in flight.
+        for (const placement of [getWidgetRect(grid, id), ...(future ? [getWidgetRect(future, id)] : [])]) {
+          box.left = Math.min(box.left, board.offsetLeft + placement.left / 100 * board.offsetWidth - FLOAT_TRAVEL * bounds.width - margin);
+          box.right = Math.max(box.right, board.offsetLeft + (placement.left + placement.width) / 100 * board.offsetWidth + FLOAT_TRAVEL * bounds.width + margin);
+          box.top = Math.min(box.top, board.offsetTop + placement.top / 100 * board.offsetHeight - FLOAT_TRAVEL * bounds.height - margin);
+          box.bottom = Math.max(box.bottom, board.offsetTop + (placement.top + placement.height) / 100 * board.offsetHeight + FLOAT_TRAVEL * bounds.height + margin);
+        }
+      }
+      return box;
+    });
+  }, [layoutEditing, swapsAllowed, controlled, previewBoard, effectiveCycle, grid, floating, motionIntervalSeconds, themePreviewBucket, previewFrame.phase, dimmed.size]);
 
   // Follow daylight (#439): one value per minute at the weather location. The ambient page glides to
   // it (widgets.css); editor canvases follow the draft at once. Fixed renders `brightness` unchanged.
@@ -546,7 +616,10 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       data-wake-lock={embedded ? undefined : wakeLock}
     >
       <MotionContext.Provider value={motion}>
-        <AmbientTheme scene={themeScene} animated={!reducedMotion && !layoutEditing && settings.appearance.animation !== 'off'} />
+        <AmbientTheme scene={embedded && themePreview ? previewTheme(themePreview) : themeScene}
+          animated={!reducedMotion && !layoutEditing && settings.appearance.animation !== 'off'}
+          still={embedded && layoutEditing && !reducedMotion && settings.appearance.animation !== 'off'}
+          exclusions={themeExclusions} layoutKey={layoutKey} inkRevision={themeInkRevision} />
         <div
           ref={plane}
           className={['ambient-content', 'widget-grid-plane', reveal.active ? 'revealing' : ''].filter(Boolean).join(' ')}
@@ -558,7 +631,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
             if (!visible.includes(id)) return null;
             const rect = getWidgetRect(grid, id); const Renderer = WIDGET_RENDERERS[id];
             const activeGesture = gesture?.id === id ? gesture : null;
-            return <Widget key={id} id={id} settings={settings} index={index} revealOrder={revealOrder.indexOf(id)} registry={registry.current} style={{
+            return <Widget key={id} id={id} settings={settings} index={index} revealOrder={revealOrder.indexOf(id)} registry={registry.current} onInkChange={notifyThemeInk} style={{
               left: `${rect.left}%`, top: `${rect.top}%`,
               width: activeGesture?.width === undefined ? `${rect.width}%` : `${activeGesture.width}px`,
               height: activeGesture?.height === undefined ? `${rect.height}%` : `${activeGesture.height}px`,

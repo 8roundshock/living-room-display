@@ -1,5 +1,52 @@
 # Project status
 
+## Cultural atmosphere refinement — 2026-11-04 (#579)
+
+Separate Canada, Korea and Russia research informed an explicit major-scene,
+card-only and quiet-day policy. Original larger contour compositions and the
+normal editor's still atmosphere preview now compile with a local Try a scene
+control. The central registry owns art, palette, cadence and holiday eligibility;
+the date module retains factual calendar records and calculations. Christmas's
+November 15 approach is an explicit product choice, not an official calendar rule.
+
+Both typechecks, the production build, all 661 source tests and 29 focused
+theme/calendar tests pass.
+The calendar worker compared all 12,900 factual observance records for 1900–2199
+against the base and found no date/content changes. The first independent RAM
+visual pass verified current-date preview and dark native menu contrast, then
+found a compact upward chooser clipped behind the sticky toolbar and delicate
+low-brightness contours. Compact controls now follow document flow and principal
+contours have a stronger hierarchy. Code review found ink-growth and pending
+step-swap clearance gaps; measured invalidation and bounded lifetime envelopes
+correct them. A blanket motion reserve initially hid default-board Christmas;
+the explicit browser assertion failed, and the lifetime-bounded correction now
+keeps all eleven tested scenes present at 1080p/4K. This was a fix, not a blind retry.
+
+The isolated theme suite covers demonstrations, compact controls, typography
+growth, 30-second floating/step swaps, finite slot lifetimes and bounded ongoing
+work. Its first corrected candidate exceeded the style-recalculation limit by
+one (16 against 15). Keeping one resize observer per mounted scene removes the
+duplicate initial callback on each slot renewal; the completed ten-group suite
+then passed with the original limit (2 layouts, 15 style recalculations, about
+15 ms main-thread work, zero paints and 23 layers in the 4.2-second active sample).
+Swap assertions explicitly seek CSS ages, require visible marks, and include a
+deliberate overlap negative control. Corrected-head independent visual/code review and CI belong to
+[PR #581](https://github.com/8roundshock/living-room-display/pull/581). No
+installation, capture or native behavior changed.
+
+Full CI on `c172589` passed 25 browser suites, including themes, but Workspace
+mistook the closed scene disclosure's hidden select for a visible control: the
+native element retained a layout box although only its summary was exposed.
+The correction excludes only descendants hidden by closed disclosures and adds
+the visible summary to the existing overlap and centre-hit checks. Open select
+and Automatic controls, selected-but-collapsed state, storage/action alerts and
+an opaque-control negative check guard against reduced coverage. The theme skill
+and contract now require Workspace alongside themes for canvas-control changes.
+The corrected full Workspace suite passes across its desktop, phone and short
+viewports; the original geometry/centre-hit assertions remain intact. A compact
+action-alert scroll probe found no real preview-control overlap, so this follow-up
+changes the test's native-disclosure handling rather than production UI behavior.
+
 ## Optional atmosphere, holiday cards and hourly weather — 2026-11-04 (#575, #458, #452)
 
 [PR #576](https://github.com/8roundshock/living-room-display/pull/576) combines three
