@@ -55,7 +55,7 @@ function reminder(dueAt: number | null, text = 'Synthetic reminder', completed =
   return { id: `00000000-0000-4000-8000-${String(reminderId).padStart(12, '0')}`, text, completed, dueAt: dueAt === null ? null : iso(dueAt), createdAt: iso(NOW - 2 * 86_400_000), updatedAt: iso(NOW - 86_400_000) };
 }
 const countdown = (id: string, date: string, title = 'Synthetic date'): CountdownEvent => ({ id: `7a1c0d4e-0000-4000-8000-${id.padStart(12, '0')}`, title, date, repeatsYearly: false });
-const ALL = { weather: true, alerts: true, air: true, sky: true, personal: true };
+const ALL = { weather: true, alerts: true, air: true, sky: true, personal: true, holidays: false };
 function input(overrides: Partial<DynamicInput> = {}): DynamicInput {
   return { weather: weather(), airQuality: air(), alerts: alerts([]), reminders: [], countdowns: [], sources: ALL, onBoard: {}, clockFormat: '12h', airScale: 'us', now: NOW, disconnected: false, localTimeZone: TZ, ...overrides };
 }
@@ -63,6 +63,46 @@ const all = (signals: DynamicSignals) => [...signals.alert, ...signals.focus, ..
 const find = (signals: DynamicSignals, id: string) => all(signals).find(card => card.id === id);
 const kinds = (signals: DynamicSignals) => all(signals).map(card => card.kind);
 const signal = (overrides: Partial<DynamicInput> = {}) => dynamicSignals(input(overrides));
+
+test('holiday cards are opt-in, use selected calendars and local dates, and never become official alerts', () => {
+  const now = Date.parse('2026-12-25T02:00:00Z'); // Still Christmas Eve in Toronto.
+  assert.equal(all(signal({ now })).some(card => card.source === 'holidays'), false);
+  const holidays = signal({ now, sources: { ...ALL, holidays: true }, holidayCalendars: ['CA', 'KR'] });
+  const cards = all(holidays).filter(card => card.source === 'holidays');
+  assert.equal(cards.length, 1, 'same Christmas date combines selected calendars');
+  assert.deepEqual([cards[0]!.headline, cards[0]!.detail, cards[0]!.provenance], ['Christmas', 'Tomorrow', 'Canada\u00a0·\u00a0Korea']);
+  assert.equal(cards[0]!.official, undefined);
+  assert.equal(soundsOfficial(cards[0]!.headline), false);
+  const seoul = all(signal({ now, localTimeZone: 'Asia/Seoul', sources: { ...ALL, holidays: true }, holidayCalendars: ['KR'] })).filter(card => card.source === 'holidays');
+  assert.deepEqual([seoul[0]!.headline, seoul[0]!.detail], ['Christmas', 'Today'], 'computer date, not saved weather location date');
+  assert.equal(all(signal({ now, sources: { ...ALL, holidays: true }, holidayCalendars: [] })).some(card => card.source === 'holidays'), false);
+});
+
+test('holiday cards cross New Year, cover the Korean three-day period and expire without stale claims', () => {
+  const just = (date: string, calendars: DynamicInput['holidayCalendars']) => all(signal({ now: Date.parse(`${date}T17:00:00Z`),
+    sources: { weather: false, alerts: false, air: false, sky: false, personal: false, holidays: true }, holidayCalendars: calendars }));
+  assert.equal(just('2026-12-31', ['CA'])[0]!.detail, 'Tomorrow');
+  assert.equal(just('2027-01-01', ['CA'])[0]!.detail, 'Today');
+  assert.deepEqual(just('2027-01-02', ['CA']), []);
+  assert.equal(just('2027-02-05', ['KR'])[0]!.headline, 'Seollal');
+  assert.equal(just('2027-02-05', ['KR'])[0]!.detail, 'Tomorrow');
+  for (const date of ['2027-02-06', '2027-02-07', '2027-02-08']) assert.equal(just(date, ['KR'])[0]!.detail, 'Today');
+  assert.deepEqual(just('2027-02-09', ['KR']), []);
+  assert.equal(just('2026-11-11', ['CA'])[0]!.kicker, 'Observance');
+});
+
+test('holidays cannot displace hazards or reminders and calendar changes invalidate memoized signals', () => {
+  const value = input({ now: Date.parse('2026-12-25T17:00:00Z'), sources: { ...ALL, holidays: true }, holidayCalendars: ['CA'] });
+  const memo = memoizeDynamicSignals(), first = memo(value);
+  assert.equal(memo(value), first);
+  const changed = memo({ ...value, holidayCalendars: [] });
+  assert.notEqual(changed, first);
+  assert.equal(all(changed).some(card => card.source === 'holidays'), false);
+  const due = { ...reminder(value.now + MINUTE), text: 'Synthetic urgent item' };
+  assert.equal(chooseDynamic(dynamicSignals({ ...value, reminders: [due] }), 0, null, 0).lead?.source, 'personal');
+  const liveWeather = weather({ now: value.now, updatedAt: value.now, current: { weatherCode: 95 } });
+  assert.equal(chooseDynamic(dynamicSignals({ ...value, weather: liveWeather }), 0, null, 0).lead?.source, 'weather');
+});
 
 test('each threshold fires at its value and not one step below, in metric and imperial', () => {
   for (const units of ['metric', 'imperial'] as const) {
@@ -176,7 +216,7 @@ test('air: estimate and last-known readings, off and unavailable; UV from upcomi
 });
 
 test('#511 exhausted saved sources stay visible instead of becoming an empty Dynamic widget', () => {
-  const only = (source: 'weather' | 'alerts' | 'air') => ({ weather: false, alerts: false, air: false, sky: false, personal: false, [source]: true });
+  const only = (source: 'weather' | 'alerts' | 'air') => ({ weather: false, alerts: false, air: false, sky: false, personal: false, holidays: false, [source]: true });
   const oldAir = NOW - 30 * HOUR, oldWeather = NOW - 8 * 24 * HOUR;
   const providers = {
     airQuality: { ...air({ status: 'stale', updatedAt: oldAir, start: oldAir - oldAir % HOUR }), error: 'Synthetic air outage' },
@@ -197,7 +237,7 @@ test('#511 exhausted saved sources stay visible instead of becoming an empty Dyn
     assert.equal(usable.mode, 'rotate', `${source}: an independent usable source still renders`);
     assert.equal(usable.lead?.source, 'sky');
   }
-  const combined = signal({ ...providers, sources: { weather: true, alerts: true, air: true, sky: false, personal: false } });
+  const combined = signal({ ...providers, sources: { weather: true, alerts: true, air: true, sky: false, personal: false, holidays: false } });
   assert.equal(chooseDynamic(combined, 0, null, 2).mode, 'unavailable', 'multiple exhausted saved sources also stay visible');
 
   const quiet = signal({ alerts: alerts([]), sources: only('alerts') });
@@ -322,7 +362,7 @@ test('chooseDynamic: tie-break, modulo, the latch, a new focus card breaking it,
   const urgent = signal({ onBoard: { weather: true, forecast: true }, reminders: [reminder(NOW + 20 * MINUTE)] });
   assert.equal(chooseDynamic(urgent, 5, { slot: 5, id: 'air:calm' }, 3).lead!.kind, 'reminder-soon', 'a new focus card replaces the lead at once');
   // Nothing at all: unavailable when a source is degraded, empty otherwise.
-  const nothing = input({ sources: { weather: false, alerts: false, air: false, sky: false, personal: true } });
+  const nothing = input({ sources: { weather: false, alerts: false, air: false, sky: false, personal: true, holidays: false } });
   assert.deepEqual(chooseDynamic(dynamicSignals(nothing), 0, null, 3), { mode: 'empty', lead: null, also: [], more: 0, position: null });
   assert.equal(chooseDynamic(dynamicSignals({ ...nothing, reminders: 'broken' as unknown as Reminder[] }), 0, null, 3).mode, 'unavailable');
   assert.equal(chooseDynamic(dynamicSignals({ ...nothing, sources: { ...nothing.sources, personal: false, weather: true }, weather: { ...weather(), status: 'unavailable', current: null, daily: [], hourly: [] } }), 0, null, 3).mode, 'unavailable');

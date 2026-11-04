@@ -1,4 +1,5 @@
 import type { AirQualityState, AlertsState, CountdownEvent, DynamicSources, Reminder, Settings, WeatherAlert, WeatherState, WidgetId } from '../shared/contracts.ts';
+import { HOLIDAY_REGIONS, HOLIDAY_REGION_NAMES, koreanCalendarAvailable, observancesForYear, shiftHolidayDate, type HolidayRegion } from '../shared/holidays.ts';
 import { AIR_CREDIT, SCALE_LABELS, aqiCategory, uvCategory } from './air-categories.ts';
 import { airAgeSegments, airReadingView, upcomingAirHours } from './airHourly.ts';
 import { addDays, civilDateKey, formatDuration, localTimeZone, moonPhase, nextMoonEvent, sunDay, zoneFormatter, type MoonPhase } from './astronomy.ts';
@@ -57,7 +58,7 @@ export type DynamicTone = 'water' | 'sun' | 'time' | 'personal' | 'sky';
 /** What the card's glyph slot draws; the renderer turns it into WeatherGlyph, Icon or MoonGlyph. */
 export type DynamicGlyph =
   | { kind: 'weather'; code: number; isDay: boolean }
-  | { kind: 'icon'; name: 'alert' | 'air' | 'wind' | 'sun' | 'sunrise' | 'moon' | 'check' | 'hourglass' | 'snow'; glyph?: 'sun' | 'moon' | 'snow' }
+  | { kind: 'icon'; name: 'alert' | 'air' | 'wind' | 'sun' | 'sunrise' | 'moon' | 'check' | 'hourglass' | 'snow' | 'calendar'; glyph?: 'sun' | 'moon' | 'snow' }
   | { kind: 'moon'; phase: MoonPhase; southern: boolean };
 export interface DynamicPhrase { text: string; caution: boolean }
 export interface DynamicCard {
@@ -127,6 +128,8 @@ export interface DynamicInput {
   disconnected: boolean;
   /** This computer's zone, for reminders and countdowns (defaults to the browser's). */
   localTimeZone?: string;
+  /** Same calendar choices as whole-screen themes, independent of whether those themes are enabled. */
+  holidayCalendars?: readonly HolidayRegion[];
 }
 
 const BANNED = /\b(warning|warnings|alert|alerts|watch|watches|advisory|advisories)\b/i;
@@ -579,6 +582,39 @@ function personalCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   return cards;
 }
 
+// ---- Offline holidays -------------------------------------------------------------------------------
+
+/** Holiday cards never displace a weather hazard, official alert or due reminder. */
+export const HOLIDAY_SCORES = { today: 760, tomorrow: 750 } as const;
+function holidayCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
+  if (!ctx.input.sources.holidays) return [];
+  const regions = ctx.input.holidayCalendars ?? HOLIDAY_REGIONS;
+  if (regions.includes('KR') && !koreanCalendarAvailable()) statuses.push({ source: 'holidays', text: 'Korean lunar dates unavailable', caution: true, smallRank: 6, degraded: true });
+  const today = civilDate(ctx.now, ctx.local), tomorrow = shiftHolidayDate(today, 1), year = Number(today.slice(0, 4));
+  const dates = [year, year + 1].flatMap(value => observancesForYear(value, regions));
+  const cards = new Map<string, DynamicCard>();
+  for (const observance of dates) {
+    const current = today >= observance.startDate && today <= observance.endDate;
+    if (!current && tomorrow !== observance.startDate) continue;
+    const when = current ? 'Today' : 'Tomorrow';
+    const key = `${observance.name}:${observance.date}`;
+    const existing = cards.get(key), country = HOLIDAY_REGION_NAMES[observance.region];
+    if (existing) {
+      existing.provenance = `${existing.provenance}${NBSP}·${NBSP}${country}`;
+      existing.provenanceShort = existing.provenance;
+      continue;
+    }
+    cards.set(key, card({
+      id: `holiday:${observance.id}:${observance.date}`, source: 'holidays', kind: current ? 'holiday-today' : 'holiday-tomorrow',
+      tier: 'notable', score: current ? HOLIDAY_SCORES.today : HOLIDAY_SCORES.tomorrow,
+      kicker: observance.kind === 'commemoration' ? 'Observance' : 'Holiday', headline: observance.name, compact: observance.shortName,
+      detail: when, time: when, glyph: { kind: 'icon', name: 'calendar' }, tone: 'time',
+      provenance: country, provenanceShort: country, label: `${observance.shortName} ${when.toLowerCase()}`,
+    }));
+  }
+  return [...cards.values()];
+}
+
 // ---- Signals, selection and rotation ----------------------------------------------------------------
 
 /** Calm order, and the widget whose presence on the board makes each one redundant. */
@@ -605,7 +641,7 @@ export function dynamicSignals(input: DynamicInput): DynamicSignals {
   };
   const statuses: DynamicStatus[] = [];
   if (input.disconnected) statuses.push({ source: 'connection', text: 'Offline', caution: true, smallRank: 0, degraded: true });
-  const cards = [...alertCards(ctx, statuses), ...weatherCards(ctx, statuses), ...airCards(ctx, statuses), ...skyCards(ctx), ...personalCards(ctx, statuses)];
+  const cards = [...alertCards(ctx, statuses), ...weatherCards(ctx, statuses), ...airCards(ctx, statuses), ...skyCards(ctx), ...personalCards(ctx, statuses), ...holidayCards(ctx, statuses)];
   const tier = (name: DynamicTier) => cards.filter(item => item.tier === name).sort(byRank);
   const calmCards = CALM_ORDER.flatMap(({ id }) => cards.filter(item => item.tier === 'calm' && item.id === id));
   const kept = calmCards.filter(item => !CALM_ORDER.find(entry => entry.id === item.id)!.skipWith.some(widget => input.onBoard[widget]));
@@ -623,7 +659,7 @@ export function memoizeDynamicSignals(): (input: DynamicInput) => DynamicSignals
   let last: { key: unknown[]; value: DynamicSignals } | null = null;
   return input => {
     const minute = Math.floor(input.now / MINUTE);
-    const key = [input.weather, input.airQuality, input.alerts, input.reminders, input.countdowns, input.sources, input.onBoard, input.clockFormat, input.airScale, minute, input.disconnected, input.localTimeZone];
+    const key = [input.weather, input.airQuality, input.alerts, input.reminders, input.countdowns, input.sources, input.onBoard, input.clockFormat, input.airScale, minute, input.disconnected, input.localTimeZone, input.holidayCalendars];
     if (last && key.every((value, index) => Object.is(value, last!.key[index]))) return last.value;
     last = { key, value: dynamicSignals({ ...input, now: minute * MINUTE }) };
     return last.value;
