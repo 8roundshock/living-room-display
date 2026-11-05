@@ -1,6 +1,6 @@
 ---
 name: living-room-theme
-description: Add or refine Living Room Display whole-screen seasonal, cultural holiday or weather scenes, their date policy, artwork, motion or editor demonstrations. Use for this repository’s atmosphere layer, not individual widget implementation.
+description: Add or refine Living Room Display whole-screen seasonal, cultural holiday, birthday or weather scenes, their date policy, artwork, motion or editor demonstrations. Use for this repository’s atmosphere layer, not individual widget implementation.
 ---
 
 # Living Room Display themes
@@ -45,8 +45,9 @@ and system reduced motion retain their explicit behavior. No burn-in guarantee.
 Owner preference (#582, 2026-11-04): atmosphere should look visibly colourful,
 populated and alive at 26% brightness. Use distinct palette roles, multi-scale
 feature/companion forms and characteristic finite motion; a tiny opacity/count
-increase is insufficient. Keep black dominant and text clear. Compare all 23
-scenes at 26%/36% in RAM, with default/dense/empty boards and 1080p/4K samples.
+increase is insufficient. Keep black dominant and text clear. Compare affected
+scenes at 26%/36% in RAM, with default/dense/empty boards and 1080p/4K samples;
+complete styling passes compare every registered scene.
 Motion waypoints in the registry are shared by CSS transforms and placement
 bounds, including rotation and stroke extent; do not add unreserved transforms.
 

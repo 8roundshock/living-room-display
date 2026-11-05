@@ -849,6 +849,8 @@ API-only, and timer contents stay in the existing sidecar outside exports.
 
 An empty birthday list writes no key and remains compatible with the frozen
 previous reader. Nonempty global `settings.birthdays` is an opt-in exception:
-older strict readers reject this unknown key. Remove all entries and save twice
-to clear primary and backup, or restore the complete pre-update data copy.
+older strict readers reject this unknown key. Remove all entries and save, then
+make and save another intended settings change to rotate the old populated backup.
+Save is unavailable on an unchanged draft. Alternatively restore the complete
+pre-update data copy.
 Exports intentionally include populated birthdays as private user content.

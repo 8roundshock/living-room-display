@@ -185,6 +185,6 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
       </div>
       <p className="settings-status" role="status">{message}</p>
     </main>
-    {dirty && <div className="settings-savebar">{draftProblem ? <span id="settings-draft-problem" role="status">{draftProblem}</span> : <span>Unsaved changes</span>}<button className="button small" disabled={saving} onClick={cancel}>Cancel</button><button ref={saveTrigger} className="button primary" disabled={saving || locating || !!draftProblem} aria-describedby={draftProblem ? 'settings-draft-problem' : undefined} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
+    {dirty && <div className="settings-savebar">{draftProblem ? <span id="settings-draft-problem" role="status">Check birthday details</span> : <span>Unsaved changes</span>}<button className="button small" disabled={saving} onClick={cancel}>Cancel</button><button ref={saveTrigger} className="button primary" disabled={saving || locating || !!draftProblem} aria-describedby={draftProblem ? 'settings-draft-problem' : undefined} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
   </div>;
 }

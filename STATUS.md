@@ -1,5 +1,37 @@
 # Project status
 
+## Optional annual birthday themes — 2026-11-04 (#584)
+
+The source candidate adds a global private birthday list in Settings, with
+ordinary Save/Cancel, month/day controls, three treatments and no birth year.
+Three original birthday-first cake/balloon/gift scenes use subtle textile-inspired
+Russian or Korean accents. Exact quiet dates and Combined weather retain priority;
+annual dates and same-day collisions have explicit policy. Empty lists are omitted
+at rest; populated lists are an older-reader rollback exception. Museum sources
+and extension rules are in the theme contract. Build/typechecks and focused
+resolver/draft/data/compatibility tests pass. The first full source run caught a
+missing birthday declaration in the required omission inventory; the correction
+passes all 17 rollback tests against the unchanged frozen reader. Author RAM
+inspection caught and corrected an inherited disclosure-label style. Browser,
+independent visual and final-head review/CI evidence belongs to
+[PR #585](https://github.com/8roundshock/living-room-display/pull/585).
+No installed/native/capture behavior or actual personal data changes in this work.
+
+All 674 source tests pass. Independent code review found a missing birthday input
+in the display's scene memo; the fixed-minute browser regression fails the first
+checkpoint and passes the correction while weather/theme identities stay fixed.
+The complete themes suite passes 11 groups in 73 seconds, including all 26 scenes,
+actual motion phases, birthday demonstration isolation and quiet-date precedence.
+Its active sample has 3 renewals/layouts, 22 style recalculations, 26.5ms task time,
+zero paints and 31 layers; the 40-frame negative control is rejected. Settings
+passes 16 groups, including compact date validation, field-only writes, Cancel,
+concurrent list/field merging and failed-save retry. The first independent RAM
+visual pass accepted the three birthday-first treatments at 26%/36%, default and
+dense 4K, but found a cramped 109px phone validation bar. A concise global cue
+keeps full reasons beside the fields; corrected visual review and final CI remain
+recorded on the PR rather than inferred from the first pass.
+The complete Workspace suite also passes its alert/dirty-state/scroll checks.
+
 ## Richer atmosphere styling — 2026-11-04 (#582)
 
 The owner requested a complete richer pass after #579: more colour, more visible

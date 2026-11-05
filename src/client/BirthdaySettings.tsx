@@ -21,6 +21,7 @@ export function BirthdaySettings({ entries, onChange }: { entries: BirthdayEntry
   return <details className="birthday-settings">
     <summary id="settings-birthdays"><strong>Birthdays</strong>{entries.length > 0 && <span className="birthday-count">{entries.length}</span>}</summary>
     <p className="muted">Annual birthday scenes appear with Seasonal &amp; holidays or Combined. Names and dates stay in your local settings and backups.</p>
+    {entries.length > BIRTHDAY_LIMIT && <p className="birthday-problem" role="status">Up to {BIRTHDAY_LIMIT} birthdays. Remove an entry to save.</p>}
     {mixedDate && <p className="muted">Birthdays sharing a date use Classic when their treatments differ.</p>}
     <div className="birthday-list">{entries.map(entry => {
       const [month = '', day = ''] = entry.date.split('-'), editing = active === entry.id;
@@ -31,12 +32,14 @@ export function BirthdaySettings({ entries, onChange }: { entries: BirthdayEntry
           <strong>{entry.name.trim() || 'New birthday'}</strong><span>{dateLabel} · {BIRTHDAY_LABELS[entry.treatment]}</span>
         </button>
         {editing && <div id={`birthday-${entry.id}`} className="birthday-fields">
-          <label className="birthday-name"><span className="field-label">Name</span><input ref={nameInput} className="text-input" maxLength={60} value={entry.name} onChange={event => update(entry.id, { name: event.target.value })} /></label>
+          <label className="birthday-name"><span className="field-label">Name</span><input ref={nameInput} className="text-input" maxLength={60} value={entry.name} aria-invalid={!entry.name.trim() || undefined} aria-describedby={!entry.name.trim() ? `birthday-name-${entry.id}` : undefined} onChange={event => update(entry.id, { name: event.target.value })} /></label>
+          {!entry.name.trim() && <p className="birthday-problem" id={`birthday-name-${entry.id}`}>Enter a name.</p>}
           <div className="birthday-date-fields">
-            <label><span className="field-label">Month</span><select className="select-input" value={month} aria-invalid={invalidDate || undefined} aria-describedby={invalidDate ? `birthday-date-${entry.id}` : undefined} onChange={event => update(entry.id, { date: `${event.target.value}-${day}` })}><option value="">Month</option>{MONTHS.map((label, index) => <option key={label} value={pad(index + 1)}>{label}</option>)}</select></label>
-            <label><span className="field-label">Day</span><select className="select-input" value={day} aria-invalid={invalidDate || undefined} aria-describedby={invalidDate ? `birthday-date-${entry.id}` : undefined} onChange={event => update(entry.id, { date: `${month}-${event.target.value}` })}><option value="">Day</option>{Array.from({ length: 31 }, (_, index) => <option key={index} value={pad(index + 1)}>{index + 1}</option>)}</select></label>
+            <label><span className="field-label">Month</span><select className="select-input" value={month} aria-invalid={!validBirthdayDate(entry.date) || undefined} aria-describedby={!validBirthdayDate(entry.date) ? `birthday-date-${entry.id}` : undefined} onChange={event => update(entry.id, { date: `${event.target.value}-${day}` })}><option value="">Month</option>{MONTHS.map((label, index) => <option key={label} value={pad(index + 1)}>{label}</option>)}</select></label>
+            <label><span className="field-label">Day</span><select className="select-input" value={day} aria-invalid={!validBirthdayDate(entry.date) || undefined} aria-describedby={!validBirthdayDate(entry.date) ? `birthday-date-${entry.id}` : undefined} onChange={event => update(entry.id, { date: `${month}-${event.target.value}` })}><option value="">Day</option>{Array.from({ length: 31 }, (_, index) => <option key={index} value={pad(index + 1)}>{index + 1}</option>)}</select></label>
           </div>
           {invalidDate && <p className="birthday-problem" id={`birthday-date-${entry.id}`} role="status">This month does not have {Number(day)} days. Choose another day.</p>}
+          {(!month || !day) && <p className="birthday-problem" id={`birthday-date-${entry.id}`}>Choose a month and day.</p>}
           {entry.date === '02-29' && <p className="muted">February 29 birthdays appear only in leap years.</p>}
           <label><span className="field-label">Treatment</span><select className="select-input" value={entry.treatment} onChange={event => update(entry.id, { treatment: event.target.value as BirthdayEntry['treatment'] })}>{BIRTHDAY_TREATMENTS.map(value => <option key={value} value={value}>{BIRTHDAY_LABELS[value]}</option>)}</select></label>
           <button type="button" className="button small" onClick={() => { focusNew.current = 'add'; onChange(entries.filter(value => value.id !== entry.id)); setActive(null); }}>Remove from draft</button>

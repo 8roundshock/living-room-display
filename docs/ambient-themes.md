@@ -1,6 +1,6 @@
 # Ambient themes
 
-Work tracked in #582 (richer colour/composition/motion), following #579 and #575, with #452
+Work tracked in #584 (private annual birthdays), following #582 (richer colour/composition/motion), #579 and #575, with #452
 hourly weather and #458 holiday cards. Themes default to Off; existing selections
 are preserved. A theme is part of the visual style, so the editor
 preview, Save/Cancel, saved styles and scheduled styles share the same choice.
@@ -189,7 +189,14 @@ The central registry owns all three birthday scenes and treatment-to-scene mappi
 `shared/birthdays.ts` owns date validation and same-day treatment resolution.
 Top-level `settings.birthdays` is private local content included in explicit
 exports/backups. Empty entries are omitted at rest; nonempty entries are an
-explicit strict older-reader rollback exception. Remove them and save twice or
-restore the pre-update backup before rolling back. Frozen compatibility readers
+explicit strict older-reader rollback exception. Remove them and save, then make
+and save another intended settings change to rotate the old populated backup;
+alternatively restore the complete pre-update copy before rolling back. Frozen compatibility readers
 remain unchanged. Settings, themes and Workspace browser checks cover the new
 controls and previews; source checks do not establish installed/native acceptance.
+The birthday revision's visual/source review and CI belong to
+[PR #585](https://github.com/8roundshock/living-room-display/pull/585). Its display
+regression adds and removes a birthday within one minute while deliberately
+retaining weather/theme identities; it fails the first checkpoint's missing memo
+dependency and passes the correction. Compact validation keeps a short global
+cue and field-associated reasons, with cancellable and concurrent-edit checks.
