@@ -43,19 +43,32 @@ export function fitHabitatGroup(group: SceneArtGroup, patch: ScenePatch, box: Re
       top: box.y + Math.min(...corners.map(p => p.y)) * scale, bottom: box.y + Math.max(...corners.map(p => p.y)) * scale };
   };
   const fit = (bounds: SceneArtGroup['bounds']) => {
-    const swept = shape(bounds), rootY = box.y + group.pivot[1] * scale;
-    if (!patch.edge.startsWith('bottom')) return 1;
+    const swept = shape(bounds), rootY = box.y + group.pivot[1] * scale, rootX = box.x + group.pivot[0] * scale;
     const overlap = holes.filter(hole => hole.right > swept.left && hole.left < swept.right && hole.bottom > swept.top && hole.top < swept.bottom);
     if (!overlap.length) return 1;
-    const safeTop = Math.max(...overlap.map(hole => hole.bottom)) + 5;
-    return Math.max(0, Math.min(1, (rootY - safeTop) / Math.max(1, rootY - swept.top)));
+    let available: number, full: number;
+    if (patch.edge.startsWith('bottom')) {
+      available = rootY - Math.max(...overlap.map(hole => hole.bottom)) - 5; full = rootY - swept.top;
+    } else if (patch.edge.startsWith('top')) {
+      available = Math.min(...overlap.map(hole => hole.top)) - rootY - 5; full = swept.bottom - rootY;
+    } else if (patch.edge === 'left') {
+      available = Math.min(...overlap.map(hole => hole.left)) - rootX - 5; full = swept.right - rootX;
+    } else {
+      available = rootX - Math.max(...overlap.map(hole => hole.right)) - 5; full = rootX - swept.left;
+    }
+    return Math.max(0, Math.min(1, available / Math.max(1, full)));
   };
   let paths = group.paths, bounds = group.bounds, yScale = fit(bounds), compact = false;
   if (yScale < .78 && group.compact) {
     paths = group.compact.paths; bounds = group.compact.bounds; yScale = fit(bounds); compact = true;
   }
-  return { paths, compact, visible: yScale >= .65, yScale,
-    transform: `translate(0 ${group.pivot[1]}) scale(1 ${yScale}) translate(0 ${-group.pivot[1]})` };
+  const horizontal = patch.edge === 'left' || patch.edge === 'right';
+  // Botanical grass can shorten around its roots; other authored objects retain
+  // their natural ratio (a fitted cake/lantern must not become a flattened symbol).
+  const xScale = horizontal || group.motion !== 'grass' ? yScale : 1;
+  const actualY = !horizontal || group.motion !== 'grass' ? yScale : 1;
+  return { paths, compact, visible: yScale >= .65, yScale: actualY, xScale,
+    transform: `translate(${group.pivot[0]} ${group.pivot[1]}) scale(${xScale} ${actualY}) translate(${-group.pivot[0]} ${-group.pivot[1]})` };
 }
 
 /** Three related precipitation groups, not an independently scheduled icon set.
@@ -78,4 +91,18 @@ export function rainImpacts(width: number, height: number, group: number) {
     const x = rainLanding(width, group, index), y = height * .985;
     return `M${x - radius} ${y}q${radius} ${radius * .3} ${radius * 2} 0 M${x - radius * .65} ${y - radius * .3}q${radius * .65} ${-radius * .18} ${radius * 1.3} 0`;
   }).join(' ');
+}
+
+export function snowField(width: number, height: number, group: number, quiet = false) {
+  return Array.from({ length: quiet ? 3 : 7 }, (_, index) => {
+    const x = width * (.05 + ((index * .193 + group * .137) % .90));
+    const y = height * (.03 + ((index * .271 + group * .173) % .82));
+    const r = Math.min(width, height) * (.0025 + index % 3 * .0018);
+    return `M${x} ${y - r}v${r * 2} M${x - r * .86} ${y - r * .5}l${r * 1.72} ${r} M${x - r * .86} ${y + r * .5}l${r * 1.72} ${-r}`;
+  }).join(' ');
+}
+
+export function fogContour(width: number, height: number, group: number) {
+  const x = width * (.03 + group * .17), y = height * (.86 - group * .11), w = width * .42, h = height * .025;
+  return `M${x} ${y}c${w * .3} ${-h * 2} ${w * .62} ${h} ${w} 0 M${x + w * .09} ${y + h * .8}q${w * .4} ${-h} ${w * .78} ${h * .15}`;
 }

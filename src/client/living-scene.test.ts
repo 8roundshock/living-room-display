@@ -43,6 +43,19 @@ test('Wind strength changes related attached groups while quiet motion is smalle
   assert.equal(rainField(1920, 1080, 0).match(/M/g)?.length, 11);
   assert.notEqual(rainField(1920, 1080, 0), rainField(1920, 1080, 1));
 });
+test('Top and side habitats fit complete objects with their aspect ratio intact', () => {
+  const group = { id: 'whole-form', paths: [{ d: 'M0 0L100 100', tone: 0 as const }], motion: 'still' as const, pivot: [0, 0] as const, bounds: [0, 0, 100, 100] as const };
+  for (const edge of ['top-left', 'left'] as const) {
+    const patch = { id: edge, edge, width: .5, height: .5, viewBox: [100, 100] as const, depth: 'habitat' as const, groups: [group] };
+    const box = { x: 0, y: 0, width: 100, height: 100 };
+    const hole = edge === 'left' ? { left: 80, top: 0, right: 200, bottom: 200 } : { left: 0, top: 80, right: 200, bottom: 200 };
+    const fitted = fitHabitatGroup(group, patch, box, [hole], undefined, false);
+    assert.equal(fitted.visible, true);
+    assert.equal(fitted.xScale, fitted.yScale, 'objects scale uniformly instead of being flattened against an edge');
+    assert.ok(fitted.xScale > .7 && fitted.xScale < .8);
+    assert.equal(fitHabitatGroup(group, patch, box, [{ left: 0, top: 0, right: 200, bottom: 200 }], undefined, false).visible, false);
+  }
+});
 test('Combined rain adapts Summer; Weather stays neutral and stale data drops the adaptation', () => {
   const settings = defaultSettings(), now = new Date('2026-07-10T18:30:00Z');
   settings.appearance.theme = { mode: 'combined', calendars: [] };

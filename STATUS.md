@@ -1,12 +1,15 @@
 # Project status
 
-## Planned layered living scenes — 2026-11-04 (#586)
+## Layered living scenes in progress — 2026-11-04 (#586)
 
-Implementation has started with a Summer/rain vertical slice: original connected
-meadow geometry, shared attached-group motion, staggered local retreats and
-reading-space masking. Build/typechecks and existing resolver/calendar checks
-pass. The first actual whole-scene visual/performance gate is pending; the other
-25 compositions and optional foreground policy are not yet migrated or accepted.
+The Summer/rain composition passed the independent reuse gate after complete
+compact growth replaced clipped stems. All 26 scene compositions are now authored;
+Winter/snow, birthday families and the remaining inventory still need whole-frame
+visual acceptance. Top/side fitting preserves complete objects and natural ratios.
+A fast 30-second widget swap previously omitted the whole habitat for roughly
+15 seconds; an actual-ink destination reserve is under test. Optional foreground
+storage is opt-in and omitted by default; its passage implementation and visual
+acceptance remain incomplete.
 
 The first independent RAM pass found visible horizontal shearing where the
 reading mask cut tall grass. The correction fits each complete rooted group,
@@ -20,10 +23,10 @@ results are prototype evidence, not final all-scene acceptance or a new budget.
 
 The coordinator accepted the direction in the [layered scene plan](docs/layered-scene-plan.md):
 connected seasonal edges, shared environmental motion, integrated weather and
-rare bounded foreground passages across all 26 scenes. This is documented future
-work, not implemented artwork. [PR #587](https://github.com/8roundshock/living-room-display/pull/587)
-is documentation only; #586 stays open for the staged visual, performance and
-implementation gates. Current runtime behavior remains in the theme contract.
+rare bounded foreground passages across all 26 scenes. [PR #587](https://github.com/8roundshock/living-room-display/pull/587)
+contains the plan; draft [PR #588](https://github.com/8roundshock/living-room-display/pull/588)
+contains implementation. #586 stays open for the remaining visual, performance,
+review and authorized delivery gates. No all-scene or native acceptance is claimed.
 
 ## Optional annual birthday themes — 2026-11-04 (#584)
 

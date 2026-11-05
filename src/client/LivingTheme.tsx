@@ -2,7 +2,7 @@ import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProp
 import type { LivingSceneArt, ScenePath } from '../shared/living-scene-art';
 import { LIVING_SCENE_BUDGET } from '../shared/theme-registry';
 import type { ThemeRect, ThemeScene, WeatherMotif } from './ambient-theme';
-import { habitatBox, habitatMotion, fitHabitatGroup, patchPhase, rainField, rainImpacts } from './living-scene';
+import { habitatBox, habitatMotion, fitHabitatGroup, patchPhase, rainField, rainImpacts, snowField, fogContour } from './living-scene';
 import './living-scene.css';
 
 interface Props { scene: ThemeScene; art: LivingSceneArt; still: boolean; exclusions: () => readonly ThemeRect[]; inkRevision: number }
@@ -40,6 +40,7 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
   const { width, height, elapsed, holes } = frame;
   const palette = [scene.tint, scene.companion, scene.accent];
   const weather = scene.source === 'weather' ? scene.motif as WeatherMotif : undefined;
+  const atmosphere = weather ?? (scene.motif === 'winter' ? 'snow' : undefined);
   return <div ref={root} className="ambient-theme living-theme" aria-hidden="true" data-theme-motif={scene.motif}
     data-theme-habitat={scene.habitat ?? scene.motif} data-theme-source={scene.source} data-theme-quiet={scene.quiet || undefined}
     data-theme-still={still || undefined} data-scene-elapsed={elapsed} data-scene-revision={revision}>
@@ -58,6 +59,10 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
           {[0, 1, 2].map(index => <RainPhrase key={`${index}:${Math.floor(elapsed / LIVING_SCENE_BUDGET.life)}`} index={index}
             elapsed={elapsed % LIVING_SCENE_BUDGET.life} width={width} height={height} palette={palette} still={still} />)}
         </g>}
+        {(atmosphere === 'snow' || atmosphere === 'fog') && <g className="living-weather" data-scene-weather={atmosphere}>
+          {[0, 1, 2].map(index => <AirPhrase key={`${index}:${Math.floor(elapsed / LIVING_SCENE_BUDGET.life)}`} index={index}
+            elapsed={elapsed % LIVING_SCENE_BUDGET.life} width={width} height={height} palette={palette} kind={atmosphere} quiet={scene.quiet} />)}
+        </g>}
       </g>
     </svg>}
   </div>;
@@ -70,7 +75,9 @@ function HabitatPatch({ patch, box, initialAge, palette, weather, quiet, still, 
 }) {
   // Freeze the delay at this generation's mount. Geometry invalidation never restarts its age.
   const [age] = useState(initialAge);
+  const [born] = useState(() => performance.now());
   return <svg data-scene-patch={patch.id} data-scene-depth={patch.depth} data-scene-generation={generation}
+    data-scene-born={born}
     x={box.x} y={box.y} width={box.width} height={box.height} viewBox={`0 0 ${patch.viewBox[0]} ${patch.viewBox[1]}`} overflow="hidden"
     opacity={patch.opacity ?? (patch.depth === 'far' ? .48 : 1)}>
     <g className="living-patch-life" style={{ '--patch-life': `${LIVING_SCENE_BUDGET.life}ms`, '--patch-age': `-${age}ms` } as CSSProperties}>
@@ -90,9 +97,20 @@ function HabitatPatch({ patch, box, initialAge, palette, weather, quiet, still, 
   </svg>;
 }
 
+function AirPhrase({ index, elapsed, width, height, palette, kind, quiet }: { index: number; elapsed: number; width: number; height: number; palette: readonly string[]; kind: 'snow' | 'fog'; quiet: boolean }) {
+  const [age] = useState(elapsed);
+  const [born] = useState(() => performance.now());
+  return <g data-scene-born={born} className={`living-air living-${kind}`} style={{ '--air-age': `${-(age + index * 4000)}ms`, '--air-mid': `translate(${width * .008}px, ${kind === 'snow' ? height * .06 : height * .003}px)`,
+    '--air-end': `translate(${width * (kind === 'snow' ? -.006 : .026)}px, ${kind === 'snow' ? height * .12 : height * .006}px)` } as CSSProperties}>
+    <path d={kind === 'snow' ? snowField(width, height, index, quiet) : fogContour(width, height, index)} fill="none" stroke={palette[index]}
+      strokeWidth={Math.max(.5, Math.min(width, height) * (kind === 'snow' ? .0012 : .0018))} strokeLinecap="round" opacity={kind === 'snow' ? .85 : .6} />
+  </g>;
+}
+
 function RainPhrase({ index, elapsed, width, height, palette, still }: { index: number; elapsed: number; width: number; height: number; palette: readonly string[]; still: boolean }) {
   const [age] = useState(elapsed);
-  return <g style={{ '--rain-age': `${-(age + index * 1200)}ms`, '--rain-travel': `translate(${-height * .035}px, ${height * .105}px)` } as CSSProperties}>
+  const [born] = useState(() => performance.now());
+  return <g data-scene-born={born} style={{ '--rain-age': `${-(age + index * 1200)}ms`, '--rain-travel': `translate(${-height * .035}px, ${height * .105}px)` } as CSSProperties}>
     <g className="living-rain"><path d={rainField(width, height, index)} fill="none" stroke={palette[index % 2]} strokeWidth={Math.max(.6, Math.min(width, height) * .0015)} strokeLinecap="round" opacity={.75} /></g>
     <g className="living-ripple"><path d={rainImpacts(width, height, index)} fill="none" stroke={palette[2]} strokeWidth={Math.max(.5, Math.min(width, height) * .001)} strokeLinecap="round" opacity={.65} /></g>
   </g>;
