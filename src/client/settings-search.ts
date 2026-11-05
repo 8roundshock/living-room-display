@@ -6,6 +6,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   { id: 'time', label: 'Time format', section: 'Time & units', selector: '#settings-clock-format', terms: 'clock hours 12 24 am pm' },
   { id: 'screen', label: 'Keep the screen on', section: 'This device', selector: '.settings-device-card .toggle', terms: 'awake sleep power monitor display' },
   { id: 'schedule', label: 'Edit schedule', section: 'Schedule', selector: '#settings-schedule .schedule-disclosure > summary', terms: 'automatic styles weekday weekend morning night rules timetable' },
+  { id: 'birthdays', label: 'Birthdays', section: 'Birthdays', selector: '#settings-birthdays', terms: 'birthday annual celebration date russian korean classic' },
   { id: 'export', label: 'Export saved data', section: 'Data & recovery', selector: '#settings-recovery .data-actions a', terms: 'backup download save copy' },
   { id: 'restore', label: 'Restore from backup', section: 'Data & recovery', selector: '#settings-recovery .data-actions button', terms: 'import upload recover reset recovery' },
 ] as const;

@@ -29,9 +29,10 @@ export const AT_REST = { appearance: { accentMode: 'color', animation: 'subtle',
 /**
  * Top-level settings sections omitted at rest while they equal their defaults, like the widgetData
  * sections. `screen` (#436, Keep the screen on) is unknown to d66832b, so turning it off is a
- * documented rollback exception (docs/install.md).
+ * documented rollback exception (docs/install.md). Private birthdays (#584) are likewise omitted
+ * only while empty; an explicit backup with entries needs a reader that supports them.
  */
-export const DEFAULT_SECTIONS_AT_REST = ['screen'] as const;
+export const DEFAULT_SECTIONS_AT_REST = ['screen', 'birthdays'] as const;
 
 /** Settings as written to state.json, state.backup.json and exports: additive defaults omitted. */
 export type PersistableSettings = Record<string, unknown>;

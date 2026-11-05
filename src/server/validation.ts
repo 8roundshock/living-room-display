@@ -8,6 +8,7 @@ import { KEEP_DONE_MS, TIMER_ADD_MAX_MS, TIMER_LABEL_MAX, TIMER_LIMIT, TIMER_MAX
 import { checkPhotoUpload, photoAssetSchema, photoAssetShape } from './photo.ts';
 import { AT_REST } from './persistence.ts';
 import { defaultTheme, HOLIDAY_CALENDARS, THEME_MODES } from '../shared/themes.ts';
+import { BIRTHDAY_LIMIT, BIRTHDAY_TREATMENTS, validBirthdayDate } from '../shared/birthdays.ts';
 
 const widgetShape = <T>(factory: (id: WidgetId) => T) => Object.fromEntries(WIDGET_IDS.map(id => [id, factory(id)])) as Record<WidgetId, T>;
 function legacyWidgets(value: unknown) {
@@ -110,6 +111,9 @@ const countdown = z.object({ id: z.uuid(), title: z.string().trim().min(1).max(6
 const noteText = z.string().transform(value => value.replace(/\r\n?/g, '\n').trim())
   .pipe(z.string().max(200, 'Use at most 200 characters').refine(value => value.split('\n').length <= 4, 'Use at most 4 lines'));
 const uniqueIds = (items: { id: string }[]) => new Set(items.map(item => item.id)).size === items.length;
+const birthdays = z.array(z.object({ id: z.uuid(), name: z.string().trim().min(1).max(60),
+  date: z.string().refine(validBirthdayDate, 'Use a real month and day in MM-DD form'), treatment: z.enum(BIRTHDAY_TREATMENTS),
+}).strict()).max(BIRTHDAY_LIMIT).refine(uniqueIds, 'Birthday IDs must be unique');
 const worldClocks = z.array(worldClock).max(4).refine(uniqueIds, 'World clock IDs must be unique');
 const countdowns = z.array(countdown).max(12).refine(uniqueIds, 'Countdown IDs must be unique');
 const weekStart = z.enum(['locale', 'sunday', 'monday']);
@@ -159,6 +163,7 @@ export const settingsSchema = z.object({ ...visualShape, version: z.literal(1), 
   // Missing source means legacy/manual, so upgrades cannot replace an existing city.
   locationSource: z.enum(['device', 'manual', 'fallback']).default('manual'),
   units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets, widgetData, screen,
+  birthdays: birthdays.default([]),
 }).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(absorbRetiredWidgets).transform(value => {
   if (value.locationSource === 'fallback') return { ...value, location: defaultSettings().location };
   if (value.locationSource === 'device') return { ...value, location: {
@@ -191,6 +196,7 @@ export const settingsPatchSchema = z.object({
   preview: preview.partial().optional(), idle: idle.partial().optional(), savedPresets: savedPresets.optional(),
   widgetData: widgetDataPatch.optional(),
   screen: screenPatch.optional(),
+  birthdays: birthdays.optional(),
 }).strict();
 const dueAt = z.iso.datetime({ offset: true }).nullable();
 export const reminderInputSchema = z.object({ text: z.string().trim().min(1).max(240), dueAt: dueAt.optional() }).strict();

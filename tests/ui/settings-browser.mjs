@@ -126,6 +126,84 @@ export async function runSettingsQa({ playwright, edge, capture = false } = {}) 
     if (capture) { await page.evaluate(() => scrollTo(0, 0)); await page.waitForFunction(() => scrollY === 0); images.push({ name: 'settings-groups-desktop', bytes: await page.screenshot() }); }
     record('Section links focus their destinations without losing drafts, and time/units live in their own compact group');
 
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 320, height: 480 }, { width: 640, height: 300 }]) {
+      await open('/settings', viewport);
+      const search = page.getByRole('searchbox', { name: 'Find a setting', exact: true });
+      await search.fill('birthday'); await search.press('Enter');
+      assert.equal(await page.locator('#settings-birthdays').evaluate(element => element === document.activeElement), true);
+      assert.equal(await page.locator('.birthday-settings').getAttribute('open'), null, 'search only navigates');
+      assert.equal(saved().birthdays.length, 0);
+      await page.keyboard.press('Enter'); await button('Add birthday').click();
+      const name = page.getByRole('textbox', { name: 'Name', exact: true });
+      const month = page.getByRole('combobox', { name: 'Month', exact: true });
+      const day = page.getByRole('combobox', { name: 'Day', exact: true });
+      const treatment = page.getByRole('combobox', { name: 'Treatment', exact: true });
+      assert.equal(await name.evaluate(element => element === document.activeElement), true, 'Add focuses the new name');
+      assert.equal(await button('Save changes').isEnabled(), false, 'incomplete entry cannot save');
+      await name.fill('Birthday A'); await month.selectOption('02'); await day.selectOption('31');
+      await page.getByText('This month does not have 31 days. Choose another day.', { exact: true }).waitFor();
+      assert.equal(await day.inputValue(), '31', 'invalid day remains editable');
+      assert.equal(await button('Save changes').isEnabled(), false);
+      assert.ok((await page.locator('.settings-savebar').boundingBox()).height <= 80, 'concise birthday cue avoids the former109px compact error bar');
+      assert.match(await day.evaluate(element => document.getElementById(element.getAttribute('aria-describedby'))?.textContent), /31 days/, 'full date reason stays associated with the field');
+      await day.selectOption('29');
+      await page.getByText('February 29 birthdays appear only in leap years.', { exact: true }).waitFor();
+      await month.selectOption('06'); await day.selectOption('12'); await treatment.selectOption('korean');
+      assert.equal(await page.getByText('February 29 birthdays appear only in leap years.', { exact: true }).count(), 0);
+      for (const target of [name, month, day, treatment, button('Remove from draft'), button('Add birthday')]) {
+        await target.focus(); await reachable(target, `${viewport.width}: birthday control clears Save/Cancel`);
+        assert.ok((await target.boundingBox()).height >= 44, 'birthday targets stay44px');
+      }
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      assert.equal(saved().birthdays.length, 0, 'all entry edits stay draft-only');
+      if (capture) images.push({ name: `birthday-settings-${viewport.width}`, bytes: await page.screenshot() });
+      await button('Cancel').click(); await clean(); assert.equal(await page.locator('.birthday-entry').count(), 0);
+      await button('Add birthday').click(); await name.fill('Birthday A'); await month.selectOption('01'); await day.selectOption('10'); await treatment.selectOption('russian');
+      const patches = []; const collect = request => { if (new URL(request.url()).pathname === '/api/settings' && request.method() === 'PATCH') patches.push(request.postDataJSON()); };
+      page.on('request', collect); await button('Save changes').click(); await clean(); page.off('request', collect);
+      assert.equal(patches.length, 1); assert.deepEqual(Object.keys(patches[0]), ['birthdays'], 'birthday save is field-scoped');
+      assert.equal(saved().birthdays.length, 1); assert.equal(saved().birthdays[0].date, '01-10');
+      await button('Remove from draft').click();
+      assert.equal(await button('Add birthday').evaluate(element => element === document.activeElement), true, 'Remove focuses the surviving Add control');
+      assert.equal(saved().birthdays.length, 1); await button('Cancel').click(); await clean();
+      assert.equal(await page.locator('.birthday-entry').count(), 1, 'Cancel restores removed entry');
+      await page.locator('.birthday-entry-toggle').click(); await button('Remove from draft').click(); await button('Save changes').click(); await clean();
+      assert.deepEqual(saved().birthdays, []);
+    }
+    record('Global birthdays use search,44px compact controls,editable invalid dates and leap-day help; Add/edit/remove stay cancellable and save only their field');
+
+    await open('/settings'); await page.locator('#settings-birthdays').click(); await button('Add birthday').click();
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Birthday A');
+    await page.getByRole('combobox', { name: 'Month', exact: true }).selectOption('01');
+    await page.getByRole('combobox', { name: 'Day', exact: true }).selectOption('10');
+    await button('Save changes').click(); await clean();
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Birthday A edited');
+    let race = true;
+    await page.route('**/api/settings', async route => {
+      if (race && route.request().method() === 'PATCH') {
+        race = false;
+        await app.store.update(data => {
+          data.settings.birthdays[0].treatment = 'korean';
+          data.settings.birthdays.push({ id: '00000000-0000-4000-8000-000000000585', name: 'Birthday B', date: '01-10', treatment: 'russian' });
+          data.settings.units = 'imperial';
+        });
+      }
+      await route.continue();
+    });
+    await button('Save changes').click(); await page.getByRole('alert').filter({ hasText: 'Review your edits' }).waitFor();
+    assert.equal(await page.getByRole('textbox', { name: 'Name', exact: true }).inputValue(), 'Birthday A edited');
+    assert.equal(await page.getByRole('combobox', { name: 'Treatment', exact: true }).inputValue(), 'korean');
+    assert.equal(await page.locator('.birthday-entry').count(), 2);
+    await page.getByText('Birthdays sharing a date use Classic when their treatments differ.', { exact: true }).waitFor();
+    await page.unroute('**/api/settings');
+    await page.route('**/api/settings', route => route.fulfill({ status: 503, json: { error: 'Synthetic birthday save unavailable' } }));
+    await button('Save changes').click(); await page.getByRole('alert').filter({ hasText: 'Synthetic birthday save unavailable' }).waitFor();
+    assert.equal(await page.locator('.birthday-entry').count(), 2);
+    await page.unroute('**/api/settings'); await button('Save changes').click(); await clean();
+    assert.equal(saved().birthdays[0].name, 'Birthday A edited'); assert.equal(saved().birthdays[0].treatment, 'korean');
+    assert.equal(saved().birthdays.length, 2); assert.equal(saved().units, 'imperial');
+    record('Birthday stale-save review merges names,treatments and remote additions byID; failed retry retains the list and unrelated saved preferences');
+
     for (const viewport of [{ width: 1280, height: 480 }, { width: 390, height: 640 }, { width: 320, height: 480 }]) {
       await open('/settings', viewport);
       await app.store.update(data => { data.settings.savedPresets = [{ id: 'layout-check', name: 'Layout check', visual: getVisual(data.settings) }]; });

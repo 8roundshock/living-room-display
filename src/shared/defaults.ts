@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
     dynamic: { weather: true, alerts: true, air: true, sky: true, personal: true, holidays: false },
   },
   screen: { keepAwake: true },
+  birthdays: [],
 };
 
 export function defaultSettings(): Settings { return structuredClone(DEFAULT_SETTINGS); }

@@ -422,3 +422,22 @@ test('an item the other side inserted goes before the item that followed it ther
   assert.deepEqual(rebaseDraft([x, y], [x, b, y], [x, y, a]), [x, b, y, a]);
   assert.deepEqual(rebaseDraft([x], [b, x], [x, a]), [b, x, a]);
 });
+
+test('birthday drafts merge stable IDs and fields without submitting unrelated settings', () => {
+  const base = defaultSettings();
+  base.birthdays = [{ id: 'a', name: 'Birthday A', date: '01-10', treatment: 'classic' }];
+  const local = structuredClone(base), remote = structuredClone(base);
+  local.birthdays[0]!.name = 'Edited birthday';
+  remote.birthdays[0]!.treatment = 'korean';
+  remote.birthdays.push({ id: 'b', name: 'Birthday B', date: '06-12', treatment: 'russian' });
+  remote.units = 'imperial';
+  const merged = rebaseSettings(base, local, remote);
+  assert.equal(merged.birthdays[0]!.name, 'Edited birthday');
+  assert.equal(merged.birthdays[0]!.treatment, 'korean'); assert.equal(merged.birthdays.length, 2);
+  assert.deepEqual(settingsChanges(remote, merged), { birthdays: merged.birthdays });
+  assert.equal(merged.units, 'imperial');
+  local.birthdays = [];
+  const deleted = rebaseSettings(base, local, remote);
+  assert.deepEqual(deleted.birthdays, [remote.birthdays[1]], 'local deletion preserves remote addition');
+  assert.equal('birthdays' in getVisual(merged), false, 'saved styles never contain private annual content');
+});

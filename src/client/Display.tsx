@@ -526,7 +526,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   const motion = useMemo<MotionState>(() => ({ plan, revealEpoch: reveal.epoch, revealing: reveal.active }), [plan, reveal.epoch, reveal.active]);
   const animation = plan.valueTransitions ? plan.level : 'off';
   const themeMinute = Math.floor(now.getTime() / 60_000);
-  const themeScene = useMemo(() => resolveTheme(settings, state.weather, new Date(themeMinute * 60_000), disconnected), [settings.appearance.theme, settings.location.latitude, settings.location.longitude, state.weather, disconnected, themeMinute]);
+  const themeScene = useMemo(() => resolveTheme(settings, state.weather, new Date(themeMinute * 60_000), disconnected), [settings.appearance.theme, settings.birthdays, settings.location.latitude, settings.location.longitude, state.weather, disconnected, themeMinute]);
   const themePreviewFrame = useRef({ time: previewTime, phase: previewFrame.phase, transition: previewFrame.transition });
   themePreviewFrame.current = { time: previewTime, phase: previewFrame.phase, transition: previewFrame.transition };
   const themePreviewBucket = controlled ? Math.floor(previewTime / 4) : 0;
