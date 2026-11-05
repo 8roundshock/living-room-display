@@ -1,6 +1,6 @@
 ---
 name: living-room-theme
-description: Add or refine Living Room Display whole-screen seasonal, cultural holiday or weather scenes, their date policy, artwork, motion or editor demonstrations. Use for this repository’s atmosphere layer, not individual widget implementation.
+description: Add or refine Living Room Display whole-screen seasonal, cultural holiday, birthday or weather scenes, their date policy, artwork, motion or editor demonstrations. Use for this repository’s atmosphere layer, not individual widget implementation.
 ---
 
 # Living Room Display themes
@@ -45,8 +45,9 @@ and system reduced motion retain their explicit behavior. No burn-in guarantee.
 Owner preference (#582, 2026-11-04): atmosphere should look visibly colourful,
 populated and alive at 26% brightness. Use distinct palette roles, multi-scale
 feature/companion forms and characteristic finite motion; a tiny opacity/count
-increase is insufficient. Keep black dominant and text clear. Compare all 23
-scenes at 26%/36% in RAM, with default/dense/empty boards and 1080p/4K samples.
+increase is insufficient. Keep black dominant and text clear. Compare affected
+scenes at 26%/36% in RAM, with default/dense/empty boards and 1080p/4K samples;
+complete styling passes compare every registered scene.
 Motion waypoints in the registry are shared by CSS transforms and placement
 bounds, including rotation and stroke extent; do not add unreserved transforms.
 
@@ -64,3 +65,13 @@ Installation, desktop capture, native acceptance and physical-TV viewing are
 separate scopes. Obtain
 independent concept and visual critique, refine the result, then independently
 review the exact final pushed head under the normal repository workflow.
+
+Birthdays (#584) are global private annual content in Settings, never saved-style
+appearance. The central registry supplies three generic birthday previews;
+shared/birthdays.ts supplies exact-day and same-day collision policy. Keep real
+names/dates out of code, fixtures, diagnostics, tickets and PRs. Use invented
+examples in source checks. Preserve field-scoped Save/Cancel, concurrent ID-list
+rebase, default omission and frozen-reader rollback tests. Run Settings, themes
+and Workspace for birthday control changes. Cultural textile accents must remain
+secondary to the birthday silhouette; cite primary sources and distinguish art
+choices from birthday-custom claims in the theme contract.

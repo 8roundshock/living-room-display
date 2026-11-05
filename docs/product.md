@@ -208,3 +208,13 @@ new account, permission or external personal-data source is required. Quiet scen
 is a sparse local illustration. Settings and the picker explain sources while the
 ambient face stays passive. Timers work on a board without Clock when its dedicated
 widget is enabled.
+
+### Annual birthday content (#584)
+
+Settings includes optional private month/day birthdays with Classic, Russian
+accents or Korean accents. These global entries survive style changes and use
+ordinary Save/Cancel. Seasonal/Combined show birthday atmosphere on the exact
+annual civil day (February 29 only in leap years), subject to quiet-day and
+Combined weather priority. No age, year, public built-in personal dates or new
+widget is introduced. See the theme contract for researched accent sources,
+same-day collision policy and rollback behavior.

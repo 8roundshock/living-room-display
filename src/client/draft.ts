@@ -6,6 +6,7 @@ import type {
 } from '../shared/contracts.ts';
 import { WIDGET_CATALOG, WIDGET_IDS, isActiveWidget, placementFits } from '../shared/widgets.ts';
 import { labelLook } from './model.ts';
+import { BIRTHDAY_LIMIT } from '../shared/birthdays.ts';
 
 export function same(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
@@ -305,6 +306,7 @@ function keeps(base: unknown, incoming: unknown, result: unknown): boolean {
  * tabs' lists can exceed one (#288), which then blocks Save with this reason.
  */
 const LIST_LIMITS: { count: (settings: Settings) => number; limit: number; items: string }[] = [
+  { count: (settings) => settings.birthdays.length, limit: BIRTHDAY_LIMIT, items: 'birthdays' },
   { count: (settings) => settings.widgetData.countdowns.length, limit: 12, items: 'dates' },
   { count: (settings) => settings.widgetData.worldClocks.length, limit: 4, items: 'cities' },
   { count: (settings) => settings.savedPresets.length, limit: 12, items: 'saved styles' },

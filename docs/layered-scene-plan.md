@@ -82,14 +82,14 @@ layout/content boundaries, never once per animation frame.
 
 ## Complete scene inventory
 
-The baseline has 4 seasons, 14 celebrations and 5 weather scenes. Three generic
-birthday treatments are included in this design inventory as a dependency on
-[#584 / PR #585](https://github.com/8roundshock/living-room-display/pull/585),
-which is pending final CI at the time of this plan. Do not describe that pending
-feature as merged or copy any actual person's names/dates into this work.
-The intended eventual inventory is **26**, verified against the registry after
-the birthday dependency lands. The same composition grammar does not mean the
-same silhouettes with different colours.
+The current source inventory has 4 seasons, 14 celebrations, 5 weather scenes
+and 3 generic birthday treatments: **26** in total. The birthday feature
+[#584 / PR #585](https://github.com/8roundshock/living-room-display/pull/585)
+merged after independent review and CI; this plan integrates that reviewed source
+base. It makes no installation or private-configuration claim. Do not copy any
+actual person's names/dates into this work. Verify inventory against the registry
+during implementation. The same composition grammar does not mean the same
+silhouettes with different colours.
 
 | Scene | Connected habitat / framing | Characteristic detail and motion |
 | --- | --- | --- |
@@ -146,7 +146,7 @@ Use factual wind direction only when supported by the selected fresh forecast
 data; otherwise the visual direction is authored motion, not a compass or weather
 claim. No decorative animation should imply a more precise forecast than exists.
 
-Keep the accepted birthday policy when #584 lands: global private entries,
+Keep the accepted #584 birthday policy: global private entries,
 exact annual day, February 29 only in leap years, mixed same-day treatments use
 Classic, birthday beats ordinary festive/seasonal scenery. Selected exact quiet
 dates still take precedence. Quiet scenes are neutral/subdued seasonal or factual
@@ -230,7 +230,7 @@ especially for masks, gradients and transformed groups.
 | --- | --- | --- |
 | 0 — plan | This document and discovery links; coordinator + independent concept/final-head review. | Plan reviewed; #586 remains open. No renderer edits in the plan PR. |
 | 1 — vertical slice | Art/UX owner: Summer habitat, integrated rain and one optional foreground passage. Renderer owner: `theme-registry.ts`, a proposed pure scene-composition module, `AmbientTheme.tsx`/CSS and `Display.tsx` depth/reading-space integration. One integrator owns Git. | Actual baseline/candidate whole-screen RAM comparison, 45-second motion review, low-light/default/dense proof and measured cost. Stop/revise if it still reads as floating stickers or only looks good on an empty board. |
-| 2 — prove reuse | Winter+snow and one generic birthday textile treatment, then the other birthday variants after #584 lands. Data owner only if the optional toggle needs contracts/defaults/validation/persistence. | Distinct topology works without a separate renderer per scene; quiet/reduced, weather priority, style drafts and birthday privacy remain intact. |
+| 2 — prove reuse | Winter+snow and one generic birthday textile treatment, then the other two birthday variants. Data owner only if the optional toggle needs contracts/defaults/validation/persistence. | Distinct topology works without a separate renderer per scene; quiet/reduced, weather priority, style drafts and birthday privacy remain intact. |
 | 3 — complete inventory | Art/UX owner migrates all 26 scene definitions with current cultural references; planner/renderer stays shared. | Complete contact sheets and populated whole-scene motion review, no placeholder old icon groups left behind. |
 | 4 — refine and integrate | Existing theme/Workspace/Settings tests, focused composition/bounds units, docs/skill/STATUS updated to actual final authority. | Two independent visual passes with corrections, exact pushed-head independent source review, applicable CI; every remaining acceptance item tracked. |
 | 5 — delivery | Coordinator-owned supported update/release after approval; private settings configured locally if needed. | Separately authorized delivery evidence. No native/desktop/physical-TV acceptance inferred from source tests. |
@@ -243,10 +243,11 @@ work into a widget-layout, motion-engine, provider, installer or calendar rewrit
 If the SVG prototype cannot meet the target, bring a measured Canvas comparison
 back to the coordinator; do not silently replace the architecture mid-rollout.
 
-The birthday PR is an independent feature. Merge its reviewed result into the
-implementation base when available; do not reimplement its settings or use this
-plan PR to carry birthday runtime changes. Public planning uses generic treatment
-names only. Follow the normal non-force-push integration/review workflow.
+The birthday PR is an independently delivered source feature, integrated into
+this plan's base by merging current main. Do not reimplement its settings or
+include birthday runtime changes in this plan PR's diff. Public planning uses
+generic treatment names only. Follow the normal non-force-push integration/review
+workflow.
 
 ## Acceptance evidence and test strategy
 

@@ -912,3 +912,15 @@ rest; non-default choices are a documented older-reader rollback exception.
 `widgetData.dynamic.holidays` defaults false and is omitted while false. It uses
 the same calendar list and adds offline today/tomorrow cards only when opted in.
 Weather details remain API-only and are excluded from private settings exports.
+
+## Annual birthdays (#584)
+
+`settings.birthdays` is a global list, excluded from visual presets. Each entry
+is `{ id: UUID, name: string, date: 'MM-DD', treatment: 'classic' | 'russian' |
+'korean' }`; up to 24 entries, unique IDs, trimmed 1–60-character names and a
+valid month/day including February 29. There is no year. PATCH replaces the
+whole list; unrelated fields stay untouched. Send the current settings ETag with
+`If-Match`; review/rebase a 409 before retrying. Settings merges concurrent lists
+by stable ID and fields. Empty lists are normalized in API responses but omitted
+from files/exports. Nonempty lists are private content in backups and require
+the newer reader; they are never part of diagnostics or public fixture data.

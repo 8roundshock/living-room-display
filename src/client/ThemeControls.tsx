@@ -4,7 +4,7 @@ import { THEME_LABELS, THEME_MODES, type ThemeSettings } from '../shared/themes'
 import { resolveTheme } from './ambient-theme';
 import { usePrefersReducedMotion } from './useMotion';
 import { HolidayCalendars } from './HolidayCalendars';
-import { THEME_SCENES, THEME_SCENE_IDS, type ThemeSceneId } from '../shared/theme-registry';
+import { THEME_SCENES, THEME_SCENE_IDS, THEME_GROUPS, type ThemeSceneId } from '../shared/theme-registry';
 
 export function ThemeControls({ settings, weather, disconnected, onChange, saving }: { settings: Settings; weather: WeatherState; disconnected: boolean; onChange: (value: ThemeSettings) => void; saving: boolean }) {
   const theme = settings.appearance.theme;
@@ -33,7 +33,7 @@ export function ThemePreviewControls({ value, onChange, motionAllowed }: { value
       <label className="field-label" htmlFor="theme-scene-preview">Scene preview</label>
       <select id="theme-scene-preview" className="select-input" value={value ?? 'automatic'} onChange={event => onChange(event.target.value === 'automatic' ? null : event.target.value as ThemeSceneId)}>
         <option value="automatic">Automatic · current date and weather</option>
-        {(['Seasons', 'Celebrations', 'Weather'] as const).map(group => <optgroup key={group} label={group}>
+        {THEME_GROUPS.map(group => <optgroup key={group} label={group}>
           {THEME_SCENE_IDS.filter(id => THEME_SCENES[id].group === group).map(id => <option key={id} value={id}>{THEME_SCENES[id].label}</option>)}
         </optgroup>)}
       </select>
