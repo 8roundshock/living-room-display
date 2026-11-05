@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { defaultSettings } from '../shared/defaults.ts';
 import type { WeatherState } from '../shared/contracts.ts';
 import { THEME_SCENES, LIVING_SCENE_BUDGET } from '../shared/theme-registry.ts';
-import { habitatBox, habitatMotion, patchPhase, rainField } from './living-scene.ts';
+import { habitatBox, habitatMotion, fitHabitatGroup, patchPhase, rainField, rainImpacts } from './living-scene.ts';
 import { resolveTheme } from './ambient-theme.ts';
 
 test('Summer keeps authored non-square ratios at editor, HD and 4K sizes', () => {
@@ -21,6 +21,19 @@ test('Local retreats remain staggered over several cycles without whole-scene bl
     assert.ok(phases.every(value => value.age >= 0 && value.age < LIVING_SCENE_BUDGET.life));
     assert.ok(phases.some(value => value.age >= .08 * LIVING_SCENE_BUDGET.life && value.age <= .78 * LIVING_SCENE_BUDGET.life));
   }
+});
+test('Shallow reading clearance selects complete compact growth and impossible clearance omits the group', () => {
+  const patch = THEME_SCENES.summer.composition!.patches[1]!, group = patch.groups[0]!;
+  const box = habitatBox(patch, 1920, 1080);
+  const clear = fitHabitatGroup(group, patch, box, [], undefined, false);
+  assert.equal(clear.compact, false); assert.equal(clear.yScale, 1);
+  const shallow = fitHabitatGroup(group, patch, box, [{ left: 0, top: 850, right: 640, bottom: 1014 }], undefined, false);
+  assert.equal(shallow.compact, true); assert.equal(shallow.visible, true);
+  assert.ok(shallow.yScale >= .65 && shallow.yScale <= 1);
+  assert.equal(shallow.paths, group.compact!.paths, 'whole authored low forms replace tall geometry');
+  const blocked = fitHabitatGroup(group, patch, box, [{ left: 0, top: 0, right: 1920, bottom: 1080 }], undefined, false);
+  assert.equal(blocked.visible, false, 'the reading mask is not a way to pass off chopped stems as a fit');
+  assert.equal(rainImpacts(1920, 1080, 0).match(/M/g)?.length, 6);
 });
 test('Wind strength changes related attached groups while quiet motion is smaller', () => {
   const group = THEME_SCENES.summer.composition!.patches[1]!.groups[0]!;

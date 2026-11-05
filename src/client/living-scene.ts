@@ -1,6 +1,6 @@
 import type { ScenePatch, SceneArtGroup } from '../shared/living-scene-art.ts';
 import { LIVING_SCENE_BUDGET } from '../shared/theme-registry.ts';
-import type { WeatherMotif } from './ambient-theme.ts';
+import type { WeatherMotif, ThemeRect } from './ambient-theme.ts';
 
 /** Local patches retire independently. Their cycles never blank the information plane. */
 export function patchPhase(elapsed: number, index: number) {
@@ -28,13 +28,54 @@ export function habitatMotion(group: SceneArtGroup, weather: WeatherMotif | unde
   return [0, -.55, 1, .28, 0].map(turn => `rotate(${(turn * amplitude).toFixed(3)}deg)`);
 }
 
+/** Fit complete rooted groups before the reading mask. A compact authored form
+ * keeps broad leaves and complete seedheads where a tall clump cannot fit. */
+export function fitHabitatGroup(group: SceneArtGroup, patch: ScenePatch, box: ReturnType<typeof habitatBox>, holes: readonly ThemeRect[], weather: WeatherMotif | undefined, quiet: boolean) {
+  const scale = box.width / patch.viewBox[0];
+  const turns = habitatMotion(group, weather, quiet).map(value => Number(value.slice(7, -4)) * Math.PI / 180);
+  const shape = (bounds: SceneArtGroup['bounds']) => {
+    const [x, y, w, h] = bounds, [px, py] = group.pivot;
+    const corners = turns.flatMap(angle => [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map(([cx, cy]) => ({
+      x: px + (cx! - px) * Math.cos(angle) - (cy! - py) * Math.sin(angle),
+      y: py + (cx! - px) * Math.sin(angle) + (cy! - py) * Math.cos(angle),
+    })));
+    return { left: box.x + Math.min(...corners.map(p => p.x)) * scale, right: box.x + Math.max(...corners.map(p => p.x)) * scale,
+      top: box.y + Math.min(...corners.map(p => p.y)) * scale, bottom: box.y + Math.max(...corners.map(p => p.y)) * scale };
+  };
+  const fit = (bounds: SceneArtGroup['bounds']) => {
+    const swept = shape(bounds), rootY = box.y + group.pivot[1] * scale;
+    if (!patch.edge.startsWith('bottom')) return 1;
+    const overlap = holes.filter(hole => hole.right > swept.left && hole.left < swept.right && hole.bottom > swept.top && hole.top < swept.bottom);
+    if (!overlap.length) return 1;
+    const safeTop = Math.max(...overlap.map(hole => hole.bottom)) + 5;
+    return Math.max(0, Math.min(1, (rootY - safeTop) / Math.max(1, rootY - swept.top)));
+  };
+  let paths = group.paths, bounds = group.bounds, yScale = fit(bounds), compact = false;
+  if (yScale < .78 && group.compact) {
+    paths = group.compact.paths; bounds = group.compact.bounds; yScale = fit(bounds); compact = true;
+  }
+  return { paths, compact, visible: yScale >= .65, yScale,
+    transform: `translate(0 ${group.pivot[1]}) scale(1 ${yScale}) translate(0 ${-group.pivot[1]})` };
+}
+
 /** Three related precipitation groups, not an independently scheduled icon set.
  * Each is a sparse slice of the same directional field; the habitat gets its gust. */
 export function rainField(width: number, height: number, group: number) {
   return Array.from({ length: 11 }, (_, index) => {
-    const x = width * (.04 + ((index * .173 + group * .11) % .94));
-    const y = height * (.04 + ((index * .231 + group * .15) % .8));
+    const x = index >= 8 ? rainLanding(width, group, index - 8) + height * .035 : width * (.04 + ((index * .173 + group * .11) % .94));
+    const y = index >= 8 ? height * .88 : height * (.04 + ((index * .231 + group * .15) % .8));
     const length = Math.min(width, height) * (.012 + index % 3 * .006);
     return `M${x.toFixed(2)} ${y.toFixed(2)}l${(-length * .33).toFixed(2)} ${length.toFixed(2)}`;
+  }).join(' ');
+}
+
+function rainLanding(width: number, group: number, index: number) {
+  return width * (.12 + ((index * .31 + group * .09) % .78));
+}
+export function rainImpacts(width: number, height: number, group: number) {
+  const radius = Math.min(width, height) * .014;
+  return [0, 1, 2].map(index => {
+    const x = rainLanding(width, group, index), y = height * .985;
+    return `M${x - radius} ${y}q${radius} ${radius * .3} ${radius * 2} 0 M${x - radius * .65} ${y - radius * .3}q${radius * .65} ${-radius * .18} ${radius * 1.3} 0`;
   }).join(' ');
 }

@@ -2,7 +2,7 @@ import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProp
 import type { LivingSceneArt, ScenePath } from '../shared/living-scene-art';
 import { LIVING_SCENE_BUDGET } from '../shared/theme-registry';
 import type { ThemeRect, ThemeScene, WeatherMotif } from './ambient-theme';
-import { habitatBox, habitatMotion, patchPhase, rainField } from './living-scene';
+import { habitatBox, habitatMotion, fitHabitatGroup, patchPhase, rainField, rainImpacts } from './living-scene';
 import './living-scene.css';
 
 interface Props { scene: ThemeScene; art: LivingSceneArt; still: boolean; exclusions: () => readonly ThemeRect[]; inkRevision: number }
@@ -52,7 +52,7 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
         {art.patches.map((patch, index) => {
           const phase = patchPhase(elapsed, index), box = habitatBox(patch, width, height, phase.generation);
           return <HabitatPatch key={`${patch.id}:${phase.generation}`} patch={patch} box={box} initialAge={phase.age} palette={palette}
-            weather={weather} quiet={scene.quiet} still={still} generation={phase.generation} />;
+            weather={weather} quiet={scene.quiet} still={still} generation={phase.generation} holes={holes} />;
         })}
         {(weather === 'rain' || weather === 'storm') && <g className="living-weather" data-scene-weather={weather}>
           {[0, 1, 2].map(index => <RainPhrase key={`${index}:${Math.floor(elapsed / LIVING_SCENE_BUDGET.life)}`} index={index}
@@ -63,9 +63,10 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
   </div>;
 });
 
-function HabitatPatch({ patch, box, initialAge, palette, weather, quiet, still, generation }: {
+function HabitatPatch({ patch, box, initialAge, palette, weather, quiet, still, generation, holes }: {
   patch: LivingSceneArt['patches'][number]; box: ReturnType<typeof habitatBox>; initialAge: number; palette: readonly string[];
   weather: WeatherMotif | undefined; quiet: boolean; still: boolean; generation: number;
+  holes: readonly ThemeRect[];
 }) {
   // Freeze the delay at this generation's mount. Geometry invalidation never restarts its age.
   const [age] = useState(initialAge);
@@ -74,11 +75,15 @@ function HabitatPatch({ patch, box, initialAge, palette, weather, quiet, still, 
     opacity={patch.opacity ?? (patch.depth === 'far' ? .48 : 1)}>
     <g className="living-patch-life" style={{ '--patch-life': `${LIVING_SCENE_BUDGET.life}ms`, '--patch-age': `-${age}ms` } as CSSProperties}>
       {patch.groups.map(group => {
+        const fitted = fitHabitatGroup(group, patch, box, holes, weather, quiet);
         const moves = habitatMotion(group, weather, quiet);
         const style = { transformOrigin: `${group.pivot[0]}px ${group.pivot[1]}px`, '--group-phase': `${-(age + (group.phase ?? 0) * 1000)}ms`,
           ...Object.fromEntries(moves.map((value, index) => [`--habitat-step-${index}`, value])) } as CSSProperties;
-        return <g key={group.id} className="living-attached" data-scene-group={group.id} data-scene-motion={group.motion} style={style}>
-          {group.paths.map((path, index) => <ArtPath key={index} path={path} palette={palette} quiet={quiet} />)}
+        return <g key={group.id} data-scene-fit={group.id} data-scene-compact={fitted.compact || undefined} data-scene-omitted={!fitted.visible || undefined}
+          transform={fitted.transform} opacity={fitted.visible ? 1 : 0}>
+          <g className="living-attached" data-scene-group={group.id} data-scene-motion={group.motion} style={style}>
+            {fitted.paths.map((path, index) => <ArtPath key={index} path={path} palette={palette} quiet={quiet} />)}
+          </g>
         </g>;
       })}
     </g>
@@ -87,7 +92,8 @@ function HabitatPatch({ patch, box, initialAge, palette, weather, quiet, still, 
 
 function RainPhrase({ index, elapsed, width, height, palette, still }: { index: number; elapsed: number; width: number; height: number; palette: readonly string[]; still: boolean }) {
   const [age] = useState(elapsed);
-  return <g className="living-rain" style={{ '--rain-age': `${-(age + index * 1200)}ms`, '--rain-travel': `translate(${-height * .035}px, ${height * .105}px)` } as CSSProperties}>
-    <path d={rainField(width, height, index)} fill="none" stroke={palette[index % 2]} strokeWidth={Math.max(.6, Math.min(width, height) * .0015)} strokeLinecap="round" opacity={.75} />
+  return <g style={{ '--rain-age': `${-(age + index * 1200)}ms`, '--rain-travel': `translate(${-height * .035}px, ${height * .105}px)` } as CSSProperties}>
+    <g className="living-rain"><path d={rainField(width, height, index)} fill="none" stroke={palette[index % 2]} strokeWidth={Math.max(.6, Math.min(width, height) * .0015)} strokeLinecap="round" opacity={.75} /></g>
+    <g className="living-ripple"><path d={rainImpacts(width, height, index)} fill="none" stroke={palette[2]} strokeWidth={Math.max(.5, Math.min(width, height) * .001)} strokeLinecap="round" opacity={.65} /></g>
   </g>;
 }

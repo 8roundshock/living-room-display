@@ -8,6 +8,16 @@ reading-space masking. Build/typechecks and existing resolver/calendar checks
 pass. The first actual whole-scene visual/performance gate is pending; the other
 25 compositions and optional foreground policy are not yet migrated or accepted.
 
+The first independent RAM pass found visible horizontal shearing where the
+reading mask cut tall grass. The correction fits each complete rooted group,
+choosing original compact growth where clearance is shallow; impossible groups
+are omitted before the safety mask. Rain now has phase-linked edge impacts.
+The first real 4.2-second empty-scene sample measured 26ms task work, zero paints,
+17 layers and 21 style/layout updates. Disabling attached or rain animation
+separately reduced that work while the observation revision rose only once,
+pointing to bounded SVG animation cost rather than observer feedback. These
+results are prototype evidence, not final all-scene acceptance or a new budget.
+
 The coordinator accepted the direction in the [layered scene plan](docs/layered-scene-plan.md):
 connected seasonal edges, shared environmental motion, integrated weather and
 rare bounded foreground passages across all 26 scenes. This is documented future
