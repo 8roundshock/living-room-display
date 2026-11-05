@@ -567,12 +567,25 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
         top: ink.top - boardY - offset.y + loY - 1, bottom: ink.bottom - boardY - offset.y + hiY + 1 };
       if (future || inTransit) {
         // At most one swap can begin during a mark's life (minimum interval30s).
-        // Reserve the swept box through current/next cells, including a glide already in flight.
+        // Reserve the actual ink through equal-size destinations. Whole-cell reserves
+        // erase an edge habitat for many seconds despite unused whitespace (#586).
+        // A size change still needs the conservative cell reserve until its next fit.
         for (const placement of [getWidgetRect(grid, id), ...(future ? [getWidgetRect(future, id)] : [])]) {
-          box.left = Math.min(box.left, board.offsetLeft + placement.left / 100 * board.offsetWidth - FLOAT_TRAVEL * bounds.width - margin);
-          box.right = Math.max(box.right, board.offsetLeft + (placement.left + placement.width) / 100 * board.offsetWidth + FLOAT_TRAVEL * bounds.width + margin);
-          box.top = Math.min(box.top, board.offsetTop + placement.top / 100 * board.offsetHeight - FLOAT_TRAVEL * bounds.height - margin);
-          box.bottom = Math.max(box.bottom, board.offsetTop + (placement.top + placement.height) / 100 * board.offsetHeight + FLOAT_TRAVEL * bounds.height + margin);
+          const targetLeft = board.offsetLeft + placement.left / 100 * board.offsetWidth;
+          const targetTop = board.offsetTop + placement.top / 100 * board.offsetHeight;
+          const targetWidth = placement.width / 100 * board.offsetWidth, targetHeight = placement.height / 100 * board.offsetHeight;
+          if (Math.abs(targetWidth - rect.width) < 1 && Math.abs(targetHeight - rect.height) < 1) {
+            const sectionLeft = rect.left - bounds.left, sectionTop = rect.top - bounds.top;
+            box.left = Math.min(box.left, targetLeft + ink.left - sectionLeft + loX - 1);
+            box.right = Math.max(box.right, targetLeft + ink.right - sectionLeft + hiX + 1);
+            box.top = Math.min(box.top, targetTop + ink.top - sectionTop + loY - 1);
+            box.bottom = Math.max(box.bottom, targetTop + ink.bottom - sectionTop + hiY + 1);
+          } else {
+            box.left = Math.min(box.left, targetLeft - FLOAT_TRAVEL * bounds.width - margin);
+            box.right = Math.max(box.right, targetLeft + targetWidth + FLOAT_TRAVEL * bounds.width + margin);
+            box.top = Math.min(box.top, targetTop - FLOAT_TRAVEL * bounds.height - margin);
+            box.bottom = Math.max(box.bottom, targetTop + targetHeight + FLOAT_TRAVEL * bounds.height + margin);
+          }
         }
       }
       return box;

@@ -3,7 +3,7 @@ export const THEME_MODES = ['off', 'weather', 'seasonal', 'combined'] as const;
 export type ThemeMode = typeof THEME_MODES[number];
 export const HOLIDAY_CALENDARS = ['CA', 'KR', 'RU'] as const;
 export type ThemeCalendar = typeof HOLIDAY_CALENDARS[number];
-export interface ThemeSettings { mode: ThemeMode; calendars: ThemeCalendar[] }
+export interface ThemeSettings { mode: ThemeMode; calendars: ThemeCalendar[]; foreground?: boolean }
 export const THEME_LABELS: Record<ThemeMode, string> = {
   off: 'Off', weather: 'Weather', seasonal: 'Seasonal & holidays', combined: 'Combined',
 };

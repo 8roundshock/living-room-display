@@ -1,6 +1,8 @@
 /** Original artwork and product policy. Calendar facts live in holidays.ts.
  * Read docs/ambient-themes.md before changing eligibility, cultural art or motion. */
 import type { BirthdayTreatment } from './birthdays.ts';
+import { LIVING_SCENE_ART, type LivingSceneArt } from './living-scene-art.ts';
+export const LIVING_SCENE_BUDGET = { life: 36_000, stagger: 12_000, observation: 4000, patches: 4, paths: 240, animations: 32 } as const;
 export type ThemeTone = 0 | 1 | 2;
 export interface ThemeArt { primary: string; secondary?: string; accent?: string; wash?: string; tone?: ThemeTone; secondaryTone?: ThemeTone; motion?: ThemeMotion }
 export interface ThemeMotionFrame { x: number; y: number; turn: number }
@@ -20,6 +22,7 @@ export const THEME_MOTIONS = {
 export type ThemeMotion = keyof typeof THEME_MOTIONS;
 export const THEME_GROUPS = ['Seasons', 'Celebrations', 'Birthdays', 'Weather'] as const;
 export interface ThemeDefinition {
+  composition?: LivingSceneArt;
   label: string;
   group: typeof THEME_GROUPS[number];
   palette: readonly [string, string, string];
@@ -71,12 +74,12 @@ const russianCake: ThemeArt = { ...birthdayCake, accent: 'M23 72L30 65L37 72L30 
 const koreanCake: ThemeArt = { ...birthdayCake, accent: 'M21 69Q50 78 79 69 M37 66V83 M60 73V83 M60 73L77 79', wash: 'M22 67Q29 70 36 71V81L22 78Z M61 74L77 71V78Z' };
 
 /** Central registry for original art, demonstrations and bounded scene behavior. */
-export const THEME_SCENES = {
+const SCENE_DEFINITIONS = {
   birthday: scene('Birthday · Classic', ['#df9da8', '#8ac4df', '#e2c679'], [birthdayCake, birthdayBalloons, birthdayGift], 'Birthdays', 15),
   'birthday-russian': scene('Birthday · Russian accents', ['#df91a3', '#dfc176', '#90bfcb'], [russianCake, birthdayBalloons, { ...birthdayGift, accent: 'M20 63L28 55L36 63L28 71Z M62 63L70 55L78 63L70 71Z M20 77H39 M61 77H80' }], 'Birthdays', 15),
   'birthday-korean': scene('Birthday · Korean accents', ['#86cbb6', '#df9aab', '#e2c17c'], [koreanCake, birthdayBalloons, { ...birthdayGift, secondary: 'M50 33C13 34 22 6 39 16Z M50 33C87 34 78 6 61 16Z M40 44V84 M40 61H84 M64 61V84', accent: 'M16 70H40 M64 61L84 44', wash: 'M18 46H38V68H18Z M42 63H62V82H42Z' }], 'Birthdays', 15),
   spring: scene('Spring', ['#79c99b', '#db91b5', '#dec386'], [branch, petal, seed], 'Seasons'),
-  summer: scene('Summer', ['#63c1af', '#e1bd62', '#dc9476'], [{ ...petal, tone: 1 }, { ...seed, tone: 0 }, { ...ring, tone: 2 }], 'Seasons'),
+  summer: { ...scene('Summer', ['#63c1af', '#e1bd62', '#dc9476'], [{ ...petal, tone: 1 }, { ...seed, tone: 0 }, { ...ring, tone: 2 }], 'Seasons'), composition: LIVING_SCENE_ART.summer },
   autumn: scene('Autumn', ['#dc995b', '#bf6f86', '#dbbf70'], [leaf, grain, { ...seed, tone: 2 }], 'Seasons'),
   winter: scene('Winter', ['#83bcd9', '#99c9b7', '#b8a3d8'], [{ ...flake, tone: 0 }, { ...pine, tone: 1 }, branch], 'Seasons'),
   christmas: scene('Christmas', ['#74c398', '#d57d8a', '#e1c077'], [pine, ornament, { ...star, tone: 2 }]),
@@ -99,6 +102,8 @@ export const THEME_SCENES = {
   fog: weather('Fog', ['#93c1d5', '#c1afd9', '#a0c9b8'], [{ primary: 'M4 27Q35 6 65 27T96 27', secondary: 'M9 53Q47 30 91 49', accent: 'M15 78Q49 57 89 73' }, { primary: 'M4 44Q37 63 66 44T96 44', secondary: 'M13 20Q46 36 79 21', accent: 'M24 75Q56 89 88 71', tone: 1 }], 16, 'mist'),
   wind: weather('Wind', ['#82d0b0', '#d8bd79', '#8bbce0'], [{ primary: 'M4 64Q32 22 63 39T94 22', secondary: 'M17 85Q50 54 80 65', accent: 'M8 27Q17 12 29 16Q28 33 8 27', wash: 'M8 27Q17 12 29 16Q28 33 8 27Z' }, { ...seed, tone: 1, motion: 'wind' }], 12, 'wind'),
 } satisfies Record<string, ThemeDefinition>;
+export const THEME_SCENES = Object.fromEntries(Object.entries(SCENE_DEFINITIONS).map(([id, definition]) =>
+  [id, { ...definition, composition: LIVING_SCENE_ART[id] }])) as { [Id in keyof typeof SCENE_DEFINITIONS]: ThemeDefinition };
 export type ThemeSceneId = keyof typeof THEME_SCENES;
 export const BIRTHDAY_SCENES = { classic: 'birthday', russian: 'birthday-russian', korean: 'birthday-korean' } as const satisfies Record<BirthdayTreatment, ThemeSceneId>;
 export const THEME_SCENE_IDS = Object.keys(THEME_SCENES) as ThemeSceneId[];

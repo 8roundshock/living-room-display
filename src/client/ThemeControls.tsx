@@ -20,6 +20,12 @@ export function ThemeControls({ settings, weather, disconnected, onChange, savin
     {theme.mode !== 'off' && <p className="theme-current">{scene?.label ?? 'No weather effect right now'}
       <small>{reduced ? 'Atmosphere hidden by your system’s reduced-motion setting.' : settings.appearance.animation === 'off' ? 'Turn on Animation to show the atmosphere.' : theme.mode === 'combined' ? 'Seasonal until noteworthy weather is near.' : theme.mode === 'weather' ? 'Current weather and the next few hours.' : 'Changes with the season and selected holidays.'}</small>
     </p>}
+    {(theme.mode !== 'off' || theme.foreground) && <details className="theme-scene-options">
+      <summary>Scene options</summary>
+      <label className="theme-passage-option"><input type="checkbox" checked={theme.foreground ?? false} disabled={saving}
+        onChange={event => { const { foreground: _foreground, ...rest } = theme; onChange(event.target.checked ? { ...rest, foreground: true } : rest); }} />
+        <span>Occasional foreground details<small>Rare, brief passages in front of large values.</small></span></label>
+    </details>}
   </div>;
 }
 
