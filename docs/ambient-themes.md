@@ -5,6 +5,15 @@ hourly weather and #458 holiday cards. Themes default to Off; existing selection
 are preserved. A theme is part of the visual style, so the editor
 preview, Save/Cancel, saved styles and scheduled styles share the same choice.
 
+## Planned composition direction (#586)
+
+The approved [layered scene plan](layered-scene-plan.md) proposes connected edge
+habitats, three coordinated depths, integrated weather and rare bounded foreground
+passages across all 26 scenes. It is not implemented by the documentation-only
+PR #587. The current runtime, reading-space, motion and persistence guardrails
+below remain authoritative until each planned migration is implemented and
+validated; the plan's provisional budgets are not verified behavior.
+
 ## Design decision (2026-11-04)
 
 Independent coordinator concept critique chose one native Theme selector in the

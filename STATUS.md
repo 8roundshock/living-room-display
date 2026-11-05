@@ -1,5 +1,14 @@
 # Project status
 
+## Planned layered living scenes — 2026-11-04 (#586)
+
+The coordinator accepted the direction in the [layered scene plan](docs/layered-scene-plan.md):
+connected seasonal edges, shared environmental motion, integrated weather and
+rare bounded foreground passages across all 26 scenes. This is documented future
+work, not implemented artwork. [PR #587](https://github.com/8roundshock/living-room-display/pull/587)
+is documentation only; #586 stays open for the staged visual, performance and
+implementation gates. Current runtime behavior remains in the theme contract.
+
 ## Optional annual birthday themes — 2026-11-04 (#584)
 
 The source candidate adds a global private birthday list in Settings, with
