@@ -42,6 +42,14 @@ safe reading-space gap exists. Keep finite transform/opacity animation and expir
 slot renewal; no per-frame JavaScript or fixed bright frame. Off, Animation Off
 and system reduced motion retain their explicit behavior. No burn-in guarantee.
 
+Owner preference (#582, 2026-11-04): atmosphere should look visibly colourful,
+populated and alive at 26% brightness. Use distinct palette roles, multi-scale
+feature/companion forms and characteristic finite motion; a tiny opacity/count
+increase is insufficient. Keep black dominant and text clear. Compare all 23
+scenes at 26%/36% in RAM, with default/dense/empty boards and 1080p/4K samples.
+Motion waypoints in the registry are shared by CSS transforms and placement
+bounds, including rotation and stroke extent; do not add unreserved transforms.
+
 Editor demonstrations remain local state with a visible Preview/display-unchanged
 label and Automatic return. They must not produce a dirty Save bar, requests,
 persisted fields or altered dates/weather. Reset them on Cancel, theme/calendar

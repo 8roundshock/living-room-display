@@ -1,5 +1,38 @@
 # Project status
 
+## Richer atmosphere styling — 2026-11-04 (#582)
+
+The owner requested a complete richer pass after #579: more colour, more visible
+forms and characteristic motion across all 23 scenes, directly visible at 26%
+brightness. The first source candidate adds three-tone art roles, local subtle
+fills, multi-scale compositions and eight finite motion profiles. Registry
+waypoints supply both actual transforms and reserved movement bounds. Quiet
+dates keep neutral colours, lower density and smaller travel. No settings schema,
+calendar facts, preview controls or installation/native behavior changes.
+The first independent visual pass found a clear seasonal/holiday improvement
+at 26%, with 4–6 visible forms and stronger colour separation, but the five
+weather scenes still looked faint. A focused second pass adds broader compound
+features, stronger chromatic strokes and readable cloud/crystal/ribbon forms.
+All 662 source tests pass. The richer all-scene browser matrix passed actual
+motion-phase and reading-clearance checks; its first performance assertion used
+an unsupported five-recalculations-per-renewal assumption and failed (22 for
+three renewals, 27.7ms task time, zero paints, 31 layers). The calibration retains
+the prior measured allowance of 15 for two renewals, with separate task/layout/
+paint/layer ceilings and a continuous-work negative control. Final browser and
+independent review/CI results belong to [PR #583](https://github.com/8roundshock/living-room-display/pull/583).
+The second independent RAM pass accepted all five corrected weather scenes at
+26%/36%: the default board shows 5–8 visible weather placements at the sampled
+steady phase, with recognizable broader features and coloured companions.
+The complete seasonal/holiday contact sheets, representative dense 4K boards,
+actual motion phases, quiet/reduced-motion behavior and compact controls were
+inspected. The author and coordinator also inspected actual comparison images.
+No screenshots were saved and this establishes no physical-TV acceptance.
+The completed ten-group themes suite passes in 71 seconds: 3 renewals, 3 layouts,
+22 style recalculations, 36.3ms task work, zero paints and 31 layers in the active
+4.2-second window. The real 40-frame negative control produces 41 recalculations
+and is rejected by the idle allowance of five. Build/typechecks, all 662 source
+tests, 30 focused tests and the theme-skill validator pass.
+
 ## Cultural atmosphere refinement — 2026-11-04 (#579)
 
 Separate Canada, Korea and Russia research informed an explicit major-scene,

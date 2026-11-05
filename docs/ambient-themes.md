@@ -1,6 +1,6 @@
 # Ambient themes
 
-Work tracked in #579 (visual/cultural refinement), following #575, with #452
+Work tracked in #582 (richer colour/composition/motion), following #579 and #575, with #452
 hourly weather and #458 holiday cards. Themes default to Off; existing selections
 are preserved. A theme is part of the visual style, so the editor
 preview, Save/Cancel, saved styles and scheduled styles share the same choice.
@@ -29,7 +29,20 @@ fir/ornaments, broad New Year arcs or the Russian tree, and an Orthodox Christma
 star. Seollal uses an open-centred rectangular kite, Chuseok a separated full-moon
 circle and harvest forms, and Buddha's Birthday lotus lanterns.
 
-One sparse layer sits behind widgets. Its larger contours stay dim against true
+Owner direction, 2026-11-04 (#582), asks for noticeably more colour, more visible
+forms and richer characteristic movement across all 23 scenes. The chosen pass
+uses three prominent palette roles and multi-scale contours with small local
+13%-opacity fills, instead of a particle-count-only change or broad filled
+vignettes. Global brightness stays authoritative; compare at 26% and 36% rather
+than raising saved settings. A feature form recurs every third seasonal birth,
+with distinct smaller companions between it. Winter crystals, summer flowers,
+Maslenitsa pancake stacks and geometric Pascha eggs improve silhouette identity.
+The first visual pass found weather still disproportionately faint; the second
+uses a broader feature every third birth, smaller companions and stronger coloured
+strokes. Rain has droplets/ripples and streaks, snow readable crystal groups,
+storms curled cloud/rain, fog three separated ribbons and wind leaves/currents.
+
+One bounded layer sits behind widgets. Its larger contours stay dim against true
 black, without full-screen fills, blur, persistent borders, lightning flashes or
 audio. Weather chooses the geometry; a seasonal or celebratory tint can remain.
 Exact selected quiet dates use neutral seasonal/weather contours. Off does
@@ -70,16 +83,23 @@ computer's civil date, with selectable curated calendars documented in
 commemorations take precedence over festive anticipation. Unsupported Korean
 lunar-date runtimes show a brief limitation; fixed dates and seasons remain.
 
-Each mark uses one finite 12-second transform/opacity animation. Eight weather
-slots renew one at a time every two seconds, four seasonal/holiday slots every
-four seconds, or five fog/wind slots every four seconds. A slot lives 16–20 seconds,
+Each mark uses one finite 12-second transform/opacity animation. Twelve weather
+slots renew one at a time every 1.2 seconds, nine seasonal/holiday slots every
+1.6 seconds, or eight fog slots every two seconds. Exact quiet dates keep four
+slots at four-second intervals, neutral colour, no fills and reduced travel.
+A slot lives 14.4–16 seconds,
 so it becomes invisible before replacement. Initial marks fade in individually;
-motif changes and motion resumption start a fresh sequence. Only a few marks are
-visible at once. This provides continuous sparse atmosphere without a per-frame
+motif changes, quiet-day transitions and motion resumption start a fresh sequence.
+Several forms stay visible at once. This provides continuous atmosphere without a per-frame
 JavaScript loop; it does not claim zero continuous GPU work or unchanged energy use.
 The normal editor immediately shows a representative still scene when enabled
 and motion is allowed; Preview movement runs the same finite sequence. Animation
 Off and system reduced motion remove both and explain why in Style.
+Eight registry motion profiles provide five actual waypoints each: sway, flutter,
+rise, drift, rain, snow, mist and wind. The renderer passes these to finite CSS
+transforms; placement derives its bounds from the same waypoints, maximum
+interpolated rotation and stroke extent. Per-mark scale/direction variation stays
+inside those bounds. No frame-by-frame script, paint animation or flashing.
 
 Try a scene occupies the existing canvas caption and opens a compact native
 grouped select. Its Preview/display-unchanged label stays visible until Automatic
@@ -114,14 +134,20 @@ dates/weather. It verifies Save/Cancel, shared calendar controls, 44px keyboard
 targets, 320/390px and short editors, holiday/weather geometry at 1080p and 4K,
 reduced-motion behavior, steady/initial slot lifetimes and real browser Dangi.
 Its optional images are returned in RAM, never saved. Bounded CDP samples compare
-active atmosphere with motion off; the general performance budget remains #364.
+active atmosphere with motion off. Faster births use the prior allowance of 15
+style recalculations per two renewals (rounded up), with five while idle; the
+4.2-second sample also caps renewals, task time, layout, paint and layer count.
+A deliberate per-frame style invalidation must fail that budget. This is a
+per-renewal adaptation, not an unchanged absolute work allowance; the general
+performance budget remains #364.
 Calendar and weather units exercise lunar dates, lead-window expiry, stale data,
 hourly hazards, DST and gust intervals. Persistence checks retain the frozen reader.
 Canvas preview control changes also run the existing `workspace` browser suite
 for alert clearance, dirty-state and scroll interactions alongside `themes`.
 
 The original foundation's review/CI evidence belongs to [PR #576](https://github.com/8roundshock/living-room-display/pull/576).
-The cultural refinement's current-head visual review, focused regressions and CI
-belong to [PR #581](https://github.com/8roundshock/living-room-display/pull/581).
+The cultural refinement's review and CI belong to [PR #581](https://github.com/8roundshock/living-room-display/pull/581).
+The richer styling pass's all-scene comparisons, focused regressions and current-head
+review/CI belong to [PR #583](https://github.com/8roundshock/living-room-display/pull/583).
 These are source checks; the theme suite establishes no installation or
 native/physical-TV acceptance.

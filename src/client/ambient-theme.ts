@@ -1,18 +1,18 @@
 import type { Settings, WeatherState } from '../shared/contracts.ts';
 import { holidayWindow, seasonForDate } from '../shared/holidays.ts';
 import { defaultTheme } from '../shared/themes.ts';
-import { QUIET_PALETTE, THEME_SCENES, THEME_CLEARANCE_SECONDS, type ThemeSceneId } from '../shared/theme-registry.ts';
+import { QUIET_PALETTE, QUIET_THEME, THEME_MOTIONS, THEME_SCENES, THEME_CLEARANCE_SECONDS, type ThemeSceneId, type ThemeMotionFrame } from '../shared/theme-registry.ts';
 import { DYNAMIC_THRESHOLDS } from './dynamic.ts';
 import { gustForecastSpells } from './weather-hazards.ts';
 
 export type WeatherMotif = 'rain' | 'snow' | 'storm' | 'fog' | 'wind';
 export type ThemeMotif = ThemeSceneId;
-export interface ThemeScene { motif: ThemeMotif; tint: string; companion: string; label: string; source: 'weather' | 'season' | 'holiday'; holiday: string | null; forecast: boolean; quiet: boolean }
+export interface ThemeScene { motif: ThemeMotif; tint: string; companion: string; accent: string; label: string; source: 'weather' | 'season' | 'holiday'; holiday: string | null; forecast: boolean; quiet: boolean }
 const HOUR = 3_600_000;
 export const THEME_WEATHER_HORIZON = 3 * HOUR;
 export { THEME_ACTIVE_MS, THEME_PARTICLES_MAX } from '../shared/theme-registry.ts';
-export function themeCadence(motif: ThemeMotif) {
-  const { slots, interval } = THEME_SCENES[motif];
+export function themeCadence(motif: ThemeMotif, quiet = false) {
+  const { slots, interval } = quiet ? QUIET_THEME : THEME_SCENES[motif];
   return { slots, interval };
 }
 const RANK: Record<WeatherMotif, number> = { storm: 5, snow: 4, rain: 3, wind: 2, fog: 1 };
@@ -66,13 +66,13 @@ export function resolveTheme(settings: Settings, weather: WeatherState, now: Dat
   const quiet = holiday?.policy.role === 'quiet';
   const motif = holiday?.policy.role === 'major' ? holiday.policy.scene : season;
   const palette = quiet ? QUIET_PALETTE : THEME_SCENES[motif].palette;
-  const baseline: ThemeScene = { motif, tint: palette[0], companion: palette[1],
+  const baseline: ThemeScene = { motif, tint: palette[0], companion: palette[1], accent: palette[2],
     label: holiday ? `${holiday.observance.shortName}${quiet ? ' · quiet season' : holiday.phase === 'approaching' ? ' season' : ''}` : THEME_SCENES[season].label,
     source: holiday ? 'holiday' : 'season', holiday: holiday?.observance.name ?? null, forecast: false, quiet };
   const weatherEffect = theme.mode === 'weather' || theme.mode === 'combined' ? weatherScene(weather, settings, now.getTime(), disconnected) : null;
   if (!weatherEffect) return seasonal ? baseline : null;
   const weatherPalette = quiet ? QUIET_PALETTE : theme.mode === 'combined' && holiday ? palette : THEME_SCENES[weatherEffect.motif].palette;
-  return { motif: weatherEffect.motif, tint: weatherPalette[0], companion: weatherPalette[1], quiet,
+  return { motif: weatherEffect.motif, tint: weatherPalette[0], companion: weatherPalette[1], accent: weatherPalette[2], quiet,
     label: `${WEATHER_LABEL[weatherEffect.motif]}${weatherEffect.forecast ? ' expected soon' : ' now'}${holiday ? ` · ${holiday.observance.shortName}` : ''}`,
     source: 'weather', holiday: holiday?.observance.name ?? null, forecast: weatherEffect.forecast };
 }
@@ -80,7 +80,7 @@ export function resolveTheme(settings: Settings, weather: WeatherState, now: Dat
 /** A local illustration only: never invent a date or modify forecast/settings to demonstrate art. */
 export function previewTheme(motif: ThemeSceneId): ThemeScene {
   const definition = THEME_SCENES[motif];
-  return { motif, tint: definition.palette[0], companion: definition.palette[1], label: definition.label,
+  return { motif, tint: definition.palette[0], companion: definition.palette[1], accent: definition.palette[2], label: definition.label,
     source: definition.group === 'Weather' ? 'weather' : definition.group === 'Seasons' ? 'season' : 'holiday',
     holiday: null, forecast: false, quiet: false };
 }
@@ -103,16 +103,21 @@ export function themeMotionTimes(seconds: number, interval: number, phase = 0, h
 }
 /** Search bounded negative space, including a mark's motion envelope. A crowded layout
  * may omit a mark; it never paints over a reading area to meet a decorative count. */
-export function placeThemeMark(index: number, cycle: number, width: number, height: number, size: number, exclusions: readonly ThemeRect[]) {
+export function placeThemeMark(index: number, cycle: number, width: number, height: number, size: number, exclusions: readonly ThemeRect[], motion: readonly ThemeMotionFrame[] = THEME_MOTIONS.drift) {
   const inset = Math.min(width, height) * .012;
+  const x = motion.map(frame => frame.x * width / 100), y = motion.map(frame => frame.y * height / 100);
+  const minX = Math.min(0, ...x), maxX = Math.max(0, ...x), minY = Math.min(0, ...y), maxY = Math.max(0, ...y);
+  // Motion interpolates monotonically between waypoints; the square's largest
+  // rotated extent is at the greatest angle (all profiles stay below 45 degrees).
+  const angle = Math.max(...motion.map(frame => Math.abs(frame.turn))) * Math.PI / 180;
   for (const factor of [1, .78, .6]) {
-    const extent = size * factor, travel = Math.max(width * .015, height * .025);
-    const envelope = extent * 1.12 + travel;
+    const extent = size * factor, padding = extent * (Math.cos(angle) + Math.sin(angle) - 1) / 2 + 4;
+    const envelopeWidth = extent + padding * 2 + maxX - minX, envelopeHeight = extent + padding * 2 + maxY - minY;
     for (let candidate = 0; candidate < 54; candidate++) {
       const point = themeParticle(index + candidate * 3, cycle + candidate * 17);
-      const left = inset + point.x / 100 * Math.max(0, width - envelope - inset * 2);
-      const top = inset + point.y / 100 * Math.max(0, height - envelope - inset * 2);
-      const box = { left: left - travel, top: top - travel, right: left + envelope, bottom: top + envelope };
+      const left = inset + padding - minX + point.x / 100 * Math.max(0, width - envelopeWidth - inset * 2);
+      const top = inset + padding - minY + point.y / 100 * Math.max(0, height - envelopeHeight - inset * 2);
+      const box = { left: left - padding + minX, top: top - padding + minY, right: left + extent + padding + maxX, bottom: top + extent + padding + maxY };
       if (box.left < 0 || box.top < 0 || box.right > width || box.bottom > height) continue;
       if (exclusions.some(rect => box.left < rect.right && box.right > rect.left && box.top < rect.bottom && box.bottom > rect.top)) continue;
       return { left, top, size: extent, box };
