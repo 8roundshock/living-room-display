@@ -64,3 +64,13 @@ Installation, desktop capture, native acceptance and physical-TV viewing are
 separate scopes. Obtain
 independent concept and visual critique, refine the result, then independently
 review the exact final pushed head under the normal repository workflow.
+
+Birthdays (#584) are global private annual content in Settings, never saved-style
+appearance. The central registry supplies three generic birthday previews;
+shared/birthdays.ts supplies exact-day and same-day collision policy. Keep real
+names/dates out of code, fixtures, diagnostics, tickets and PRs. Use invented
+examples in source checks. Preserve field-scoped Save/Cancel, concurrent ID-list
+rebase, default omission and frozen-reader rollback tests. Run Settings, themes
+and Workspace for birthday control changes. Cultural textile accents must remain
+secondary to the birthday silhouette; cite primary sources and distinguish art
+choices from birthday-custom claims in the theme contract.

@@ -89,8 +89,8 @@ test('minor civic cards retain the season; selected exact quiet days constrain w
 });
 
 test('scene illustrations are complete local registry choices with no implied live forecast', () => {
-  assert.equal(THEME_SCENE_IDS.length, 23);
-  assert.deepEqual(['Seasons', 'Celebrations', 'Weather'].map(group => THEME_SCENE_IDS.filter(id => THEME_SCENES[id].group === group).length), [4,14,5]);
+  assert.equal(THEME_SCENE_IDS.length, 26);
+  assert.deepEqual(['Seasons', 'Celebrations', 'Birthdays', 'Weather'].map(group => THEME_SCENE_IDS.filter(id => THEME_SCENES[id].group === group).length), [4,14,3,5]);
   for (const id of THEME_SCENE_IDS) {
     const scene=previewTheme(id),definition=THEME_SCENES[id];
     assert.equal(scene.motif,id); assert.equal(scene.forecast,false); assert.equal(scene.holiday,null);
@@ -137,4 +137,28 @@ test('finite-lifetime motion samples bound every float/step point including the 
       assert.ok(point.x>=bounds.left-1e-9&&point.x<=bounds.right+1e-9&&point.y>=bounds.top-1e-9&&point.y<=bounds.bottom+1e-9,`${interval}/${seconds}/${floating}: point stays in reserved space`);
     }
   }
+});
+
+test('personal birthdays are exact-day global scenes with explicit quiet/weather/holiday precedence', () => {
+  const { settings, weather } = fixture();
+  settings.birthdays = [{ id: 'a', name: 'Birthday A', date: '12-20', treatment: 'russian' }];
+  const birthday = resolveTheme(settings, weather, now, false, '2026-12-20')!;
+  assert.equal(birthday.motif, 'birthday-russian'); assert.equal(birthday.source, 'birthday');
+  assert.equal(birthday.label.includes('Birthday A'), false, 'private labels never enter atmosphere metadata');
+  assert.equal(resolveTheme(settings, weather, now, false, '2026-12-19')?.motif, 'christmas');
+  assert.equal(resolveTheme(settings, weather, now, false, '2026-12-21')?.motif, 'christmas');
+  settings.appearance.theme.calendars = [];
+  assert.equal(resolveTheme(settings, weather, now, false, '2027-12-20')?.motif, 'birthday-russian', 'independent of public calendars/year');
+  weather.current!.weatherCode = 63;
+  const wet = resolveTheme(settings, weather, now, false, '2026-12-20')!;
+  assert.equal(wet.motif, 'rain'); assert.equal(wet.tint, birthday.tint); assert.equal(wet.holiday, null);
+  settings.appearance.theme.mode = 'weather';
+  assert.equal(resolveTheme(settings, weather, now, false, '2026-12-20')?.tint, THEME_SCENES.rain.palette[0]);
+  settings.appearance.theme.mode = 'off'; assert.equal(resolveTheme(settings, weather, now), null);
+  settings.appearance.theme = { mode: 'combined', calendars: ['CA'] };
+  settings.birthdays[0]!.date = '11-11';
+  const quiet = resolveTheme(settings, weather, now, false, '2026-11-11')!;
+  assert.equal(quiet.quiet, true); assert.equal(quiet.motif, 'rain'); assert.equal(quiet.tint, QUIET_PALETTE[0]);
+  settings.appearance.theme.mode = 'seasonal';
+  assert.equal(resolveTheme(settings, weather, now, false, '2026-11-11')?.motif, 'autumn');
 });

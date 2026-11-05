@@ -1,5 +1,6 @@
 /** Original artwork and product policy. Calendar facts live in holidays.ts.
  * Read docs/ambient-themes.md before changing eligibility, cultural art or motion. */
+import type { BirthdayTreatment } from './birthdays.ts';
 export type ThemeTone = 0 | 1 | 2;
 export interface ThemeArt { primary: string; secondary?: string; accent?: string; wash?: string; tone?: ThemeTone; secondaryTone?: ThemeTone; motion?: ThemeMotion }
 export interface ThemeMotionFrame { x: number; y: number; turn: number }
@@ -17,9 +18,10 @@ export const THEME_MOTIONS = {
   mist: motion(3, .7, 0, glide), wind: motion(3.2, 1.3, 8, glide),
 } as const;
 export type ThemeMotion = keyof typeof THEME_MOTIONS;
+export const THEME_GROUPS = ['Seasons', 'Celebrations', 'Birthdays', 'Weather'] as const;
 export interface ThemeDefinition {
   label: string;
-  group: 'Seasons' | 'Celebrations' | 'Weather';
+  group: typeof THEME_GROUPS[number];
   palette: readonly [string, string, string];
   art: readonly ThemeArt[];
   /** Short-side percentage of a feature form; companions use smaller scales. */
@@ -48,8 +50,31 @@ const scene = (label: string, palette: ThemeDefinition['palette'], art: readonly
 const weather = (label: string, palette: ThemeDefinition['palette'], art: readonly ThemeArt[], size: number, motion: ThemeMotion): ThemeDefinition =>
   ({ label, group: 'Weather', palette, art, size, motion, slots: motion === 'mist' ? 8 : 12, interval: motion === 'mist' ? 2000 : 1200, still: motion === 'mist' ? 6 : 9 });
 
-/** All 23 scenes: prominent palette roles, original companions and characteristic finite motion. */
+const birthdayCake: ThemeArt = {
+  primary: 'M17 47Q50 37 83 47V81Q50 93 17 81Z M17 48Q20 65 30 57Q40 69 50 58Q60 69 70 57Q80 64 83 48 M10 85Q50 99 90 85',
+  secondary: 'M46 42V27H54V42 M50 22C40 17 50 7 50 7C50 7 60 17 50 22Z',
+  accent: 'M24 73Q50 82 76 73', wash: 'M21 65Q50 75 79 65V78Q50 87 21 78Z', motion: 'sway',
+};
+const birthdayBalloons: ThemeArt = {
+  primary: 'M16 29C16 2 52 2 52 29C52 52 34 58 34 58C34 58 16 52 16 29Z M32 59L36 59L34 64Z M34 64Q18 78 37 96',
+  secondary: 'M55 41C55 20 84 20 84 41C84 59 70 64 70 64C70 64 55 59 55 41Z M70 65Q88 81 62 94',
+  accent: 'M24 22Q25 14 32 13 M61 38Q62 31 68 30 M7 70L13 74 M88 9L91 16',
+  wash: 'M20 29C20 10 37 6 43 13Q27 15 27 34Q28 44 35 51C27 48 20 40 20 29Z', tone: 1, motion: 'rise',
+};
+const birthdayGift: ThemeArt = {
+  primary: 'M16 43H84V84H16Z M12 33H88V44H12Z',
+  secondary: 'M45 33V84 M55 33V84 M50 32C13 34 22 6 39 16Z M50 32C87 34 78 6 61 16Z',
+  accent: 'M8 13L12 20 M83 8L79 17 M4 91L12 94 M88 59L97 64',
+  wash: 'M20 48H40V80H20Z', tone: 2, motion: 'flutter',
+};
+const russianCake: ThemeArt = { ...birthdayCake, accent: 'M23 72L30 65L37 72L30 79Z M43 75L50 68L57 75L50 82Z M63 72L70 65L77 72L70 79Z' };
+const koreanCake: ThemeArt = { ...birthdayCake, accent: 'M21 69Q50 78 79 69 M37 66V83 M60 73V83 M60 73L77 79', wash: 'M22 67Q29 70 36 71V81L22 78Z M61 74L77 71V78Z' };
+
+/** Central registry for original art, demonstrations and bounded scene behavior. */
 export const THEME_SCENES = {
+  birthday: scene('Birthday · Classic', ['#df9da8', '#8ac4df', '#e2c679'], [birthdayCake, birthdayBalloons, birthdayGift], 'Birthdays', 15),
+  'birthday-russian': scene('Birthday · Russian accents', ['#df91a3', '#dfc176', '#90bfcb'], [russianCake, birthdayBalloons, { ...birthdayGift, accent: 'M20 63L28 55L36 63L28 71Z M62 63L70 55L78 63L70 71Z M20 77H39 M61 77H80' }], 'Birthdays', 15),
+  'birthday-korean': scene('Birthday · Korean accents', ['#86cbb6', '#df9aab', '#e2c17c'], [koreanCake, birthdayBalloons, { ...birthdayGift, secondary: 'M50 33C13 34 22 6 39 16Z M50 33C87 34 78 6 61 16Z M40 44V84 M40 61H84 M64 61V84', accent: 'M16 70H40 M64 61L84 44', wash: 'M18 46H38V68H18Z M42 63H62V82H42Z' }], 'Birthdays', 15),
   spring: scene('Spring', ['#79c99b', '#db91b5', '#dec386'], [branch, petal, seed], 'Seasons'),
   summer: scene('Summer', ['#63c1af', '#e1bd62', '#dc9476'], [{ ...petal, tone: 1 }, { ...seed, tone: 0 }, { ...ring, tone: 2 }], 'Seasons'),
   autumn: scene('Autumn', ['#dc995b', '#bf6f86', '#dbbf70'], [leaf, grain, { ...seed, tone: 2 }], 'Seasons'),
@@ -75,6 +100,7 @@ export const THEME_SCENES = {
   wind: weather('Wind', ['#82d0b0', '#d8bd79', '#8bbce0'], [{ primary: 'M4 64Q32 22 63 39T94 22', secondary: 'M17 85Q50 54 80 65', accent: 'M8 27Q17 12 29 16Q28 33 8 27', wash: 'M8 27Q17 12 29 16Q28 33 8 27Z' }, { ...seed, tone: 1, motion: 'wind' }], 12, 'wind'),
 } satisfies Record<string, ThemeDefinition>;
 export type ThemeSceneId = keyof typeof THEME_SCENES;
+export const BIRTHDAY_SCENES = { classic: 'birthday', russian: 'birthday-russian', korean: 'birthday-korean' } as const satisfies Record<BirthdayTreatment, ThemeSceneId>;
 export const THEME_SCENE_IDS = Object.keys(THEME_SCENES) as ThemeSceneId[];
 export const THEME_ACTIVE_MS = 12_000;
 export const THEME_RETIRE_MS = 180;

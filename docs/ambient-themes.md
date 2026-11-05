@@ -151,3 +151,45 @@ The richer styling pass's all-scene comparisons, focused regressions and current
 review/CI belong to [PR #583](https://github.com/8roundshock/living-room-display/pull/583).
 These are source checks; the theme suite establishes no installation or
 native/physical-TV acceptance.
+
+## Optional annual birthdays (#584)
+
+Birthdays are global private content in Settings, independent of saved and
+scheduled styles. The collapsed section edits up to 24 named month/day entries
+with Classic, Russian accents or Korean accents, through ordinary Save/Cancel.
+No birth year or age is requested. Invalid month/day pairs stay editable and
+block Save. February 29 appears only in leap years, with conditional help.
+
+Seasonal and Combined use the exact civil day only. A birthday takes precedence
+over public festive windows and seasons; selected exact quiet dates retain
+neutral subdued geometry. Weather mode stays weather. In Combined, noteworthy
+weather keeps its geometry with birthday colours. Same-day birthdays share their
+treatment when identical; mixed treatments use Classic, independent of list order.
+No personal label enters scene metadata or generic Try a scene options.
+
+The birthday-first original cake, balloons and gift vocabulary uses three tones
+and the existing finite, bounded placement. The candle is a static contour in a
+moving mark, never a flicker. The accents are textile-inspired product art, not
+claims about a birthday ritual or a culture's canonical colours:
+
+- [Russian Ethnographic Museum, REM2740-26](https://collection.ethnomuseum.ru/entity/OBJECT/378562)
+  describes red embroidery bands and rows of diamonds on a nineteenth-century
+  Vologda linen towel. The artwork uses an original small diamond ribbon on the
+  cake/gift, without copying the object or its symbolic figures.
+- [V&A, Jogakbo](https://www.vam.ac.uk/articles/jogakbo-traditional-korean-patchwork)
+  describes irregular squares/rectangles and flat seams. Original offset panels
+  sit inside a cake band or gift; there is no full-screen grid.
+
+Primary museum sources reviewed 2026-11-04 by the independent cultural/UX critic.
+Recheck on changes to cultural motifs or descriptions. Compared style-local dates,
+a new content widget and global Settings; the latter preserves dates across style
+switches and avoids adding a display surface or crowding the Style inspector.
+
+The central registry owns all three birthday scenes and treatment-to-scene mapping;
+`shared/birthdays.ts` owns date validation and same-day treatment resolution.
+Top-level `settings.birthdays` is private local content included in explicit
+exports/backups. Empty entries are omitted at rest; nonempty entries are an
+explicit strict older-reader rollback exception. Remove them and save twice or
+restore the pre-update backup before rolling back. Frozen compatibility readers
+remain unchanged. Settings, themes and Workspace browser checks cover the new
+controls and previews; source checks do not establish installed/native acceptance.

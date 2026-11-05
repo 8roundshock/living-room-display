@@ -1,13 +1,14 @@
 import type { Settings, WeatherState } from '../shared/contracts.ts';
 import { holidayWindow, seasonForDate } from '../shared/holidays.ts';
 import { defaultTheme } from '../shared/themes.ts';
-import { QUIET_PALETTE, QUIET_THEME, THEME_MOTIONS, THEME_SCENES, THEME_CLEARANCE_SECONDS, type ThemeSceneId, type ThemeMotionFrame } from '../shared/theme-registry.ts';
+import { birthdayTreatmentForDate } from '../shared/birthdays.ts';
+import { BIRTHDAY_SCENES, QUIET_PALETTE, QUIET_THEME, THEME_MOTIONS, THEME_SCENES, THEME_CLEARANCE_SECONDS, type ThemeSceneId, type ThemeMotionFrame } from '../shared/theme-registry.ts';
 import { DYNAMIC_THRESHOLDS } from './dynamic.ts';
 import { gustForecastSpells } from './weather-hazards.ts';
 
 export type WeatherMotif = 'rain' | 'snow' | 'storm' | 'fog' | 'wind';
 export type ThemeMotif = ThemeSceneId;
-export interface ThemeScene { motif: ThemeMotif; tint: string; companion: string; accent: string; label: string; source: 'weather' | 'season' | 'holiday'; holiday: string | null; forecast: boolean; quiet: boolean }
+export interface ThemeScene { motif: ThemeMotif; tint: string; companion: string; accent: string; label: string; source: 'weather' | 'season' | 'holiday' | 'birthday'; holiday: string | null; forecast: boolean; quiet: boolean }
 const HOUR = 3_600_000;
 export const THEME_WEATHER_HORIZON = 3 * HOUR;
 export { THEME_ACTIVE_MS, THEME_PARTICLES_MAX } from '../shared/theme-registry.ts';
@@ -64,24 +65,25 @@ export function resolveTheme(settings: Settings, weather: WeatherState, now: Dat
   const holiday = seasonal ? holidayWindow(civilDate, theme.calendars) : null;
   const season = seasonForDate(civilDate, settings.location.latitude < 0 ? 'south' : 'north');
   const quiet = holiday?.policy.role === 'quiet';
-  const motif = holiday?.policy.role === 'major' ? holiday.policy.scene : season;
+  const birthday = seasonal && !quiet ? birthdayTreatmentForDate(settings.birthdays, civilDate) : null;
+  const motif = birthday ? BIRTHDAY_SCENES[birthday] : holiday?.policy.role === 'major' ? holiday.policy.scene : season;
   const palette = quiet ? QUIET_PALETTE : THEME_SCENES[motif].palette;
   const baseline: ThemeScene = { motif, tint: palette[0], companion: palette[1], accent: palette[2],
-    label: holiday ? `${holiday.observance.shortName}${quiet ? ' · quiet season' : holiday.phase === 'approaching' ? ' season' : ''}` : THEME_SCENES[season].label,
-    source: holiday ? 'holiday' : 'season', holiday: holiday?.observance.name ?? null, forecast: false, quiet };
+    label: birthday ? THEME_SCENES[motif].label : holiday ? `${holiday.observance.shortName}${quiet ? ' · quiet season' : holiday.phase === 'approaching' ? ' season' : ''}` : THEME_SCENES[season].label,
+    source: birthday ? 'birthday' : holiday ? 'holiday' : 'season', holiday: birthday ? null : holiday?.observance.name ?? null, forecast: false, quiet };
   const weatherEffect = theme.mode === 'weather' || theme.mode === 'combined' ? weatherScene(weather, settings, now.getTime(), disconnected) : null;
   if (!weatherEffect) return seasonal ? baseline : null;
-  const weatherPalette = quiet ? QUIET_PALETTE : theme.mode === 'combined' && holiday ? palette : THEME_SCENES[weatherEffect.motif].palette;
+  const weatherPalette = quiet ? QUIET_PALETTE : theme.mode === 'combined' && (holiday || birthday) ? palette : THEME_SCENES[weatherEffect.motif].palette;
   return { motif: weatherEffect.motif, tint: weatherPalette[0], companion: weatherPalette[1], accent: weatherPalette[2], quiet,
-    label: `${WEATHER_LABEL[weatherEffect.motif]}${weatherEffect.forecast ? ' expected soon' : ' now'}${holiday ? ` · ${holiday.observance.shortName}` : ''}`,
-    source: 'weather', holiday: holiday?.observance.name ?? null, forecast: weatherEffect.forecast };
+    label: `${WEATHER_LABEL[weatherEffect.motif]}${weatherEffect.forecast ? ' expected soon' : ' now'}${birthday ? ' · Birthday' : holiday ? ` · ${holiday.observance.shortName}` : ''}`,
+    source: 'weather', holiday: birthday ? null : holiday?.observance.name ?? null, forecast: weatherEffect.forecast };
 }
 
 /** A local illustration only: never invent a date or modify forecast/settings to demonstrate art. */
 export function previewTheme(motif: ThemeSceneId): ThemeScene {
   const definition = THEME_SCENES[motif];
   return { motif, tint: definition.palette[0], companion: definition.palette[1], accent: definition.palette[2], label: definition.label,
-    source: definition.group === 'Weather' ? 'weather' : definition.group === 'Seasons' ? 'season' : 'holiday',
+    source: definition.group === 'Weather' ? 'weather' : definition.group === 'Seasons' ? 'season' : definition.group === 'Birthdays' ? 'birthday' : 'holiday',
     holiday: null, forecast: false, quiet: false };
 }
 

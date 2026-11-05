@@ -2,6 +2,7 @@ import type { GridDensity, WidgetKind, WidgetSize, WidgetSpan } from './widgets.
 import type { AccentMode } from './palette.ts';
 import type { AnimationLevel } from './motion.ts';
 import type { ThemeSettings } from './themes.ts';
+import type { BirthdayEntry } from './birthdays.ts';
 export type WidgetId = WidgetKind;
 /**
  * `span` is a custom whole-cell size, only for free-size widgets (#73) and only when it differs from
@@ -77,6 +78,8 @@ export interface Settings extends VisualSettings {
   idle: IdleSettings; savedPresets: SavedPreset[];
   widgetData: WidgetDataSettings;
   screen: ScreenSettings;
+  /** Private annual dates; not part of saved styles. Empty is omitted at rest. */
+  birthdays: BirthdayEntry[];
 }
 export interface SettingsPatch {
   /** Request intent only; automatic/failure-fallback selection must preserve a saved manual city. */
@@ -91,6 +94,7 @@ export interface SettingsPatch {
   photoChange?: { pngBase64: string } | null;
   preview?: Partial<PreviewSettings>; idle?: Partial<IdleSettings>; savedPresets?: SavedPreset[];
   screen?: Partial<ScreenSettings>;
+  birthdays?: BirthdayEntry[];
   /** Arrays replace whole; nested objects merge. */
   widgetData?: {
     worldClocks?: WorldClockCity[]; calendar?: Partial<WidgetDataSettings['calendar']>; countdowns?: CountdownEvent[];

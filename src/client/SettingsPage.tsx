@@ -13,6 +13,8 @@ import { ScheduleSettings, useScheduleDraft } from './ScheduleSettings';
 import { StudioHeader } from './StudioHeader';
 import { useDisplayWindow } from './displayWindow';
 import { findSettings, type SettingsSearchItem } from './settings-search';
+import { BirthdaySettings } from './BirthdaySettings';
+import { birthdayProblem } from '../shared/birthdays';
 import './settings.css';
 
 export function SettingsPage({ state, setState, connectionError, reload }: {
@@ -48,6 +50,7 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
   }, [settingsQuery, searchOpen]);
   const controls = useDisplayWindow();
   const dirty = !same(settingsChanges(saved, draft), {});
+  const draftProblem = birthdayProblem(draft.birthdays);
   const scheduleEditor = useScheduleDraft(state.schedule);
   function update(next: Settings) { live.current = next; setDraft(next); setMessage(''); }
   function change(patch: Partial<Settings>) { update({ ...live.current, ...patch }); setError(''); }
@@ -94,7 +97,7 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
     if (lastControl.current?.isConnected) lastControl.current.focus();
   }); }
   async function save() {
-    if (savingNow.current || locating || !dirty) return;
+    if (savingNow.current || locating || !dirty || birthdayProblem(live.current.birthdays)) return;
     savingNow.current = true; setSaving(true); setError('');
     const submitted = structuredClone(live.current), submittedBase = base.current;
     try {
@@ -159,7 +162,7 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
       </div>
       {(error || connectionError) && <div className="settings-alert" role="alert"><span>{error || connectionError}</span>{error && <button className="icon-button" aria-label="Dismiss message" onClick={() => setError('')}><Icon name="close" size={15} /></button>}</div>}
       <nav className="settings-nav" aria-label="Settings sections">
-        <a href="#weather-heading">Weather</a><a href="#preferences-heading">Time &amp; units</a><a href="#device-heading">This device</a><a href="#settings-schedule">Schedule</a><a href="#settings-recovery">Data &amp; recovery</a>
+        <a href="#weather-heading">Weather</a><a href="#preferences-heading">Time &amp; units</a><a href="#device-heading">This device</a><a href="#settings-birthdays">Birthdays</a><a href="#settings-schedule">Schedule</a><a href="#settings-recovery">Data &amp; recovery</a>
       </nav>
       <div className="settings-sections">
         <section className="settings-card settings-weather-card" aria-labelledby="weather-heading">
@@ -177,10 +180,11 @@ export function SettingsPage({ state, setState, connectionError, reload }: {
         </section>
         <section className="settings-card settings-device-card" aria-labelledby="device-heading"><h2 id="device-heading" tabIndex={-1}>This device</h2><ScreenSettings keepAwake={draft.screen.keepAwake} active onKeepAwake={value => change({ screen: { ...live.current.screen, keepAwake: value } })} /></section>
         <div id="settings-schedule" tabIndex={-1} className="settings-card settings-schedule-card"><ScheduleSettings snapshot={state.schedule} presets={saved.savedPresets} editor={scheduleEditor} setState={setState} reload={reload} /></div>
+        <section className="settings-card settings-birthday-card" aria-label="Birthdays"><BirthdaySettings entries={draft.birthdays} onChange={birthdays => change({ birthdays })} /></section>
         <div id="settings-recovery" tabIndex={-1} className="settings-recovery-section"><DataRecovery dirty={dirty || saving || scheduleEditor.dirty} clockFormat={draft.clockFormat} reload={reload} /></div>
       </div>
       <p className="settings-status" role="status">{message}</p>
     </main>
-    {dirty && <div className="settings-savebar"><span>Unsaved changes</span><button className="button small" disabled={saving} onClick={cancel}>Cancel</button><button ref={saveTrigger} className="button primary" disabled={saving || locating} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
+    {dirty && <div className="settings-savebar">{draftProblem ? <span id="settings-draft-problem" role="status">{draftProblem}</span> : <span>Unsaved changes</span>}<button className="button small" disabled={saving} onClick={cancel}>Cancel</button><button ref={saveTrigger} className="button primary" disabled={saving || locating || !!draftProblem} aria-describedby={draftProblem ? 'settings-draft-problem' : undefined} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
   </div>;
 }

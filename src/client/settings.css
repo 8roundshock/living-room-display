@@ -62,6 +62,24 @@
 .settings-search-result:hover, .settings-search-result:focus-visible { background: #c1b2ed1c; }
 .settings-search-result small { display: block; margin-top: 3px; font-size: 12px; color: var(--studio-muted); }
 .settings-search-result > svg { flex-shrink: 0; }
+.settings-birthday-card { grid-column: 1 / -1; }
+.studio .birthday-settings > summary { min-height: 44px; gap: 10px; font-size: 16px; font-weight: 600; }
+.birthday-count { color: var(--studio-muted); font-size: 13px; font-weight: 400; }
+.birthday-settings .muted, .birthday-problem { font-size: 13px; line-height: 1.5; margin: 8px 0 14px; color: var(--studio-muted); }
+.birthday-list { display: grid; gap: 8px; }
+.birthday-entry { border: 1px solid #ffffff14; border-radius: 12px; min-width: 0; }
+.birthday-entry-toggle { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border: 0; background: transparent; color: var(--studio-text); text-align: left; font: inherit; cursor: pointer; }
+.birthday-entry-toggle strong { font-size: 14px; overflow-wrap: anywhere; }
+.birthday-entry-toggle span { font-size: 12px; color: var(--studio-muted); }
+.birthday-fields { padding: 0 14px 14px; display: grid; gap: 12px; }
+.birthday-fields label { min-width: 0; }
+.birthday-fields :is(input, select) { width: 100%; min-width: 0; min-height: 44px; }
+.birthday-date-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; }
+.birthday-fields > button { justify-self: start; }
+.birthday-fields .muted, .birthday-fields .birthday-problem { margin: 0; }
+.birthday-problem { color: #eab1b8; }
+.birthday-add { margin-top: 12px; }
+.settings-savebar > #settings-draft-problem { white-space: normal; max-width: 240px; }
 @media (max-width: 700px) {
   .settings-main { width: calc(100% - 28px); padding-top: 20px; }
   .settings-heading { align-items: stretch; flex-direction: column; gap: 12px; }
@@ -71,6 +89,7 @@
   .settings-card { padding: 16px; }
   .settings-savebar { bottom: 12px; width: calc(100% - 24px); justify-content: flex-end; padding-left: 12px; }
   .settings-savebar > span { margin-right: auto; white-space: normal; }
+  .birthday-entry-toggle { align-items: flex-start; flex-direction: column; gap: 4px; }
 }
 /* Three stable destinations; actions remain distinct on their own row on narrow screens. */
 @media (max-width: 700px) {
