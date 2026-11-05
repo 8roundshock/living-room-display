@@ -1,5 +1,13 @@
 # Display studio design
 
+## Proposed layered atmosphere (#586)
+
+The owner requested coherent living scenes with grounded seasonal edges and
+occasional bounded foreground passages. The [layered scene plan](layered-scene-plan.md)
+documents the full inventory, architecture alternatives, phased delivery and
+visual/performance gates. It is planning only; the current renderer remains as
+described in the [theme contract](ambient-themes.md).
+
 ## Explicit creation and native popup readability (#570, 2026-11-03)
 
 Create new style opens a compact naming/starting-point dialog and then returns
