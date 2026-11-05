@@ -1,0 +1,24 @@
+.living-theme { opacity: var(--ambient-brightness, .55); }
+.living-canvas { display: block; width: 100%; height: 100%; overflow: hidden; }
+.living-patch-life { animation: habitat-life var(--patch-life) linear var(--patch-age) 1 both; }
+.living-attached { transform-box: view-box; animation: habitat-phrase 12s ease-in-out var(--group-phase) 3 both; }
+.living-rain { animation: habitat-rain 4s linear var(--rain-age) 9 both; }
+@keyframes habitat-life {
+  0%,96%,100% { opacity: 0; }
+  8%,78% { opacity: 1; }
+  90% { opacity: 0; }
+}
+@keyframes habitat-phrase {
+  0% { transform: var(--habitat-step-0); }
+  25% { transform: var(--habitat-step-1); }
+  50% { transform: var(--habitat-step-2); }
+  75% { transform: var(--habitat-step-3); }
+  100% { transform: var(--habitat-step-4); }
+}
+@keyframes habitat-rain {
+  0% { opacity: 0; transform: translate(0,0); }
+  18%,72% { opacity: 1; }
+  100% { opacity: 0; transform: var(--rain-travel); }
+}
+.living-theme[data-theme-still] :is(.living-patch-life,.living-attached,.living-rain) { animation: none; opacity: 1; }
+.living-theme[data-theme-quiet] { opacity: calc(var(--ambient-brightness, .55) * .38); }

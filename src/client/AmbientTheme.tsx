@@ -2,12 +2,15 @@ import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties 
 import { THEME_ACTIVE_MS, THEME_RETIRE_MS, THEME_SCENES, THEME_MOTIONS, QUIET_THEME, type ThemeMotionFrame } from '../shared/theme-registry';
 import { placeThemeMark, themeCadence, type ThemeRect, type ThemeScene } from './ambient-theme';
 import './ambient-theme.css';
+import { LivingTheme } from './LivingTheme';
 
 type Exclusions = () => readonly ThemeRect[];
 interface ThemeProps { scene: ThemeScene | null; animated: boolean; still?: boolean; exclusions: Exclusions; layoutKey: string; inkRevision: number }
 
 /** Static editor art is explicit; disabled/reduced display motion never mounts a sequence. */
 export const AmbientTheme = memo(function AmbientTheme({ scene, animated, still = false, exclusions, layoutKey, inkRevision }: ThemeProps) {
+  const composition = scene && THEME_SCENES[scene.habitat ?? scene.motif].composition;
+  if (scene && composition && (animated || still)) return <LivingTheme key={`${scene.motif}:${scene.habitat}:${scene.quiet}:${still}:${layoutKey}`} scene={scene} art={composition} still={still} exclusions={exclusions} inkRevision={inkRevision} />;
   return scene && (animated || still) ? <ThemeSequence key={`${scene.motif}:${scene.quiet}:${still}:${layoutKey}`} scene={scene} still={still} exclusions={exclusions} inkRevision={inkRevision} /> : null;
 });
 

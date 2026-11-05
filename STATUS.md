@@ -2,6 +2,12 @@
 
 ## Planned layered living scenes — 2026-11-04 (#586)
 
+Implementation has started with a Summer/rain vertical slice: original connected
+meadow geometry, shared attached-group motion, staggered local retreats and
+reading-space masking. Build/typechecks and existing resolver/calendar checks
+pass. The first actual whole-scene visual/performance gate is pending; the other
+25 compositions and optional foreground policy are not yet migrated or accepted.
+
 The coordinator accepted the direction in the [layered scene plan](docs/layered-scene-plan.md):
 connected seasonal edges, shared environmental motion, integrated weather and
 rare bounded foreground passages across all 26 scenes. This is documented future

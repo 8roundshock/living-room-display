@@ -1,6 +1,8 @@
 /** Original artwork and product policy. Calendar facts live in holidays.ts.
  * Read docs/ambient-themes.md before changing eligibility, cultural art or motion. */
 import type { BirthdayTreatment } from './birthdays.ts';
+import { LIVING_SCENE_ART, type LivingSceneArt } from './living-scene-art.ts';
+export const LIVING_SCENE_BUDGET = { life: 36_000, stagger: 12_000, observation: 4000, patches: 4, paths: 240, animations: 32 } as const;
 export type ThemeTone = 0 | 1 | 2;
 export interface ThemeArt { primary: string; secondary?: string; accent?: string; wash?: string; tone?: ThemeTone; secondaryTone?: ThemeTone; motion?: ThemeMotion }
 export interface ThemeMotionFrame { x: number; y: number; turn: number }
@@ -20,6 +22,7 @@ export const THEME_MOTIONS = {
 export type ThemeMotion = keyof typeof THEME_MOTIONS;
 export const THEME_GROUPS = ['Seasons', 'Celebrations', 'Birthdays', 'Weather'] as const;
 export interface ThemeDefinition {
+  composition?: LivingSceneArt;
   label: string;
   group: typeof THEME_GROUPS[number];
   palette: readonly [string, string, string];
@@ -76,7 +79,7 @@ export const THEME_SCENES = {
   'birthday-russian': scene('Birthday · Russian accents', ['#df91a3', '#dfc176', '#90bfcb'], [russianCake, birthdayBalloons, { ...birthdayGift, accent: 'M20 63L28 55L36 63L28 71Z M62 63L70 55L78 63L70 71Z M20 77H39 M61 77H80' }], 'Birthdays', 15),
   'birthday-korean': scene('Birthday · Korean accents', ['#86cbb6', '#df9aab', '#e2c17c'], [koreanCake, birthdayBalloons, { ...birthdayGift, secondary: 'M50 33C13 34 22 6 39 16Z M50 33C87 34 78 6 61 16Z M40 44V84 M40 61H84 M64 61V84', accent: 'M16 70H40 M64 61L84 44', wash: 'M18 46H38V68H18Z M42 63H62V82H42Z' }], 'Birthdays', 15),
   spring: scene('Spring', ['#79c99b', '#db91b5', '#dec386'], [branch, petal, seed], 'Seasons'),
-  summer: scene('Summer', ['#63c1af', '#e1bd62', '#dc9476'], [{ ...petal, tone: 1 }, { ...seed, tone: 0 }, { ...ring, tone: 2 }], 'Seasons'),
+  summer: { ...scene('Summer', ['#63c1af', '#e1bd62', '#dc9476'], [{ ...petal, tone: 1 }, { ...seed, tone: 0 }, { ...ring, tone: 2 }], 'Seasons'), composition: LIVING_SCENE_ART.summer },
   autumn: scene('Autumn', ['#dc995b', '#bf6f86', '#dbbf70'], [leaf, grain, { ...seed, tone: 2 }], 'Seasons'),
   winter: scene('Winter', ['#83bcd9', '#99c9b7', '#b8a3d8'], [{ ...flake, tone: 0 }, { ...pine, tone: 1 }, branch], 'Seasons'),
   christmas: scene('Christmas', ['#74c398', '#d57d8a', '#e1c077'], [pine, ornament, { ...star, tone: 2 }]),
