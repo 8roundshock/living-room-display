@@ -114,7 +114,7 @@ same silhouettes with different colours.
 | Birthday · Classic | Edge-anchored balloon/ribbon cluster and a lower cake/gift arrangement. | Buoyant balloon tension, related ribbon motion and rare confetti; birthday silhouette comes first. |
 | Birthday · Russian accents | The same birthday vocabulary with a small original diamond-band textile accent inside wrapping/ribbon/cake detail. | Cranberry/gold/cool colour roles are art choices; no costume, flags or assumed ritual. |
 | Birthday · Korean accents | Birthday grouping with a few asymmetric patchwork panels inside wrapping/cake detail. | Jade/coral/gold roles and restrained fabric motion; no full-screen patchwork grid or generic lantern replacement. |
-| Rain | A dark edge vegetation/ripple habitat adapted to the chosen season, with directional rainfall in depth. | Rain direction, droplets, ground ripples and bending vegetation share one event; no uniform full-screen veil. |
+| Rain | A neutral dark vegetation/ripple edge in Weather mode, or the compatible seasonal habitat in Combined, with directional rainfall in depth. | Rain direction, droplets, ground ripples and bending vegetation share one event; no uniform full-screen veil. |
 | Snow | Drifts and a small twig/evergreen fragment, with separated flake scales/depths. | Falling/swaying crystals and slow drift changes; no opaque snow curtain. |
 | Storms | Dark cloud/branch-edge grouping and stronger directional rain. | Coordinated wind/rain with calm intervals; no lightning, flashes or screen shake. |
 | Fog | Sparse edge reeds/branch silhouettes and separated local contour ribbons. | Slow horizontal layers; black gaps stay open. No blurred full-screen grey wash. |
@@ -142,6 +142,9 @@ adaptations; an unsupported pair uses the standalone weather composition with
 the existing contextual tint. Do not invent new combinations by stacking layers.
 Weather-only mode never displays holiday/birthday emblems. Stale/disconnected
 weather follows the existing honest fallback, with no extra provider requests.
+Use factual wind direction only when supported by the selected fresh forecast
+data; otherwise the visual direction is authored motion, not a compass or weather
+claim. No decorative animation should imply a more precise forecast than exists.
 
 Keep the accepted birthday policy when #584 lands: global private entries,
 exact annual day, February 29 only in leap years, mixed same-day treatments use
@@ -199,9 +202,9 @@ colour separation at 26%, then validate 36% and the supported brightness extreme
 Avoid full-screen tint/blur, luminous fixed baselines, pulsing global opacity,
 screen flashes, audio and a dense bright rectangular frame.
 
-Start with edge habitats occupying roughly 10–18% of the short dimension and
-asymmetric spans; adapt topology to available space, rather than uniformly
-shrinking the composition until it disappears. The central reading field stays
+Start with lower habitats roughly 5–12% of screen height, with isolated peaks up
+to 18% and smaller side/top fragments. Adapt topology to available space, rather
+than uniformly shrinking the composition until it disappears. The central reading field stays
 open. A dense board can simplify/split the habitat and omit passages, while
 retaining a recognizable edge silhouette where feasible. An empty board must
 look composed, not like randomly enlarged copies of the populated-board marks.
@@ -209,9 +212,11 @@ look composed, not like randomly enlarged copies of the populated-board marks.
 Every visibly lit edge fragment must change its actual occupied pixels over time
 through movement, local shape grouping or staggered replacement. A patch may
 appear rooted while its base position/shape changes gently. Prototype a maximum
-45-second unchanged-fragment dwell, with separate local handoffs and no whole
-screen fade. Inspect a temporal occupancy heatmap; a moving tip alone does not
-justify a permanently lit root/border. This reduces fixed decorative patterns;
+45-second unchanged-fragment dwell. Stagger local patch retreats fully to true
+black while neighbouring habitat remains; never blank/fade the information board
+or the whole display. Inspect a long-run temporal occupancy/coverage heatmap over
+multiple complete cycles; a moving tip alone does not justify a permanently lit
+root/border. This reduces fixed decorative patterns;
 it does not promise burn-in prevention or replace physical viewing acceptance.
 
 Off, Animation Off and system reduced motion keep the current no-atmosphere
@@ -253,7 +258,7 @@ unbuilt design already meets them. Record failures and before/after corrections.
 | Whole-scene quality | Author, independent visual critic and coordinator inspect actual rendered default/dense/empty scenes at 26%/36%, 1080p/4K, beside the current baseline at identical settings. Recognizable grounded habitat, related motion and depth must be clear in the whole screen; enlarged crops/DOM counts alone do not pass. |
 | Complete coverage | Registry-derived inventory equals the 4+14+5 baseline plus the 3 landed birthday variants. Contact sheets cover every scene; full views cover each family and each cultural treatment. Distinct silhouette/composition, not only palette changes. |
 | Motion | Inspect at least 45 seconds for representative Summer/rain, Winter/snow, celebration and birthday scenes, plus deterministic sampled phases across every profile. Accelerated scheduler tests cover several full renewal/cooldown cycles, quiet transitions, pause/resume and scene changes without reset flashes. |
-| Negative space | In scene-only synthetic renders, target at least 80% exact-black pixels during steady phases and at least 70% in the worst permitted passage/transition. Report thresholds, antialiasing and scene-only masks; occupied bounds are not lit-pixel area. These targets cannot substitute for judging legibility or attractive composition. |
+| Negative space | In scene-only synthetic renders, target at least 80% exact-black pixels during steady phases and at least 70% in the worst permitted passage/transition; at least 40% of the perimeter remains unlit at every sampled phase. Report thresholds, antialiasing and scene-only masks; occupied bounds are not lit-pixel area. These targets cannot substitute for judging legibility or attractive composition. |
 | Reading / incursions | Background and middle pass current measured reading-ink clearance at float/step/swap boundaries, including 30-second motion and pending dim swap. Foreground tests assert swept intersection duration/area/opacity/cooldowns, protected zones and overflow handling. A deliberately oversized/long/opaque crossing must fail. Inspect actual glyph readability at worst permitted phase. |
 | Edge persistence | Temporal heatmaps over multiple full cycles identify fixed bright roots, border segments and repeated occupancy. No fragment remains visually unchanged beyond the proposed 45-second dwell; independently review any residual fixed pattern. |
 | Initial resource cap | At most 3 depth planes, 4 habitat patches, 6 middle detail groups and 1 foreground actor; at most 240 SVG path elements and 32 simultaneous decorative transform/opacity animations. Includes incoming/outgoing fragments. These cap structure, not quality. |
@@ -264,6 +269,10 @@ unbuilt design already meets them. Record failures and before/after corrections.
 Use the existing isolated production source harness, mocked Windows status and
 wake locks, loopback ephemeral ports and synthetic data. Images/clips and pixel
 analysis remain in RAM; do not add screenshot files or upload private captures.
+Do not use Playwright `recordVideo` or another recorder that writes video files by
+default. Review motion live or assemble only in-memory frame sequences; retain
+textual findings and source/asset provenance instead of accumulating image/video
+artifacts.
 Run focused tests during iteration, then the relevant themes, Workspace and
 Settings suites once stable; full applicable CI remains the final gate. Preserve
 the exact source SHA and served asset hashes for each visual pass. No current
@@ -284,6 +293,11 @@ or prove the proposed art/performance outcome.
 - [W3C Pause, Stop, Hide guidance](https://www.w3.org/WAI/WCAG22/Understanding/pause-stop-hide.html):
   moving content beside information needs user control. Preserve the current
   Off/Animation Off/reduced-motion behavior and verify the optional passage toggle.
+- [ALBERTINA, The Great Piece of Turf](https://sammlungenonline.albertina.at/de/objects/39098/das-groe-rasenstuck)
+  and [The Met, Autumn Grasses](https://www.metmuseum.org/art/collection/search/45744)
+  inform observed plant variation, grouped silhouettes and depth. Study the
+  composition rather than reproduce the art; do not transplant Japanese motifs
+  into Korean or Russian cultural labels.
 - [Existing cultural sources](holiday-calendar.md#cultural-art-references) support
   the celebration identities; current date policy remains authoritative.
 - Birthday accent references from the separately reviewed #584 work:
