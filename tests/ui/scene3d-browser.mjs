@@ -4,13 +4,18 @@
 // --gpu uses the machine's real GPU and adds the frame-rate floor. It fails, loudly, if the browser
 // gives the page no WebGL context at all.
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { openScene, startSceneServer, WEBGL_ARGS } from './lib/scene-cases.mjs';
+import { openScene, SCENE_CASES, startSceneServer, WEATHER_IDS, WEBGL_ARGS } from './lib/scene-cases.mjs';
 
 const VIEWPORT = { width: 640, height: 360 }, BRIGHTNESS = .36, READY = 120_000;
+// A season or holiday scene that has no file under scenes/ yet (and borrows none), read from the folder so that
+// adding a scene never breaks this suite. Null once every such scene has its module: nothing is left to show.
+const SCENE_MODULES = readdirSync(fileURLToPath(new URL('../../src/client/scene3d/scenes/', import.meta.url))).filter(file => file.endsWith('.js') && !file.startsWith('_')).map(file => file.slice(0, -3));
+const FLAT_SCENE = SCENE_CASES.map(([id]) => id).find(id => !SCENE_MODULES.includes(id) && !WEATHER_IDS.includes(id) && !id.startsWith('birthday')) ?? null;
 // [scene, weather over it, tier, source, share of brightness]. settings.ts: share 0.95, everyday x0.9, special x1.15 clamped at 1.
 // Christmas is shown under Combined snow, so its module and the snow overlay are drawn together on the display.
 const CASES = [['christmas', 'snow', 'everyday', 'weather', .95 * .9], ['canada-day', null, 'special', 'holiday', 1], ['birthday', null, 'special', 'birthday', 1]];
@@ -45,13 +50,15 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
   }
   try {
     // ---------- the browser must give the page WebGL, or this suite has checked nothing ----------
-    await open({ scene: 'summer' });
+    await open({ scene: FLAT_SCENE ?? 'christmas' });
     const webgl = await page.evaluate(() => { const gl = document.createElement('canvas').getContext('webgl2') ?? document.createElement('canvas').getContext('webgl'); if (!gl) return null;
       const info = gl.getExtension('WEBGL_debug_renderer_info'), name = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER)); gl.getExtension('WEBGL_lose_context')?.loseContext(); return name; });
     if (webgl === null) throw new Error(`NO WEBGL: Edge gave the page no WebGL context with ${JSON.stringify(args)}. None of the 3D scene checks ran. This is a failure of the check, not a pass.`);
     console.log(`SCENE3D_WEBGL ${JSON.stringify({ renderer: webgl, mode: gpu ? 'gpu' : 'software' })}`);
-    await flat('summer'); assert.equal(await canvas().count(), 0); assert.deepEqual(await stages(), []);
-    record(`WebGL is available (${webgl}); a scene without a 3D module is drawn by the flat renderer`);
+    if (FLAT_SCENE) {
+      await flat(FLAT_SCENE); assert.equal(await canvas().count(), 0); assert.deepEqual(await stages(), []);
+      record(`WebGL is available (${webgl}); ${FLAT_SCENE}, a scene without a 3D module, is drawn by the flat renderer`);
+    } else record(`WebGL is available (${webgl}); every season and holiday scene has a 3D module, so none is left to show the flat renderer for a missing one`);
 
     // ---------- the three reference scenes ----------
     const timings = {}, chunks = {};
