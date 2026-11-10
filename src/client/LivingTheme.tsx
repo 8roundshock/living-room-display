@@ -17,18 +17,19 @@ function lighten(color: string, amount = .5) {
   return `rgb(${mix(value >> 16 & 255)},${mix(value >> 8 & 255)},${mix(value & 255)})`;
 }
 
-function ArtPath({ path, palette, quiet }: { path: ScenePath; palette: readonly string[]; quiet: boolean }) {
+function ArtPath({ path, palette, quiet, sheen }: { path: ScenePath; palette: readonly string[]; quiet: boolean; sheen?: readonly string[] }) {
   // Low-light fill curve: thin authored fills (0.13-0.5) otherwise vanish against true black at
   // 26% brightness. Outlines use a lighter rim of the same hue. Nothing raises brightness globally.
   const filled = !!path.fill && !quiet;
   // Glass, not poster paint (#600): a thin translucent body under a light rim of the same hue.
-  return <path d={path.d} fill={filled ? palette[path.tone] : 'none'} fillOpacity={path.fill ? Math.pow(path.fill, .45) * .5 : 0}
+  return <path d={path.d} fill={filled ? sheen?.[path.tone] ?? palette[path.tone] : 'none'} fillOpacity={path.fill ? Math.pow(path.fill, .45) * .5 : 0}
     stroke={path.stroke === 0 ? 'none' : filled ? lighten(palette[path.tone]!, .45) : palette[path.tone]} strokeOpacity={.9} strokeWidth={Math.min(path.stroke ?? 1.5, 1.6)}
     opacity={path.opacity ?? 1} strokeLinecap="round" strokeLinejoin="round" />;
 }
-function Dress({ path, colors }: { path: DressPath; colors: readonly string[] }) {
+function Dress({ path, colors, fills }: { path: DressPath; colors: readonly string[]; fills?: readonly string[] }) {
   const color = path.light ? lighten(colors[path.tone]!) : colors[path.tone];
-  return <path d={path.d} fill={path.fill ? color : 'none'} fillOpacity={path.fill ?? 0} stroke={path.stroke ? color : 'none'} strokeWidth={path.stroke ?? 0}
+  // `fills` are gradient paints for the same tones, so a filled form is shaded rather than flat.
+  return <path d={path.d} fill={path.fill ? (fills && !path.light ? fills[path.tone] : color) : 'none'} fillOpacity={path.fill ?? 0} stroke={path.stroke ? color : 'none'} strokeWidth={path.stroke ?? 0}
     opacity={path.opacity ?? 1} strokeLinecap="round" strokeLinejoin="round" />;
 }
 
@@ -116,12 +117,13 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
     if (!dressing || !width) return null;
     const w = width / unit1080, h = height / unit1080, styles = sideStyles(scene.habitat ?? scene.motif, dressing.ground);
     const room = (side: 'left' | 'right') => holes.reduce((least, hole) => Math.min(least, side === 'left' ? hole.left / unit1080 : w - hole.right / unit1080), w * .2);
-    return (['left', 'right'] as const).map((side, index) => ({ side, pivot: `${side === 'left' ? 0 : w}px ${h}px`, paths: sideFlourish(styles[index]!, w, h, side, room(side)) }));
+    return (['left', 'right'] as const).map((side, index) => ({ side, pivot: `${side === 'left' ? 0 : w}px ${h}px`, ...sideFlourish(styles[index]!, w, h, side, room(side)) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- holeKey is the rounded identity of holes
   }, [dressing, scene.habitat, scene.motif, width, height, unit1080, holeKey]);
   const cycle = Math.floor(elapsed / LIVING_SCENE_BUDGET.life);
   const groundColors = weather === 'snow' ? SNOW_COLORS : dressing?.groundColors ?? palette;
   const topColors = palette;
+  const sheen = palette.map((_, index) => `url(#${maskId}-sheen-${index})`), blade = groundColors.map((_, index) => `url(#${maskId}-blade-${index})`);
   return <div ref={root} className="ambient-theme living-theme" aria-hidden="true" data-theme-motif={scene.motif}
     data-theme-habitat={scene.habitat ?? scene.motif} data-theme-source={scene.source} data-theme-quiet={scene.quiet || undefined}
     data-theme-still={still || undefined} data-scene-elapsed={elapsed} data-scene-revision={revision}>
@@ -131,6 +133,15 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
           <stop offset="0" stopColor="#000" /><stop offset=".6" stopColor="#999" /><stop offset="1" stopColor="#fff" />
         </linearGradient>
         <mask id={`${maskId}-ground`} maskUnits="userSpaceOnUse" x="0" y="0" width={width} height={height} style={{ maskType: 'luminance' }}><rect width={width} height={height} fill={`url(#${maskId}-rise)`} /></mask>
+        {palette.map((color, index) => <linearGradient key={`sheen${index}`} id={`${maskId}-sheen-${index}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={lighten(color, .6)} /><stop offset=".45" stopColor={color} /><stop offset="1" stopColor={color} stopOpacity=".4" />
+        </linearGradient>)}
+        {palette.map((color, index) => <radialGradient key={`bulb${index}`} id={`${maskId}-bulb-${index}`}>
+          <stop offset="0" stopColor={lighten(color, .85)} /><stop offset=".2" stopColor={lighten(color, .3)} stopOpacity=".95" /><stop offset=".48" stopColor={color} stopOpacity=".2" /><stop offset="1" stopColor={color} stopOpacity="0" />
+        </radialGradient>)}
+        {groundColors.map((color, index) => <linearGradient key={`blade${index}`} id={`${maskId}-blade-${index}`} gradientUnits="userSpaceOnUse" x1="0" x2="0" y1={height / unit1080 * .86} y2={height / unit1080}>
+          <stop offset="0" stopColor={lighten(color, .5)} /><stop offset="1" stopColor={color} />
+        </linearGradient>)}
         {palette.map((color, index) => <radialGradient key={`glow${index}`} id={`${maskId}-glow-${index}`}>
           <stop offset="0" stopColor={color} stopOpacity=".2" /><stop offset=".5" stopColor={color} stopOpacity=".07" /><stop offset="1" stopColor={color} stopOpacity="0" />
         </radialGradient>)}
@@ -142,9 +153,11 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
         style={{ '--fog-age': `${-(age + glow.delay * 1000)}ms`, '--fog-travel': `translate(${glow.travel}px, 0px)` } as CSSProperties} />)}</Aged></g>
       {sides && <g transform={`scale(${unit1080})`} opacity=".6" data-scene-sides><Aged key={cycle} age={elapsed % LIVING_SCENE_BUDGET.life}>{age => sides.map(flourish => <g key={flourish.side} className="living-side" data-scene-side={flourish.side}
         style={{ transformOrigin: flourish.pivot, '--band-age': `${-(age + (flourish.side === 'left' ? 0 : 9000))}ms` } as CSSProperties}>
-        {flourish.paths.map((path, index) => <Dress key={index} path={path} colors={palette} />)}</g>)}</Aged></g>}
+        {flourish.paths.map((path, index) => <Dress key={index} path={path} colors={palette} fills={sheen} />)}
+        {[0, 1].map(half => <g key={half} className="living-twinkle" style={{ '--band-age': `${-(age + half * 4500 + (flourish.side === 'left' ? 0 : 2000))}ms` } as CSSProperties}>
+          {flourish.lights.filter((_, index) => index % 2 === half).map((light, index) => <circle key={index} cx={light.x} cy={light.y} r={light.r} fill={`url(#${maskId}-bulb-${light.tone})`} />)}</g>)}</g>)}</Aged></g>}
       <g>
-        {bands && <g mask={`url(#${maskId}-ground)`} opacity=".45"><EdgeLayer key={`rear:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="segments" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
+        {bands && <g mask={`url(#${maskId}-ground)`} opacity=".45"><EdgeLayer key={`rear:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="segments" groundColors={groundColors} groundFills={blade} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
         {patches.map((patch, index) => {
           const phase = phases[index]!, entry = placed.current.get(patch.id)!, authored = habitatBox(patch, width, height, phase.generation);
           const moved = (box: HabitatBox) => Math.abs(box.x - authored.x) > 1 || Math.abs(box.y - authored.y) > 1 || Math.abs(box.width - authored.width) > 1;
@@ -152,12 +165,12 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
           const leaving = !still && entry.previous && phase.age < LIVING_SCENE_BUDGET.crossfade ? entry.previous : null;
           return [
             leaving && <HabitatPatch key={`${patch.id}:${leaving.generation}:${leaving.epoch}`} patch={patch} box={leaving.box} initialAge={0} palette={palette} relocated={moved(leaving.box)}
-              weather={weather} quiet={scene.quiet} generation={leaving.generation} holes={holes} leaving />,
+              weather={weather} quiet={scene.quiet} generation={leaving.generation} holes={holes} sheen={sheen} leaving />,
             <HabitatPatch key={`${patch.id}:${phase.generation}:${entry.epoch}`} patch={patch} box={entry.box} initialAge={phase.age} palette={palette} relocated={moved(entry.box)}
-              weather={weather} quiet={scene.quiet} generation={phase.generation} holes={holes} />,
+              weather={weather} quiet={scene.quiet} generation={phase.generation} holes={holes} sheen={sheen} />,
           ];
         })}
-        {bands && <g mask={`url(#${maskId}-ground)`} opacity=".45"><EdgeLayer key={`front:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="front" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
+        {bands && <g mask={`url(#${maskId}-ground)`} opacity=".45"><EdgeLayer key={`front:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="front" groundColors={groundColors} groundFills={blade} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
         {(weather === 'rain' || weather === 'storm') && <g className="living-weather" data-scene-weather={weather}>
           {weatherGroups.map(index => <RainPhrase key={`${index}:${cycle}`} index={index} storm={weather === 'storm'}
             elapsed={elapsed % LIVING_SCENE_BUDGET.life} width={width} height={height} palette={palette} />)}
@@ -181,10 +194,10 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
 /** Freezes a layer's age at mount: a running CSS animation must not be re-timed by later observation renders. */
 function Aged({ age: initial, children }: { age: number; children: (age: number) => ReactNode }) { const [age] = useState(initial); return <>{children(age)}</>; }
 
-function HabitatPatch({ patch, box, relocated, initialAge, palette, weather, quiet, generation, holes, leaving = false }: {
+function HabitatPatch({ patch, box, relocated, initialAge, palette, weather, quiet, generation, holes, sheen, leaving = false }: {
   patch: LivingSceneArt['patches'][number]; box: HabitatBox; relocated: boolean; initialAge: number; palette: readonly string[];
   weather: WeatherMotif | undefined; quiet: boolean; generation: number; leaving?: boolean;
-  holes: readonly ThemeRect[];
+  holes: readonly ThemeRect[]; sheen: readonly string[];
 }) {
   // Freeze the delay at this generation's mount. Geometry invalidation never restarts its age.
   const [age] = useState(initialAge);
@@ -203,7 +216,7 @@ function HabitatPatch({ patch, box, relocated, initialAge, palette, weather, qui
         return <g key={group.id} data-scene-fit={leaving ? undefined : group.id} data-scene-compact={fitted.compact || undefined} data-scene-omitted={!fitted.visible || undefined}
           transform={fitted.transform} opacity={fitted.visible ? 1 : 0}>
           <g className="living-attached" data-scene-group={group.id} data-scene-motion={group.motion} style={style}>
-            {fitted.paths.map((path, index) => <ArtPath key={index} path={path} palette={palette} quiet={quiet} />)}
+            {fitted.paths.map((path, index) => <ArtPath key={index} path={path} palette={palette} quiet={quiet} sheen={sheen} />)}
           </g>
         </g>;
       })}
@@ -214,19 +227,19 @@ function HabitatPatch({ patch, box, relocated, initialAge, palette, weather, qui
 /** Ground and top bands. Rear segments sit behind the authored patches and the
  * front ones over their bases. Grass segments share one travelling sway; the
  * whole band also shifts a few pixels over its life so its pixels keep changing. */
-function EdgeLayer({ age: initialAge, ground, top, layer, groundColors, topColors, kind, topKind, scale }: {
-  age: number; ground: EdgeBand; top: EdgeBand | null; layer: 'segments' | 'front'; groundColors: readonly string[]; topColors: readonly string[]; kind: string; topKind: string | undefined; scale: number;
+function EdgeLayer({ age: initialAge, ground, top, layer, groundColors, groundFills, topColors, kind, topKind, scale }: {
+  age: number; ground: EdgeBand; top: EdgeBand | null; layer: 'segments' | 'front'; groundColors: readonly string[]; groundFills: readonly string[]; topColors: readonly string[]; kind: string; topKind: string | undefined; scale: number;
 }) {
   const [age] = useState(initialAge);
-  const segment = (band: EdgeBand, colors: readonly string[]) => (part: DressSegment, index: number) => {
+  const segment = (band: EdgeBand, colors: readonly string[], fills?: readonly string[]) => (part: DressSegment, index: number) => {
     const sway = layer === 'front' ? 0 : band.sway; // only the tall rear blades sway; the low front fringe stays cheap
     const style = sway ? { transformOrigin: `${part.pivot[0]}px ${part.pivot[1]}px`, '--group-phase': `${-(age + part.phase * 1000)}ms`,
       ...Object.fromEntries([0, -.55, 1, .28, 0].map((turn, step) => [`--habitat-step-${step}`, `skewX(${(-turn * sway).toFixed(2)}deg)`])) } as CSSProperties : undefined;
-    return <g key={index} className={sway ? 'living-attached living-blades' : undefined} style={style}>{part.paths.map((path, item) => <Dress key={item} path={path} colors={colors} />)}</g>;
+    return <g key={index} className={sway ? 'living-attached living-blades' : undefined} style={style}>{part.paths.map((path, item) => <Dress key={item} path={path} colors={colors} fills={fills} />)}</g>;
   };
   const shift = { '--band-age': `${-age}ms` } as CSSProperties;
   return <g transform={`scale(${scale})`}>
-    <g className="living-band" data-scene-ground={layer === 'segments' ? kind : undefined} data-ground-lit={layer === 'segments' ? ground.lit.toFixed(3) : undefined} style={shift}>{ground[layer].map(segment(ground, groundColors))}</g>
+    <g className="living-band" data-scene-ground={layer === 'segments' ? kind : undefined} data-ground-lit={layer === 'segments' ? ground.lit.toFixed(3) : undefined} style={shift}>{ground[layer].map(segment(ground, groundColors, groundFills))}</g>
     {top && <g className="living-band living-band-top" data-scene-top={layer === 'segments' ? topKind : undefined} data-top-lit={layer === 'segments' ? top.lit.toFixed(3) : undefined} style={shift}>
       {top[layer].map(segment(top, topColors))}
       {layer === 'front' && top.pendants.map((pendant, index) => <g key={index} className="living-pendulum" style={{ transformOrigin: `${pendant.x}px ${pendant.y}px`, '--swing': `${pendant.swing}deg`,

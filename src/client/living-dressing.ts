@@ -61,9 +61,9 @@ function rim(profile: Float32Array, from: number, to: number, base: number, dire
   }
   return d;
 }
-function leafShape(x: number, y: number, length: number, angle: number) {
+function leafShape(x: number, y: number, length: number, angle: number, fat = .34) {
   const tx = x + Math.cos(angle) * length, ty = y + Math.sin(angle) * length, mx = (x + tx) / 2, my = (y + ty) / 2;
-  const px = -Math.sin(angle) * length * .34, py = Math.cos(angle) * length * .34;
+  const px = -Math.sin(angle) * length * fat, py = Math.cos(angle) * length * fat;
   return `M${n(x)} ${n(y)}Q${n(mx + px)} ${n(my + py)} ${n(tx)} ${n(ty)}Q${n(mx - px)} ${n(my - py)} ${n(x)} ${n(y)}Z`;
 }
 const disc = (x: number, y: number, r: number) => `M${n(x - r)} ${n(y)}a${n(r)} ${n(r)} 0 1 0 ${n(r * 2)} 0a${n(r)} ${n(r)} 0 1 0 ${n(-r * 2)} 0Z`;
@@ -283,55 +283,78 @@ export function sideStyles(id: string, ground: GroundKind): readonly [SideStyle,
   const style: SideStyle = ground === 'drift' ? 'frost' : ground === 'cloth' ? 'ribbon' : ground === 'water' || ground === 'mist' ? 'reed' : 'branch';
   return SIDES[id] ?? [style, style];
 }
-export function sideFlourish(style: SideStyle, width: number, height: number, side: 'left' | 'right', room: number): DressPath[] {
+export interface SideLight { x: number; y: number; r: number; tone: 0 | 1 | 2 }
+export interface SideArt { paths: DressPath[]; lights: SideLight[] }
+/** Polish pass (#600, third owner pass): stems taper, leaves carry a midrib and a gradient,
+ * the fir is fine needles, and lights are individual glowing points drawn by the renderer. */
+export function sideFlourish(style: SideStyle, width: number, height: number, side: 'left' | 'right', room: number): SideArt {
   const dir = side === 'left' ? 1 : -1, edge = side === 'left' ? 14 : width - 14, seed = side === 'left' ? 3 : 11;
-  const reach = Math.max(26, Math.min(150, room * .7)), rise = height * .8;
+  const reach = Math.max(26, Math.min(150, room * .7)), rise = height * .8, lights: SideLight[] = [];
   const spine = (t: number, lean = 1, shift = 0): [number, number] => [edge + dir * (shift + reach * lean * (Math.sin(t * Math.PI * .85) * .62 + t * .38 * Math.sin(t * 4.2 + seed))), height + 6 - t * rise];
-  const curve = (lean: number, shift: number, top: number) => { let d = ''; for (let t = 0; t <= top + .001; t += .025) { const [x, y] = spine(t, lean, shift); d += `${t ? 'L' : 'M'}${n(x)} ${n(y)}`; } return d; };
-  const bulbs = (points: readonly (readonly [number, number])[]): DressPath[] => [0, 1, 2].flatMap(tone => {
-    const own = points.filter((_, index) => index % 3 === tone); if (!own.length) return [];
-    return [{ d: own.map(([x, y]) => disc(x, y, 11)).join(''), tone: tone as 0 | 1 | 2, fill: .1, stroke: 0, light: true }, { d: own.map(([x, y]) => disc(x, y, 4.2)).join(''), tone: tone as 0 | 1 | 2, fill: .85, stroke: 0, light: true }];
-  });
-  if (style === 'fir') { // the side of a tree: layered boughs reaching in from the edge, a light string wound across them
-    const wide = Math.max(60, Math.min(210, room * .9)); let boughs = '', rims = '', string = ''; const lit: [number, number][] = [];
+  const curve = (lean: number, shift: number, top: number, from = 0) => { let d = ''; for (let t = from; t <= top + .001; t += .025) { const [x, y] = spine(t, lean, shift); d += `${t === from ? 'M' : 'L'}${n(x)} ${n(y)}`; } return d; };
+  // A stem that thins toward its tip: the same curve drawn three times, shorter and heavier each time.
+  const tapered = (lean: number, shift: number, top: number, tone: 0 | 1 | 2 = 0): DressPath[] =>
+    [{ d: curve(lean, shift, top), tone, stroke: 1.1, opacity: .8 }, { d: curve(lean, shift, top * .62), tone, stroke: 2.1, opacity: .8 }, { d: curve(lean, shift, top * .3), tone, stroke: 3.2, opacity: .8 }];
+  const veined = (x: number, y: number, length: number, angle: number) => `M${n(x)} ${n(y)}L${n(x + Math.cos(angle) * length * .82)} ${n(y + Math.sin(angle) * length * .82)}`;
+  if (style === 'fir') { // the side of a tree: needle boughs reaching in from the edge, a light string wound across them
+    const wide = Math.max(70, Math.min(230, room * .95)); let branches = '', near = '', far = '', string = ''; let last: [number, number] | null = null;
     for (let tier = 0; tier < 7; tier++) {
-      const y = height * (.97 - tier * .115), w = wide * (1 - tier * .1), x = edge - dir * 20, tip = x + dir * (w + 20);
-      boughs += `M${n(x)} ${n(y - 64)}Q${n(x + dir * w * .7)} ${n(y - 34)} ${n(tip)} ${n(y + 14)}Q${n(x + dir * w * .55)} ${n(y + 2)} ${n(x)} ${n(y + 30)}Z`;
-      rims += `M${n(x)} ${n(y - 64)}Q${n(x + dir * w * .7)} ${n(y - 34)} ${n(tip)} ${n(y + 14)}`;
-      const from: [number, number] = tier % 2 ? [x + dir * w * .9, y - 2] : [x + dir * 26, y - 30], to: [number, number] = tier % 2 ? [x + dir * 26, y - 96] : [x + dir * w * .78, y - 108];
-      string += `M${n(from[0])} ${n(from[1])}Q${n((from[0] + to[0]) / 2)} ${n(Math.max(from[1], to[1]) + 16)} ${n(to[0])} ${n(to[1])}`;
-      for (const u of [.2, .5, .8]) lit.push([from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u + 32 * u * (1 - u)]);
+      const x0 = edge - dir * 10, y0 = height * (.93 - tier * .12), length = wide * (1 - tier * .09);
+      const cx = x0 + dir * length * .55, cy = y0 - 22, x1 = x0 + dir * length, y1 = y0 + 34;
+      const at = (u: number): [number, number, number] => { const v = 1 - u; return [v * v * x0 + 2 * v * u * cx + u * u * x1, v * v * y0 + 2 * v * u * cy + u * u * y1, Math.atan2(2 * v * (cy - y0) + 2 * u * (y1 - cy), 2 * v * (cx - x0) + 2 * u * (x1 - cx))]; };
+      branches += `M${n(x0)} ${n(y0)}Q${n(cx)} ${n(cy)} ${n(x1)} ${n(y1)}`;
+      for (let step = 0, u = .06; u <= 1; step++, u += .055) {
+        const [x, y, angle] = at(u), needle = 21 - 9 * u;
+        for (const turn of [-.62, .62]) { const d = `M${n(x)} ${n(y)}L${n(x + Math.cos(angle + turn) * needle)} ${n(y + Math.sin(angle + turn) * needle)}`; if ((step + (turn > 0 ? 1 : 0)) % 2) near += d; else far += d; }
+      }
+      for (const u of tier % 2 ? [.72, .36] : [.36, .72]) {
+        const [x, y] = at(u), point: [number, number] = [x, y + 12];
+        if (last) string += `M${n(last[0])} ${n(last[1])}Q${n((last[0] + point[0]) / 2)} ${n(Math.max(last[1], point[1]) + 14)} ${n(point[0])} ${n(point[1])}`;
+        lights.push({ x: point[0], y: point[1], r: 13, tone: (lights.length % 3) as 0 | 1 | 2 }); last = point;
+      }
     }
-    return [{ d: boughs, tone: 0, fill: .3, stroke: 0 }, { d: rims, tone: 0, stroke: 1.3, opacity: .6, light: true }, { d: string, tone: 2, stroke: .9, opacity: .45 }, ...bulbs(lit)];
+    return { paths: [{ d: far, tone: 0, stroke: 1, opacity: .5 }, { d: branches, tone: 0, stroke: 1.5, opacity: .7 }, { d: near, tone: 0, stroke: 1.1, opacity: .85, light: true }, { d: string, tone: 2, stroke: .8, opacity: .4 }], lights };
   }
   if (style === 'lights') { // a string of small lights hanging down the side in loose scallops
-    let string = ''; const lit: [number, number][] = [], spans = 6, top = height * .08, drop = height * .86 / spans, sag = Math.max(30, Math.min(110, room * .6));
+    let string = ''; const spans = 6, top = height * .08, drop = height * .86 / spans, sag = Math.max(30, Math.min(110, room * .6));
     for (let span = 0; span < spans; span++) {
       const y0 = top + span * drop, y1 = y0 + drop, x = edge + dir * 6, bulge = sag * (.7 + unit(span, seed) * .5);
       string += `M${n(x)} ${n(y0)}Q${n(x + dir * bulge * 2)} ${n((y0 + y1) / 2 + 18)} ${n(x)} ${n(y1)}`;
-      for (const u of [.22, .5, .78]) lit.push([x + dir * bulge * 4 * u * (1 - u), y0 + drop * u + 36 * u * (1 - u) + 7]);
+      for (const u of [.22, .5, .78]) lights.push({ x: x + dir * bulge * 4 * u * (1 - u), y: y0 + drop * u + 36 * u * (1 - u) + 7, r: 13, tone: (lights.length % 3) as 0 | 1 | 2 });
     }
-    return [{ d: string, tone: 2, stroke: 1, opacity: .5 }, ...bulbs(lit)];
+    return { paths: [{ d: string, tone: 2, stroke: .9, opacity: .45 }], lights };
   }
-  if (style === 'ribbon') // two long ribbons that cross once
-    return [{ d: curve(1, 0, 1), tone: 0, stroke: 2.2, opacity: .7 }, { d: curve(-.45, reach * .5, .82), tone: 1, stroke: 1.5, opacity: .6 }, { d: curve(.5, reach * .1, .6), tone: 2, stroke: 1, opacity: .5, light: true }];
+  if (style === 'ribbon') { // two ribbons with a slow twist: a band whose width swells and closes along its length
+    const band = (lean: number, shift: number, top: number, girth: number) => {
+      const forward: string[] = [], back: string[] = [];
+      for (let t = 0; t <= top + .001; t += .025) { const [x, y] = spine(t, lean, shift), w = girth * Math.abs(Math.sin(t * Math.PI * 2.4 + seed)) + .8; forward.push(`${n(x - w)} ${n(y)}`); back.unshift(`${n(x + w)} ${n(y + w * .5)}`); }
+      return `M${forward.join('L')}L${back.join('L')}Z`;
+    };
+    return { paths: [{ d: band(1, 0, 1, 8), tone: 0, fill: .5, stroke: 0 }, { d: curve(1, 0, 1), tone: 0, stroke: .9, opacity: .6, light: true },
+      { d: band(-.45, reach * .5, .82, 6), tone: 1, fill: .45, stroke: 0 }, { d: curve(.5, reach * .1, .6), tone: 2, stroke: .9, opacity: .5, light: true }], lights };
+  }
   if (style === 'reed') { // three reeds with slender heads
-    let stems = '', heads = '';
+    const paths: DressPath[] = []; let heads = '', ribs = '';
     for (const [lean, shift, top] of [[.35, 0, 1], [.7, reach * .25, .78], [.15, reach * .5, .6]] as const) {
-      stems += curve(lean, shift, top); const [x, y] = spine(top, lean, shift); heads += leafShape(x, y, 46, -Math.PI / 2 + dir * .08);
+      paths.push(...tapered(lean, shift, top)); const [x, y] = spine(top, lean, shift), angle = -Math.PI / 2 + dir * .08;
+      heads += leafShape(x, y + 6, 52, angle); ribs += veined(x, y + 6, 52, angle);
     }
-    return [{ d: stems, tone: 0, stroke: 1.5, opacity: .75 }, { d: heads, tone: 1, fill: .34, stroke: 0, light: true }];
+    return { paths: [...paths, { d: heads, tone: 1, fill: .5, stroke: 0 }, { d: ribs, tone: 1, stroke: .8, opacity: .5, light: true }], lights };
   }
-  let twigs = '', leaves = '', buds = '';
+  let twigs = '', leaves = '', ribs = '', petals = '';
   for (let index = 1; index < 11; index++) {
     const t = .12 + index * .08, [x, y] = spine(t), out = index % 2 ? 1 : -1, length = (34 + unit(index, seed) * 44) * (1 - t * .45);
     const angle = -Math.PI / 2 + out * dir * (.75 + unit(index, seed + 2) * .5), tx = x + Math.cos(angle) * length, ty = y + Math.sin(angle) * length;
     twigs += `M${n(x)} ${n(y)}Q${n(x + Math.cos(angle) * length * .5)} ${n(y + Math.sin(angle) * length * .2)} ${n(tx)} ${n(ty)}`;
-    if (style === 'frost') buds += disc(tx, ty, 2.6 + unit(index, 5) * 2) + (index % 3 ? '' : disc(x + (tx - x) * .55, y + (ty - y) * .6, 2));
-    else if (style === 'blossom') { for (let petal = 0; petal < 5; petal++) buds += disc(tx + Math.cos(petal * 1.257) * 5.5, ty + Math.sin(petal * 1.257) * 5.5, 3.6); if (index % 3 === 0) leaves += leafShape(x + (tx - x) * .5, y + (ty - y) * .5, 22, angle + out * dir * .7); }
-    else { leaves += leafShape(tx, ty, 26 + unit(index, 7) * 22, angle - out * dir * .5); if (index % 4 === 0) buds += disc(tx, ty, 3.4); }
+    if (style === 'frost') { lights.push({ x: tx, y: ty, r: 5 + unit(index, 5) * 3, tone: 0 }); if (index % 3 === 0) lights.push({ x: x + (tx - x) * .55, y: y + (ty - y) * .6, r: 4, tone: 2 }); }
+    else if (style === 'blossom') {
+      for (let petal = 0; petal < 5; petal++) petals += leafShape(tx, ty, 13, petal * 1.257 + unit(index, 9), .62);
+      lights.push({ x: tx, y: ty, r: 4.5, tone: 2 });
+      if (index % 3 === 0) { const leafAngle = angle + out * dir * .7, lx = x + (tx - x) * .5, ly = y + (ty - y) * .5; leaves += leafShape(lx, ly, 24, leafAngle); ribs += veined(lx, ly, 24, leafAngle); }
+    } else { const size = 26 + unit(index, 7) * 22, leafAngle = angle - out * dir * .5; leaves += leafShape(tx, ty, size, leafAngle); ribs += veined(tx, ty, size, leafAngle); }
   }
-  return ([{ d: curve(1, 0, 1), tone: 0, stroke: 2, opacity: .85 }, { d: twigs, tone: 0, stroke: 1.3, opacity: .75 }, { d: leaves, tone: 1, fill: .3, stroke: 0 }, { d: leaves, tone: 1, stroke: .9, opacity: .55, light: true }, { d: buds, tone: 2, fill: style === 'blossom' ? .5 : .7, stroke: 0, light: true }] as DressPath[]).filter(path => path.d);
+  return { paths: ([...tapered(1, 0, 1), { d: twigs, tone: 0, stroke: 1, opacity: .7 }, { d: leaves, tone: 1, fill: .5, stroke: 0 }, { d: ribs, tone: 1, stroke: .8, opacity: .55, light: true },
+    { d: petals, tone: 1, fill: .6, stroke: 0 }] as DressPath[]).filter(path => path.d), lights };
 }
 /** Long curved gust streaks; the renderer slides and fades them. Each streak takes an
  * open lane that its whole slide clears, shortening before it gives up, so a
@@ -360,5 +383,5 @@ export function sceneAnimationCount(art: LivingSceneArt, dressing: SceneDressing
   const unit1080 = Math.min(width, height) / 1080, wet = weather === 'rain' || weather === 'storm';
   const ground = groundBand(weather === 'snow' ? 'drift' : dressing.ground === 'mist' ? 'water' : dressing.ground, width / unit1080, height / unit1080, []);
   const particles = wet || weather === 'fog' ? false : weather === 'snow' || weather === 'wind' || !!dressing.particles;
-  return drawn + 2 + 2 + 2 + (ground.sway ? ground.segments.length : 0) + (particles ? PARTICLE_LAYERS : 0) + (wet ? 9 : weather === 'fog' ? 5 : weather === 'wind' ? 4 : 0);
+  return drawn + 2 + 2 + 2 + 4 + (ground.sway ? ground.segments.length : 0) + (particles ? PARTICLE_LAYERS : 0) + (wet ? 9 : weather === 'fog' ? 5 : weather === 'wind' ? 4 : 0);
 }

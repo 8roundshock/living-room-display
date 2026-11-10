@@ -33,6 +33,13 @@ older statement below that conflicts with it.
   blossom or leaf branches, frost twigs, ribbons, reeds. A flourish bows inward about as
   far as the free margin beside the widgets (a thin remainder may pass behind a widget
   that touches the edge), and sways by half a degree.
+- **Third owner pass (2026-11-10): polish, same direction.** "Less like basic SVGs":
+  filled forms use a diagonal light-to-transparent gradient of their tone (`sheen`),
+  ground blades a vertical one; stems taper; leaves and reed heads carry a midrib;
+  blossoms are five round petals around a glowing centre; the fir is fine needles on
+  curved boughs; ribbons are bands that swell and close. Lights and frost beads are
+  individual circles with a radial glow and a slow nine-second twinkle in two groups.
+  Prefer these techniques over flat fills and uniform strokes in any new art.
 - **Iteration.** Change the renderer, build, capture two or three scenes to a temp
   folder, look, delete the images. Do not run multi-round agent reviews for taste.
 
