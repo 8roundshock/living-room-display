@@ -163,6 +163,34 @@ for [#632](https://github.com/8roundshock/living-room-display/issues/632), see
 Measured as above on 2026-11-10 at 1920×1080: 1,300 to 87,000 triangles, 18 to 44 draw
 calls, build 56 to 350 ms, 25 to 30 ms/s of main-thread time, frame script under 1 ms.
 
+The four seasons (their design plans) are the quietest scenes: on screen for weeks or
+months, so each is one well-made hero at an edge and very little else, and lights about a
+quarter of the pixels Christmas does. Each is one fixed picture for its whole run
+(coordinator decision, 2026-11-10: no month-by-month change); on a quiet date the hero is
+drawn alone.
+
+- **Spring** ([#613](https://github.com/8roundshock/living-room-display/issues/613)):
+  a magnolia bough from the top-left corner with six blooms at four openings (pink
+  outside, pale inside) and velvet buds, a spray of young leaves low on the right, now and
+  then one petal falling down the left edge.
+- **Summer** ([#614](https://github.com/8roundshock/living-room-display/issues/614)):
+  a morning-glory vine hanging down the right edge (two wound stems, heart leaves, three
+  periwinkle flowers, furled buds, tendrils), a short runner low on the left, and a few
+  fireflies that are lights only.
+- **Autumn** ([#615](https://github.com/8roundshock/living-room-display/issues/615)):
+  a ginkgo branch rising along the left edge with gold fans on spur shoots, a few fallen
+  fans in the bottom-left corner, now and then one more falling. Gold and amber only.
+- **Winter** ([#616](https://github.com/8roundshock/living-room-display/issues/616)):
+  frost ferns growing in from the bottom-left corner and a bare twig glazed in clear ice in
+  the top-right corner. Still air (coordinator decision on #616): the 3D Winter scene draws
+  no snowfall of its own, so falling snow over it always means the forecast says snow.
+
+Measured as above on 2026-11-10 at 1920×1080: 30,000 to 75,000 triangles (Winter's frost
+is about 5,000 crystals in one instanced mesh), 43 to 76 draw calls, build 62 to 115 ms,
+23 to 38 ms/s of main-thread time and frame script of about 1 ms or less, on a PC that was
+busy with other captures (Christmas measured 39 to 48 ms/s in the same runs). At full
+opacity on an empty board a season lights 2.2 to 3.4% of the pixels; Christmas lights 11.7%.
+
 ### Which renderer draws a scene
 
 `AmbientTheme.tsx` chooses once per scene. The layer's root carries
@@ -299,8 +327,12 @@ of the short side and capped at 12, because each is its own animation.
 `src/shared/living-scene-dressing.ts` names each scene's ground, top and
 particle kind (and fixed ground or canopy colours where the scene palette's
 first role is not ground-coloured). These are art choices, not weather or
-cultural claims: Christmas, New Year (Russia), Orthodox Christmas and Winter
-show authored snowfall whatever the weather is.
+cultural claims: in this flat renderer Christmas, New Year (Russia), Orthodox
+Christmas and Winter show authored snowfall whatever the weather is. That no
+longer holds for Winter in 3D (coordinator decision on
+[#616](https://github.com/8roundshock/living-room-display/issues/616),
+2026-11-10): its air is still, and snow falls over it only when the forecast
+says snow. The flat Winter keeps its snowfall only as the fallback.
 
 Palettes in the registry are saturated (true reds, bright yellow, orange, mid
 green). Authored fills follow a low-light curve (`fill^0.45`) with a lighter rim
