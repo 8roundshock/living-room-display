@@ -1,5 +1,14 @@
 # Project status
 
+## Planned layered living scenes — 2026-11-04 (#586)
+
+The coordinator accepted the direction in the [layered scene plan](docs/layered-scene-plan.md):
+connected seasonal edges, shared environmental motion, integrated weather and
+rare bounded foreground passages across all 26 scenes. This is documented future
+work, not implemented artwork. [PR #587](https://github.com/8roundshock/living-room-display/pull/587)
+is documentation only; #586 stays open for the staged visual, performance and
+implementation gates. Current runtime behavior remains in the theme contract.
+
 ## Follow daylight curve and dim time — 2026-11-09 (#591)
 
 Source candidate, not installed. Follow daylight no longer peaks only at solar
@@ -18,15 +27,6 @@ inspect captures by eye, and no TV or installed-app check was made. Review and C
 evidence belongs to the pull request for #591. Open follow-ups: a selectable evening level
 ([#592](https://github.com/8roundshock/living-room-display/issues/592)) and the polar-night morning
 ([#593](https://github.com/8roundshock/living-room-display/issues/593)).
-
-## Planned layered living scenes — 2026-11-04 (#586)
-
-The coordinator accepted the direction in the [layered scene plan](docs/layered-scene-plan.md):
-connected seasonal edges, shared environmental motion, integrated weather and
-rare bounded foreground passages across all 26 scenes. This is documented future
-work, not implemented artwork. [PR #587](https://github.com/8roundshock/living-room-display/pull/587)
-is documentation only; #586 stays open for the staged visual, performance and
-implementation gates. Current runtime behavior remains in the theme contract.
 
 ## Optional annual birthday themes — 2026-11-04 (#584)
 
