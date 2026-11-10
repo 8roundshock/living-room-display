@@ -83,12 +83,18 @@ export function snowPlates(kit, { count, colour = 0x2c3a48, salt = 0 } = {}) {
   if (ctx.quiet || n < 1) return new T.Group();
   const mesh = new T.InstancedMesh(new T.CylinderGeometry(1, 1, .16, 6), kit.mat({ color: colour, roughness: .2, metalness: 0, reflectivity: 1, clearcoat: 1, clearcoatRoughness: .14, flatShading: true }, 2.2), n), o = new T.Object3D();
   mesh.frustumCulled = false;
+  // Everything about a plate that does not change from frame to frame is worked out once.
+  const plates = Array.from({ length: n }, (_, i) => {
+    const r = k => rnd(i, salt + 60 + k), z = -2.5 + r(1) * 3.2, k = 1 - z / view.depth, span = (view.halfH + .3) * 2 * k;
+    return { z, span, x: (i % 2 ? 1 : -1) * (.5 + (i + r(3)) / n * .5) * view.halfW * k, phase: r(2) * 6.283, sway: .5 + r(4) * .3, start: r(5) * span, fall: (.09 + r(6) * .05) * REAL,
+      spinX: 1.3 + r(7) * 1.2, spinY: .9 + r(8) * .9, size: (.06 + (i + r(9)) / n * .05) * ctx.size };
+  });
   tick(t => {
     for (let i = 0; i < n; i++) {
-      const r = k => rnd(i, salt + 60 + k), z = -2.5 + r(1) * 3.2, k = 1 - z / view.depth, span = (view.halfH + .3) * 2 * k, phase = r(2) * 6.283;
-      o.position.set((i % 2 ? 1 : -1) * (.5 + (i + r(3)) / n * .5) * view.halfW * k + Math.sin(t * (.5 + r(4) * .3) + phase) * .3, span / 2 - (r(5) * span + t * (.09 + r(6) * .05) * REAL) % span, z);
+      const plate = plates[i];
+      o.position.set(plate.x + Math.sin(t * plate.sway + plate.phase) * .3, plate.span / 2 - (plate.start + t * plate.fall) % plate.span, plate.z);
       // One turn in 20 to 40 real seconds, about two axes at once.
-      o.rotation.set(t * (1.3 + r(7) * 1.2) + phase, t * (.9 + r(8) * .9) + phase, phase); o.scale.setScalar((.06 + (i + r(9)) / n * .05) * ctx.size); o.updateMatrix(); mesh.setMatrixAt(i, o.matrix);
+      o.rotation.set(t * plate.spinX + plate.phase, t * plate.spinY + plate.phase, plate.phase); o.scale.setScalar(plate.size); o.updateMatrix(); mesh.setMatrixAt(i, o.matrix);
     }
     mesh.instanceMatrix.needsUpdate = true;
   });

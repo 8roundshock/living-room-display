@@ -27,12 +27,14 @@ export function paneBeads(kit, { count, reach = 3.4, side = -1, seed = 0 }) {
   const mesh = new T.InstancedMesh(lens, water, beads.length), matrix = mesh.instanceMatrix.array; mesh.frustumCulled = false; group.add(mesh);
   matrix.fill(0);
   tick(t => {
-    beads.forEach((bead, i) => {
+    for (let i = 0; i < beads.length; i++) {
       // Each life is three to six minutes; it swells in and shrinks away over eight seconds, a little aside from where the last one sat.
-      const turn = (t + bead.offset) / bead.life, life = Math.floor(turn), age = (turn - life) * bead.life, size = ctx.quiet ? bead.radius : bead.radius * Math.min(smooth(age), smooth(bead.life - age)), o = i * 16;
+      const bead = beads[i], turn = (t + bead.offset) / bead.life, life = Math.floor(turn), age = (turn - life) * bead.life, size = ctx.quiet ? bead.radius : bead.radius * Math.min(smooth(age), smooth(bead.life - age)), o = i * 16;
+      // Where this life sits is drawn once per life, not once per frame.
+      if (bead.lived !== life) { bead.lived = life; bead.dx = (rnd(i + life * 31, seed + 6) - .5) * .16; bead.dy = (rnd(i + life * 31, seed + 7) - .5) * .16; }
       matrix[o] = size; matrix[o + 5] = size * bead.tall; matrix[o + 10] = size; matrix[o + 15] = 1;
-      matrix[o + 12] = cx - side * (bead.x + (rnd(i + life * 31, seed + 6) - .5) * .16); matrix[o + 13] = cy - bead.y - (bead.tall - 1) * size - (rnd(i + life * 31, seed + 7) - .5) * .16; matrix[o + 14] = Z;
-    });
+      matrix[o + 12] = cx - side * (bead.x + bead.dx); matrix[o + 13] = cy - bead.y - (bead.tall - 1) * size - bead.dy; matrix[o + 14] = Z;
+    }
     mesh.instanceMatrix.needsUpdate = true;
   });
   // A faint cool light behind the cluster, the registry's violet: it gives the lenses a rim to catch.
@@ -47,14 +49,17 @@ export function paneBeads(kit, { count, reach = 3.4, side = -1, seed = 0 }) {
   const trail = new T.Mesh(trailGeometry, kit.mat({ color: 0x121c26, roughness: .05, metalness: 0, reflectivity: 1, clearcoat: 1, clearcoatRoughness: .05, opacity: 1 }, 2));
   const runner = new T.Mesh(lens, waterOf()), run = new T.Group(), at = V(); run.add(trail, runner); group.add(run);
   const PERIOD = 56, SLIDE = 26, DRY = 20;
+  let slide = { cycle: -1 };
   tick(t => {
-    const real = t * REAL, cycle = Math.floor(real / PERIOD), since = real - cycle * PERIOD - rnd(cycle, seed + 8) * 8, r = k => rnd(cycle, seed + 20 + k);
-    const length = .62 + r(1) * .38, radius = (.13 + r(2) * .04) * S, x = Math.min(1, Math.max(0, since / SLIDE)), along = x - Math.sin(x * 6 * Math.PI) / (6 * Math.PI) * .95;
+    const real = t * REAL, cycle = Math.floor(real / PERIOD);
+    // A run's own numbers (when it starts, where, how long, how big, which way it wanders) are drawn once per run, not once per frame.
+    if (slide.cycle !== cycle) { const r = k => rnd(cycle, seed + 20 + k); slide = { cycle, wait: rnd(cycle, seed + 8) * 8, length: .62 + r(1) * .38, radius: (.13 + r(2) * .04) * S, x: cx - side * (.7 + r(3) * 2), y: cy - .35 - r(4) * .5, turn: r(5) < .5 ? -1 : 1 }; }
+    const since = real - cycle * PERIOD - slide.wait, x = Math.min(1, Math.max(0, since / SLIDE)), along = x - Math.sin(x * 6 * Math.PI) / (6 * Math.PI) * .95;
     run.visible = since > 0 && since < SLIDE + DRY; if (!run.visible) return;
-    run.position.set(cx - side * (.7 + r(3) * 2), cy - .35 - r(4) * .5, Z); run.scale.x = r(5) < .5 ? -1 : 1; trail.scale.y = length;
-    path.getPointAt(along, at); runner.position.set(at.x, at.y * length, .01);
+    run.position.set(slide.x, slide.y, Z); run.scale.x = slide.turn; trail.scale.y = slide.length;
+    path.getPointAt(along, at); runner.position.set(at.x, at.y * slide.length, .01);
     // The bead swells at the top, runs, and thins away at the bottom; the trail it left dries over twenty seconds.
-    const size = radius * smooth(since / 3) * (1 - smooth((since - SLIDE - 2) / 6)); runner.scale.set(size, size * 1.16, size);
+    const size = slide.radius * smooth(since / 3) * (1 - smooth((since - SLIDE - 2) / 6)); runner.scale.set(size, size * 1.16, size);
     trailGeometry.setDrawRange(0, Math.floor(along * SEGMENTS) * 36); trail.material.opacity = 1 - smooth((since - SLIDE) / DRY);
   });
   return group;

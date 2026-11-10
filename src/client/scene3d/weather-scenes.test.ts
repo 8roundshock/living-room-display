@@ -36,5 +36,7 @@ test('Storms have no bolt and no flash: the only light is the slow glow inside t
   // The everyday layer is drawn at 0.855 of the saved brightness and widget text at about 0.27 of white beside a
   // saved 36% (docs/ambient-themes.md), so a display value under 0.87 stays under the text.
   assert.ok(peak > 0 && peak < .87, `the glow's peak ${peak} stays below widget text`);
+  // The bound is enforced in the part itself, whatever a caller passes: 0.86 on an everyday layer, 0.74 on a special one.
+  assert.match(cloud, /Math\.min\(peak, ctx\.tier === 'special' \? \.74 : \.86\)/, 'the peak is clamped inside stormCloud');
   for (const file of ['./scenes/storm.js', './weather/storm.js', './parts/storm-cloud.js']) assert.doesNotMatch(read(file).replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, ''), /bolt|lightning|flash/i, `${file} draws no bolt and no flash`);
 });

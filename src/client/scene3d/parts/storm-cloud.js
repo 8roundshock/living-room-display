@@ -62,6 +62,9 @@ void main() {
  */
 export function stormCloud(kit, { count, ragged: share = .6, side = -1, length = 7.5, hang = 2.6, peak = .68, echo = true, salt = 0 }) {
   const { T, rnd, view, tick, ctx } = kit, group = new T.Group(), W = view.halfW, S = ctx.size;
+  // The glow's bound is enforced here, whatever a caller asks for: a display value that stays below widget text. Text is about
+  // 0.27 of white beside a saved 36%; an everyday layer is drawn at 0.855 of that brightness and a special one at all of it.
+  const top = Math.max(0, Math.min(peak, ctx.tier === 'special' ? .74 : .86));
   // Four different volumes on one canvas: each is a few merged soft lumps broken by slow noise, fading to nothing before its square's edge.
   const atlas = kit.canvasTexture(512, 512, (g, w, h) => {
     const image = g.createImageData(w, h), data = image.data, broad = softNoise(kit, 16, salt + 1), fine = softNoise(kit, 32, salt + 2), N = 256, density = new Float32Array(N * N);
@@ -108,7 +111,7 @@ export function stormCloud(kit, { count, ragged: share = .6, side = -1, length =
   body.position.z = Z; body.frustumCulled = false; group.add(body);
   // The glow is drawn after everything else, keeping the lighter of what is there and itself. It still tests depth, so
   // an object of the scene underneath that stands in front of the cloud hides it.
-  const glowing = peak > 0 && !ctx.quiet, inner = new T.Mesh(geometry, new T.ShaderMaterial({ vertexShader: VERTEX, fragmentShader: GLOW, transparent: true, depthWrite: false,
+  const glowing = top > 0 && !ctx.quiet, inner = new T.Mesh(geometry, new T.ShaderMaterial({ vertexShader: VERTEX, fragmentShader: GLOW, transparent: true, depthWrite: false,
     blending: T.CustomBlending, blendEquation: T.MaxEquation, blendSrc: T.OneFactor, blendDst: T.OneFactor,
     uniforms: { ...shared, uGlow: { value: new T.Color(0xc3ccff) }, uLights: { value: lights }, uReach: { value: 1.75 * S } } }));
   inner.position.z = Z; inner.renderOrder = 1; inner.frustumCulled = false; inner.visible = false; group.add(inner);
@@ -121,7 +124,7 @@ export function stormCloud(kit, { count, ragged: share = .6, side = -1, length =
       const since = real - slot * SLOT - (slot ? rnd(slot, salt + 40) * 40 : 0), swap = rnd(slot, salt + 41) < .5, strong = pulse(since), answer = echo && rnd(slot, salt + 42) < .5 ? pulse(since - 2.5) * .4 : 0;
       first = swap ? answer : strong; second = swap ? strong : answer;
     }
-    lights[0].z = first * peak; lights[1].z = second * peak; inner.visible = first + second > .002;
+    lights[0].z = first * top; lights[1].z = second * top; inner.visible = first + second > .002;
   });
   return group;
 }
