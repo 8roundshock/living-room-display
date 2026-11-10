@@ -138,6 +138,31 @@ The three reference scenes follow their design plans:
   [#627](https://github.com/8roundshock/living-room-display/issues/627) and
   [#631](https://github.com/8roundshock/living-room-display/issues/631).
 
+Canadian and shared Western occasions (their design plans; each plan's day-only extra waits
+for [#632](https://github.com/8roundshock/living-room-display/issues/632), see
+[#639](https://github.com/8roundshock/living-room-display/issues/639)):
+
+- **Thanksgiving · Canada** ([#607](https://github.com/8roundshock/living-room-display/issues/607)):
+  a woven horn of plenty lying on the bottom edge in the left corner, spilling two apples
+  that differ, a pear, dark grapes and a few cranberries; a bound sheaf of bearded wheat
+  standing in the right corner. No pumpkins, no leaves, nothing falls.
+- **Halloween** ([#608](https://github.com/8roundshock/living-room-display/issues/608)):
+  three glass pumpkins in the left corner that differ in shape, colour and size, the large
+  amber one carved with a calm face and lit from inside by a glow that breathes and never
+  flickers; a hair-fine cobweb with dew in the top-right corner. No spider.
+- **New Year** ([#610](https://github.com/8roundshock/living-room-display/issues/610)):
+  long-exposure fireworks held almost still on a two-minute cycle (a gold chrysanthemum
+  top-left, a silver willow top-right, a small gold-and-rose palm far back), a few sinking
+  embers, paper streamers of different finishes over the top edge. No flash, no numerals,
+  no drinkware (coordinator decision on #610).
+- **Easter · Canada** ([#611](https://github.com/8roundshock/living-room-display/issues/611)):
+  a potted white Easter lily in the left corner with four trumpets at different stages and
+  three buds; a twig nest with four plain eggs of different finishes in the fork of a
+  budding branch that grows in from the right edge. No red or patterned eggs, no blossom.
+
+Measured as above on 2026-11-10 at 1920×1080: 1,300 to 87,000 triangles, 18 to 44 draw
+calls, build 56 to 350 ms, 25 to 30 ms/s of main-thread time, frame script under 1 ms.
+
 ### Which renderer draws a scene
 
 `AmbientTheme.tsx` chooses once per scene. The layer's root carries
