@@ -12,23 +12,39 @@ inventing another scene list or copying an old schema from documentation.
 
 - `src/shared/holidays.ts` owns factual observance dates, names and ordinary
   holiday spans. Preserve verified Dangi and Julian/Gregorian arithmetic.
-- `src/shared/theme-registry.ts` owns original path art, palettes, size/motion
-  budgets and explicit major/card/quiet eligibility. Both renderer and Try a
+- `src/shared/theme-registry.ts` owns scene identity, palettes, the living-scene
+  budget and explicit major/card/quiet eligibility. Both renderer and Try a
   scene consume it. Adding an observance must not automatically create a scene.
+- `src/shared/living-scene-art.ts` and `living-celebration-art.ts` own each
+  scene's authored composition: edge patches of rooted groups with complete and
+  compact drawings, a passage form and supported weather. Bounds are derived
+  from the path control hull; the art test verifies them.
 - `src/client/ambient-theme.ts` resolves current scenes and fresh noteworthy
   weather. An illustration uses `previewTheme`, never a fake clock or forecast.
-- `AmbientTheme.tsx` places a bounded sequence in measured negative space;
-  `Display.tsx` supplies widget reading areas and effective brightness.
+- `LivingTheme.tsx` with `living-scene.ts` fits and animates the composition
+  behind widgets under one reading mask; `SceneForeground.tsx` with
+  `scene-passage.ts` runs the opt-in foreground passage. `Display.tsx` supplies
+  widget reading areas and effective brightness.
+- `src/client/living-scene-principals.ts` names each scene's principal
+  silhouette for the unit and browser retention checks.
+- `src/shared/living-scene-dressing.ts` chooses each scene's ground band, top
+  band and particle kind; `src/client/living-dressing.ts` generates them from
+  the measured reading areas. A new scene needs an entry there.
 
 For a cultural change, establish the date/custom from primary sources and record
 URLs, review date and factual-versus-product distinctions in the calendar doc.
-Use original recognizable contours, with a principal form and simpler companions.
+Compose one connected edge scene: a principal habitat patch, a far silhouette and
+one or two counterweights (at most four patches, six groups, 240 paths in all).
+Draw a patch as one complete picture; the fitter moves the whole patch along its
+edge before it shortens or omits anything, so art that bleeds off a side must
+taper below the frame rather than end in a cut edge. Give tall groups a complete
+compact drawing. Register the principal group ids for a new scene.
 Do not substitute one generic lantern/star for different cultures. Choose one
 scene at a time; selected exact quiet dates constrain festive shapes and palette,
 while factual weather retains priority. Minor cards leave the season intact.
 
-To add a researched major scene, add one `THEME_SCENES` entry (original art,
-palette, size, finite motion budget), then an explicit observance policy such as
+To add a researched major scene, add one `THEME_SCENES` entry (label, group,
+palette) and its composition in the art module, then an explicit observance policy such as
 `major('new-scene-id', 65, 3)`. The final argument is anticipation days, a product
 choice; the factual central date remains in the calendar. A card-only addition
 needs no art. Update sources and test start/day/end, overlap, deselection and the
@@ -37,9 +53,10 @@ calendar can supply its distinct New Year tree. Resolve one scene at a time.
 
 Keep dominant true black, no full-screen tint/blur, no flashes/audio, clear widget
 text and bounded SVG nodes. Tune from real RAM images at low brightness and
-1080p/4K; increasing size alone does not ensure readability. Omit a mark when no
-safe reading-space gap exists. Keep finite transform/opacity animation and expired
-slot renewal; no per-frame JavaScript or fixed bright frame. Off, Animation Off
+1080p/4K; increasing size alone does not ensure readability. Never weaken reading
+protection to keep a form: relocate the whole patch, then compact, then omit.
+Keep finite transform/opacity animation and staggered local patch renewal; no
+per-frame JavaScript or fixed bright frame. Off, Animation Off
 and system reduced motion retain their explicit behavior. No burn-in guarantee.
 
 Owner preference (#582, 2026-11-04): atmosphere should look visibly colourful,
@@ -48,8 +65,18 @@ feature/companion forms and characteristic finite motion; a tiny opacity/count
 increase is insufficient. Keep black dominant and text clear. Compare affected
 scenes at 26%/36% in RAM, with default/dense/empty boards and 1080p/4K samples;
 complete styling passes compare every registered scene.
-Motion waypoints in the registry are shared by CSS transforms and placement
-bounds, including rotation and stroke extent; do not add unreserved transforms.
+Owner direction (#586, 2026-11-04 and 2026-11-09): scenes must read as composed
+whole-screen or edge scenery, never floating stickers or a corner vignette. On
+the default board at 26% aim for: scenery along at least 85% of the bottom edge,
+a second dressed edge, 6-10% lit pixels, hero forms 200-320px, saturated fills
+whose bright accents reach widget-text luminance, sway that is plainly visible,
+20 or more particles always in flight and renewal that never leaves an area
+empty. Measure lit pixels and edge coverage; do not judge from brightened
+captures. Keep particles as a few animated layers, not one animation each.
+An occasional brief overlap of a widget's empty space is acceptable; text and
+glyphs are never covered. Judge the populated default board first: a scene that
+is only good on an empty board fails.
+A group's rotation sweep is part of its fitted bounds; do not add unreserved transforms.
 
 Editor demonstrations remain local state with a visible Preview/display-unchanged
 label and Automatic return. They must not produce a dirty Save bar, requests,

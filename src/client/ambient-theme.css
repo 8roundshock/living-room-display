@@ -21,6 +21,11 @@
 }
 @media (prefers-reduced-motion: reduce) { .ambient-theme { display: none; } }
 .theme-controls { margin: 0 0 18px; }
+.theme-scene-options { margin-top: 6px; }
+.theme-scene-options summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-size: .82rem; }
+.theme-passage-option { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: .82rem; }
+.theme-passage-option input { flex: 0 0 auto; width: 18px; height: 18px; margin: 0; }
+.theme-passage-option small { display: block; color: var(--muted); font-size: .76rem; margin-top: 3px; }
 .theme-controls .theme-mode { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .theme-controls select { min-width: 0; max-width: 70%; min-height: 44px; }
 .theme-calendars { display: flex; flex-wrap: wrap; gap: 0 14px; border: 0; margin: 8px 0 0; padding: 0; }

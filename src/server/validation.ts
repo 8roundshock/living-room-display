@@ -48,7 +48,8 @@ const daylightBrightness = z.object({
 // Field schemas carry no defaults: zod applies .default() inside .partial(), which made a
 // brightness-only PATCH reset a saved clock style (#83). Only the persisted reader fills defaults.
 const appearanceFields = {
-  theme: z.object({ mode: z.enum(THEME_MODES), calendars: z.array(z.enum(HOLIDAY_CALENDARS)).max(3).refine(values => new Set(values).size === values.length, 'Choose each calendar once') }).strict(),
+  theme: z.object({ mode: z.enum(THEME_MODES), calendars: z.array(z.enum(HOLIDAY_CALENDARS)).max(3).refine(values => new Set(values).size === values.length, 'Choose each calendar once'), foreground: z.boolean().optional() }).strict()
+    .transform(({ foreground, ...theme }) => foreground ? { ...theme, foreground: true } : theme),
   preset: z.enum(['phone', 'room', 'night', 'custom']), accentColor: color, textColor: color,
   brightness: brightnessLevel, fontScale: z.number().min(0.7).max(1.5),
   fontFamily: z.enum(['sans', 'serif', 'mono']), layout: z.enum(['balanced', 'minimal', 'weather-first']),

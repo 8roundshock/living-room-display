@@ -13,6 +13,7 @@ import { leaveDisplay, liveOpener } from './displayWindow.ts';
 import { AmbientTheme } from './AmbientTheme.tsx';
 import { previewTheme, resolveTheme, themeMotionTimes, type ThemeRect } from './ambient-theme.ts';
 import { THEME_CLEARANCE_SECONDS, type ThemeSceneId } from '../shared/theme-registry.ts';
+import { passageGeometry } from './scene-passage-dom';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
 
 export interface WidgetGesture { id: WidgetId; x: number; y: number; width?: number; height?: number }
@@ -567,17 +568,35 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
         top: ink.top - boardY - offset.y + loY - 1, bottom: ink.bottom - boardY - offset.y + hiY + 1 };
       if (future || inTransit) {
         // At most one swap can begin during a mark's life (minimum interval30s).
-        // Reserve the swept box through current/next cells, including a glide already in flight.
+        // Reserve the actual ink through equal-size destinations. Whole-cell reserves
+        // erase an edge habitat for many seconds despite unused whitespace (#586).
+        // A size change still needs the conservative cell reserve until its next fit.
         for (const placement of [getWidgetRect(grid, id), ...(future ? [getWidgetRect(future, id)] : [])]) {
-          box.left = Math.min(box.left, board.offsetLeft + placement.left / 100 * board.offsetWidth - FLOAT_TRAVEL * bounds.width - margin);
-          box.right = Math.max(box.right, board.offsetLeft + (placement.left + placement.width) / 100 * board.offsetWidth + FLOAT_TRAVEL * bounds.width + margin);
-          box.top = Math.min(box.top, board.offsetTop + placement.top / 100 * board.offsetHeight - FLOAT_TRAVEL * bounds.height - margin);
-          box.bottom = Math.max(box.bottom, board.offsetTop + (placement.top + placement.height) / 100 * board.offsetHeight + FLOAT_TRAVEL * bounds.height + margin);
+          const targetLeft = board.offsetLeft + placement.left / 100 * board.offsetWidth;
+          const targetTop = board.offsetTop + placement.top / 100 * board.offsetHeight;
+          const targetWidth = placement.width / 100 * board.offsetWidth, targetHeight = placement.height / 100 * board.offsetHeight;
+          if (Math.abs(targetWidth - rect.width) < 1 && Math.abs(targetHeight - rect.height) < 1) {
+            const sectionLeft = rect.left - bounds.left, sectionTop = rect.top - bounds.top;
+            box.left = Math.min(box.left, targetLeft + ink.left - sectionLeft + loX - 1);
+            box.right = Math.max(box.right, targetLeft + ink.right - sectionLeft + hiX + 1);
+            box.top = Math.min(box.top, targetTop + ink.top - sectionTop + loY - 1);
+            box.bottom = Math.max(box.bottom, targetTop + ink.bottom - sectionTop + hiY + 1);
+          } else {
+            box.left = Math.min(box.left, targetLeft - FLOAT_TRAVEL * bounds.width - margin);
+            box.right = Math.max(box.right, targetLeft + targetWidth + FLOAT_TRAVEL * bounds.width + margin);
+            box.top = Math.min(box.top, targetTop - FLOAT_TRAVEL * bounds.height - margin);
+            box.bottom = Math.max(box.bottom, targetTop + targetHeight + FLOAT_TRAVEL * bounds.height + margin);
+          }
         }
       }
       return box;
     });
   }, [layoutEditing, swapsAllowed, controlled, previewBoard, effectiveCycle, grid, floating, motionIntervalSeconds, themePreviewBucket, previewFrame.phase, dimmed.size]);
+  const themePassageGeometry = useCallback(() => {
+    const element = root.current; if (!element) return null;
+    const holes = themeExclusions();
+    return passageGeometry(element, [...registry.current.values()].map((entry, index) => ({ element: entry.section, swept: holes[index]! })).filter(entry => entry.swept));
+  }, [themeExclusions]);
 
   // Follow daylight (#439): one value per minute at the weather location. The ambient page glides to
   // it (widgets.css); editor canvases follow the draft at once. Fixed renders `brightness` unchanged.
@@ -621,7 +640,8 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
         <AmbientTheme scene={embedded && themePreview ? previewTheme(themePreview) : themeScene}
           animated={!reducedMotion && !layoutEditing && settings.appearance.animation !== 'off'}
           still={embedded && layoutEditing && !reducedMotion && settings.appearance.animation !== 'off'}
-          exclusions={themeExclusions} layoutKey={layoutKey} inkRevision={themeInkRevision} />
+          exclusions={themeExclusions} layoutKey={layoutKey} inkRevision={themeInkRevision}
+          foreground={settings.appearance.theme.foreground} passageMeasure={themePassageGeometry} />
         <div
           ref={plane}
           className={['ambient-content', 'widget-grid-plane', reveal.active ? 'revealing' : ''].filter(Boolean).join(' ')}

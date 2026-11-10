@@ -1,10 +1,11 @@
 # Layered living scenes — design and implementation plan
 
 Primary work: [#586 — Create layered living scenes for every atmosphere theme](https://github.com/8roundshock/living-room-display/issues/586).
-Plan written 2026-11-04. **This is a proposed implementation plan, not delivered
-artwork or a visual/performance acceptance claim.** The initial PR changes docs
-only. The coordinator reviews this plan before renderer implementation starts.
-The feature issue stays open until the implementation gates below are met.
+Plan written 2026-11-04. It remains the design record and gate list. Source
+implementation status as of 2026-11-10 is in [Phase status](#phase-status-2026-11-10);
+the current renderer contract is in [Ambient themes](ambient-themes.md#layered-living-scenes-586).
+Budgets below are the plan's starting values, not measurements, unless the
+status section says so. The feature issue stays open until the gates are met.
 
 The owner wants the display to feel like a coherent, high-quality living scene.
 The present atmosphere reads as separate floating stickers, despite its colour
@@ -248,6 +249,41 @@ this plan's base by merging current main. Do not reimplement its settings or
 include birthday runtime changes in this plan PR's diff. Public planning uses
 generic treatment names only. Follow the normal non-force-push integration/review
 workflow.
+
+## Phase status (2026-11-10)
+
+Source state on draft PR #588. "Verified" means checked in this worktree with an
+isolated synthetic server and headless Edge; nothing here is an installed,
+native or physical-TV result.
+
+| Phase | Status |
+| --- | --- |
+| 0 — plan | Done (PR #587). |
+| 1 — vertical slice | Summer habitat, integrated rain and the optional passage are implemented and were inspected at low light and in real time. Open: 45-second human motion review and a temporal coverage heatmap. |
+| 2 — prove reuse | Winter/snow and the three birthday treatments use the shared renderer. Quiet, reduced-motion, weather priority, style drafts and birthday privacy checks pass. |
+| 3 — complete inventory | All 26 compositions render through one renderer with full-edge dressing. Every scene's named principal form is retained on the default and dense boards. The unused per-mark registry art still exists in source (#590). |
+| 4 — refine and integrate | A first independent visual pass (2026-11-09) rejected the candidate; the second-round changes below answer it. Open: a second independent visual pass and independent review of the final pushed head. |
+| 5 — delivery | Not started; needs separate authorization. |
+
+### Starting values superseded by owner direction (2026-11-09)
+
+The numbers earlier in this plan were first prototypes' starting points. The
+owner's later words win where they conflict; the current values and their
+measurements are in [Ambient themes](ambient-themes.md#layered-living-scenes-586).
+
+| Plan starting value | Current value | Why |
+| --- | --- | --- |
+| Lower habitats 5-12% of height, peaks to 18% | Ground band 5-19% of the short side across the whole bottom edge; habitat drawings 1.45x, principal forms about 14-25% | The 18% peaks read as small corner stickers on a populated 1080p board. |
+| At least 80% exact black, 40% of the perimeter unlit | 5.6-12.2% lit pixels; bottom edge 100% lit, top edge 100% lit except Fog | He asked for grass along the bottom or a border; text stays protected by the mask. |
+| No persistent border | Continuous top and bottom bands that sway, shift 12px each way and cross-fade at renewal | Same request. Still no luminous rectangle, no side borders, no burn-in claim. |
+| Patches retreat to true black one at a time | Cross-fade to the next generation's shifted root | The blink was the most noticeable event on screen. |
+| 240 paths, 32 animations | 420 paths, 48 animations (measured at most 87 and 23) | Continuous particles and bands. 150ms and 40 layers still hold at 1080p. |
+| Sway of a few degrees | Grass 7.5, hanging 8.5, branch 4 degrees; pendulum pendants | Motion was nearly imperceptible. |
+| Foreground: one small actor, 0.22 x brightness | Near passage is a four-form cluster about 80px at 0.9 x that never touches readings; incursion caps unchanged | A 14px actor at 6% opacity was invisible. |
+
+Unchanged: true-black background, the reading mask, Off / Animation Off /
+reduced-motion behaviour, finite transform/opacity animation, one scene at a
+time, quiet-date restraint, weather honesty and birthday privacy.
 
 ## Acceptance evidence and test strategy
 

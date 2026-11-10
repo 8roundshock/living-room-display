@@ -1,13 +1,49 @@
 # Project status
 
-## Planned layered living scenes — 2026-11-04 (#586)
+## Layered living scenes: second-round candidate awaiting review — 2026-11-10 (#586)
 
-The coordinator accepted the direction in the [layered scene plan](docs/layered-scene-plan.md):
-connected seasonal edges, shared environmental motion, integrated weather and
-rare bounded foreground passages across all 26 scenes. This is documented future
-work, not implemented artwork. [PR #587](https://github.com/8roundshock/living-room-display/pull/587)
-is documentation only; #586 stays open for the staged visual, performance and
-implementation gates. Current runtime behavior remains in the theme contract.
+Draft [PR #588](https://github.com/8roundshock/living-room-display/pull/588)
+replaces the floating-mark atmosphere with composed edge-to-edge scenery for
+all 26 registered scenes. The contract and measurements are in
+[Ambient themes](docs/ambient-themes.md#layered-living-scenes-586); the values
+that replaced the plan's starting points are in the
+[plan's phase status](docs/layered-scene-plan.md#phase-status-2026-11-10).
+
+An independent visual review of the first all-scene candidate (2026-11-09)
+judged it a small, muted, nearly still corner vignette. The second round adds a
+continuous ground band along the whole bottom edge, a canopy, garland, bunting,
+icicle or cloud band along the top, 1.45x larger habitat drawings, saturated
+filled palettes, roughly doubled sway, particles always in flight, cross-faded
+renewal, redrawn Fog/Storm/Wind/Rain air and distinct birthday colourways with
+a larger cake. The opt-in Foreground moments passage is now a visible cluster
+that crosses open space and never text or glyphs.
+
+Verified on 2026-11-10 in an isolated synthetic source server with headless
+Edge, default board, 1920x1080, 26% brightness: every scene's default frame was
+inspected at native brightness; lit pixels 5.6-12.2%, bottom-edge columns 100%
+in every scene, no principal group omitted on empty, default or dense boards;
+4.2-second samples 56-139ms task time, at most 32 layers and 23 animations.
+Reading protection is unchanged and has a two-phase pixel proof in the `themes`
+browser suite.
+
+Third round (2026-11-10): Fog redrawn as soft feathered haze, pendants capped,
+dressing scaled with the viewport (4K now costs the same as 1080p), particles
+fade before text, heavier Combined snow and bobbing balloons. Family-specific
+dressing and weak heroes are tracked in
+[#598](https://github.com/8roundshock/living-room-display/issues/598), small
+renderer defects in [#599](https://github.com/8roundshock/living-room-display/issues/599).
+
+Not done or not verified: final-head
+review, installation, native/idle display and physical-TV viewing, a temporal
+coverage heatmap and 45-second human review per scene. Known weak points: Fog
+is still the plainest scene; New Year (CA/KR), Seollal and Maslenitsa keep
+abstract authored forms; per-blade and per-ornament motion is approximated by
+segment sway and pendulum pendants; falling leaves and petals do not tumble;
+Foreground moments stays opt-in and its text incursion is still barely
+perceptible ([#589](https://github.com/8roundshock/living-room-display/issues/589));
+unused per-mark registry code remains
+([#590](https://github.com/8roundshock/living-room-display/issues/590)).
+#586 stays open.
 
 ## Follow daylight curve and dim time — 2026-11-09 (#591)
 
