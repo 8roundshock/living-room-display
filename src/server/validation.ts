@@ -8,6 +8,7 @@ import { KEEP_DONE_MS, TIMER_ADD_MAX_MS, TIMER_LABEL_MAX, TIMER_LIMIT, TIMER_MAX
 import { checkPhotoUpload, photoAssetSchema, photoAssetShape } from './photo.ts';
 import { AT_REST } from './persistence.ts';
 import { defaultTheme, HOLIDAY_CALENDARS, THEME_MODES } from '../shared/themes.ts';
+import { DEFAULT_DIM_TIME, isDimTime } from '../shared/daylight.ts';
 import { BIRTHDAY_LIMIT, BIRTHDAY_TREATMENTS, validBirthdayDate } from '../shared/birthdays.ts';
 
 const widgetShape = <T>(factory: (id: WidgetId) => T) => Object.fromEntries(WIDGET_IDS.map(id => [id, factory(id)])) as Record<WidgetId, T>;
@@ -32,8 +33,16 @@ export const location = z.object({
 }).strict();
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex color');
 const brightnessLevel = z.number().min(0.1).max(1);
-/** Follow daylight (#439): a whole range, replaced whole by PATCH; null is Fixed. */
-const daylightBrightness = z.object({ dimmest: brightnessLevel, brightest: brightnessLevel }).strict()
+/**
+ * Follow daylight (#439): a whole range, replaced whole by PATCH; null is Fixed. `dimTime` (#591)
+ * reads as 23:00 when missing, in stored data (every range saved before #591, and the at-rest
+ * omission) and in a PATCH from a client that predates it. The default lives inside the object,
+ * which a PATCH always replaces whole, so it cannot reset another key (#83).
+ */
+const daylightBrightness = z.object({
+  dimmest: brightnessLevel, brightest: brightnessLevel,
+  dimTime: z.string().refine(isDimTime, 'Use a dim time on the half hour from 20:00 to 03:00').default(DEFAULT_DIM_TIME),
+}).strict()
   .refine(range => range.dimmest <= range.brightest, { message: 'Dimmest must not be brighter than Brightest', path: ['dimmest'] })
   .nullable();
 // Field schemas carry no defaults: zod applies .default() inside .partial(), which made a

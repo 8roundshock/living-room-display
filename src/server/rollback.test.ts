@@ -256,7 +256,8 @@ test('#439 Follow daylight is a documented rollback exception until Fixed is sav
     assert.equal('daylightBrightness' in fresh.settings.appearance, false, 'a fresh folder omits the key');
     await app.send('PATCH', '/api/settings', { appearance: { daylightBrightness: DAYLIGHT } });
     const following = await readJson(directory, 'state.json');
-    assert.deepEqual(daylightOf(following), DAYLIGHT, 'state.json carries the range');
+    assert.deepEqual(daylightOf(following), DAYLIGHT, 'state.json carries the range, written as before #591: the default dim time adds no key');
+    assert.deepEqual(app.store.snapshot().settings.appearance.daylightBrightness, { ...DAYLIGHT, dimTime: '23:00' }, 'in memory the dim time is always present');
     assertPreviousReaderRejects('data', following, 'Follow daylight state.json');
     assertPreviousReaderAccepts('data', stripDaylight(following), 'Follow daylight state.json after the strip');
     assert.equal(stripDaylight(following).settings.appearance.brightness, following.settings.appearance.brightness, 'the strip keeps the Fixed level');
@@ -282,7 +283,22 @@ test('#439 Follow daylight is a documented rollback exception until Fixed is sav
     // Importing a Follow daylight export restores the range in the newer app.
     await imported.send('POST', '/api/import', exported);
     assert.deepEqual(daylightOf(await readJson(target, 'state.json')), DAYLIGHT);
-    assert.deepEqual(imported.store.snapshot().settings.appearance.daylightBrightness, DAYLIGHT);
+    assert.deepEqual(imported.store.snapshot().settings.appearance.daylightBrightness, { ...DAYLIGHT, dimTime: '23:00' });
+    // #591: another dim time is written inside the range, in the settings, a saved style and the export, and imports back.
+    const midnight = { ...DAYLIGHT, dimTime: '00:00' };
+    await imported.send('PATCH', '/api/settings', { appearance: { daylightBrightness: midnight } });
+    await imported.send('PATCH', '/api/settings', { savedPresets: [{ id: 'midnight-style', name: 'Midnight style', visual: getVisual(imported.store.snapshot().settings) }] });
+    const late = await readJson(target, 'state.json');
+    assert.deepEqual(daylightOf(late), midnight);
+    assert.deepEqual(late.settings.savedPresets[0]?.visual.appearance.daylightBrightness, midnight);
+    const lateExport = await imported.send('GET', '/api/export');
+    assert.deepEqual(daylightOf(lateExport), midnight);
+    assertPreviousReaderAccepts('data', stripDaylight(late), 'a midnight dim time after the strip');
+    // Back at 11 PM the key is gone again, so the range reads in every build since #439.
+    await imported.send('PATCH', '/api/settings', { appearance: { daylightBrightness: { ...DAYLIGHT, dimTime: '23:00' } } });
+    assert.deepEqual(daylightOf(await readJson(target, 'state.json')), DAYLIGHT);
+    await app.send('POST', '/api/import', lateExport);
+    assert.deepEqual(app.store.snapshot().settings.appearance.daylightBrightness, midnight, 'an export with a dim time imports');
   } finally {
     await app.close(); await imported.close();
     await rm(directory, { recursive: true, force: true }); await rm(target, { recursive: true, force: true });

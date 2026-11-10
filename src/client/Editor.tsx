@@ -48,7 +48,8 @@ import {
   spokenSeconds,
   withAppearance,
 } from './model';
-import { defaultDaylightRange } from './daylight';
+import { defaultDaylightRange, dimTimeLabel } from './daylight';
+import { DEFAULT_DIM_TIME, DIM_TIMES, isDimTime } from '../shared/daylight';
 import { DaylightStatus } from './DaylightStatus';
 import { ThemeControls, ThemePreviewControls } from './ThemeControls';
 import type { ThemeSceneId } from '../shared/theme-registry';
@@ -997,13 +998,13 @@ export function Editor({
     );
   }
   /** Moving one end past the other carries the other along, so Dimmest never exceeds Brightest. */
-  function daylightEnd(end: keyof DaylightBrightness, value: number) {
+  function daylightEnd(end: 'dimmest' | 'brightest', value: number) {
     const range = draftRef.current.appearance.daylightBrightness;
     if (!range) return;
     setDaylightBrightness(
       end === 'dimmest'
-        ? { dimmest: value, brightest: Math.max(value, range.brightest) }
-        : { dimmest: Math.min(value, range.dimmest), brightest: value },
+        ? { ...range, dimmest: value, brightest: Math.max(value, range.brightest) }
+        : { ...range, dimmest: Math.min(value, range.dimmest), brightest: value },
     );
   }
   const followDaylight = draft.appearance.daylightBrightness !== null;
@@ -1742,8 +1743,8 @@ export function Editor({
               <>
                 <h2>Make it yours</h2>
                 <ThemeControls settings={draft} weather={state.weather} saving={saving} disconnected={!!connectionError} onChange={theme => { setThemePreview(null); change(previous => withAppearance(previous, { theme })); }} />
-                {/* #439: Fixed (one level) or Follow daylight (Dimmest to Brightest, peaking at
-                    solar noon). The mode sits on the label line, so the default Fixed tab keeps
+                {/* #439: Fixed (one level) or Follow daylight (Dimmest to Brightest with a dim
+                    time, #591). The mode sits on the label line, so the default Fixed tab keeps
                     its height at 1280×720. */}
                 {(() => {
                   const modes = (
@@ -1814,6 +1815,24 @@ export function Editor({
                         display={`${brightest}%`}
                         onChange={(value) => daylightEnd('brightest', value / 100)}
                       />
+                      {/* #591: when the evening level glides to Dimmest. */}
+                      <label className="daylight-dim">
+                        <span className="field-label">Dim at</span>
+                        <select
+                          className="select-input"
+                          aria-label="Dim at"
+                          value={isDimTime(range.dimTime) ? range.dimTime : DEFAULT_DIM_TIME}
+                          onChange={(event) =>
+                            setDaylightBrightness({ ...range, dimTime: event.target.value })
+                          }
+                        >
+                          {DIM_TIMES.map((time) => (
+                            <option key={time} value={time}>
+                              {dimTimeLabel(time, draft.clockFormat)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                       <DaylightStatus
                         range={range}
                         settings={draft}

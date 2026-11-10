@@ -1,6 +1,6 @@
-// Follow daylight brightness (#439) in the production build: display renders at three times of day,
-// the minute step and glide, Fixed unchanged, polar days and nights, and the Style tab's Brightness
-// mode. Own ephemeral loopback server and temporary data; synthetic location, forecast and settings;
+// Follow daylight brightness (#439, curve and dim time #591) in the production build: display renders
+// at four times of day, the minute step and glide, Fixed unchanged, the dim time, polar days and
+// nights, and the Style tab's Brightness mode. Own ephemeral loopback server and temporary data; synthetic location, forecast and settings;
 // screenshots stay in RAM.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -17,15 +17,16 @@ import { keepPagesLocal } from './lib/local-only.mjs';
 
 const TORONTO = { name: 'Toronto', latitude: 43.6532, longitude: -79.3832, timezone: 'America/Toronto' };
 const TROMSO = { name: 'Tromsø', latitude: 69.6492, longitude: 18.9553, timezone: 'Europe/Oslo' };
-const RANGE = { dimmest: 0.2, brightest: 0.8 };
-// Toronto, Tuesday 2026-10-20 (EDT): 2 AM, 10 AM and the solar noon at 13:02.
-const TIMES = { night: '2026-10-20T06:00:00Z', morning: '2026-10-20T14:00:00Z', noon: '2026-10-20T17:02:00Z' };
+const RANGE = { dimmest: 0.2, brightest: 0.8, dimTime: '23:00' };
+// Toronto, Tuesday 2026-10-20 (EDT; sunrise 7:37 AM, sunset 6:26 PM): 2 AM, 7:35 AM in the dawn,
+// 10 AM and 8 PM.
+const TIMES = { night: '2026-10-20T06:00:00Z', dawn: '2026-10-20T11:35:00Z', day: '2026-10-20T14:00:00Z', evening: '2026-10-21T00:00:00Z' };
 
 export async function runDaylightQa({ playwright, edge } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const directory = await mkdtemp(join(tmpdir(), 'lrd-daylight-'));
   const root = fileURLToPath(new URL('../../', import.meta.url));
-  let current = Date.parse(TIMES.noon);
+  let current = Date.parse(TIMES.day);
   const app = await createApplication({
     dataDirectory: directory, clientDirectory: join(root, 'dist/client'), now: () => current,
     fetcher: async () => Response.json(forecastFixture()),
@@ -90,11 +91,11 @@ export async function runDaylightQa({ playwright, edge } = {}) {
   const slider = name => page.getByRole('slider', { name, exact: true });
   const savebar = () => page.locator('.studio-savebar');
   async function styleTab() { await page.getByRole('tab', { name: /^Style/ }).click(); await page.clock.runFor(300); }
-  const status = () => page.locator('.daylight-status').innerText();
+  const status = () => page.locator('.daylight-now').innerText();
   const canvas = () => brightness('.preview-frame');
 
   try {
-    // 1. The display at three times of day, against Fixed renders at the expected levels.
+    // 1. The display at four times of day, against Fixed renders at the expected levels.
     const measured = {};
     for (const [label, time] of Object.entries(TIMES)) {
       await reset(settings => { settings.appearance.daylightBrightness = RANGE; });
@@ -116,55 +117,80 @@ export async function runDaylightQa({ playwright, edge } = {}) {
       assert.equal(measured[label].nonBlackCorner, 0, `${label}: unused pixels stay #000`);
     }
     assert.equal(measured.night.value, 0.2, '2 AM is Dimmest');
-    assert.ok(measured.noon.value >= 0.799, `solar noon is Brightest: ${measured.noon.value}`);
-    assert.ok(measured.morning.value > 0.4 && measured.morning.value < 0.75, `10 AM is in between: ${measured.morning.value}`);
-    assert.ok(measured.night.max < measured.morning.max && measured.morning.max < measured.noon.max, `lit pixels brighten through the day: ${JSON.stringify(Object.fromEntries(Object.entries(measured).map(([key, value]) => [key, value.max])))}`);
-    checks.push(`display at 2 AM, 10 AM and the 13:02 solar noon in Toronto: --ambient-brightness ${measured.night.value}, ${measured.morning.value}, ${measured.noon.value}; brightest lit pixel ${measured.night.max} < ${measured.morning.max} < ${measured.noon.max}; each render paints like a Fixed render at the same value; unused pixels #000`);
+    assert.ok(measured.dawn.value > 0.35 && measured.dawn.value < 0.55, `just before sunrise is part of the way up: ${measured.dawn.value}`);
+    assert.equal(measured.day.value, 0.8, '10 AM is already Brightest');
+    assert.equal(measured.evening.value, 0.59, '8 PM holds the evening level, 0.65 of the range');
+    assert.ok(measured.night.max < measured.dawn.max && measured.dawn.max < measured.evening.max && measured.evening.max < measured.day.max, `lit pixels follow the levels: ${JSON.stringify(Object.fromEntries(Object.entries(measured).map(([key, value]) => [key, value.max])))}`);
+    checks.push(`display at 2 AM, 7:35 AM, 10 AM and 8 PM in Toronto: --ambient-brightness ${measured.night.value}, ${measured.dawn.value}, ${measured.day.value}, ${measured.evening.value}; brightest lit pixel ${measured.night.max} < ${measured.dawn.max} < ${measured.evening.max} < ${measured.day.max}; each render paints like a Fixed render at the same value; unused pixels #000`);
 
     // 2. The value steps once a minute and the display glides; Fixed has no glide.
     await reset(settings => { settings.appearance.daylightBrightness = RANGE; });
-    await open('/display', { time: TIMES.morning });
+    await open('/display', { time: TIMES.dawn });
     const start = await brightness();
     assert.match(start.transition, /filter 10s/, `the display glides: ${start.transition}`);
     await page.clock.runFor(30_000);
     assert.equal((await brightness()).value, start.value, 'no change within the minute');
     await page.clock.runFor(31_000);
     const next = await brightness();
-    assert.ok(next.value > start.value && next.value - start.value < 0.01, `the next minute rises a little: ${start.value} → ${next.value}`);
+    assert.ok(next.value > start.value && next.value - start.value < 0.025, `the next minute of dawn rises a little: ${start.value} → ${next.value}`);
     // Reduced motion and Drift and fade off keep the glide (brightness is not motion).
     await reset(settings => { settings.appearance.daylightBrightness = RANGE; settings.appearance.motionEnabled = false; });
-    await open('/display', { time: TIMES.morning, reducedMotion: 'no-preference' });
+    await open('/display', { time: TIMES.dawn, reducedMotion: 'no-preference' });
     assert.match((await brightness()).transition, /filter 10s/, 'Drift and fade off keeps the glide');
     await reset();
-    await open('/display', { time: TIMES.morning });
+    await open('/display', { time: TIMES.dawn });
     const fixedDisplay = await brightness();
     assert.deepEqual([fixedDisplay.mode, fixedDisplay.value, fixedDisplay.filter], ['fixed', 0.55, 'brightness(0.55)'], 'Fixed renders the saved level');
     assert.doesNotMatch(fixedDisplay.transition, /filter/, `Fixed has no brightness glide: ${fixedDisplay.transition}`);
     await page.clock.runFor(61_000);
     assert.equal((await brightness()).value, 0.55, 'Fixed never changes with the time');
-    checks.push(`the value changes once a minute (${start.value} → ${next.value} at 10 AM) and the display glides over 10 s, also with reduced motion and with Drift and fade off; Fixed renders the saved 0.55 with no glide at any time`);
+    checks.push(`the value changes once a minute (${start.value} → ${next.value} in the dawn) and the display glides over 10 s, also with reduced motion and with Drift and fade off; Fixed renders the saved 0.55 with no glide at any time`);
 
     // 3. Polar night and polar day at Tromsø.
     await reset(settings => { settings.location = { ...TROMSO }; settings.appearance.daylightBrightness = RANGE; });
     await open('/display', { time: '2026-12-21T10:45:00Z' });
-    assert.equal((await brightness()).value, 0.2, 'polar night noon stays Dimmest');
+    const polarNoon = (await brightness()).value;
+    assert.ok(polarNoon >= 0.59 && polarNoon < 0.66, `polar night noon: the evening level plus a little twilight: ${polarNoon}`);
+    await open('/display', { time: '2026-12-21T06:00:00Z' });
+    assert.equal((await brightness()).value, 0.2, 'the polar night morning rests at Dimmest');
     await open('/display', { time: '2026-06-21T22:45:00Z' });
     const midnightSun = (await brightness()).value;
-    assert.ok(midnightSun > 0.2 && midnightSun < 0.4, `midnight sun stays above Dimmest: ${midnightSun}`);
+    assert.ok(midnightSun > 0.7 && midnightSun < 0.8, `the midnight sun, 3° up after the dim time, stays near Brightest: ${midnightSun}`);
     await open('/display', { time: '2026-06-21T10:44:00Z' });
     assert.ok((await brightness()).value >= 0.799, 'polar day noon is Brightest');
-    checks.push(`Tromsø: Dimmest at noon in the polar night; ${midnightSun} at the June solar midnight (never down to Dimmest) and Brightest at its solar noon`);
+    checks.push(`Tromsø: Dimmest in the polar night's morning and ${polarNoon} at its noon; ${midnightSun} at the June solar midnight, after the dim time, and Brightest at its solar noon`);
 
-    // 4. 4K render of the morning display for inspection.
+    // 3b. The dim time (#591), also after midnight: 11:40 PM in Toronto.
+    const late = {};
+    for (const dimTime of ['23:00', '00:00', '00:30']) {
+      await reset(settings => { settings.appearance.daylightBrightness = { ...RANGE, dimTime }; });
+      await open('/display', { time: '2026-10-21T03:40:00Z' });
+      late[dimTime] = (await brightness()).value;
+    }
+    assert.deepEqual(late, { '23:00': 0.2, '00:00': 0.59, '00:30': 0.59 }, 'Dimmest once the 11 PM ramp has finished; still the evening level with a dim time after midnight');
+    await open('/display', { time: '2026-10-21T04:45:00Z' });
+    const ramp = (await brightness()).value;
+    assert.equal(ramp, 0.395, '12:45 AM is half way down the 12:30 AM ramp');
+    await open('/display', { time: '2026-10-21T05:00:00Z' });
+    assert.equal((await brightness()).value, 0.2, '1 AM is Dimmest');
+    // A range saved before #591 has no dim time: it dims at 11 PM.
+    await reset(settings => { settings.appearance.daylightBrightness = { dimmest: 0.2, brightest: 0.8 }; });
+    await open('/display', { time: '2026-10-21T02:00:00Z' });
+    assert.equal((await brightness()).value, 0.59, 'a range without the key holds the evening level at 10 PM');
+    await open('/display', { time: '2026-10-21T03:40:00Z' });
+    assert.equal((await brightness()).value, 0.2, 'and is at Dimmest by 11:40 PM');
+    checks.push(`dim time at 11:40 PM in Toronto: ${JSON.stringify(late)}; 12:45 AM is half way down the 12:30 AM ramp (${ramp}) and 1 AM is Dimmest; a range without the key dims at 11 PM`);
+
+    // 4. 4K render of the dawn display for inspection.
     await reset(settings => { settings.appearance.daylightBrightness = RANGE; });
-    await open('/display', { time: TIMES.morning, viewport: { width: 3840, height: 2160 } });
+    await open('/display', { time: TIMES.dawn, viewport: { width: 3840, height: 2160 } });
     const fourK = await brightness();
     const fourKShot = await page.screenshot();
     const fourKPixels = await pixels(fourKShot);
     assert.equal(fourKPixels.nonBlackCorner, 0);
-    assert.equal(fourK.value, measured.morning.value, '4K shows the same value');
-    images.push({ name: 'daylight-morning-3840x2160', bytes: fourKShot });
-    checks.push(`3840×2160 at 10 AM: the same ${fourK.value}, black corners`);
+    assert.equal(fourK.value, measured.dawn.value, '4K shows the same value');
+    images.push({ name: 'daylight-dawn-3840x2160', bytes: fourKShot });
+    checks.push(`3840×2160 at 7:35 AM: the same ${fourK.value}, black corners`);
 
     // 5. Style tab: Fixed is the default and keeps the tab's height; Follow daylight is a draft.
     await reset();
@@ -213,9 +239,16 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     await savebar().waitFor();
     assert.equal(await slider('Brightness').count(), 0);
     assert.deepEqual([await slider('Dimmest').inputValue(), await slider('Brightest').inputValue()], ['28', '70'], 'starts at Night’s 28% and Phone’s 70%');
-    assert.match(await status(), /Now 70% · brightest at 1:02\sPM/);
+    assert.match(await status(), /^Now 70% · brightest since 8:1\d\sAM · dims at 11:00\sPM$/);
+    // #591: the dim time, 11 PM by default, half hours from 8 PM to 3 AM with midnight named.
+    const dimAt = page.getByRole('combobox', { name: 'Dim at', exact: true });
+    assert.equal(await dimAt.inputValue(), '23:00');
+    const dimOptions = await dimAt.locator('option').evaluateAll(options => options.map(option => [option.value, option.textContent]));
+    assert.equal(dimOptions.length, 15);
+    assert.deepEqual([dimOptions[0], dimOptions[6], dimOptions[8], dimOptions[14]], [['20:00', '8:00 PM'], ['23:00', '11:00 PM'], ['00:00', '12:00 AM (midnight)'], ['03:00', '3:00 AM']]);
     await button('How daylight brightness works').click();
     assert.match(await page.getByRole('tooltip').innerText(), /weather location \(Toronto\)/);
+    assert.match(await page.getByRole('tooltip').innerText(), /reaches Brightest soon after sunrise and stays there while it is light\. After sunset it eases to an evening level \(55%\) for a lit room, glides to Dimmest over 30 minutes from the dim time/);
     assert.match(await page.getByRole('tooltip').innerText(), /Starter looks keep this daylight range/);
     await page.keyboard.press('Escape');
     const followed = await canvas();
@@ -231,12 +264,18 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     assert.deepEqual([await slider('Dimmest').inputValue(), await slider('Brightest').inputValue()], ['30', '30']);
     await slider('Dimmest').fill('25'); await slider('Brightest').fill('75'); await page.clock.runFor(100);
     assert.match(await page.locator('.brightness-daylight > .control-label output').innerText(), /^25–75%$/);
+    // The dim time is part of the draft, and moving a slider keeps it.
+    await dimAt.selectOption('00:00'); await page.clock.runFor(100);
+    assert.match(await status(), /dims at 12:00\sAM$/);
+    await slider('Brightest').fill('76'); await slider('Brightest').fill('75'); await page.clock.runFor(100);
+    assert.equal(await dimAt.inputValue(), '00:00', 'a slider keeps the dim time');
     // Fixed again is the saved state: no Save bar. Returning restores this session's range.
     await button('Fixed').click(); await page.clock.runFor(200);
     await savebar().waitFor({ state: 'detached' });
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'brightness-mode-fixed');
     await button('Follow daylight').click(); await page.clock.runFor(200);
     assert.deepEqual([await slider('Dimmest').inputValue(), await slider('Brightest').inputValue()], ['25', '75'], 'the last range comes back');
+    assert.equal(await dimAt.inputValue(), '00:00', 'with its dim time');
     // Built-in styles keep the mode.
     await page.getByRole('combobox', { name: 'Style', exact: true }).selectOption('builtin:night');
     await page.getByRole('group', { name: 'Switch style', exact: true }).getByRole('button', { name: 'Save and switch', exact: true }).click();
@@ -247,10 +286,18 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     await page.getByRole('group', { name: 'Switch style', exact: true }).getByRole('button', { name: 'Save and switch', exact: true }).click();
     await page.getByRole('group', { name: 'Switch style', exact: true }).waitFor({ state: 'detached' }); await page.clock.runFor(200);
     await button('Save changes').click(); await savebar().waitFor({ state: 'detached' });
-    assert.deepEqual(app.store.snapshot().settings.appearance.daylightBrightness, { dimmest: 0.25, brightest: 0.75 });
-    assert.deepEqual(JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')).settings.appearance.daylightBrightness, { dimmest: 0.25, brightest: 0.75 });
+    assert.deepEqual(app.store.snapshot().settings.appearance.daylightBrightness, { dimmest: 0.25, brightest: 0.75, dimTime: '00:00' });
+    assert.deepEqual(JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')).settings.appearance.daylightBrightness, { dimmest: 0.25, brightest: 0.75, dimTime: '00:00' });
     await page.reload(); await button('Edit layout').waitFor(); await page.clock.runFor(500); await styleTab();
     assert.equal(await button('Follow daylight').getAttribute('aria-pressed'), 'true', 'saved through reload');
+    assert.equal(await dimAt.inputValue(), '00:00', 'the dim time too');
+    // Save and Cancel appear only for an effective change: another time is one, the saved time again is none.
+    assert.equal(await savebar().count(), 0);
+    await dimAt.selectOption('23:30'); await savebar().waitFor();
+    await dimAt.selectOption('00:00'); await savebar().waitFor({ state: 'detached' });
+    await dimAt.selectOption('01:00'); await savebar().waitFor();
+    await button('Cancel').click(); await savebar().waitFor({ state: 'detached' });
+    assert.equal(await dimAt.inputValue(), '00:00', 'Cancel restores the saved dim time');
     // Cancel restores the saved range.
     await slider('Brightest').fill('90'); await savebar().waitFor();
     await button('Cancel').click(); await savebar().waitFor({ state: 'detached' });
@@ -258,26 +305,31 @@ export async function runDaylightQa({ playwright, edge } = {}) {
     // The time follows the Time format.
     await app.store.update(data => { data.settings.clockFormat = '24h'; });
     await page.clock.runFor(30_000);
-    assert.match(await status(), /Now 75% · brightest at 13:02/);
+    assert.match(await status(), /^Now 75% · brightest since 08:1\d · dims at 00:00$/);
+    assert.deepEqual(await dimAt.locator('option').evaluateAll(options => [options[6].textContent, options[8].textContent]), ['23:00', '00:00 (midnight)']);
     assert.equal(await savebar().count(), 0, 'a time format saved elsewhere is not an editor draft');
-    // An hour later, in the afternoon, the status follows.
-    await page.clock.fastForward(60 * 60_000); await page.clock.runFor(1000);
-    const afternoon = Number((await status()).match(/Now (\d+)%/)[1]);
-    assert.ok(afternoon < 75 && afternoon > 25, `an hour after noon the status falls: ${afternoon}%`);
-    checks.push('Style tab: Fixed is pressed by default, named “Fixed” (Playwright and Chromium) in no label, and clicking the line’s name or value presses nothing; the tab still fits at 1280×720; the mode buttons sit on the label line with a hit area above and below that never covers the slider; Follow daylight is a draft starting at 28–70% with “Now 70% · brightest at 1:02 PM” and the canvas at 0.7 at once (no glide); Dimmest and Brightest carry each other; Fixed again hides the Save bar and keeps focus; the session range returns; Night and Room keep the mode; Save persists through reload; Cancel restores; 24-hour time; the status follows the clock');
+    // Seven hours later, at 8:05 PM, the status shows the evening level and the next morning.
+    await page.clock.fastForward(7 * 60 * 60_000); await page.clock.runFor(1000);
+    const evening = Number((await status()).match(/Now (\d+)%/)[1]);
+    assert.ok(evening === 57 || evening === 58, `the evening level of 25–75% is 57.5%: ${evening}%`);
+    assert.match(await status(), /· brightest from 08:1\d · dims at 00:00$/);
+    checks.push('Style tab: Fixed is pressed by default, named “Fixed” (Playwright and Chromium) in no label, and clicking the line’s name or value presses nothing; the tab still fits at 1280×720; the mode buttons sit on the label line with a hit area above and below that never covers the slider; Follow daylight is a draft starting at 28–70%, dimming at 11 PM, with “Now 70% · brightest since 8:1x AM · dims at 11:00 PM” and the canvas at 0.7 at once (no glide); Dim at lists 15 half hours from 8 PM to 3 AM with midnight named; Dimmest and Brightest carry each other and keep the dim time; Fixed again hides the Save bar and keeps focus; the session range and dim time return; Night and Room keep the mode; Save persists the range with dimTime 00:00 through reload; another dim time shows Save, the saved one hides it, Cancel restores; 24-hour time; at 8:05 PM the status shows the evening level and the next morning');
 
     // 6. Polar status lines.
     await reset(settings => { settings.location = { ...TROMSO }; settings.appearance.daylightBrightness = RANGE; });
     await open('/editor', { time: '2026-12-21T10:45:00Z' }); await styleTab();
-    assert.match(await status(), /Now 20% · the sun stays down today/);
+    assert.match(await status(), /^Now 6\d% · the sun stays down today · dims at 11:00\sPM$/);
     await button('How daylight brightness works').click();
-    assert.match(await page.getByRole('tooltip').innerText(), /Stays at Dimmest while the sun is down/);
+    assert.match(await page.getByRole('tooltip').innerText(), /While the sun stays down it rises only to the evening level, late in the morning/);
     await page.keyboard.press('Escape');
     await open('/editor', { time: '2026-06-21T22:45:00Z' }); await styleTab();
+    assert.match(await status(), /^Now 7\d% · brightest from \d:\d\d\sAM · light all night$/);
     await button('How daylight brightness works').click();
-    assert.match(await page.getByRole('tooltip').innerText(), /The sun is up all day/);
+    assert.match(await page.getByRole('tooltip').innerText(), /While it is still light at the dim time, it dims with the dusk instead/);
     await page.keyboard.press('Escape');
-    checks.push('polar night reads “Now 20% · the sun stays down today”; polar day says the sun is up all day');
+    await open('/editor', { time: '2026-06-21T10:44:00Z' }); await styleTab();
+    assert.match(await status(), /^Now 80% · brightest since \d:\d\d\sAM · light all night$/);
+    checks.push('polar night reads “Now 6x% · the sun stays down today · dims at 11:00 PM”; the polar day reads “brightest from/since … · light all night” and says it dims with the dusk instead');
 
     // 7. 390 and 320 px: no horizontal overflow in either mode.
     for (const width of [390, 320]) {
@@ -287,14 +339,16 @@ export async function runDaylightQa({ playwright, edge } = {}) {
         const overflow = await page.evaluate(() => {
           const panel = document.querySelector('.inspector-panel').getBoundingClientRect();
           const group = document.querySelector('.brightness-mode').getBoundingClientRect();
-          return { page: document.documentElement.scrollWidth, width: innerWidth, inside: group.left >= panel.left && group.right <= panel.right };
+          const dim = document.querySelector('.daylight-dim')?.getBoundingClientRect();
+          const now = document.querySelector('.daylight-status')?.getBoundingClientRect();
+          return { page: document.documentElement.scrollWidth, width: innerWidth, inside: [group, dim, now].every(box => !box || (box.left >= panel.left && box.right <= panel.right)) };
         });
         assert.ok(overflow.page <= overflow.width && overflow.inside, `${width} px (${mode}): ${JSON.stringify(overflow)}`);
         if (width === 390 && mode === 'first') { await page.locator('.brightness-mode').scrollIntoViewIfNeeded(); images.push({ name: 'style-daylight-390', bytes: await page.screenshot() }); }
         await button(mode === 'first' ? (width === 390 ? 'Fixed' : 'Follow daylight') : (width === 390 ? 'Follow daylight' : 'Fixed')).click(); await page.clock.runFor(200);
       }
     }
-    checks.push('390 and 320 px: the Brightness mode stays inside the panel in both modes with no horizontal scroll');
+    checks.push('390 and 320 px: the Brightness mode, the dim time and the status line stay inside the panel in both modes with no horizontal scroll');
 
     assert.deepEqual(errors, []);
     return { checks, images, outside: [...new Set(answeredLists.flat())] };
