@@ -138,6 +138,37 @@ The three reference scenes follow their design plans:
   [#627](https://github.com/8roundshock/living-room-display/issues/627) and
   [#631](https://github.com/8roundshock/living-room-display/issues/631).
 
+Korean family (added 2026-11-10; one hero each, in four different corners, and no object
+shared between two of the four; sources in [holiday calendar](holiday-calendar.md#cultural-art-references)):
+
+- **Seollal · Korea** ([#628](https://github.com/8roundshock/living-room-display/issues/628)):
+  one hanji shield kite (bangpae-yeon: round hole, five bamboo spars, indigo skirt, no tail)
+  on a taut line in the top-left corner, a round and an eared silk lucky pouch on one hook
+  in the top-right corner, four yut sticks as they fell at the bottom right.
+- **Chuseok · Korea** ([#629](https://github.com/8roundshock/living-room-display/issues/629)):
+  five half-moon songpyeon on pine needles on a woven tray in the bottom-left corner with an
+  opened chestnut burr and jujubes beside it, a dim warm full moon in the top-right corner
+  crossed by a leafy persimmon branch with three fruits still turning orange.
+- **Buddha's Birthday · Korea** ([#630](https://github.com/8roundshock/living-room-display/issues/630)):
+  one large pink lotus lantern with its blank tag in the top-right corner, and a white
+  lotus, an eight-sided palmo-deung and a pale-yellow lotus on one cord across the top
+  left; lanterns only, nothing on the ground.
+- **Birthday · Korean accents** ([#631](https://github.com/8roundshock/living-room-display/issues/631)),
+  now its own module instead of the shared Birthday one: a candle-lit cake and a brass bowl
+  of seaweed soup on a low lacquered soban in the bottom-right corner with three balloons
+  tied to the table, two gifts in knotted silk bojagi at the bottom left, a sheer jogakbo
+  patchwork cloth hanging in the top-left corner.
+
+Seollal and Chuseok are everyday-tier scenes (nine-day windows). Each has one more element
+for its three holiday days (a far ray kite; ripening rice), drawn only when the engine
+gives the scene the special tier, which waits for
+[#632](https://github.com/8roundshock/living-room-display/issues/632). Measured like the
+table below (2026-11-10, 1920×1080): 26,000 to 60,000 triangles, 49 to 84 draw calls,
+build 60 to 140 ms, frame script 0.7 to 1.5 ms and 2.6 to 4.1 ms with the GPU. As the first
+scene of a session, which also compiles the shaders, Seollal built in 0.37 to 0.81 s over
+nine runs (median 0.49 s) on a machine busy with other work; Christmas took 0.39 s the
+same way.
+
 ### Which renderer draws a scene
 
 `AmbientTheme.tsx` chooses once per scene. The layer's root carries
