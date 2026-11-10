@@ -110,10 +110,14 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     await flat('canada-day'); assert.equal(await canvas().count(), 0); assert.deepEqual(await stages(), []);
     record('A lost context, or WebGL that fails when the renderer is created, leaves the flat scene on screen and throws nothing to the page');
 
-    // ---------- weather without an overlay module ----------
-    await open({ scene: 'christmas', weather: 'wind' }); await flat('wind', 'christmas');
-    assert.equal(await canvas().count(), 0); assert.deepEqual(await stages(), []);
-    record('Weather over a 3D scene without an overlay module stays with the flat renderer, which draws that weather');
+    // ---------- weather over a scene: every kind has its overlay module (#617 to #621), so it stays in 3D ----------
+    const overlayRequests = []; await open({ scene: 'canada-day', weather: 'wind', onPage: target => target.on('request', request => overlayRequests.push(new URL(request.url()).pathname)) }); await ready();
+    const windy = await attributes();
+    assert.deepEqual([windy.sceneRenderer, windy.sceneModule, windy.sceneWeather, windy.themeMotif, windy.themeHabitat, windy.canvases, windy.flat], ['3d', 'canada-day', 'wind', 'wind', 'canada-day', 1, 0]);
+    assert.ok(overlayRequests.some(path => path.includes('/assets/wind-')), 'the wind overlay was fetched on demand'); assert.equal((await stages()).length, 1);
+    record('Weather over a 3D scene is drawn in 3D with its overlay module (wind over Canada Day); the flat renderer is not mounted');
+    // The next check builds its own stage and counts the live ones: give it a page with WebGL and no scene.
+    await open({ scene: 'christmas', mode: 'off' }); assert.deepEqual(await stages(), []);
 
     // ---------- a quiet date, asked of the engine itself (no reference scene falls on one) ----------
     const quiet = await page.evaluate(async ({ enginePath, scenePath }) => {
