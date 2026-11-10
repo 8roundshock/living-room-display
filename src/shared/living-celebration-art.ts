@@ -482,13 +482,13 @@ const SEOLLAL: LivingSceneArt = {
 
 const CHUSEOK: LivingSceneArt = {
   patches: [
-    { id: 'chuseok-full-moon', edge: 'top-right', width: .25, height: .22, viewBox: [450, 330], depth: 'far', opacity: .7,
+    { id: 'chuseok-full-moon', edge: 'top-right', width: .3, height: .3, viewBox: [450, 330], depth: 'far', opacity: 1,
       groups: [group('chuseok-moon-air', [6, 8, 452, 330], [450, 20], 'drift', [
-        p('M340 142C340 208 291 253 228 253C165 253 116 204 116 142C116 79 167 30 228 30C291 30 340 79 340 142Z', 0, .2, 2.3),
+        p('M340 142C340 208 291 253 228 253C165 253 116 204 116 142C116 79 167 30 228 30C291 30 340 79 340 142Z', 0, .92, 2.3),
         p('M135 127Q158 82 199 73M273 214Q300 198 309 167', 0, undefined, 1.6, .62),
         p('M11 292C112 241 172 298 265 280Q365 260 452 298M55 319Q139 286 199 308', 2, undefined, 2, .6),
       ], compact([6, 8, 452, 211], [
-        p('M322 96C322 137 290 168 250 168C210 168 178 137 178 96C178 56 210 24 250 24C290 24 322 56 322 96Z', 0, .2, 2),
+        p('M322 96C322 137 290 168 250 168C210 168 178 137 178 96C178 56 210 24 250 24C290 24 322 56 322 96Z', 0, .92, 2),
         p('M10 198Q145 154 273 185T452 187', 2, undefined, 1.8, .65),
       ]))] },
     { id: 'chuseok-grain-and-table', edge: 'bottom-left', width: .59, height: .22, viewBox: [1050, 320], depth: 'habitat',

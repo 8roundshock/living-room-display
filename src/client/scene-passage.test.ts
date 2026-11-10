@@ -191,7 +191,7 @@ test('without a reachable target the passage stays in whitespace beside its habi
   assert.equal(plan.intersectionMs, 0); assert.equal(plan.footprintRatio, 0);
   for (const area of [reading, target.rect, target.swept]) assert.deepEqual(passagePathMetrics(plan, area), { intersectionMs: 0, footprintRatio: 0 }, 'a near passage never touches reading space or a movement envelope');
   for (const step of plan.steps) assert.ok(step.x - plan.width / 2 >= 0 && step.x + plan.width / 2 <= 1920 && step.y - plan.height / 2 >= 0 && step.y + plan.height / 2 <= 1080);
-  assert.ok(plan.duration <= PASSAGE_MAX_DURATION && plan.width <= 1080 * .05);
+  assert.ok(plan.duration <= PASSAGE_MAX_DURATION && plan.width >= 40 && plan.width <= 1080 * .08);
   assert.equal(planScenePassage({ ...input({ protectedRects: [reading], lastGlobal: 200_000 - PASSAGE_GLOBAL_COOLDOWN + 1 }), origins: [far] }), null, 'one passage per minute across the display');
   assert.equal(planScenePassage({ ...input({ protectedRects: [reading], lastByTarget: { 'habitat:far-habitat': 200_000 - PASSAGE_TARGET_COOLDOWN + 1 } }), origins: [far] }), null, 'the same habitat waits three minutes');
   assert.equal(planScenePassage({ ...input({ protectedRects: [rect(0, 0, 1920, 1080)], targets: [] }), origins: [far] }), null, 'no whitespace means no passage');

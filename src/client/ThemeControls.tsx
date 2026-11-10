@@ -24,7 +24,7 @@ export function ThemeControls({ settings, weather, disconnected, onChange, savin
       <summary>Scene options</summary>
       <label className="theme-passage-option"><input type="checkbox" checked={theme.foreground ?? false} disabled={saving}
         onChange={event => { const { foreground: _foreground, ...rest } = theme; onChange(event.target.checked ? { ...rest, foreground: true } : rest); }} />
-        <span>Occasional foreground details<small>Rare, brief passages in front of large values.</small></span></label>
+        <span>Foreground moments<small>About once a minute, a few leaves or flakes drift across open space in front of widgets, never over text.</small></span></label>
     </details>}
   </div>;
 }

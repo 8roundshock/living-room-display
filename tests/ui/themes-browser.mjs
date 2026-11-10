@@ -72,18 +72,22 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
    * blue. Any ink pixel within two pixels of pure green means art touches a reading. */
   async function artTouchingInk() {
     const style=await page.addStyleTag({content:'.living-theme{opacity:1!important}.living-theme [data-reading-mask] path,.living-theme [data-reading-mask] rect{stroke:#00ff00!important;opacity:1!important}.living-theme [data-reading-mask] path:not([fill="none"]),.living-theme [data-reading-mask] rect{fill:#00ff00!important;fill-opacity:1!important}.living-theme svg[data-scene-patch],.living-theme .living-patch-life{opacity:1!important}'});
+    // Judge one settled frame: at 4K a headless screenshot can otherwise race the first raster of large
+    // animated layers and come back without the scene. Phases are sampled by seeking, not by waiting.
+    await page.evaluate(()=>document.querySelector('.living-theme')?.getAnimations({subtree:true}).forEach(a=>a.pause()));
+    await waitForNativeRender(page); await page.waitForTimeout(150);
     const shot=(await page.screenshot()).toString('base64');
     await style.evaluate(node=>node.remove());
     return page.evaluate(async base64=>{
       const bitmap=await createImageBitmap(new Blob([Uint8Array.from(atob(base64),character=>character.charCodeAt(0))],{type:'image/png'}));
       const canvas=new OffscreenCanvas(bitmap.width,bitmap.height),context=canvas.getContext('2d'); context.drawImage(bitmap,0,0);
       const {data,width,height}=context.getImageData(0,0,bitmap.width,bitmap.height),green=new Uint8Array(width*height);
-      let art=0;
-      for(let i=0;i<width*height;i++){const r=data[i*4],g=data[i*4+1],b=data[i*4+2]; if(g>150&&r<40&&b<40){green[i]=1;art++;}}
+      let art=0,lit=0,peak=[0,0,0];
+      for(let i=0;i<width*height;i++){const r=data[i*4],g=data[i*4+1],b=data[i*4+2]; if(g>150&&r<40&&b<40){green[i]=1;art++;} if(r+g+b>30){lit++; if(g>peak[1])peak=[r,g,b];}}
       let touching=0;
       for(let y=2;y<height-2;y++) for(let x=2;x<width-2;x++){const i=y*width+x; if(data[i*4]<=24&&data[i*4+2]<=24) continue;
         search: for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++) if(green[i+dy*width+dx]){touching++;break search;}}
-      return {art,touching};
+      return {art,touching,lit,peak,size:[width,height]};
     },shot);
   }
   /** A visible, unscaled group must sit wholly outside clearance; the mask is a
@@ -91,7 +95,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
   async function fullFormsInReadingSpace() {
     return page.evaluate(()=>{
       const layer=document.querySelector('.living-theme'),origin=layer.getBoundingClientRect();
-      const holes=[...layer.querySelectorAll('mask rect[fill="black"]')].map(hole=>({left:hole.x.baseVal.value,top:hole.y.baseVal.value,right:hole.x.baseVal.value+hole.width.baseVal.value,bottom:hole.y.baseVal.value+hole.height.baseVal.value}));
+      const holes=[...layer.querySelectorAll('mask > rect[fill="black"]')].map(hole=>({left:hole.x.baseVal.value,top:hole.y.baseVal.value,right:hole.x.baseVal.value+hole.width.baseVal.value,bottom:hole.y.baseVal.value+hole.height.baseVal.value}));
       return [...layer.querySelectorAll('[data-scene-fit]:not([data-scene-omitted])')].filter(group=>!/scale\((?!1 1\))/.test(group.getAttribute('transform')??'')).flatMap(group=>{
         // Path boxes follow the drawn silhouette more tightly than the conservative control hull.
         const hit=[...group.querySelectorAll('path')].some(path=>{const r=path.getBoundingClientRect(),view=path.closest('svg').getBoundingClientRect();
@@ -212,7 +216,15 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
         assert.ok(form.present&&!form.omitted&&form.onScreen&&form.life>.9,`${motif} keeps its principal form ${form.name} on the default board at ${viewport.width}: ${JSON.stringify(form)}`);
         if(!form.grass) assert.equal(form.compact,false,`${motif} keeps the complete ${form.name} drawing on the default board at ${viewport.width}`);
       }
-      const ink=await artTouchingInk(); assert.ok(ink.art>200,`${motif} draws visible art (${ink.art}px)`); assert.equal(ink.touching,0,`${motif} art never touches reading ink`);
+      const dress=await page.locator('.living-theme').evaluate(layer=>({ground:Number(layer.querySelector('[data-ground-lit]')?.dataset.groundLit??0),top:layer.querySelectorAll('[data-scene-top]').length,particles:Number(layer.querySelector('[data-particle-count]')?.dataset.particleCount??0),layers:layer.querySelectorAll('.living-particle-layer').length,rain:layer.querySelectorAll('.living-rain path').length,fog:layer.querySelectorAll('.living-fog-band').length}));
+      assert.ok(dress.ground>=.85,`${motif} lights at least85% of bottom-edge columns on the default board (${dress.ground})`);
+      if(motif!=='fog') assert.equal(dress.top,1,`${motif} dresses a second edge`);
+      assert.ok(dress.particles>=20||dress.rain>=6||dress.fog>=3,`${motif} keeps particles, rain or fog in the air: ${JSON.stringify(dress)}`);
+      const ink=await artTouchingInk(); // Only fully opaque recoloured pixels are counted here, so translucent fills and thin 4K strokes undercount the lit area.
+      assert.ok(ink.art>viewport.width*viewport.height*.02,`${motif} draws opaque art over at least2% of the screen (${ink.art}px) ${JSON.stringify(dress)}`); assert.equal(ink.touching,0,`${motif} art never touches reading ink`);
+      // A second phase of the sway and particle cycle keeps the same clearance.
+      await page.locator('.living-attached, .living-particle-layer, .living-pendulum, .living-rain').evaluateAll(nodes=>nodes.forEach(node=>node.getAnimations().forEach(a=>{a.pause();a.currentTime=(a.currentTime??0)+3100;})));
+      assert.equal((await artTouchingInk()).touching,0,`${motif} art clears reading ink at a second motion phase`);
       assert.deepEqual(await fullFormsInReadingSpace(),[],`${motif} complete forms are not sheared by reading space`);
       const transforms=[];
       for(const age of [2000,5000,8000,11000]) transforms.push(await page.locator('.living-attached').evaluateAll((groups,age)=>groups.map(group=>{for(const animation of group.getAnimations()){animation.pause();animation.currentTime=age+(animation.effect.getTiming().delay??0);}return{motion:group.dataset.sceneMotion,transform:getComputedStyle(group).transform};}),age));
@@ -221,18 +233,20 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     }
     for(const motion of ['grass','branch','hanging','drift']) assert.ok(motionsSeen.has(motion),`${motion} choreography was phase-sampled`);
     record('All26 living scenes keep their named principal form on the default board at26%1080p/36%4K, trueblack, masked reading clearance and bounded structure');
-    for(const [name,options,expectation] of [['summer rain',{date:'2026-07-20T18:30:00Z',mode:'combined',code:63},{motif:'rain',habitat:'summer',weather:'rain'}],['winter snow',{date:'2026-02-01T18:30:00Z',mode:'combined',code:73},{motif:'snow',habitat:'winter',weather:'snow'}],
+    for(const [name,options,expectation] of [['summer rain',{date:'2026-07-20T18:30:00Z',mode:'combined',code:63},{motif:'rain',habitat:'summer',weather:'rain'}],['winter snow',{date:'2026-02-01T18:30:00Z',mode:'combined',code:73},{motif:'snow',habitat:'winter',weather:undefined}],
       ['weather-only rain',{date:'2026-12-20T18:30:00Z',mode:'weather',code:63},{motif:'rain',habitat:'rain',weather:'rain'}]]) {
       await open({...options,path:'/display',viewport:{width:1920,height:1080},brightness:.26}); await page.locator('.living-theme').waitFor(); await settle();
-      const state=await page.locator('.living-theme').evaluate(layer=>({motif:layer.dataset.themeMotif,habitat:layer.dataset.themeHabitat,weather:layer.querySelector('[data-scene-weather]')?.dataset.sceneWeather,drift:layer.querySelectorAll('.living-drift').length,patches:[...layer.querySelectorAll('[data-scene-patch]')].map(p=>p.dataset.scenePatch)}));
-      assert.deepEqual({motif:state.motif,habitat:state.habitat,weather:state.weather},expectation,name); assert.equal(state.drift,0,'precipitation replaces detached drift forms');
+      const state=await page.locator('.living-theme').evaluate(layer=>({motif:layer.dataset.themeMotif,habitat:layer.dataset.themeHabitat,weather:layer.querySelector('[data-scene-weather]')?.dataset.sceneWeather,particles:layer.querySelector('[data-scene-particles]')?.dataset.sceneParticles,count:Number(layer.querySelector('[data-particle-count]')?.dataset.particleCount??0),rain:layer.querySelectorAll('.living-rain path').length,patches:[...layer.querySelectorAll('[data-scene-patch]')].map(p=>p.dataset.scenePatch)}));
+      assert.deepEqual({motif:state.motif,habitat:state.habitat,weather:state.weather},expectation,name);
+      if(name==='winter snow') {assert.equal(state.particles,'flake');assert.ok(state.count>=60,'Combined snow is visibly heavier than Winter alone');}
+      else {assert.equal(state.particles,undefined,'rain replaces seasonal particles');assert.ok(state.rain>=6,'rain falls in two depths');}
       if(options.mode==='weather') assert.ok(state.patches.every(id=>id.startsWith('rain-')),'Weather mode shows no seasonal or holiday habitat');
       await photo(`combined-${name}`);
     }
     record('Combined weather adapts the seasonal habitat with one precipitation field; Weather mode stays weather-only');
     for(const code of [0,63]) {
       await open({date:'2026-11-11T18:30:00Z',mode:'combined',code,path:'/display',brightness:.26,birthday:'classic',foreground:true}); await page.locator('.living-theme').waitFor(); await settle(); await photo(`quiet-${code}`);
-      const quiet=await page.locator('.living-theme').evaluate(layer=>({quiet:layer.hasAttribute('data-theme-quiet'),patches:layer.querySelectorAll('[data-scene-patch]').length,opacity:Number(getComputedStyle(layer).opacity),drift:layer.querySelectorAll('.living-drift').length,
+      const quiet=await page.locator('.living-theme').evaluate(layer=>({quiet:layer.hasAttribute('data-theme-quiet'),patches:layer.querySelectorAll('[data-scene-patch]').length,opacity:Number(getComputedStyle(layer).opacity),drift:layer.querySelectorAll('.living-particle-layer,.living-band,.living-pendulum').length,
         fills:[...layer.querySelectorAll('[data-scene-patch] path')].filter(path=>path.getAttribute('fill')!=='none').length,birthday:layer.dataset.themeMotif.startsWith('birthday')}));
       assert.ok(quiet.quiet);assert.ok(quiet.patches<=2);assert.equal(quiet.fills,0);assert.equal(quiet.drift,0);assert.equal(quiet.birthday,false);assert.ok(quiet.opacity<=.26*.38+.005);
       await page.clock.runFor(80_000); assert.equal(await page.locator('.living-foreground').count(),0,'quiet dates never run a foreground passage');
@@ -269,47 +283,65 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     for(const options of [{reduced:'reduce'},{animation:'off'},{mode:'off'}]) { await open({mode:'combined',path:'/display',foreground:true,...options}); await page.clock.runFor(70_000); assert.equal(await page.locator('.ambient-theme').count(),0); assert.equal(await page.locator('.living-foreground').count(),0); }
     record('Off,AnimationOff and system reduced motion mount no decorative layer and no foreground passage');
     await open({date:'2026-07-20T18:30:00Z',mode:'seasonal',path:'/display',empty:true}); await page.locator('.living-theme').waitFor(); await page.clock.runFor(1000);
-    const lifecycle=()=>page.locator('.living-theme').evaluate(layer=>({generations:[...layer.querySelectorAll('[data-scene-patch]')].map(patch=>`${patch.dataset.scenePatch}:${patch.dataset.sceneGeneration}`),drift:layer.querySelectorAll('.living-drift').length}));
-    const first=await lifecycle(); assert.equal(first.drift,0,'detached forms enter one at a time after mount, not as an initial burst');
-    assert.equal(first.generations.length,THEME_SCENES.summer.composition.patches.length);
+    const lifecycle=()=>page.locator('.living-theme').evaluate(layer=>({generations:[...layer.querySelectorAll('[data-scene-patch]:not([data-scene-leaving])')].map(patch=>`${patch.dataset.scenePatch}:${patch.dataset.sceneGeneration}`),drift:layer.querySelectorAll('.living-particle-layer').length,leaving:layer.querySelectorAll('[data-scene-leaving]').length}));
+    const first=await lifecycle(); assert.equal(first.drift,4,'particles are four depth layers, not one animation each');
+    assert.equal(first.generations.length,THEME_SCENES.summer.composition.patches.filter(patch=>!(patch.depth==='far'&&patch.edge.startsWith('bottom'))).length);
     const timing=await page.locator('.living-theme').evaluate(layer=>layer.getAnimations({subtree:true}).map(a=>({iterations:a.effect.getTiming().iterations,properties:[...new Set(a.effect.getKeyframes().flatMap(k=>Object.keys(k)))].filter(k=>!['offset','easing','composite','computedOffset'].includes(k))})));
     assert.ok(timing.length>0&&timing.length<=LIVING_SCENE_BUDGET.animations); assert.ok(timing.every(t=>Number.isFinite(t.iterations)&&t.properties.every(p=>['opacity','transform'].includes(p))),'every decorative animation is finite and touches only transform/opacity');
-    await page.clock.runFor(20_000); assert.ok((await lifecycle()).drift>=3,'detached forms are present once their first whole iteration starts');
-    await page.clock.runFor(LIVING_SCENE_BUDGET.life);
+    await page.clock.runFor(20_000);
+    // Renewal is a cross-fade: while a patch's next generation arrives, the previous one is still drawn.
+    let overlap=0,empty=0;
+    for(let step=0;step<40;step++) { await page.clock.runFor(1000); const now=await lifecycle(); overlap+=now.leaving; if(now.generations.length<first.generations.length) empty++; }
+    assert.ok(overlap>0,'an outgoing generation overlaps the incoming one'); assert.equal(empty,0,'no patch is ever absent during renewal');
     const later=await lifecycle(); assert.notDeepEqual(later.generations,first.generations,'local patches renew by generation');
     assert.equal(later.generations.length,first.generations.length,'renewal replaces patches without accumulating them');
+    await page.clock.runFor(LIVING_SCENE_BUDGET.crossfade+4100); assert.equal((await lifecycle()).leaving,0,'outgoing generations are removed after the cross-fade');
     assert.ok(await page.locator('.living-theme').evaluate(layer=>layer.getAnimations({subtree:true}).length)<=LIVING_SCENE_BUDGET.animations,'animations stay bounded after several renewals');
     await page.emulateMedia({reducedMotion:'reduce'}); await page.locator('.ambient-theme').waitFor({state:'detached'});
     await page.emulateMedia({reducedMotion:'no-preference'}); await page.locator('.living-theme').waitFor(); await page.clock.runFor(200);
     assert.ok(Number(await page.locator('.living-theme').getAttribute('data-scene-elapsed'))<5000,'resuming motion starts a fresh scene clock');
-    record('Finite transform/opacity animations, staggered local patch renewal and a fresh scene after reduced-motion resume');
+    await open({date:'2026-07-20T18:30:55Z',mode:'seasonal',path:'/display',empty:true}); await page.locator('.living-theme').waitFor(); await page.clock.runFor(1000);
+    const meadow=await page.locator('[data-scene-patch]').first().elementHandle(), band=await page.locator('.living-band').first().elementHandle();
+    await page.clock.runFor(7000);
+    assert.ok(await meadow.evaluate(node=>node.isConnected)&&await band.evaluate(node=>node.isConnected),'a wall-clock minute boundary never restarts the scene');
+    await open({date:'2026-12-20T18:30:55Z',mode:'combined',code:63,empty:true});
+    await button('Preview movement').click(); await page.clock.runFor(9000);
+    assert.equal(await page.locator('.living-theme').getAttribute('data-theme-motif'),'rain');
+    await page.getByRole('combobox',{name:'Theme',exact:true}).selectOption('seasonal'); await page.clock.runFor(4200);
+    assert.equal(await page.locator('.living-theme').getAttribute('data-theme-motif'),'christmas','a theme change during Preview movement shows the new scene');
+    assert.ok(Number(await page.locator('.living-theme').getAttribute('data-scene-elapsed'))<9000,'the new scene starts its own clock');
+    assert.ok(await page.locator('.living-particle-layer').count()>0&&await page.locator('.living-rain').count()===0);
+    record('Finite transform/opacity animations, cross-faded patch renewal, minute-boundary continuity, mid-preview theme change and a fresh scene after reduced-motion resume');
     await open({date:'2026-07-20T18:30:00Z',mode:'seasonal',path:'/display',viewport:{width:1920,height:1080},brightness:.26,foreground:true}); await page.locator('.living-theme').waitFor();
     const passages=[]; let overReading=0,maxOpacity=0;
     for(let tick=0;tick<92;tick++) {
       // CSS fades run on real time while the scene clock is synthetic: let renewed patches finish
       // fading in before the cooldown ends, as they would have long before on a real display.
-      if(tick===74) await page.waitForTimeout(3000);
+      if(tick===10||tick===70) await page.waitForTimeout(3600);
       await page.clock.runFor(1000);
       const state=await page.evaluate(()=>{
         const layer=document.querySelector('.living-foreground'),actor=layer?.querySelector('.living-passage'); if(!layer||!actor) return null;
         const a=actor.getBoundingClientRect(),readings=[],range=document.createRange();
-        const walk=node=>{for(const child of node.childNodes){if(child.nodeType===Node.TEXT_NODE&&child.textContent?.trim()){range.selectNodeContents(child);readings.push(...range.getClientRects());}else if(child instanceof Element&&!child.classList.contains('sr-only'))walk(child);}};
+        // Graphics count as readings even when aria-hidden (weather glyphs).
+        const walk=node=>{for(const child of node.childNodes){if(child.nodeType===Node.TEXT_NODE&&child.textContent?.trim()){range.selectNodeContents(child);readings.push(...range.getClientRects());}else if(child instanceof Element&&!child.classList.contains('sr-only')){if(child.matches('svg,img,canvas,picture,video,[role="img"]'))readings.push(child.getBoundingClientRect());else walk(child);}}};
         document.querySelectorAll('.widget-content').forEach(walk);
-        return {born:layer.dataset.passageBorn,kind:layer.dataset.passageKind,opacity:Number(getComputedStyle(layer).opacity),size:[a.width,a.height],
+        return {born:layer.dataset.passageBorn,kind:layer.dataset.passageKind,opacity:Number(getComputedStyle(layer).opacity),size:[a.width,a.height],glyphs:document.querySelectorAll('.widget-content svg[aria-hidden="true"]').length,forms:actor.querySelectorAll('svg').length,
           over:readings.filter(r=>r.width>0&&r.height>0&&a.left<r.right&&a.right>r.left&&a.top<r.bottom&&a.bottom>r.top).length,layers:document.querySelectorAll('.living-foreground').length};
       });
       if(!state) continue;
       assert.equal(state.layers,1,'one foreground actor at a time');
       if(!passages.some(entry=>entry.born===state.born)) passages.push({born:state.born,kind:state.kind,second:tick});
       maxOpacity=Math.max(maxOpacity,state.opacity); if(state.kind==='near') overReading+=state.over;
-      assert.ok(state.opacity<=(state.kind==='near'?.8:.22)*.26+.002,`${state.kind} passage opacity ${state.opacity}`);
-      assert.ok(state.size[0]<=1080*.05&&state.size[1]<=1080*.03,'the actor stays small');
+      assert.ok(state.opacity<=(state.kind==='near'?.9:.22)*.26+.002,`${state.kind} passage opacity ${state.opacity}`);
+      assert.ok(state.size[0]<=1080*.08&&state.size[1]<=1080*.055,'the actor stays a small cluster');
+      if(state.kind==='near') assert.ok(state.size[0]>=40&&state.forms>=3,'a near passage is a visible cluster of several forms');
+      assert.ok(state.glyphs>0,'the board under test has an aria-hidden weather glyph to protect');
     }
     assert.equal(passages.length,2,`one passage per minute: ${JSON.stringify(passages)}`);
     assert.ok(Number(passages[1].born)-Number(passages[0].born)>=60_000,`at least60s between passage starts: ${JSON.stringify(passages)}`); assert.equal(overReading,0,'a near passage never crosses reading ink');
     await page.mouse.move(400,400); await page.clock.runFor(200);
     console.log(`THEME_PASSAGES ${JSON.stringify({passages,maxOpacity})}`);
-    record('Opt-in foreground passage: one small actor at a time, at most one per minute, capped opacity and no reading overlap for near passages');
+    record('Opt-in foreground passage: one visible cluster at a time, at most one per minute, capped opacity and no overlap of text or glyphs');
     // Real-time, bounded compositor observation. Synthetic page time stays fixed; no desktop probes.
     await open({mode:'weather',code:63,path:'/display',empty:true}); await page.locator('.living-theme').waitFor();
     await page.clock.runFor(24_000);
@@ -328,8 +360,8 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     // Measured for #586: animated SVG groups cost roughly 10-15 style/layout updates a second here
     // (about40-60 per sample), far below one per frame (about250). The ceiling rejects a per-frame loop.
     const checkStyles=(styles,ceiling)=>assert.ok(styles<=ceiling,'style work stays within the measured scene allowance, with at most5 when idle');
-    checkStyles(observed.active.style,150); checkStyles(observed.idle.style,5);
-    assert.ok(observed.active.layout<=150&&observed.idle.layout<=1,'layout work is bounded while active and absent when motion is off');
+    checkStyles(observed.active.style,110); checkStyles(observed.idle.style,5);
+    assert.ok(observed.active.layout<=110&&observed.idle.layout<=1,'layout work is bounded while active and absent when motion is off');
     assert.ok(observed.active.task<.15&&observed.idle.task<.15,'bounded4.2s window stays below150ms main-thread task work');
     assert.ok(activeLayers>0&&peakLayers<=40,'small nonempty bounded layer tree');
     assert.ok(observed.active.paints<=5&&observed.idle.paints<=5,'no per-frame repainting');

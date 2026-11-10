@@ -24,11 +24,12 @@ export function passageGeometry(root: HTMLElement, sections: readonly { element:
           range.selectNodeContents(child);
           for (const rect of range.getClientRects()) if (rect.width > 0 && rect.height > 0) readings.push({ rect: local(rect), target: candidate.contains(child) });
         } else if (child instanceof Element) {
-          if (child.matches('.sr-only,[aria-hidden="true"]')) continue;
+          // Graphics are readings even when hidden from assistive technology: the hero
+          // weather glyph and forecast icons are aria-hidden SVGs and must stay protected.
           if (child.matches('svg,img,canvas,picture,video,[role="img"]')) {
             const rect = child.getBoundingClientRect();
             if (rect.width > 0 && rect.height > 0) readings.push({ rect: local(rect), target: false });
-          } else walk(child);
+          } else if (!child.matches('.sr-only') && getComputedStyle(child).display !== 'none') walk(child);
         }
       }
     };

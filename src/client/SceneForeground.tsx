@@ -2,8 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ScenePassageArt } from '../shared/living-scene-art';
 import type { ThemeScene } from './ambient-theme';
 import type { PassageGeometry } from './scene-passage-dom';
-import { passagePathMetrics, planScenePassage, PASSAGE_MAX_INTERSECTION, PASSAGE_MAX_FOOTPRINT, type PassagePlan } from './scene-passage';
+import { passagePathMetrics, planScenePassage, PASSAGE_GLOBAL_COOLDOWN, PASSAGE_MAX_INTERSECTION, PASSAGE_MAX_FOOTPRINT, type PassagePlan } from './scene-passage';
 
+/** Left %, top %, width % and rotation of each form inside the actor box. */
+const CLUSTER = [[0, 8, 46, -12], [50, 0, 42, 24], [22, 46, 44, 8], [60, 50, 36, -30]] as const;
 export interface PassageHistory { lastGlobal: number | null; lastByTarget: Record<string, number | undefined> }
 export type PassageMeasure = () => PassageGeometry | null;
 
@@ -20,8 +22,10 @@ export function SceneForeground({ scene, art, enabled, measure, inkRevision, his
     if (!enabled || scene.quiet) { setActive(null); return; }
     const attempt = () => {
       if (activeRef.current) return;
-      const geometry = measure(); if (!geometry) return;
       const now = performance.now();
+      // No layout read while the display-wide cooldown still holds.
+      if (history.lastGlobal !== null && now - history.lastGlobal < PASSAGE_GLOBAL_COOLDOWN) return;
+      const geometry = measure(); if (!geometry) return;
       const plan = planScenePassage({ ...geometry, now, lastGlobal: history.lastGlobal, lastByTarget: history.lastByTarget });
       if (!plan) return;
       history.lastGlobal = now; history.lastByTarget[plan.targetId] = now;
@@ -53,9 +57,12 @@ export function SceneForeground({ scene, art, enabled, measure, inkRevision, his
   const palette = [scene.tint, scene.companion, scene.accent];
   return <div className="living-foreground" aria-hidden="true" data-passage-born={active.born} data-passage-target={active.plan.targetId} data-passage-kind={active.plan.kind}>
     <div ref={actor} className="living-passage" style={{ width: active.plan.width, height: active.plan.height }}>
-      <svg viewBox={`0 0 ${art.viewBox[0]} ${art.viewBox[1]}`} width="100%" height="100%">
-        {art.paths.map((path, index) => <path key={index} d={path.d} fill="none" stroke={palette[path.tone]} strokeWidth={path.stroke ?? 1.5} opacity={path.opacity ?? 1} strokeLinecap="round" strokeLinejoin="round" />)}
-      </svg>
+      {/* An incursion stays one small outline. A near passage is a loose cluster of four filled forms. */}
+      {(active.plan.kind === 'near' ? CLUSTER : CLUSTER.slice(0, 1)).map(([left, top, size, turn], form) => <svg key={form} viewBox={`0 0 ${art.viewBox[0]} ${art.viewBox[1]}`}
+        style={active.plan.kind === 'near' ? { position: 'absolute', left: `${left}%`, top: `${top}%`, width: `${size}%`, transform: `rotate(${turn}deg)` } : { width: '100%', height: '100%' }}>
+        {art.paths.map((path, index) => <path key={index} d={path.d} fill={active.plan.kind === 'near' ? palette[(path.tone + form) % 3] : 'none'} fillOpacity={.35} stroke={palette[(path.tone + form) % 3]}
+          strokeWidth={(path.stroke ?? 1.5) * (active.plan.kind === 'near' ? 1.8 : 1)} opacity={path.opacity ?? 1} strokeLinecap="round" strokeLinejoin="round" />)}
+      </svg>)}
     </div>
   </div>;
 }

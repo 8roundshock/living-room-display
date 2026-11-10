@@ -24,6 +24,7 @@ export interface PassageInput {
   lastGlobal: number | null;
   lastByTarget: Readonly<Record<string, number | undefined>>;
 }
+/** At most one passage a minute: the upper end of the owner's 45-60 second request (2026-11-09). */
 export const PASSAGE_GLOBAL_COOLDOWN = 60_000;
 export const PASSAGE_TARGET_COOLDOWN = 180_000;
 export const PASSAGE_MAX_DURATION = 6_000;
@@ -202,12 +203,14 @@ export function planScenePassage(input: PassageInput & { origins: readonly Passa
     const targetId = `habitat:${origin.id}`, last = input.lastByTarget[targetId];
     if (last !== undefined && (!Number.isFinite(last) || input.now - last < PASSAGE_TARGET_COOLDOWN)) continue;
     const inward = origin.edge === 'bottom' ? [0, -1] : origin.edge === 'top' ? [0, 1] : origin.edge === 'left' ? [1, 0] : [-1, 0];
-    for (const direction of [-1, 1]) {
+    // A cluster of several forms, 40-80px across, arcing through widget whitespace. Longer
+    // routes are tried first; every candidate must clear all reading and movement space.
+    for (const reach of [1, .7, .45]) for (const direction of [-1, 1]) {
       const along = [-inward[1]! * direction, inward[0]! * direction];
-      const steps = [[0, 0, 0], [.35, .04, .03], [.7, .11, .055], [1, .16, .015]].map(([offset, travel, depth]) => ({
-        offset: offset!, x: origin.x + short * (along[0]! * travel! + inward[0]! * depth!), y: origin.y + short * (along[1]! * travel! + inward[1]! * depth!),
+      const steps = [[0, 0, .02], [.3, .13, .1], [.65, .3, .15], [1, .44, .07]].map(([offset, travel, depth]) => ({
+        offset: offset!, x: origin.x + short * reach * (along[0]! * travel! + inward[0]! * depth!), y: origin.y + short * reach * (along[1]! * travel! + inward[1]! * depth!),
       }));
-      const path = { duration: DURATION, width: short * .045, height: short * .0225, steps };
+      const path = { duration: PASSAGE_MAX_DURATION, width: short * .075, height: short * .05, steps };
       if (inside(path) && clears(path, protectedRects)) return { kind: 'near', targetId, ...path, intersectionMs: 0, footprintRatio: 0 };
     }
   }

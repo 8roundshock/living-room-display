@@ -32,6 +32,8 @@ export interface ScenePatch {
   /** Fraction of the viewport's shorter side. */
   height: number;
   viewBox: readonly [width: number, height: number];
+  /** Top-left of the viewBox in authored units when a patch crops a larger drawing. */
+  origin?: readonly [x: number, y: number];
   depth: 'far' | 'habitat';
   opacity?: number;
   groups: readonly SceneArtGroup[];
@@ -500,7 +502,9 @@ function birthdayScene(treatment: 'classic' | 'russian' | 'korean'): LivingScene
         filled('M-20 196C112 136 180 174 308 162C434 148 500 169 597 197C685 221 778 156 889 171Q949 177 1020 199L1020 211C897 179 822 220 730 221C607 230 554 190 455 190C284 190 133 166-20 214Z', 1, .22, 0),
         line('M6 192C128 152 186 178 309 169 M589 199Q661 224 738 199 M815 181Q898 165 989 195', 2, 1.1, .60),
       ], .25)] },
-      { id: `birthday-${treatment}-celebration`, edge: 'bottom-left', width: .66, height: .30, viewBox: [1000, 250], depth: 'habitat', groups: [
+      // Cake with gifts and the balloon bunch are separate complete drawings, so each can stand
+      // at hero size where a populated board leaves only a narrow free column.
+      { id: `birthday-${treatment}-celebration`, edge: 'bottom-left', width: .40, height: .30, viewBox: [430, 205], origin: [60, 62], depth: 'habitat', groups: [
         form('birthday-grounded-cake-gifts', 'still', [290, 268], [
           filled('M155 150Q220 129 283 150L283 201Q220 226 155 201Z', 0, .44, 1.8),
           filled('M155 150Q220 130 283 150Q278 170 264 162Q253 179 239 166Q223 182 208 168Q193 180 181 165Q164 175 155 150Z', 1, .53, 1.4),
@@ -518,6 +522,8 @@ function birthdayScene(treatment: 'classic' | 'russian' | 'korean'): LivingScene
           line('M378 173V224 M389 173V224 M383 172C359 168 359 152 373 159L383 172Q408 165 403 155Q390 152 383 172 M146 226Q216 244 290 226', 1, 1.7),
           ...(treatment === 'russian' ? [line('M174 212L187 201L200 212L187 223Z M214 213L226 202L238 213L226 224Z M369 205L382 194L395 205L382 216Z', 2, 1.2)] : treatment === 'korean' ? [filled('M160 205L193 209V225L160 219Z M235 208L277 202V216L235 226Z', 2, .42, .6), line('M193 209V228 M368 187V224 M368 205H425 M395 205V224', 1, 1.3)] : [line('M168 213Q218 226 270 212', 2, 1.5)]),
         ]),
+      ] },
+      { id: `birthday-${treatment}-balloons`, edge: 'right', width: .20, height: .34, viewBox: [290, 285], origin: [540, 0], depth: 'habitat', groups: [
         form('birthday-tethered-balloons', 'hanging', [690, 265], [
           filled('M572 75C554 33 580 11 604 20C631 31 641 75 625 102Q615 121 608 124C590 115 578 98 572 75Z', 1, .43, 1.6),
           filled('M664 64C664 26 700 14 723 37C749 64 735 109 711 126C687 119 665 93 664 64Z', 0, .42, 1.7),
@@ -533,11 +539,6 @@ function birthdayScene(treatment: 'classic' | 'russian' | 'korean'): LivingScene
           line('M688 249Q656 234 649 247Q663 260 688 249Q719 232 729 245Q716 257 688 249', 0, 1.7),
         ]),
       ] },
-      { id: `birthday-${treatment}-ribbon-counterweight`, edge: 'bottom-right', width: .23, height: .14, viewBox: [440, 190], depth: 'habitat', opacity: .84, groups: [form('birthday-open-ribbon', 'drift', [345, 215], [
-        filled('M-8 161C72 195 97 89 177 115C231 133 202 185 260 188C319 191 352 137 453 170L453 178C351 146 322 204 260 201C185 198 216 143 173 127C103 104 74 208-8 172Z', 2, .32, .9),
-        line('M-8 160C72 193 99 90 177 116 M260 191Q337 185 372 162 M117 149Q144 121 169 130', 1, 1.5, .77),
-        line('M205 165L217 159 M277 168L284 156 M321 195L334 201', 0, 2.2, .72),
-      ], .85)] },
     ], passage: RIBBON_PASSAGE, weather: ['wind', 'rain'],
   };
 }

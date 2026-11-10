@@ -11,8 +11,8 @@ test('Summer keeps authored non-square ratios at editor, HD and 4K sizes', () =>
   for (const [width, height] of [[320, 180], [1920, 1080], [3840, 2160]]) for (const patch of art.patches) {
     const box = habitatBox(patch, width!, height!);
     assert.ok(Math.abs(box.width / box.height - patch.viewBox[0] / patch.viewBox[1]) < .0001);
-    assert.ok(box.height <= height! * .18);
-    assert.ok(box.y + box.height > height! && box.y < height!, 'offscreen roots avoid a fixed lit baseline');
+    assert.ok(box.height <= height! * .30, 'habitats reach 14-18% of the screen with peaks below 30%');
+    assert.ok(box.y + box.height > height! - Math.min(width!, height!) * .05 && box.y < height!, 'roots end inside the ground band, never as a visible cut line');
   }
 });
 test('Local retreats remain staggered over several cycles without whole-scene blanking', () => {
@@ -27,7 +27,7 @@ test('Shallow reading clearance selects complete compact growth and impossible c
   const box = habitatBox(patch, 1920, 1080);
   const clear = fitHabitatGroup(group, patch, box, [], undefined, false);
   assert.equal(clear.compact, false); assert.equal(clear.yScale, 1);
-  const shallow = fitHabitatGroup(group, patch, box, [{ left: 0, top: 850, right: 640, bottom: 1014 }], undefined, false);
+  const shallow = fitHabitatGroup(group, patch, box, [{ left: 0, top: box.y - 100, right: box.x + box.width * .4, bottom: box.y + box.height * .52 }], undefined, false);
   assert.equal(shallow.compact, true); assert.equal(shallow.visible, true);
   assert.ok(shallow.yScale >= .65 && shallow.yScale <= 1);
   assert.equal(shallow.paths, group.compact!.paths, 'whole authored low forms replace tall geometry');
