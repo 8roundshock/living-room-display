@@ -154,6 +154,81 @@ choices. All shipped vectors are original; no source prose or museum images ship
   [UNESCO Yeondeunghoe](https://ich.unesco.org/en/RL/yeondeunghoe-lantern-lighting-festival-in-the-republic-of-korea-00882)
   supports lotus lanterns. The holiday scene does not claim a live parade date
   or depict flying sky-lantern releases.
+  - Korean 3D scenes (reviewed 2026-11-10 for
+    [#628](https://github.com/8roundshock/living-room-display/issues/628) to
+    [#631](https://github.com/8roundshock/living-room-display/issues/631); the
+    tickets carry the full notes and the avoid lists). Placement, palette, counts
+    and the absence of lettering are design choices.
+  - Seollal: kites are flown from the twelfth lunar month to the first full moon
+    ([folk encyclopedia, kite flying](https://folkency.nfm.go.kr/topic/detail/4466));
+    the bangpae-yeon is a rectangle of hanji with a round hole about a third of
+    its length, five spars with none along the foot, a bow string and no tail
+    ([National Folk Museum webzine](https://webzine.nfm.go.kr/2025/12/27/%ED%95%9C%EA%B5%AD%EC%9D%98-%EC%97%B0-%EA%B7%B8-%EB%8F%85%ED%8A%B9%ED%95%9C-%EB%B0%A9%ED%8C%A8%EC%97%B0/),
+    [Encyclopedia of Korean Culture, 연](https://encykorea.aks.ac.kr/Article/E0036663));
+    the gaori-yeon is the diamond kite with a tail
+    ([folk encyclopedia](https://folkency.nfm.go.kr/topic/detail/10088)). Lucky
+    pouches come round (duru-jumeoni) and eared (gwi-jumeoni)
+    ([folk encyclopedia](https://folkency.nfm.go.kr/topic/detail/4023),
+    [Encyclopedia of Korean Culture](https://encykorea.aks.ac.kr/Article/E0053228)).
+    Yut sticks are rounded on the back and flat on the belly
+    ([folk encyclopedia](https://folkency.nfm.go.kr/topic/detail/1595),
+    [Encyclopedia of Korean Culture](https://encykorea.aks.ac.kr/Article/E0042794));
+    no fixed mark is sourced, so the backs are plain. Red envelopes are described
+    as the Chinese custom ([korea.kr](https://www.korea.kr/news/issueQAView.do?newsId=148809200))
+    and are not drawn.
+  - Chuseok: the full-moon harvest festival
+    ([Encyclopedia of Korean Culture, 추석](https://encykorea.aks.ac.kr/Article/E0057862)).
+    Songpyeon are half-moon rice cakes steamed on pine needles
+    ([National Folk Museum](https://www.nfm.go.kr/kids/elecontents/view.do?topic=84),
+    [Korean Food Promotion Institute](https://hansik.or.kr/magazines/list/magazineDetail/15/2763?menuSn=));
+    they are steamed in a siru or on a chaeban, then picked clean and oiled
+    ([Gimje](https://gimje.grandculture.net/gimje/toc/GC02601558),
+    [Gumi](https://gumi.grandculture.net/gumi/toc/GC01202611)); the chaeban is a
+    flat rimless woven tray ([Encyclopedia of Korean Culture](https://encykorea.aks.ac.kr/Article/E0055596)).
+    Showing them on their needles on the tray joins the two methods and is a
+    design choice. Persimmon, chestnut and jujube are the autumn fruits named for
+    the day; persimmons are still turning colour on a leafy branch
+    ([Encyclopedia of Korean Culture, 감나무](https://encykorea.aks.ac.kr/Article/E0000705),
+    [Rural Development Administration](https://www.rda.go.kr/middlePopOpenPopNongsaroDBView.do?no=2020)),
+    and rice is ripening, not yet cut
+    ([RDA rice harvest guide](https://nongsaro.go.kr/portal/ps/psz/psza/contentSub.ps?cntntsNo=207071&menuId=PS00078)).
+    Mooncakes and pampas grass with dumplings belong to the Chinese and Japanese
+    festivals and are not drawn; neither is a rabbit in the moon.
+  - Buddha's Birthday: lanterns are made from bamboo and hanji
+    ([Korea Heritage Service](https://www.heritage.go.kr/heri/html/HtmlPage.do?pg=%2Funesco%2FCulHeritage%2FCulHeritage_21.jsp&pageNo=1_3_2_0));
+    the lotus lantern is an eight-sided frame covered in white paper, then rows of
+    creased dyed petals with hand-twisted tips, and green leaves at the bottom
+    ([Dongguk University Buddhist culture portal](https://buddhaland.dongguk.edu/article?dataId=KBA0001251),
+    [KTO](https://korean.visitkorea.or.kr/detail/rem_detail.do?cotid=9411b811-4fe9-4831-9869-554491e40d82));
+    Korean lanterns took many shapes, the eight-sided palmo-deung among them
+    ([Encyclopedia of Korean Culture, 관등놀이](http://encykorea.aks.ac.kr/Contents/Item/E0004800)).
+    Hanging the blank tag beneath a lantern follows common practice and is not
+    separately sourced. The red-and-blue cheongsa-chorong is a wedding lantern
+    ([Encyclopedia of Korean Culture](https://encykorea.aks.ac.kr/Article/E0056464))
+    and is not drawn; lotus blooms in July and August
+    ([Encyclopedia of Korean Culture, 연꽃](https://encykorea.aks.ac.kr/Article/E0036723)),
+    so no living lotus is drawn either.
+  - Birthday with Korean accents: seaweed soup is the birthday food
+    ([Encyclopedia of Korean Culture, 미역국](https://encykorea.aks.ac.kr/Article/E0019982),
+    [생일](https://encykorea.aks.ac.kr/Article/E0027532)); the soban is the small
+    lacquered table of the home and the Naju type has a rimmed rectangular top,
+    an apron, slender legs and a rail at mid-leg
+    ([소반](https://encykorea.aks.ac.kr/Article/E0030068),
+    [나주반](https://encykorea.aks.ac.kr/Article/E0011478)); soup bowls are brass
+    in the cold months and the spoon has a long straight handle
+    ([대접](https://encykorea.aks.ac.kr/Article/E0032543),
+    [숟가락](https://encykorea.aks.ac.kr/Article/E0031662)). A bojagi is the cloth
+    made to wrap and carry, tied by its own corners
+    ([보자기](https://encykorea.aks.ac.kr/Article/E0023523),
+    [Asian Art Museum](https://education.asianart.org/resources/making-bojagi-with-artist-youngmin-lee/));
+    jogakbo is pieced from scraps with flat sealed seams
+    ([조각보](https://encykorea.aks.ac.kr/Article/E0079777),
+    [V&A](https://www.vam.ac.uk/articles/jogakbo-traditional-korean-patchwork));
+    saekdong is the stripe of children's festive sleeves
+    ([folk encyclopedia](https://folkency.nfm.go.kr/topic/detail/12028),
+    [색동](https://encykorea.aks.ac.kr/Article/E0027478)) and appears only as one
+    lining. Serving the cake on a soban is a design choice, not a claimed custom;
+    nothing of a first birthday, a wedding or a rite is drawn.
 - Russia: [State Archive tree history](https://statearchive.ru/1485) distinguishes
   secular New Year evergreens from Christmas; [Ethnographic Museum Christmas](https://ethnomuseum.ru/collections/ethnocalendar/january/sukkot6/)
   supports the star; [Pascha](https://ethnomuseum.ru/collections/ethnocalendar/april/pasha-svetloe-hristovo-voskresenie/)
