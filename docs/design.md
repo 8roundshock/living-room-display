@@ -7,6 +7,9 @@ occasional bounded foreground passages. The [layered scene plan](layered-scene-p
 documents the full inventory, architecture alternatives, phased delivery and
 visual/performance gates. The source implementation and its verified limits are
 described in the [theme contract](ambient-themes.md#layered-living-scenes-586).
+On 2026-11-10 the owner rejected the flat look of these scenes and chose lit 3D
+objects instead; see [3D scenes](ambient-themes.md#3d-scenes-600-owner-decision-2026-11-10).
+The flat renderer remains as the fallback.
 
 ## Explicit creation and native popup readability (#570, 2026-11-03)
 

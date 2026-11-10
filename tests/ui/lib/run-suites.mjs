@@ -37,6 +37,7 @@ export const SHARDS = {
     ['catalog-time', 'canvas-scope', 'screen'], // 38, 32, 19
     ['freesize', 'daylight', 'picker-sheet'], // 29, 21, 16
     ['first-run', 'preview', 'editor-sync', 'context-help', 'motion-preview'], // 13, 12, 12, 10, 9
+    ['scene3d'], // 70: WebGL on the runner's software rasteriser (#600), where every mount compiles its shaders on the processor
   ],
   main: [['widgets'], ['home'], ['catalog-sky']],
   scheduled: [['motion', 'weather', 'palette', 'collection']], // 219, 81, 68

@@ -10,6 +10,19 @@ and [calendar facts and cultural sources](../../../docs/holiday-calendar.md).
 The registry is executable authority; inspect its current types instead of
 inventing another scene list or copying an old schema from documentation.
 
+**Scenes are 3D now (#600, owner decision 2026-11-10).** The owner rejected the flat SVG
+scenes and approved lit, partly see-through 3D objects. New and reworked scene art goes
+in `src/client/scene3d/scenes/<id>.js` (weather over a scene in `weather/<kind>.js`);
+read `src/client/scene3d/README.md` first: it holds the module contract, the kit, the
+owner's art rules and the look-at-it loop. The owner's look and the special/everyday tier
+are constants in `settings.ts` and `tier.ts`; a scene never overrides them. Each scene
+has a design ticket (#606 to #631): implement that plan. The flat renderer described
+below is only the fallback for scenes without a module and browsers without hardware
+WebGL; do not polish flat art. Iterate cheaply: edit, `npm run build`, capture two or three
+scenes with `tests/ui/tools/scene-sheet.mjs --full` to a temporary folder, look, delete,
+then one independent code review. Run `node --test "src/client/scene3d/*.test.ts"` and
+the `scene3d` suite (and `themes`, which now runs without WebGL on the flat fallback).
+
 - `src/shared/holidays.ts` owns factual observance dates, names and ordinary
   holiday spans. Preserve verified Dangi and Julian/Gregorian arithmetic.
 - `src/shared/theme-registry.ts` owns scene identity, palettes, the living-scene

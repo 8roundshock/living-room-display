@@ -1,4 +1,7 @@
 // Whole-screen atmosphere, isolated source server, synthetic data and RAM-only images.
+// Edge is launched without WebGL (#600): this suite exercises the flat SVG renderer, which is the supported
+// fallback for every scene when WebGL is unavailable and the only renderer for scenes without a 3D module.
+// The 3D renderer has its own suite, scene3d-browser.mjs.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -13,6 +16,7 @@ import { defaultSettings } from '../../src/shared/defaults.ts';
 import { LIVING_SCENE_BUDGET, THEME_SCENE_IDS, THEME_SCENES } from '../../src/shared/theme-registry.ts';
 import { PRINCIPAL_FORMS } from '../../src/client/living-scene-principals.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
+import { SCENE_CASES, WEBGL_ARGS } from './lib/scene-cases.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
 import { waitForNativeRender } from './lib/native-render.mjs';
 
@@ -22,7 +26,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
   const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0,'127.0.0.1'); await once(app.server,'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await chromium.launch({ executablePath: edge, headless: true, args: WEBGL_ARGS.off });
   const images=[],checks=[],errors=[],writes=[]; let context,page,source,clock;
   const record = text => { checks.push(text); console.log(`PASS: ${text}`); };
   const saved = () => app.store.snapshot().settings;
@@ -107,6 +111,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
   }
   try {
     await open(); assert.equal(await page.locator('.ambient-theme').count(),0);
+    assert.equal(await page.evaluate(()=>document.createElement('canvas').getContext('webgl2')??document.createElement('canvas').getContext('webgl')),null,'this suite runs without WebGL, on the flat fallback');
     await waitForNativeRender(page);
     const defaultFit=await page.locator('.inspector-panel').evaluate(panel=>({client:panel.clientHeight,scroll:panel.scrollHeight}));
     assert.ok(defaultFit.scroll<=defaultFit.client+1,`Default Style fits at1280x720: ${JSON.stringify(defaultFit)}`);
@@ -187,14 +192,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     await page.locator('.theme-passage-option input').uncheck(); await button('Save changes').click(); await page.locator('.studio-savebar').waitFor({state:'detached'});
     assert.deepEqual(saved().appearance.theme,{mode:'combined',calendars:['CA','KR','RU']},'turning it off removes the field at rest');
     record('Foreground moments is an opt-in cancellable style draft that is omitted at rest when off');
-    const scenes=[
-      ['birthday','2026-01-10',0,[], 'classic'],['birthday-russian','2026-01-10',0,[], 'russian'],['birthday-korean','2026-06-12',0,[], 'korean'],
-      ['spring','2026-04-25',0],['summer','2026-07-20',0],['autumn','2026-11-04',0],['winter','2026-02-01',0],
-      ['christmas','2026-12-20',0],['new-year','2026-12-29',0,['CA','KR']],['new-year-tree','2026-12-29',0],['orthodox-christmas','2027-01-07',0],
-      ['halloween','2026-10-25',0],['thanksgiving','2026-10-12',0],['canada-day','2026-07-01',0],['easter','2026-04-05',0,['CA']],
-      ['seollal','2027-02-07',0],['chuseok','2027-09-15',0],['lotus-lanterns','2027-05-13',0],['maslenitsa','2026-02-16',0,['RU']],['pascha','2026-04-12',0,['RU']],['mimosa','2026-03-08',0],
-      ['rain','2026-12-20',63],['snow','2026-12-20',73],['storm','2026-12-20',95],['fog','2026-12-20',45],['wind','2026-12-20',0],
-    ];
+    const scenes=SCENE_CASES;
     assert.deepEqual(scenes.map(([id])=>id).sort(),[...THEME_SCENE_IDS].sort(),'matrix covers every registered scene');
     const motionsSeen=new Set();
     for(const viewport of [{width:1920,height:1080},{width:3840,height:2160}]) for(const [motif,civil,code,calendars,birthday] of scenes) {
@@ -202,6 +200,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
       const brightness=viewport.width===1920?.26:.36;
       await open({date:`${civil}T18:30:00Z`,mode,code,calendars,birthday,wind:motif==='wind'?40:8,path:'/display',viewport,brightness}); await page.locator('.living-theme').waitFor(); await settle();
       assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-motif'),motif); assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-source'),origin);
+      assert.equal(await page.locator('.ambient-theme').getAttribute('data-scene-renderer'),'flat',`${motif} is drawn by the flat renderer when WebGL is unavailable`); assert.equal(await page.locator('canvas.scene3d-canvas').count(),0);
       const geometry=await page.locator('.living-theme').evaluate(layer=>({patches:layer.querySelectorAll('[data-scene-patch]').length,paths:layer.querySelectorAll('path').length,unmasked:[...layer.querySelectorAll('path')].filter(path=>!path.closest('[data-reading-mask],mask')).length,
         animations:layer.getAnimations({subtree:true}).filter(a=>a.playState==='running').length,background:getComputedStyle(layer.closest('.ambient')).backgroundColor,filter:getComputedStyle(layer).filter,opacity:Number(getComputedStyle(layer).opacity),
         foreground:document.querySelectorAll('.living-foreground').length}));

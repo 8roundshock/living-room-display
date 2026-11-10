@@ -124,7 +124,7 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
   const groundColors = weather === 'snow' ? SNOW_COLORS : dressing?.groundColors ?? palette;
   const topColors = palette;
   const sheen = palette.map((_, index) => `url(#${maskId}-sheen-${index})`), blade = groundColors.map((_, index) => `url(#${maskId}-blade-${index})`);
-  return <div ref={root} className="ambient-theme living-theme" aria-hidden="true" data-theme-motif={scene.motif}
+  return <div ref={root} className="ambient-theme living-theme" aria-hidden="true" data-scene-renderer="flat" data-theme-motif={scene.motif}
     data-theme-habitat={scene.habitat ?? scene.motif} data-theme-source={scene.source} data-theme-quiet={scene.quiet || undefined}
     data-theme-still={still || undefined} data-scene-elapsed={elapsed} data-scene-revision={revision}>
     {width > 0 && <svg className="living-canvas" viewBox={`0 0 ${width} ${height}`}>

@@ -1,0 +1,199 @@
+# 3D scenes
+
+The living scenes behind the widgets, drawn as lit 3D objects in WebGL (#600, owner decision
+2026-11-10). This folder is the engine, the kit that scenes are built from, and one file per
+scene. The product rules are in [Ambient themes](../../../docs/ambient-themes.md#3d-scenes-600-owner-decision-2026-11-10);
+this file is the contract for whoever adds or changes a scene.
+
+A scene that has no file here yet, a browser without hardware WebGL and a stage that fails are
+all drawn by the flat SVG renderer (`LivingTheme`), which stays until every scene is ported.
+
+## Add a scene
+
+1. Create `scenes/<id>.js`, named exactly after the scene's id in `src/shared/theme-registry.ts`.
+   Nothing else has to change: the file is discovered at build time (`modules.ts`) and becomes
+   its own lazily loaded chunk. A weather overlay is `weather/<kind>.js` in the same way.
+   Two scenes are drawn by another scene's file until they have their own: `birthday-russian`
+   and `birthday-korean` use `birthday.js` (`SCENE_MODULE_FALLBACK` in `resolve.ts`). A file
+   named after the scene always wins, so adding `scenes/birthday-russian.js` takes over with
+   no other edit; leave the fallback table alone.
+2. Export one function. It builds the scene by adding objects to `kit.stage`; it returns nothing.
+
+   ```js
+   /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
+   export default function build(kit, ctx) {
+     const { T, V, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount;
+     const lamp = kit.bulb(0xffd9a0, .05 * S);
+     lamp.position.set(W - 1, 3, 0);            // one unit in from the right edge
+     stage.add(lamp);
+     tick(t => { lamp.position.y = 3 + Math.sin(t) * .1; });
+   }
+   ```
+3. Build, capture, look, delete (see [Look at it](#look-at-it)). Run
+   `node --test "src/client/scene3d/*.test.ts"`: it checks every file in `scenes/` and
+   `weather/` against this contract.
+4. One scene, one pull request, one independent code review. Do not edit `engine.js`, `kit/`,
+   `settings.ts`, `resolve.ts` or another scene in a scene pull request. If the kit lacks
+   something, build it inside your scene file from `kit.T`, or as a shared part (below).
+
+A scene file imports nothing except shared parts from `../parts/`. three.js is `kit.T`.
+
+## Shared parts (`parts/`)
+
+Something the kit lacks and more than one scene could use (a lantern frame, a pine cone, a
+paper fan) goes in `parts/`, never in `kit/`. Several agents add scenes at the same time, so
+the rules are about not meeting in the same file:
+
+- **One part per file, named after the scene that introduced it:**
+  `parts/<scene id>-<part>.js`, for example `parts/seollal-kite.js` or
+  `parts/new-year-tree-spire.js`. Your scene id is your prefix, so no two agents can choose
+  the same file name, and a reader sees where a part came from. A weather overlay uses its
+  kind (`parts/rain-streak.js`).
+- **A part exports plain functions whose first argument is the kit** and that return an
+  object for the caller to add: `export function kite(kit, { colour, size }) { ... }`. No
+  state at module level, no import of three.js or app code, no `Math.random`. A part may
+  import another part (`./seollal-kite.js`) and nothing else.
+- **Use:** `import { kite } from '../parts/seollal-kite.js';` in the scene file.
+- **You add a part in your own scene's pull request**: a new file touches nobody else. You
+  may import a part that is already on `main`. Do not edit another scene's part in your pull
+  request: if it does not fit, write your own under your prefix, or change the shared one in
+  a separate pull request that re-captures every scene using it.
+- **Promotion to the kit** (when several scenes use a part and its signature has settled) is
+  a separate pull request that moves it into `kit/` and updates `engine.d.ts` and the kit
+  table below together.
+
+`node --test "src/client/scene3d/*.test.ts"` checks the file names and imports of `scenes/`,
+`weather/` and `parts/`.
+
+## Art rules (owner, 2026-11-10)
+
+- **Few, and not repeated.** Vary size, colour, finish and pattern. No row of identical objects,
+  no evenly spaced ring or line of the same thing.
+- **Everything belongs somewhere.** Each object is attached, hung, standing on the bottom edge,
+  or falling the way it really falls. Nothing floats without a reason.
+- **Nothing generic.** A scene must be recognisably its own occasion, and scenes for different
+  cultures must not share a stock lantern, star or tree. Read the scene's ticket and the
+  cultural notes in the theme contract first.
+- **Edges and corners.** Hero elements sit at the edges and in the corners. The middle of the
+  screen, where the widgets are, is left to fade.
+- **Calm.** A scene that stays for weeks is low-key; a one-day occasion may be a little
+  bolder and bigger. That is `ctx.tier`, already applied to `ctx.amount` and `ctx.size`:
+  do not add your own multiplier on top.
+- **Quality over count.** Improve an element (a real vein pattern, a second finish, a shape that
+  is not a sphere) before adding another copy of it.
+
+## What a scene is given
+
+`ctx` (frozen):
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Registry id being shown. `birthday.js` also serves `birthday-russian` and `birthday-korean` (see `resolve.ts`) and reads this. |
+| `amount` | How much to put in the scene, 0-1. Owner default 0.3; about 0.24 for an everyday scene, 0.1 on a quiet date. Turn it into counts: `Math.round(3 + ctx.amount * 6)`. |
+| `size` | Scale of objects (radius, length). Owner default 0.85. Never multiply positions by it. |
+| `tier` | `'special'` or `'everyday'`. Already applied; read it only to choose between two designs. |
+| `weather` | Weather shown over this scene in Combined mode (`'snow'`, ...) or `null`. The overlay draws the weather; a scene may adapt, for example drop its own decorative snow. |
+| `quiet` | A selected quiet date. The stage is frozen and reduced; see below. |
+| `palette` | The scene's three registry colours as CSS strings; neutral greys when quiet. |
+| `seed` | A stable whole number for this scene id. Use it as the salt of `kit.rnd` for a layout that is yours. It does not change from day to day. |
+| `day` | The civil day as a whole number that grows by one at local midnight. A scene that should look slightly different each day adds it to the salt (`kit.rnd(i, ctx.seed + ctx.day)`); the scene is rebuilt at midnight. Use it for small things (which leaf is larger), never for the composition. |
+| `width`, `height` | View size in CSS pixels. Use `kit.view` for world units. |
+
+The world: the camera has a 30° field of view and looks at the plane z = 0, which is 9 units
+high. On a 16:9 screen it is 16 wide, but the app also runs at 21:9 and in small editor
+previews, so never write `8`: the left and right edges are `-kit.view.halfW` and
+`+kit.view.halfW`, top and bottom `±4.5` (`kit.view.halfH`). In front of the plane (z > 0)
+less is visible, behind it more: `view.halfWAt(z)` and `view.halfHAt(z)` give the half-extents
+at a depth, so an object stands on the bottom edge at `y = -view.halfHAt(z)`. Things beyond
+about z = -9 fade into black fog. The scene is rebuilt when the view's shape changes.
+
+The engine drifts the whole stage on a slow closed path (0.14 units sideways and 0.06 up and
+down, over about seven and five minutes), so standing objects do not light the same pixels for
+weeks. Start cords, boughs and poles at least 0.3 units beyond the edge they come from, so the
+drift never shows their end.
+
+Time: `tick(fn)` registers `fn(t)`, called once per drawn frame with the scene clock in
+seconds. The clock runs at one eighth of real time (the owner's "motion 5%") and frames are
+drawn about 20 times a second, so write motion as a function of `t` (`Math.sin(t * .4)`), never
+as a per-frame increment. A still editor preview and a quiet date call every tick once, at
+t = 14, and draw one frame.
+
+Quiet dates: `ctx.amount` is already reduced. `kit.snow`, `kit.bokeh`, `kit.confetti` and
+`kit.fireworks` return an empty group, so `stage.add(kit.snow(40))` is always safe. Guard your
+own things that are in the air with `if (!ctx.quiet)`. The layer is also dimmed and
+desaturated by the app.
+
+## The kit
+
+Stable: additions are fine, changes to existing signatures are not. Typed in `engine.d.ts`.
+Colours are sRGB (`0xrrggbb` or `'#rrggbb'`) unless stated. Factories return an object that
+you add yourself; nothing is added for you except `part()`.
+
+| Helper | What it gives |
+| --- | --- |
+| `T` | three.js r128, complete. |
+| `stage`, `part(x, y, scale, mirror)` | The root group; a sub-stage already on it that can be placed, scaled or mirrored as one piece. |
+| `view` | `halfW`, `halfH`, `aspect`, `depth`, `halfWAt(z)`, `halfHAt(z)`. |
+| `V(x, y, z)`, `C(colour)`, `mix(a, b, k)`, `shift(colour, hue, sat, light)`, `rnd(i, salt)` | Vector; sRGB to linear colour; blend two colours; turn a colour around the wheel; a deterministic value in [0, 1). Never use `Math.random`. |
+| `tick(fn)`, `own(resource)` | Per-frame update; register a texture or geometry you made for disposal with the scene. |
+| `mat(options, env = 1, physical = true)` | The material factory: three.js material options with sRGB colours, glass-patched (a lit body thins out, its rim and highlights stay). `env` scales the studio reflections. Use it for every lit surface. The extra option `see` (0-1) is the share of the see-through look a surface takes, for the rare one that must stay solid (a national flag). |
+| `gold()`, `satin(colour)` | Polished gold; ribbon satin. |
+| `glow(colour, size, opacity, { texture, twinkle })`, `bulb(colour, radius, halo)`, `bokeh(colour, size, opacity, twinkle)` | An additive halo; a small lit bulb with its halo; a soft out-of-focus light disc. Their strength follows the owner's glow setting. |
+| `tex.glow()`, `tex.disc()`, `tex.flame()`, `canvasTexture(w, h, draw, opts)`, `patternTex(base, accent, kind)` | Shared soft textures; a texture drawn once on a 2D canvas; a repeating pattern (`dots`, `stripes`, `grid`, `bands`, `diamonds`). Blur a whole layer once, never per stroke. |
+| `line(points, colour, opacity)`, `catenary(a, b, sag, n)`, `ribbonGeo(points, width, side)` | A thread or cord; points of a hanging cord; a flat band along points. |
+| `ballGeo`, `sphereGeo` | Shared low and high detail unit spheres. |
+| `needles()`, `twig(...)`, `bough(...)` | Fir: a needle collector (`.mesh()` once at the end), needles along a twig (with a share of them snow-white), a drooping bough that returns `pt(t)` for hanging things on it. |
+| `ornament({ color, radius, thread, shape, finish, accent })`, `bauble(colour, radius, thread, satin)` | A hanging ornament: `ball`, `drop`, `onion`, `finial`, `facet` in `mirror`, `satin`, `pearl`, `glitter`, `banded`. The origin is the point it hangs from. |
+| `snow(count, { size, opacity, colour, salt })` | Slow snow points over the whole view. |
+| `leaf(tint, scale, variant)`, `LEAF_TINTS`, `MAPLE_OUTLINE` | A curled, veined maple leaf (texture, alpha, bump); its tints; its outline for drawing. |
+| `flagCloth(texture, { width, height, fly, wave, see })` | A cloth waving from its hoist edge, for any texture. It keeps only a third of the see-through look, so a flag never reads as faded. |
+| `fireworks(bursts, { per, size, tints, flash, period, life })` | Slow bursts of light points. |
+| `balloon(colour, radius, { skin, shape, pattern })`, `puffyBow(colour, scale)`, `gift(w, h, d, base, accent, kind, ribbon)`, `cake(options)` | Party pieces. Balloons: `latex`, `pearl`, `foil`; `round` or `star`. |
+| `bunting(a, b, options)`, `confetti(count, options)`, `streamer(length, radius, colour, options)` | Flags on a cord, tumbling foil, a curled paper streamer. |
+
+The studio environment (four soft light panels), the key, rim and fill lights, the black fog,
+tone mapping and the camera are set by the engine and are the same for every scene. Do not add
+scene-wide lights; a small local `T.PointLight` (the cake's candles) is fine.
+
+## The look is not yours to tune
+
+`settings.ts` holds the owner's picks (see-through, glow, shine, size, speed, fade to middle,
+brightness share, amount) and the tier and quiet multipliers; `tier.ts` derives the tier from
+the registry group and the holiday policy window. A scene module never reads or overrides
+them. If a scene looks too strong or too weak at these settings, change the scene.
+
+## Runtime behaviour (engine.js, Scene3D.tsx)
+
+- Nothing 3D is in the dashboard bundle. The engine with three.js (about 620 kB, 160 kB
+  gzipped) and each scene file are fetched only when a 3D scene is about to be shown.
+- Theme Off, Animation Off and system reduced motion mount nothing. The editor's still
+  preview and a quiet date draw one frame and run no loop.
+- The backing store is at most 2560 x 1440. Frames are drawn about 20 times a second, never
+  while the document is hidden, and never before the GPU has finished the previous one.
+- One stage owns one canvas and one WebGL context and releases both on unmount.
+- A software rasteriser is refused, and a GPU that needs more than 120 ms a frame ten frames
+  running gives up; so does a lost context or a scene that throws. In each case the flat
+  renderer takes over for that scene, and nothing is thrown to the page.
+- `window.__lrdScene3d` is the set of live stages (`stats()`, `measure()`), for tests and
+  tools. `window.__lrdScene3dAllowSoftware = true`, set before the page loads, lets a source
+  check run the 3D path on a machine without a GPU; nothing in the app sets it.
+
+## Look at it
+
+```powershell
+npm run build
+$tools = "$env:TEMP\lrd-browser-tools\node_modules"   # Playwright, installed as in docs/development.md
+node tests/ui/tools/scene-sheet.mjs --playwright "$tools\playwright" --edge "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe" --out "$env:TEMP\scene-look" --full my-scene christmas+snow
+```
+
+The tool opens the built app on an isolated synthetic server, on each scene's own date and
+weather, and writes one 1920 x 1080 PNG per scene into the folder you name (outside the
+checkout). `--full` shows the scene at full opacity, which is how to judge the art; without it
+you see the real, much dimmer layer. `--empty` hides the widgets, `--measure` prints build,
+frame and main-thread times, `--size 3840x2160` and `--size 2560x1080` check other shapes.
+Look at the images, fix what is wrong, and delete the folder: the project keeps no
+screenshots. Check that nothing important sits in the middle, nothing is cut by an edge that
+should stand on it, and no two neighbours are copies.
+
+`node tests/ui/scene3d-browser.mjs --playwright <module> --edge <msedge.exe> [--gpu]` is the
+browser suite for the 3D path; the `themes` suite runs without WebGL and covers the fallback.

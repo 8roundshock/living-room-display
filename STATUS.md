@@ -1,5 +1,50 @@
 # Project status
 
+## 3D scenes: foundation and three reference scenes — 2026-11-10 (#600)
+
+Source candidate, not installed. The owner rejected every flat SVG version of the living
+scenes and approved lit, partly see-through 3D objects in a scene style picker. This
+adds the WebGL engine and a stable kit under `src/client/scene3d/` (three.js 0.128.0, the
+release the approved look was rendered with, loaded lazily), the owner's picks and the
+special/everyday tier rule as named constants, and three reference scenes: Christmas,
+Canada Day and Birthday (which also serves the Russian and Korean birthday treatments
+with their own colourway). A scene is one file discovered at build time, so the other 23
+scenes ([#606](https://github.com/8roundshock/living-room-display/issues/606) to
+[#631](https://github.com/8roundshock/living-room-display/issues/631)) can be added
+without touching shared code. Combined snow has its overlay; rain, storm, fog and wind
+over a 3D scene still use the flat renderer. The contract is in
+[the scene README](src/client/scene3d/README.md) and
+[Ambient themes](docs/ambient-themes.md#3d-scenes-600-owner-decision-2026-11-10).
+
+The flat renderer stays as the fallback for scenes without a module and for browsers
+without hardware WebGL; a software rasteriser, a slow GPU, a lost context or a failing
+scene falls back to it without an error. Off, Animation Off and reduced motion mount
+nothing and download no 3D code; the editor still preview and quiet dates draw one frame.
+
+Verified on 2026-11-10 with source builds and synthetic data only: both typechecks, the
+production build, the unit tests, the new `scene3d` browser suite on the development PC's
+GPU and on a software rasteriser, and the `themes` suite on the flat fallback (now
+launched without WebGL). The author inspected captures of the three scenes at full
+opacity and at the app's real opacity, at 1920×1080, 3840×2160 and 2560×1080, and deleted
+them. On that PC's GeForce GTX 1080 Ti a frame costs 0.6-1.3 ms of script and 2-4 ms with
+the GPU at up to 2560×1440; the page's main thread spends 32-42 ms per second on a running
+scene. The lazy engine chunk is 622 kB (161 kB gzipped); the dashboard bundle grew 6.6 kB.
+
+Not done or not verified: installation, the native screensaver host (whether its browser
+gives hardware WebGL is unobserved), physical-TV viewing and the owner's judgement of the
+result on the display. Layer brightness is the saved brightness × 0.95 (coordinator
+decision on [#636](https://github.com/8roundshock/living-room-display/issues/636):
+the picker's 45% sat beside text of about the same luminance, so scene highlights are meant
+to be about as bright as the text), with the special tier clamped at the saved brightness.
+Christmas keeps the edge of a lit tree in the bottom-right corner (coordinator decision on
+[#609](https://github.com/8roundshock/living-room-display/issues/609)). Follow-ups:
+three.js upgrade ([#633](https://github.com/8roundshock/living-room-display/issues/633)),
+removing the flat renderer once every scene is ported
+([#634](https://github.com/8roundshock/living-room-display/issues/634)), three.js in the
+installer payload ([#635](https://github.com/8roundshock/living-room-display/issues/635)),
+and the day-of tier ([#632](https://github.com/8roundshock/living-room-display/issues/632)).
+Review and CI evidence belongs to the pull request for #600.
+
 ## Layered living scenes: second-round candidate awaiting review — 2026-11-10 (#586)
 
 Draft [PR #588](https://github.com/8roundshock/living-room-display/pull/588)
