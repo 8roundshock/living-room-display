@@ -5,14 +5,94 @@ hourly weather and #458 holiday cards. Themes default to Off; existing selection
 are preserved. A theme is part of the visual style, so the editor
 preview, Save/Cancel, saved styles and scheduled styles share the same choice.
 
-## Planned composition direction (#586)
+## Layered living scenes (#586)
 
-The approved [layered scene plan](layered-scene-plan.md) proposes connected edge
-habitats, three coordinated depths, integrated weather and rare bounded foreground
-passages across all 26 scenes. It is not implemented by the documentation-only
-PR #587. The current runtime, reading-space, motion and persistence guardrails
-below remain authoritative until each planned migration is implemented and
-validated; the plan's provisional budgets are not verified behavior.
+Implemented in source on draft [PR #588](https://github.com/8roundshock/living-room-display/pull/588),
+following the [layered scene plan](layered-scene-plan.md). This section is the
+current renderer contract. Older sections below describe decisions that still
+hold (modes, calendars, resolution, birthdays); where they mention independent
+marks, slots or a 12-second birth rhythm they are history, replaced by this one.
+
+Every one of the 26 registered scenes has one authored composition
+(`src/shared/living-scene-art.ts`, `living-celebration-art.ts`): up to four edge
+patches (a dim far silhouette, the principal habitat, counterweights), each a
+complete drawing of rooted groups that sway on one shared phrase. `LivingTheme.tsx`
+draws them in a single SVG behind the widgets, under one luminance mask cut from
+the measured reading areas and their near-future movement.
+
+Fitting order, most preferred first:
+
+1. The authored root, when every group is whole.
+2. The same complete patch at another root on its own edge: four sizes (100%,
+   86%, 74%, 62%) by 25 positions, scored by retained drawn area so the principal
+   form dominates. The largest habitat is placed first and later patches keep out
+   of its gap. A top drawing whose whole top edge is reading space may enter
+   lower from its own side or, reflected, from the opposite side (13 positions,
+   three sizes). Group relationships inside a patch never change.
+3. A group's authored compact drawing, then uniform shortening to no less than 65%.
+4. Omission of that group. The mask is a safety net, never a way to show a
+   sheared drawing.
+
+A root is chosen once per 36-second local generation and for each still editor
+layout. It is chosen again mid-generation only when reading-space changes cost
+that patch more than 40% of its retained silhouette; the patch then fades in at
+its new root. Patches retire to true black one at a time, 12 seconds apart, for
+about one second plus fades; the information board never blanks.
+
+Living air: seasons, celebrations, birthdays and the Wind scene release five
+small detached forms from the scene's own passage art (seed, petal, leaf, husk
+or ribbon curl), each one finite drift replaced at its own boundary while
+invisible. Winter, Christmas, New Year (Russia) and Orthodox Christmas use an
+authored snowfall instead; this is seasonal art, not a weather claim. Fresh
+noteworthy weather replaces the drift with its one precipitation or fog field.
+Fog ribbons take open space or are omitted. Thin authored fills follow a
+low-light curve (`fill^0.62`) so they stay visible at 26%; saved brightness still
+scales the whole layer and is never raised.
+
+`src/client/living-scene-principals.ts` names the principal silhouette of every
+scene (for example the birthday cake/gifts and balloons, the Christmas bough,
+the Seollal kite, the lotus-lantern arc). Unit and browser checks require those
+named groups to stay visible and complete on the default board, and visible on
+a dense board. Do not replace this with a path or placement count.
+
+### Foreground moments
+
+One opt-in checkbox in the Style inspector's scene options, default off and
+omitted from saved data when off (an enabled value is an older-reader rollback
+exception, see [install](install.md#additive-data-and-rollback-compatibility-84)).
+`scene-passage.ts` plans one small actor at a time, at most one start per 60
+seconds across the display and 180 seconds per target, lasting 4.8 seconds:
+
+- An *incursion* may graze only a large current-temperature value: at most 1.2
+  seconds of contact and 5% of that reading area, at `0.22 x` brightness, bound
+  to a visible habitat within 30% of the short side. Clock/timer digits, labels,
+  alerts, hovered or focused widgets and all other readings are protected.
+- Otherwise a *near* passage stays wholly in whitespace beside its habitat, at
+  `0.8 x` brightness, and is cancelled if reading space reaches it.
+
+Quiet dates, layout editing, the still editor preview, Animation Off, system
+reduced motion and Theme Off never run a passage. Verified limit, 2026-11-09: on
+the default synthetic board only near passages occurred; the incursion actor is
+at most 13% of the target's width (about 14px beside a 108px value), so the
+permitted overlap is technically present but barely perceptible. Making it a
+worthwhile visible event within the same caps is tracked in
+[#589](https://github.com/8roundshock/living-room-display/issues/589).
+
+### Measured cost and known limits
+
+Bounded 4.2-second production-browser samples at 1920x1080 on 2026-11-09
+(synthetic data, headless Edge): 43-88ms main-thread task time, 23-55
+style/layout updates, no layer paints reported, 15-20 layers, 9-14 running
+animations and 20-47 scene paths, against the plan's 150ms, 40-layer,
+32-animation and 240-path ceilings. Motion off measured zero scene work.
+Animated SVG groups are main-thread work, not compositor-only; total GPU and
+energy cost stays with #364. The structural caps are tested for all 26 scenes.
+
+Not verified here: the installed app, native/idle display, physical-TV viewing,
+a long-run temporal coverage heatmap, and 45-second human motion review of every
+scene. Fog and the two weather-only precipitation scenes are the plainest
+compositions; the principal habitat is fully dark for about a second of every
+36 by design.
 
 ## Design decision (2026-11-04)
 
@@ -125,11 +205,16 @@ explicit dark option/optgroup contrast.
 
 The repository-local [theme skill](../.agents/skills/living-room-theme/SKILL.md)
 routes future changes. `src/shared/theme-registry.ts` is the actual shared source
-for art, palette, scale, motion cadence and explicit holiday eligibility/windows/
-priorities; the picker derives its options from it. `holidays.ts` owns factual
+for scene identity, palette and explicit holiday eligibility/windows/priorities;
+the picker derives its options from it. Authored compositions live in
+`living-scene-art.ts` and `living-celebration-art.ts`. `holidays.ts` owns factual
 calendar rules. `ambient-theme.ts` resolves current weather/season/holiday and
-creates explicitly labelled illustrations. `AmbientTheme.tsx` owns bounded
-placement/finite slots; `Display.tsx` supplies reading-area exclusions/brightness.
+creates explicitly labelled illustrations. `LivingTheme.tsx` and `living-scene.ts`
+own whole-patch fitting and finite choreography, `SceneForeground.tsx` and
+`scene-passage.ts` the optional passage; `Display.tsx` supplies reading-area
+exclusions/brightness. The registry's older per-mark `art`, slot and motion-profile
+fields are no longer rendered; their removal is tracked in
+[#590](https://github.com/8roundshock/living-room-display/issues/590).
 Add one scene and explicit policy, source its cultural meaning in the calendar
 doc, and exercise date boundaries, weather priority, scene demonstration isolation,
 ordinary preview, motion resumption and compact controls. Do not duplicate a
@@ -139,16 +224,21 @@ facts just to change a decorative lead window.
 ## Source verification
 
 The dedicated `themes` browser suite uses an ephemeral source server and synthetic
-dates/weather. It verifies Save/Cancel, shared calendar controls, 44px keyboard
-targets, 320/390px and short editors, holiday/weather geometry at 1080p and 4K,
-reduced-motion behavior, steady/initial slot lifetimes and real browser Dangi.
-Its optional images are returned in RAM, never saved. Bounded CDP samples compare
-active atmosphere with motion off. Faster births use the prior allowance of 15
-style recalculations per two renewals (rounded up), with five while idle; the
-4.2-second sample also caps renewals, task time, layout, paint and layer count.
-A deliberate per-frame style invalidation must fail that budget. This is a
-per-renewal adaptation, not an unchanged absolute work allowance; the general
-performance budget remains #364.
+dates/weather. It verifies Save/Cancel, shared calendar controls, the foreground
+option's draft/omission, 44px keyboard targets, 320/390px and short editors, and
+all 26 living scenes at 26%/1080p and 36%/4K: named principal forms visible and
+complete on the default board, structural budgets, true black and a pixel proof
+that no art touches reading ink (the scene is recoloured pure green in one RAM
+screenshot; controls show a masked full-screen wash passes and an unmasked one
+fails). It also covers Combined rain/snow, Weather-only isolation, quiet dates,
+typography growth, 30-second step/glide swaps, Off/Animation Off/reduced motion,
+finite transform/opacity animation, local patch renewal, foreground cadence and
+opacity, and real browser Dangi. Its optional images are returned in RAM, never
+saved. Bounded CDP samples compare an active scene with motion off: under 150ms
+task time, at most 150 style and layout updates (measured 27-55; a per-frame
+loop is about 250), five paints, 40 layers, and five style updates when idle.
+A deliberate per-frame style invalidation must fail the idle allowance. The
+general performance budget remains #364.
 Calendar and weather units exercise lunar dates, lead-window expiry, stale data,
 hourly hazards, DST and gust intervals. Persistence checks retain the frozen reader.
 Canvas preview control changes also run the existing `workspace` browser suite

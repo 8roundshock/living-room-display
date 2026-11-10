@@ -1,10 +1,11 @@
 # Layered living scenes — design and implementation plan
 
 Primary work: [#586 — Create layered living scenes for every atmosphere theme](https://github.com/8roundshock/living-room-display/issues/586).
-Plan written 2026-11-04. **This is a proposed implementation plan, not delivered
-artwork or a visual/performance acceptance claim.** The initial PR changes docs
-only. The coordinator reviews this plan before renderer implementation starts.
-The feature issue stays open until the implementation gates below are met.
+Plan written 2026-11-04. It remains the design record and gate list. Source
+implementation status as of 2026-11-09 is in [Phase status](#phase-status-2026-11-09);
+the current renderer contract is in [Ambient themes](ambient-themes.md#layered-living-scenes-586).
+Budgets below are the plan's starting values, not measurements, unless the
+status section says so. The feature issue stays open until the gates are met.
 
 The owner wants the display to feel like a coherent, high-quality living scene.
 The present atmosphere reads as separate floating stickers, despite its colour
@@ -248,6 +249,28 @@ this plan's base by merging current main. Do not reimplement its settings or
 include birthday runtime changes in this plan PR's diff. Public planning uses
 generic treatment names only. Follow the normal non-force-push integration/review
 workflow.
+
+## Phase status (2026-11-09)
+
+Source state on draft PR #588. "Verified" means checked in this worktree with an
+isolated synthetic server and headless Edge; nothing here is an installed,
+native or physical-TV result.
+
+| Phase | Status |
+| --- | --- |
+| 0 — plan | Done (PR #587). |
+| 1 — vertical slice | Summer habitat, integrated rain and the optional passage are implemented. Low-light empty/default/dense frames and a 100-second real-time run were inspected. Open: the 45-second human motion review and a temporal coverage heatmap; the permitted widget incursion is implemented but barely perceptible (#589). |
+| 2 — prove reuse | Winter/snow and the three birthday treatments use the shared renderer. Quiet, reduced-motion, weather priority, style drafts and birthday privacy checks pass. |
+| 3 — complete inventory | All 26 compositions render through one renderer. A shared fitting defect (principal forms lost on populated boards) was corrected by whole-patch relocation; every scene's named principal form is retained on the default and dense boards. The unused per-mark registry art still exists in source (#590). |
+| 4 — refine and integrate | Unit, themes-suite, docs and skill updates are in the PR. Open: two independent visual passes and independent review of the final pushed head. |
+| 5 — delivery | Not started; needs separate authorization. |
+
+Changes from the starting values, with reasons: lower habitats now reach about
+21% of the short side for Summer and up to 30% for the birthday and snow-bank
+patches (the 18% peaks read as small stickers on a 1080p board); relocation may
+move a top drawing to a side edge; near passages use `0.8 x` brightness because
+they never touch reading space; patches stay lit from 6% to 88% of their
+36-second life instead of 8% to 78%.
 
 ## Acceptance evidence and test strategy
 

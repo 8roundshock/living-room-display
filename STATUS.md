@@ -1,32 +1,39 @@
 # Project status
 
-## Layered living scenes in progress — 2026-11-04 (#586)
+## Layered living scenes: source candidate awaiting review — 2026-11-09 (#586)
 
-The Summer/rain composition passed the independent reuse gate after complete
-compact growth replaced clipped stems. All 26 scene compositions are now authored;
-Winter/snow, birthday families and the remaining inventory still need whole-frame
-visual acceptance. Top/side fitting preserves complete objects and natural ratios.
-A fast 30-second widget swap previously omitted the whole habitat for roughly
-15 seconds; an actual-ink destination reserve is under test. Optional foreground
-storage is opt-in and omitted by default; its passage implementation and visual
-acceptance remain incomplete.
+Draft [PR #588](https://github.com/8roundshock/living-room-display/pull/588)
+replaces the floating-mark atmosphere with one composed edge scene per theme
+for all 26 registered scenes, per the [layered scene plan](docs/layered-scene-plan.md).
+The current contract and limits are in [Ambient themes](docs/ambient-themes.md#layered-living-scenes-586).
 
-The first independent RAM pass found visible horizontal shearing where the
-reading mask cut tall grass. The correction fits each complete rooted group,
-choosing original compact growth where clearance is shallow; impossible groups
-are omitted before the safety mask. Rain now has phase-linked edge impacts.
-The first real 4.2-second empty-scene sample measured 26ms task work, zero paints,
-17 layers and 21 style/layout updates. Disabling attached or rain animation
-separately reduced that work while the observation revision rose only once,
-pointing to bounded SVG animation cost rather than observer feedback. These
-results are prototype evidence, not final all-scene acceptance or a new budget.
+The blocking defect from the last visual pass is corrected in source: populated
+boards no longer drop a scene's principal form. A bounded set of whole-patch
+roots is scored before any group is shortened or omitted, and a top drawing with
+no usable top edge enters from a side. Named principal silhouettes for every
+scene are checked by unit tests on measured default and dense boards and by the
+`themes` browser suite on the default board at 1080p and 4K. Reading protection
+is unchanged and now has a pixel proof in that suite.
 
-The coordinator accepted the direction in the [layered scene plan](docs/layered-scene-plan.md):
-connected seasonal edges, shared environmental motion, integrated weather and
-rare bounded foreground passages across all 26 scenes. [PR #587](https://github.com/8roundshock/living-room-display/pull/587)
-contains the plan; draft [PR #588](https://github.com/8roundshock/living-room-display/pull/588)
-contains implementation. #586 stays open for the remaining visual, performance,
-review and authorized delivery gates. No all-scene or native acceptance is claimed.
+Also added: detached seed/petal/leaf/ribbon forms or authored snowfall in every
+non-weather scene, visible snow drifts, fog ribbons that take open space, a
+low-light fill curve, and the opt-in Foreground moments passage (one small
+actor, at most one start a minute).
+
+Verified on 2026-11-09 in an isolated synthetic source server with headless Edge:
+every scene plus Combined rain and snow was rendered and inspected on empty,
+default and dense boards at 1920x1080 and 26% brightness; Summer, Autumn and
+Birthday were observed moving in real time. Measured 4.2-second samples stayed
+at 43-88ms task time, 15-20 layers and at most 14 running animations.
+
+Not done or not verified: independent visual passes and final-head review,
+installation, native/idle display and physical-TV viewing, a temporal coverage
+heatmap, and 45-second human motion review per scene. Known weak points: fog
+and the weather-only precipitation scenes are plain; a widget incursion by the
+foreground passage is permitted but barely perceptible
+([#589](https://github.com/8roundshock/living-room-display/issues/589)); unused
+per-mark registry art remains ([#590](https://github.com/8roundshock/living-room-display/issues/590)).
+#586 stays open.
 
 ## Optional annual birthday themes — 2026-11-04 (#584)
 
