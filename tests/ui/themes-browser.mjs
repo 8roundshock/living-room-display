@@ -206,7 +206,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
         animations:layer.getAnimations({subtree:true}).filter(a=>a.playState==='running').length,background:getComputedStyle(layer.closest('.ambient')).backgroundColor,filter:getComputedStyle(layer).filter,opacity:Number(getComputedStyle(layer).opacity),
         foreground:document.querySelectorAll('.living-foreground').length}));
       assert.ok(geometry.patches>=1&&geometry.patches<=LIVING_SCENE_BUDGET.patches*2,`${motif} patch budget ${geometry.patches}`); assert.ok(geometry.paths<=LIVING_SCENE_BUDGET.paths,`${motif} path budget ${geometry.paths}`);
-      assert.ok(geometry.animations<=LIVING_SCENE_BUDGET.animations,`${motif} animation budget ${geometry.animations}`); assert.equal(geometry.unmasked,0,'every drawn path is under the reading mask');
+      assert.ok(geometry.animations<=LIVING_SCENE_BUDGET.animations,`${motif} animation budget ${geometry.animations}`); assert.equal(await page.locator('.living-theme mask rect[fill="black"]').count(),0,'no rectangular reading holes: scenery is translucent, not clipped (#600)');
       assert.ok(geometry.opacity>0&&geometry.opacity<=brightness+.001,`saved brightness bounds the scene and is not raised (${geometry.opacity})`); assert.equal(geometry.background,'rgb(0, 0, 0)'); assert.equal(geometry.filter,'none'); assert.equal(geometry.foreground,0,'no foreground layer unless opted in');
       await photo(`${motif}-${viewport.width}`);
       const forms=await page.locator('.living-theme').evaluate((layer,names)=>names.map(name=>{const group=layer.querySelector(`[data-scene-fit="${name}"]`),box=group?.getBoundingClientRect();
@@ -216,17 +216,17 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
         assert.ok(form.present&&!form.omitted&&form.onScreen&&form.life>.9,`${motif} keeps its principal form ${form.name} on the default board at ${viewport.width}: ${JSON.stringify(form)}`);
         if(!form.grass) assert.equal(form.compact,false,`${motif} keeps the complete ${form.name} drawing on the default board at ${viewport.width}`);
       }
-      const dress=await page.locator('.living-theme').evaluate(layer=>({ground:Number(layer.querySelector('[data-ground-lit]')?.dataset.groundLit??0),top:layer.querySelectorAll('[data-scene-top]').length,particles:Number(layer.querySelector('[data-particle-count]')?.dataset.particleCount??0),layers:layer.querySelectorAll('.living-particle-layer').length,rain:layer.querySelectorAll('.living-rain path').length,fog:layer.querySelectorAll('ellipse.living-fog-band').length,fogMasked:layer.querySelectorAll('[data-scene-weather="fog"][data-reading-mask][mask] .living-fog-band').length}));
-      if(motif==='fog') {assert.equal(dress.fog,5,'fog is five soft blobs');assert.equal(dress.fogMasked,5,'every fog blob is under the feathered reading mask');}
-      if(dress.layers) assert.equal(await page.locator('.living-theme [data-reading-mask][mask$="-particle)"] .living-particle-layer').count(),4,`${motif} particles are under their own tight feathered mask`);
+      const dress=await page.locator('.living-theme').evaluate(layer=>({ground:Number(layer.querySelector('[data-ground-lit]')?.dataset.groundLit??0),top:layer.querySelectorAll('[data-scene-top]').length,particles:Number(layer.querySelector('[data-particle-count]')?.dataset.particleCount??0),layers:layer.querySelectorAll('.living-particle-layer').length,rain:layer.querySelectorAll('.living-rain path').length,fog:layer.querySelectorAll('ellipse.living-fog-band').length,glows:layer.querySelectorAll('ellipse.living-glow').length,bodies:[...layer.querySelectorAll('[data-scene-patch] path')].map(path=>Number(path.getAttribute('fill-opacity')??0)),tops:layer.querySelectorAll('.living-pendulum,.living-band-top').length}));
+      if(motif==='fog') assert.equal(dress.fog,5,'fog is five soft blobs');
+      assert.equal(dress.glows,3,`${motif} carries its colour as three soft washes`); assert.equal(dress.tops,0,`${motif} hangs nothing from the top edge`); assert.ok(dress.bodies.every(value=>value<=.5),`${motif} authored forms are translucent`); assert.ok(geometry.patches<=4,`${motif} shows only its principal patches`);
       assert.ok(dress.ground>=.85,`${motif} lights at least85% of bottom-edge columns on the default board (${dress.ground})`);
-      if(motif!=='fog') assert.equal(dress.top,1,`${motif} dresses a second edge`);
-      assert.ok(dress.particles>=20||dress.rain>=6||dress.fog>=3,`${motif} keeps particles, rain or fog in the air: ${JSON.stringify(dress)}`);
-      const ink=await artTouchingInk(); // Only fully opaque recoloured pixels are counted here, so translucent fills and thin 4K strokes undercount the lit area.
-      assert.ok(ink.art>viewport.width*viewport.height*.02,`${motif} draws opaque art over at least2% of the screen (${ink.art}px) ${JSON.stringify(dress)}`); assert.equal(ink.touching,0,`${motif} art never touches reading ink`);
+
+      assert.ok(dress.particles>=10||dress.rain>=6||dress.fog>=3,`${motif} keeps particles, rain or fog in the air: ${JSON.stringify(dress)}`);
+
+
       // A second phase of the sway and particle cycle keeps the same clearance.
-      await page.locator('.living-attached, .living-particle-layer, .living-pendulum, .living-rain').evaluateAll(nodes=>nodes.forEach(node=>node.getAnimations().forEach(a=>{a.pause();a.currentTime=(a.currentTime??0)+3100;})));
-      assert.equal((await artTouchingInk()).touching,0,`${motif} art clears reading ink at a second motion phase`);
+
+
       assert.deepEqual(await fullFormsInReadingSpace(),[],`${motif} complete forms are not sheared by reading space`);
       const transforms=[];
       for(const age of [2000,5000,8000,11000]) transforms.push(await page.locator('.living-attached').evaluateAll((groups,age)=>groups.map(group=>{for(const animation of group.getAnimations()){animation.pause();animation.currentTime=age+(animation.effect.getTiming().delay??0);}return{motion:group.dataset.sceneMotion,transform:getComputedStyle(group).transform};}),age));
@@ -234,13 +234,13 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
       transforms.flat().forEach(({motion})=>motionsSeen.add(motion));
     }
     for(const motion of ['grass','branch','hanging','drift']) assert.ok(motionsSeen.has(motion),`${motion} choreography was phase-sampled`);
-    record('All26 living scenes keep their named principal form on the default board at26%1080p/36%4K, trueblack, masked reading clearance and bounded structure');
+    record('All26 living scenes keep their named principal form on the default board at26%1080p/36%4K, trueblack and bounded structure');
     for(const [name,options,expectation] of [['summer rain',{date:'2026-07-20T18:30:00Z',mode:'combined',code:63},{motif:'rain',habitat:'summer',weather:'rain'}],['winter snow',{date:'2026-02-01T18:30:00Z',mode:'combined',code:73},{motif:'snow',habitat:'winter',weather:undefined}],
       ['weather-only rain',{date:'2026-12-20T18:30:00Z',mode:'weather',code:63},{motif:'rain',habitat:'rain',weather:'rain'}]]) {
       await open({...options,path:'/display',viewport:{width:1920,height:1080},brightness:.26}); await page.locator('.living-theme').waitFor(); await settle();
       const state=await page.locator('.living-theme').evaluate(layer=>({motif:layer.dataset.themeMotif,habitat:layer.dataset.themeHabitat,weather:layer.querySelector('[data-scene-weather]')?.dataset.sceneWeather,particles:layer.querySelector('[data-scene-particles]')?.dataset.sceneParticles,count:Number(layer.querySelector('[data-particle-count]')?.dataset.particleCount??0),rain:layer.querySelectorAll('.living-rain path').length,patches:[...layer.querySelectorAll('[data-scene-patch]')].map(p=>p.dataset.scenePatch)}));
       assert.deepEqual({motif:state.motif,habitat:state.habitat,weather:state.weather},expectation,name);
-      if(name==='winter snow') {assert.equal(state.particles,'flake');assert.ok(state.count>=60,'Combined snow is visibly heavier than Winter alone');}
+      if(name==='winter snow') {assert.equal(state.particles,'flake');assert.ok(state.count>=24,'Combined snow is visibly heavier than Winter alone');}
       else {assert.equal(state.particles,undefined,'rain replaces seasonal particles');assert.ok(state.rain>=6,'rain falls in two depths');}
       if(options.mode==='weather') assert.ok(state.patches.every(id=>id.startsWith('rain-')),'Weather mode shows no seasonal or holiday habitat');
       await photo(`combined-${name}`);
@@ -261,29 +261,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-quiet'),'true','selected quiet policy takes effect at the local midnight boundary');
     assert.ok(await page.locator('[data-scene-patch]').count()<=2);
     record('Quiet dates keep a subdued, unfilled, sparse habitat with no drift, birthday geometry or foreground passage');
-    await open({mode:'seasonal'}); await page.clock.runFor(100); assert.equal((await artTouchingInk()).touching,0);
-    await page.getByRole('slider',{name:'Text size',exact:true}).focus(); await page.keyboard.press('End'); await page.clock.runFor(400);
-    const grown=await artTouchingInk(); assert.ok(grown.art>200); assert.equal(grown.touching,0,'growing typography invalidates the still reading mask');
-    assert.deepEqual(await fullFormsInReadingSpace(),[],'still forms refit instead of being sheared');
-    for(const float of [false,true]) {
-      await open({mode:'weather',code:63,path:'/display',viewport:{width:1920,height:1080},float,swap:true,interval:30,only:['clock']}); await page.locator('.living-theme').waitFor();
-      await page.clock.runFor(29_900);
-      let visibleSamples=0;
-      for(let step=0;step<16;step++) {
-        await page.clock.runFor(100);
-        visibleSamples+=await page.locator('[data-scene-fit]:not([data-scene-omitted])').count();
-        assert.equal((await artTouchingInk()).touching,0,`${float?'glide':'pending dim/step'} swap reading clearance at30s+${step/10}`);
-      }
-      assert.ok(visibleSamples>0,`${float?'glide':'step'} clearance inspected a populated scene, not an empty layer`);
-      assert.equal(await page.locator('.ambient').getAttribute('data-composition'),'1','the shortest supported swap completed');
-      // Controls: a full-screen wash drawn under the mask still leaves all ink untouched;
-      // the same wash without clearance holes must be detected.
-      await page.evaluate(()=>{const group=document.querySelector('.living-theme [data-reading-mask]'),wash=document.createElementNS('http://www.w3.org/2000/svg','rect');wash.setAttribute('width','100%');wash.setAttribute('height','100%');wash.setAttribute('data-control-wash','');group.append(wash);});
-      const washed=await artTouchingInk(); assert.ok(washed.art>1920*1080*.5); assert.equal(washed.touching,0,'masked clearance protects ink even from a full-screen wash');
-      await page.evaluate(()=>document.querySelectorAll('.living-theme mask rect[fill="black"]').forEach(hole=>hole.remove()));
-      assert.ok((await artTouchingInk()).touching>0,'negative control detects art touching ink once clearance is removed');
-    }
-    record('Typography growth and30s floating/step swaps keep every reading inside masked clearance across the pending dim boundary');
+    record('Scenery is translucent and unclipped: no reading holes, at most two authored forms, three soft washes');
     for(const options of [{reduced:'reduce'},{animation:'off'},{mode:'off'}]) { await open({mode:'combined',path:'/display',foreground:true,...options}); await page.clock.runFor(70_000); assert.equal(await page.locator('.ambient-theme').count(),0); assert.equal(await page.locator('.living-foreground').count(),0); }
     record('Off,AnimationOff and system reduced motion mount no decorative layer and no foreground passage');
     await open({date:'2026-07-20T18:30:00Z',mode:'seasonal',path:'/display',empty:true}); await page.locator('.living-theme').waitFor(); await page.clock.runFor(1000);

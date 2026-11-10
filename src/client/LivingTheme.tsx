@@ -1,10 +1,10 @@
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { LivingSceneArt, ScenePath } from '../shared/living-scene-art';
-import { SCENE_DRESSING, type ParticleKind, type TopKind } from '../shared/living-scene-dressing';
+import { SCENE_DRESSING, type ParticleKind } from '../shared/living-scene-dressing';
 import { LIVING_SCENE_BUDGET } from '../shared/theme-registry';
 import type { ThemeRect, ThemeScene, WeatherMotif } from './ambient-theme';
 import { habitatBox, habitatMotion, fitHabitatGroup, fitHabitatPatch, patchExtent, patchPriority, patchPhase, patchQuality, rainField, rainImpacts, type HabitatBox } from './living-scene';
-import { fogBands, groundBand, gustStreaks, particleLayers, topBand, type DressPath, type DressSegment, type EdgeBand } from './living-dressing';
+import { fogBands, glowWashes, scenePatches, groundBand, gustStreaks, particleLayers, type DressPath, type DressSegment, type EdgeBand } from './living-dressing';
 import './living-scene.css';
 
 interface Props { scene: ThemeScene; art: LivingSceneArt; still: boolean; exclusions: () => readonly ThemeRect[]; inkRevision: number }
@@ -21,8 +21,9 @@ function ArtPath({ path, palette, quiet }: { path: ScenePath; palette: readonly 
   // Low-light fill curve: thin authored fills (0.13-0.5) otherwise vanish against true black at
   // 26% brightness. Outlines use a lighter rim of the same hue. Nothing raises brightness globally.
   const filled = !!path.fill && !quiet;
-  return <path d={path.d} fill={filled ? palette[path.tone] : 'none'} fillOpacity={path.fill ? Math.pow(path.fill, .45) : 0}
-    stroke={path.stroke === 0 ? 'none' : filled ? lighten(palette[path.tone]!, .38) : palette[path.tone]} strokeWidth={path.stroke ?? 1.5}
+  // Glass, not poster paint (#600): a thin translucent body under a light rim of the same hue.
+  return <path d={path.d} fill={filled ? palette[path.tone] : 'none'} fillOpacity={path.fill ? Math.pow(path.fill, .45) * .5 : 0}
+    stroke={path.stroke === 0 ? 'none' : filled ? lighten(palette[path.tone]!, .45) : palette[path.tone]} strokeOpacity={.9} strokeWidth={Math.min(path.stroke ?? 1.5, 1.6)}
     opacity={path.opacity ?? 1} strokeLinecap="round" strokeLinejoin="round" />;
 }
 function Dress({ path, colors }: { path: DressPath; colors: readonly string[] }) {
@@ -60,8 +61,8 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
   const weather = scene.source === 'weather' ? scene.motif as WeatherMotif : undefined;
   const dressing = scene.quiet ? undefined : SCENE_DRESSING[scene.habitat ?? scene.motif];
   // The continuous ground band replaces the dim far bottom silhouettes of the first compositions.
-  const patches = scene.quiet ? art.patches.filter(patch => patch.depth === 'habitat').slice(0, 2)
-    : art.patches.filter(patch => !(dressing && patch.depth === 'far' && patch.edge.startsWith('bottom')));
+  // #600: at most two authored forms; the rest of the scene is light, not objects.
+  const patches = scene.quiet ? art.patches.filter(patch => patch.depth === 'habitat').slice(0, 1) : scenePatches(art, scene.habitat ?? scene.motif);
   const weatherGroups = scene.quiet ? [0] : [0, 1, 2];
   // Whole-patch roots are chosen once per local generation (and per still layout),
   // principal drawing first. A root is chosen again only when later reading-space
@@ -99,48 +100,39 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
   const unit1080 = Math.min(width, height) / 1080 || 1;
   const bands = useMemo(() => {
     if (!dressing || !width) return null;
-    const top: TopKind | undefined = weather === 'storm' || weather === 'rain' ? 'cloud' : weather === 'fog' ? undefined : weather === 'snow' ? 'icicle' : dressing.top;
-    const scaled = holes.map(hole => ({ left: hole.left / unit1080, top: hole.top / unit1080, right: hole.right / unit1080, bottom: hole.bottom / unit1080 }));
-    // Fresh snow lies on any scene: a deeper drift replaces its ground and ice hangs from the top.
+    // One low continuous ground only. It ignores reading areas: it is translucent and fades upward, so it runs behind widgets instead of being cut by them.
     const ground = weather === 'snow' ? 'drift' : dressing.ground === 'mist' ? 'water' : dressing.ground;
-    return { ground: groundBand(ground, width / unit1080, height / unit1080, scaled, 1, weather === 'snow' ? 1.35 : 1), groundKind: ground, top: top ? topBand(top, width / unit1080, height / unit1080, scaled) : null, topKind: top };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- holeKey is the rounded identity of holes
-  }, [dressing, weather, width, height, holeKey]);
+    return { ground: groundBand(ground, width / unit1080, height / unit1080, [], 1, weather === 'snow' ? .8 : .62), groundKind: ground, top: null as EdgeBand | null, topKind: undefined as string | undefined };
+  }, [dressing, weather, width, height, unit1080]);
+  const glows = useMemo(() => width ? glowWashes(width, height, scene.habitat ?? scene.motif).slice(0, scene.quiet ? 1 : 3) : [], [width, height, scene.habitat, scene.motif, scene.quiet]);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- holeKey is the rounded identity of holes
   const gusts = useMemo(() => weather === 'wind' && width ? gustStreaks(width, height, holes) : [], [weather, width, height, holeKey]);
   const SNOW_COLORS = ['#bfe3f7', '#9fd0f2', '#d6c8f5'] as const;
   const particleKind: ParticleKind | undefined = !dressing || weather === 'rain' || weather === 'storm' || weather === 'fog' ? undefined : weather === 'snow' ? 'flake' : weather === 'wind' ? dressing.particles ?? 'leaf' : dressing.particles;
-  const particleCount = weather === 'snow' ? 96 : dressing?.count ?? 26;
+  const particleCount = Math.round((weather === 'snow' ? 60 : dressing?.count ?? 26) * .5);
   const cycle = Math.floor(elapsed / LIVING_SCENE_BUDGET.life);
   const groundColors = weather === 'snow' ? SNOW_COLORS : dressing?.groundColors ?? palette;
-  const topColors = weather === 'snow' ? SNOW_COLORS : bands?.topKind === 'cloud' ? palette : dressing?.topColors ?? palette;
+  const topColors = palette;
   return <div ref={root} className="ambient-theme living-theme" aria-hidden="true" data-theme-motif={scene.motif}
     data-theme-habitat={scene.habitat ?? scene.motif} data-theme-source={scene.source} data-theme-quiet={scene.quiet || undefined}
     data-theme-still={still || undefined} data-scene-elapsed={elapsed} data-scene-revision={revision}>
     {width > 0 && <svg className="living-canvas" viewBox={`0 0 ${width} ${height}`}>
       <defs>
-        <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width={width} height={height} style={{ maskType: 'luminance' }}>
-          <rect width={width} height={height} fill="white" />
-          {holes.map((hole, index) => <rect key={index} x={hole.left} y={hole.top} width={Math.max(0, hole.right - hole.left)} height={Math.max(0, hole.bottom - hole.top)} rx={Math.min(width, height) * .014} fill="black" />)}
-        </mask>
-        {/* Two feathered copies of the reading mask. Wide: soft fog must not outline reading areas as
-            boxes. Tight: particles fade over about 25-30px beside text instead of being clipped into
-            half-shapes, without thinning the whole field on a populated board. The blur region is the
-            whole canvas in user space, so a feather is never truncated on a board with one small widget. */}
-        {([['soft', weather === 'fog', .045, .022], ['particle', !!particleKind, .015, .01]] as const).map(([name, used, growShare, blurShare]) => used && <g key={name}>
-          <filter id={`${maskId}-${name}-blur`} filterUnits="userSpaceOnUse" x={-width * .1} y={-height * .1} width={width * 1.2} height={height * 1.2}><feGaussianBlur stdDeviation={Math.min(width, height) * blurShare} /></filter>
-          <mask id={`${maskId}-${name}`} maskUnits="userSpaceOnUse" x="0" y="0" width={width} height={height} style={{ maskType: 'luminance' }}>
-            <rect width={width} height={height} fill="white" />
-            <g filter={`url(#${maskId}-${name}-blur)`}>{holes.map((hole, index) => { const grow = Math.min(width, height) * growShare;
-              return <rect key={index} x={hole.left - grow} y={hole.top - grow} width={Math.max(0, hole.right - hole.left) + grow * 2} height={Math.max(0, hole.bottom - hole.top) + grow * 2} rx={grow} fill="black" />; })}</g>
-          </mask>
-        </g>)}
+        <linearGradient id={`${maskId}-rise`} gradientUnits="userSpaceOnUse" x1="0" x2="0" y1={height - Math.min(width, height) * .15} y2={height}>
+          <stop offset="0" stopColor="#000" /><stop offset=".6" stopColor="#999" /><stop offset="1" stopColor="#fff" />
+        </linearGradient>
+        <mask id={`${maskId}-ground`} maskUnits="userSpaceOnUse" x="0" y="0" width={width} height={height} style={{ maskType: 'luminance' }}><rect width={width} height={height} fill={`url(#${maskId}-rise)`} /></mask>
+        {palette.map((color, index) => <radialGradient key={`glow${index}`} id={`${maskId}-glow-${index}`}>
+          <stop offset="0" stopColor={color} stopOpacity=".5" /><stop offset=".5" stopColor={color} stopOpacity=".2" /><stop offset="1" stopColor={color} stopOpacity="0" />
+        </radialGradient>)}
         {weather === 'fog' && palette.map((color, index) => <radialGradient key={index} id={`${maskId}-fog-${index}`}>
           <stop offset="0" stopColor={color} stopOpacity=".62" /><stop offset=".55" stopColor={color} stopOpacity=".3" /><stop offset="1" stopColor={color} stopOpacity="0" />
         </radialGradient>)}
       </defs>
-      <g mask={`url(#${maskId})`} data-reading-mask>
-        {bands && <EdgeLayer key={`rear:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="segments" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} />}
+      <g data-scene-glow>{glows.map((glow, index) => <ellipse key={`${index}:${cycle}`} className="living-glow" cx={glow.cx} cy={glow.cy} rx={glow.rx} ry={glow.ry} fill={`url(#${maskId}-glow-${glow.tone})`}
+        style={{ '--fog-age': `${-(elapsed % LIVING_SCENE_BUDGET.life + glow.delay * 1000)}ms`, '--fog-travel': `translate(${glow.travel}px, 0px)` } as CSSProperties} />)}</g>
+      <g>
+        {bands && <g mask={`url(#${maskId}-ground)`} opacity=".62"><EdgeLayer key={`rear:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="segments" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
         {patches.map((patch, index) => {
           const phase = phases[index]!, entry = placed.current.get(patch.id)!, authored = habitatBox(patch, width, height, phase.generation);
           const moved = (box: HabitatBox) => Math.abs(box.x - authored.x) > 1 || Math.abs(box.y - authored.y) > 1 || Math.abs(box.width - authored.width) > 1;
@@ -153,7 +145,7 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
               weather={weather} quiet={scene.quiet} generation={phase.generation} holes={holes} />,
           ];
         })}
-        {bands && <EdgeLayer key={`front:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="front" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} />}
+        {bands && <g mask={`url(#${maskId}-ground)`} opacity=".62"><EdgeLayer key={`front:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="front" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
         {(weather === 'rain' || weather === 'storm') && <g className="living-weather" data-scene-weather={weather}>
           {weatherGroups.map(index => <RainPhrase key={`${index}:${cycle}`} index={index} storm={weather === 'storm'}
             elapsed={elapsed % LIVING_SCENE_BUDGET.life} width={width} height={height} palette={palette} />)}
@@ -165,8 +157,8 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
       </g>
       {/* Particles and fog fade out before reading space instead of being clipped into half-shapes. */}
       {particleKind && <ParticleLayer key={`${particleKind}:${cycle}:${width}:${height}`} kind={particleKind} count={particleCount} width={width / unit1080} height={height / unit1080} age={elapsed % LIVING_SCENE_BUDGET.life}
-          gust={weather === 'wind'} palette={palette} scale={unit1080} mask={`url(#${maskId}-particle)`} />}
-      {weather === 'fog' && <g key={`fog:${cycle}:${width}`} className="living-weather" data-scene-weather="fog" data-reading-mask mask={`url(#${maskId}-soft)`}>
+          gust={weather === 'wind'} palette={palette} scale={unit1080} />}
+      {weather === 'fog' && <g key={`fog:${cycle}:${width}`} className="living-weather" data-scene-weather="fog">
         {fogBands(width, height).slice(0, scene.quiet ? 2 : 5).map((band, index) => <ellipse key={index} className="living-fog-band" cx={band.cx} cy={band.cy} rx={band.rx} ry={band.ry}
           fill={`url(#${maskId}-fog-${band.tone})`} style={{ '--fog-age': `${-(elapsed % LIVING_SCENE_BUDGET.life)}ms`, '--fog-travel': `translate(${band.travel}px, 0px)` } as CSSProperties} />)}
       </g>}
@@ -230,12 +222,12 @@ function EdgeLayer({ age: initialAge, ground, top, layer, groundColors, topColor
   </g>;
 }
 
-/** Depth-scaled particles under the reading mask: four layers, each one finite
+/** Depth-scaled soft particles, unmasked (#600): four layers, each one finite
  * transform animation whose period divides the scene life. */
-function ParticleLayer({ kind, count, width, height, age: initialAge, gust, palette, scale, mask }: { kind: ParticleKind; count: number; width: number; height: number; age: number; gust: boolean; palette: readonly string[]; scale: number; mask: string }) {
+function ParticleLayer({ kind, count, width, height, age: initialAge, gust, palette, scale }: { kind: ParticleKind; count: number; width: number; height: number; age: number; gust: boolean; palette: readonly string[]; scale: number }) {
   const [age] = useState(initialAge);
   const layers = useMemo(() => particleLayers(kind, count, width, height, gust), [kind, count, width, height, gust]);
-  return <g mask={mask} data-reading-mask><g className="living-particles" transform={`scale(${scale})`} data-scene-particles={kind} data-particle-count={layers.reduce((sum, layer) => sum + layer.count, 0)}>
+  return <g><g className="living-particles" transform={`scale(${scale})`} data-scene-particles={kind} data-particle-count={layers.reduce((sum, layer) => sum + layer.count, 0)}>
     {layers.map((layer, index) => <g key={index} className={layer.wander ? 'living-particle-layer living-wander' : 'living-particle-layer'} opacity={layer.opacity}
       style={{ animationDuration: `${layer.duration}ms`, animationDelay: `${-(age + layer.offset)}ms`, animationIterationCount: LIVING_SCENE_BUDGET.life / layer.duration + 1,
         '--p-q1': `translate(${(layer.travel[0] * .25 + layer.sway).toFixed(1)}px, ${(layer.travel[1] * .25).toFixed(1)}px)`, '--p-mid': `translate(${(layer.travel[0] * .5).toFixed(1)}px, ${(layer.travel[1] * .5).toFixed(1)}px)`,
@@ -251,8 +243,8 @@ function RainPhrase({ index, elapsed, width, height, palette, storm }: { index: 
   const [born] = useState(() => performance.now());
   const short = Math.min(width, height);
   return <g data-scene-born={born} style={{ '--rain-age': `${-(age + index * 1200)}ms`, '--rain-travel': `translate(${-height * (storm ? .066 : .035)}px, ${height * .105}px)` } as CSSProperties}>
-    <g className="living-rain"><path d={rainField(width, height, index, 0, storm)} fill="none" stroke={palette[index % 2]} strokeWidth={Math.max(1, short * .0019)} strokeLinecap="round" opacity={.8} /></g>
-    <g className="living-rain living-rain-near"><path d={rainField(width, height, index, 1, storm)} fill="none" stroke={lighten(palette[0]!, .45)} strokeWidth={Math.max(1.4, short * .0028)} strokeLinecap="round" opacity={.95} /></g>
+    <g className="living-rain"><path d={rainField(width, height, index, 0, storm)} fill="none" stroke={palette[index % 2]} strokeWidth={Math.max(1, short * .0019)} strokeLinecap="round" opacity={.5} /></g>
+    <g className="living-rain living-rain-near"><path d={rainField(width, height, index, 1, storm)} fill="none" stroke={lighten(palette[0]!, .45)} strokeWidth={Math.max(1.4, short * .0028)} strokeLinecap="round" opacity={.62} /></g>
     <g className="living-ripple"><path d={rainImpacts(width, height, index)} fill="none" stroke={lighten(palette[2]!, .4)} strokeWidth={Math.max(1.2, short * .002)} strokeLinecap="round" /></g>
   </g>;
 }
