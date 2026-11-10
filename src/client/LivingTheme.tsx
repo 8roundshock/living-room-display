@@ -114,7 +114,6 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
   const cycle = Math.floor(elapsed / LIVING_SCENE_BUDGET.life);
   const groundColors = weather === 'snow' ? SNOW_COLORS : dressing?.groundColors ?? palette;
   const topColors = weather === 'snow' ? SNOW_COLORS : bands?.topKind === 'cloud' ? palette : dressing?.topColors ?? palette;
-  const soft = weather === 'fog' || !!particleKind;
   return <div ref={root} className="ambient-theme living-theme" aria-hidden="true" data-theme-motif={scene.motif}
     data-theme-habitat={scene.habitat ?? scene.motif} data-theme-source={scene.source} data-theme-quiet={scene.quiet || undefined}
     data-theme-still={still || undefined} data-scene-elapsed={elapsed} data-scene-revision={revision}>
@@ -124,15 +123,18 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
           <rect width={width} height={height} fill="white" />
           {holes.map((hole, index) => <rect key={index} x={hole.left} y={hole.top} width={Math.max(0, hole.right - hole.left)} height={Math.max(0, hole.bottom - hole.top)} rx={Math.min(width, height) * .014} fill="black" />)}
         </mask>
-        {/* Wide soft fog must not outline reading areas as boxes: its own mask grows and blurs the holes. */}
-        {soft && <>
-          <filter id={`${maskId}-blur`} x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation={Math.min(width, height) * .022} /></filter>
-          <mask id={`${maskId}-soft`} maskUnits="userSpaceOnUse" x="0" y="0" width={width} height={height} style={{ maskType: 'luminance' }}>
+        {/* Two feathered copies of the reading mask. Wide: soft fog must not outline reading areas as
+            boxes. Tight: particles fade over about 25-30px beside text instead of being clipped into
+            half-shapes, without thinning the whole field on a populated board. The blur region is the
+            whole canvas in user space, so a feather is never truncated on a board with one small widget. */}
+        {([['soft', weather === 'fog', .045, .022], ['particle', !!particleKind, .015, .01]] as const).map(([name, used, growShare, blurShare]) => used && <g key={name}>
+          <filter id={`${maskId}-${name}-blur`} filterUnits="userSpaceOnUse" x={-width * .1} y={-height * .1} width={width * 1.2} height={height * 1.2}><feGaussianBlur stdDeviation={Math.min(width, height) * blurShare} /></filter>
+          <mask id={`${maskId}-${name}`} maskUnits="userSpaceOnUse" x="0" y="0" width={width} height={height} style={{ maskType: 'luminance' }}>
             <rect width={width} height={height} fill="white" />
-            <g filter={`url(#${maskId}-blur)`}>{holes.map((hole, index) => { const grow = Math.min(width, height) * .045;
+            <g filter={`url(#${maskId}-${name}-blur)`}>{holes.map((hole, index) => { const grow = Math.min(width, height) * growShare;
               return <rect key={index} x={hole.left - grow} y={hole.top - grow} width={Math.max(0, hole.right - hole.left) + grow * 2} height={Math.max(0, hole.bottom - hole.top) + grow * 2} rx={grow} fill="black" />; })}</g>
           </mask>
-        </>}
+        </g>)}
         {weather === 'fog' && palette.map((color, index) => <radialGradient key={index} id={`${maskId}-fog-${index}`}>
           <stop offset="0" stopColor={color} stopOpacity=".62" /><stop offset=".55" stopColor={color} stopOpacity=".3" /><stop offset="1" stopColor={color} stopOpacity="0" />
         </radialGradient>)}
@@ -163,7 +165,7 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
       </g>
       {/* Particles and fog fade out before reading space instead of being clipped into half-shapes. */}
       {particleKind && <ParticleLayer key={`${particleKind}:${cycle}:${width}:${height}`} kind={particleKind} count={particleCount} width={width / unit1080} height={height / unit1080} age={elapsed % LIVING_SCENE_BUDGET.life}
-          gust={weather === 'wind'} palette={palette} scale={unit1080} mask={`url(#${maskId}-soft)`} />}
+          gust={weather === 'wind'} palette={palette} scale={unit1080} mask={`url(#${maskId}-particle)`} />}
       {weather === 'fog' && <g key={`fog:${cycle}:${width}`} className="living-weather" data-scene-weather="fog" data-reading-mask mask={`url(#${maskId}-soft)`}>
         {fogBands(width, height).slice(0, scene.quiet ? 2 : 5).map((band, index) => <ellipse key={index} className="living-fog-band" cx={band.cx} cy={band.cy} rx={band.rx} ry={band.ry}
           fill={`url(#${maskId}-fog-${band.tone})`} style={{ '--fog-age': `${-(elapsed % LIVING_SCENE_BUDGET.life)}ms`, '--fog-travel': `translate(${band.travel}px, 0px)` } as CSSProperties} />)}

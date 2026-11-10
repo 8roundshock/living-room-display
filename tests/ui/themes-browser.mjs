@@ -218,6 +218,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
       }
       const dress=await page.locator('.living-theme').evaluate(layer=>({ground:Number(layer.querySelector('[data-ground-lit]')?.dataset.groundLit??0),top:layer.querySelectorAll('[data-scene-top]').length,particles:Number(layer.querySelector('[data-particle-count]')?.dataset.particleCount??0),layers:layer.querySelectorAll('.living-particle-layer').length,rain:layer.querySelectorAll('.living-rain path').length,fog:layer.querySelectorAll('ellipse.living-fog-band').length,fogMasked:layer.querySelectorAll('[data-scene-weather="fog"][data-reading-mask][mask] .living-fog-band').length}));
       if(motif==='fog') {assert.equal(dress.fog,5,'fog is five soft blobs');assert.equal(dress.fogMasked,5,'every fog blob is under the feathered reading mask');}
+      if(dress.layers) assert.equal(await page.locator('.living-theme [data-reading-mask][mask$="-particle)"] .living-particle-layer').count(),4,`${motif} particles are under their own tight feathered mask`);
       assert.ok(dress.ground>=.85,`${motif} lights at least85% of bottom-edge columns on the default board (${dress.ground})`);
       if(motif!=='fog') assert.equal(dress.top,1,`${motif} dresses a second edge`);
       assert.ok(dress.particles>=20||dress.rain>=6||dress.fog>=3,`${motif} keeps particles, rain or fog in the air: ${JSON.stringify(dress)}`);

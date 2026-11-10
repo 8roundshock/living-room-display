@@ -142,14 +142,21 @@ test('particles stay in flight as four seamless depth layers', () => {
   }
 });
 
-test('every scene stays inside the animation budget on empty 1080p, 4K and ultrawide boards', () => {
-  // Weather adds at most nine rain animations or five fog blobs or four gust streaks to a scene without particles.
-  const weatherExtra: Record<string, number> = { rain: 9, storm: 9, fog: 5, wind: 4 };
+test('every scene and Combined weather pairing stays inside the animation budget on empty 1080p, 4K and ultrawide boards', () => {
+  const standalone: Record<string, 'rain' | 'storm' | 'fog' | 'wind' | 'snow'> = { rain: 'rain', storm: 'storm', fog: 'fog', wind: 'wind', snow: 'snow' };
+  let highest = 0;
   for (const [width, height] of [[1920, 1080], [3840, 2160], [3440, 1440]] as const) for (const id of THEME_SCENE_IDS) {
-    const dressing = SCENE_DRESSING[id]!, count = sceneAnimationCount(LIVING_SCENE_ART[id]!, dressing, width, height) + (weatherExtra[id] ?? 0);
-    assert.ok(count <= LIVING_SCENE_BUDGET.animations, `${id} at ${width}x${height}: ${count} animations`);
+    const art = LIVING_SCENE_ART[id]!, dressing = SCENE_DRESSING[id]!;
+    // The scene on its own (a weather scene with its own weather), then every Combined adaptation it declares.
+    for (const weather of [standalone[id], ...(standalone[id] ? [] : art.weather)]) {
+      const count = sceneAnimationCount(art, dressing, width, height, [], weather);
+      highest = Math.max(highest, count);
+      assert.ok(count <= LIVING_SCENE_BUDGET.animations, `${id}${weather ? ` with ${weather}` : ''} at ${width}x${height}: ${count} animations`);
+    }
     if (dressing.top) assert.ok(topBand(dressing.top, width / (height / 1080), 1080, []).pendants.length <= PENDANT_MAX, `${id}: pendants are capped`);
   }
+  assert.equal(sceneAnimationCount(LIVING_SCENE_ART.summer!, SCENE_DRESSING.summer!, 1920, 1080, [], 'wind'), 41, 'Combined wind on Summer');
+  assert.equal(highest, 41, 'no scene or Combined pairing exceeds the busiest known one');
   // The cap is what holds on a wide empty board: uncapped spacing alone would exceed it.
   assert.equal(topBand('foliage', 3440 / (1440 / 1080), 1080, []).pendants.length, PENDANT_MAX);
 });

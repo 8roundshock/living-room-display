@@ -275,10 +275,15 @@ export function gustStreaks(width: number, height: number, holes: readonly Theme
  * every sway group, patch fade and appear, one cross-fading generation, band
  * shifts, grass segments, pendants, particle layers and weather. Checked against
  * LIVING_SCENE_BUDGET.animations on empty boards, where the most pendants fit. */
-export function sceneAnimationCount(art: LivingSceneArt, dressing: SceneDressing, width: number, height: number, holes: readonly ThemeRect[] = []) {
+export function sceneAnimationCount(art: LivingSceneArt, dressing: SceneDressing, width: number, height: number, holes: readonly ThemeRect[] = [], weather?: 'rain' | 'snow' | 'storm' | 'fog' | 'wind') {
   const patches = art.patches.filter(patch => !(patch.depth === 'far' && patch.edge.startsWith('bottom')));
   const drawn = patches.reduce((sum, patch) => sum + patch.groups.length + 2, 0) + Math.max(0, ...patches.map(patch => patch.groups.length + 1));
-  const unit1080 = Math.min(width, height) / 1080, top = dressing.top ? topBand(dressing.top, width / unit1080, height / unit1080, holes) : null;
-  const ground = groundBand(dressing.ground === 'mist' ? 'water' : dressing.ground, width / unit1080, height / unit1080, holes);
-  return drawn + 2 + (ground.sway ? ground.segments.length : 0) + (top ? 2 + top.pendants.length : 0) + (dressing.particles ? PARTICLE_LAYERS : 0);
+  const unit1080 = Math.min(width, height) / 1080, wet = weather === 'rain' || weather === 'storm';
+  // Mirrors the renderer: fresh weather replaces the top band, the ground under snow and the particles.
+  const topKind = wet ? 'cloud' : weather === 'fog' ? undefined : weather === 'snow' ? 'icicle' : dressing.top;
+  const top = topKind ? topBand(topKind, width / unit1080, height / unit1080, holes) : null;
+  const ground = groundBand(weather === 'snow' ? 'drift' : dressing.ground === 'mist' ? 'water' : dressing.ground, width / unit1080, height / unit1080, holes);
+  const particles = wet || weather === 'fog' ? false : weather === 'snow' || weather === 'wind' || !!dressing.particles;
+  return drawn + 2 + (ground.sway ? ground.segments.length : 0) + (top ? 2 + top.pendants.length : 0) + (particles ? PARTICLE_LAYERS : 0)
+    + (wet ? 9 : weather === 'fog' ? 5 : weather === 'wind' ? 4 : 0);
 }

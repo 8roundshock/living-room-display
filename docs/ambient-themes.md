@@ -52,8 +52,13 @@ measured reading areas and their near-future movement, on true black.
 
 Bands, pendants and particles are generated in a 1080-short-side space and drawn
 scaled to the viewport, so their proportions and path counts are the same at 4K
-as at 1080p. Particles and fog use the feathered mask and fade out before
-reading space; patches and bands use the hard mask. Pendants are spaced at 8-12%
+as at 1080p. Three masks are cut from the same reading areas: patches, bands,
+rain and gust streaks use the hard mask; fog uses a wide feathered copy (holes
+grown 4.5% of the short side, blurred 2.2%) so it never outlines widgets;
+particles use their own tight feathered copy (grown 1.5%, blurred 1%), fading
+over about 25-30px beside text instead of being clipped into half-shapes. The
+wide feather was first shared with particles and hid 40-85% of them on
+populated boards, which is why they have their own. Pendants are spaced at 8-12%
 of the short side and capped at 12, because each is its own animation.
 
 `src/shared/living-scene-dressing.ts` names each scene's ground, top and
@@ -145,8 +150,8 @@ a passage visibly crossing text or glyphs. That is deliberate.
 Isolated synthetic source server, headless Edge, default board, 1920x1080, 26%
 brightness, scene-only pixels:
 
-- Fog (2026-11-10, third round) is five soft radial blobs under the feathered mask;
-  particles use the same feathered mask and fade out before reading space.
+- Fog (2026-11-10, third round) is five soft radial blobs under the wide feathered
+  mask; particles have their own tight feathered mask (fourth round).
 - Lit pixels 5.6-12.2% (median 8.6%); bottom-edge columns lit 100% in all 26
   scenes and both Combined samples; top-edge columns lit 100% except Fog (40%).
 - Scene luminance: median 21-52 and 99th percentile 47-58 of 255, against
@@ -157,7 +162,8 @@ brightness, scene-only pixels:
   round) Summer and Wind measured 87-92ms and 33 layers at both 1920x1080 and
   3840x2160.
 - Upper bound of running animations on an empty board, by unit test, at
-  1920x1080, 3840x2160 and 3440x1440: 16 (Snow) to 39 (Wind) of 48.
+  1920x1080, 3840x2160 and 3440x1440: 16 (Snow) to 39 (Wind) of 48 for scenes on
+  their own; Combined pairings reach 41 (wind on Summer).
 - Structural caps (`LIVING_SCENE_BUDGET`): 4 patches, 420 paths, 48 animations.
   The plan's first caps (240 paths, 32 animations, 40 layers, 150ms) were set
   for sparse scenery; the path and animation caps were raised with these
