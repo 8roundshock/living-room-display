@@ -249,7 +249,7 @@ export function particleLayers(kind: ParticleKind, count: number, width: number,
       const x = unit(key, 31) * width, y = (wander ? .1 + unit(key, 33) * .78 : unit(key, 33)) * height, angle = unit(key, 43) * Math.PI * 2;
       for (const copy of wander ? [0] : [0, 1]) { tones[key % 3] += particleShape(kind, x - copy * tile[0], y - copy * tile[1], size, angle); halo += disc(x - copy * tile[0], y - copy * tile[1], size * (kind === 'flake' || kind === 'firefly' ? .5 : .62)); }
     }
-    return { duration: life / (gust ? [2, 3, 4, 6][layer]! : wander ? [1, 2, 3, 4][layer]! : [1, 2, 3, 4][layer]!), offset: unit(layer, 35) * 9000, wander, opacity: .45 + .4 * depth, count: share,
+    return { duration: life / (gust ? [2, 3, 4, 6][layer]! : [1, 1, 2, 2][layer]!), offset: unit(layer, 35) * 9000, wander, opacity: .45 + .4 * depth, count: share,
       sway: wander ? 26 + depth * 40 : kind === 'flake' ? 10 + depth * 14 : 26 + depth * 44, travel: tile,
       // Each particle is a soft halo under a translucent body, so the field reads as light with depth, not cut-outs.
       paths: [{ d: halo, tone: (layer % 3) as 0 | 1 | 2, light: true, fill: .1, stroke: 0 }, ...tones.map((d, tone) => ({ d, tone: tone as 0 | 1 | 2, light: kind === 'flake' || kind === 'firefly' || tone === 0 && kind !== 'leaf', fill: kind === 'flake' || kind === 'firefly' ? .85 : .55, stroke: 0 }))].filter(path => path.d) };
@@ -262,12 +262,76 @@ export function fogBands(width: number, height: number) {
   return [[.3, .87, .44, .095], [.78, .79, .38, .085], [.52, .67, .42, .075], [.34, .035, .5, .075], [.82, .05, .42, .065]].map(([cx, cy, rx, ry], index) =>
     ({ cx: width * cx!, cy: height * cy!, rx: width * rx!, ry: height * ry!, travel: width * (.045 + index * .01) * (index % 2 ? -1 : 1), tone: (index % 3) as 0 | 1 | 2 }));
 }
-/** Three large, soft colour washes that hug the bottom corners and the top edge (#600).
+/** Two large, faint colour washes in the bottom corners (#600).
  * They carry the scene's colour as light and drift slowly, so nothing lit stays in place. */
 export function glowWashes(width: number, height: number, salt: string) {
   const seed = [...salt].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return ([[.16, 1.02, .4, .36, 0], [.84, 1, .44, .3, 1], [.5, -.05, .5, .24, 2]] as const).map(([cx, cy, rx, ry, tone], index) =>
-    ({ cx: width * (cx + (unit(seed, index + 61) - .5) * .2), cy: height * cy, rx: width * rx, ry: height * ry, travel: width * (.08 + .03 * index) * (index % 2 ? -1 : 1), tone, delay: index * 7 }));
+  return ([[.16, 1.02, .4, .3, 0], [.84, 1, .44, .26, 1]] as const).map(([cx, cy, rx, ry, tone], index) =>
+    ({ cx: width * (cx + (unit(seed, index + 61) - .5) * .2), cy: height * cy, rx: width * rx, ry: height * ry, travel: width * (.05 + .02 * index) * (index % 2 ? -1 : 1), tone, delay: index * 7 }));
+}
+/** A tall, thin flourish rising along one side edge (#600, second owner pass): line work
+ * with a few translucent leaves, buds or reed heads, as tall as most of the screen. It
+ * bows inward by at most the free margin `room`, so it frames the board instead of crossing it. */
+export type SideStyle = 'branch' | 'blossom' | 'frost' | 'ribbon' | 'reed' | 'fir' | 'lights';
+const SIDES: Readonly<Record<string, readonly [SideStyle, SideStyle]>> = {
+  christmas: ['fir', 'lights'], 'new-year-tree': ['fir', 'lights'], 'new-year': ['lights', 'ribbon'],
+  spring: ['blossom', 'blossom'], easter: ['blossom', 'blossom'], pascha: ['blossom', 'blossom'], mimosa: ['blossom', 'blossom'], 'lotus-lanterns': ['blossom', 'reed'],
+  halloween: ['frost', 'frost'], chuseok: ['branch', 'reed'],
+};
+/** Which flourish frames each side. Art choices only; unlisted scenes follow their ground. */
+export function sideStyles(id: string, ground: GroundKind): readonly [SideStyle, SideStyle] {
+  const style: SideStyle = ground === 'drift' ? 'frost' : ground === 'cloth' ? 'ribbon' : ground === 'water' || ground === 'mist' ? 'reed' : 'branch';
+  return SIDES[id] ?? [style, style];
+}
+export function sideFlourish(style: SideStyle, width: number, height: number, side: 'left' | 'right', room: number): DressPath[] {
+  const dir = side === 'left' ? 1 : -1, edge = side === 'left' ? 14 : width - 14, seed = side === 'left' ? 3 : 11;
+  const reach = Math.max(26, Math.min(150, room * .7)), rise = height * .8;
+  const spine = (t: number, lean = 1, shift = 0): [number, number] => [edge + dir * (shift + reach * lean * (Math.sin(t * Math.PI * .85) * .62 + t * .38 * Math.sin(t * 4.2 + seed))), height + 6 - t * rise];
+  const curve = (lean: number, shift: number, top: number) => { let d = ''; for (let t = 0; t <= top + .001; t += .025) { const [x, y] = spine(t, lean, shift); d += `${t ? 'L' : 'M'}${n(x)} ${n(y)}`; } return d; };
+  const bulbs = (points: readonly (readonly [number, number])[]): DressPath[] => [0, 1, 2].flatMap(tone => {
+    const own = points.filter((_, index) => index % 3 === tone); if (!own.length) return [];
+    return [{ d: own.map(([x, y]) => disc(x, y, 11)).join(''), tone: tone as 0 | 1 | 2, fill: .1, stroke: 0, light: true }, { d: own.map(([x, y]) => disc(x, y, 4.2)).join(''), tone: tone as 0 | 1 | 2, fill: .85, stroke: 0, light: true }];
+  });
+  if (style === 'fir') { // the side of a tree: layered boughs reaching in from the edge, a light string wound across them
+    const wide = Math.max(60, Math.min(210, room * .9)); let boughs = '', rims = '', string = ''; const lit: [number, number][] = [];
+    for (let tier = 0; tier < 7; tier++) {
+      const y = height * (.97 - tier * .115), w = wide * (1 - tier * .1), x = edge - dir * 20, tip = x + dir * (w + 20);
+      boughs += `M${n(x)} ${n(y - 64)}Q${n(x + dir * w * .7)} ${n(y - 34)} ${n(tip)} ${n(y + 14)}Q${n(x + dir * w * .55)} ${n(y + 2)} ${n(x)} ${n(y + 30)}Z`;
+      rims += `M${n(x)} ${n(y - 64)}Q${n(x + dir * w * .7)} ${n(y - 34)} ${n(tip)} ${n(y + 14)}`;
+      const from: [number, number] = tier % 2 ? [x + dir * w * .9, y - 2] : [x + dir * 26, y - 30], to: [number, number] = tier % 2 ? [x + dir * 26, y - 96] : [x + dir * w * .78, y - 108];
+      string += `M${n(from[0])} ${n(from[1])}Q${n((from[0] + to[0]) / 2)} ${n(Math.max(from[1], to[1]) + 16)} ${n(to[0])} ${n(to[1])}`;
+      for (const u of [.2, .5, .8]) lit.push([from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u + 32 * u * (1 - u)]);
+    }
+    return [{ d: boughs, tone: 0, fill: .3, stroke: 0 }, { d: rims, tone: 0, stroke: 1.3, opacity: .6, light: true }, { d: string, tone: 2, stroke: .9, opacity: .45 }, ...bulbs(lit)];
+  }
+  if (style === 'lights') { // a string of small lights hanging down the side in loose scallops
+    let string = ''; const lit: [number, number][] = [], spans = 6, top = height * .08, drop = height * .86 / spans, sag = Math.max(30, Math.min(110, room * .6));
+    for (let span = 0; span < spans; span++) {
+      const y0 = top + span * drop, y1 = y0 + drop, x = edge + dir * 6, bulge = sag * (.7 + unit(span, seed) * .5);
+      string += `M${n(x)} ${n(y0)}Q${n(x + dir * bulge * 2)} ${n((y0 + y1) / 2 + 18)} ${n(x)} ${n(y1)}`;
+      for (const u of [.22, .5, .78]) lit.push([x + dir * bulge * 4 * u * (1 - u), y0 + drop * u + 36 * u * (1 - u) + 7]);
+    }
+    return [{ d: string, tone: 2, stroke: 1, opacity: .5 }, ...bulbs(lit)];
+  }
+  if (style === 'ribbon') // two long ribbons that cross once
+    return [{ d: curve(1, 0, 1), tone: 0, stroke: 2.2, opacity: .7 }, { d: curve(-.45, reach * .5, .82), tone: 1, stroke: 1.5, opacity: .6 }, { d: curve(.5, reach * .1, .6), tone: 2, stroke: 1, opacity: .5, light: true }];
+  if (style === 'reed') { // three reeds with slender heads
+    let stems = '', heads = '';
+    for (const [lean, shift, top] of [[.35, 0, 1], [.7, reach * .25, .78], [.15, reach * .5, .6]] as const) {
+      stems += curve(lean, shift, top); const [x, y] = spine(top, lean, shift); heads += leafShape(x, y, 46, -Math.PI / 2 + dir * .08);
+    }
+    return [{ d: stems, tone: 0, stroke: 1.5, opacity: .75 }, { d: heads, tone: 1, fill: .34, stroke: 0, light: true }];
+  }
+  let twigs = '', leaves = '', buds = '';
+  for (let index = 1; index < 11; index++) {
+    const t = .12 + index * .08, [x, y] = spine(t), out = index % 2 ? 1 : -1, length = (34 + unit(index, seed) * 44) * (1 - t * .45);
+    const angle = -Math.PI / 2 + out * dir * (.75 + unit(index, seed + 2) * .5), tx = x + Math.cos(angle) * length, ty = y + Math.sin(angle) * length;
+    twigs += `M${n(x)} ${n(y)}Q${n(x + Math.cos(angle) * length * .5)} ${n(y + Math.sin(angle) * length * .2)} ${n(tx)} ${n(ty)}`;
+    if (style === 'frost') buds += disc(tx, ty, 2.6 + unit(index, 5) * 2) + (index % 3 ? '' : disc(x + (tx - x) * .55, y + (ty - y) * .6, 2));
+    else if (style === 'blossom') { for (let petal = 0; petal < 5; petal++) buds += disc(tx + Math.cos(petal * 1.257) * 5.5, ty + Math.sin(petal * 1.257) * 5.5, 3.6); if (index % 3 === 0) leaves += leafShape(x + (tx - x) * .5, y + (ty - y) * .5, 22, angle + out * dir * .7); }
+    else { leaves += leafShape(tx, ty, 26 + unit(index, 7) * 22, angle - out * dir * .5); if (index % 4 === 0) buds += disc(tx, ty, 3.4); }
+  }
+  return ([{ d: curve(1, 0, 1), tone: 0, stroke: 2, opacity: .85 }, { d: twigs, tone: 0, stroke: 1.3, opacity: .75 }, { d: leaves, tone: 1, fill: .3, stroke: 0 }, { d: leaves, tone: 1, stroke: .9, opacity: .55, light: true }, { d: buds, tone: 2, fill: style === 'blossom' ? .5 : .7, stroke: 0, light: true }] as DressPath[]).filter(path => path.d);
 }
 /** Long curved gust streaks; the renderer slides and fades them. Each streak takes an
  * open lane that its whole slide clears, shortening before it gives up, so a
@@ -296,5 +360,5 @@ export function sceneAnimationCount(art: LivingSceneArt, dressing: SceneDressing
   const unit1080 = Math.min(width, height) / 1080, wet = weather === 'rain' || weather === 'storm';
   const ground = groundBand(weather === 'snow' ? 'drift' : dressing.ground === 'mist' ? 'water' : dressing.ground, width / unit1080, height / unit1080, []);
   const particles = wet || weather === 'fog' ? false : weather === 'snow' || weather === 'wind' || !!dressing.particles;
-  return drawn + 2 + 3 + (ground.sway ? ground.segments.length : 0) + (particles ? PARTICLE_LAYERS : 0) + (wet ? 9 : weather === 'fog' ? 5 : weather === 'wind' ? 4 : 0);
+  return drawn + 2 + 2 + 2 + (ground.sway ? ground.segments.length : 0) + (particles ? PARTICLE_LAYERS : 0) + (wet ? 9 : weather === 'fog' ? 5 : weather === 'wind' ? 4 : 0);
 }

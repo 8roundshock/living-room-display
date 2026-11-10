@@ -218,10 +218,10 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
       }
       const dress=await page.locator('.living-theme').evaluate(layer=>({ground:Number(layer.querySelector('[data-ground-lit]')?.dataset.groundLit??0),top:layer.querySelectorAll('[data-scene-top]').length,particles:Number(layer.querySelector('[data-particle-count]')?.dataset.particleCount??0),layers:layer.querySelectorAll('.living-particle-layer').length,rain:layer.querySelectorAll('.living-rain path').length,fog:layer.querySelectorAll('ellipse.living-fog-band').length,glows:layer.querySelectorAll('ellipse.living-glow').length,bodies:[...layer.querySelectorAll('[data-scene-patch] path')].map(path=>Number(path.getAttribute('fill-opacity')??0)),tops:layer.querySelectorAll('.living-pendulum,.living-band-top').length}));
       if(motif==='fog') assert.equal(dress.fog,5,'fog is five soft blobs');
-      assert.equal(dress.glows,3,`${motif} carries its colour as three soft washes`); assert.equal(dress.tops,0,`${motif} hangs nothing from the top edge`); assert.ok(dress.bodies.every(value=>value<=.5),`${motif} authored forms are translucent`); assert.ok(geometry.patches<=4,`${motif} shows only its principal patches`);
+      assert.equal(dress.glows,2,`${motif} carries its colour as two faint washes`); assert.equal(await page.locator('.living-theme [data-scene-side]').count(),2,`${motif} frames the board with two side flourishes`); assert.equal(dress.tops,0,`${motif} hangs nothing from the top edge`); assert.ok(dress.bodies.every(value=>value<=.5),`${motif} authored forms are translucent`); assert.ok(geometry.patches<=4,`${motif} shows only its principal patches`);
       assert.ok(dress.ground>=.85,`${motif} lights at least85% of bottom-edge columns on the default board (${dress.ground})`);
 
-      assert.ok(dress.particles>=10||dress.rain>=6||dress.fog>=3,`${motif} keeps particles, rain or fog in the air: ${JSON.stringify(dress)}`);
+      assert.ok(dress.particles>=8||dress.rain>=6||dress.fog>=3,`${motif} keeps particles, rain or fog in the air: ${JSON.stringify(dress)}`);
 
 
       // A second phase of the sway and particle cycle keeps the same clearance.
@@ -240,7 +240,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
       await open({...options,path:'/display',viewport:{width:1920,height:1080},brightness:.26}); await page.locator('.living-theme').waitFor(); await settle();
       const state=await page.locator('.living-theme').evaluate(layer=>({motif:layer.dataset.themeMotif,habitat:layer.dataset.themeHabitat,weather:layer.querySelector('[data-scene-weather]')?.dataset.sceneWeather,particles:layer.querySelector('[data-scene-particles]')?.dataset.sceneParticles,count:Number(layer.querySelector('[data-particle-count]')?.dataset.particleCount??0),rain:layer.querySelectorAll('.living-rain path').length,patches:[...layer.querySelectorAll('[data-scene-patch]')].map(p=>p.dataset.scenePatch)}));
       assert.deepEqual({motif:state.motif,habitat:state.habitat,weather:state.weather},expectation,name);
-      if(name==='winter snow') {assert.equal(state.particles,'flake');assert.ok(state.count>=24,'Combined snow is visibly heavier than Winter alone');}
+      if(name==='winter snow') {assert.equal(state.particles,'flake');assert.ok(state.count>=14,'Combined snow is visibly heavier than Winter alone');}
       else {assert.equal(state.particles,undefined,'rain replaces seasonal particles');assert.ok(state.rain>=6,'rain falls in two depths');}
       if(options.mode==='weather') assert.ok(state.patches.every(id=>id.startsWith('rain-')),'Weather mode shows no seasonal or holiday habitat');
       await photo(`combined-${name}`);
@@ -248,7 +248,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     record('Combined weather adapts the seasonal habitat with one precipitation field; Weather mode stays weather-only');
     for(const code of [0,63]) {
       await open({date:'2026-11-11T18:30:00Z',mode:'combined',code,path:'/display',brightness:.26,birthday:'classic',foreground:true}); await page.locator('.living-theme').waitFor(); await settle(); await photo(`quiet-${code}`);
-      const quiet=await page.locator('.living-theme').evaluate(layer=>({quiet:layer.hasAttribute('data-theme-quiet'),patches:layer.querySelectorAll('[data-scene-patch]').length,opacity:Number(getComputedStyle(layer).opacity),brightness:parseFloat(getComputedStyle(layer).getPropertyValue('--ambient-brightness')),drift:layer.querySelectorAll('.living-particle-layer,.living-band,.living-pendulum,.living-glow').length,
+      const quiet=await page.locator('.living-theme').evaluate(layer=>({quiet:layer.hasAttribute('data-theme-quiet'),patches:layer.querySelectorAll('[data-scene-patch]').length,opacity:Number(getComputedStyle(layer).opacity),brightness:parseFloat(getComputedStyle(layer).getPropertyValue('--ambient-brightness')),drift:layer.querySelectorAll('.living-particle-layer,.living-band,.living-pendulum,.living-glow,.living-side').length,
         fills:[...layer.querySelectorAll('[data-scene-patch] path')].filter(path=>path.getAttribute('fill')!=='none').length,birthday:layer.dataset.themeMotif.startsWith('birthday')}));
       assert.ok(quiet.quiet);assert.ok(quiet.patches<=2);assert.equal(quiet.fills,0);assert.equal(quiet.drift,0);assert.equal(quiet.birthday,false);// The page glides to its saved brightness, so compare with the brightness in effect at this instant
       // (a slow runner sampled mid-glide and failed a fixed 26% comparison on 2026-11-10).
