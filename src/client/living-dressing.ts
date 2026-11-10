@@ -2,6 +2,13 @@ import { LIVING_SCENE_BUDGET } from '../shared/theme-registry.ts';
 import type { GroundKind, ParticleKind, SceneDressing, TopKind } from '../shared/living-scene-dressing.ts';
 import type { LivingSceneArt } from '../shared/living-scene-art.ts';
 import type { ThemeRect } from './ambient-theme.ts';
+import { PRINCIPAL_FORMS } from './living-scene-principals.ts';
+
+/** #600: a scene shows its named principal forms and little else: at most two authored patches unless more carry a principal. */
+export function scenePatches(art: LivingSceneArt, id: string) {
+  const names = PRINCIPAL_FORMS[id] ?? [], main = art.patches.filter(patch => patch.groups.some(group => names.includes(group.id)));
+  return main.length >= 2 ? main : [...main, ...art.patches.filter(patch => !main.includes(patch) && patch.depth !== 'far')].slice(0, 2);
+}
 
 /** Procedural edge dressing for #586 (owner direction, 2026-11-09): a continuous
  * ground band along the whole bottom edge, a second band or swag along the top,
@@ -218,7 +225,7 @@ export function topBand(kind: TopKind, width: number, height: number, holes: rea
 export interface ParticleLayer { duration: number; offset: number; wander: boolean; opacity: number; sway: number; travel: readonly [number, number]; paths: DressPath[]; count: number }
 function particleShape(kind: ParticleKind, x: number, y: number, size: number, angle: number) {
   const c = Math.cos(angle), s = Math.sin(angle), point = (px: number, py: number) => `${n(x + (px * c - py * s) * size)} ${n(y + (px * s + py * c) * size)}`;
-  if (kind === 'flake') return [0, 1, 2].map(arm => { const a = angle + arm * Math.PI / 3, dx = Math.cos(a) * size * .5, dy = Math.sin(a) * size * .5; return `M${n(x - dx)} ${n(y - dy)}L${n(x + dx)} ${n(y + dy)}`; }).join('');
+  if (kind === 'flake') return disc(x, y, size * .15);
   if (kind === 'firefly') return disc(x, y, size * .2);
   if (kind === 'leaf') return leafShape(x - c * size * .5, y - s * size * .5, size, angle);
   if (kind === 'petal') return `M${point(-.5, 0)}Q${point(-.1, -.48)} ${point(.5, -.08)}Q${point(.1, .5)} ${point(-.5, 0)}Z`;
@@ -231,20 +238,21 @@ export const PARTICLE_LAYERS = 4;
  * A falling layer is a tile drawn twice one tile apart and slid by exactly one
  * tile per period, so it never empties or jumps; every period divides the scene life. */
 export function particleLayers(kind: ParticleKind, count: number, width: number, height: number, gust = false): ParticleLayer[] {
-  const life = LIVING_SCENE_BUDGET.life, wander = kind === 'firefly' || kind === 'sparkle', stroke = kind === 'flake';
+  const life = LIVING_SCENE_BUDGET.life, wander = kind === 'firefly' || kind === 'sparkle';
   return Array.from({ length: PARTICLE_LAYERS }, (_, layer) => {
     const depth = layer / (PARTICLE_LAYERS - 1), share = Math.max(2, Math.round(count * [.34, .28, .22, .16][layer]!));
     // A gust blows the same falling tile steeply sideways; a full-width horizontal tile would double the layer's raster.
     const tile: readonly [number, number] = gust ? [width * .32, height] : [0, height];
-    const tones = ['', '', ''];
+    const tones = ['', '', '']; let halo = '';
     for (let index = 0; index < share; index++) {
       const key = layer * 97 + index, size = (8 + 22 * depth) * (.75 + unit(key, 41) * .5);
       const x = unit(key, 31) * width, y = (wander ? .1 + unit(key, 33) * .78 : unit(key, 33)) * height, angle = unit(key, 43) * Math.PI * 2;
-      for (const copy of wander ? [0] : [0, 1]) tones[key % 3] += particleShape(kind, x - copy * tile[0], y - copy * tile[1], size, angle);
+      for (const copy of wander ? [0] : [0, 1]) { tones[key % 3] += particleShape(kind, x - copy * tile[0], y - copy * tile[1], size, angle); halo += disc(x - copy * tile[0], y - copy * tile[1], size * (kind === 'flake' || kind === 'firefly' ? .5 : .62)); }
     }
-    return { duration: life / (gust ? [2, 3, 4, 6][layer]! : wander ? [1, 2, 3, 4][layer]! : [1, 2, 3, 4][layer]!), offset: unit(layer, 35) * 9000, wander, opacity: .5 + .5 * depth, count: share,
+    return { duration: life / (gust ? [2, 3, 4, 6][layer]! : wander ? [1, 2, 3, 4][layer]! : [1, 2, 3, 4][layer]!), offset: unit(layer, 35) * 9000, wander, opacity: .45 + .4 * depth, count: share,
       sway: wander ? 26 + depth * 40 : kind === 'flake' ? 10 + depth * 14 : 26 + depth * 44, travel: tile,
-      paths: tones.map((d, tone) => ({ d, tone: tone as 0 | 1 | 2, light: kind === 'flake' || kind === 'firefly' || tone === 0 && kind !== 'leaf', ...(stroke ? { stroke: 1.4 + depth * 1.2 } : { fill: 1, stroke: 0 }) })).filter(path => path.d) };
+      // Each particle is a soft halo under a translucent body, so the field reads as light with depth, not cut-outs.
+      paths: [{ d: halo, tone: (layer % 3) as 0 | 1 | 2, light: true, fill: .1, stroke: 0 }, ...tones.map((d, tone) => ({ d, tone: tone as 0 | 1 | 2, light: kind === 'flake' || kind === 'firefly' || tone === 0 && kind !== 'leaf', fill: kind === 'flake' || kind === 'firefly' ? .85 : .55, stroke: 0 }))].filter(path => path.d) };
   });
 }
 
@@ -253,6 +261,13 @@ export function particleLayers(kind: ParticleKind, count: number, width: number,
 export function fogBands(width: number, height: number) {
   return [[.3, .87, .44, .095], [.78, .79, .38, .085], [.52, .67, .42, .075], [.34, .035, .5, .075], [.82, .05, .42, .065]].map(([cx, cy, rx, ry], index) =>
     ({ cx: width * cx!, cy: height * cy!, rx: width * rx!, ry: height * ry!, travel: width * (.045 + index * .01) * (index % 2 ? -1 : 1), tone: (index % 3) as 0 | 1 | 2 }));
+}
+/** Three large, soft colour washes that hug the bottom corners and the top edge (#600).
+ * They carry the scene's colour as light and drift slowly, so nothing lit stays in place. */
+export function glowWashes(width: number, height: number, salt: string) {
+  const seed = [...salt].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return ([[.16, 1.02, .4, .36, 0], [.84, 1, .44, .3, 1], [.5, -.05, .5, .24, 2]] as const).map(([cx, cy, rx, ry, tone], index) =>
+    ({ cx: width * (cx + (unit(seed, index + 61) - .5) * .2), cy: height * cy, rx: width * rx, ry: height * ry, travel: width * (.08 + .03 * index) * (index % 2 ? -1 : 1), tone, delay: index * 7 }));
 }
 /** Long curved gust streaks; the renderer slides and fades them. Each streak takes an
  * open lane that its whole slide clears, shortening before it gives up, so a
@@ -275,15 +290,11 @@ export function gustStreaks(width: number, height: number, holes: readonly Theme
  * every sway group, patch fade and appear, one cross-fading generation, band
  * shifts, grass segments, pendants, particle layers and weather. Checked against
  * LIVING_SCENE_BUDGET.animations on empty boards, where the most pendants fit. */
-export function sceneAnimationCount(art: LivingSceneArt, dressing: SceneDressing, width: number, height: number, holes: readonly ThemeRect[] = [], weather?: 'rain' | 'snow' | 'storm' | 'fog' | 'wind') {
-  const patches = art.patches.filter(patch => !(patch.depth === 'far' && patch.edge.startsWith('bottom')));
+export function sceneAnimationCount(art: LivingSceneArt, dressing: SceneDressing, width: number, height: number, _holes: readonly ThemeRect[] = [], weather: 'rain' | 'snow' | 'storm' | 'fog' | 'wind' | undefined, id: string) {
+  const patches = scenePatches(art, id);
   const drawn = patches.reduce((sum, patch) => sum + patch.groups.length + 2, 0) + Math.max(0, ...patches.map(patch => patch.groups.length + 1));
   const unit1080 = Math.min(width, height) / 1080, wet = weather === 'rain' || weather === 'storm';
-  // Mirrors the renderer: fresh weather replaces the top band, the ground under snow and the particles.
-  const topKind = wet ? 'cloud' : weather === 'fog' ? undefined : weather === 'snow' ? 'icicle' : dressing.top;
-  const top = topKind ? topBand(topKind, width / unit1080, height / unit1080, holes) : null;
-  const ground = groundBand(weather === 'snow' ? 'drift' : dressing.ground === 'mist' ? 'water' : dressing.ground, width / unit1080, height / unit1080, holes);
+  const ground = groundBand(weather === 'snow' ? 'drift' : dressing.ground === 'mist' ? 'water' : dressing.ground, width / unit1080, height / unit1080, []);
   const particles = wet || weather === 'fog' ? false : weather === 'snow' || weather === 'wind' || !!dressing.particles;
-  return drawn + 2 + (ground.sway ? ground.segments.length : 0) + (top ? 2 + top.pendants.length : 0) + (particles ? PARTICLE_LAYERS : 0)
-    + (wet ? 9 : weather === 'fog' ? 5 : weather === 'wind' ? 4 : 0);
+  return drawn + 2 + 3 + (ground.sway ? ground.segments.length : 0) + (particles ? PARTICLE_LAYERS : 0) + (wet ? 9 : weather === 'fog' ? 5 : weather === 'wind' ? 4 : 0);
 }

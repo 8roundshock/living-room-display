@@ -19,6 +19,7 @@
 .living-rain-near { animation-duration: 2s; animation-iteration-count: 20; }
 .living-ripple { animation: habitat-impact 4s linear var(--rain-age) 10 both; }
 .living-fog-band { animation: fog-drift 36s ease-in-out var(--fog-age) 2 both; }
+.living-glow { animation: glow-drift 36s ease-in-out var(--fog-age) 2 both; }
 .living-gust { animation: gust-pass 6s ease-in-out var(--gust-age) 8 both; }
 @keyframes habitat-appear { 0% { opacity: 0; } }
 @keyframes habitat-arrive { 0% { opacity: 0; } 100% { opacity: 1; } }
@@ -30,7 +31,7 @@
   75% { transform: var(--habitat-step-3); }
   100% { transform: var(--habitat-step-4); }
 }
-@keyframes band-shift { 0%,100% { transform: translate(0px, 0px); } 30% { transform: translate(12px, 0px); } 72% { transform: translate(-12px, 0px); } }
+@keyframes band-shift { 0%,100% { transform: translate(0px, 0px); } 30% { transform: translate(28px, 0px); } 72% { transform: translate(-28px, 0px); } }
 @keyframes pendulum-swing { 0%,100% { transform: rotate(calc(var(--swing) * -1)); } 50% { transform: rotate(var(--swing)); } }
 /* One tile per period: the layer is drawn twice a tile apart, so the loop is seamless. */
 @keyframes particle-fall { 0% { transform: translate(0px, 0px); } 25% { transform: var(--p-q1); } 50% { transform: var(--p-mid); } 75% { transform: var(--p-q3); } 100% { transform: var(--p-end); } }
@@ -42,7 +43,8 @@
 }
 @keyframes habitat-impact { 0%,62%,100% { opacity: 0; } 80% { opacity: .95; } }
 @keyframes fog-drift { 0%,100% { transform: translate(0px, 0px); } 50% { transform: var(--fog-travel); } }
+@keyframes glow-drift { 0%,100% { transform: translate(0px, 0px); opacity: .7; } 50% { transform: var(--fog-travel); opacity: 1; } }
 @keyframes gust-pass { 0% { opacity: 0; transform: translate(0px, 0px); } 25%,60% { opacity: .75; } 100% { opacity: 0; transform: var(--gust-travel); } }
-.living-theme[data-theme-still] :is(.living-patch,.living-patch-life,.living-attached,.living-band,.living-pendulum,.living-rain,.living-ripple,.living-fog-band,.living-gust) { animation: none; opacity: 1; }
+.living-theme[data-theme-still] :is(.living-patch,.living-patch-life,.living-attached,.living-band,.living-pendulum,.living-rain,.living-ripple,.living-fog-band,.living-glow,.living-gust) { animation: none; opacity: 1; }
 .living-theme[data-theme-still] .living-particle-layer { animation: none; }
 .living-theme[data-theme-quiet] { opacity: calc(var(--ambient-brightness, .55) * .38); }

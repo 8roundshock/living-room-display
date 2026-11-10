@@ -5,6 +5,32 @@ hourly weather and #458 holiday cards. Themes default to Off; existing selection
 are preserved. A theme is part of the visual style, so the editor
 preview, Save/Cancel, saved styles and scheduled styles share the same choice.
 
+## Current rendering direction (#600, owner decision 2026-11-10)
+
+After seeing the #586 scenes on the display the owner asked for far less scenery,
+drawn translucent and classy, never clipped by widgets. This section overrides any
+older statement below that conflicts with it.
+
+- **Light, not objects.** Each scene carries its palette as three large soft colour
+  washes (two bottom corners, one top edge) that drift and breathe. Quiet dates
+  draw no wash and at most one unfilled patch.
+- **Few authored forms.** Only the patches holding a scene's named principal forms
+  are drawn (otherwise at most two), as translucent "glass": body fill at most 50%
+  opacity under a thin light rim.
+- **One low ground.** A single continuous ground band at about 60% of its former
+  height, 62% opacity, fading to nothing at its top. No top band, pendants,
+  bunting, icicles or cloud bank.
+- **Soft particles.** About half the former count; each is a faint halo under a
+  translucent body, in four depth layers. Snow is soft dots, not line asterisks.
+- **No reading holes.** Nothing is cut out around widgets. Scenery passes behind
+  text; legibility comes from low alpha, and authored forms are still placed away
+  from reading areas. The old "art never touches ink" pixel proof no longer applies.
+- **Iteration.** Change the renderer, build, capture two or three scenes to a temp
+  folder, look, delete the images. Do not run multi-round agent reviews for taste.
+
+The top-band generator, the old mask description and the ink pixel-proof helper are
+now unused; removing them is tracked in #590.
+
 ## Layered living scenes (#586)
 
 Implemented in source on draft [PR #588](https://github.com/8roundshock/living-room-display/pull/588),

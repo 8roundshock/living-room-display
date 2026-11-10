@@ -1,7 +1,7 @@
 /** The named principal silhouette(s) of every scene: what a viewer must still
  * recognise on a populated board. A retained ribbon, far layer or path count
  * never satisfies these. Grass may use its authored compact growth.
- * Verification data shared by the unit and browser checks; the renderer does not read it. */
+ * Shared by the unit and browser checks; since #600 the renderer also uses it to choose which patches to draw. */
 export const PRINCIPAL_FORMS: Readonly<Record<string, readonly string[]>> = {
   birthday: ['birthday-grounded-cake-gifts', 'birthday-tethered-balloons'],
   'birthday-russian': ['birthday-grounded-cake-gifts', 'birthday-tethered-balloons'],

@@ -135,7 +135,7 @@ test('particles stay in flight as four seamless depth layers', () => {
     assert.ok(layers.reduce((sum, layer) => sum + layer.count, 0) >= 36, 'the requested number of particles is drawn');
     for (const layer of layers) {
       assert.equal(LIVING_SCENE_BUDGET.life % layer.duration, 0, 'each period divides the scene life, so renewal rejoins its phase');
-      assert.ok(layer.paths.length >= 1 && layer.paths.length <= 3);
+      assert.ok(layer.paths.length >= 1 && layer.paths.length <= 4); // soft halo plus up to three tones
       // A falling layer travels exactly one tile and is drawn twice a tile apart.
       if (!layer.wander) assert.ok(Math.abs(layer.travel[0]) + Math.abs(layer.travel[1]) >= H * .2);
     }
@@ -149,16 +149,14 @@ test('every scene and Combined weather pairing stays inside the animation budget
     const art = LIVING_SCENE_ART[id]!, dressing = SCENE_DRESSING[id]!;
     // The scene on its own (a weather scene with its own weather), then every Combined adaptation it declares.
     for (const weather of [standalone[id], ...(standalone[id] ? [] : art.weather)]) {
-      const count = sceneAnimationCount(art, dressing, width, height, [], weather);
+      const count = sceneAnimationCount(art, dressing, width, height, [], weather, id);
       highest = Math.max(highest, count);
       assert.ok(count <= LIVING_SCENE_BUDGET.animations, `${id}${weather ? ` with ${weather}` : ''} at ${width}x${height}: ${count} animations`);
     }
     if (dressing.top) assert.ok(topBand(dressing.top, width / (height / 1080), 1080, []).pendants.length <= PENDANT_MAX, `${id}: pendants are capped`);
   }
-  assert.equal(sceneAnimationCount(LIVING_SCENE_ART.summer!, SCENE_DRESSING.summer!, 1920, 1080, [], 'wind'), 41, 'Combined wind on Summer');
-  assert.equal(highest, 41, 'no scene or Combined pairing exceeds the busiest known one');
-  // The cap is what holds on a wide empty board: uncapped spacing alone would exceed it.
-  assert.equal(topBand('foliage', 3440 / (1440 / 1080), 1080, []).pendants.length, PENDANT_MAX);
+  // #600 removed the top band and its pendants; the busiest scene is far below the cap.
+  assert.ok(highest <= 40, `busiest scene: ${highest}`);
 });
 
 test('fog is five soft blobs: three low, two as a top haze, none a hard-edged band', () => {
