@@ -498,8 +498,9 @@ sweeps and use multiple synthetic boards for catalog coverage.
 
 The `themes` pull-request suite (#575, #586) runs an isolated synthetic source server.
 It checks mode/calendar/foreground draft transactions, small editor layouts, all
-26 living scenes at 1080p/4K (named principal forms, a pixel proof that art never
-touches reading ink, structural budgets), finite animation and patch renewal,
+26 living scenes at 1080p/4K (named principal forms, bottom-edge coverage, a
+second edge, particles, a two-phase pixel proof that art never touches reading
+ink, structural budgets), finite animation and cross-faded patch renewal,
 foreground cadence, reduced-motion restarts, real Dangi fixtures and bounded CDP
 main-thread/layer observations. `capture: true` returns RAM-only images with
 every patch sampled in its steady visible phase. It never opens the installed app, invokes native activation or captures a

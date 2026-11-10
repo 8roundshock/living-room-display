@@ -900,7 +900,7 @@ weather, snapshot pixels, and native tokens are excluded. Store backups privatel
 
 At rest, `state.json`, `state.backup.json` and exports omit additive values while
 they equal the current read default: `appearance.accentMode` `color`,
-`appearance.animation` `subtle`, `appearance.theme` Off with all three calendars,
+`appearance.animation` `subtle`, `appearance.theme` Off with all three calendars (and `theme.foreground` unless `true`),
 `appearance.daylightBrightness` `null` (Fixed,
 #439), default `widgetData` sections, and disabled widget ids the previous installed
 release does not know. The previous release (`d66832b`) reads `accentMode`, `animation`
@@ -934,11 +934,19 @@ alert service when their dedicated widget is enabled.
 ### Ambient themes and holiday sources (#575, #458)
 
 `appearance.theme` is `{ mode: 'off' | 'weather' | 'seasonal' | 'combined',
-calendars: ('CA' | 'KR' | 'RU')[] }`. Missing persisted fields default to Off with
-all three calendars. Calendar entries are unique; an empty list keeps seasons.
+calendars: ('CA' | 'KR' | 'RU')[], foreground?: boolean }`. Missing persisted
+fields default to Off with all three calendars and no foreground passage.
+Calendar entries are unique; an empty list keeps seasons.
 Settings patches replace this small object completely; saved styles and their
 scheduled activation use the same appearance field. The default is omitted at
 rest; non-default choices are a documented older-reader rollback exception.
+
+`foreground` (#586, Foreground moments) is an optional boolean. Only `true` is
+stored: `false` is accepted and normalised to omission, and any other type is
+rejected. Because a patch replaces the whole theme object, a patch that sends
+`mode` and `calendars` without `foreground` turns it off. `foreground: true` in
+current settings or a saved style is an older-reader rollback exception; see the
+[install table](install.md#additive-data-and-rollback-compatibility-84).
 `widgetData.dynamic.holidays` defaults false and is omitted while false. It uses
 the same calendar list and adds offline today/tomorrow cards only when opted in.
 Weather details remain API-only and are excluded from private settings exports.

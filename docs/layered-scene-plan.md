@@ -2,7 +2,7 @@
 
 Primary work: [#586 — Create layered living scenes for every atmosphere theme](https://github.com/8roundshock/living-room-display/issues/586).
 Plan written 2026-11-04. It remains the design record and gate list. Source
-implementation status as of 2026-11-09 is in [Phase status](#phase-status-2026-11-09);
+implementation status as of 2026-11-10 is in [Phase status](#phase-status-2026-11-10);
 the current renderer contract is in [Ambient themes](ambient-themes.md#layered-living-scenes-586).
 Budgets below are the plan's starting values, not measurements, unless the
 status section says so. The feature issue stays open until the gates are met.
@@ -250,7 +250,7 @@ include birthday runtime changes in this plan PR's diff. Public planning uses
 generic treatment names only. Follow the normal non-force-push integration/review
 workflow.
 
-## Phase status (2026-11-09)
+## Phase status (2026-11-10)
 
 Source state on draft PR #588. "Verified" means checked in this worktree with an
 isolated synthetic server and headless Edge; nothing here is an installed,
@@ -259,18 +259,31 @@ native or physical-TV result.
 | Phase | Status |
 | --- | --- |
 | 0 — plan | Done (PR #587). |
-| 1 — vertical slice | Summer habitat, integrated rain and the optional passage are implemented. Low-light empty/default/dense frames and a 100-second real-time run were inspected. Open: the 45-second human motion review and a temporal coverage heatmap; the permitted widget incursion is implemented but barely perceptible (#589). |
+| 1 — vertical slice | Summer habitat, integrated rain and the optional passage are implemented and were inspected at low light and in real time. Open: 45-second human motion review and a temporal coverage heatmap. |
 | 2 — prove reuse | Winter/snow and the three birthday treatments use the shared renderer. Quiet, reduced-motion, weather priority, style drafts and birthday privacy checks pass. |
-| 3 — complete inventory | All 26 compositions render through one renderer. A shared fitting defect (principal forms lost on populated boards) was corrected by whole-patch relocation; every scene's named principal form is retained on the default and dense boards. The unused per-mark registry art still exists in source (#590). |
-| 4 — refine and integrate | Unit, themes-suite, docs and skill updates are in the PR. Open: two independent visual passes and independent review of the final pushed head. |
+| 3 — complete inventory | All 26 compositions render through one renderer with full-edge dressing. Every scene's named principal form is retained on the default and dense boards. The unused per-mark registry art still exists in source (#590). |
+| 4 — refine and integrate | A first independent visual pass (2026-11-09) rejected the candidate; the second-round changes below answer it. Open: a second independent visual pass and independent review of the final pushed head. |
 | 5 — delivery | Not started; needs separate authorization. |
 
-Changes from the starting values, with reasons: lower habitats now reach about
-21% of the short side for Summer and up to 30% for the birthday and snow-bank
-patches (the 18% peaks read as small stickers on a 1080p board); relocation may
-move a top drawing to a side edge; near passages use `0.8 x` brightness because
-they never touch reading space; patches stay lit from 6% to 88% of their
-36-second life instead of 8% to 78%.
+### Starting values superseded by owner direction (2026-11-09)
+
+The numbers earlier in this plan were first prototypes' starting points. The
+owner's later words win where they conflict; the current values and their
+measurements are in [Ambient themes](ambient-themes.md#layered-living-scenes-586).
+
+| Plan starting value | Current value | Why |
+| --- | --- | --- |
+| Lower habitats 5-12% of height, peaks to 18% | Ground band 5-19% of the short side across the whole bottom edge; habitat drawings 1.45x, principal forms about 14-25% | The 18% peaks read as small corner stickers on a populated 1080p board. |
+| At least 80% exact black, 40% of the perimeter unlit | 5.6-12.2% lit pixels; bottom edge 100% lit, top edge 100% lit except Fog | He asked for grass along the bottom or a border; text stays protected by the mask. |
+| No persistent border | Continuous top and bottom bands that sway, shift 12px each way and cross-fade at renewal | Same request. Still no luminous rectangle, no side borders, no burn-in claim. |
+| Patches retreat to true black one at a time | Cross-fade to the next generation's shifted root | The blink was the most noticeable event on screen. |
+| 240 paths, 32 animations | 420 paths, 48 animations (measured at most 87 and 23) | Continuous particles and bands. 150ms and 40 layers still hold at 1080p. |
+| Sway of a few degrees | Grass 7.5, hanging 8.5, branch 4 degrees; pendulum pendants | Motion was nearly imperceptible. |
+| Foreground: one small actor, 0.22 x brightness | Near passage is a four-form cluster about 80px at 0.9 x that never touches readings; incursion caps unchanged | A 14px actor at 6% opacity was invisible. |
+
+Unchanged: true-black background, the reading mask, Off / Animation Off /
+reduced-motion behaviour, finite transform/opacity animation, one scene at a
+time, quiet-date restraint, weather honesty and birthday privacy.
 
 ## Acceptance evidence and test strategy
 

@@ -27,6 +27,9 @@ inventing another scene list or copying an old schema from documentation.
   widget reading areas and effective brightness.
 - `src/client/living-scene-principals.ts` names each scene's principal
   silhouette for the unit and browser retention checks.
+- `src/shared/living-scene-dressing.ts` chooses each scene's ground band, top
+  band and particle kind; `src/client/living-dressing.ts` generates them from
+  the measured reading areas. A new scene needs an entry there.
 
 For a cultural change, establish the date/custom from primary sources and record
 URLs, review date and factual-versus-product distinctions in the calendar doc.
@@ -62,10 +65,17 @@ feature/companion forms and characteristic finite motion; a tiny opacity/count
 increase is insufficient. Keep black dominant and text clear. Compare affected
 scenes at 26%/36% in RAM, with default/dense/empty boards and 1080p/4K samples;
 complete styling passes compare every registered scene.
-Owner direction (#586, 2026-11-04): scenes must read as composed whole-screen or
-edge scenery (grass along the bottom, boughs, drifts), never floating stickers;
-an occasional brief overlap of a widget is acceptable when it is rare. Judge the
-populated default board first: a scene that is only good on an empty board fails.
+Owner direction (#586, 2026-11-04 and 2026-11-09): scenes must read as composed
+whole-screen or edge scenery, never floating stickers or a corner vignette. On
+the default board at 26% aim for: scenery along at least 85% of the bottom edge,
+a second dressed edge, 6-10% lit pixels, hero forms 200-320px, saturated fills
+whose bright accents reach widget-text luminance, sway that is plainly visible,
+20 or more particles always in flight and renewal that never leaves an area
+empty. Measure lit pixels and edge coverage; do not judge from brightened
+captures. Keep particles as a few animated layers, not one animation each.
+An occasional brief overlap of a widget's empty space is acceptable; text and
+glyphs are never covered. Judge the populated default board first: a scene that
+is only good on an empty board fails.
 A group's rotation sweep is part of its fitted bounds; do not add unreserved transforms.
 
 Editor demonstrations remain local state with a visible Preview/display-unchanged
