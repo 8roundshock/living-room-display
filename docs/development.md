@@ -217,7 +217,7 @@ single-runner pull-request set took 1931 s: widgets 833, home 227, catalog-sky 1
 - A **pull request** runs the ten **pull-request shards** in parallel, each about
   90 s of test time plus setup. `node tests/ui/lib/run-suites.mjs --list` prints them.
   The tenth is the `scene3d` suite alone (#600): the runner draws WebGL on the processor
-  and compiles every scene's shaders there.
+  and compiles every scene's shaders there (70 s on 2026-11-10; 18 s on a real GPU).
 - A **push to `main`** also runs the **main set**, one suite per runner: widgets (so a
   fix that leaves a no-longer-needed allowance still fails CI, after merge), home and
   catalog-sky.

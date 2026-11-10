@@ -57,9 +57,10 @@ export default function build(kit, ctx) {
 
   // ---------- a cord of leaves in the top-left corner: five at most, no two the same size and tint ----------
   {
-    const cord = kit.catenary(V(-W - .4, 4.3, 0), V(-W + 4.7, 4.66, 0), .4, 40), strung = Math.min(5, Math.max(2, Math.round(3 + A * 12))), SIZES = [.5, .3, .42, .24, .36]; stage.add(kit.line(cord, 0xbfa77a, .7));
+    // Sizes alternate large and small so neighbours never touch.
+    const cord = kit.catenary(V(-W - .4, 4.3, 0), V(-W + 5.5, 4.66, 0), .4, 40), strung = Math.min(5, Math.max(2, Math.round(3 + A * 12))), SIZES = [.46, .24, .4, .28, .34]; stage.add(kit.line(cord, 0xbfa77a, .7));
     for (let k = 0; k < strung; k++) {
-      const at = cord[Math.round(4 + (k + .5 + (rnd(k, seed + 13) - .5) * .2) / strung * 32)].clone().add(V(0, 0, (rnd(k, seed + 14) - .5) * .3));
+      const at = cord[Math.round(3 + (k + .5 + (rnd(k, seed + 13) - .5) * .2) / strung * 34)].clone().add(V(0, 0, (rnd(k, seed + 14) - .5) * .3));
       hangLeaf(at, SIZES[k] * S, TINTS[(k * 2) % TINTS.length], k, (rnd(k, seed + 12) - .5) * .4, (rnd(k, seed + 16) - .5) * 1.1, .3, rnd(k, seed + 15) * 6);
     }
   }
