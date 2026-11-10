@@ -158,5 +158,48 @@ choices. All shipped vectors are original; no source prose or museum images ship
   secular New Year evergreens from Christmas; [Ethnographic Museum Christmas](https://ethnomuseum.ru/collections/ethnocalendar/january/sukkot6/)
   supports the star; [Pascha](https://ethnomuseum.ru/collections/ethnocalendar/april/pasha-svetloe-hristovo-voskresenie/)
   supports eggs; [Leningradsky museum](https://lenmuseum.len-kultura.ru/item/712823)
-  supports mimosa for March 8. Maslenitsa uses original warm rings/ribbon curves,
-  without fire/effigies. Customs vary; no scene implies universal participation.
+  supports mimosa for March 8. Maslenitsa shows blini, the dish of the week
+  ([Ethnographic Museum Maslenitsa](https://ethnomuseum.ru/collections/ethnocalendar/february/maslenica-maslenichnaya-nedelya-syrnaya-nedelya/)),
+  without fire/effigies; the flat fallback keeps its original warm rings/ribbon
+  curves. Customs vary; no scene implies universal participation.
+  - 3D scenes of the Russian family (#622 to #627), sources read 2026-11-10.
+    Where a detail could not be confirmed it is an art choice and is named as one
+    in its ticket (the bird shape of the clip-on ornament, shed mimosa balls, the
+    flower kinds of the birthday bunch).
+  - New Year · Russia: [Moscow 24, Soviet tree decorations](https://www.m24.ru/articles/06012022/159012)
+    supports the glass spire that replaced the star on top, glass icicles and
+    cones, clip-on pieces, bead garlands and foil "rain";
+    [KP, New Year traditions](https://www.kp.ru/family/prazdniki/traditsii-novogo-goda/)
+    supports the tree, tangerines and sparklers at midnight;
+    [TASS factbox](https://tass.com/society/1894857) is why no red star is drawn;
+    [Gateway to Russia, tangerines](https://gw2ru.com/lifestyle/225514-tangerines-soviet-new-year)
+    supports the fruit of the Soviet New Year table.
+  - Orthodox Christmas: the museum page above describes the carollers' hand-made
+    star on a sieve hoop with candles lit inside;
+    [Gateway to Russia, kolyadki](https://www.gw2ru.com/mgr/3539-kolyadki-song-at-christmas)
+    supports the star carried on a stick;
+    [mos.ru, Christmas traditions](https://www.mos.ru/news/item/34501073/)
+    supports the first star of the evening.
+  - Maslenitsa: [HSE, Maslenitsa guide](https://www.hse.ru/recommends/news/1129535891.html)
+    supports soured cream and caviar with blini. Whether a blin stands for the
+    sun is disputed: the museum page calls blini a pagan sun symbol, while Perm
+    Polytechnic researchers quoted by [Gazeta.ru](https://www.gazeta.ru/science/news/2026/02/18/27868231.shtml)
+    say they never were. The scene shows low warm light and makes no such claim;
+    labels and documents must not make it either.
+  - Orthodox Easter: the museum page above names dyed eggs and kulich;
+    [HSE, Russian Easter traditions](https://hse.ru/recommends/news/266809579.html)
+    supports onion-skin maroon eggs; [SBS Food](https://www.sbs.com.au/food/article/celebrate-russian-orthodox-easter/p9w25iq1e)
+    supports red and marbled eggs; [OrthodoxWiki, Palm Sunday](https://orthodoxwiki.org/Palm_Sunday)
+    and [The Moscow Times](https://www.themoscowtimes.com/2020/04/13/russia-celebrates-orthodox-palm-sunday-amid-coronavirus-pandemic-a69961)
+    support pussy willow on the Sunday before Pascha; the shape of the bread
+    follows [Wikipedia, Kulich](https://en.wikipedia.org/wiki/Kulich_(bread)), a secondary source.
+  - Women's Day: [Gateway to Russia, mimosa and tulips](https://gw2ru.com/lifestyle/232046-how-did-the-mimosa-become-symbol-march-8)
+    supports tulips beside the mimosa.
+  - Birthday · Russian accents: [Cultural Atlas, Russian etiquette](https://theculturalatlas.org/russian-culture/russian-culture-etiquette)
+    supports tea for a guest and an odd number of flowers;
+    [Wikipedia, Medovik](https://en.wikipedia.org/wiki/Medovik) and
+    [Wikipedia, Podstakannik](https://en.wikipedia.org/wiki/Podstakannik) (secondary
+    sources) describe the honey layer cake and the glass holder. The runner's red
+    diamond band is an original row in the manner of the Vologda towel cited in
+    [Ambient themes](ambient-themes.md), not a copy of it. None of this claims a
+    birthday ritual.

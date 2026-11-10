@@ -163,6 +163,43 @@ for [#632](https://github.com/8roundshock/living-room-display/issues/632), see
 Measured as above on 2026-11-10 at 1920×1080: 1,300 to 87,000 triangles, 18 to 44 draw
 calls, build 56 to 350 ms, 25 to 30 ms/s of main-thread time, frame script under 1 ms.
 
+**Russian family** (six scenes with their own modules; six heroes, none shared; shared
+pieces are `parts/new-year-tree-*`, `orthodox-christmas-*`, `maslenitsa-*`, `pascha-*`,
+`mimosa-*` and `birthday-russian-*`):
+
+- **New Year · Russia** ([#622](https://github.com/8roundshock/living-room-display/issues/622)), everyday:
+  the top of a sparse spruce in the bottom-left corner with a glass spire, seven glass pieces
+  that all differ (two twisted icicles, two cones, a pyramid drop, one "reflector" ball, a
+  clip-on bird), a bead thread and three wisps of foil rain; four tangerines, one half
+  peeled, in the bottom-right corner. No wreath, swag, lights or snow.
+- **Orthodox Christmas** ([#623](https://github.com/8roundshock/living-room-display/issues/623)), special:
+  a carollers' eight-rayed paper star on a pole at the right edge, its drum lit from inside,
+  ribbons under it, planted in a snow drift; one steady first star in the top-left corner; a
+  thin fall of snow.
+- **Maslenitsa · Russia** ([#624](https://github.com/8roundshock/living-room-display/issues/624)), special but kept calm all week:
+  a stack of thin lacy blini on a plate in the bottom-right corner with melting butter and
+  honey, a folded blin, red caviar in cut glass and soured cream in a clay bowl with a wooden
+  spoon; low sun as light only in the bottom-left corner.
+- **Orthodox Easter** ([#625](https://github.com/8roundshock/living-room-display/issues/625)), everyday:
+  a tall kulich under dripping white glaze on a plate and linen napkin with five plain red
+  and maroon eggs in the bottom-left corner; pussy willow in an unglazed clay jug at the
+  right edge.
+- **Women’s Day · Russia** ([#626](https://github.com/8roundshock/living-room-display/issues/626)), special:
+  a spray of mimosa in a clear glass vase rising up the left side, a few shed blossom balls;
+  five tulips (coral, pink, cream; bud to open) tied with a lilac ribbon along the bottom
+  right.
+- **Birthday · Russian accents** ([#627](https://github.com/8roundshock/living-room-display/issues/627)), special:
+  its own module, so it no longer borrows Birthday's. A candle-lit honey layer cake with a
+  cut wedge on a low-footed plate, a linen runner with a red diamond band, tea in a glass
+  holder and the cut slice in the bottom-right corner; three balloons tied to a
+  paper-wrapped bunch of seven flowers in the bottom-left.
+
+Not built yet, waiting for the day-of lift ([#632](https://github.com/8roundshock/living-room-display/issues/632)): the sparkler of 31 December and
+1 January, and the brighter Pascha Sunday. Measured as the reference scenes were on
+2026-11-10 (1920×1080, same PC): 12,000 to 170,000 triangles, 17 to 79 draw calls, build 70
+to 165 ms after the first scene of a session, frame 1.0 to 3.7 ms with GPU; a scene chunk
+with its parts is 7 to 17 kB (3 to 7 kB gzipped).
+
 ### Which renderer draws a scene
 
 `AmbientTheme.tsx` chooses once per scene. The layer's root carries
