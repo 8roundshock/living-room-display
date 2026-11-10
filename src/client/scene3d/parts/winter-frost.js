@@ -122,7 +122,7 @@ export function ice(kit) {
     const mesh = new T.Mesh(S.geometry(), material); mesh.renderOrder = 2; return mesh;
   }
   /** A flattened bead of ice, `size` across. */
-  function bead(size) { const mesh = new T.Mesh(kit.sphereGeo, material); mesh.scale.set(size / 2, size * .36, size / 2); mesh.renderOrder = 2; return mesh; }
+  function bead(size) { const mesh = new T.Mesh(kit.ballGeo, material); mesh.scale.set(size / 2, size * .36, size / 2); mesh.renderOrder = 2; return mesh; }   // a few pixels across: the low-detail sphere is enough
   return { sleeve, drop, bead, material };
 }
 
