@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { LivingSceneArt, ScenePath } from '../shared/living-scene-art';
 import { SCENE_DRESSING, type ParticleKind } from '../shared/living-scene-dressing';
 import { LIVING_SCENE_BUDGET } from '../shared/theme-registry';
@@ -138,11 +138,11 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
           <stop offset="0" stopColor={color} stopOpacity=".62" /><stop offset=".55" stopColor={color} stopOpacity=".3" /><stop offset="1" stopColor={color} stopOpacity="0" />
         </radialGradient>)}
       </defs>
-      <g data-scene-glow>{glows.map((glow, index) => <ellipse key={`${index}:${cycle}`} className="living-glow" cx={glow.cx} cy={glow.cy} rx={glow.rx} ry={glow.ry} fill={`url(#${maskId}-glow-${glow.tone})`}
-        style={{ '--fog-age': `${-(elapsed % LIVING_SCENE_BUDGET.life + glow.delay * 1000)}ms`, '--fog-travel': `translate(${glow.travel}px, 0px)` } as CSSProperties} />)}</g>
-      {sides && <g transform={`scale(${unit1080})`} opacity=".6" data-scene-sides>{sides.map(flourish => <g key={`${flourish.side}:${cycle}`} className="living-side" data-scene-side={flourish.side}
-        style={{ transformOrigin: flourish.pivot, '--band-age': `${-(elapsed % LIVING_SCENE_BUDGET.life + (flourish.side === 'left' ? 0 : 9000))}ms` } as CSSProperties}>
-        {flourish.paths.map((path, index) => <Dress key={index} path={path} colors={palette} />)}</g>)}</g>}
+      <g data-scene-glow><Aged key={cycle} age={elapsed % LIVING_SCENE_BUDGET.life}>{age => glows.map((glow, index) => <ellipse key={index} className="living-glow" cx={glow.cx} cy={glow.cy} rx={glow.rx} ry={glow.ry} fill={`url(#${maskId}-glow-${glow.tone})`}
+        style={{ '--fog-age': `${-(age + glow.delay * 1000)}ms`, '--fog-travel': `translate(${glow.travel}px, 0px)` } as CSSProperties} />)}</Aged></g>
+      {sides && <g transform={`scale(${unit1080})`} opacity=".6" data-scene-sides><Aged key={cycle} age={elapsed % LIVING_SCENE_BUDGET.life}>{age => sides.map(flourish => <g key={flourish.side} className="living-side" data-scene-side={flourish.side}
+        style={{ transformOrigin: flourish.pivot, '--band-age': `${-(age + (flourish.side === 'left' ? 0 : 9000))}ms` } as CSSProperties}>
+        {flourish.paths.map((path, index) => <Dress key={index} path={path} colors={palette} />)}</g>)}</Aged></g>}
       <g>
         {bands && <g mask={`url(#${maskId}-ground)`} opacity=".45"><EdgeLayer key={`rear:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="segments" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
         {patches.map((patch, index) => {
@@ -177,6 +177,9 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
     </svg>}
   </div>;
 });
+
+/** Freezes a layer's age at mount: a running CSS animation must not be re-timed by later observation renders. */
+function Aged({ age: initial, children }: { age: number; children: (age: number) => ReactNode }) { const [age] = useState(initial); return <>{children(age)}</>; }
 
 function HabitatPatch({ patch, box, relocated, initialAge, palette, weather, quiet, generation, holes, leaving = false }: {
   patch: LivingSceneArt['patches'][number]; box: HabitatBox; relocated: boolean; initialAge: number; palette: readonly string[];

@@ -26,12 +26,13 @@ older statement below that conflicts with it.
   text; legibility comes from low alpha, and authored forms are still placed away
   from reading areas. The old "art never touches ink" pixel proof no longer applies.
 - **Second owner pass (2026-11-10): quieter still.** "A screensaver in the middle of
-  my living room": two faint bottom-corner washes (peak 20%), no top wash; eight slow
+  my living room": two faint bottom-corner washes (peak 20%), no top wash; about nine slow
   particles (fourteen in snow); ground at 45%. The left and right edges carry one tall,
   thin flourish each, chosen per scene in `sideStyles` (`living-dressing.ts`): the side
   of a fir with a wound light string and a hanging string of lights for Christmas,
-  blossom or leaf branches, frost twigs, ribbons, reeds. A flourish bows inward only as
-  far as the free margin beside the widgets, and sways by half a degree.
+  blossom or leaf branches, frost twigs, ribbons, reeds. A flourish bows inward about as
+  far as the free margin beside the widgets (a thin remainder may pass behind a widget
+  that touches the edge), and sways by half a degree.
 - **Iteration.** Change the renderer, build, capture two or three scenes to a temp
   folder, look, delete the images. Do not run multi-round agent reviews for taste.
 
