@@ -206,19 +206,28 @@ runs on its own as `node tests/ui/<name>-browser.mjs --playwright <module> --edg
 CI runs them in `.github/workflows/browser-suites.yml` (#323) on `windows-2025` with
 Node 24 and the runner's Edge, in one job per set. It installs the pinned tools into
 the runner's temporary folder (the step fails if `package.json` or the lockfile
-changes), runs one set through the runner and uploads nothing. Pull requests and
-pushes to `main` run the **pull-request set**: the widgets suite, so a fix that leaves
-a no-longer-needed allowance fails CI, and every suite that takes under a minute on
-the runner. The weekly schedule (Monday 07:23 UTC) and a manual run
-(`workflow_dispatch`) add the **scheduled set**, the slower motion, palette and
-weather suites. A change to Markdown files only skips the workflow. On the first
-CI runs the pull-request set took about 11 minutes of suites (widgets about 6) plus
-about a minute of setup, and the scheduled set about 6; every run still takes runner
-time and delays a PR's checks, so weigh adding a slow suite to the pull-request set
-against that
-([#384](https://github.com/8roundshock/living-room-display/issues/384)). The Dynamic
-suite (#437) joined the pull-request set at about 50 seconds locally; its runner time is
-not measured yet. The runner
+changes), runs one shard of one set through the runner and uploads nothing.
+
+Owner direction, 2026-11-10
+([#603](https://github.com/8roundshock/living-room-display/issues/603)): a pull
+request must not wait half an hour for a one-file change. Measured that day, the old
+single-runner pull-request set took 1931 s: widgets 833, home 227, catalog-sky 141 and
+23 suites of 90 s or less. So:
+
+- A **pull request** runs the nine **pull-request shards** in parallel, each about
+  90 s of test time plus setup. `node tests/ui/lib/run-suites.mjs --list` prints them.
+- A **push to `main`** also runs the **main set**, one suite per runner: widgets (so a
+  fix that leaves a no-longer-needed allowance still fails CI, after merge), home and
+  catalog-sky.
+- The weekly schedule (Monday 07:23 UTC) and a manual run (`workflow_dispatch`) add
+  the **scheduled set**, the slower motion, palette and weather suites.
+- A change to Markdown files only skips the workflow.
+- Keep every pull-request shard near 90 s. Put a new suite in the lightest shard, or
+  in the main set if it takes over about 90 s on the runner
+  ([#384](https://github.com/8roundshock/living-room-display/issues/384)).
+- Locally, run the suite your change touches by name; do not wait on the others.
+
+The runner
 has no GPU, so CI passes `--no-gpu` to the motion suite: its resting glyph pixel
 parity and #248 frame budget depend on GPU rasterising and stay local checks. A new
 suite fails the runner until it is placed in one set in

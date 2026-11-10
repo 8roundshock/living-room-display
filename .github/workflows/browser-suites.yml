@@ -31,13 +31,15 @@ env:
   SHARP_VERSION: 0.35.5
 jobs:
   suites:
-    name: Browser suites (${{ matrix.set }})
+    name: Browser suites (${{ matrix.set }} ${{ matrix.shard }})
     strategy:
       fail-fast: false
+      # #603: a pull request runs only the pull-request shards, in parallel, about 90 s of tests each.
+      # Pushes to main add the slow `main` suites; the weekly and manual runs add `scheduled` too.
       matrix:
-        set: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["pull-request","scheduled"]' || '["pull-request"]') }}
+        include: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '[{"set":"pull-request","shard":1},{"set":"pull-request","shard":2},{"set":"pull-request","shard":3},{"set":"pull-request","shard":4},{"set":"pull-request","shard":5},{"set":"pull-request","shard":6},{"set":"pull-request","shard":7},{"set":"pull-request","shard":8},{"set":"pull-request","shard":9},{"set":"main","shard":1},{"set":"main","shard":2},{"set":"main","shard":3},{"set":"scheduled","shard":1}]' || github.event_name == 'push' && '[{"set":"pull-request","shard":1},{"set":"pull-request","shard":2},{"set":"pull-request","shard":3},{"set":"pull-request","shard":4},{"set":"pull-request","shard":5},{"set":"pull-request","shard":6},{"set":"pull-request","shard":7},{"set":"pull-request","shard":8},{"set":"pull-request","shard":9},{"set":"main","shard":1},{"set":"main","shard":2},{"set":"main","shard":3}]' || '[{"set":"pull-request","shard":1},{"set":"pull-request","shard":2},{"set":"pull-request","shard":3},{"set":"pull-request","shard":4},{"set":"pull-request","shard":5},{"set":"pull-request","shard":6},{"set":"pull-request","shard":7},{"set":"pull-request","shard":8},{"set":"pull-request","shard":9}]') }}
     runs-on: windows-2025
-    timeout-minutes: 40
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -68,7 +70,7 @@ jobs:
           if (-not $edge) { throw 'Microsoft Edge was not found on the runner' }
           Write-Host "Edge $((Get-Item -LiteralPath $edge).VersionInfo.ProductVersion) at $edge"
           "LRD_EDGE=$edge" >> $env:GITHUB_ENV
-      - name: Run the ${{ matrix.set }} suites
+      - name: Run the ${{ matrix.set }} suites, shard ${{ matrix.shard }}
         run: |
-          node tests/ui/lib/run-suites.mjs --set '${{ matrix.set }}' --no-gpu --playwright $env:LRD_PLAYWRIGHT --edge $env:LRD_EDGE --sharp $env:LRD_SHARP
+          node tests/ui/lib/run-suites.mjs --set '${{ matrix.set }}' --shard ${{ matrix.shard }} --no-gpu --playwright $env:LRD_PLAYWRIGHT --edge $env:LRD_EDGE --sharp $env:LRD_SHARP
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

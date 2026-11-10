@@ -4,6 +4,7 @@
 //
 //   node tests/ui/lib/run-suites.mjs --playwright <module> --edge <browser> --sharp <module> [suite ...]
 //   node tests/ui/lib/run-suites.mjs ... --set pull-request       the suites CI runs on every pull request
+//   node tests/ui/lib/run-suites.mjs ... --set pull-request --shard 2   only the second shard of that set
 //   node tests/ui/lib/run-suites.mjs ... --repeat 5 preview       five consecutive runs
 //   node tests/ui/lib/run-suites.mjs --list                       the sets and their suites
 //
@@ -18,32 +19,29 @@ const directory = fileURLToPath(new URL('..', import.meta.url));
 /** Every suite in tests/ui, by name (`widgets` for widgets-browser.mjs). */
 export const SUITES = readdirSync(directory).filter(file => file.endsWith('-browser.mjs')).map(file => file.slice(0, -'-browser.mjs'.length)).sort();
 /**
- * The CI sets (#323), chosen from the first CI runs on windows-2025 (seconds per suite in brackets).
- * `pull-request` runs on every pull request and push to main: the widgets suite, whose allowances must
- * fail once their fix lands, and every suite under a minute on the runner (about 11 minutes in all).
- * `scheduled` adds the slower suites on the weekly and manual runs (about 6 minutes). Every suite
- * belongs to exactly one set, so a new suite fails the runner until it is placed in one. See
- * docs/development.md and #384 before moving a slow suite into the pull-request set.
+ * The CI sets. Owner direction, 2026-11-10 (#603): a pull request must not wait half an hour, so the
+ * pull-request set is split into shards of about 90 seconds of test time that run on parallel runners
+ * (seconds measured on windows-2025 in brackets), and the three slow suites moved to `main`.
+ * `main` runs on pushes to main and weekly: widgets (833), home (227), catalog-sky (141).
+ * `scheduled` adds the slowest motion and data suites on the weekly and manual runs.
+ * Every suite belongs to exactly one set, so a new suite fails the runner until it is placed.
  */
-export const SETS = {
+export const SHARDS = {
   'pull-request': [
-    'widgets', // 371
-    'canvas-scope', 'grid', 'studio', 'workspace', 'catalog-sky', 'reminders', 'catalog-time', 'freesize', // 22, 45, 41, 38, 34, 34, 31, 29
-    'preview', 'shared-snapshot', 'first-run', 'editor-sync', 'display-controls', // Shared file flow also exercises real fetch metadata.
-    'daylight', // #439: not yet timed on the runner; 25 to 70 locally under load, where catalog-time took 59
-    'dynamic', // #437: its own Dynamic scenarios, timed locally (see docs/development.md)
-    'screen', // #436, about 40 locally
-    'home', // #438, about 70 locally
-    'context-help', // Compact help: keyboard, hover, touch, responsive placement and draft isolation.
-    'styles', // Top style/save transactions and responsive controls; 16 seconds locally, CI not timed yet.
-    'settings', // #517: app-wide preferences, destination/draft guards and recovery.
-    'schedule', 'motion-preview', // #514/#515: isolated schedule and deterministic preview contracts.
-    'picker-sheet', // #554: modal add flow, responsive size previews and draft/focus contracts.
-    'snapshot-resume', // #556: explicit in-app consent, pending/retry races and accessible focus.
-    'themes', // #575: optional atmosphere, calendar choices and bounded decorative motion.
+    ['workspace'], // 90
+    ['themes'], // 83
+    ['grid', 'display-controls', 'shared-snapshot', 'snapshot-resume'], // 71, 6, 3, 7
+    ['studio', 'settings'], // 64, 21
+    ['styles', 'schedule'], // 59, 30
+    ['dynamic', 'reminders'], // 44, 41
+    ['catalog-time', 'canvas-scope', 'screen'], // 38, 32, 19
+    ['freesize', 'daylight', 'picker-sheet'], // 29, 21, 16
+    ['first-run', 'preview', 'editor-sync', 'context-help', 'motion-preview'], // 13, 12, 12, 10, 9
   ],
-  scheduled: ['motion', 'weather', 'palette', 'collection'], // 219, 81, 68
+  main: [['widgets'], ['home'], ['catalog-sky']],
+  scheduled: [['motion', 'weather', 'palette', 'collection']], // 219, 81, 68
 };
+export const SETS = Object.fromEntries(Object.entries(SHARDS).map(([set, shards]) => [set, shards.flat()]));
 
 export function checkSets() {
   const placed = Object.values(SETS).flat();
@@ -51,7 +49,7 @@ export function checkSets() {
     ...SUITES.filter(suite => !placed.includes(suite)).map(suite => `tests/ui/${suite}-browser.mjs is in no set of tests/ui/lib/run-suites.mjs`),
     ...placed.filter(suite => !SUITES.includes(suite)).map(suite => `set suite ${suite} has no tests/ui/${suite}-browser.mjs`),
     ...placed.filter((suite, index) => placed.indexOf(suite) !== index).map(suite => `${suite} is in more than one set`),
-    ...(SETS['pull-request'].includes('widgets') ? [] : ['the pull-request set must include the widgets suite (#323)']),
+    ...(SETS.main.includes('widgets') ? [] : ['the main set must include the widgets suite (#323, #603)']),
   ];
 }
 
@@ -69,18 +67,20 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     allowPositionals: true,
     options: {
       playwright: { type: 'string' }, edge: { type: 'string' }, sharp: { type: 'string' },
-      set: { type: 'string' }, repeat: { type: 'string', default: '1' }, list: { type: 'boolean' },
+      set: { type: 'string' }, shard: { type: 'string' }, repeat: { type: 'string', default: '1' }, list: { type: 'boolean' },
       'no-gpu': { type: 'boolean' },
     },
   });
   const problems = checkSets();
   if (values.list) {
-    for (const [set, suites] of Object.entries(SETS)) console.log(`${set}: ${suites.join(' ') || '(none)'}`);
+    for (const [set, shards] of Object.entries(SHARDS)) shards.forEach((suites, index) => console.log(`${set} ${index + 1}/${shards.length}: ${suites.join(' ')}`));
   }
   if (problems.length) { for (const problem of problems) console.error(problem); process.exit(1); }
   if (values.list) process.exit(0);
   if (values.set && !SETS[values.set]) { console.error(`Unknown set ${values.set}; sets: ${Object.keys(SETS).join(', ')}`); process.exit(1); }
-  const chosen = values.set ? SETS[values.set] : positionals.length ? positionals : SUITES;
+  const shard = values.shard === undefined ? undefined : Number(values.shard);
+  if (shard !== undefined && !(values.set && Number.isInteger(shard) && shard >= 1 && shard <= SHARDS[values.set].length)) { console.error('--shard takes a shard number of the chosen --set'); process.exit(1); }
+  const chosen = values.set ? (shard ? SHARDS[values.set][shard - 1] : SETS[values.set]) : positionals.length ? positionals : SUITES;
   const unknown = chosen.filter(suite => !SUITES.includes(suite));
   if (unknown.length) { console.error(`Unknown suite(s): ${unknown.join(', ')}; suites: ${SUITES.join(', ')}`); process.exit(1); }
   const repeat = Number(values.repeat);
