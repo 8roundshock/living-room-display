@@ -26,16 +26,18 @@ production build, the unit tests, the new `scene3d` browser suite on the develop
 GPU and on a software rasteriser, and the `themes` suite on the flat fallback (now
 launched without WebGL). The author inspected captures of the three scenes at full
 opacity and at the app's real opacity, at 1920×1080, 3840×2160 and 2560×1080, and deleted
-them. On that PC's GeForce GTX 1080 Ti a frame costs 0.6-0.9 ms of script and 2-4 ms with
-the GPU at up to 2560×1440; the page's main thread spends 24-38 ms per second on a running
+them. On that PC's GeForce GTX 1080 Ti a frame costs 0.6-1.3 ms of script and 2-4 ms with
+the GPU at up to 2560×1440; the page's main thread spends 32-42 ms per second on a running
 scene. The lazy engine chunk is 622 kB (161 kB gzipped); the dashboard bundle grew 6.6 kB.
 
 Not done or not verified: installation, the native screensaver host (whether its browser
 gives hardware WebGL is unobserved), physical-TV viewing and the owner's judgement of the
-result on the display. The layer follows the specified brightness rule (saved brightness
-× 0.45), which makes it two to three times dimmer beside the widget text than in the
-picker at a saved 36%; that needs the owner's eye
-([#636](https://github.com/8roundshock/living-room-display/issues/636)). Follow-ups:
+result on the display. Layer brightness is the saved brightness × 0.95 (coordinator
+decision on [#636](https://github.com/8roundshock/living-room-display/issues/636):
+the picker's 45% sat beside text of about the same luminance, so scene highlights are meant
+to be about as bright as the text), with the special tier clamped at the saved brightness.
+Christmas keeps the edge of a lit tree in the bottom-right corner (coordinator decision on
+[#609](https://github.com/8roundshock/living-room-display/issues/609)). Follow-ups:
 three.js upgrade ([#633](https://github.com/8roundshock/living-room-display/issues/633)),
 removing the flat renderer once every scene is ported
 ([#634](https://github.com/8roundshock/living-room-display/issues/634)), three.js in the

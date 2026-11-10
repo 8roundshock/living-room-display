@@ -65,7 +65,7 @@ Chosen in the picker for its "All together" compositions, and held as named cons
 
 | Setting | Pick | In the app |
 | --- | --- | --- |
-| Brightness | 45% | Layer opacity is the ambient brightness × 0.45, so it never exceeds the saved brightness. |
+| Brightness | 45%, beside stand-in text of about the same luminance | Layer opacity is the saved brightness × 0.95 (× tier, clamped at 1): scene highlights about as bright as the text, never above the saved brightness. |
 | How much | 30% (Canada Day 15%) | `ctx.amount`; a scene turns it into counts. |
 | Size | 85% | `ctx.size`: object radius and length, not position. |
 | Glow | 65% | Strength of halos and soft light discs. |
@@ -79,11 +79,14 @@ repeated, not as intense as all together, but overall the vibe is good"; "specia
 one-day screensavers can be more intense, bigger, and the daily/seasonal ones that stay for
 weeks or months need to be more low-key"; scenes for different cultures must be unique.
 
-Open question for the owner ([#636](https://github.com/8roundshock/living-room-display/issues/636)):
-in the picker 45% was the scene's opacity beside text already drawn dim, while here it is
-multiplied by the saved brightness, so at a saved 36% the layer is at 15-19% opacity.
-Scene pixels alone on an empty 1920×1080 board at 36%: 6.7-9.7% lit, median luminance
-11-23 and 99th percentile 24-33 of 255, against widget text at about 69.
+Brightness (coordinator decision, 2026-11-10, [#636](https://github.com/8roundshock/living-room-display/issues/636)):
+the picker's 45% is not multiplied into the app's layer. In the picker it sat beside stand-in
+text drawn at roughly the same luminance, so the look the owner approved has scene highlights
+about as bright as the text, a ratio close to 1 and not 0.45. In the app the text is already
+dimmed by the saved brightness, so the scene takes 0.95 of it. Scene pixels alone on an empty
+1920×1080 board at a saved 36%: 8-10% lit, median luminance 21-43 and 99th percentile
+48-63 of 255, against widget text at about 69. (With the first rule, saved brightness ×
+0.45, the 99th percentile was 24-33.)
 
 ### Tier rule
 
@@ -93,10 +96,11 @@ scene). It keeps no list of scenes.
 
 - **special**: birthdays, and celebrations that can be on screen for at most seven
   consecutive days (Canada Day 3, Women's Day 3, Buddha's Birthday 4, New Year 6, Orthodox
-  Christmas 7, Maslenitsa 7). Opacity ×1.15, size ×1.1.
+  Christmas 7, Maslenitsa 7). Opacity ×1.15, which with the 0.95 share is clamped to the
+  saved brightness itself; size ×1.1.
 - **everyday**: seasons, weather, and celebrations with a longer window (Thanksgiving 8,
   Pascha 8, Easter 9, Seollal 9, Chuseok 9, New Year · Russia 13, Halloween 17, Christmas
-  42). Opacity ×0.9, amount ×0.8.
+  42). Opacity ×0.9 (0.855 of the saved brightness), amount ×0.8.
 
 Weather over a scene (Combined) keeps that scene's tier. The one-week boundary is one
 constant, `SPECIAL_MAX_WINDOW_DAYS`. Stepping a long-window holiday up to special on its
@@ -116,8 +120,11 @@ The three reference scenes follow their design plans:
 - **Christmas** ([#609](https://github.com/8roundshock/living-room-display/issues/609)):
   a wreath with a red bow hung on a ribbon from a short fir swag in the top-left corner, a
   longer swag in the top-right corner with five ornaments that differ in shape, colour and
-  finish, one snow-dusted bough low at each side, soft warm lights far behind, a little
-  snow. No tree (New Year · Russia) and no star (Orthodox Christmas).
+  finish, the edge of a lit tree in the bottom-right corner rising to a little over half the
+  height with warm lights and a few ornaments that differ, one snow-dusted bough low on the
+  left, soft warm lights far behind, a little snow. The tree is an edge only (coordinator
+  decision on #609: the owner asked for the side of a tree); the whole decorated tree with
+  its top stays with New Year · Russia, the star with Orthodox Christmas.
 - **Canada Day** ([#606](https://github.com/8roundshock/living-room-display/issues/606)):
   the National Flag (2:1, the 11-point leaf, kept solid) flying from its pole in the
   top-right corner, leaves fallen at the pole's foot, a cord of five maple leaves in the
@@ -175,18 +182,18 @@ Measured on 2026-11-10, source build, headless Edge on the development PC's GeFo
 
 | Scene | Triangles | Draw calls | Build, once | Main thread, running | Frame: script | Frame: with GPU |
 | --- | --- | --- | --- | --- | --- | --- |
-| Christmas, 1920×1080 | 261,000 | 79 | 554 ms | 27 ms/s | 0.7 ms | 1.9 ms |
-| Canada Day, 1920×1080 | 32,000 | 30 | 56 ms | 38 ms/s | 0.8 ms | 2.0 ms |
-| Birthday, 1920×1080 | 98,000 | 82 | 50 ms | 29 ms/s | 0.6 ms | 3.0 ms |
-| Christmas, 3840×2160 | 261,000 | 79 | 335 ms | 24 ms/s | 0.6 ms | 2.7 ms |
-| Canada Day, 3840×2160 | 32,000 | 30 | 45 ms | 34 ms/s | 0.9 ms | 3.8 ms |
-| Birthday, 3840×2160 | 98,000 | 82 | 46 ms | 28 ms/s | 0.7 ms | 2.8 ms |
+| Christmas, 1920×1080 | 282,000 | 104 | 391 ms | 36 ms/s | 0.7 ms | 1.8 ms |
+| Canada Day, 1920×1080 | 32,000 | 30 | 56 ms | 40 ms/s | 1.1 ms | 3.6 ms |
+| Birthday, 1920×1080 | 98,000 | 82 | 59 ms | 42 ms/s | 0.9 ms | 3.7 ms |
+| Christmas, 3840×2160 | 282,000 | 104 | 372 ms | 34 ms/s | 0.6 ms | 1.9 ms |
+| Canada Day, 3840×2160 | 32,000 | 30 | 50 ms | 42 ms/s | 1.3 ms | 2.5 ms |
+| Birthday, 3840×2160 | 98,000 | 82 | 50 ms | 32 ms/s | 0.8 ms | 2.1 ms |
 
 "Build" is the one-time main-thread cost when a scene starts (the first of a session
 includes compiling its shaders). "Main thread, running" is the page's task time per
 second at the real 20 frames a second. At 3840×2160 the backing store is 2560×1440. On a
-software rasteriser the same scenes take 0.1 to 1.5 s a frame, which is why one is
-refused. Total GPU and energy cost stays with #364.
+software rasteriser the same scenes take 0.2 to 1 s a frame at 1920×1080, which is why
+one is refused. Run-to-run variation of the main-thread figure is about 10 ms/s. Total GPU and energy cost stays with #364.
 
 ### Iteration loop
 

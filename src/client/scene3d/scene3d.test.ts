@@ -14,14 +14,14 @@ const moduleIds = (folder: string) => readdirSync(fileURLToPath(new URL(`./${fol
 const SCENE_FILES = moduleIds('scenes'), WEATHER_FILES = moduleIds('weather');
 
 test('The owner’s picks of 2026-11-10 are the look of an everyday scene, before the tier rule', () => {
-  assert.deepEqual({ ...OWNER_LOOK }, { seeThrough: 1, glow: .65, shine: .8, size: .85, timeScale: 5 / 40, fadeToMiddle: .6, brightness: .45, amount: .3 });
+  assert.deepEqual({ ...OWNER_LOOK }, { seeThrough: 1, glow: .65, shine: .8, size: .85, timeScale: 5 / 40, fadeToMiddle: .6, brightness: .95, amount: .3 });
   const christmas = sceneLook('christmas', 'everyday');
-  near(christmas.amount, .3 * .8, 'everyday amount'); near(christmas.size, .85, 'everyday size'); near(christmas.opacity, .45 * .9, 'everyday opacity');
+  near(christmas.amount, .3 * .8, 'everyday amount'); near(christmas.size, .85, 'everyday size'); near(christmas.opacity, .95 * .9, 'everyday opacity');
   assert.deepEqual([christmas.glow, christmas.shine, christmas.seeThrough, christmas.timeScale, christmas.fadeToMiddle, christmas.particles, christmas.saturation], [.65, .8, 1, .125, .6, true, 1]);
 });
 test('Special occasions are a little brighter and bigger; Canada Day keeps its own lower amount', () => {
   const birthday = sceneLook('birthday', 'special'), canada = sceneLook('canada-day', 'special');
-  near(birthday.amount, .3, 'special amount'); near(birthday.size, .85 * 1.1, 'special size'); near(birthday.opacity, .45 * 1.15, 'special opacity');
+  near(birthday.amount, .3, 'special amount'); near(birthday.size, .85 * 1.1, 'special size'); assert.equal(birthday.opacity, 1, 'a special scene is drawn at the saved brightness itself: 0.95 x 1.15 is clamped');
   near(canada.amount, .15, 'Canada Day amount'); near(sceneLook('canada-day', 'everyday').amount, .15 * .8, 'Canada Day everyday amount');
   assert.deepEqual(TIER_LOOK, { everyday: { opacity: .9, amount: .8, size: 1 }, special: { opacity: 1.15, amount: 1, size: 1.1 } });
 });
@@ -36,6 +36,12 @@ test('No tier or date raises the scene above the saved brightness', () => {
     const { opacity } = sceneLook(id, tier, quiet);
     assert.ok(opacity > 0 && opacity <= 1, `${id} ${tier} ${quiet}: ${opacity}`);
   }
+  // The brightness share (#636: scene highlights about as bright as the text, as in the picker) times the tier is clamped at 1.
+  assert.ok(OWNER_LOOK.brightness * TIER_LOOK.special.opacity > 1, 'the special tier would exceed the saved brightness without the clamp');
+  assert.equal(sceneLook('canada-day', 'special').opacity, 1);
+  near(sceneLook('christmas', 'everyday').opacity, .855, 'everyday share of the saved brightness');
+  near(sceneLook('birthday', 'special', true).opacity, .38, 'a quiet date dims the clamped layer, not the unclamped product');
+  assert.ok(sceneLook('christmas', 'everyday').opacity < sceneLook('birthday', 'special').opacity, 'everyday stays below special');
 });
 test('Fade to middle is the picker’s radial mask', () => {
   assert.equal(fadeMask(.6), 'radial-gradient(ellipse 72% 72% at 50% 50%, rgba(0,0,0,0.40) 31%, #000 100%)');
@@ -99,6 +105,26 @@ test('A scene resolves to its own module, to a declared fallback, or to the flat
   assert.equal(sceneModuleFor('birthday-russian', [...scenes, 'birthday-russian']), 'birthday-russian', 'a file named after the scene wins without an edit');
   assert.equal(sceneModuleFor('birthday-russian', ['christmas']), null);
 });
+test('A birthday treatment uses its own module as soon as its file exists, and the shared Birthday module until then', () => {
+  for (const id of ['birthday-russian', 'birthday-korean'] as const) {
+    const scene = previewTheme(id), others = SCENE_FILES.filter(file => file !== id);
+    assert.ok(others.includes('birthday'), 'the shared Birthday module exists');
+    // Without scenes/<id>.js: the shared module draws it, and the scene is told which treatment it is (ctx.id).
+    assert.deepEqual(planScene3d(scene, others, WEATHER_FILES), { sceneId: id, module: 'birthday', weather: null });
+    // With scenes/<id>.js: that file wins. Nothing but the new file changes; SCENE_MODULE_FALLBACK may keep its entry.
+    assert.deepEqual(planScene3d(scene, [...others, id], WEATHER_FILES), { sceneId: id, module: id, weather: null });
+    assert.equal(SCENE_MODULE_FALLBACK[id], 'birthday');
+    // The folder as it is today resolves one way or the other, never to nothing.
+    assert.equal(planScene3d(scene, SCENE_FILES, WEATHER_FILES)?.module, SCENE_FILES.includes(id) ? id : 'birthday');
+    // Neither file: the flat renderer.
+    assert.equal(planScene3d(scene, others.filter(file => file !== 'birthday'), WEATHER_FILES), null);
+    // Combined weather over a birthday follows the same rule for the scene module.
+    assert.equal(planScene3d({ motif: 'snow', habitat: id, source: 'weather' }, [...others, id], ['snow'])?.module, id);
+    assert.equal(planScene3d({ motif: 'snow', habitat: id, source: 'weather' }, others, ['snow'])?.module, 'birthday');
+  }
+  // The classic treatment never borrows another treatment's module.
+  assert.equal(sceneModuleFor('birthday', ['birthday-russian', 'birthday-korean']), null);
+});
 test('Weather over a scene needs its overlay; a weather scene on its own needs its scene module', () => {
   const scenes = ['christmas', 'canada-day', 'birthday'];
   const snowOnChristmas = { motif: 'snow', habitat: 'christmas', source: 'weather' } as const, rainOnCanadaDay = { motif: 'rain', habitat: 'canada-day', source: 'weather' } as const;
@@ -127,6 +153,18 @@ test('Module files follow the contract: a registered id, a default build(kit, ct
     assert.ok((THEME_SCENE_IDS as string[]).includes(from), from); assert.ok(SCENE_FILES.includes(to), `${from} falls back to an existing module`);
   }
   for (const id of ['birthday', 'birthday-russian', 'birthday-korean', 'christmas', 'canada-day'] as const) assert.ok(planScene3d(previewTheme(id), SCENE_FILES, WEATHER_FILES), `${id} is drawn in 3D`);
+});
+test('Shared parts are named after the scene that introduced them and import only other parts', () => {
+  let parts: string[] = [];
+  try { parts = readdirSync(fileURLToPath(new URL('./parts/', import.meta.url))).filter(file => file.endsWith('.js')); } catch { /* no shared parts yet */ }
+  const owners = [...THEME_SCENE_IDS, 'rain', 'snow', 'storm', 'fog', 'wind'] as string[];
+  for (const file of parts) {
+    assert.match(file, /^[a-z0-9]+(-[a-z0-9]+)+\.js$/, `parts/${file} is lower-case words joined by hyphens`);
+    assert.ok(owners.some(owner => file.startsWith(`${owner}-`) && file.length > owner.length + 4), `parts/${file} starts with the id of the scene that introduced it, then the name of the part`);
+    const source = readFileSync(new URL(`./parts/${file}`, import.meta.url), 'utf8');
+    for (const [, specifier] of source.matchAll(/^\s*(?:import\s*|(?:import|export)\s[^'"\n;]*?\sfrom\s*)['"]([^'"\n]+)['"]/gm)) assert.match(specifier!, /^\.\/[\w-]+\.js$/, `parts/${file} imports ${specifier}`);
+    assert.doesNotMatch(source, /Math\.random\(/, `parts/${file} must be deterministic: use kit.rnd`);
+  }
 });
 test('A processor-drawn WebGL is recognised by name', () => {
   for (const name of ['ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)', 'llvmpipe (LLVM 15.0.7, 256 bits)', 'Microsoft Basic Render Driver', 'Software Rasterizer']) assert.equal(softwareRendererName(name), true, name);

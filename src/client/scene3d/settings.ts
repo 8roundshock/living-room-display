@@ -17,8 +17,12 @@ export const OWNER_LOOK = {
   timeScale: 5 / 40,
   /** How far the scene fades out toward the middle of the screen (the picker's radial mask). */
   fadeToMiddle: .6,
-  /** Scene opacity as a share of the app's ambient brightness; the product never exceeds that brightness. */
-  brightness: .45,
+  /** Scene opacity as a share of the app's ambient brightness; the layer never exceeds that brightness.
+   * Not the picker's 45% taken literally (coordinator decision, 2026-11-10, #636): in the picker the
+   * owner's 45% sat beside stand-in text drawn at roughly the same luminance, so the look he approved
+   * has scene highlights about as bright as the text, a ratio close to 1 and not 0.45. In the app the
+   * text is already dimmed by the ambient brightness, so the scene takes nearly all of it. */
+  brightness: .95,
   /** How much is in a scene, 0-1. A scene module turns this into counts. */
   amount: .3,
 } as const;
@@ -27,7 +31,9 @@ export const OWNER_SCENE_AMOUNT: Readonly<Record<string, number>> = { 'canada-da
 
 export type SceneTier = 'special' | 'everyday';
 /** Owner direction, 2026-11-10: one-day occasions "can be more intense, bigger"; scenes that stay
- * for weeks or months "need to be more low-key". Applied gently around the picks above. */
+ * for weeks or months "need to be more low-key". Applied gently around the picks above. The
+ * product of brightness share and tier is clamped to 1 (sceneLook), so a special scene is drawn
+ * at the saved brightness itself and never above it. */
 export const TIER_LOOK: Readonly<Record<SceneTier, { opacity: number; amount: number; size: number }>> = {
   everyday: { opacity: .9, amount: .8, size: 1 },
   special: { opacity: 1.15, amount: 1, size: 1.1 },
@@ -53,7 +59,8 @@ export function sceneLook(sceneId: string, tier: SceneTier, quiet = false): Scen
   return {
     amount: (OWNER_SCENE_AMOUNT[sceneId] ?? OWNER_LOOK.amount) * rule.amount * (quiet ? QUIET_LOOK.amount : 1),
     size: OWNER_LOOK.size * rule.size,
-    opacity: Math.min(1, OWNER_LOOK.brightness * rule.opacity * (quiet ? QUIET_LOOK.opacity : 1)),
+    // Share and tier are clamped together first, so no tier is ever above the saved brightness; a quiet date dims that.
+    opacity: Math.min(1, OWNER_LOOK.brightness * rule.opacity) * (quiet ? QUIET_LOOK.opacity : 1),
     glow: OWNER_LOOK.glow, shine: OWNER_LOOK.shine, seeThrough: OWNER_LOOK.seeThrough,
     timeScale: quiet ? QUIET_LOOK.timeScale : OWNER_LOOK.timeScale,
     fadeToMiddle: OWNER_LOOK.fadeToMiddle,

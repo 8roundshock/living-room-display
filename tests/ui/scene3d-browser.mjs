@@ -11,9 +11,9 @@ import { parseArgs } from 'node:util';
 import { openScene, startSceneServer, WEBGL_ARGS } from './lib/scene-cases.mjs';
 
 const VIEWPORT = { width: 640, height: 360 }, BRIGHTNESS = .36, READY = 120_000;
-// [scene, weather over it, tier, source, share of brightness]. settings.ts: the owner's share 0.45, everyday x0.9, special x1.15.
+// [scene, weather over it, tier, source, share of brightness]. settings.ts: share 0.95, everyday x0.9, special x1.15 clamped at 1.
 // Christmas is shown under Combined snow, so its module and the snow overlay are drawn together on the display.
-const CASES = [['christmas', 'snow', 'everyday', 'weather', .45 * .9], ['canada-day', null, 'special', 'holiday', .45 * 1.15], ['birthday', null, 'special', 'birthday', .45 * 1.15]];
+const CASES = [['christmas', 'snow', 'everyday', 'weather', .95 * .9], ['canada-day', null, 'special', 'holiday', 1], ['birthday', null, 'special', 'birthday', 1]];
 const CHUNK = /\/assets\/(engine|christmas|canada-day|birthday|snow)-/;
 
 export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {

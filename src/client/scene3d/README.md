@@ -13,6 +13,10 @@ all drawn by the flat SVG renderer (`LivingTheme`), which stays until every scen
 1. Create `scenes/<id>.js`, named exactly after the scene's id in `src/shared/theme-registry.ts`.
    Nothing else has to change: the file is discovered at build time (`modules.ts`) and becomes
    its own lazily loaded chunk. A weather overlay is `weather/<kind>.js` in the same way.
+   Two scenes are drawn by another scene's file until they have their own: `birthday-russian`
+   and `birthday-korean` use `birthday.js` (`SCENE_MODULE_FALLBACK` in `resolve.ts`). A file
+   named after the scene always wins, so adding `scenes/birthday-russian.js` takes over with
+   no other edit; leave the fallback table alone.
 2. Export one function. It builds the scene by adding objects to `kit.stage`; it returns nothing.
 
    ```js
@@ -29,11 +33,37 @@ all drawn by the flat SVG renderer (`LivingTheme`), which stays until every scen
    `node --test "src/client/scene3d/*.test.ts"`: it checks every file in `scenes/` and
    `weather/` against this contract.
 4. One scene, one pull request, one independent code review. Do not edit `engine.js`, `kit/`,
-   `settings.ts` or another scene in a scene pull request. If the kit lacks something, build it
-   inside your scene file from `kit.T`; if a second scene needs the same thing, move it to its
-   own file under `parts/` (a function that takes `kit`) in a separate pull request.
+   `settings.ts`, `resolve.ts` or another scene in a scene pull request. If the kit lacks
+   something, build it inside your scene file from `kit.T`, or as a shared part (below).
 
-A scene file imports nothing except helpers from `../parts/`. three.js is `kit.T`.
+A scene file imports nothing except shared parts from `../parts/`. three.js is `kit.T`.
+
+## Shared parts (`parts/`)
+
+Something the kit lacks and more than one scene could use (a lantern frame, a pine cone, a
+paper fan) goes in `parts/`, never in `kit/`. Several agents add scenes at the same time, so
+the rules are about not meeting in the same file:
+
+- **One part per file, named after the scene that introduced it:**
+  `parts/<scene id>-<part>.js`, for example `parts/seollal-kite.js` or
+  `parts/new-year-tree-spire.js`. Your scene id is your prefix, so no two agents can choose
+  the same file name, and a reader sees where a part came from. A weather overlay uses its
+  kind (`parts/rain-streak.js`).
+- **A part exports plain functions whose first argument is the kit** and that return an
+  object for the caller to add: `export function kite(kit, { colour, size }) { ... }`. No
+  state at module level, no import of three.js or app code, no `Math.random`. A part may
+  import another part (`./seollal-kite.js`) and nothing else.
+- **Use:** `import { kite } from '../parts/seollal-kite.js';` in the scene file.
+- **You add a part in your own scene's pull request**: a new file touches nobody else. You
+  may import a part that is already on `main`. Do not edit another scene's part in your pull
+  request: if it does not fit, write your own under your prefix, or change the shared one in
+  a separate pull request that re-captures every scene using it.
+- **Promotion to the kit** (when several scenes use a part and its signature has settled) is
+  a separate pull request that moves it into `kit/` and updates `engine.d.ts` and the kit
+  table below together.
+
+`node --test "src/client/scene3d/*.test.ts"` checks the file names and imports of `scenes/`,
+`weather/` and `parts/`.
 
 ## Art rules (owner, 2026-11-10)
 
@@ -152,7 +182,8 @@ them. If a scene looks too strong or too weak at these settings, change the scen
 
 ```powershell
 npm run build
-node tests/ui/tools/scene-sheet.mjs --playwright <module> --edge <msedge.exe> --out "$env:TEMP\scene-look" --full my-scene christmas+snow
+$tools = "$env:TEMP\lrd-browser-tools\node_modules"   # Playwright, installed as in docs/development.md
+node tests/ui/tools/scene-sheet.mjs --playwright "$tools\playwright" --edge "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe" --out "$env:TEMP\scene-look" --full my-scene christmas+snow
 ```
 
 The tool opens the built app on an isolated synthetic server, on each scene's own date and
