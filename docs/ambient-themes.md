@@ -163,10 +163,11 @@ for [#632](https://github.com/8roundshock/living-room-display/issues/632), see
 Measured as above on 2026-11-10 at 1920×1080: 1,300 to 87,000 triangles, 18 to 44 draw
 calls, build 56 to 350 ms, 25 to 30 ms/s of main-thread time, frame script under 1 ms.
 
-The four seasons (their design plans) are the quietest scenes: on screen for weeks or months, so each is one
-well-made hero at an edge and very little else, and lights about a quarter of the pixels
-Christmas does. Each is one fixed picture for its whole run (coordinator decision,
-2026-11-10: no month-by-month change); on a quiet date the hero is drawn alone.
+The four seasons (their design plans) are the quietest scenes: on screen for weeks or
+months, so each is one well-made hero at an edge and very little else, and lights about a
+quarter of the pixels Christmas does. Each is one fixed picture for its whole run
+(coordinator decision, 2026-11-10: no month-by-month change); on a quiet date the hero is
+drawn alone.
 
 - **Spring** ([#613](https://github.com/8roundshock/living-room-display/issues/613)):
   a magnolia bough from the top-left corner with six blooms at four openings (pink
