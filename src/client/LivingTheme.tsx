@@ -104,7 +104,7 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
     const ground = weather === 'snow' ? 'drift' : dressing.ground === 'mist' ? 'water' : dressing.ground;
     return { ground: groundBand(ground, width / unit1080, height / unit1080, [], 1, weather === 'snow' ? .8 : .62), groundKind: ground, top: null as EdgeBand | null, topKind: undefined as string | undefined };
   }, [dressing, weather, width, height, unit1080]);
-  const glows = useMemo(() => width ? glowWashes(width, height, scene.habitat ?? scene.motif).slice(0, scene.quiet ? 1 : 3) : [], [width, height, scene.habitat, scene.motif, scene.quiet]);
+  const glows = useMemo(() => width ? glowWashes(width, height, scene.habitat ?? scene.motif).slice(0, scene.quiet ? 0 : 3) : [], [width, height, scene.habitat, scene.motif, scene.quiet]);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- holeKey is the rounded identity of holes
   const gusts = useMemo(() => weather === 'wind' && width ? gustStreaks(width, height, holes) : [], [weather, width, height, holeKey]);
   const SNOW_COLORS = ['#bfe3f7', '#9fd0f2', '#d6c8f5'] as const;
@@ -155,7 +155,7 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
               style={{ '--gust-age': `${-(elapsed % LIVING_SCENE_BUDGET.life + streak.delay * 1000)}ms`, '--gust-travel': `translate(${streak.travel}px, 0px)` } as CSSProperties} />)}
           </g>}
       </g>
-      {/* Particles and fog fade out before reading space instead of being clipped into half-shapes. */}
+      {/* Particles and fog are soft and unmasked; they pass behind reading space (#600). */}
       {particleKind && <ParticleLayer key={`${particleKind}:${cycle}:${width}:${height}`} kind={particleKind} count={particleCount} width={width / unit1080} height={height / unit1080} age={elapsed % LIVING_SCENE_BUDGET.life}
           gust={weather === 'wind'} palette={palette} scale={unit1080} />}
       {weather === 'fog' && <g key={`fog:${cycle}:${width}`} className="living-weather" data-scene-weather="fog">

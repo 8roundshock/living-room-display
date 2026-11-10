@@ -12,7 +12,8 @@ drawn translucent and classy, never clipped by widgets. This section overrides a
 older statement below that conflicts with it.
 
 - **Light, not objects.** Each scene carries its palette as three large soft colour
-  washes (two bottom corners, one top edge) that drift and breathe.
+  washes (two bottom corners, one top edge) that drift and breathe. Quiet dates
+  draw no wash and at most one unfilled patch.
 - **Few authored forms.** Only the patches holding a scene's named principal forms
   are drawn (otherwise at most two), as translucent "glass": body fill at most 50%
   opacity under a thin light rim.
