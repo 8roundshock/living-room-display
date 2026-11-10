@@ -163,6 +163,91 @@ for [#632](https://github.com/8roundshock/living-room-display/issues/632), see
 Measured as above on 2026-11-10 at 1920×1080: 1,300 to 87,000 triangles, 18 to 44 draw
 calls, build 56 to 350 ms, 25 to 30 ms/s of main-thread time, frame script under 1 ms.
 
+The four seasons (their design plans) are the quietest scenes: on screen for weeks or
+months, so each is one well-made hero at an edge and very little else, and lights about a
+quarter of the pixels Christmas does. Each is one fixed picture for its whole run
+(coordinator decision, 2026-11-10: no month-by-month change); on a quiet date the hero is
+drawn alone.
+
+- **Spring** ([#613](https://github.com/8roundshock/living-room-display/issues/613)):
+  a magnolia bough from the top-left corner with six blooms at four openings (pink
+  outside, pale inside) and velvet buds, a spray of young leaves low on the right, now and
+  then one petal falling down the left edge.
+- **Summer** ([#614](https://github.com/8roundshock/living-room-display/issues/614)):
+  a morning-glory vine hanging down the right edge (two wound stems, heart leaves, three
+  periwinkle flowers, furled buds, tendrils), a short runner low on the left, and a few
+  fireflies that are lights only.
+- **Autumn** ([#615](https://github.com/8roundshock/living-room-display/issues/615)):
+  a ginkgo branch rising along the left edge with gold fans on spur shoots, a few fallen
+  fans in the bottom-left corner, now and then one more falling. Gold and amber only.
+- **Winter** ([#616](https://github.com/8roundshock/living-room-display/issues/616)):
+  frost ferns growing in from the bottom-left corner and a bare twig glazed in clear ice in
+  the top-right corner. Still air (coordinator decision on #616): the 3D Winter scene draws
+  no snowfall of its own, so falling snow over it always means the forecast says snow.
+
+Measured as above on 2026-11-10 at 1920×1080: 30,000 to 75,000 triangles (Winter's frost
+is about 5,000 crystals in one instanced mesh), 43 to 76 draw calls, build 62 to 115 ms,
+23 to 38 ms/s of main-thread time and frame script of about 1 ms or less, on a PC that was
+busy with other captures (Christmas measured 39 to 48 ms/s in the same runs). At full
+opacity on an empty board a season lights 2.2 to 3.4% of the pixels; Christmas lights 11.7%.
+
+#### Weather scenes and overlays
+
+The weather family ([#617](https://github.com/8roundshock/living-room-display/issues/617)
+to [#621](https://github.com/8roundshock/living-room-display/issues/621)). Each kind is a
+standalone scene (`scenes/<kind>.js`: Weather mode, and Combined where the scene underneath
+does not list that weather) and an overlay (`weather/<kind>.js`: Combined, over a scene that
+lists it). Nothing of it is drawn unless the resolver returns that weather from fresh
+forecast data. One quiet density per kind: it follows the amount setting, never a light or
+heavy weather code. Rain leans one way and wind blows right to left as art choices; the
+resolver passes no direction. Particles are weighted to the sides, each kind has a far, a
+middle and an out-of-focus near depth, and on a quiet date nothing falls or sails.
+
+- **Rain** scene: slanted threads of light at three depths, glass beads of water in the
+  top-left corner with one that runs down now and then, rings on a small pool in the
+  bottom-right corner.
+- **Rain** overlay: the far and middle threads only, half the count at 70% strength, 35% of
+  a holiday's or birthday's colour; no near band, beads or pool.
+- **Snow** scene: small sharp flakes far away, soft ones in focus, a few large soft discs
+  near the glass, a few clear hexagonal plates, two low rim-lit drifts in the bottom corners.
+- **Snow** overlay: the far and middle flakes at half the count and two near discs; no
+  drifts, and plates only over Winter. The scene underneath leaves out its own snow.
+- **Storms** scene: a dark cloud mass in the top-left corner thinning along the top edge,
+  lit from inside by a slow, soft glow; driven rain leaning 16° at three depths, with a wider
+  sheet of heavier rain crossing now and then.
+- **Storms** overlay: five cloud volumes in the top-left corner, the glow at 60% with no
+  echo, driven rain at 60% of the count; no sheets and no near band.
+- **Fog** scene: four birch trunks at three depths (three on the left, one far on the right)
+  and bands of fog that slide between them, thin across the middle; nothing falls.
+- **Fog** overlay: three bands (far, middle, one low near band held to 0.04) at 60%
+  strength; no trunks. It stays, still, on a quiet date.
+- **Wind** scene: a branch in the top-right corner bowed over by the wind with slim leaves
+  streaming, downy seeds sailing along the top and bottom at three depths, a leaf or two
+  tumbling low; one gust drives all of it.
+- **Wind** overlay: half the seeds, far and middle depths, always behind the scene's own
+  objects; no branch, loose leaves or backlight. The scene underneath shows the rest.
+
+The Storms glow (coordinator decision on #619) is not lightning and not a flash: no bolt
+is drawn; the glow takes 1.6 s to rise, holds 0.4 s and fades over 5 s, 48 to 128 s apart;
+it is drawn only through the cloud's own density, so nothing outside the cloud brightens;
+overlapping volumes take the lighter value instead of adding up; and its peak stays below
+widget text (0.68 of white on the canvas, drawn at 0.855 of the saved brightness).
+
+Thread, flake and band strengths are higher than the figures in the design plans, which were
+chosen beside the picker's brighter stand-in layer: in the app the layer is drawn at about a
+third, and the planned values could not be seen there. Scene pixels alone at a saved 36%
+(1920×1080, empty board): brightest pixel 49-60 of 255 in all five scenes, against widget
+text at about 69.
+
+Measured on 2026-11-10 like the table under Runtime (1920×1080 and 3840×2160, default
+board, three runs): Rain 13,400 triangles and 8 draw calls, Snow 4,700 and 13, Storms 300
+and 5, Fog 4,400 and 12, Wind 5,500 and 52; a frame costs 0.03-0.7 ms of script and 0.4-3 ms
+with the GPU; the page's main thread spends 20-41 ms per second on a running scene, and
+building one takes 50-410 ms. Rain, snow and storm particles move in the vertex shader (one
+uniform a frame). An overlay adds 2 to 6 draw calls to the scene underneath; its
+main-thread cost could not be told apart from the run-to-run variation (the PC was busy
+with other work when this was measured, so the main-thread figures are the noisy ones).
+
 **Russian family** (six scenes with their own modules; six heroes, none shared; shared
 pieces are `parts/new-year-tree-*`, `orthodox-christmas-*`, `maslenitsa-*`, `pascha-*`,
 `mimosa-*` and `birthday-russian-*`):
@@ -208,7 +293,7 @@ still attributes.
 
 - **3D** when `src/client/scene3d/scenes/<id>.js` exists (found at build time, so adding a
   scene edits no list), the browser gives the page hardware WebGL, and, with weather over
-  the scene in Combined, `weather/<kind>.js` exists too. Only `snow` exists so far.
+  the scene in Combined, `weather/<kind>.js` exists too. All five kinds have one.
 - **Flat** otherwise: a scene without a module yet, weather over a 3D scene whose overlay
   does not exist yet (the flat renderer still draws that weather), no WebGL, a software
   rasteriser, a GPU that needs more than 120 ms a frame, a lost context, or a scene module
@@ -218,7 +303,8 @@ Unchanged rules: Theme Off, Animation Off and system reduced motion mount nothin
 download nothing 3D); the editor's still preview draws one static frame and runs no loop;
 a selected quiet date draws a frozen, desaturated frame with nothing in the air, amount
 ×0.4 and opacity ×0.38; saved brightness is never raised; true black; no audio and no
-flashes. The opt-in foreground passage is untouched, and because it starts from the flat
+flashes (the Storms scene's slow glow inside its cloud is described under
+[Weather scenes and overlays](#weather-scenes-and-overlays)). The opt-in foreground passage is untouched, and because it starts from the flat
 renderer's patches it does not start over a 3D scene
 ([#589](https://github.com/8roundshock/living-room-display/issues/589),
 [#634](https://github.com/8roundshock/living-room-display/issues/634)).
@@ -336,8 +422,12 @@ of the short side and capped at 12, because each is its own animation.
 `src/shared/living-scene-dressing.ts` names each scene's ground, top and
 particle kind (and fixed ground or canopy colours where the scene palette's
 first role is not ground-coloured). These are art choices, not weather or
-cultural claims: Christmas, New Year (Russia), Orthodox Christmas and Winter
-show authored snowfall whatever the weather is.
+cultural claims: in this flat renderer Christmas, New Year (Russia), Orthodox
+Christmas and Winter show authored snowfall whatever the weather is. That no
+longer holds for Winter in 3D (coordinator decision on
+[#616](https://github.com/8roundshock/living-room-display/issues/616),
+2026-11-10): its air is still, and snow falls over it only when the forecast
+says snow. The flat Winter keeps its snowfall only as the fallback.
 
 Palettes in the registry are saturated (true reds, bright yellow, orange, mid
 green). Authored fills follow a low-light curve (`fill^0.45`) with a lighter rim
@@ -487,7 +577,10 @@ strokes. Rain has droplets/ripples and streaks, snow readable crystal groups,
 storms curled cloud/rain, fog three separated ribbons and wind leaves/currents.
 
 Still current: one bounded layer sits behind widgets on true black, without
-full-screen fills, lightning flashes or audio. Weather chooses the geometry; a seasonal or celebratory tint can remain.
+full-screen fills, flashes, drawn lightning bolts or audio. The only storm light is the 3D
+Storms scene's glow inside its cloud: slow (1.6 s to rise, 5 s to fade, about once a minute
+or two), soft, never brighter than widget text, and nothing outside the cloud brightens
+([Weather scenes and overlays](#weather-scenes-and-overlays), #619). Weather chooses the geometry; a seasonal or celebratory tint can remain.
 Exact selected quiet dates use neutral seasonal/weather contours. Off does
 not mount the layer; reduced motion and Animation Off remove it entirely. This
 does not promise OLED burn-in prevention or substitute for weather alerts.
