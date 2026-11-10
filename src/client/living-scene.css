@@ -5,6 +5,8 @@
 .living-canvas { display: block; width: 100%; height: 100%; overflow: hidden; }
 .living-patch-life { animation: habitat-life var(--patch-life) linear var(--patch-age) 1 both; }
 .living-attached { transform-box: view-box; animation: habitat-phrase 12s ease-in-out var(--group-phase) 3 both; }
+.living-patch { animation: habitat-appear 1.6s ease-out 1 both; }
+.living-drift { transform-box: fill-box; transform-origin: center; animation: habitat-drift var(--drift-duration) linear 1 both; }
 .living-rain { animation: habitat-rain 4s linear var(--rain-age) 9 both; }
 .living-ripple { animation: habitat-impact 4s linear var(--rain-age) 9 both; }
 .living-air { animation: habitat-air 12s ease-in-out var(--air-age) 3 both; }
@@ -20,6 +22,13 @@
   75% { transform: var(--habitat-step-3); }
   100% { transform: var(--habitat-step-4); }
 }
+@keyframes habitat-appear { 0% { opacity: 0; } }
+@keyframes habitat-drift {
+  0% { opacity: 0; transform: var(--drift-from); }
+  14%,82% { opacity: .8; }
+  50% { transform: var(--drift-mid); }
+  100% { opacity: 0; transform: var(--drift-end); }
+}
 @keyframes habitat-rain {
   0% { opacity: 0; transform: translate(0,0); }
   18%,72% { opacity: 1; }
@@ -32,5 +41,6 @@
   50% { transform: var(--air-mid); }
   100% { opacity: 0; transform: var(--air-end); }
 }
-.living-theme[data-theme-still] :is(.living-patch-life,.living-attached,.living-rain,.living-ripple,.living-air) { animation: none; opacity: 1; }
+.living-theme[data-theme-still] :is(.living-patch,.living-patch-life,.living-attached,.living-rain,.living-ripple,.living-air,.living-drift) { animation: none; opacity: 1; }
+.living-theme[data-theme-still] .living-drift { opacity: .8; }
 .living-theme[data-theme-quiet] { opacity: calc(var(--ambient-brightness, .55) * .38); }

@@ -45,6 +45,8 @@ export interface LivingSceneArt {
   patches: readonly ScenePatch[];
   passage: ScenePassageArt;
   weather: readonly ('rain' | 'snow' | 'storm' | 'fog' | 'wind')[];
+  /** Authored seasonal air in place of detached drifting forms; not a weather claim. */
+  air?: 'snow';
 }
 
 /** These are newly drawn low plants, not cropped or flattened tall plants. Their
@@ -252,18 +254,18 @@ const RIBBON_PASSAGE: ScenePassageArt = { kind: 'ribbon', viewBox: [100, 50], pa
 ] };
 const WINTER_SCENE: LivingSceneArt = {
   patches: [
-    { id: 'winter-distant-shoulder', edge: 'bottom-right', width: .62, height: .13, viewBox: [900, 180], depth: 'far', opacity: .43, groups: [form('winter-distant-drift', 'drift', [570, 205], [
-      filled('M-20 203C92 174 128 131 233 143C308 148 359 183 442 172C534 160 572 113 653 124C744 135 798 181 922 174L922 216L-20 216Z', 0, .30, 0),
+    { id: 'winter-distant-shoulder', edge: 'bottom-right', width: .62, height: .26, viewBox: [900, 214], depth: 'far', opacity: .43, groups: [form('winter-distant-drift', 'drift', [570, 205], [
+      filled('M2 216C92 180 128 131 233 143C308 148 359 183 442 172C534 160 572 113 653 124C744 135 810 185 898 216L2 216Z', 0, .30, 0),
       line('M75 180C141 155 185 143 241 150 M505 164Q583 129 650 134 M718 150Q786 180 862 179', 2, 1.25, .55),
     ], .44)] },
-    { id: 'winter-snow-shoulders', edge: 'bottom-left', width: .62, height: .16, viewBox: [900, 180], depth: 'habitat', groups: [form('winter-near-drift', 'drift', [310, 208], [
-      filled('M-25 187C56 182 79 139 151 137C218 135 254 182 318 183C385 184 421 159 475 164C522 169 559 194 625 201L625 222L-25 222Z', 0, .34, 0),
-      filled('M-17 209C74 186 108 166 178 174C244 182 265 205 345 208L345 226L-17 226Z', 2, .18, 0),
-      line('M-12 185Q65 177 108 149Q147 126 190 146 M230 167Q267 186 318 184 M379 178Q427 157 473 166', 0, 1.8, .82),
+    { id: 'winter-snow-shoulders', edge: 'bottom-left', width: .62, height: .27, viewBox: [900, 212], depth: 'habitat', groups: [form('winter-near-drift', 'drift', [310, 208], [
+      filled('M4 214C60 200 85 139 151 137C218 135 254 182 318 183C385 184 421 159 475 164C522 169 559 194 640 214L640 222L4 222Z', 0, .34, 0),
+      filled('M6 214C74 190 108 166 178 174C244 182 265 205 345 214L345 226L6 226Z', 2, .18, 0),
+      line('M22 203Q72 180 108 149Q147 126 190 146 M230 167Q267 186 318 184 M379 178Q427 157 473 166', 0, 1.8, .82),
       line('M72 193Q120 175 165 182 M478 185Q519 189 550 201', 1, 1.2, .55),
     ], .12, [
-      filled('M-20 205C61 184 92 162 155 164C219 167 256 192 322 194C383 196 419 179 471 182C522 187 561 204 624 210L624 225L-20 225Z', 0, .34, 0),
-      line('M-5 202Q82 164 151 168 M224 182Q275 197 322 196 M383 190Q432 179 475 186', 0, 1.8, .82),
+      filled('M4 214C61 192 92 162 155 164C219 167 256 192 322 194C383 196 419 179 471 182C522 187 561 204 624 214L624 225L4 225Z', 0, .34, 0),
+      line('M26 202Q84 166 151 168 M224 182Q275 197 322 196 M383 190Q432 179 475 186', 0, 1.8, .82),
       line('M68 207Q115 189 164 194 M471 201Q511 199 545 211', 2, 1.2, .55),
     ])] },
     { id: 'winter-twig-counterweight', edge: 'bottom-right', width: .23, height: .21, viewBox: [430, 260], depth: 'habitat', groups: [form('winter-frost-twigs', 'branch', [365, 280], [
@@ -276,17 +278,17 @@ const WINTER_SCENE: LivingSceneArt = {
       line('M203 181L190 160 M225 190L233 170 M307 180L291 169 M202 204L183 190', 0, 1.3),
       filled('M146 149L154 157L147 169L140 158Z M314 157L321 165L315 177L308 165Z', 2, .4, .9),
     ])] },
-  ], passage: FLAKE_PASSAGE, weather: ['snow', 'wind', 'fog'],
+  ], passage: FLAKE_PASSAGE, weather: ['snow', 'wind', 'fog'], air: 'snow',
 };
 const SNOW_SCENE: LivingSceneArt = {
   patches: [
-    { id: 'snow-wind-piled-bank', edge: 'bottom-left', width: .73, height: .16, viewBox: [1000, 190], depth: 'habitat', groups: [form('snow-soft-bank', 'drift', [490, 215], [
-      filled('M-24 210C52 197 67 155 120 153C182 148 202 185 254 180C306 174 320 126 371 133C418 138 431 178 490 179C550 178 570 151 619 160C665 170 682 201 743 199C810 199 847 174 907 181Q963 185 1025 213L1025 231L-24 231Z', 0, .33, 0),
+    { id: 'snow-wind-piled-bank', edge: 'bottom-left', width: .73, height: .30, viewBox: [1000, 226], depth: 'habitat', groups: [form('snow-soft-bank', 'drift', [490, 215], [
+      filled('M2 228C52 202 67 155 120 153C182 148 202 185 254 180C306 174 320 126 371 133C418 138 431 178 490 179C550 178 570 151 619 160C665 170 682 201 743 199C810 199 847 174 907 181Q963 185 998 228L2 228Z', 0, .33, 0),
       line('M9 195Q72 151 121 158 M263 179Q324 126 372 139 M441 174Q491 190 536 178 M780 199Q843 178 903 187', 0, 1.7, .81),
       filled('M136 207Q194 180 254 199Q287 208 317 220L98 224Z M568 211Q613 181 666 204L711 225L528 226Z', 1, .18, 0),
       line('M343 166L354 175L367 166 M349 170L349 183 M614 184L621 192L629 184', 2, 1, .70),
     ], .22, [
-      filled('M-24 217C54 195 92 176 136 177C183 176 209 201 254 198C308 192 334 167 376 172C425 179 451 202 494 202C550 198 581 181 623 188C684 197 700 219 760 215Q894 185 1020 219L1020 237L-24 237Z', 0, .33, 0),
+      filled('M2 228C54 200 92 176 136 177C183 176 209 201 254 198C308 192 334 167 376 172C425 179 451 202 494 202C550 198 581 181 623 188C684 197 700 219 760 215Q894 185 998 228L2 228Z', 0, .33, 0),
       line('M10 211Q83 175 137 181 M270 198Q331 169 377 177 M521 200Q579 180 627 193 M796 213Q882 194 945 210', 0, 1.7, .81),
     ])] },
     { id: 'snow-cropped-evergreen', edge: 'bottom-right', width: .28, height: .22, viewBox: [520, 270], depth: 'habitat', groups: [form('snow-needle-bough', 'branch', [540, 285], [
@@ -498,7 +500,7 @@ function birthdayScene(treatment: 'classic' | 'russian' | 'korean'): LivingScene
         filled('M-20 196C112 136 180 174 308 162C434 148 500 169 597 197C685 221 778 156 889 171Q949 177 1020 199L1020 211C897 179 822 220 730 221C607 230 554 190 455 190C284 190 133 166-20 214Z', 1, .22, 0),
         line('M6 192C128 152 186 178 309 169 M589 199Q661 224 738 199 M815 181Q898 165 989 195', 2, 1.1, .60),
       ], .25)] },
-      { id: `birthday-${treatment}-celebration`, edge: 'bottom-left', width: .66, height: .23, viewBox: [1000, 250], depth: 'habitat', groups: [
+      { id: `birthday-${treatment}-celebration`, edge: 'bottom-left', width: .66, height: .30, viewBox: [1000, 250], depth: 'habitat', groups: [
         form('birthday-grounded-cake-gifts', 'still', [290, 268], [
           filled('M155 150Q220 129 283 150L283 201Q220 226 155 201Z', 0, .44, 1.8),
           filled('M155 150Q220 130 283 150Q278 170 264 162Q253 179 239 166Q223 182 208 168Q193 180 181 165Q164 175 155 150Z', 1, .53, 1.4),

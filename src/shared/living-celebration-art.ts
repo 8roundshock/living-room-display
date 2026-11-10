@@ -138,7 +138,7 @@ const CHRISTMAS: LivingSceneArt = {
         p('M480 0Q295 23 4 78', 0, undefined, 3.8),
         p('M423 7L365 2L379 25L312 13L326 36L244 27L262 50L179 44L196 64L96 58L123 80L4 79L45 96Q248 60 423 7Z', 0, .58, 1.3),
       ]), .42)] },
-  ], passage: ribbonPassage, weather: ['snow', 'wind', 'fog'],
+  ], passage: ribbonPassage, weather: ['snow', 'wind', 'fog'], air: 'snow',
 };
 
 const NEW_YEAR: LivingSceneArt = {
@@ -210,7 +210,7 @@ const NEW_YEAR_TREE: LivingSceneArt = {
         p('M629 248Q342 158 2 170', 0, undefined, 3.6),
         p('M575 231L497 178L504 210L398 153L423 194L295 137L326 180L196 130L232 173L104 147L139 180L2 169L56 202Q348 181 575 245Z', 0, .61, 1.4),
       ]), .45)] },
-  ], passage: ribbonPassage, weather: ['snow', 'wind', 'fog'],
+  ], passage: ribbonPassage, weather: ['snow', 'wind', 'fog'], air: 'snow',
 };
 
 const ORTHODOX_CHRISTMAS: LivingSceneArt = {
@@ -245,7 +245,7 @@ const ORTHODOX_CHRISTMAS: LivingSceneArt = {
         p('M69 107L76 120L91 121L79 132L79 146L67 138L54 142L59 128L50 118L64 119Z', 0, .25, 1.5),
       ]), .35)] },
   ], passage: { kind: 'flake', viewBox: [62, 62], paths: [p('M31 5V57M9 18L53 44M9 44L53 18M22 12L31 20L40 12M14 28L23 25L22 15M40 48L31 40L22 48', 0, undefined, 1.5)] },
-  weather: ['snow', 'wind', 'fog'],
+  weather: ['snow', 'wind', 'fog'], air: 'snow',
 };
 
 const HALLOWEEN: LivingSceneArt = {
