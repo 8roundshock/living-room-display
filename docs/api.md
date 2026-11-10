@@ -259,25 +259,54 @@ The four values are the ones the previous release requires, so no stored shape c
 
 `appearance.daylightBrightness` is the brightness mode (#439). `null`, the default
 and what data without the key reads as, is **Fixed**: the display shows `brightness`,
-exactly as before. `{ "dimmest": 0.2, "brightest": 0.8 }` is **Follow daylight**:
-both values in `brightness`'s 0.1–1 range, with `dimmest` ≤ `brightest` (equal is a
-flat line). A PATCH sends the whole range or `null`; a partial range, Dimmest above
-Brightest, a value out of range or an unknown key returns 400. `brightness` stays
-the Fixed level in both modes, so returning to Fixed restores it. The browser computes
-the value; the API and the server never do. For the start of each minute it takes the
-sun's elevation at the saved `location` (with [astronomy.ts](../src/client/astronomy.ts),
-no network) and shows
-`dimmest + (brightest − dimmest) · max(0, sin(elevation)) / sin(elevation at solar noon)`,
-using the solar noon of the current solar day and a noon elevation of at least 5°.
-So it is Dimmest from sunset to sunrise and through a polar night, Brightest at local
-solar noon, above Dimmest all through a polar day, and a minute never changes it by
-more than about 1% of the range; around midwinter beyond about 61° latitude, where the
-noon sun stays under 5°, it peaks lower ([src/client/daylight.ts](../src/client/daylight.ts)).
+exactly as before. `{ "dimmest": 0.2, "brightest": 0.8, "dimTime": "23:00" }` is
+**Follow daylight**: both levels in `brightness`'s 0.1–1 range, with `dimmest` ≤
+`brightest` (equal is a flat line). `dimTime` (#591) is a 24-hour `"HH:MM"` clock
+time at the weather location, one of the half hours from `"20:00"` through
+`"00:00"` to `"03:00"`; a time after midnight belongs to the evening before. A PATCH
+sends the whole range or `null`. A range without `dimTime` is accepted and means
+`"23:00"`, so a client written before #591 still saves and a range stored before it
+reads as 11 PM; API responses always include it. A missing level, Dimmest above
+Brightest, a value out of range, any other dim time or an unknown key returns 400.
+`brightness` stays the Fixed level in both modes, so returning to Fixed restores it.
+
+The browser computes the value; the API and the server never do. For the start of
+each minute it takes the sun's geometric elevation at the saved `location` (with
+[astronomy.ts](../src/client/astronomy.ts), no network) and shows
+`dimmest + (brightest − dimmest) · (evening + (1 − evening) · daylight)`, where
+`smooth(x) = x²(3 − 2x)` with `x` clamped to 0–1 and:
+
+- `daylight = smooth((elevation + 6°) / 11°)`: 0 until civil dawn, about 0.45 at
+  sunrise, 1 once the sun is 5° up (30 to 50 minutes after sunrise at Toronto), and
+  the mirror image through dusk.
+- `evening = 0.65 · arm · (1 − smooth((now − dim instant) / 30 min))`. The dim
+  instant is the first time the clock shows `dimTime` after the solar noon, in the
+  location's time zone (the forecast's resolved zone while the location stores
+  `auto`, this computer's until a forecast arrives). `arm` raises the term from 0
+  to 1 over the two hours before each solar noon, when daylight already holds the
+  display at Brightest; before that window the previous evening's term applies.
+
+So the display rises through dawn, is at Brightest while the sun is 5° up, eases to
+the evening level (0.65 of the range: 55% with the starting 28–70% range, the Room
+look's Fixed level) as dusk falls, holds it until the dim time, glides to Dimmest
+over 30 minutes and stays there until the next dawn. Daylight wins: a dim time that
+arrives while it is light only lets dusk carry the display down, and a dawn that
+starts during the ramp blends with it. Nothing is scaled to the noon elevation, so a
+day whose sun stays under 5° peaks below Brightest. On a polar day the display stays
+at Brightest while the sun is 5° up and dips around solar midnight when it is lower.
+In a polar night it rests at Dimmest through the morning, rises to the evening level
+over the two hours before solar noon and holds it until the dim time. The curve is
+continuous. Measured for every minute of 2026 at nine places from the equator to
+78° N, a minute changes it by at most 3.5% of the range with a dim time of 11 PM or
+later (2.5% through a Toronto dawn), and by up to 4.1% when an earlier dim time meets
+dusk ([src/client/daylight.ts](../src/client/daylight.ts)). This replaces the #439
+curve, which followed the sine of the elevation and peaked only at solar noon.
 The ambient page glides to each new value over 10 seconds; editor canvases follow the
 draft at once. Night, Native colours and per-element opacity all scale from that one
 value through the same `--ambient-brightness` cap. Built-in styles keep the mode (they
 set only the Fixed level), Reset appearance returns to Fixed, and saved styles store
-it. At rest `null` is omitted; the previous installed release (`d66832b`) does not know
+the range with its dim time. At rest `null` is omitted, and so is a `dimTime` of
+`"23:00"` inside a range; the previous installed release (`d66832b`) does not know
 the key, so a saved range is a [rollback exception](install.md#additive-data-and-rollback-compatibility-84).
 
 Appearance PATCHes contain exactly the supplied keys: an omitted `clockStyle`,
@@ -877,7 +906,8 @@ they equal the current read default: `appearance.accentMode` `color`,
 release does not know. The previous release (`d66832b`) reads `accentMode`, `animation`
 and pre-Dynamic `widgetData`, so omitting those values is optional (#272). It does
 not know `daylightBrightness`: omitting `null` keeps Fixed brightness readable, while
-a saved range is a rollback exception. It also lacks Dynamic (#437): while off, its
+a saved range is a rollback exception. Inside a range, `dimTime` `"23:00"` (#591) is
+omitted too, so such a range is stored exactly as before #591. It also lacks Dynamic (#437): while off, its
 visibility and hidden placement are omitted, as are its default sources (all on).
 Under the #135 rule no transform is ever written for an unknown id, whatever its
 value; transforms no longer render, so dropping one loses nothing. An enabled

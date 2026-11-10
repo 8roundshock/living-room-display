@@ -1,4 +1,4 @@
-// Follow daylight brightness (#439): the appearance.daylightBrightness contract. Synthetic data in
+// Follow daylight brightness (#439, dim time #591): the appearance.daylightBrightness contract. Synthetic data in
 // temporary folders only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,7 +14,10 @@ import { importSchema, mergeSettings, settingsPatchSchema, settingsSchema } from
 import { applyBuiltinPreset, getVisual, resetAppearance } from '../client/model.ts';
 import { rebaseSettings, sameEffectiveSettings, settingsChanges } from '../client/draft.ts';
 
-const RANGE = { dimmest: 0.25, brightest: 0.75 };
+/** A range as a pre-#591 client sends it and as it is stored with the default dim time. */
+const BARE = { dimmest: 0.25, brightest: 0.75 };
+const RANGE = { ...BARE, dimTime: '23:00' };
+const MIDNIGHT = { ...BARE, dimTime: '00:00' };
 
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-daylight-'));
@@ -47,8 +50,8 @@ test('a PATCH sets a whole range or null; a brightness-only PATCH keeps the rang
   const brighter = mergeSettings(following, settingsPatchSchema.parse({ appearance: { brightness: 0.4 } }));
   assert.deepEqual(brighter.appearance.daylightBrightness, RANGE, 'an unrelated appearance PATCH keeps the range');
   assert.equal(brighter.appearance.brightness, 0.4, 'brightness stays the Fixed level');
-  const equal = mergeSettings(following, { appearance: { daylightBrightness: { dimmest: 0.5, brightest: 0.5 } } });
-  assert.deepEqual(equal.appearance.daylightBrightness, { dimmest: 0.5, brightest: 0.5 }, 'an empty range is allowed');
+  const equal = mergeSettings(following, settingsPatchSchema.parse({ appearance: { daylightBrightness: { dimmest: 0.5, brightest: 0.5 } } }));
+  assert.deepEqual(equal.appearance.daylightBrightness, { dimmest: 0.5, brightest: 0.5, dimTime: '23:00' }, 'an empty range is allowed');
   assert.equal(mergeSettings(following, { appearance: { daylightBrightness: null } }).appearance.daylightBrightness, null);
 });
 
@@ -58,6 +61,9 @@ test('invalid ranges are 400 and change nothing; saved values survive a restart'
     for (const daylightBrightness of [
       { dimmest: 0.8, brightest: 0.3 }, { dimmest: 0.05, brightest: 0.5 }, { dimmest: 0.2, brightest: 1.2 }, { dimmest: 0.2 },
       { brightest: 0.6 }, { dimmest: 0.2, brightest: 0.6, peak: 'noon' }, { dimmest: '0.2', brightest: 0.6 }, 0.5, 'daylight', [],
+      // #591 dim times: only the half hours from 20:00 to 03:00, as 24-hour HH:MM text.
+      { ...BARE, dimTime: '19:30' }, { ...BARE, dimTime: '03:30' }, { ...BARE, dimTime: '23:15' }, { ...BARE, dimTime: '12:00' }, { ...BARE, dimTime: '11:00 PM' },
+      { ...BARE, dimTime: '24:00' }, { ...BARE, dimTime: '9:00' }, { ...BARE, dimTime: 1380 }, { ...BARE, dimTime: null }, { ...BARE, dimTime: '' },
     ]) {
       const response = await app.patch({ appearance: { daylightBrightness } });
       assert.equal(response.status, 400, JSON.stringify(daylightBrightness));
@@ -68,7 +74,7 @@ test('invalid ranges are 400 and change nothing; saved values survive a restart'
     assert.deepEqual(saved.appearance.daylightBrightness, RANGE, 'the PATCH response carries the range');
     const state = await (await fetch(`${app.url}/api/state`)).json();
     assert.deepEqual(state.settings.appearance.daylightBrightness, RANGE);
-    assert.deepEqual(JSON.parse(await readFile(join(app.directory, 'state.json'), 'utf8')).settings.appearance.daylightBrightness, RANGE);
+    assert.deepEqual(JSON.parse(await readFile(join(app.directory, 'state.json'), 'utf8')).settings.appearance.daylightBrightness, BARE, 'the default dim time is omitted at rest');
     assert.deepEqual((await DataStore.open(app.directory)).snapshot().settings.appearance.daylightBrightness, RANGE, 'through a restart');
     // Fixed again: API responses keep the key (null); the file omits it.
     const fixed = await (await app.patch({ appearance: { daylightBrightness: null } })).json();
@@ -119,4 +125,63 @@ test('built-in styles keep the brightness mode; Reset appearance returns to Fixe
   assert.deepEqual(getVisual(following).appearance.daylightBrightness, RANGE, 'a saved style captures the range');
   const restyled = mergeSettings(following, { savedPresets: [{ id: 's', name: 'Daylight', visual: getVisual(following) }] });
   assert.deepEqual(restyled.savedPresets[0]!.visual.appearance.daylightBrightness, RANGE);
+});
+
+test('#591 a range saved before the dim time existed reads as 11 PM, in settings, saved styles and imports', () => {
+  const legacy = JSON.parse(JSON.stringify(defaultSettings()));
+  legacy.appearance.daylightBrightness = { ...BARE };
+  legacy.savedPresets = [{ id: 'legacy', name: 'Legacy', visual: { ...getVisual(defaultSettings()), appearance: { ...legacy.appearance } } }];
+  const read = settingsSchema.parse(legacy);
+  const imported = importSchema.parse({ version: 1, exportedAt: new Date().toISOString(), settings: legacy, reminders: [] }).settings;
+  for (const appearance of [read.appearance, read.savedPresets[0]!.visual.appearance, imported.appearance, imported.savedPresets[0]!.visual.appearance]) {
+    assert.deepEqual(appearance.daylightBrightness, RANGE);
+  }
+  // A stored dim time is kept; an unusable one is rejected rather than silently replaced.
+  legacy.appearance.daylightBrightness = { ...MIDNIGHT };
+  assert.deepEqual(settingsSchema.parse(legacy).appearance.daylightBrightness, MIDNIGHT);
+  legacy.appearance.daylightBrightness = { ...BARE, dimTime: '12:00' };
+  assert.equal(settingsSchema.safeParse(legacy).success, false);
+});
+
+test('#591 the dim time is part of the whole range: a PATCH without it means 11 PM; another time is stored and survives a restart', async () => {
+  assert.deepEqual(settingsPatchSchema.parse({ appearance: { daylightBrightness: BARE } }), { appearance: { daylightBrightness: RANGE } }, 'a client from before #591 still saves');
+  assert.deepEqual(settingsPatchSchema.parse({ appearance: { daylightBrightness: MIDNIGHT } }), { appearance: { daylightBrightness: MIDNIGHT } });
+  assert.deepEqual(settingsPatchSchema.parse({ appearance: { brightness: 0.4 } }), { appearance: { brightness: 0.4 } }, 'the default never enters an unrelated PATCH (#83)');
+  const app = await fixture();
+  try {
+    const saved = await (await app.patch({ appearance: { daylightBrightness: MIDNIGHT } })).json();
+    assert.deepEqual(saved.appearance.daylightBrightness, MIDNIGHT);
+    const file = async () => JSON.parse(await readFile(join(app.directory, 'state.json'), 'utf8')).settings.appearance.daylightBrightness;
+    assert.deepEqual(await file(), MIDNIGHT, 'a chosen dim time is written');
+    assert.deepEqual((await DataStore.open(app.directory)).snapshot().settings.appearance.daylightBrightness, MIDNIGHT, 'through a restart');
+    assert.deepEqual((await (await fetch(`${app.url}/api/export`)).json()).settings.appearance.daylightBrightness, MIDNIGHT);
+    // An unrelated appearance PATCH keeps it.
+    await app.patch({ appearance: { brightness: 0.4 } });
+    assert.deepEqual(app.store.snapshot().settings.appearance.daylightBrightness, MIDNIGHT);
+    // A range without the key replaces the whole range: 11 PM again, in the response and omitted in the file.
+    const reset = await (await app.patch({ appearance: { daylightBrightness: BARE } })).json();
+    assert.deepEqual(reset.appearance.daylightBrightness, RANGE, 'API responses always carry the dim time');
+    assert.deepEqual(await file(), BARE);
+    assert.deepEqual((await DataStore.open(app.directory)).snapshot().settings.appearance.daylightBrightness, RANGE);
+    // Writing never changes the settings in memory.
+    assert.deepEqual(app.store.snapshot().settings.appearance.daylightBrightness, RANGE);
+  } finally { await app.close(); }
+});
+
+test('#591 the editor: a dim time change is one effective edit, sent with the whole range, and returning to it is none', () => {
+  const saved = mergeSettings(defaultSettings(), { appearance: { daylightBrightness: RANGE } });
+  const later = structuredClone(saved); later.appearance.daylightBrightness = { ...MIDNIGHT };
+  assert.equal(sameEffectiveSettings(saved, later), false);
+  assert.deepEqual(settingsChanges(saved, later).appearance, { daylightBrightness: MIDNIGHT }, 'the whole range, never the dim time alone');
+  assert.ok(settingsPatchSchema.safeParse(settingsChanges(saved, later)).success);
+  const back = structuredClone(later); back.appearance.daylightBrightness = { ...RANGE };
+  assert.equal(sameEffectiveSettings(saved, back), true, 'choosing the saved time again is no edit');
+  assert.deepEqual(settingsChanges(saved, back), {});
+  // A polling rebase keeps a local dim time with its range; untouched, the saved one arrives.
+  const incoming = structuredClone(saved); incoming.appearance.daylightBrightness = { dimmest: 0.3, brightest: 0.6, dimTime: '22:00' };
+  assert.deepEqual(rebaseSettings(saved, later, incoming).appearance.daylightBrightness, MIDNIGHT);
+  assert.deepEqual(rebaseSettings(saved, structuredClone(saved), incoming).appearance.daylightBrightness, incoming.appearance.daylightBrightness);
+  // Saved styles and built-in looks carry it.
+  assert.deepEqual(getVisual(later).appearance.daylightBrightness, MIDNIGHT);
+  assert.deepEqual(applyBuiltinPreset(later, 'night').appearance.daylightBrightness, MIDNIGHT);
 });

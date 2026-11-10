@@ -5,7 +5,7 @@ import { DEFAULT_ANIMATION_LEVEL, MAX_REVEAL_STEPS, motionPlan, revealTiming, ty
 import { FLOAT_TRAVEL, MAX_STEPS_PER_SECOND, clampFloatOffset, floatPath, floatRange, nextBoundaryDelay, nextStepDelay, stepPath, widgetFloatTarget, widgetTrack, type FloatSlack, type Point } from '../shared/float.ts';
 import { compositionTimeline, dimSeconds, glideKeyframes, glideSeconds, movementFrame, SWAP_DIM } from '../shared/movementTimeline.ts';
 import { renderedAccent, toneVariables } from '../shared/palette.ts';
-import { DAYLIGHT_TRANSITION_SECONDS, daylightStep, effectiveBrightness } from './daylight.ts';
+import { DAYLIGHT_TRANSITION_SECONDS, daylightStep, daylightTimeZone, effectiveBrightness } from './daylight.ts';
 import { Icon } from './icons.tsx';
 import { MotionContext, usePrefersReducedMotion, type MotionState } from './useMotion.ts';
 import { useWakeLock } from './useWakeLock.ts';
@@ -602,8 +602,10 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   // it (widgets.css); editor canvases follow the draft at once. Fixed renders `brightness` unchanged.
   const daylight = settings.appearance.daylightBrightness;
   const brightnessStep = daylightStep(now).getTime();
-  const brightness = useMemo(() => effectiveBrightness(settings.appearance, settings.location, brightnessStep),
-    [settings.appearance.brightness, daylight?.dimmest, daylight?.brightest, settings.location.latitude, settings.location.longitude, brightnessStep]);
+  // #591: the dim time is a clock time at the weather location, read in its zone.
+  const daylightZone = useMemo(() => daylightTimeZone(settings.location.timezone, state.weather.location.timezone), [settings.location.timezone, state.weather.location.timezone]);
+  const brightness = useMemo(() => effectiveBrightness(settings.appearance, settings.location, brightnessStep, daylightZone),
+    [settings.appearance.brightness, daylight?.dimmest, daylight?.brightest, daylight?.dimTime, settings.location.latitude, settings.location.longitude, brightnessStep, daylightZone]);
   const ambientStyle = { '--ambient-accent': renderedAccent(settings.appearance.accentColor), '--ambient-text': settings.appearance.textColor, '--ambient-brightness': brightness, '--font-scale': settings.appearance.fontScale,
     ...(daylight && !embedded ? { '--brightness-transition': `${DAYLIGHT_TRANSITION_SECONDS}s` } : {}),
     ...toneVariables(settings.appearance) } as CSSProperties;

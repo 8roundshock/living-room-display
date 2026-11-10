@@ -633,6 +633,21 @@ html.studio-editor {
 .studio .brightness-daylight > .control-block {
   margin: 10px 0;
 }
+/* #591: the dim time on one line, its select sized to its times. */
+.studio .daylight-dim {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0;
+}
+.studio .daylight-dim > .field-label {
+  margin: 0;
+}
+.studio .daylight-dim > .select-input {
+  flex: 0 1 190px;
+  width: auto;
+}
 .studio .daylight-status {
   margin-top: 10px;
 }

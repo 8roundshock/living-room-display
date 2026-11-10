@@ -3,6 +3,7 @@ import type { Settings } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
 import { WIDGET_IDS } from '../shared/widgets.ts';
 import { defaultTheme } from '../shared/themes.ts';
+import { DEFAULT_DIM_TIME } from '../shared/daylight.ts';
 
 /**
  * The installed release whose strict reader must still accept what this build writes (#84).
@@ -21,7 +22,10 @@ export const PREVIOUS_RELEASE = {
  * in a reader bump. It stays the mechanism for a future additive key or widget id that the previous
  * release does not know: list the key here, or leave the id out of PREVIOUS_RELEASE.widgetIds.
  * `daylightBrightness` (#439) is such a key: d66832b does not know it, so its omission in Fixed
- * mode (null) is required, and a Follow daylight range is a documented rollback exception.
+ * mode (null) is required, and a Follow daylight range is a documented rollback exception. Inside
+ * a range, `dimTime` (#591) is omitted while 23:00 (omitVisual): d66832b rejects any range, but a
+ * build between #439 and #591 reads a range only without that key, so another dim time is a
+ * rollback exception for those builds.
  * `rearrange` (#436, Swap places) is such a key: d66832b does not know it, so its omission while off
  * is required, and Swap places on is a documented rollback exception (docs/install.md).
  */
@@ -44,6 +48,9 @@ function omitVisual(visual: Loose): void {
   const appearance = visual.appearance as Loose | undefined;
   if (appearance) {
     for (const [key, value] of Object.entries(AT_REST.appearance)) if (isDeepStrictEqual(appearance[key], value)) delete appearance[key];
+    // #591: the default dim time is omitted inside a Follow daylight range, so a range with it is
+    // written exactly as before #591 and builds since #439 that predate the key still read it.
+    if (appearance.daylightBrightness?.dimTime === DEFAULT_DIM_TIME) delete appearance.daylightBrightness.dimTime;
   }
   for (const id of WIDGET_IDS) {
     if (previousIds.has(id)) continue;
