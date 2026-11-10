@@ -10,7 +10,8 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
-import { THEME_PARTICLES_MAX, THEME_SCENE_IDS, THEME_SCENES, THEME_MOTIONS, QUIET_THEME } from '../../src/shared/theme-registry.ts';
+import { LIVING_SCENE_BUDGET, THEME_SCENE_IDS, THEME_SCENES } from '../../src/shared/theme-registry.ts';
+import { PRINCIPAL_FORMS } from '../../src/client/living-scene-principals.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
 import { waitForNativeRender } from './lib/native-render.mjs';
@@ -26,8 +27,8 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
   const record = text => { checks.push(text); console.log(`PASS: ${text}`); };
   const saved = () => app.store.snapshot().settings;
   const button = name => page.getByRole('button',{name,exact:true});
-  async function open({date='2026-12-20T18:30:00Z',mode='off',code=0,wind=8,reduced='no-preference',animation='subtle',viewport={width:1280,height:720},path='/editor',calendars=['CA','KR','RU'],empty=false,brightness=.36,float=false,swap=false,interval=180,only,birthday,stableThemeInputs=false}={}) {
-    await context?.close(); clock=new Date(date); const settings=defaultSettings(); settings.appearance.theme={mode,calendars}; settings.appearance.motionEnabled=false; settings.appearance.animation=animation;
+  async function open({date='2026-12-20T18:30:00Z',mode='off',code=0,wind=8,reduced='no-preference',animation='subtle',viewport={width:1280,height:720},path='/editor',calendars=['CA','KR','RU'],empty=false,brightness=.36,float=false,swap=false,interval=180,only,birthday,stableThemeInputs=false,foreground=false}={}) {
+    await context?.close(); clock=new Date(date); const settings=defaultSettings(); settings.appearance.theme={mode,calendars,...(foreground?{foreground:true}:{})}; settings.appearance.motionEnabled=false; settings.appearance.animation=animation;
     settings.appearance.brightness=brightness;
     if(birthday) settings.birthdays=[{id:'00000000-0000-4000-8000-000000000584',name:'Birthday A',date:date.slice(5,10),treatment:birthday}];
     settings.appearance.motionEnabled=float; settings.appearance.rearrange=swap; settings.appearance.motionIntervalSeconds=interval;
@@ -56,25 +57,47 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     await page.goto(base+path); await page.locator(path==='/editor'?'.studio-header':'.widget-grid-plane').waitFor();
     if(path==='/editor') await page.getByRole('tab',{name:'Style',exact:true}).click();
   }
-  async function photo(name) {
-    // Seek a synthetic steady instant. Finish widget entrances and sample each mark at its true age.
-    await page.clock.runFor(24_000);
-    await page.evaluate(()=>document.getAnimations().forEach(a=>{const target=a.effect?.target;if(target instanceof Element&&!target.closest('.ambient-theme')&&a.effect.getTiming().iterations!==Infinity)a.finish();}));
-    await page.locator('.theme-mark').evaluateAll(marks=>marks.forEach(mark=>mark.getAnimations().forEach(a=>{a.pause();a.currentTime=Math.max(0,performance.now()-Number(mark.dataset.themeBorn));})));
-    if(capture) images.push({name,bytes:await page.screenshot()});
+
+  /** Finish widget entrances and let the scene observe the settled reading areas. */
+  async function settle() {
+    await page.clock.runFor(1500);
+    await page.evaluate(()=>document.getAnimations().forEach(a=>{const target=a.effect?.target;if(target instanceof Element&&!target.closest('.ambient-theme,.living-foreground')&&a.effect.getTiming().iterations!==Infinity)a.finish();}));
+    await page.clock.runFor(4200);
+    // Sample every patch inside its steady visible phase; staggered local retreats are checked separately.
+    await page.locator('.living-patch, .living-patch-life').evaluateAll(nodes=>nodes.forEach(node=>node.getAnimations().forEach(a=>{a.pause();a.currentTime=(a.effect.getTiming().delay??0)+9000;})));
   }
-  async function readingIntersections() {
+  async function photo(name) { if(capture) images.push({name,bytes:await page.screenshot()}); }
+  /** Pixel proof from one RAM screenshot, so moving widgets cannot desynchronise it.
+   * The scene is recoloured pure, fully opaque green; widget ink always carries red or
+   * blue. Any ink pixel within two pixels of pure green means art touches a reading. */
+  async function artTouchingInk() {
+    const style=await page.addStyleTag({content:'.living-theme{opacity:1!important}.living-theme [data-reading-mask] path,.living-theme [data-reading-mask] rect{stroke:#00ff00!important;opacity:1!important}.living-theme [data-reading-mask] path:not([fill="none"]),.living-theme [data-reading-mask] rect{fill:#00ff00!important;fill-opacity:1!important}.living-theme svg[data-scene-patch],.living-theme .living-patch-life{opacity:1!important}'});
+    const shot=(await page.screenshot()).toString('base64');
+    await style.evaluate(node=>node.remove());
+    return page.evaluate(async base64=>{
+      const bitmap=await createImageBitmap(new Blob([Uint8Array.from(atob(base64),character=>character.charCodeAt(0))],{type:'image/png'}));
+      const canvas=new OffscreenCanvas(bitmap.width,bitmap.height),context=canvas.getContext('2d'); context.drawImage(bitmap,0,0);
+      const {data,width,height}=context.getImageData(0,0,bitmap.width,bitmap.height),green=new Uint8Array(width*height);
+      let art=0;
+      for(let i=0;i<width*height;i++){const r=data[i*4],g=data[i*4+1],b=data[i*4+2]; if(g>150&&r<40&&b<40){green[i]=1;art++;}}
+      let touching=0;
+      for(let y=2;y<height-2;y++) for(let x=2;x<width-2;x++){const i=y*width+x; if(data[i*4]<=24&&data[i*4+2]<=24) continue;
+        search: for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++) if(green[i+dy*width+dx]){touching++;break search;}}
+      return {art,touching};
+    },shot);
+  }
+  /** A visible, unscaled group must sit wholly outside clearance; the mask is a
+   * safety net, not a way to pass off a sheared drawing as a fit. */
+  async function fullFormsInReadingSpace() {
     return page.evaluate(()=>{
-      const readings=[],range=document.createRange();
-      const walk=node=>{for(const child of node.childNodes) {
-        if(child.nodeType===Node.TEXT_NODE&&child.textContent?.trim()) {range.selectNodeContents(child); readings.push(...range.getClientRects());}
-        else if(child instanceof Element&&!child.classList.contains('sr-only')) {
-          if(child.matches('svg,img,canvas,picture,video,[role="img"]')) readings.push(child.getBoundingClientRect()); else walk(child);
-        }
-      }};
-      document.querySelectorAll('.widget-content').forEach(walk);
-      return [...document.querySelectorAll('.theme-mark')].filter(mark=>Number(getComputedStyle(mark).opacity)>.02&&Number(getComputedStyle(mark.parentElement).opacity)>.5).flatMap(mark=>{
-        const r=mark.getBoundingClientRect(); return readings.filter(b=>b.width>0&&b.height>0&&r.left<b.right&&r.right>b.left&&r.top<b.bottom&&r.bottom>b.top).map(()=>mark.dataset.themeGeneration);
+      const layer=document.querySelector('.living-theme'),origin=layer.getBoundingClientRect();
+      const holes=[...layer.querySelectorAll('mask rect[fill="black"]')].map(hole=>({left:hole.x.baseVal.value,top:hole.y.baseVal.value,right:hole.x.baseVal.value+hole.width.baseVal.value,bottom:hole.y.baseVal.value+hole.height.baseVal.value}));
+      return [...layer.querySelectorAll('[data-scene-fit]:not([data-scene-omitted])')].filter(group=>!/scale\((?!1 1\))/.test(group.getAttribute('transform')??'')).flatMap(group=>{
+        // Path boxes follow the drawn silhouette more tightly than the conservative control hull.
+        const hit=[...group.querySelectorAll('path')].some(path=>{const r=path.getBoundingClientRect(),view=path.closest('svg').getBoundingClientRect();
+          const box={left:Math.max(r.left,view.left)-origin.left+2,right:Math.min(r.right,view.right)-origin.left-2,top:Math.max(r.top,view.top)-origin.top+2,bottom:Math.min(r.bottom,view.bottom)-origin.top-2};
+          return box.right>box.left&&box.bottom>box.top&&holes.some(hole=>box.left<hole.right&&box.right>hole.left&&box.top<hole.bottom&&box.bottom>hole.top);});
+        return hit?[group.dataset.sceneFit]:[];
       });
     });
   }
@@ -106,10 +129,11 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     assert.equal(await page.evaluate(()=>new Date().getUTCMinutes()),30,'both changes render within the same minute');
     record('Adding and clearing today’s birthday updates the existing display at fixed minute with unchanged weather/theme identities');
     await open({date:'2026-11-04T18:30:00Z',mode:'seasonal'});
-    await page.locator('.ambient-theme[data-theme-still]').waitFor(); await page.clock.runFor(50);
+    await page.locator('.living-theme[data-theme-still]').waitFor(); await page.clock.runFor(50);
     assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-motif'),'autumn');
-    assert.ok(await page.locator('.theme-mark').count()>0,'ordinary editor visibly represents the current season');
+    assert.ok(await page.locator('[data-scene-fit]:not([data-scene-omitted])').count()>0,'ordinary editor visibly represents the current season');
     assert.equal(await page.locator('.ambient-theme').evaluate(layer=>layer.getAnimations({subtree:true}).length),0,'normal preview is still');
+    assert.equal(await page.locator('.living-foreground').count(),0,'the still editor preview has no foreground passage');
     await photo('november4-ordinary-editor');
     await open(); const writeCount=writes.length;
     await page.locator('.theme-try summary').click();
@@ -150,6 +174,15 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
       await photo(`theme-editor-${viewport.width}x${viewport.height}`);
     }
     record('Native keyboard selection,44px targets and no horizontal overflow at desktop,phone and short-window sizes');
+    await open({mode:'combined'}); await page.locator('.theme-scene-options summary').click();
+    const passageOption=page.locator('.theme-passage-option input'); assert.equal(await passageOption.isChecked(),false,'foreground moments default off');
+    await passageOption.check(); await button('Save changes').waitFor(); assert.equal(saved().appearance.theme.foreground,undefined);
+    await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({state:'detached'}); assert.equal(await page.locator('.theme-passage-option input').isChecked(),false);
+    await page.locator('.theme-passage-option input').check(); await button('Save changes').click(); await page.locator('.studio-savebar').waitFor({state:'detached'});
+    assert.deepEqual(saved().appearance.theme,{mode:'combined',calendars:['CA','KR','RU'],foreground:true});
+    await page.locator('.theme-passage-option input').uncheck(); await button('Save changes').click(); await page.locator('.studio-savebar').waitFor({state:'detached'});
+    assert.deepEqual(saved().appearance.theme,{mode:'combined',calendars:['CA','KR','RU']},'turning it off removes the field at rest');
+    record('Foreground moments is an opt-in cancellable style draft that is omitted at rest when off');
     const scenes=[
       ['birthday','2026-01-10',0,[], 'classic'],['birthday-russian','2026-01-10',0,[], 'russian'],['birthday-korean','2026-06-12',0,[], 'korean'],
       ['spring','2026-04-25',0],['summer','2026-07-20',0],['autumn','2026-11-04',0],['winter','2026-02-01',0],
@@ -163,127 +196,140 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     for(const viewport of [{width:1920,height:1080},{width:3840,height:2160}]) for(const [motif,civil,code,calendars,birthday] of scenes) {
       const definition=THEME_SCENES[motif], mode=definition.group==='Weather'?'weather':'seasonal',origin=definition.group==='Weather'?'weather':definition.group==='Seasons'?'season':definition.group==='Birthdays'?'birthday':'holiday';
       const brightness=viewport.width===1920?.26:.36;
-      await open({date:`${civil}T18:30:00Z`,mode,code,calendars,birthday,wind:motif==='wind'?40:8,path:'/display',viewport,brightness}); await page.locator('.ambient-theme').waitFor();
+      await open({date:`${civil}T18:30:00Z`,mode,code,calendars,birthday,wind:motif==='wind'?40:8,path:'/display',viewport,brightness}); await page.locator('.living-theme').waitFor(); await settle();
       assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-motif'),motif); assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-source'),origin);
-      const geometry=await page.locator('.ambient-theme').evaluate(layer=>({count:layer.querySelectorAll('svg').length,background:getComputedStyle(layer.closest('.ambient')).backgroundColor,filter:getComputedStyle(layer).filter,opacity:Number(getComputedStyle(layer).opacity),marks:[...layer.querySelectorAll('svg')].map(mark=>{const r=mark.getBoundingClientRect();return{width:r.width,height:r.height};})}));
-      assert.ok(geometry.count<=THEME_PARTICLES_MAX&&geometry.opacity<=brightness); assert.equal(geometry.background,'rgb(0, 0, 0)'); assert.equal(geometry.filter,'none'); assert.ok(geometry.marks.every(mark=>mark.width<viewport.width*.2&&mark.height<viewport.height*.2));
+      const geometry=await page.locator('.living-theme').evaluate(layer=>({patches:layer.querySelectorAll('[data-scene-patch]').length,paths:layer.querySelectorAll('path').length,unmasked:[...layer.querySelectorAll('path')].filter(path=>!path.closest('[data-reading-mask],mask')).length,
+        animations:layer.getAnimations({subtree:true}).filter(a=>a.playState==='running').length,background:getComputedStyle(layer.closest('.ambient')).backgroundColor,filter:getComputedStyle(layer).filter,opacity:Number(getComputedStyle(layer).opacity),
+        foreground:document.querySelectorAll('.living-foreground').length}));
+      assert.ok(geometry.patches>=1&&geometry.patches<=LIVING_SCENE_BUDGET.patches*2,`${motif} patch budget ${geometry.patches}`); assert.ok(geometry.paths<=LIVING_SCENE_BUDGET.paths,`${motif} path budget ${geometry.paths}`);
+      assert.ok(geometry.animations<=LIVING_SCENE_BUDGET.animations,`${motif} animation budget ${geometry.animations}`); assert.equal(geometry.unmasked,0,'every drawn path is under the reading mask');
+      assert.ok(geometry.opacity>0&&geometry.opacity<=brightness+.001,`saved brightness bounds the scene and is not raised (${geometry.opacity})`); assert.equal(geometry.background,'rgb(0, 0, 0)'); assert.equal(geometry.filter,'none'); assert.equal(geometry.foreground,0,'no foreground layer unless opted in');
       await photo(`${motif}-${viewport.width}`);
-      const visible=await page.locator('.theme-mark').evaluateAll(marks=>marks.filter(mark=>Number(getComputedStyle(mark).opacity)>.1&&Number(getComputedStyle(mark.parentElement).opacity)>.5).length);
-      assert.ok(visible>=3,`${motif} retains at least3 visible placements on the default board (${visible})`);
-      assert.deepEqual(await readingIntersections(),[],`${motif} actual steady transforms clear widget ink`);
-      const transforms=[];
-      for(const age of [2000,5000,8000,11000]) {
-        transforms.push(await page.locator('.theme-mark').evaluateAll((marks,age)=>{for(const mark of marks)for(const animation of mark.getAnimations()){animation.pause();animation.currentTime=age;}return marks.map(mark=>({motion:mark.dataset.themeMotion,transform:getComputedStyle(mark).transform}));},age));
-        assert.deepEqual(await readingIntersections(),[],`${motif} actual CSS phase${age} clears widget ink`);
+      const forms=await page.locator('.living-theme').evaluate((layer,names)=>names.map(name=>{const group=layer.querySelector(`[data-scene-fit="${name}"]`),box=group?.getBoundingClientRect();
+        return {name,present:!!group,omitted:group?.hasAttribute('data-scene-omitted')??true,compact:group?.hasAttribute('data-scene-compact')??false,grass:group?.querySelector('[data-scene-motion]')?.dataset.sceneMotion==='grass',
+          onScreen:!!box&&box.width>8&&box.height>8&&box.right>0&&box.bottom>0&&box.left<innerWidth&&box.top<innerHeight,life:Number(getComputedStyle(group?.closest('.living-patch-life')??layer).opacity)};}),PRINCIPAL_FORMS[motif]);
+      for(const form of forms) {
+        assert.ok(form.present&&!form.omitted&&form.onScreen&&form.life>.9,`${motif} keeps its principal form ${form.name} on the default board at ${viewport.width}: ${JSON.stringify(form)}`);
+        if(!form.grass) assert.equal(form.compact,false,`${motif} keeps the complete ${form.name} drawing on the default board at ${viewport.width}`);
       }
-      assert.notDeepEqual(transforms[0],transforms[3],`${motif} has actual changing transforms`);
+      const ink=await artTouchingInk(); assert.ok(ink.art>200,`${motif} draws visible art (${ink.art}px)`); assert.equal(ink.touching,0,`${motif} art never touches reading ink`);
+      assert.deepEqual(await fullFormsInReadingSpace(),[],`${motif} complete forms are not sheared by reading space`);
+      const transforms=[];
+      for(const age of [2000,5000,8000,11000]) transforms.push(await page.locator('.living-attached').evaluateAll((groups,age)=>groups.map(group=>{for(const animation of group.getAnimations()){animation.pause();animation.currentTime=age+(animation.effect.getTiming().delay??0);}return{motion:group.dataset.sceneMotion,transform:getComputedStyle(group).transform};}),age));
+      assert.notDeepEqual(transforms[0],transforms[2],`${motif} attached groups actually move`);
       transforms.flat().forEach(({motion})=>motionsSeen.add(motion));
     }
-    assert.deepEqual([...motionsSeen].sort(),Object.keys(THEME_MOTIONS).sort(),'all8 actual motion profiles were phase-sampled');
-    for(const code of [0,63]) {
-      await open({date:'2026-11-11T18:30:00Z',mode:'combined',code,path:'/display',brightness:.26,birthday:'classic'});await photo(`quiet-${code}`);
-      const quiet=await page.locator('.ambient-theme').evaluate(layer=>({quiet:layer.hasAttribute('data-theme-quiet'),count:layer.querySelectorAll('.theme-mark').length,interval:Number(layer.dataset.themeInterval),fills:[...layer.querySelectorAll('.theme-wash')].map(fill=>getComputedStyle(fill).display)}));
-      assert.ok(quiet.quiet);assert.ok(quiet.count<=QUIET_THEME.slots);assert.equal(quiet.interval,QUIET_THEME.interval);assert.ok(quiet.fills.every(display=>display==='none'));
+    for(const motion of ['grass','branch','hanging','drift']) assert.ok(motionsSeen.has(motion),`${motion} choreography was phase-sampled`);
+    record('All26 living scenes keep their named principal form on the default board at26%1080p/36%4K, trueblack, masked reading clearance and bounded structure');
+    for(const [name,options,expectation] of [['summer rain',{date:'2026-07-20T18:30:00Z',mode:'combined',code:63},{motif:'rain',habitat:'summer',weather:'rain'}],['winter snow',{date:'2026-02-01T18:30:00Z',mode:'combined',code:73},{motif:'snow',habitat:'winter',weather:'snow'}],
+      ['weather-only rain',{date:'2026-12-20T18:30:00Z',mode:'weather',code:63},{motif:'rain',habitat:'rain',weather:'rain'}]]) {
+      await open({...options,path:'/display',viewport:{width:1920,height:1080},brightness:.26}); await page.locator('.living-theme').waitFor(); await settle();
+      const state=await page.locator('.living-theme').evaluate(layer=>({motif:layer.dataset.themeMotif,habitat:layer.dataset.themeHabitat,weather:layer.querySelector('[data-scene-weather]')?.dataset.sceneWeather,drift:layer.querySelectorAll('.living-drift').length,patches:[...layer.querySelectorAll('[data-scene-patch]')].map(p=>p.dataset.scenePatch)}));
+      assert.deepEqual({motif:state.motif,habitat:state.habitat,weather:state.weather},expectation,name); assert.equal(state.drift,0,'precipitation replaces detached drift forms');
+      if(options.mode==='weather') assert.ok(state.patches.every(id=>id.startsWith('rain-')),'Weather mode shows no seasonal or holiday habitat');
+      await photo(`combined-${name}`);
     }
-    await open({date:'2026-11-11T04:59:40Z',mode:'combined',code:63,path:'/display',empty:true,brightness:.26});
-    await page.clock.runFor(18_000); const beforeQuiet=await page.locator('.theme-mark').first().elementHandle();
-    assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-quiet'),null);
+    record('Combined weather adapts the seasonal habitat with one precipitation field; Weather mode stays weather-only');
+    for(const code of [0,63]) {
+      await open({date:'2026-11-11T18:30:00Z',mode:'combined',code,path:'/display',brightness:.26,birthday:'classic',foreground:true}); await page.locator('.living-theme').waitFor(); await settle(); await photo(`quiet-${code}`);
+      const quiet=await page.locator('.living-theme').evaluate(layer=>({quiet:layer.hasAttribute('data-theme-quiet'),patches:layer.querySelectorAll('[data-scene-patch]').length,opacity:Number(getComputedStyle(layer).opacity),drift:layer.querySelectorAll('.living-drift').length,
+        fills:[...layer.querySelectorAll('[data-scene-patch] path')].filter(path=>path.getAttribute('fill')!=='none').length,birthday:layer.dataset.themeMotif.startsWith('birthday')}));
+      assert.ok(quiet.quiet);assert.ok(quiet.patches<=2);assert.equal(quiet.fills,0);assert.equal(quiet.drift,0);assert.equal(quiet.birthday,false);assert.ok(quiet.opacity<=.26*.38+.005);
+      await page.clock.runFor(80_000); assert.equal(await page.locator('.living-foreground').count(),0,'quiet dates never run a foreground passage');
+    }
+    await open({date:'2026-11-11T04:59:40Z',mode:'combined',code:63,path:'/display',empty:true,brightness:.26}); await page.locator('.living-theme').waitFor();
+    await page.clock.runFor(18_000); assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-quiet'),null);
     await page.clock.runFor(3000);
     assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-quiet'),'true','selected quiet policy takes effect at the local midnight boundary');
-    assert.equal(await beforeQuiet.evaluate(mark=>mark.isConnected),false,'quiet policy starts its own lower-travel sequence instead of retaining old rich marks');
-    assert.ok(await page.locator('.theme-mark').count()<=QUIET_THEME.slots);
-    record('All26 scenes retain richer visible compositions at26%1080p/36%4K with trueblack and reading clearance; quiet dates keep lower density and no fills');
-    await open({mode:'seasonal'}); await page.clock.runFor(100); assert.deepEqual(await readingIntersections(),[]);
+    assert.ok(await page.locator('[data-scene-patch]').count()<=2);
+    record('Quiet dates keep a subdued, unfilled, sparse habitat with no drift, birthday geometry or foreground passage');
+    await open({mode:'seasonal'}); await page.clock.runFor(100); assert.equal((await artTouchingInk()).touching,0);
     await page.getByRole('slider',{name:'Text size',exact:true}).focus(); await page.keyboard.press('End'); await page.clock.runFor(400);
-    assert.deepEqual(await readingIntersections(),[],'growing typography invalidates still reading-space placement');
+    const grown=await artTouchingInk(); assert.ok(grown.art>200); assert.equal(grown.touching,0,'growing typography invalidates the still reading mask');
+    assert.deepEqual(await fullFormsInReadingSpace(),[],'still forms refit instead of being sheared');
     for(const float of [false,true]) {
-      await open({mode:'weather',code:63,path:'/display',viewport:{width:1920,height:1080},float,swap:true,interval:30,only:['clock']});
+      await open({mode:'weather',code:63,path:'/display',viewport:{width:1920,height:1080},float,swap:true,interval:30,only:['clock']}); await page.locator('.living-theme').waitFor();
       await page.clock.runFor(29_900);
       let visibleSamples=0;
       for(let step=0;step<16;step++) {
         await page.clock.runFor(100);
-        // Browser CSS time is independent of the fake clock: sample real finite ages explicitly.
-        visibleSamples+=await page.locator('.theme-mark').evaluateAll(marks=>{let count=0;for(const mark of marks) {
-          for(const animation of mark.getAnimations()) {animation.pause();animation.currentTime=Math.max(0,performance.now()-Number(mark.dataset.themeBorn));}
-          if(Number(getComputedStyle(mark).opacity)>.02&&Number(getComputedStyle(mark.parentElement).opacity)>.5)count++;
-        }return count;});
-        assert.deepEqual(await readingIntersections(),[],`${float?'glide':'pending dim/step'} swap reading clearance at30s+${step/10}`);
+        visibleSamples+=await page.locator('[data-scene-fit]:not([data-scene-omitted])').count();
+        assert.equal((await artTouchingInk()).touching,0,`${float?'glide':'pending dim/step'} swap reading clearance at30s+${step/10}`);
       }
-      assert.ok(visibleSamples>0,`${float?'glide':'step'} clearance inspected visible CSS marks, not an empty/transparent layer`);
+      assert.ok(visibleSamples>0,`${float?'glide':'step'} clearance inspected a populated scene, not an empty layer`);
       assert.equal(await page.locator('.ambient').getAttribute('data-composition'),'1','the shortest supported swap completed');
-      // Negative control: deliberately place an opaque mark over a clock glyph. The detector must reject it.
-      await page.evaluate(()=>{const mark=document.querySelector('.theme-mark'),text=document.querySelector('.ambient-clock svg')??document.querySelector('.clock-date'); const target=text.getBoundingClientRect(),root=mark.closest('.ambient').getBoundingClientRect();mark.style.animation='none';mark.style.opacity='1';mark.parentElement.style.cssText=`left:${target.left-root.left}px;top:${target.top-root.top}px;width:80px;height:80px;opacity:1;transition:none`;});
-      assert.ok((await readingIntersections()).length>0,'negative control detects a mark deliberately intersecting clock ink');
+      // Controls: a full-screen wash drawn under the mask still leaves all ink untouched;
+      // the same wash without clearance holes must be detected.
+      await page.evaluate(()=>{const group=document.querySelector('.living-theme [data-reading-mask]'),wash=document.createElementNS('http://www.w3.org/2000/svg','rect');wash.setAttribute('width','100%');wash.setAttribute('height','100%');wash.setAttribute('data-control-wash','');group.append(wash);});
+      const washed=await artTouchingInk(); assert.ok(washed.art>1920*1080*.5); assert.equal(washed.touching,0,'masked clearance protects ink even from a full-screen wash');
+      await page.evaluate(()=>document.querySelectorAll('.living-theme mask rect[fill="black"]').forEach(hole=>hole.remove()));
+      assert.ok((await artTouchingInk()).touching>0,'negative control detects art touching ink once clearance is removed');
     }
-    record('Typography growth and30s floating/step swaps retain reading clearance across the pending dim boundary');
-    for(const options of [{reduced:'reduce'},{animation:'off'},{mode:'off'}]) { await open({mode:'combined',path:'/display',...options}); assert.equal(await page.locator('.ambient-theme').count(),0); }
-    record('Off,AnimationOff and system reduced motion mount no decorative layer');
-    await open({mode:'weather',code:63,path:'/display',empty:true}); await page.locator('.theme-mark').first().waitFor();
-    assert.equal(await page.locator('.theme-mark').count(),1,'initial atmosphere fades in one mark at a time');
-    const firstMark=await page.locator('.theme-mark').first().elementHandle();
-    await page.clock.runFor(11_900);
-    assert.ok(await firstMark.evaluate(mark=>mark.isConnected),'a visible mark retains its DOM and animation');
-    await firstMark.evaluate(mark=>mark.getAnimations().forEach(a=>a.finish()));
-    assert.equal(await firstMark.evaluate(mark=>getComputedStyle(mark).opacity),'0');
-    await page.clock.runFor(4200);
-    assert.equal(await firstMark.evaluate(mark=>mark.isConnected),false,'the first slot renews only after its12s animation has ended');
-    const timing=await page.locator('.ambient-theme').evaluate(layer=>layer.getAnimations({subtree:true}).map(a=>({duration:a.effect.getTiming().duration,iterations:a.effect.getTiming().iterations,properties:[...new Set(a.effect.getKeyframes().flatMap(k=>Object.keys(k)))].filter(k=>!['offset','easing','composite','computedOffset'].includes(k))})));
-    assert.equal(timing.length,THEME_PARTICLES_MAX); assert.ok(timing.every(t=>t.duration===12000&&t.iterations===1&&t.properties.every(p=>['opacity','transform'].includes(p))));
-    await page.locator('.ambient-theme').evaluate(layer=>layer.getAnimations({subtree:true}).forEach(a=>a.finish()));
-    assert.ok(await page.locator('.theme-mark').evaluateAll(marks=>marks.every(mark=>getComputedStyle(mark).opacity==='0')));
-    record('Staggered finite12s animations touch only transform/opacity and expired slots alone renew with at most12 placements');
-    await open({date:'2026-12-20T18:30:55Z',mode:'weather',code:63,path:'/display',empty:true}); await page.locator('.theme-mark').first().waitFor();
-    const placement=()=>page.locator('.theme-mark').first().evaluate(mark=>mark.parentElement.getAttribute('style'));
-    const lateMount=await placement();
-    await page.clock.runFor(5100);
-    assert.equal(await placement(),lateMount,'a wall-clock minute never interrupts the initial burst');
-    await page.clock.runFor(11_000);
-    assert.notEqual(await placement(),lateMount,'the placement renews after its full relative slot lifetime');
-    await open({date:'2026-12-20T18:30:55Z',mode:'combined',code:63,empty:true});
-    await button('Preview movement').click();
-    await page.clock.runFor(15_900);
-    await page.getByRole('combobox',{name:'Theme',exact:true}).selectOption('seasonal');
-    assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-motif'),'christmas');
-    await page.locator('.theme-mark').first().waitFor();
-    const originalMark=await page.locator('.theme-mark').first().elementHandle();
-    const changedMotif=await placement();
-    assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-tick'),'0');
-    await page.clock.runFor(5100);
-    assert.equal(await placement(),changedMotif,'a new motif also gets its full burst across a minute boundary');
-    assert.ok(await originalMark.evaluate(mark=>mark.isConnected),'the existing live CSS animation is not replaced by the old deadline');
+    record('Typography growth and30s floating/step swaps keep every reading inside masked clearance across the pending dim boundary');
+    for(const options of [{reduced:'reduce'},{animation:'off'},{mode:'off'}]) { await open({mode:'combined',path:'/display',foreground:true,...options}); await page.clock.runFor(70_000); assert.equal(await page.locator('.ambient-theme').count(),0); assert.equal(await page.locator('.living-foreground').count(),0); }
+    record('Off,AnimationOff and system reduced motion mount no decorative layer and no foreground passage');
+    await open({date:'2026-07-20T18:30:00Z',mode:'seasonal',path:'/display',empty:true}); await page.locator('.living-theme').waitFor(); await page.clock.runFor(1000);
+    const lifecycle=()=>page.locator('.living-theme').evaluate(layer=>({generations:[...layer.querySelectorAll('[data-scene-patch]')].map(patch=>`${patch.dataset.scenePatch}:${patch.dataset.sceneGeneration}`),drift:layer.querySelectorAll('.living-drift').length}));
+    const first=await lifecycle(); assert.equal(first.drift,0,'detached forms enter one at a time after mount, not as an initial burst');
+    assert.equal(first.generations.length,THEME_SCENES.summer.composition.patches.length);
+    const timing=await page.locator('.living-theme').evaluate(layer=>layer.getAnimations({subtree:true}).map(a=>({iterations:a.effect.getTiming().iterations,properties:[...new Set(a.effect.getKeyframes().flatMap(k=>Object.keys(k)))].filter(k=>!['offset','easing','composite','computedOffset'].includes(k))})));
+    assert.ok(timing.length>0&&timing.length<=LIVING_SCENE_BUDGET.animations); assert.ok(timing.every(t=>Number.isFinite(t.iterations)&&t.properties.every(p=>['opacity','transform'].includes(p))),'every decorative animation is finite and touches only transform/opacity');
+    await page.clock.runFor(20_000); assert.ok((await lifecycle()).drift>=3,'detached forms are present once their first whole iteration starts');
+    await page.clock.runFor(LIVING_SCENE_BUDGET.life);
+    const later=await lifecycle(); assert.notDeepEqual(later.generations,first.generations,'local patches renew by generation');
+    assert.equal(later.generations.length,first.generations.length,'renewal replaces patches without accumulating them');
+    assert.ok(await page.locator('.living-theme').evaluate(layer=>layer.getAnimations({subtree:true}).length)<=LIVING_SCENE_BUDGET.animations,'animations stay bounded after several renewals');
     await page.emulateMedia({reducedMotion:'reduce'}); await page.locator('.ambient-theme').waitFor({state:'detached'});
-    await page.emulateMedia({reducedMotion:'no-preference'}); await page.locator('.theme-mark').first().waitFor(); assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-tick'),'0');
-    assert.equal(await page.locator('.theme-mark').count(),1,'resuming motion starts a fresh sequence');
-    await page.getByRole('combobox',{name:'Theme',exact:true}).selectOption('off');
-    await page.getByRole('combobox',{name:'Theme',exact:true}).selectOption('combined');
-    await page.locator('.theme-mark').first().waitFor();
-    assert.equal(await page.locator('.ambient-theme').getAttribute('data-theme-tick'),'0');
-    assert.equal(await page.locator('.theme-mark').first().evaluate(mark=>getComputedStyle(mark).animationDelay),'0s','new marks fade in from zero');
-    record('Near-boundary mount,motif changes and Off/reduced-motion resume keep fresh slot ages and do not cut active marks');
+    await page.emulateMedia({reducedMotion:'no-preference'}); await page.locator('.living-theme').waitFor(); await page.clock.runFor(200);
+    assert.ok(Number(await page.locator('.living-theme').getAttribute('data-scene-elapsed'))<5000,'resuming motion starts a fresh scene clock');
+    record('Finite transform/opacity animations, staggered local patch renewal and a fresh scene after reduced-motion resume');
+    await open({date:'2026-07-20T18:30:00Z',mode:'seasonal',path:'/display',viewport:{width:1920,height:1080},brightness:.26,foreground:true}); await page.locator('.living-theme').waitFor();
+    const passages=[]; let overReading=0,maxOpacity=0;
+    for(let tick=0;tick<92;tick++) {
+      // CSS fades run on real time while the scene clock is synthetic: let renewed patches finish
+      // fading in before the cooldown ends, as they would have long before on a real display.
+      if(tick===74) await page.waitForTimeout(3000);
+      await page.clock.runFor(1000);
+      const state=await page.evaluate(()=>{
+        const layer=document.querySelector('.living-foreground'),actor=layer?.querySelector('.living-passage'); if(!layer||!actor) return null;
+        const a=actor.getBoundingClientRect(),readings=[],range=document.createRange();
+        const walk=node=>{for(const child of node.childNodes){if(child.nodeType===Node.TEXT_NODE&&child.textContent?.trim()){range.selectNodeContents(child);readings.push(...range.getClientRects());}else if(child instanceof Element&&!child.classList.contains('sr-only'))walk(child);}};
+        document.querySelectorAll('.widget-content').forEach(walk);
+        return {born:layer.dataset.passageBorn,kind:layer.dataset.passageKind,opacity:Number(getComputedStyle(layer).opacity),size:[a.width,a.height],
+          over:readings.filter(r=>r.width>0&&r.height>0&&a.left<r.right&&a.right>r.left&&a.top<r.bottom&&a.bottom>r.top).length,layers:document.querySelectorAll('.living-foreground').length};
+      });
+      if(!state) continue;
+      assert.equal(state.layers,1,'one foreground actor at a time');
+      if(!passages.some(entry=>entry.born===state.born)) passages.push({born:state.born,kind:state.kind,second:tick});
+      maxOpacity=Math.max(maxOpacity,state.opacity); if(state.kind==='near') overReading+=state.over;
+      assert.ok(state.opacity<=(state.kind==='near'?.8:.22)*.26+.002,`${state.kind} passage opacity ${state.opacity}`);
+      assert.ok(state.size[0]<=1080*.05&&state.size[1]<=1080*.03,'the actor stays small');
+    }
+    assert.equal(passages.length,2,`one passage per minute: ${JSON.stringify(passages)}`);
+    assert.ok(Number(passages[1].born)-Number(passages[0].born)>=60_000,`at least60s between passage starts: ${JSON.stringify(passages)}`); assert.equal(overReading,0,'a near passage never crosses reading ink');
+    await page.mouse.move(400,400); await page.clock.runFor(200);
+    console.log(`THEME_PASSAGES ${JSON.stringify({passages,maxOpacity})}`);
+    record('Opt-in foreground passage: one small actor at a time, at most one per minute, capped opacity and no reading overlap for near passages');
     // Real-time, bounded compositor observation. Synthetic page time stays fixed; no desktop probes.
-    await open({mode:'weather',code:63,path:'/display',empty:true}); await page.locator('.theme-mark').first().waitFor();
+    await open({mode:'weather',code:63,path:'/display',empty:true}); await page.locator('.living-theme').waitFor();
     await page.clock.runFor(24_000);
-    await page.locator('.ambient-theme').evaluate(layer=>layer.querySelectorAll('.theme-mark').forEach(mark=>mark.getAnimations().forEach(a=>{a.currentTime=(Number(layer.dataset.themeTick)-Number(mark.dataset.themeGeneration))*Number(layer.dataset.themeInterval);})));
     const cdp=await context.newCDPSession(page); await cdp.send('Performance.enable');
     let layers=[],peakLayers=0,paints=0; cdp.on('LayerTree.layerTreeDidChange',event=>{layers=event.layers??[];peakLayers=Math.max(peakLayers,layers.length);}); cdp.on('LayerTree.layerPainted',()=>{paints++;}); await cdp.send('LayerTree.enable');
     await new Promise(resolve=>setTimeout(resolve,1500));
     const metrics=async()=>Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(item=>[item.name,item.value]));
-    const tickBefore=Number(await page.locator('.ambient-theme').getAttribute('data-theme-tick'));
+    const running=await page.locator('.living-theme').evaluate(layer=>layer.getAnimations({subtree:true}).filter(a=>a.playState==='running').length);
+    assert.ok(running>0,'the sample observes running scene animations');
     const before=await metrics(),paintStart=paints; await new Promise(resolve=>setTimeout(resolve,4200)); const active=await metrics(),activePaints=paints-paintStart;
-    const tickAfter=Number(await page.locator('.ambient-theme').getAttribute('data-theme-tick'));
-    assert.ok(tickAfter-tickBefore>=2,'real-time sample includes at least two recurring slot replacements');
-    assert.ok(tickAfter-tickBefore<=4,'the richer1.2s cadence cannot become an uncontrolled renewal loop');
-    assert.equal(await page.locator('.theme-mark').count(),THEME_PARTICLES_MAX);
     const activeLayers=layers.length;
     await page.emulateMedia({reducedMotion:'reduce'});
     await new Promise(resolve=>setTimeout(resolve,300)); const quietStart=await metrics(),idlePaintStart=paints; await new Promise(resolve=>setTimeout(resolve,4200)); const idle=await metrics();
-    const observed={active:{layout:active.LayoutCount-before.LayoutCount,style:active.RecalcStyleCount-before.RecalcStyleCount,task:active.TaskDuration-before.TaskDuration,paints:activePaints},idle:{layout:idle.LayoutCount-quietStart.LayoutCount,style:idle.RecalcStyleCount-quietStart.RecalcStyleCount,task:idle.TaskDuration-quietStart.TaskDuration,paints:paints-idlePaintStart},layers:activeLayers,peakLayers,slotReplacements:tickAfter-tickBefore};
+    const observed={active:{layout:active.LayoutCount-before.LayoutCount,style:active.RecalcStyleCount-before.RecalcStyleCount,task:active.TaskDuration-before.TaskDuration,paints:activePaints},idle:{layout:idle.LayoutCount-quietStart.LayoutCount,style:idle.RecalcStyleCount-quietStart.RecalcStyleCount,task:idle.TaskDuration-quietStart.TaskDuration,paints:paints-idlePaintStart},layers:activeLayers,peakLayers,running};
     console.log(`THEME_BUDGET ${JSON.stringify(observed)}`);
-    assert.ok(observed.active.layout<=observed.slotReplacements+1&&observed.idle.layout<=1,'slot replacement, not animation frames, accounts for layout');
-    // The previous accepted 4.2s sample allowed15 recalculations for2 renewals.
-    // Keep that per-renewal allowance as the intentional cadence becomes faster.
-    const checkStyles=(styles,renewals)=>assert.ok(styles<=Math.max(5,Math.ceil(15*renewals/2)), 'style work stays within the baseline allowance per renewal, with at most5 when idle');
-    checkStyles(observed.active.style,observed.slotReplacements); checkStyles(observed.idle.style,0);
+    // Measured for #586: animated SVG groups cost roughly 10-15 style/layout updates a second here
+    // (about40-60 per sample), far below one per frame (about250). The ceiling rejects a per-frame loop.
+    const checkStyles=(styles,ceiling)=>assert.ok(styles<=ceiling,'style work stays within the measured scene allowance, with at most5 when idle');
+    checkStyles(observed.active.style,150); checkStyles(observed.idle.style,5);
+    assert.ok(observed.active.layout<=150&&observed.idle.layout<=1,'layout work is bounded while active and absent when motion is off');
     assert.ok(observed.active.task<.15&&observed.idle.task<.15,'bounded4.2s window stays below150ms main-thread task work');
     assert.ok(activeLayers>0&&peakLayers<=40,'small nonempty bounded layer tree');
     assert.ok(observed.active.paints<=5&&observed.idle.paints<=5,'no per-frame repainting');
@@ -294,9 +340,9 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     const noisy=await metrics();
     const noisyStyles=noisy.RecalcStyleCount-noiseStart.RecalcStyleCount;
     console.log(`THEME_STYLE_NEGATIVE_CONTROL ${JSON.stringify({frames:40,style:noisyStyles,idleAllowance:5})}`);
-    assert.throws(()=>checkStyles(noisyStyles,0), /style work stays within/,'the budget rejects deliberate continuous style work');
+    assert.throws(()=>checkStyles(noisyStyles,5), /style work stays within/,'the budget rejects deliberate continuous style work');
     await cdp.detach();
-    record('Real4.2s steady active/motion-off samples include slot replacements within layout/style/main-thread and small-layer bounds');
+    record('Real4.2s active/motion-off samples stay within task, layout/style and small-layer bounds; motion off leaves no scene work');
     const lunar=await page.evaluate(()=>{const fmt=new Intl.DateTimeFormat('en-u-ca-dangi',{calendar:'dangi',timeZone:'Asia/Seoul',month:'numeric',day:'numeric'});return ['2027-02-07','2027-05-13','2027-09-15'].map(date=>fmt.formatToParts(new Date(`${date}T12:00:00Z`)).filter(p=>p.type==='month'||p.type==='day').map(p=>p.value));});
     assert.deepEqual(lunar,[['1','1'],['4','8'],['8','15']]); record('Real browser Dangi matches2027 Seollal,Buddha birthday and Chuseok fixtures');
     assert.deepEqual(errors,[]); return {checks,images,seconds:Math.round((Date.now()-started)/1000)};
