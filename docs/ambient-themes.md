@@ -11,8 +11,8 @@ After seeing the #586 scenes on the display the owner asked for far less scenery
 drawn translucent and classy, never clipped by widgets. This section overrides any
 older statement below that conflicts with it.
 
-- **Light, not objects.** Each scene carries its palette as three large soft colour
-  washes (two bottom corners, one top edge) that drift and breathe. Quiet dates
+- **Light, not objects.** Each scene carries its palette as two large, faint colour
+  washes in the bottom corners that drift and breathe. Quiet dates
   draw no wash and at most one unfilled patch.
 - **Few authored forms.** Only the patches holding a scene's named principal forms
   are drawn (otherwise at most two), as translucent "glass": body fill at most 50%
@@ -25,6 +25,13 @@ older statement below that conflicts with it.
 - **No reading holes.** Nothing is cut out around widgets. Scenery passes behind
   text; legibility comes from low alpha, and authored forms are still placed away
   from reading areas. The old "art never touches ink" pixel proof no longer applies.
+- **Second owner pass (2026-11-10): quieter still.** "A screensaver in the middle of
+  my living room": two faint bottom-corner washes (peak 20%), no top wash; eight slow
+  particles (fourteen in snow); ground at 45%. The left and right edges carry one tall,
+  thin flourish each, chosen per scene in `sideStyles` (`living-dressing.ts`): the side
+  of a fir with a wound light string and a hanging string of lights for Christmas,
+  blossom or leaf branches, frost twigs, ribbons, reeds. A flourish bows inward only as
+  far as the free margin beside the widgets, and sways by half a degree.
 - **Iteration.** Change the renderer, build, capture two or three scenes to a temp
   folder, look, delete the images. Do not run multi-round agent reviews for taste.
 

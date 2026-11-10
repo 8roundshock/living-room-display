@@ -4,7 +4,7 @@ import { SCENE_DRESSING, type ParticleKind } from '../shared/living-scene-dressi
 import { LIVING_SCENE_BUDGET } from '../shared/theme-registry';
 import type { ThemeRect, ThemeScene, WeatherMotif } from './ambient-theme';
 import { habitatBox, habitatMotion, fitHabitatGroup, fitHabitatPatch, patchExtent, patchPriority, patchPhase, patchQuality, rainField, rainImpacts, type HabitatBox } from './living-scene';
-import { fogBands, glowWashes, scenePatches, groundBand, gustStreaks, particleLayers, type DressPath, type DressSegment, type EdgeBand } from './living-dressing';
+import { fogBands, glowWashes, scenePatches, sideFlourish, sideStyles, groundBand, gustStreaks, particleLayers, type DressPath, type DressSegment, type EdgeBand } from './living-dressing';
 import './living-scene.css';
 
 interface Props { scene: ThemeScene; art: LivingSceneArt; still: boolean; exclusions: () => readonly ThemeRect[]; inkRevision: number }
@@ -104,12 +104,21 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
     const ground = weather === 'snow' ? 'drift' : dressing.ground === 'mist' ? 'water' : dressing.ground;
     return { ground: groundBand(ground, width / unit1080, height / unit1080, [], 1, weather === 'snow' ? .8 : .62), groundKind: ground, top: null as EdgeBand | null, topKind: undefined as string | undefined };
   }, [dressing, weather, width, height, unit1080]);
-  const glows = useMemo(() => width ? glowWashes(width, height, scene.habitat ?? scene.motif).slice(0, scene.quiet ? 0 : 3) : [], [width, height, scene.habitat, scene.motif, scene.quiet]);
+  const glows = useMemo(() => width ? glowWashes(width, height, scene.habitat ?? scene.motif).slice(0, scene.quiet ? 0 : 2) : [], [width, height, scene.habitat, scene.motif, scene.quiet]);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- holeKey is the rounded identity of holes
   const gusts = useMemo(() => weather === 'wind' && width ? gustStreaks(width, height, holes) : [], [weather, width, height, holeKey]);
   const SNOW_COLORS = ['#bfe3f7', '#9fd0f2', '#d6c8f5'] as const;
   const particleKind: ParticleKind | undefined = !dressing || weather === 'rain' || weather === 'storm' || weather === 'fog' ? undefined : weather === 'snow' ? 'flake' : weather === 'wind' ? dressing.particles ?? 'leaf' : dressing.particles;
-  const particleCount = Math.round((weather === 'snow' ? 60 : dressing?.count ?? 26) * .5);
+  // Second owner pass (#600): a living-room screensaver, so only a handful of slow particles.
+  const particleCount = weather === 'snow' ? 14 : 8;
+  // Tall, thin side flourishes use the left and right edges. Each bows inward only as far as the free margin beside the widgets allows.
+  const sides = useMemo(() => {
+    if (!dressing || !width) return null;
+    const w = width / unit1080, h = height / unit1080, styles = sideStyles(scene.habitat ?? scene.motif, dressing.ground);
+    const room = (side: 'left' | 'right') => holes.reduce((least, hole) => Math.min(least, side === 'left' ? hole.left / unit1080 : w - hole.right / unit1080), w * .2);
+    return (['left', 'right'] as const).map((side, index) => ({ side, pivot: `${side === 'left' ? 0 : w}px ${h}px`, paths: sideFlourish(styles[index]!, w, h, side, room(side)) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- holeKey is the rounded identity of holes
+  }, [dressing, scene.habitat, scene.motif, width, height, unit1080, holeKey]);
   const cycle = Math.floor(elapsed / LIVING_SCENE_BUDGET.life);
   const groundColors = weather === 'snow' ? SNOW_COLORS : dressing?.groundColors ?? palette;
   const topColors = palette;
@@ -123,7 +132,7 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
         </linearGradient>
         <mask id={`${maskId}-ground`} maskUnits="userSpaceOnUse" x="0" y="0" width={width} height={height} style={{ maskType: 'luminance' }}><rect width={width} height={height} fill={`url(#${maskId}-rise)`} /></mask>
         {palette.map((color, index) => <radialGradient key={`glow${index}`} id={`${maskId}-glow-${index}`}>
-          <stop offset="0" stopColor={color} stopOpacity=".5" /><stop offset=".5" stopColor={color} stopOpacity=".2" /><stop offset="1" stopColor={color} stopOpacity="0" />
+          <stop offset="0" stopColor={color} stopOpacity=".2" /><stop offset=".5" stopColor={color} stopOpacity=".07" /><stop offset="1" stopColor={color} stopOpacity="0" />
         </radialGradient>)}
         {weather === 'fog' && palette.map((color, index) => <radialGradient key={index} id={`${maskId}-fog-${index}`}>
           <stop offset="0" stopColor={color} stopOpacity=".62" /><stop offset=".55" stopColor={color} stopOpacity=".3" /><stop offset="1" stopColor={color} stopOpacity="0" />
@@ -131,8 +140,11 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
       </defs>
       <g data-scene-glow>{glows.map((glow, index) => <ellipse key={`${index}:${cycle}`} className="living-glow" cx={glow.cx} cy={glow.cy} rx={glow.rx} ry={glow.ry} fill={`url(#${maskId}-glow-${glow.tone})`}
         style={{ '--fog-age': `${-(elapsed % LIVING_SCENE_BUDGET.life + glow.delay * 1000)}ms`, '--fog-travel': `translate(${glow.travel}px, 0px)` } as CSSProperties} />)}</g>
+      {sides && <g transform={`scale(${unit1080})`} opacity=".6" data-scene-sides>{sides.map(flourish => <g key={`${flourish.side}:${cycle}`} className="living-side" data-scene-side={flourish.side}
+        style={{ transformOrigin: flourish.pivot, '--band-age': `${-(elapsed % LIVING_SCENE_BUDGET.life + (flourish.side === 'left' ? 0 : 9000))}ms` } as CSSProperties}>
+        {flourish.paths.map((path, index) => <Dress key={index} path={path} colors={palette} />)}</g>)}</g>}
       <g>
-        {bands && <g mask={`url(#${maskId}-ground)`} opacity=".62"><EdgeLayer key={`rear:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="segments" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
+        {bands && <g mask={`url(#${maskId}-ground)`} opacity=".45"><EdgeLayer key={`rear:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="segments" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
         {patches.map((patch, index) => {
           const phase = phases[index]!, entry = placed.current.get(patch.id)!, authored = habitatBox(patch, width, height, phase.generation);
           const moved = (box: HabitatBox) => Math.abs(box.x - authored.x) > 1 || Math.abs(box.y - authored.y) > 1 || Math.abs(box.width - authored.width) > 1;
@@ -145,7 +157,7 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
               weather={weather} quiet={scene.quiet} generation={phase.generation} holes={holes} />,
           ];
         })}
-        {bands && <g mask={`url(#${maskId}-ground)`} opacity=".62"><EdgeLayer key={`front:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="front" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
+        {bands && <g mask={`url(#${maskId}-ground)`} opacity=".45"><EdgeLayer key={`front:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="front" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} /></g>}
         {(weather === 'rain' || weather === 'storm') && <g className="living-weather" data-scene-weather={weather}>
           {weatherGroups.map(index => <RainPhrase key={`${index}:${cycle}`} index={index} storm={weather === 'storm'}
             elapsed={elapsed % LIVING_SCENE_BUDGET.life} width={width} height={height} palette={palette} />)}

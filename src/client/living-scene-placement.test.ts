@@ -131,6 +131,7 @@ test('the ground band lights the whole bottom edge and stays below every reading
 test('particles stay in flight as four seamless depth layers', () => {
   for (const kind of ['flake', 'petal', 'leaf', 'firefly', 'confetti', 'sparkle'] as const) for (const gust of [false, true]) {
     const layers = particleLayers(kind, 40, W, H, gust);
+    assert.ok(particleLayers(kind, 8, W, H, gust).reduce((sum, layer) => sum + layer.count, 0) <= 10, 'a quiet field stays a handful');
     assert.equal(layers.length, PARTICLE_LAYERS);
     assert.ok(layers.reduce((sum, layer) => sum + layer.count, 0) >= 36, 'the requested number of particles is drawn');
     for (const layer of layers) {
