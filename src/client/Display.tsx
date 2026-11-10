@@ -13,6 +13,7 @@ import { leaveDisplay, liveOpener } from './displayWindow.ts';
 import { AmbientTheme } from './AmbientTheme.tsx';
 import { previewTheme, resolveTheme, themeMotionTimes, type ThemeRect } from './ambient-theme.ts';
 import { THEME_CLEARANCE_SECONDS, type ThemeSceneId } from '../shared/theme-registry.ts';
+import { passageGeometry } from './scene-passage-dom';
 import { WIDGET_RENDERERS, widgetLabel, widgetVisible, type WidgetContentProps } from './widgets/registry.tsx';
 
 export interface WidgetGesture { id: WidgetId; x: number; y: number; width?: number; height?: number }
@@ -591,6 +592,11 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
       return box;
     });
   }, [layoutEditing, swapsAllowed, controlled, previewBoard, effectiveCycle, grid, floating, motionIntervalSeconds, themePreviewBucket, previewFrame.phase, dimmed.size]);
+  const themePassageGeometry = useCallback(() => {
+    const element = root.current; if (!element) return null;
+    const holes = themeExclusions();
+    return passageGeometry(element, [...registry.current.values()].map((entry, index) => ({ element: entry.section, swept: holes[index]! })).filter(entry => entry.swept));
+  }, [themeExclusions]);
 
   // Follow daylight (#439): one value per minute at the weather location. The ambient page glides to
   // it (widgets.css); editor canvases follow the draft at once. Fixed renders `brightness` unchanged.
@@ -632,7 +638,8 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
         <AmbientTheme scene={embedded && themePreview ? previewTheme(themePreview) : themeScene}
           animated={!reducedMotion && !layoutEditing && settings.appearance.animation !== 'off'}
           still={embedded && layoutEditing && !reducedMotion && settings.appearance.animation !== 'off'}
-          exclusions={themeExclusions} layoutKey={layoutKey} inkRevision={themeInkRevision} />
+          exclusions={themeExclusions} layoutKey={layoutKey} inkRevision={themeInkRevision}
+          foreground={settings.appearance.theme.foreground} passageMeasure={themePassageGeometry} />
         <div
           ref={plane}
           className={['ambient-content', 'widget-grid-plane', reveal.active ? 'revealing' : ''].filter(Boolean).join(' ')}

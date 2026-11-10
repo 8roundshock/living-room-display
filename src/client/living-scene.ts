@@ -20,6 +20,37 @@ export function habitatBox(patch: ScenePatch, width: number, height: number, gen
     width: w, height: h };
 }
 
+/** Keep an authored patch together while choosing available space on its edge.
+ * A few alternate roots are considered only when the original loses groups.
+ * This is not a scatter of independently placed symbols. The renderer keeps the
+ * result for the local generation, so an active scene never jumps across a row. */
+export function fitHabitatPatch(patch: ScenePatch, width: number, height: number, holes: readonly ThemeRect[], weather: WeatherMotif | undefined, quiet: boolean, generation = 0) {
+  const original = habitatBox(patch, width, height, generation);
+  const quality = (box: ReturnType<typeof habitatBox>) => patch.groups.reduce((score, group) => {
+    const fitted = fitHabitatGroup(group, patch, box, holes, weather, quiet);
+    return score + (fitted.visible ? 100 + (fitted.compact ? 0 : 20) + fitted.yScale * 10 : 0);
+  }, 0);
+  const full = patch.groups.length * 130;
+  let best = original, score = quality(original);
+  if (score >= full - .001 || patch.depth === 'far') return best;
+  const horizontal = patch.edge.startsWith('bottom') || patch.edge.startsWith('top');
+  for (const factor of [1, .85]) {
+    const w = original.width * factor, h = original.height * factor;
+    const edgePosition = patch.edge.startsWith('bottom') ? height - h * .97 : patch.edge.startsWith('top') ? -h * .035 : 0;
+    const span = horizontal ? width - w : height - h;
+    // Prefer roots nearest the authored position when visual quality is equal.
+    const positions = Array.from({ length: 9 }, (_, index) => Math.max(0, span) * index / 8)
+      .sort((a, b) => Math.abs(a - (horizontal ? original.x : original.y)) - Math.abs(b - (horizontal ? original.x : original.y)));
+    for (const position of positions) {
+      const candidate = horizontal ? { x: position, y: edgePosition, width: w, height: h }
+        : { x: patch.edge === 'right' ? width - w * .97 : -w * .035, y: position, width: w, height: h };
+      const candidateScore = quality(candidate) - (1 - factor) * 8;
+      if (candidateScore > score + .01) { best = candidate; score = candidateScore; }
+    }
+  }
+  return best;
+}
+
 /** Authored wind, not a compass claim. Attached groups share one twelve-second
  * phrase; their small phase differences describe a gust passing through roots. */
 export function habitatMotion(group: SceneArtGroup, weather: WeatherMotif | undefined, quiet: boolean) {
@@ -35,10 +66,15 @@ export function fitHabitatGroup(group: SceneArtGroup, patch: ScenePatch, box: Re
   const turns = habitatMotion(group, weather, quiet).map(value => Number(value.slice(7, -4)) * Math.PI / 180);
   const shape = (bounds: SceneArtGroup['bounds']) => {
     const [x, y, w, h] = bounds, [px, py] = group.pivot;
-    const corners = turns.flatMap(angle => [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map(([cx, cy]) => ({
-      x: px + (cx! - px) * Math.cos(angle) - (cy! - py) * Math.sin(angle),
-      y: py + (cx! - px) * Math.sin(angle) + (cy! - py) * Math.cos(angle),
-    })));
+    const low = Math.min(...turns), high = Math.max(...turns);
+    const corners = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].flatMap(([cx, cy]) => {
+      const dx = cx! - px, dy = cy! - py;
+      // Include analytic x/y extrema between CSS waypoints, not just endpoints.
+      const critical = [Math.atan2(-dy, dx), Math.atan2(dx, dy)].flatMap(angle => [-2, -1, 0, 1, 2].map(n => angle + n * Math.PI));
+      return [low, high, ...critical.filter(angle => angle >= low && angle <= high)].map(angle => ({
+        x: px + dx * Math.cos(angle) - dy * Math.sin(angle), y: py + dx * Math.sin(angle) + dy * Math.cos(angle),
+      }));
+    });
     return { left: box.x + Math.min(...corners.map(p => p.x)) * scale, right: box.x + Math.max(...corners.map(p => p.x)) * scale,
       top: box.y + Math.min(...corners.map(p => p.y)) * scale, bottom: box.y + Math.max(...corners.map(p => p.y)) * scale };
   };

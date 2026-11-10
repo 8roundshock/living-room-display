@@ -2,7 +2,7 @@ import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProp
 import type { LivingSceneArt, ScenePath } from '../shared/living-scene-art';
 import { LIVING_SCENE_BUDGET } from '../shared/theme-registry';
 import type { ThemeRect, ThemeScene, WeatherMotif } from './ambient-theme';
-import { habitatBox, habitatMotion, fitHabitatGroup, patchPhase, rainField, rainImpacts, snowField, fogContour } from './living-scene';
+import { habitatBox, habitatMotion, fitHabitatGroup, fitHabitatPatch, patchPhase, rainField, rainImpacts, snowField, fogContour } from './living-scene';
 import './living-scene.css';
 
 interface Props { scene: ThemeScene; art: LivingSceneArt; still: boolean; exclusions: () => readonly ThemeRect[]; inkRevision: number }
@@ -41,6 +41,8 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
   const palette = [scene.tint, scene.companion, scene.accent];
   const weather = scene.source === 'weather' ? scene.motif as WeatherMotif : undefined;
   const atmosphere = weather ?? (scene.motif === 'winter' ? 'snow' : undefined);
+  const patches = scene.quiet ? art.patches.filter(patch => patch.depth === 'habitat').slice(0, 2) : art.patches;
+  const weatherGroups = scene.quiet ? [0] : [0, 1, 2];
   return <div ref={root} className="ambient-theme living-theme" aria-hidden="true" data-theme-motif={scene.motif}
     data-theme-habitat={scene.habitat ?? scene.motif} data-theme-source={scene.source} data-theme-quiet={scene.quiet || undefined}
     data-theme-still={still || undefined} data-scene-elapsed={elapsed} data-scene-revision={revision}>
@@ -50,17 +52,17 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
         {holes.map((hole, index) => <rect key={index} x={hole.left} y={hole.top} width={Math.max(0, hole.right - hole.left)} height={Math.max(0, hole.bottom - hole.top)} rx={Math.min(width, height) * .014} fill="black" />)}
       </mask></defs>
       <g mask={`url(#${maskId})`} data-reading-mask>
-        {art.patches.map((patch, index) => {
+        {patches.map((patch, index) => {
           const phase = patchPhase(elapsed, index), box = habitatBox(patch, width, height, phase.generation);
-          return <HabitatPatch key={`${patch.id}:${phase.generation}`} patch={patch} box={box} initialAge={phase.age} palette={palette}
+          return <HabitatPatch key={`${patch.id}:${phase.generation}`} patch={patch} box={box} width={width} height={height} initialAge={phase.age} palette={palette}
             weather={weather} quiet={scene.quiet} still={still} generation={phase.generation} holes={holes} />;
         })}
         {(weather === 'rain' || weather === 'storm') && <g className="living-weather" data-scene-weather={weather}>
-          {[0, 1, 2].map(index => <RainPhrase key={`${index}:${Math.floor(elapsed / LIVING_SCENE_BUDGET.life)}`} index={index}
+          {weatherGroups.map(index => <RainPhrase key={`${index}:${Math.floor(elapsed / LIVING_SCENE_BUDGET.life)}`} index={index}
             elapsed={elapsed % LIVING_SCENE_BUDGET.life} width={width} height={height} palette={palette} still={still} />)}
         </g>}
         {(atmosphere === 'snow' || atmosphere === 'fog') && <g className="living-weather" data-scene-weather={atmosphere}>
-          {[0, 1, 2].map(index => <AirPhrase key={`${index}:${Math.floor(elapsed / LIVING_SCENE_BUDGET.life)}`} index={index}
+          {weatherGroups.map(index => <AirPhrase key={`${index}:${Math.floor(elapsed / LIVING_SCENE_BUDGET.life)}`} index={index}
             elapsed={elapsed % LIVING_SCENE_BUDGET.life} width={width} height={height} palette={palette} kind={atmosphere} quiet={scene.quiet} />)}
         </g>}
       </g>
@@ -68,16 +70,21 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
   </div>;
 });
 
-function HabitatPatch({ patch, box, initialAge, palette, weather, quiet, still, generation, holes }: {
+function HabitatPatch({ patch, box: originalBox, width, height, initialAge, palette, weather, quiet, still, generation, holes }: {
   patch: LivingSceneArt['patches'][number]; box: ReturnType<typeof habitatBox>; initialAge: number; palette: readonly string[];
+  width: number; height: number;
   weather: WeatherMotif | undefined; quiet: boolean; still: boolean; generation: number;
   holes: readonly ThemeRect[];
 }) {
   // Freeze the delay at this generation's mount. Geometry invalidation never restarts its age.
   const [age] = useState(initialAge);
   const [born] = useState(() => performance.now());
-  return <svg data-scene-patch={patch.id} data-scene-depth={patch.depth} data-scene-generation={generation}
-    data-scene-born={born}
+  const placement = useRef<{ key: string; box: ReturnType<typeof habitatBox> } | null>(null);
+  const key = `${width}:${height}:${still ? JSON.stringify(holes) : ''}`;
+  if (!placement.current || placement.current.key !== key) placement.current = { key, box: fitHabitatPatch(patch, width, height, holes, weather, quiet, generation) };
+  const box = placement.current.box;
+  return <svg data-scene-patch={patch.id} data-scene-depth={patch.depth} data-scene-edge={patch.edge} data-scene-generation={generation}
+    data-scene-born={born} data-scene-relocated={Math.abs(box.x - originalBox.x) > 1 || Math.abs(box.y - originalBox.y) > 1 || undefined}
     x={box.x} y={box.y} width={box.width} height={box.height} viewBox={`0 0 ${patch.viewBox[0]} ${patch.viewBox[1]}`} overflow="hidden"
     opacity={patch.opacity ?? (patch.depth === 'far' ? .48 : 1)}>
     <g className="living-patch-life" style={{ '--patch-life': `${LIVING_SCENE_BUDGET.life}ms`, '--patch-age': `-${age}ms` } as CSSProperties}>
