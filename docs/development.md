@@ -214,8 +214,10 @@ request must not wait half an hour for a one-file change. Measured that day, the
 single-runner pull-request set took 1931 s: widgets 833, home 227, catalog-sky 141 and
 23 suites of 90 s or less. So:
 
-- A **pull request** runs the nine **pull-request shards** in parallel, each about
+- A **pull request** runs the ten **pull-request shards** in parallel, each about
   90 s of test time plus setup. `node tests/ui/lib/run-suites.mjs --list` prints them.
+  The tenth is the `scene3d` suite alone (#600): the runner draws WebGL on the processor
+  and compiles every scene's shaders there.
 - A **push to `main`** also runs the **main set**, one suite per runner: widgets (so a
   fix that leaves a no-longer-needed allowance still fails CI, after merge), home and
   catalog-sky.
@@ -505,7 +507,30 @@ returns images in memory to its caller. It never writes screenshot files. The
 existing palette, widget, canvas-scope and motion suites retain their full family
 sweeps and use multiple synthetic boards for catalog coverage.
 
-The `themes` pull-request suite (#575, #586) runs an isolated synthetic source server.
+The `scene3d` pull-request suite (#600) covers the 3D scene renderer. WebGL needs a choice
+at launch, held in `tests/ui/lib/scene-cases.mjs` (`WEBGL_ARGS`):
+
+- `scene3d` launches Edge with a software rasteriser allowed (`--use-angle=swiftshader
+  --enable-unsafe-swiftshader --ignore-gpu-blocklist`), so it also runs on the runner, and
+  sets `window.__lrdScene3dAllowSoftware` before the page loads, because the app itself
+  refuses a software rasteriser. `--gpu` uses the machine's GPU instead and adds a
+  frame-rate floor. If Edge gives the page no WebGL context at all the suite fails with
+  `NO WEBGL`; it never passes without having drawn.
+- `themes` launches Edge with `--disable-3d-apis`, so all 26 scenes are drawn by the flat
+  fallback renderer, which is what that suite measures.
+- The other suites launch Edge plainly and assert nothing about the scene layer.
+
+`tests/ui/tools/scene-sheet.mjs` is a developer tool, in no CI set: it opens the built app
+for the scenes you name (`christmas canada-day birthday christmas+snow`) on their own dates
+and weather and writes one PNG each into a temporary folder that you name with `--out`
+(it refuses a folder inside the checkout). `--full` shows the scene at full opacity,
+`--empty` hides the widgets, `--measure` prints build, frame and main-thread times,
+`--webgl gpu|software|off` picks the renderer. Look, then delete the folder: the rule
+against keeping screenshots applies to it. The scene contract is in
+[src/client/scene3d/README.md](../src/client/scene3d/README.md).
+
+The `themes` pull-request suite (#575, #586) runs an isolated synthetic source server
+in a browser without WebGL.
 It checks mode/calendar/foreground draft transactions, small editor layouts, all
 26 living scenes at 1080p/4K (named principal forms, bottom-edge coverage, a
 second edge, particles, a two-phase pixel proof that art never touches reading

@@ -7,6 +7,9 @@ preview, Save/Cancel, saved styles and scheduled styles share the same choice.
 
 ## Current rendering direction (#600, owner decision 2026-11-10)
 
+Superseded on the same day by [3D scenes](#3d-scenes-600-owner-decision-2026-11-10) for
+every scene that has a 3D module; it still describes the flat fallback renderer.
+
 After seeing the #586 scenes on the display the owner asked for far less scenery,
 drawn translucent and classy, never clipped by widgets. This section overrides any
 older statement below that conflicts with it.
@@ -46,11 +49,170 @@ older statement below that conflicts with it.
 The top-band generator, the old mask description and the ink pixel-proof helper are
 now unused; removing them is tracked in #590.
 
+## 3D scenes (#600, owner decision 2026-11-10)
+
+**This supersedes the flat rendering direction above** for every scene that has a 3D
+module. The owner rejected each flat SVG version ("basic shapes") and approved lit 3D
+objects in a scene style picker: partly see-through, slowly moving, fading out toward the
+middle of the screen. The flat renderer described above and below remains only as the
+fallback. The engine, the kit and the contract for adding a scene are in
+[src/client/scene3d/README.md](../src/client/scene3d/README.md).
+
+### The owner's picks
+
+Chosen in the picker for its "All together" compositions, and held as named constants in
+`src/client/scene3d/settings.ts`. They are picks, not defaults to tune.
+
+| Setting | Pick | In the app |
+| --- | --- | --- |
+| Brightness | 45% | Layer opacity is the ambient brightness × 0.45, so it never exceeds the saved brightness. |
+| How much | 30% (Canada Day 15%) | `ctx.amount`; a scene turns it into counts. |
+| Size | 85% | `ctx.size`: object radius and length, not position. |
+| Glow | 65% | Strength of halos and soft light discs. |
+| Motion | 5% | The scene clock runs at 5/40 of the picker's default speed, one eighth of real time. |
+| Shine | 80% | Strength of the studio reflections. |
+| See-through | 100% | A lit body thins to glass; its rim and highlights stay. |
+| Fade to middle | 60% | The picker's radial mask: full strength at the edges, 40% in the middle. |
+
+His words on the direction: "something like this, just improve the elements, less
+repeated, not as intense as all together, but overall the vibe is good"; "special occasion
+one-day screensavers can be more intense, bigger, and the daily/seasonal ones that stay for
+weeks or months need to be more low-key"; scenes for different cultures must be unique.
+
+Open question for the owner ([#636](https://github.com/8roundshock/living-room-display/issues/636)):
+in the picker 45% was the scene's opacity beside text already drawn dim, while here it is
+multiplied by the saved brightness, so at a saved 36% the layer is at 15-19% opacity.
+Scene pixels alone on an empty 1920×1080 board at 36%: 6.7-9.7% lit, median luminance
+11-23 and 99th percentile 24-33 of 255, against widget text at about 69.
+
+### Tier rule
+
+`tier.ts` derives one of two tiers from the registry group and the holiday policy's
+eligibility window (lead days, the holiday's own span, adjoining observances of the same
+scene). It keeps no list of scenes.
+
+- **special**: birthdays, and celebrations that can be on screen for at most seven
+  consecutive days (Canada Day 3, Women's Day 3, Buddha's Birthday 4, New Year 6, Orthodox
+  Christmas 7, Maslenitsa 7). Opacity ×1.15, size ×1.1.
+- **everyday**: seasons, weather, and celebrations with a longer window (Thanksgiving 8,
+  Pascha 8, Easter 9, Seollal 9, Chuseok 9, New Year · Russia 13, Halloween 17, Christmas
+  42). Opacity ×0.9, amount ×0.8.
+
+Weather over a scene (Combined) keeps that scene's tier. The one-week boundary is one
+constant, `SPECIAL_MAX_WINDOW_DAYS`. Stepping a long-window holiday up to special on its
+central day only is [#632](https://github.com/8roundshock/living-room-display/issues/632).
+
+### Art rules
+
+- Few, and not repeated: vary size, colour, finish and pattern; no row of identical objects.
+- Every object is attached, hung, standing on the bottom edge, or falling naturally.
+- Nothing generic: each scene is recognisably its own occasion, and scenes for different
+  cultures share no stock form.
+- Hero elements sit at the edges and in the corners; the middle is left to fade.
+- A scene's quality comes from better elements, not more of them.
+
+The three reference scenes follow their design plans:
+
+- **Christmas** ([#609](https://github.com/8roundshock/living-room-display/issues/609)):
+  a wreath with a red bow hung on a ribbon from a short fir swag in the top-left corner, a
+  longer swag in the top-right corner with five ornaments that differ in shape, colour and
+  finish, one snow-dusted bough low at each side, soft warm lights far behind, a little
+  snow. No tree (New Year · Russia) and no star (Orthodox Christmas).
+- **Canada Day** ([#606](https://github.com/8roundshock/living-room-display/issues/606)):
+  the National Flag (2:1, the 11-point leaf, kept solid) flying from its pole in the
+  top-right corner, leaves fallen at the pole's foot, a cord of five maple leaves in the
+  top-left corner, a maple branch from the lower left with one large leaf on its stem,
+  three leaves falling. No fireworks.
+- **Birthday** ([#612](https://github.com/8roundshock/living-room-display/issues/612)):
+  a candle-lit three-tier cake between two presents in the left corner, five balloons that
+  all differ tied to a present in the right corner, a short swag of bunting in each top
+  corner. Birthday · Russian accents and Birthday · Korean accents use the same module
+  with their own colourway and wrapping-paper pattern until
+  [#627](https://github.com/8roundshock/living-room-display/issues/627) and
+  [#631](https://github.com/8roundshock/living-room-display/issues/631).
+
+### Which renderer draws a scene
+
+`AmbientTheme.tsx` chooses once per scene. The layer's root carries
+`data-scene-renderer="3d"` or `"flat"` beside the existing motif, habitat, source, quiet and
+still attributes.
+
+- **3D** when `src/client/scene3d/scenes/<id>.js` exists (found at build time, so adding a
+  scene edits no list), the browser gives the page hardware WebGL, and, with weather over
+  the scene in Combined, `weather/<kind>.js` exists too. Only `snow` exists so far.
+- **Flat** otherwise: a scene without a module yet, weather over a 3D scene whose overlay
+  does not exist yet (the flat renderer still draws that weather), no WebGL, a software
+  rasteriser, a GPU that needs more than 120 ms a frame, a lost context, or a scene module
+  that throws. Nothing is thrown to the page.
+
+Unchanged rules: Theme Off, Animation Off and system reduced motion mount nothing (and
+download nothing 3D); the editor's still preview draws one static frame and runs no loop;
+a selected quiet date draws a frozen, desaturated frame with nothing in the air, amount
+×0.4 and opacity ×0.38; saved brightness is never raised; true black; no audio and no
+flashes. The opt-in foreground passage is untouched, and because it starts from the flat
+renderer's patches it does not start over a 3D scene
+([#589](https://github.com/8roundshock/living-room-display/issues/589),
+[#634](https://github.com/8roundshock/living-room-display/issues/634)).
+
+### Runtime
+
+- Nothing 3D is in the dashboard bundle. The engine with three.js is one lazily loaded
+  chunk of 622 kB (161 kB gzipped); a scene module is 2-4 kB. The dashboard bundle grew by
+  6.6 kB (815.6 to 822.2 kB) for the loader, the settings and the tier rule.
+- three.js is pinned at 0.128.0, the release the approved look was rendered with
+  ([#633](https://github.com/8roundshock/living-room-display/issues/633) upgrades it;
+  [#635](https://github.com/8roundshock/living-room-display/issues/635) keeps its 24 MB
+  package out of the installed payload).
+- The backing store is at most 2560×1440. About 20 frames a second, none while the
+  document is hidden, and never a frame queued behind one the GPU has not finished.
+- One stage owns one canvas and one WebGL context and releases both on unmount.
+- The whole scene drifts on a slow closed path (about 17 px sideways and 7 px up and down
+  at 1080p, over seven and five minutes) so standing objects do not light the same pixels
+  for weeks. This reduces fixed patterns; it is not a burn-in guarantee.
+
+Measured on 2026-11-10, source build, headless Edge on the development PC's GeForce GTX
+1080 Ti, default board:
+
+| Scene | Triangles | Draw calls | Build, once | Main thread, running | Frame: script | Frame: with GPU |
+| --- | --- | --- | --- | --- | --- | --- |
+| Christmas, 1920×1080 | 261,000 | 79 | 554 ms | 27 ms/s | 0.7 ms | 1.9 ms |
+| Canada Day, 1920×1080 | 32,000 | 30 | 56 ms | 38 ms/s | 0.8 ms | 2.0 ms |
+| Birthday, 1920×1080 | 98,000 | 82 | 50 ms | 29 ms/s | 0.6 ms | 3.0 ms |
+| Christmas, 3840×2160 | 261,000 | 79 | 335 ms | 24 ms/s | 0.6 ms | 2.7 ms |
+| Canada Day, 3840×2160 | 32,000 | 30 | 45 ms | 34 ms/s | 0.9 ms | 3.8 ms |
+| Birthday, 3840×2160 | 98,000 | 82 | 46 ms | 28 ms/s | 0.7 ms | 2.8 ms |
+
+"Build" is the one-time main-thread cost when a scene starts (the first of a session
+includes compiling its shaders). "Main thread, running" is the page's task time per
+second at the real 20 frames a second. At 3840×2160 the backing store is 2560×1440. On a
+software rasteriser the same scenes take 0.1 to 1.5 s a frame, which is why one is
+refused. Total GPU and energy cost stays with #364.
+
+### Iteration loop
+
+Edit the scene file; `npm run build`; capture two or three scenes to a temporary folder
+with `tests/ui/tools/scene-sheet.mjs` (`--full` to judge the art, without it to see the
+real layer); look; fix; delete the folder. One independent code review per pull request. No
+multi-round agent reviews for taste: the owner judges taste on the display.
+
+### Verification and limits
+
+`node --test "src/client/scene3d/*.test.ts"` covers the picks, the tier rule, scene
+resolution and the module-file contract. The `scene3d` browser suite runs with WebGL
+(software-rendered on the CI runner, `--gpu` for a real GPU) and covers the 3D path; the
+`themes` suite runs without WebGL and covers the flat fallback for all 26 scenes. See
+[development](development.md).
+
+Not verified: the installed app, the native screensaver host (whether its browser gives the
+page hardware WebGL has not been observed), physical-TV viewing, a 3D scene on a quiet date
+(no reference scene falls on one; the engine's frozen, particle-free frame is checked
+directly), and long-run behaviour over days.
+
 ## Layered living scenes (#586)
 
 Implemented in source on draft [PR #588](https://github.com/8roundshock/living-room-display/pull/588),
 following the [layered scene plan](layered-scene-plan.md). **This section is the
-current renderer contract.** The sections after it are kept for the decisions
+contract of the flat fallback renderer** (see [3D scenes](#3d-scenes-600-owner-decision-2026-11-10)). The sections after it are kept for the decisions
 that still hold (modes, calendars, weather resolution, Try a scene, birthdays);
 each one says where it describes the earlier floating-mark renderer, which no
 longer runs.
@@ -321,8 +483,11 @@ for scene identity, palette and explicit holiday eligibility/windows/priorities;
 the picker derives its options from it. Authored compositions live in
 `living-scene-art.ts` and `living-celebration-art.ts`. `holidays.ts` owns factual
 calendar rules. `ambient-theme.ts` resolves current weather/season/holiday and
-creates explicitly labelled illustrations. `LivingTheme.tsx` and `living-scene.ts`
-own whole-patch fitting and finite choreography, `SceneForeground.tsx` and
+creates explicitly labelled illustrations. `src/client/scene3d/` owns the 3D renderer: one file per scene under `scenes/`, weather
+overlays under `weather/`, the owner's look in `settings.ts`, the tier rule in `tier.ts`
+and the contract in its README; `AmbientTheme.tsx` chooses between it and the flat
+renderer. `LivingTheme.tsx` and `living-scene.ts`
+own the flat renderer's whole-patch fitting and finite choreography, `SceneForeground.tsx` and
 `scene-passage.ts` the optional passage; `Display.tsx` supplies reading-area
 exclusions/brightness. The registry's older per-mark `art`, slot and motion-profile
 fields are no longer rendered; their removal is tracked in
@@ -335,8 +500,15 @@ facts just to change a decorative lead window.
 
 ## Source verification
 
+The `scene3d` browser suite (#600) covers the 3D renderer with WebGL enabled: the three
+reference scenes' canvas, data attributes, drawn pixels and brightness bound, the 20
+frames-a-second loop and its pause while hidden, fallback to the flat scene on a lost or
+refused context, the still preview's single frame, release of every context on unmount,
+and that Off, Animation Off and reduced motion download no 3D chunk.
+
 The dedicated `themes` browser suite uses an ephemeral source server and synthetic
-dates/weather. It verifies Save/Cancel, shared calendar controls, the foreground
+dates/weather, in a browser launched without WebGL so that every scene is drawn by the
+flat renderer. It verifies Save/Cancel, shared calendar controls, the foreground
 option's draft/omission, 44px keyboard targets, 320/390px and short editors, and
 all 26 living scenes at 26%/1080p and 36%/4K: named principal forms visible and
 complete on the default board, structural budgets, true black and a pixel proof
