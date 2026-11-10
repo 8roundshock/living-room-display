@@ -191,8 +191,9 @@ board, three runs): Rain 13,400 triangles and 8 draw calls, Snow 4,700 and 13, S
 and 5, Fog 4,400 and 12, Wind 5,500 and 52; a frame costs 0.03-0.7 ms of script and 0.4-3 ms
 with the GPU; the page's main thread spends 20-41 ms per second on a running scene, and
 building one takes 50-410 ms. Rain, snow and storm particles move in the vertex shader (one
-uniform a frame). An overlay adds 2 to 6 draw calls to the scene underneath, and its
-main-thread cost is within the run-to-run variation of about 10 ms per second.
+uniform a frame). An overlay adds 2 to 6 draw calls to the scene underneath; its
+main-thread cost could not be told apart from the run-to-run variation (the PC was busy
+with other work when this was measured, so the main-thread figures are the noisy ones).
 
 ### Which renderer draws a scene
 
