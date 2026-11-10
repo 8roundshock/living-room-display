@@ -1,5 +1,6 @@
 import { LIVING_SCENE_BUDGET } from '../shared/theme-registry.ts';
-import type { GroundKind, ParticleKind, TopKind } from '../shared/living-scene-dressing.ts';
+import type { GroundKind, ParticleKind, SceneDressing, TopKind } from '../shared/living-scene-dressing.ts';
+import type { LivingSceneArt } from '../shared/living-scene-art.ts';
 import type { ThemeRect } from './ambient-theme.ts';
 
 /** Procedural edge dressing for #586 (owner direction, 2026-11-09): a continuous
@@ -13,6 +14,7 @@ export interface Pendant { x: number; y: number; length: number; period: number;
 export interface EdgeBand { sway: number; segments: DressSegment[]; front: DressSegment[]; pendants: Pendant[]; lit: number }
 
 const STEP = 6, OVERHANG = 30;
+export const PENDANT_MAX = 12;
 /** Deterministic unit noise; no random clock, so still previews and tests are stable. */
 export const unit = (index: number, salt: number) => { const value = Math.sin(index * 127.1 + salt * 311.7) * 43758.5453; return value - Math.floor(value); };
 const wave = (x: number, seed: number) => .5 + .5 * (Math.sin(x * .011 + seed) * .5 + Math.sin(x * .027 + seed * 2.3) * .3 + Math.sin(x * .061 + seed * .7) * .2);
@@ -61,8 +63,8 @@ const disc = (x: number, y: number, r: number) => `M${n(x - r)} ${n(y)}a${n(r)} 
 
 /** Continuous bottom scenery. `segments` sit behind the authored patches and
  * `front` in front of their bases, so objects stand in the ground. */
-export function groundBand(kind: GroundKind, width: number, height: number, holes: readonly ThemeRect[], seed = 1): EdgeBand {
-  const short = Math.min(width, height), low = short * .05, high = short * (kind === 'water' || kind === 'cloth' ? .1 : kind === 'grass' ? .19 : .15);
+export function groundBand(kind: GroundKind, width: number, height: number, holes: readonly ThemeRect[], seed = 1, boost = 1): EdgeBand {
+  const short = Math.min(width, height), low = short * .05, high = short * boost * (kind === 'water' || kind === 'cloth' ? .1 : kind === 'grass' ? .19 : .15);
   const profile = edgeProfile(width, height, holes, 'bottom', low, high, seed, kind === 'grass' ? 1.5 : .55), base = height + 4;
   const parts = kind === 'grass' ? 5 : 1, segments: DressSegment[] = [], front: DressSegment[] = [];
   for (let part = 0; part < parts; part++) {
@@ -133,12 +135,18 @@ export function topBand(kind: TopKind, width: number, height: number, holes: rea
   const profile = edgeProfile(width, height, holes, 'top', short * .022, deep, seed + 4, kind === 'cloud' ? .6 : 1.5), base = -4;
   const rear: DressPath[] = [], near: DressPath[] = [], pendants: Pendant[] = [];
   const bumps = (size: number, amount: number) => (x: number) => Math.abs(Math.sin(x * Math.PI / size + seed)) * amount;
+  // Spacing is a share of the short side (callers pass 8-12% of it) and the count is
+  // capped: every pendant is its own pendulum animation, so a sparse ultrawide or 4K
+  // board must not multiply them past the scene's animation budget.
   const pendantSlots = (spacing: number, need: number, make: (x: number, index: number, depth: number) => Pendant) => {
+    const free: { x: number; index: number; room: number }[] = [];
     for (let x = spacing * .5, index = 0; x < width; index++, x += spacing * (.8 + unit(index, 17) * .4)) {
       let room = height * .5;
       for (const hole of holes) if (hole.left - 30 < x && hole.right + 30 > x) room = Math.min(room, hole.top - 10);
-      if (room >= need) pendants.push(make(x, index, Math.min(room, short * .2)));
+      if (room >= need) free.push({ x, index, room });
     }
+    const keep = Math.min(free.length, PENDANT_MAX);
+    for (let slot = 0; slot < keep; slot++) { const pick = free[Math.floor((slot + .5) * free.length / keep)]!; pendants.push(make(pick.x, pick.index, Math.min(pick.room, short * .2))); }
   };
   if (kind === 'cloud') {
     rear.push({ d: silhouette(profile, -OVERHANG, width + OVERHANG, base, -1, 1, bumps(150, 16)), tone: 0, fill: .55, stroke: 0 });
@@ -169,7 +177,7 @@ export function topBand(kind: TopKind, width: number, height: number, holes: rea
     }
     rear.push({ d: silhouette(profile, -OVERHANG, width + OVERHANG, base, -1, kind === 'fir' ? .35 : .5, bumps(54, 8)), tone: 0, fill: .55, stroke: 0 });
     near.push({ d: fringe, tone: 0, fill: 1, stroke: 0 }, { d: sprigs, tone: kind === 'fir' ? 0 : 2, stroke: 1.4, light: true, opacity: .6 });
-    pendantSlots(kind === 'fir' ? 118 : 86, short * .09, (x, index, depth) => {
+    pendantSlots(short * (kind === 'fir' ? .11 : .08), short * .09, (x, index, depth) => {
       const length = Math.min(depth - 34, 26 + unit(index, 11) * 52), r = kind === 'fir' ? 13 + unit(index, 13) * 8 : 9 + unit(index, 13) * 5, y = length + r;
       const tone = (1 + index % 2) as 1 | 2;
       const paths: DressPath[] = kind === 'fir'
@@ -197,7 +205,7 @@ export function topBand(kind: TopKind, width: number, height: number, holes: rea
     }
     rear.push({ d: string, tone: 2, stroke: kind === 'streamer' ? 4 : 2, opacity: .9 });
     near.push({ d: flagsA, tone: 0, fill: 1, stroke: 0 }, { d: flagsB, tone: 1, fill: 1, stroke: 0 }, { d: ribbon, tone: 1, stroke: 5.5, opacity: .95 }, { d: ribbon, tone: 1, stroke: 1.6, light: true, opacity: .9 });
-    if (kind === 'lantern') pendantSlots(132, short * .12, (x, index, depth) => {
+    if (kind === 'lantern') pendantSlots(short * .12, short * .12, (x, index, depth) => {
       const length = Math.min(depth - 62, 14 + unit(index, 11) * 30), r = 20 + unit(index, 13) * 9, y = length + r * 1.1, tone = (index % 2) as 0 | 1;
       const petal = (shift: number, w: number) => `M${n(x + shift)} ${n(y + r)}C${n(x + shift - w)} ${n(y + r * .2)} ${n(x + shift - w * .5)} ${n(y - r * .6)} ${n(x + shift)} ${n(y - r)}C${n(x + shift + w * .5)} ${n(y - r * .6)} ${n(x + shift + w)} ${n(y + r * .2)} ${n(x + shift)} ${n(y + r)}Z`;
       return { x, y: 0, length: y + r, period: [6, 9, 12][index % 3]!, phase: unit(index, 15) * 9, swing: 6 + unit(index, 19) * 4,
@@ -240,9 +248,11 @@ export function particleLayers(kind: ParticleKind, count: number, width: number,
   });
 }
 
-/** Wide soft fog bands for the lower third and the top; drawn with a vertical gradient. */
+/** Soft irregular fog: overlapping ellipses filled with a radial gradient, so no
+ * blob has an edge or an end. Three sit in the lower third and two form a top haze. */
 export function fogBands(width: number, height: number) {
-  return [.9, .76, .62, .07].map((level, index) => ({ x: width * (-.12 + index * .09), y: height * level - height * (.05 + index % 2 * .02), width: width * (.86 - index * .08), height: height * (.1 + index % 2 * .04), travel: width * (.05 + index * .012) * (index % 2 ? -1 : 1), tone: (index % 3) as 0 | 1 | 2 }));
+  return [[.3, .87, .44, .095], [.78, .79, .38, .085], [.52, .67, .42, .075], [.34, .035, .5, .075], [.82, .05, .42, .065]].map(([cx, cy, rx, ry], index) =>
+    ({ cx: width * cx!, cy: height * cy!, rx: width * rx!, ry: height * ry!, travel: width * (.045 + index * .01) * (index % 2 ? -1 : 1), tone: (index % 3) as 0 | 1 | 2 }));
 }
 /** Long curved gust streaks; the renderer slides and fades them. Each streak takes an
  * open lane that its whole slide clears, shortening before it gives up, so a
@@ -259,4 +269,16 @@ export function gustStreaks(width: number, height: number, holes: readonly Theme
     break search;
   }
   return streaks;
+}
+
+/** Upper bound of simultaneously running animations for one scene and board:
+ * every sway group, patch fade and appear, one cross-fading generation, band
+ * shifts, grass segments, pendants, particle layers and weather. Checked against
+ * LIVING_SCENE_BUDGET.animations on empty boards, where the most pendants fit. */
+export function sceneAnimationCount(art: LivingSceneArt, dressing: SceneDressing, width: number, height: number, holes: readonly ThemeRect[] = []) {
+  const patches = art.patches.filter(patch => !(patch.depth === 'far' && patch.edge.startsWith('bottom')));
+  const drawn = patches.reduce((sum, patch) => sum + patch.groups.length + 2, 0) + Math.max(0, ...patches.map(patch => patch.groups.length + 1));
+  const unit1080 = Math.min(width, height) / 1080, top = dressing.top ? topBand(dressing.top, width / unit1080, height / unit1080, holes) : null;
+  const ground = groundBand(dressing.ground === 'mist' ? 'water' : dressing.ground, width / unit1080, height / unit1080, holes);
+  return drawn + 2 + (ground.sway ? ground.segments.length : 0) + (top ? 2 + top.pendants.length : 0) + (dressing.particles ? PARTICLE_LAYERS : 0);
 }

@@ -45,9 +45,16 @@ measured reading areas and their near-future movement, on true black.
 4. **Particles** (`particleLayers`): 31-64 depth-scaled forms (8-30px) always in
    flight as four layers: snow at several sizes, petals, leaves, confetti,
    sparkles or firefly motes. Fresh rain and storms draw 72 streaks in two
-   depths with splashes instead; fog draws four soft gradient bands under a
-   blurred copy of the mask so it never outlines widgets; wind adds gust streaks
+   depths with splashes instead; fog draws five soft radial blobs (three low,
+   two as a top haze) under a blurred copy of the mask so it never outlines
+   widgets; fresh snow lays a deeper drift and icicles on any scene with 96 flakes; wind adds gust streaks
    in open lanes and blows the leaf layers sideways.
+
+Bands, pendants and particles are generated in a 1080-short-side space and drawn
+scaled to the viewport, so their proportions and path counts are the same at 4K
+as at 1080p. Particles and fog use the feathered mask and fade out before
+reading space; patches and bands use the hard mask. Pendants are spaced at 8-12%
+of the short side and capped at 12, because each is its own animation.
 
 `src/shared/living-scene-dressing.ts` names each scene's ground, top and
 particle kind (and fixed ground or canopy colours where the scene palette's
@@ -84,7 +91,8 @@ path or placement count.
 ### Motion and renewal
 
 - Rooted groups sway on one shared 12-second phrase: grass 7.5 degrees, hanging
-  forms 8.5, branches 4, drifts 2.4 (more in wind, rain and storms). The sweep
+  forms 8.5, branches 4, drifts 2.4 (more in wind, rain and storms); the birthday
+  balloons float, bobbing about 10-20px on their tethers. The sweep
   is part of the fitted bounds. Rear grass sways in five segments with a
   travelling phase; pendants swing 7-12 degrees on 6, 9 or 12-second periods.
 - A root is chosen once per 36-second local generation and for each still
@@ -137,23 +145,27 @@ a passage visibly crossing text or glyphs. That is deliberate.
 Isolated synthetic source server, headless Edge, default board, 1920x1080, 26%
 brightness, scene-only pixels:
 
+- Fog (2026-11-10, third round) is five soft radial blobs under the feathered mask;
+  particles use the same feathered mask and fade out before reading space.
 - Lit pixels 5.6-12.2% (median 8.6%); bottom-edge columns lit 100% in all 26
   scenes and both Combined samples; top-edge columns lit 100% except Fog (40%).
 - Scene luminance: median 21-52 and 99th percentile 47-58 of 255, against
   widget text at about 36-42.
 - 4.2-second samples: 56-139ms main-thread task time, 25-65 style/layout
   updates, 19-32 layers, 9-23 running animations, 14-87 paths; no layer paints
-  reported. Motion off: 6ms, nothing mounted. Wind at 3840x2160 measured 163ms
-  and 41 layers.
+  reported. Motion off: 6ms, nothing mounted. After viewport scaling (third
+  round) Summer and Wind measured 87-92ms and 33 layers at both 1920x1080 and
+  3840x2160.
+- Upper bound of running animations on an empty board, by unit test, at
+  1920x1080, 3840x2160 and 3440x1440: 16 (Snow) to 39 (Wind) of 48.
 - Structural caps (`LIVING_SCENE_BUDGET`): 4 patches, 420 paths, 48 animations.
   The plan's first caps (240 paths, 32 animations, 40 layers, 150ms) were set
   for sparse scenery; the path and animation caps were raised with these
   measurements, and the 150ms and 40-layer ceilings still hold at 1080p.
 
 Animated SVG is main-thread work, not compositor-only; total GPU and energy
-cost stays with #364. In headless 4K capture the Wind scene's first frames
-sometimes rastered late; it painted correctly in every real-time sample. That
-needs a look on the real display.
+cost stays with #364. Before viewport scaling, headless 4K capture of the Wind
+scene sometimes rastered its first frames late; real-display behaviour is unverified.
 
 Not verified here: the installed app, native/idle display, physical-TV viewing,
 a long-run temporal coverage heatmap and 45-second human review of every scene.
@@ -173,22 +185,18 @@ opt-in Holidays source exposes the same choices directly, including with themes
 Off. Empty calendars still keep seasons. Combined means “Seasonal until noteworthy weather
 is near.” The resolved scene distinguishes current conditions from forecasts.
 
-Independent cultural research and concept critique for #579 compared enlarged
-repeated icons, a fixed botanical vignette and migrating contour compositions.
-The chosen composition has a recognizable original anchor plus simpler companion
-marks. The renderer measures widget reading areas and searches bounded negative
-space; a crowded board can omit a mark. It reserves only the finite mark lifetime,
-using the existing float/step waypoints and upcoming swap destination, including
-the pending dim-before-step window. Typography/content measurement invalidates
-still placement; an existing animated mark that becomes unsafe fades smoothly
-without restarting other slots. This conservative retirement can precede its
-natural expiry. There are no per-frame layout reads. Three distinct winter festivities use
-fir/ornaments, broad New Year arcs or the Russian tree, and an Orthodox Christmas
-star. Seollal uses an open-centred rectangular kite, Chuseok a separated full-moon
-circle and harvest forms, and Buddha's Birthday lotus lanterns.
+History (#579, removed renderer): cultural research and concept critique compared
+enlarged repeated icons, a fixed botanical vignette and migrating contour
+compositions, and chose a recognizable original anchor with simpler companion
+marks placed one by one in measured negative space. That mark renderer no longer
+runs. What survives from it is the motif vocabulary: three distinct winter
+festivities (fir and ornaments, New Year arcs or the Russian tree, an Orthodox
+Christmas star), an open-centred rectangular Seollal kite, a separated full
+Chuseok moon with harvest forms, and lotus lanterns for Buddha's Birthday.
 
-Owner direction, 2026-11-04 (#582), asks for noticeably more colour, more visible
-forms and richer characteristic movement across all 23 scenes. The chosen pass
+History (#582, removed renderer): owner direction on 2026-11-04 asked for noticeably
+more colour, more visible forms and richer characteristic movement across the
+then 23 scenes. That pass
 uses three prominent palette roles and multi-scale contours with small local
 13%-opacity fills, instead of a particle-count-only change or broad filled
 vignettes. Global brightness stays authoritative; compare at 26% and 36% rather
@@ -200,9 +208,8 @@ uses a broader feature every third birth, smaller companions and stronger colour
 strokes. Rain has droplets/ripples and streaks, snow readable crystal groups,
 storms curled cloud/rain, fog three separated ribbons and wind leaves/currents.
 
-One bounded layer sits behind widgets. Its larger contours stay dim against true
-black, without full-screen fills, blur, persistent borders, lightning flashes or
-audio. Weather chooses the geometry; a seasonal or celebratory tint can remain.
+Still current: one bounded layer sits behind widgets on true black, without
+full-screen fills, lightning flashes or audio. Weather chooses the geometry; a seasonal or celebratory tint can remain.
 Exact selected quiet dates use neutral seasonal/weather contours. Off does
 not mount the layer; reduced motion and Animation Off remove it entirely. This
 does not promise OLED burn-in prevention or substitute for weather alerts.

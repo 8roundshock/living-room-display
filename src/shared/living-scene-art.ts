@@ -16,7 +16,7 @@ export interface ScenePath {
 export interface SceneArtGroup {
   id: string;
   paths: readonly ScenePath[];
-  motion: 'still' | 'grass' | 'branch' | 'hanging' | 'drift';
+  motion: 'still' | 'grass' | 'branch' | 'hanging' | 'drift' | 'float';
   pivot: readonly [number, number];
   /** Conservative source geometry, including control points and stroke extent. */
   bounds: readonly [x: number, y: number, width: number, height: number];
@@ -524,7 +524,7 @@ function birthdayScene(treatment: 'classic' | 'russian' | 'korean'): LivingScene
         ]),
       ] },
       { id: `birthday-${treatment}-balloons`, edge: 'right', width: .20, height: .34, viewBox: [290, 285], origin: [540, 0], depth: 'habitat', groups: [
-        form('birthday-tethered-balloons', 'hanging', [690, 265], [
+        form('birthday-tethered-balloons', 'float', [690, 265], [
           filled('M572 75C554 33 580 11 604 20C631 31 641 75 625 102Q615 121 608 124C590 115 578 98 572 75Z', 1, .43, 1.6),
           filled('M664 64C664 26 700 14 723 37C749 64 735 109 711 126C687 119 665 93 664 64Z', 0, .42, 1.7),
           filled('M755 105C748 74 770 53 792 66C815 82 814 118 798 137Q789 149 782 151C767 140 758 123 755 105Z', 2, .40, 1.5),

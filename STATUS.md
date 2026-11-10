@@ -26,7 +26,14 @@ in every scene, no principal group omitted on empty, default or dense boards;
 Reading protection is unchanged and has a two-phase pixel proof in the `themes`
 browser suite.
 
-Not done or not verified: the second independent visual pass and final-head
+Third round (2026-11-10): Fog redrawn as soft feathered haze, pendants capped,
+dressing scaled with the viewport (4K now costs the same as 1080p), particles
+fade before text, heavier Combined snow and bobbing balloons. Family-specific
+dressing and weak heroes are tracked in
+[#598](https://github.com/8roundshock/living-room-display/issues/598), small
+renderer defects in [#599](https://github.com/8roundshock/living-room-display/issues/599).
+
+Not done or not verified: final-head
 review, installation, native/idle display and physical-TV viewing, a temporal
 coverage heatmap and 45-second human review per scene. Known weak points: Fog
 is still the plainest scene; New Year (CA/KR), Seollal and Maslenitsa keep

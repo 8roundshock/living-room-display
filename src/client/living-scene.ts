@@ -10,6 +10,7 @@ export function patchPhase(elapsed: number, index: number) {
 }
 
 export const SCENE_SCALE = 1.45;
+export const FLOAT_BOB = 11;
 export const BOTTOM_LIFT = .026;
 /** Keep the authored natural aspect ratio. Dense layouts cut reading space out of
  * the shared scene, rather than converting the habitat into square icon slots. */
@@ -124,17 +125,19 @@ export function placeScenePatches(patches: readonly ScenePatch[], width: number,
 export function habitatMotion(group: SceneArtGroup, weather: WeatherMotif | undefined, quiet: boolean) {
   const strength = quiet ? .35 : weather === 'storm' ? 1.65 : weather === 'wind' || weather === 'rain' ? 1.3 : 1;
   // Visible motion (owner direction, 2026-11-09): tips travel several degrees; the sweep is part of the fitted bounds.
-  const amplitude = ({ still: 1, grass: 7.5, branch: 4, hanging: 8.5, drift: 2.4 } as const)[group.motion] * strength;
-  return [0, -.55, 1, .28, 0].map(turn => `rotate(${(turn * amplitude).toFixed(3)}deg)`);
+  const amplitude = ({ still: 1, grass: 7.5, branch: 4, hanging: 8.5, drift: 2.4, float: 3 } as const)[group.motion] * strength;
+  // A floating bunch also bobs on its tethers by FLOAT_BOB authored units (10-20px on screen).
+  return [0, -.55, 1, .28, 0].map(turn => `${group.motion === 'float' ? `translate(0px, ${(-turn * FLOAT_BOB).toFixed(2)}px) ` : ''}rotate(${(turn * amplitude).toFixed(3)}deg)`);
 }
 
 /** Fit complete rooted groups before the reading mask. A compact authored form
  * keeps broad leaves and complete seedheads where a tall clump cannot fit. */
 export function fitHabitatGroup(group: SceneArtGroup, patch: ScenePatch, box: HabitatBox, holes: readonly ThemeRect[], weather: WeatherMotif | undefined, quiet: boolean) {
   const scale = box.width / patch.viewBox[0], [ox, oy] = patch.origin ?? [0, 0];
-  const turns = habitatMotion(group, weather, quiet).map(value => Number(value.slice(7, -4)) * Math.PI / 180);
+  const turns = habitatMotion(group, weather, quiet).map(value => Number(/rotate\((-?[\d.]+)deg\)/.exec(value)![1]) * Math.PI / 180);
+  const bob = group.motion === 'float' ? FLOAT_BOB : 0;
   const shape = (bounds: SceneArtGroup['bounds']) => {
-    const [x, y, w, h] = bounds, [px, py] = group.pivot;
+    const [x, y0, w, h0] = bounds, [px, py] = group.pivot, y = y0 - bob, h = h0 + bob * 2;
     const low = Math.min(...turns), high = Math.max(...turns);
     const corners = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].flatMap(([cx, cy]) => {
       const dx = cx! - px, dy = cy! - py;

@@ -5,7 +5,7 @@ import { THEME_SCENE_IDS } from '../shared/theme-registry.ts';
 import type { ThemeRect } from './ambient-theme.ts';
 import { PRINCIPAL_FORMS as PRINCIPAL } from './living-scene-principals.ts';
 import { fitHabitatGroup, fitHabitatPatch, habitatBox, patchExtent, patchQuality, placeScenePatches, PATCH_ROOT_FACTORS } from './living-scene.ts';
-import { edgeProfile, groundBand, litColumns, particleLayers, topBand, PARTICLE_LAYERS } from './living-dressing.ts';
+import { edgeProfile, fogBands, groundBand, litColumns, particleLayers, sceneAnimationCount, topBand, PARTICLE_LAYERS, PENDANT_MAX } from './living-dressing.ts';
 import { SCENE_DRESSING } from '../shared/living-scene-dressing.ts';
 import { LIVING_SCENE_BUDGET } from '../shared/theme-registry.ts';
 
@@ -140,4 +140,23 @@ test('particles stay in flight as four seamless depth layers', () => {
       if (!layer.wander) assert.ok(Math.abs(layer.travel[0]) + Math.abs(layer.travel[1]) >= H * .2);
     }
   }
+});
+
+test('every scene stays inside the animation budget on empty 1080p, 4K and ultrawide boards', () => {
+  // Weather adds at most nine rain animations or five fog blobs or four gust streaks to a scene without particles.
+  const weatherExtra: Record<string, number> = { rain: 9, storm: 9, fog: 5, wind: 4 };
+  for (const [width, height] of [[1920, 1080], [3840, 2160], [3440, 1440]] as const) for (const id of THEME_SCENE_IDS) {
+    const dressing = SCENE_DRESSING[id]!, count = sceneAnimationCount(LIVING_SCENE_ART[id]!, dressing, width, height) + (weatherExtra[id] ?? 0);
+    assert.ok(count <= LIVING_SCENE_BUDGET.animations, `${id} at ${width}x${height}: ${count} animations`);
+    if (dressing.top) assert.ok(topBand(dressing.top, width / (height / 1080), 1080, []).pendants.length <= PENDANT_MAX, `${id}: pendants are capped`);
+  }
+  // The cap is what holds on a wide empty board: uncapped spacing alone would exceed it.
+  assert.equal(topBand('foliage', 3440 / (1440 / 1080), 1080, []).pendants.length, PENDANT_MAX);
+});
+
+test('fog is five soft blobs: three low, two as a top haze, none a hard-edged band', () => {
+  const blobs = fogBands(W, H);
+  assert.equal(blobs.length, 5);
+  assert.equal(blobs.filter(blob => blob.cy > H * .6).length, 3); assert.equal(blobs.filter(blob => blob.cy < H * .1).length, 2);
+  for (const blob of blobs) assert.ok(blob.rx > blob.ry * 4 && blob.rx <= W * .5);
 });

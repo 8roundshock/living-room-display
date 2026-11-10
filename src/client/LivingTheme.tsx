@@ -94,19 +94,27 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
   }
   // Round the reading areas so slow widget float does not redraw the edge bands every observation.
   const holeKey = holes.map(hole => [hole.left, hole.top, hole.right, hole.bottom].map(value => Math.round(value / 8)).join(',')).join(';');
+  // Dressing is generated in a 1080-short-side space and drawn scaled, so blades, leaves,
+  // particles, strokes and the band shift keep the same proportions at 4K as at 1080p.
+  const unit1080 = Math.min(width, height) / 1080 || 1;
   const bands = useMemo(() => {
     if (!dressing || !width) return null;
-    const top: TopKind | undefined = weather === 'storm' || weather === 'rain' ? 'cloud' : weather === 'fog' ? undefined : dressing.top;
-    return { ground: groundBand(dressing.ground === 'mist' ? 'water' : dressing.ground, width, height, holes), top: top ? topBand(top, width, height, holes) : null, topKind: top };
+    const top: TopKind | undefined = weather === 'storm' || weather === 'rain' ? 'cloud' : weather === 'fog' ? undefined : weather === 'snow' ? 'icicle' : dressing.top;
+    const scaled = holes.map(hole => ({ left: hole.left / unit1080, top: hole.top / unit1080, right: hole.right / unit1080, bottom: hole.bottom / unit1080 }));
+    // Fresh snow lies on any scene: a deeper drift replaces its ground and ice hangs from the top.
+    const ground = weather === 'snow' ? 'drift' : dressing.ground === 'mist' ? 'water' : dressing.ground;
+    return { ground: groundBand(ground, width / unit1080, height / unit1080, scaled, 1, weather === 'snow' ? 1.35 : 1), groundKind: ground, top: top ? topBand(top, width / unit1080, height / unit1080, scaled) : null, topKind: top };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- holeKey is the rounded identity of holes
   }, [dressing, weather, width, height, holeKey]);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- holeKey is the rounded identity of holes
   const gusts = useMemo(() => weather === 'wind' && width ? gustStreaks(width, height, holes) : [], [weather, width, height, holeKey]);
+  const SNOW_COLORS = ['#bfe3f7', '#9fd0f2', '#d6c8f5'] as const;
   const particleKind: ParticleKind | undefined = !dressing || weather === 'rain' || weather === 'storm' || weather === 'fog' ? undefined : weather === 'snow' ? 'flake' : weather === 'wind' ? dressing.particles ?? 'leaf' : dressing.particles;
-  const particleCount = weather === 'snow' ? 64 : dressing?.count ?? 26;
+  const particleCount = weather === 'snow' ? 96 : dressing?.count ?? 26;
   const cycle = Math.floor(elapsed / LIVING_SCENE_BUDGET.life);
-  const groundColors = dressing?.groundColors && !weather ? dressing.groundColors : dressing?.groundColors ?? palette;
-  const topColors = bands?.topKind === 'cloud' ? palette : dressing?.topColors ?? palette;
+  const groundColors = weather === 'snow' ? SNOW_COLORS : dressing?.groundColors ?? palette;
+  const topColors = weather === 'snow' ? SNOW_COLORS : bands?.topKind === 'cloud' ? palette : dressing?.topColors ?? palette;
+  const soft = weather === 'fog' || !!particleKind;
   return <div ref={root} className="ambient-theme living-theme" aria-hidden="true" data-theme-motif={scene.motif}
     data-theme-habitat={scene.habitat ?? scene.motif} data-theme-source={scene.source} data-theme-quiet={scene.quiet || undefined}
     data-theme-still={still || undefined} data-scene-elapsed={elapsed} data-scene-revision={revision}>
@@ -117,20 +125,20 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
           {holes.map((hole, index) => <rect key={index} x={hole.left} y={hole.top} width={Math.max(0, hole.right - hole.left)} height={Math.max(0, hole.bottom - hole.top)} rx={Math.min(width, height) * .014} fill="black" />)}
         </mask>
         {/* Wide soft fog must not outline reading areas as boxes: its own mask grows and blurs the holes. */}
-        {weather === 'fog' && <>
-          <filter id={`${maskId}-blur`} x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation={Math.min(width, height) * .017} /></filter>
+        {soft && <>
+          <filter id={`${maskId}-blur`} x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation={Math.min(width, height) * .022} /></filter>
           <mask id={`${maskId}-soft`} maskUnits="userSpaceOnUse" x="0" y="0" width={width} height={height} style={{ maskType: 'luminance' }}>
             <rect width={width} height={height} fill="white" />
-            <g filter={`url(#${maskId}-blur)`}>{holes.map((hole, index) => { const grow = Math.min(width, height) * .04;
+            <g filter={`url(#${maskId}-blur)`}>{holes.map((hole, index) => { const grow = Math.min(width, height) * .045;
               return <rect key={index} x={hole.left - grow} y={hole.top - grow} width={Math.max(0, hole.right - hole.left) + grow * 2} height={Math.max(0, hole.bottom - hole.top) + grow * 2} rx={grow} fill="black" />; })}</g>
           </mask>
         </>}
-        {weather === 'fog' && palette.map((color, index) => <linearGradient key={index} id={`${maskId}-fog-${index}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={color} stopOpacity="0" /><stop offset=".5" stopColor={color} stopOpacity=".8" /><stop offset="1" stopColor={color} stopOpacity="0" />
-        </linearGradient>)}
+        {weather === 'fog' && palette.map((color, index) => <radialGradient key={index} id={`${maskId}-fog-${index}`}>
+          <stop offset="0" stopColor={color} stopOpacity=".62" /><stop offset=".55" stopColor={color} stopOpacity=".3" /><stop offset="1" stopColor={color} stopOpacity="0" />
+        </radialGradient>)}
       </defs>
       <g mask={`url(#${maskId})`} data-reading-mask>
-        {bands && <EdgeLayer key={`rear:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="segments" groundColors={groundColors} topColors={topColors} kind={dressing!.ground} topKind={bands.topKind} />}
+        {bands && <EdgeLayer key={`rear:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="segments" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} />}
         {patches.map((patch, index) => {
           const phase = phases[index]!, entry = placed.current.get(patch.id)!, authored = habitatBox(patch, width, height, phase.generation);
           const moved = (box: HabitatBox) => Math.abs(box.x - authored.x) > 1 || Math.abs(box.y - authored.y) > 1 || Math.abs(box.width - authored.width) > 1;
@@ -143,9 +151,7 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
               weather={weather} quiet={scene.quiet} generation={phase.generation} holes={holes} />,
           ];
         })}
-        {bands && <EdgeLayer key={`front:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="front" groundColors={groundColors} topColors={topColors} kind={dressing!.ground} topKind={bands.topKind} />}
-        {particleKind && <ParticleLayer key={`${particleKind}:${cycle}:${width}:${height}`} kind={particleKind} count={particleCount} width={width} height={height} age={elapsed % LIVING_SCENE_BUDGET.life}
-          gust={weather === 'wind'} palette={palette} />}
+        {bands && <EdgeLayer key={`front:${cycle}`} age={elapsed % LIVING_SCENE_BUDGET.life} ground={bands.ground} top={bands.top} layer="front" groundColors={groundColors} topColors={topColors} kind={bands.groundKind} topKind={bands.topKind} scale={unit1080} />}
         {(weather === 'rain' || weather === 'storm') && <g className="living-weather" data-scene-weather={weather}>
           {weatherGroups.map(index => <RainPhrase key={`${index}:${cycle}`} index={index} storm={weather === 'storm'}
             elapsed={elapsed % LIVING_SCENE_BUDGET.life} width={width} height={height} palette={palette} />)}
@@ -155,10 +161,13 @@ export const LivingTheme = memo(function LivingTheme({ scene, art, still, exclus
               style={{ '--gust-age': `${-(elapsed % LIVING_SCENE_BUDGET.life + streak.delay * 1000)}ms`, '--gust-travel': `translate(${streak.travel}px, 0px)` } as CSSProperties} />)}
           </g>}
       </g>
+      {/* Particles and fog fade out before reading space instead of being clipped into half-shapes. */}
+      {particleKind && <ParticleLayer key={`${particleKind}:${cycle}:${width}:${height}`} kind={particleKind} count={particleCount} width={width / unit1080} height={height / unit1080} age={elapsed % LIVING_SCENE_BUDGET.life}
+          gust={weather === 'wind'} palette={palette} scale={unit1080} mask={`url(#${maskId}-soft)`} />}
       {weather === 'fog' && <g key={`fog:${cycle}:${width}`} className="living-weather" data-scene-weather="fog" data-reading-mask mask={`url(#${maskId}-soft)`}>
-          {fogBands(width, height).slice(0, scene.quiet ? 2 : 4).map((band, index) => <rect key={index} className="living-fog-band" x={band.x} y={band.y} width={band.width} height={band.height} rx={band.height / 2}
-            fill={`url(#${maskId}-fog-${band.tone})`} style={{ '--fog-age': `${-(elapsed % LIVING_SCENE_BUDGET.life)}ms`, '--fog-travel': `translate(${band.travel}px, 0px)` } as CSSProperties} />)}
-        </g>}
+        {fogBands(width, height).slice(0, scene.quiet ? 2 : 5).map((band, index) => <ellipse key={index} className="living-fog-band" cx={band.cx} cy={band.cy} rx={band.rx} ry={band.ry}
+          fill={`url(#${maskId}-fog-${band.tone})`} style={{ '--fog-age': `${-(elapsed % LIVING_SCENE_BUDGET.life)}ms`, '--fog-travel': `translate(${band.travel}px, 0px)` } as CSSProperties} />)}
+      </g>}
     </svg>}
   </div>;
 });
@@ -196,8 +205,8 @@ function HabitatPatch({ patch, box, relocated, initialAge, palette, weather, qui
 /** Ground and top bands. Rear segments sit behind the authored patches and the
  * front ones over their bases. Grass segments share one travelling sway; the
  * whole band also shifts a few pixels over its life so its pixels keep changing. */
-function EdgeLayer({ age: initialAge, ground, top, layer, groundColors, topColors, kind, topKind }: {
-  age: number; ground: EdgeBand; top: EdgeBand | null; layer: 'segments' | 'front'; groundColors: readonly string[]; topColors: readonly string[]; kind: string; topKind: string | undefined;
+function EdgeLayer({ age: initialAge, ground, top, layer, groundColors, topColors, kind, topKind, scale }: {
+  age: number; ground: EdgeBand; top: EdgeBand | null; layer: 'segments' | 'front'; groundColors: readonly string[]; topColors: readonly string[]; kind: string; topKind: string | undefined; scale: number;
 }) {
   const [age] = useState(initialAge);
   const segment = (band: EdgeBand, colors: readonly string[]) => (part: DressSegment, index: number) => {
@@ -207,7 +216,7 @@ function EdgeLayer({ age: initialAge, ground, top, layer, groundColors, topColor
     return <g key={index} className={sway ? 'living-attached living-blades' : undefined} style={style}>{part.paths.map((path, item) => <Dress key={item} path={path} colors={colors} />)}</g>;
   };
   const shift = { '--band-age': `${-age}ms` } as CSSProperties;
-  return <>
+  return <g transform={`scale(${scale})`}>
     <g className="living-band" data-scene-ground={layer === 'segments' ? kind : undefined} data-ground-lit={layer === 'segments' ? ground.lit.toFixed(3) : undefined} style={shift}>{ground[layer].map(segment(ground, groundColors))}</g>
     {top && <g className="living-band living-band-top" data-scene-top={layer === 'segments' ? topKind : undefined} data-top-lit={layer === 'segments' ? top.lit.toFixed(3) : undefined} style={shift}>
       {top[layer].map(segment(top, topColors))}
@@ -216,15 +225,15 @@ function EdgeLayer({ age: initialAge, ground, top, layer, groundColors, topColor
         {pendant.paths.map((path, item) => <Dress key={item} path={path} colors={topColors} />)}
       </g>)}
     </g>}
-  </>;
+  </g>;
 }
 
 /** Depth-scaled particles under the reading mask: four layers, each one finite
  * transform animation whose period divides the scene life. */
-function ParticleLayer({ kind, count, width, height, age: initialAge, gust, palette }: { kind: ParticleKind; count: number; width: number; height: number; age: number; gust: boolean; palette: readonly string[] }) {
+function ParticleLayer({ kind, count, width, height, age: initialAge, gust, palette, scale, mask }: { kind: ParticleKind; count: number; width: number; height: number; age: number; gust: boolean; palette: readonly string[]; scale: number; mask: string }) {
   const [age] = useState(initialAge);
   const layers = useMemo(() => particleLayers(kind, count, width, height, gust), [kind, count, width, height, gust]);
-  return <g className="living-particles" data-scene-particles={kind} data-particle-count={layers.reduce((sum, layer) => sum + layer.count, 0)}>
+  return <g mask={mask} data-reading-mask><g className="living-particles" transform={`scale(${scale})`} data-scene-particles={kind} data-particle-count={layers.reduce((sum, layer) => sum + layer.count, 0)}>
     {layers.map((layer, index) => <g key={index} className={layer.wander ? 'living-particle-layer living-wander' : 'living-particle-layer'} opacity={layer.opacity}
       style={{ animationDuration: `${layer.duration}ms`, animationDelay: `${-(age + layer.offset)}ms`, animationIterationCount: LIVING_SCENE_BUDGET.life / layer.duration + 1,
         '--p-q1': `translate(${(layer.travel[0] * .25 + layer.sway).toFixed(1)}px, ${(layer.travel[1] * .25).toFixed(1)}px)`, '--p-mid': `translate(${(layer.travel[0] * .5).toFixed(1)}px, ${(layer.travel[1] * .5).toFixed(1)}px)`,
@@ -232,7 +241,7 @@ function ParticleLayer({ kind, count, width, height, age: initialAge, gust, pale
         '--p-w1': `translate(${layer.sway.toFixed(1)}px, ${(-layer.sway * .6).toFixed(1)}px)`, '--p-w2': `translate(${(-layer.sway * .5).toFixed(1)}px, ${(-layer.sway).toFixed(1)}px)` } as CSSProperties}>
       {layer.paths.map((path, item) => <Dress key={item} path={path} colors={kind === 'firefly' ? [palette[1]!, palette[1]!, palette[2]!] : palette} />)}
     </g>)}
-  </g>;
+  </g></g>;
 }
 
 function RainPhrase({ index, elapsed, width, height, palette, storm }: { index: number; elapsed: number; width: number; height: number; palette: readonly string[]; storm: boolean }) {
