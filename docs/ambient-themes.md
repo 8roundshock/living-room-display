@@ -184,6 +184,11 @@ Christmas does. Each is one fixed picture for its whole run (coordinator decisio
   the top-right corner. Still air (coordinator decision on #616): the 3D Winter scene draws
   no snowfall of its own, so falling snow over it always means the forecast says snow.
 
+Measured as above on 2026-11-10 at 1920×1080: 30,000 to 110,000 triangles (Winter's frost
+is one instanced mesh), 43 to 76 draw calls, build 62 to 115 ms, 23 to 33 ms/s of
+main-thread time, frame script under 1 ms. At full opacity on an empty board a season
+lights 2.2 to 3.4% of the pixels; Christmas lights 11.7%.
+
 ### Which renderer draws a scene
 
 `AmbientTheme.tsx` chooses once per scene. The layer's root carries
