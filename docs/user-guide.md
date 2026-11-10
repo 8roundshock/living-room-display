@@ -189,12 +189,17 @@ The **Style** tab sets how everything looks:
 - **Brightness** and **Text size**: if the text is hard to read from the couch,
   raise Text size before brightness.
 - **Brightness › Follow daylight** makes the display brighter by day and dimmer at
-  night on its own: choose the **Dimmest** and **Brightest** it may be. It is
-  brightest when the sun is highest at your weather location (around midday) and
-  stays at Dimmest from sunset to sunrise, changing slowly enough that you will not
-  see it step. The editor shows the level now and when it peaks. **Fixed** keeps one
-  level all day. A look such as Night changes the colours and the Fixed level, and
-  keeps Follow daylight on.
+  night on its own: choose the **Dimmest** and **Brightest** it may be. It rises
+  through dawn at your weather location, is at Brightest soon after sunrise and
+  stays there while it is light outside. After sunset it eases to an evening level
+  that suits a lit room (about two thirds of the way from Dimmest to Brightest)
+  and holds it until the time you choose under **Dim at** (11 PM unless you change
+  it; any half hour from 8 PM to 3 AM, midnight included). Then it glides to
+  Dimmest over half an hour and stays there until the next dawn. It changes slowly
+  enough that you will not see it step, and it never dims while it is still light
+  outside. The editor shows the level now, when it is at Brightest and when it
+  dims. **Fixed** keeps one level all day. A look such as Night changes the colours
+  and the Fixed level, and keeps Follow daylight on.
 - **Saved styles**: keep a combination you like and switch back to it later.
 
 ## Why things move

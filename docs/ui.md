@@ -404,13 +404,21 @@ motion or the Off animation level.
   hit area reaching into the space above the line, never over the slider). **Fixed**,
   the default, is the single Brightness slider, unchanged. **Follow daylight** replaces
   it with **Dimmest** and **Brightest** sliders (10–100%; moving one past the other
-  carries the other along), the range on the label line ("25–75%") and a status line,
-  “Now 42% · brightest at 1:02 PM”, with a hint that it peaks at solar noon at your
-  weather location (named) and rests at Dimmest from sunset to sunrise (polar night:
-  “Now 20% · the sun stays down today”; polar day: up all day, never at Dimmest). The
-  time follows the Time format and the location's time zone (a device area uses the
+  carries the other along), the range on the label line ("25–75%"), a **Dim at**
+  select (#591: the half hours from 8 PM to 3 AM in the Time format, midnight named,
+  11 PM by default) and a status line, “Now 70% · brightest since 8:11 AM · dims at
+  11:00 PM”. The status names the next arrival at Brightest (“brightest from …”) while
+  it is darker, “brightest all day” when the sun never dips under 5°, and “the sun
+  stays low today” or, in a polar night, “the sun stays down today” when it never
+  gets that high. Its last part reads “Dimmest after dusk at …” when it is still
+  light at the dim time and “light all night” when dusk never comes. The hint
+  describes the curve for your weather location (named): up through dawn, Brightest
+  soon after sunrise and while it is light, an evening level (shown as a percentage of
+  this range) after sunset, Dimmest over 30 minutes from the dim time until dawn. The
+  times follow the Time format and the location's time zone (a device area uses the
   forecast's). It starts at Night's 28% and Phone's 70%, widened to include the Fixed
-  level, and returns to the last range chosen in this editor after Fixed. Like Animation,
+  level, dimming at 11 PM, and returns to the last range and dim time chosen in this
+  editor after Fixed. Choosing the saved dim time again leaves no draft. Like Animation,
   the mode is not part of a look: choosing it keeps the selected starter look; Phone, Room and Night
   set only the Fixed level, and focus stays on the pressed mode button. The canvas shows
   the current value at once; the display page glides to each minute's value over 10 s,
@@ -1130,10 +1138,12 @@ accent, the text colour or a status tone. It also checks the sub-tones inside th
 merged renderers (Weather's rain hook, Sun & moon's moon, World clocks' day/night
 icons, Air quality bars), picker samples in every family and the editor canvas.
 The [daylight harness](../tests/ui/daylight-browser.mjs) renders the Follow daylight
-display (#439) at 2 AM, 10 AM and solar noon in Toronto at 1280×720, and 10 AM at
-3840×2160, each against a Fixed render at the same value (equal lit pixels, black
-corners). It checks the once-a-minute step, the 10 s glide (none in Fixed), polar day
-and night at Tromsø, and the Style tab's Brightness mode at 1280×720, 390 and 320 px.
+display (#439, #591) at 2 AM, in the dawn, at 10 AM and at 8 PM in Toronto at
+1280×720, and the dawn at 3840×2160, each against a Fixed render at the same value
+(equal lit pixels, black corners). It checks the once-a-minute step, the 10 s glide
+(none in Fixed), dim times before and after midnight, a range saved without a dim
+time, polar day and night at Tromsø, and the Style tab's Brightness mode and Dim at
+select at 1280×720, 390 and 320 px.
 
 After `npm ci` and `npm run build`, run every `tests/ui/*-browser.mjs` suite with
 `node tests/ui/lib/run-suites.mjs --playwright '<Playwright module path>' --edge '<browser executable>' --sharp '<Sharp module path>'`,

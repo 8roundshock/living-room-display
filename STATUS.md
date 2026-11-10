@@ -1,5 +1,24 @@
 # Project status
 
+## Follow daylight curve and dim time — 2026-11-09 (#591)
+
+Source candidate, not installed. Follow daylight no longer peaks only at solar
+noon: it rises through civil dawn, is at Brightest once the sun is 5° up (30 to
+50 minutes after sunrise at Toronto), eases to an evening level (0.65 of the
+range) as dusk falls, holds it until a selectable dim time (11 PM by default;
+half hours from 8 PM to 3 AM) and then glides to Dimmest over 30 minutes until
+the next dawn. The curve and its constants are in
+[the API notes](docs/api.md#grid-and-widget-contracts). `dimTime` lives inside
+`appearance.daylightBrightness`; ranges saved before it read as 11 PM, and 11 PM
+is omitted at rest, so default data is written as before. Fixed is unchanged.
+Unit tests cover Toronto at the solstices and equinoxes, high latitudes, polar day
+and night, dim times after midnight, clock changes and the per-minute bound; the
+daylight browser suite covers the display and the Style tab. The author did not
+inspect captures by eye, and no TV or installed-app check was made. Review and CI
+evidence belongs to the pull request for #591. Open follow-ups: a selectable evening level
+([#592](https://github.com/8roundshock/living-room-display/issues/592)) and the polar-night morning
+([#593](https://github.com/8roundshock/living-room-display/issues/593)).
+
 ## Planned layered living scenes — 2026-11-04 (#586)
 
 The coordinator accepted the direction in the [layered scene plan](docs/layered-scene-plan.md):
