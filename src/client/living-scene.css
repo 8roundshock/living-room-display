@@ -1,5 +1,7 @@
 .living-theme { opacity: var(--ambient-brightness, .55); }
 .living-foreground { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; opacity: calc(var(--ambient-brightness, .55) * .22); contain: layout style; }
+/* A near passage never touches reading space (planner and revalidation), so only an incursion needs the 22% cap. */
+.living-foreground[data-passage-kind="near"] { opacity: calc(var(--ambient-brightness, .55) * .8); }
 .living-passage { position: absolute; left: 0; top: 0; }
 @media (prefers-reduced-motion: reduce) { .living-foreground { display: none; } }
 .living-canvas { display: block; width: 100%; height: 100%; overflow: hidden; }
@@ -11,9 +13,8 @@
 .living-ripple { animation: habitat-impact 4s linear var(--rain-age) 9 both; }
 .living-air { animation: habitat-air 12s ease-in-out var(--air-age) 3 both; }
 @keyframes habitat-life {
-  0%,96%,100% { opacity: 0; }
-  8%,78% { opacity: 1; }
-  90% { opacity: 0; }
+  0%,97%,100% { opacity: 0; }
+  6%,88% { opacity: 1; }
 }
 @keyframes habitat-phrase {
   0% { transform: var(--habitat-step-0); }

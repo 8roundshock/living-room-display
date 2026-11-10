@@ -8,7 +8,9 @@ import './living-scene.css';
 interface Props { scene: ThemeScene; art: LivingSceneArt; still: boolean; exclusions: () => readonly ThemeRect[]; inkRevision: number }
 
 function ArtPath({ path, palette, quiet }: { path: ScenePath; palette: readonly string[]; quiet: boolean }) {
-  return <path d={path.d} fill={path.fill && !quiet ? palette[path.tone] : 'none'} fillOpacity={path.fill ?? 0}
+  // Low-light fill curve: thin local fills (authored 0.13-0.5) otherwise vanish against true
+  // black at 26% brightness. Saved brightness still scales the whole layer; nothing is raised globally.
+  return <path d={path.d} fill={path.fill && !quiet ? palette[path.tone] : 'none'} fillOpacity={path.fill ? Math.pow(path.fill, .62) : 0}
     stroke={path.stroke === 0 ? 'none' : palette[path.tone]} strokeWidth={path.stroke ?? 1.5}
     opacity={path.opacity ?? 1} strokeLinecap="round" strokeLinejoin="round" />;
 }

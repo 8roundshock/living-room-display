@@ -207,7 +207,7 @@ export function planScenePassage(input: PassageInput & { origins: readonly Passa
       const steps = [[0, 0, 0], [.35, .04, .03], [.7, .11, .055], [1, .16, .015]].map(([offset, travel, depth]) => ({
         offset: offset!, x: origin.x + short * (along[0]! * travel! + inward[0]! * depth!), y: origin.y + short * (along[1]! * travel! + inward[1]! * depth!),
       }));
-      const path = { duration: DURATION, width: short * .03, height: short * .015, steps };
+      const path = { duration: DURATION, width: short * .045, height: short * .0225, steps };
       if (inside(path) && clears(path, protectedRects)) return { kind: 'near', targetId, ...path, intersectionMs: 0, footprintRatio: 0 };
     }
   }

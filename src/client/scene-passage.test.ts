@@ -168,3 +168,32 @@ test('feasible HD, 4K and editor-sized plans retain the same actual exposure bou
     assert.ok(plan.intersectionMs <= PASSAGE_MAX_INTERSECTION && plan.footprintRatio <= PASSAGE_MAX_FOOTPRINT);
   }
 });
+
+test('a scene-bound incursion starts and ends at a visible habitat and keeps every limit', async () => {
+  const { planScenePassage } = await import('./scene-passage.ts');
+  const origin = { id: 'near-habitat', x: 560, y: 1040, edge: 'bottom' as const };
+  const plan = planScenePassage({ ...input(), origins: [origin] });
+  assert.ok(plan); assert.equal(plan.kind, 'incursion');
+  assert.deepEqual([plan.steps[0]!.x, plan.steps[0]!.y, plan.steps.at(-1)!.x, plan.steps.at(-1)!.y], [origin.x, origin.y, origin.x, origin.y]);
+  for (const area of [target.rect, target.swept]) {
+    const metrics = passagePathMetrics(plan, area)!;
+    assert.ok(metrics.intersectionMs <= PASSAGE_MAX_INTERSECTION && metrics.footprintRatio <= PASSAGE_MAX_FOOTPRINT);
+  }
+  assert.ok(passagePathMetrics(plan, target.rect)!.intersectionMs > 0);
+});
+
+test('without a reachable target the passage stays in whitespace beside its habitat', async () => {
+  const { planScenePassage } = await import('./scene-passage.ts');
+  const far = { id: 'far-habitat', x: 1500, y: 1040, edge: 'bottom' as const };
+  const reading = rect(1300, 600, 1460, 990);
+  const plan = planScenePassage({ ...input({ protectedRects: [reading] }), origins: [far] });
+  assert.ok(plan); assert.equal(plan.kind, 'near'); assert.equal(plan.targetId, 'habitat:far-habitat');
+  assert.equal(plan.intersectionMs, 0); assert.equal(plan.footprintRatio, 0);
+  for (const area of [reading, target.rect, target.swept]) assert.deepEqual(passagePathMetrics(plan, area), { intersectionMs: 0, footprintRatio: 0 }, 'a near passage never touches reading space or a movement envelope');
+  for (const step of plan.steps) assert.ok(step.x - plan.width / 2 >= 0 && step.x + plan.width / 2 <= 1920 && step.y - plan.height / 2 >= 0 && step.y + plan.height / 2 <= 1080);
+  assert.ok(plan.duration <= PASSAGE_MAX_DURATION && plan.width <= 1080 * .05);
+  assert.equal(planScenePassage({ ...input({ protectedRects: [reading], lastGlobal: 200_000 - PASSAGE_GLOBAL_COOLDOWN + 1 }), origins: [far] }), null, 'one passage per minute across the display');
+  assert.equal(planScenePassage({ ...input({ protectedRects: [reading], lastByTarget: { 'habitat:far-habitat': 200_000 - PASSAGE_TARGET_COOLDOWN + 1 } }), origins: [far] }), null, 'the same habitat waits three minutes');
+  assert.equal(planScenePassage({ ...input({ protectedRects: [rect(0, 0, 1920, 1080)], targets: [] }), origins: [far] }), null, 'no whitespace means no passage');
+  assert.equal(planScenePassage({ ...input({ targets: [] }), origins: [] }), null, 'no visible habitat means no passage');
+});
