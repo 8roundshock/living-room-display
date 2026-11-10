@@ -12,8 +12,12 @@ export interface WidgetPlacement { column: number; row: number; size: WidgetSize
 export interface WidgetGrid { revision?: 1 | 2; density: GridDensity; placements: Record<WidgetId, WidgetPlacement> }
 export type Units = 'metric' | 'imperial';
 export interface LocationSettings { name: string; latitude: number; longitude: number; timezone: string }
-/** Follow daylight (#439): the display's brightness range, 0.1–1 like `brightness`, with dimmest ≤ brightest. */
-export interface DaylightBrightness { dimmest: number; brightest: number }
+/**
+ * Follow daylight (#439): the display's brightness range, 0.1–1 like `brightness`, with dimmest ≤ brightest.
+ * `dimTime` (#591) is the local "HH:MM" (one of DIM_TIMES in shared/daylight.ts) when the evening level
+ * glides to Dimmest; always present in memory and API responses, omitted at rest while 23:00.
+ */
+export interface DaylightBrightness { dimmest: number; brightest: number; dimTime: string }
 export interface AppearanceSettings {
   preset: 'phone' | 'room' | 'night' | 'custom';
   accentColor: string; textColor: string; brightness: number; fontScale: number;
@@ -32,7 +36,8 @@ export interface AppearanceSettings {
   animation: AnimationLevel;
   /**
    * Brightness mode (#439): null is Fixed (`brightness` applies, the default); a range is Follow
-   * daylight, peaking at local solar noon. `brightness` stays the Fixed level in both modes.
+   * daylight: Brightest by day, an evening level until its dim time, then Dimmest until dawn (#591).
+   * `brightness` stays the Fixed level in both modes.
    */
   daylightBrightness: DaylightBrightness | null;
   /** Swap places (#436): widgets trade cells every interval, gliding without going dark. Off by default; omitted at rest while off. */
