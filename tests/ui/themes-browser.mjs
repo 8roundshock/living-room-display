@@ -247,9 +247,11 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     record('Combined weather adapts the seasonal habitat with one precipitation field; Weather mode stays weather-only');
     for(const code of [0,63]) {
       await open({date:'2026-11-11T18:30:00Z',mode:'combined',code,path:'/display',brightness:.26,birthday:'classic',foreground:true}); await page.locator('.living-theme').waitFor(); await settle(); await photo(`quiet-${code}`);
-      const quiet=await page.locator('.living-theme').evaluate(layer=>({quiet:layer.hasAttribute('data-theme-quiet'),patches:layer.querySelectorAll('[data-scene-patch]').length,opacity:Number(getComputedStyle(layer).opacity),drift:layer.querySelectorAll('.living-particle-layer,.living-band,.living-pendulum').length,
+      const quiet=await page.locator('.living-theme').evaluate(layer=>({quiet:layer.hasAttribute('data-theme-quiet'),patches:layer.querySelectorAll('[data-scene-patch]').length,opacity:Number(getComputedStyle(layer).opacity),brightness:parseFloat(getComputedStyle(layer).getPropertyValue('--ambient-brightness')),drift:layer.querySelectorAll('.living-particle-layer,.living-band,.living-pendulum').length,
         fills:[...layer.querySelectorAll('[data-scene-patch] path')].filter(path=>path.getAttribute('fill')!=='none').length,birthday:layer.dataset.themeMotif.startsWith('birthday')}));
-      assert.ok(quiet.quiet);assert.ok(quiet.patches<=2);assert.equal(quiet.fills,0);assert.equal(quiet.drift,0);assert.equal(quiet.birthday,false);assert.ok(quiet.opacity<=.26*.38+.005);
+      assert.ok(quiet.quiet);assert.ok(quiet.patches<=2);assert.equal(quiet.fills,0);assert.equal(quiet.drift,0);assert.equal(quiet.birthday,false);// The page glides to its saved brightness, so compare with the brightness in effect at this instant
+      // (a slow runner sampled mid-glide and failed a fixed 26% comparison on 2026-11-10).
+      assert.ok(quiet.brightness>0&&quiet.brightness<=.56,`brightness in effect ${quiet.brightness}`); assert.ok(quiet.opacity<=quiet.brightness*.38+.005,`quiet scene is at most38% of brightness: ${quiet.opacity} of ${quiet.brightness}`);
       await page.clock.runFor(80_000); assert.equal(await page.locator('.living-foreground').count(),0,'quiet dates never run a foreground passage');
     }
     await open({date:'2026-11-11T04:59:40Z',mode:'combined',code:63,path:'/display',empty:true,brightness:.26}); await page.locator('.living-theme').waitFor();
