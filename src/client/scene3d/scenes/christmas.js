@@ -1,9 +1,12 @@
 // Christmas (#600 reference scene; design plan #609). Fir and ornaments: a wreath with a red bow
 // hung on a ribbon from a short fir swag in the top-left corner, a longer swag in the top-right
-// corner carrying a few glass ornaments that all differ, one snow-dusted bough reaching in low
-// from each side, soft warm lights far behind and a little snow. No tree (that is the Russian
-// New Year scene) and no star (Orthodox Christmas). The middle of the screen and the middle of
-// the top and bottom edges stay empty. Art rules: ../README.md.
+// corner carrying a few glass ornaments that all differ, the edge of a lit tree in the
+// bottom-right corner (coordinator decision on #609: the owner asked for the side of a tree),
+// one snow-dusted bough reaching in low from the left, soft warm lights far behind and a little
+// snow. The tree is only an edge, with warm lights and a few ornaments: the whole decorated tree
+// with its top belongs to the Russian New Year scene (#622), the star to Orthodox Christmas.
+// The middle of the screen and the middle of the top and bottom edges stay empty.
+// Art rules: ../README.md.
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed;
@@ -35,7 +38,7 @@ export default function build(kit, ctx) {
   const hung = Math.max(2, Math.round(3 + A * 8)), DEPTHS = [-.5, .3, -.8, .1, -.3, .4];
   for (let i = 0; i < hung; i++) {
     const u = (i + .5) / hung, o = ornament((.25 + rnd(i, seed + 8) * .15) * S, .55 + (1 - u) * 1.5 + rnd(i, seed + 9) * .3);
-    o.position.set(W - 1.2 - u * 5.3 + (rnd(i, seed + 7) - .5) * .2, 4.45, DEPTHS[i % DEPTHS.length]); stage.add(o);
+    o.position.set(W - 1.5 - u * 5.1 + (rnd(i, seed + 7) - .5) * .2, 4.45, DEPTHS[i % DEPTHS.length]); stage.add(o);
   }
 
   // ---------- the wreath, hung on its ribbon from the left swag ----------
@@ -50,19 +53,36 @@ export default function build(kit, ctx) {
     const berry = kit.mat({ color: 0xc2101c, roughness: .18, clearcoat: 1, clearcoatRoughness: .1 }, 1.1), clusters = Math.max(3, Math.round(3 + A * 8));
     for (let i = 0; i < clusters; i++) {
       const a = i / clusters * 6.283 + .4 + (rnd(i, 21) - .5) * .7, count = 2 + Math.floor(rnd(i, 22) * 3);
-      for (let k = 0; k < count; k++) { const m = new T.Mesh(kit.sphereGeo, berry); m.scale.setScalar((.06 + rnd(i * 4 + k, 23) * .03) * S); m.position.set(Math.cos(a) * R + Math.cos(k * 2.1 + i) * .09, cy + Math.sin(a) * R + Math.sin(k * 2.1 + i) * .09, .26 + k * .03); hang.add(m); }
+      for (let k = 0; k < count; k++) { const m = new T.Mesh(kit.ballGeo, berry); m.scale.setScalar((.06 + rnd(i * 4 + k, 23) * .03) * S); m.position.set(Math.cos(a) * R + Math.cos(k * 2.1 + i) * .09, cy + Math.sin(a) * R + Math.sin(k * 2.1 + i) * .09, .26 + k * .03); hang.add(m); }
     }
     for (let i = 0; i < Math.round(4 + A * 12); i++) { const a = i * 2.4 + .7, bulb = kit.bulb(0xffd9a0, .036); bulb.position.set(Math.cos(a) * R * (.92 + rnd(i, 7) * .16), cy + Math.sin(a) * R * (.92 + rnd(i, 8) * .16), .32); hang.add(bulb); }
     const bow = kit.puffyBow(0xb3121d, 1.3 * S); bow.position.set(0, cy - R, .42); hang.add(bow);
     tick(t => { hang.rotation.z = Math.sin(t * .35) * .018; });
   }
 
-  // ---------- one snow-dusted bough reaching in low from each side ----------
-  [[-1, -2.2, 3.7, 0], [1, -3.0, 2.6, .25]].forEach(([side, y, length, z], i) => {
-    const dir = V(-side, -.22, .1).normalize();
-    const pt = kit.bough(N, V(side * (W + .5), y, z), dir, length * S, .9, V(dir.y, -dir.x, .22).normalize(), .23, .42, 900 + i * 41, null, .9);
-    [.45, .8].slice(0, i ? 1 : 2).forEach((u, k) => { const bulb = kit.bulb(pick(WARM, i + k * 2), .036); bulb.position.copy(pt(u)).add(V(0, -.06, .1)); stage.add(bulb); });
-  });
+  // ---------- one snow-dusted bough reaching in low from the left ----------
+  {
+    const dir = V(1, -.22, .1).normalize(), pt = kit.bough(N, V(-W - .5, -2.2, 0), dir, 3.7 * S, .9, V(dir.y, -dir.x, .22).normalize(), .23, .42, 900, null, .9);
+    [.45, .8].forEach((u, k) => { const bulb = kit.bulb(pick(WARM, k * 2), .036); bulb.position.copy(pt(u)).add(V(0, -.06, .1)); stage.add(bulb); });
+  }
+
+  // ---------- the edge of a lit tree in the bottom-right corner, to a little over half the height ----------
+  {
+    const ax = W + .25, foot = -view.halfH - .15, apex = view.halfH * (2 * .68 - 1), tiers = 7;
+    const trunk = new T.Mesh(new T.CylinderGeometry(.05, .2, apex - foot, 10), kit.mat({ color: 0x3a2a1c, roughness: .9 }, .2, false)); trunk.position.set(ax, (apex + foot) / 2, 0); stage.add(trunk);
+    // Four small ornaments on boughs that face the room, each different, and a handful of warm lights.
+    const HUNG = new Map([[1, .72], [5, .6], [7, .76], [10, .64]].slice(0, A > .12 ? 4 : 2));
+    for (let k = 0; k < tiers; k++) {
+      const h = k / tiers, y = foot + .2 + h * (apex - foot - .3), R = 2.35 * S * Math.pow(1 - h, .7) + .4;
+      // Two boughs a tier, turned a little from tier to tier: the rest of the tree is off the screen.
+      for (let j = 0; j < 2; j++) {
+        const b = k * 2 + j, a = (-30 + j * 38 + (k % 2) * 16 + rnd(b, seed + 41) * 6) * Math.PI / 180, dir = V(-Math.cos(a), -.1, Math.sin(a)).normalize();
+        const pt = kit.bough(N, V(ax, y + rnd(b, seed + 42) * .25, 0), dir, R, R * .3, V(Math.sin(a), 0, Math.cos(a)), .2, 0, 1200 + k * 97 + j * 13, null, .3);
+        if ((k + j) % 2 === 0 && rnd(b, seed + 43) < .5 + A * 2) { const bulb = kit.bulb(pick(WARM, b), .042); bulb.position.copy(pt(.5 + rnd(b, seed + 44) * .45)).add(V(0, -.07, .06)); stage.add(bulb); }
+        if (HUNG.has(b)) { const o = ornament((.16 + rnd(b, seed + 45) * .07) * S, .1 + rnd(b, seed + 46) * .12); o.position.copy(pt(HUNG.get(b))).add(V(0, 0, .12)); stage.add(o); }
+      }
+    }
+  }
   stage.add(N.mesh());
 
   // ---------- depth and air: a few soft lights far behind, a little snow ----------
