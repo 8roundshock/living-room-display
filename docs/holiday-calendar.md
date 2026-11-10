@@ -131,6 +131,21 @@ choices. All shipped vectors are original; no source prose or museum images ship
   and [Truth and Reconciliation](https://www.canada.ca/en/canadian-heritage/campaigns/national-day-truth-reconciliation.html)
   inform respectful exact-day constraints. Avoid generic Indigenous art or
   borrowed Ukrainian pysanky patterns in a pan-Canadian scene.
+- Canada and the shared New Year, 3D scenes (cited by the design plans
+  [#607](https://github.com/8roundshock/living-room-display/issues/607),
+  [#608](https://github.com/8roundshock/living-room-display/issues/608),
+  [#610](https://github.com/8roundshock/living-room-display/issues/610) and
+  [#611](https://github.com/8roundshock/living-room-display/issues/611), checked 2026-11-10):
+  Statistics Canada, [Halloween by the numbers](https://www.statcan.gc.ca/o1/en/plus/2134-halloween-numbers),
+  supports the carved pumpkin as the main symbol of Halloween. Three secondary sources:
+  [Thanksgiving (Canada)](https://en.wikipedia.org/wiki/Thanksgiving_(Canada)) supports
+  cornucopias, corn and wheat sheaves as harvest decoration;
+  [New Year's Eve](https://en.wikipedia.org/wiki/New_Year%27s_Eve) supports fireworks in
+  both Canada and South Korea; [Lilium longiflorum](https://en.wikipedia.org/wiki/Lilium_longiflorum)
+  supports the white trumpet Easter lily. Art choices without a source: the cobweb, the
+  paper streamers, the twig nest and the plain pastel eggs. Thanksgiving uses bearded wheat
+  and orchard fruit and leaves pumpkins to Halloween; the Easter eggs stay plain, never red
+  or patterned, which belong to Pascha.
 - Korea: [KTO Seollal customs](https://english.visitkorea.or.kr/svc/contents/contentsView.do?menuSn=219&vcontsId=220321)
   and [National Folk Museum games](https://www.nfm.go.kr/kids/user/content.do?pageId=PAGE_000000000000051)
   support the open-centred rectangular bangpae kite;
