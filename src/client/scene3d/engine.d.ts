@@ -19,7 +19,7 @@ export interface SceneContext {
   /** Scale of objects (radius, length), after the tier rule. Do not scale positions with it. */
   readonly size: number;
   readonly tier: 'special' | 'everyday';
-  /** Weather shown over this scene in Combined mode, or null. The overlay draws it; a scene may adapt. */
+  /** Weather drawn over this scene in Combined mode, or null. Any of the five kinds can be over any scene (#655). The overlay draws it; a scene may adapt. */
   readonly weather: WeatherKind | null;
   /** A selected quiet date: frozen, reduced, nothing in the air. Particle helpers return nothing. */
   readonly quiet: boolean;
