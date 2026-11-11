@@ -254,8 +254,10 @@ replaced everything but Summer).
   a season under weather is drawn in the weather's colours, as it already was for the
   kinds it listed.
 - **Quiet dates and tier.** A selected quiet date keeps its rule: the quiet season stays
-  under the weather, grey, frozen, with nothing falling. Weather over a scene keeps that
-  scene's tier.
+  under the weather, grey. In 3D the frame is frozen with nothing falling. The flat
+  fallback is not the same: under rain or a storm it still draws one moving streak group
+  with its ripples, and under fog two drifting blobs, as it did before #655 (#659). Weather
+  over a scene keeps that scene's tier.
 - **Flat fallback.** The flat renderer never had per-pairing art: it draws the scene's own
   patches and one generic treatment per kind (rain or storm streaks with ripples, 14 flakes
   and a snow drift, gust streaks with the scene's own particles blown sideways, five fog

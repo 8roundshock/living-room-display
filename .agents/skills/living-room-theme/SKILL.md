@@ -30,8 +30,9 @@ the `scene3d` suite (and `themes`, which now runs without WebGL on the flat fall
   scene consume it. Adding an observance must not automatically create a scene.
 - `src/shared/living-scene-art.ts` and `living-celebration-art.ts` own each
   scene's authored composition: edge patches of rooted groups with complete and
-  compact drawings, a passage form and supported weather. Bounds are derived
-  from the path control hull; the art test verifies them.
+  compact drawings and a passage form. A scene does not list the weather it
+  supports: in Combined every weather kind is drawn over every scene (#655).
+  Bounds are derived from the path control hull; the art test verifies them.
 - `src/client/ambient-theme.ts` resolves current scenes and fresh noteworthy
   weather. An illustration uses `previewTheme`, never a fake clock or forecast.
 - `LivingTheme.tsx` with `living-scene.ts` fits and animates the composition
