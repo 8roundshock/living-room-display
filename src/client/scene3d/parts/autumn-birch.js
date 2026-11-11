@@ -7,45 +7,49 @@ import { ramp, sheets } from './spring-blade.js';
 import { leafLook, leafOn, leafTextures } from './autumn-leaf.js';
 
 /** The right half of a birch blade from the tip round to the stalk: [angle from the tip in
- * degrees, distance from the stalk] for a blade of length 1, before its teeth. */
-const HALF = [[0, 1], [5, .9], [10, .84], [16, .8], [23, .74], [31, .66], [40, .57], [50, .48], [61, .4], [73, .33], [86, .27], [101, .21], [119, .15], [141, .1], [180, .05]];
-/** Points along half a rim (every second one is a tooth), and so around the whole leaf. */
-const POINTS = 20, AROUND = POINTS * 2;
+ * degrees, distance from the stalk] for a blade of length 1, before its teeth. A broad, nearly
+ * straight base, widest a fifth of the way up, and a long drawn-out tip. */
+const HALF = [[0, 1], [3, .9], [6.5, .8], [11, .71], [18, .63], [27, .56], [38, .49], [50, .43], [62, .39], [75, .35], [90, .31], [106, .24], [124, .16], [146, .09], [180, .04]];
+/** Points along half a rim, and so around the whole leaf. The rim is doubly saw-toothed: of every four points one is a large tooth, where a side vein ends, and one a small tooth. */
+const POINTS = 24, AROUND = POINTS * 2;
 
 export function birch(kit) {
   const { T, rnd } = kit;
-  // A midrib and straight side veins, each running out to a tooth: across is the outline point, up is the way out.
+  // A strong midrib and paired straight side veins, each running out to a large tooth, the lowest pair to the
+  // corners of the base: across is the outline point, up is the way out.
   const veins = (g, w, h, colour, width) => {
     const X = point => point / AROUND * w, Y = out => (1 - out) * h;
     const line = (p0, o0, p1, o1, thick) => { g.lineWidth = thick * width; g.beginPath(); g.moveTo(X(p0), Y(o0)); g.lineTo(X(p1), Y(o1)); g.stroke(); };
-    g.strokeStyle = colour; g.lineCap = 'round'; line(POINTS, 0, POINTS, .99, 1.6); line(POINTS, 0, POINTS, .5, 3.4);
-    for (const side of [-1, 1]) for (let k = 0; k < 7; k++) line(POINTS, .06 + k * .1, POINTS + side * (14 - k * 2), .97, 1.1);   // the lowest vein to the lowest tooth
+    g.strokeStyle = colour; g.lineCap = 'round'; line(POINTS, 0, POINTS, .99, 2.2); line(POINTS, 0, POINTS, .55, 4.6);
+    for (const side of [-1, 1]) { for (let k = 1; k <= 5; k++) line(POINTS, .7 - k * .125, POINTS + side * k * 4, .98, 1.7); line(POINTS, .8, POINTS + side * 2, .98, 1.1); }
   };
-  const textures = leafTextures(kit, veins, { mottle: '170,120,20', specks: 26, salt: 90 }), leaves = leafLook(kit, textures);
-  // From the stalk out to the rim, for a clear yellow and a gold leaf; `tone` (0-1) blends between them. A dry one
-  // has a brown rim. Paints, deeper and redder than they read on screen (see the maple part).
-  const TONES = [ramp(kit, [[0, '#ffc400'], [.5, '#ffaa00'], [1, '#f89400']]), ramp(kit, [[0, '#ffaa00'], [.5, '#f28a00'], [1, '#e06c00']])], DRY = new T.Color('#795000').convertSRGBToLinear();
+  const textures = leafTextures(kit, veins, { mottle: '176,104,16', specks: 34, salt: 90 }), leaves = leafLook(kit, textures, 1.15);
+  // From the stalk out to the rim, for a clear gold, a deeper gold and an amber-edged leaf; `tone` (0-1) blends
+  // between them. A dry one has a brown rim. Paints, deeper and redder than they read on screen (see the maple
+  // part); none is yellower than a golden yellow, because a dim lemon yellow reads olive on black.
+  const TONES = [ramp(kit, [[0, '#ff9e00'], [.5, '#fb9600'], [1, '#f48600']]), ramp(kit, [[0, '#fb9600'], [.5, '#f28200'], [1, '#e87000']]), ramp(kit, [[0, '#f88e00'], [.5, '#ee7a00'], [1, '#d86000']])], DRY = new T.Color('#795000').convertSRGBToLinear();
   const STALK = ramp(kit, [[0, '#b07000'], [1, '#8a5200']]), mixed = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
   const reachAt = degrees => { let i = 0; while (i < HALF.length - 2 && degrees > HALF[i + 1][0]) i++; const [a0, r0] = HALF[i], [a1, r1] = HALF[i + 1]; return r0 + (r1 - r0) * (degrees - a0) / (a1 - a0); };
 
   /** One leaf (see leafOn in autumn-leaf.js for where its origin is and how it is drawn).
-   * `size` is the blade's length, `stalk` the stalk's, `tone` 0 (clear yellow) to 1 (gold),
-   * `dry` gives it a brown rim. */
-  function leaf({ size = .26, stalk = .1, tone = .5, dry = false, seed = 0 } = {}) {
-    const r = n => rnd(seed, n), wide = .92 + r(1) * .2, lean = (r(2) - .5) * .14, sharp = .04 + r(3) * .035, cup = .1 + r(4) * .25, wave = .02 + r(5) * .03, p1 = r(6) * 6, curl = r(7) * .25;
-    // Points crowd toward the tip, where most of the rim is; every second one stands out as a tooth.
+   * `size` is the blade's length, `stalk` the stalk's, `tone` 0 (clear gold) to 1 (amber at
+   * the rim), `dry` gives it a brown rim. */
+  function leaf({ size = .26, stalk = .14, tone = .5, dry = false, seed = 0 } = {}) {
+    const r = n => rnd(seed, n), wide = .9 + r(1) * .26, long = .92 + r(11) * .16, lean = (r(2) - .5) * .16, sharp = .05 + r(3) * .04, cup = .08 + r(4) * .3, wave = .02 + r(5) * .035, p1 = r(6) * 6, curl = (r(7) - .25) * .4, twist = (r(12) - .5) * .5;
+    // Points crowd toward the tip, where most of the rim is. Teeth are smallest at the tip and at the base.
     const outline = Array.from({ length: AROUND + 1 }, (_, i) => {
-      const side = i < POINTS ? -1 : 1, j = Math.abs(i - POINTS), degrees = 180 * Math.pow(j / POINTS, 1.8), angle = degrees * Math.PI / 180, widened = 1 + (wide - 1) * Math.sin(angle);
-      return [side * angle * (1 + side * lean * (1 - angle / Math.PI)), reachAt(degrees) * widened * (j > 0 && j < POINTS - 2 ? (j % 2 ? 1 - sharp : 1 + sharp) : 1)   /* even points are teeth */];
+      const side = i < POINTS ? -1 : 1, j = Math.abs(i - POINTS), degrees = 180 * Math.pow(j / POINTS, 1.7), angle = degrees * Math.PI / 180, widened = 1 + (wide - 1) * Math.sin(angle) + (long - 1) * Math.cos(angle / 2);
+      const tooth = (j % 4 === 0 ? 1 : j % 4 === 2 ? .3 : -.75) * sharp * Math.min(1, j / 3, (POINTS - j) / 4);
+      return [side * angle * (1 + side * lean * (1 - angle / Math.PI)), reachAt(degrees) * widened * (1 + tooth)];
     });
-    const group = leafOn(kit, leaves, {
-      outline, size, stalk, rows: 4, girth: .004 + size * .008, bow: (r(8) - .5) * .6, turn: (r(9) - .5) * .5, pitch: (r(10) - .5) * .5,
-      // Cupped a little about the midrib, the tip curled back, the rim slightly wavy.
-      lift: (x, y, out, i) => size * (cup * (x / size) * (x / size) - curl * Math.pow(Math.max(0, y / size - .5), 2) + wave * out * out * Math.sin(i * 1.3 + p1)),
-      tint: (i, out) => { const at = Math.min(1, out * (.8 + .2 * Math.abs(i - POINTS) / POINTS)), colour = mixed(TONES[0](at), TONES[1](at), tone), rim = dry ? Math.min(1, Math.max(0, (out - .72) / .2)) * .8 : 0; return rim ? mixed(colour, [DRY.r, DRY.g, DRY.b], rim) : colour; },
+    const k = Math.min(1.999, Math.max(0, tone * 2)), low = TONES[Math.floor(k)], high = TONES[Math.floor(k) + 1], share = k - Math.floor(k), deep = .7 + r(13) * .7;
+    return leafOn(kit, leaves, {
+      outline, size, stalk, rows: 4, girth: .003 + size * .007, bow: (r(8) - .5) * .7, turn: (r(9) - .5) * .7, pitch: (r(10) - .5) * .7,
+      // Cupped or flattened about the midrib, the tip curled forward or back, the rim slightly wavy, the whole blade a little twisted.
+      lift: (x, y, out, i) => size * (cup * (x / size) * (x / size) - curl * Math.pow(Math.max(0, y / size - .4), 2) + wave * out * out * Math.sin(i * 1.1 + p1) + twist * x * y / (size * size)),
+      tint: (i, out) => { const at = Math.min(1, Math.pow(out, deep) * (.75 + .25 * Math.abs(i - POINTS) / POINTS)), colour = mixed(low(at), high(at), share), rim = dry ? Math.min(1, Math.max(0, (out - .7) / .22)) * .8 : 0; return rim ? mixed(colour, [DRY.r, DRY.g, DRY.b], rim) : colour; },
       stalkTint: STALK(tone),
     });
-    return group;
   }
 
   // White bark, drawn along the stem (across the canvas) and around it (up): chalk white with warmer and greyer

@@ -129,15 +129,17 @@ export default function build(kit, ctx) {
     // The stem is white where it is thick enough to have bark that peels, and a fine dark twig beyond; it steps a little to one side at each node.
     const stem = behind(limb(kit, [foot, right(.15, -3.22, -.16), right(.8, -2.64, -.02), right(1.38, -2.1, .08), right(1.9, -1.8, .14)], taper(.056 * S, .02 * S), B.bark, { sides: 7 }), held);
     const tip = behind(limb(kit, [stem.userData.at(1), right(2.28, -1.6, .17), right(2.6, -1.55, .17), right(2.84, -1.66, .15)], taper(.02 * S, .006 * S), B.twig, { sides: 5 }), held);
-    // Side twigs, one at a node and on alternate sides: [where along the stem, the points it runs through, where its leaves hang along it]. One has lost all its leaves.
-    const TWIGS = [[.46, [[.6, -2.42, .14], [.84, -2.02, .2], [1.0, -1.76, .22]], [.5, .78, 1]], [.7, [[1.5, -2.52, .12], [1.84, -2.78, .16]], [.6, 1]], [.93, [[1.84, -1.5, .2], [2.04, -1.3, .22]], [.55, 1]], [.24, [[.3, -3.5, .1], [.52, -3.74, .12]], []]];
+    // Side twigs, one at a node and on alternate sides, arching out and drooping at their ends: [where along the stem, the points it runs through, where its leaves hang along it]. One has lost all its leaves.
+    const TWIGS = [[.46, [[.66, -2.4, .14], [.98, -2.1, .2], [1.26, -2.1, .22], [1.44, -2.3, .22]], [.45, .72, 1]], [.7, [[1.5, -2.5, .12], [1.82, -2.7, .16], [1.96, -2.98, .16]], [.55, 1]], [.93, [[1.86, -1.52, .2], [2.1, -1.36, .22], [2.32, -1.46, .22]], [.6, 1]], [.24, [[.3, -3.5, .1], [.52, -3.74, .12]], []]];
     const spots = [[tip, .5], [tip, 1]];
     TWIGS.forEach(([share, through, hung]) => { const twig = behind(limb(kit, [stem.userData.at(share), ...through.map(([x, y, z]) => right(x, y, z))], taper(.012 * S, .005 * S), B.twig, { sides: 5 }), held); for (const where of hung) spots.push([twig, where]); });
-    // Small leaves on thin stalks, hanging; fewer on a quiet date, never more than there are places.
+    // Small leaves on slender stalks, alternately to one side and the other, each hanging tip down and turned its
+    // own way about its stalk, so that some show their face and some their edge; fewer on a quiet date, never more
+    // than there are places.
     const count = Math.min(spots.length, Math.round(5 + 16 * A));
     spots.slice(0, count).forEach(([twig, where], i) => {
-      const size = (.24 + rnd(i, seed + 81) * .1) * S, tilt = (rnd(i, seed + 82) - .5) * 1.1;
-      const leaf = aim(kit, B.leaf({ size, stalk: size * (.3 + rnd(i, seed + 83) * .2), tone: rnd(i, seed + 84), dry: i === 3, seed: seed + 800 + i * 13 }), V(Math.sin(tilt) * .7, -1, .15 + (i % 3) * .12), V(Math.sin(tilt * .8 + (rnd(i, seed + 85) - .5)), .15, 1));
+      const size = (.22 + rnd(i, seed + 81) * .14) * S, tilt = (i % 2 ? 1 : -1) * (.12 + rnd(i, seed + 82) * .5), turned = (rnd(i, seed + 85) - .5) * 2.6;
+      const leaf = aim(kit, B.leaf({ size, stalk: size * (.45 + rnd(i, seed + 83) * .3), tone: rnd(i, seed + 84), dry: i === 3 || i === 6, seed: seed + 800 + i * 13 }), V(Math.sin(tilt) * .6, -1, .1 + (i % 3) * .1), V(Math.sin(turned), .12, Math.cos(turned)));
       hang(leaf, twig.userData.at(where), held, i, seed + 86, .03 + rnd(i, seed + 87) * .02); leaves.push(leaf);
     });
     // Bark peels from the white stem in thin curls.
@@ -169,26 +171,29 @@ export default function build(kit, ctx) {
 
   // ---------- one leaf at a time lets go of a shoot, rocks down the left edge and fades into the fallen ones; then the air is empty for a minute or two ----------
   if (!wet && released.length) {
-    // One leaf does every fall, in a short repeating round. A fall has its own shoot, lane, size, pace and swing,
-    // and its own empty air after it. A lane is a depth in front of or behind everything the leaf can pass, and
+    // One leaf does every fall, in a short repeating round. A fall has its own shoot, lane, size, colour, pace and
+    // swing, and its own empty air after it. The leaf is a gold one, and each fall keeps a share of its green
+    // (TURNS), which makes it gold, amber, orange or red-orange; the share is set as a fall begins, while the leaf
+    // is still faded out. A lane is a depth in front of or behind everything the leaf can pass, and
     // the leaf keeps to it from the moment it lets go, turning about its own origin: a leaf that changed depth on
     // the way down would trade places in the drawing order with whatever it passed. So it starts where its shoot
     // is seen from the room (`seen` is that scale), not at the shoot's own depth. In front: nearer than the tree
     // (its leaves are drawn from depths up to about 0.5, its wood from -0.3) and the fallen leaves (up to 0.6),
     // short of the fog's near band (1.5). Behind: farther than the tree, the glow under the fallen leaves (-0.6)
     // and the snow's middle band (-1), short of the wind's seeds (-1.4 and farther).
-    const LANES = [1, -1.2, 1.25, -1.1, -1.15], long = .4 * S * SMALLER, leaf = M.leaf({ size: long, stalk: long * .55, tone: .66, seed: seed + 500, own: true, about: long }), laid = new T.Group(), holder = new T.Group();
+    const LANES = [1, -1.2, 1.25, -1.1, -1.15], TURNS = [1, .56, .8, .42, .68], long = .4 * S * SMALLER, leaf = M.leaf({ size: long, stalk: long * .55, tone: .2, seed: seed + 500, own: true, about: long }), laid = new T.Group(), holder = new T.Group();
     laid.add(leaf); holder.add(laid); holder.visible = false; stage.add(holder);
     const falls = []; let round = 0;
     GAPS.forEach((gap, k) => {
       const from = released[(k * 2 + 1) % released.length], z = LANES[k % LANES.length], seen = (1 - z / view.depth) / (1 - from.z / view.depth), floor = (-view.halfHAt(z) + .3) / seen, speed = .24 + rnd(k, seed + 51) * .16, fall = (from.y - floor) / speed;
-      falls.push({ from, z, seen, floor, speed, fall, start: round, size: .82 + rnd(k, seed + 57) * .36, swing: 4.2 + rnd(k, seed + 54) * 1.4, reach: .32 + rnd(k, seed + 55) * .14, phase: rnd(k, seed + 56) * 6 }); round += fall + gap * MINUTE;
+      falls.push({ from, z, seen, floor, speed, fall, start: round, turn: TURNS[k % TURNS.length], size: .82 + rnd(k, seed + 57) * .36, swing: 4.2 + rnd(k, seed + 54) * 1.4, reach: .32 + rnd(k, seed + 55) * .14, phase: rnd(k, seed + 56) * 6 }); round += fall + gap * MINUTE;
     });
-    const offset = falls[((today % falls.length) + falls.length) % falls.length].start - FIRST_RELEASE;
+    const offset = falls[((today % falls.length) + falls.length) % falls.length].start - FIRST_RELEASE; let showing = null;
     tick(t => {
       const now = ((t + offset) % round + round) % round; let current = null;
       for (let k = 0; k < falls.length; k++) if (now >= falls[k].start && now < falls[k].start + falls[k].fall) current = falls[k];
       holder.visible = current !== null; if (!current) return;
+      if (current !== showing) { showing = current; leaf.userData.turn(current.turn); }
       const from = current.from, age = now - current.start, drop = age * current.speed, ease = Math.min(1, drop / .7), beat = age * current.swing + current.phase, slide = Math.sin(beat);
       holder.position.set(Math.min(-W + 2.9, Math.max(-W + .45, from.x + .3 * ease + slide * current.reach * ease)) * current.seen, (from.y - drop + Math.abs(Math.cos(beat)) * .07 * ease) * current.seen, current.z);
       // A maple leaf does not spin on its stalk: it lies back on the air, banks into each slide from side to side, nods, and turns slowly in its own plane.

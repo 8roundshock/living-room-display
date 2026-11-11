@@ -33,15 +33,17 @@ export function maple(kit) {
   // From the stalk and the veins out to the rim, for a clear yellow, a gold, a fire-orange and a red-orange
   // leaf; a leaf's `tone` (0-1) blends between them. These are paints, not what is seen: the engine's tone
   // curve lifts a bright colour and turns it toward yellow, so each is deeper and redder than it reads on
-  // screen ('#ffa100' shows as clear yellow, '#da5b00' as orange, '#c03f00' as red-orange).
-  const TONES = [ramp(kit, [[0, '#ffbf00'], [.5, '#ffa100'], [1, '#f28200']]), ramp(kit, [[0, '#ffa800'], [.5, '#f28200'], [1, '#da5b00']]), ramp(kit, [[0, '#f28a00'], [.5, '#da5b00'], [1, '#c03f00']]), ramp(kit, [[0, '#e56e00'], [.5, '#cd4b00'], [1, '#ad3500']])];
+  // screen ('#ff9e00' shows as golden yellow, '#da5b00' as orange, '#c03f00' as red-orange). The yellow end
+  // stops at a golden yellow (a hue of about 47 to 50 degrees): a lemon yellow dimmed on black reads olive.
+  const TONES = [ramp(kit, [[0, '#ff9e00'], [.5, '#fb9600'], [1, '#f28200']]), ramp(kit, [[0, '#fb9600'], [.5, '#f28200'], [1, '#da5b00']]), ramp(kit, [[0, '#f28a00'], [.5, '#da5b00'], [1, '#c03f00']]), ramp(kit, [[0, '#e56e00'], [.5, '#cd4b00'], [1, '#ad3500']])];
   const STALKS = ramp(kit, [[0, '#c06a00'], [.5, '#a04a00'], [1, '#894200']]), mixed = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
   // How near each outline point is to a vein that runs to a lobe tip: 1 on it, 0 three points away.
   const ON_VEIN = Array.from({ length: AROUND + 1 }, (_, i) => { const at = Math.abs(i - MIDDLE); return Math.max(0, 1 - Math.min(...TIPS.map(tip => Math.abs(at - tip))) / 3); });
 
   /** One leaf (see leafOn in autumn-leaf.js for where its origin is and how it is drawn).
    * `size` is the blade's length, `stalk` the stalk's, `tone` 0 (clear yellow) to 1 (red-orange);
-   * `own` gives it a material of its own and `userData.fade(k)`, for a leaf that fades out by itself. */
+   * `own` gives it a material of its own, `userData.fade(k)` and `userData.turn(green)`, for a
+   * leaf that fades out by itself and can change colour while it is out of sight. */
   function leaf({ size = .4, stalk = .32, tone = .5, seed = 0, own = false, about = 0 } = {}) {
     const r = n => rnd(seed, n), long = [.9 + r(1) * .2, .86 + r(2) * .22, .82 + r(3) * .3, .86 + r(4) * .22, .82 + r(5) * .3], sinus = .84 + r(6) * .3, tooth = .93 + r(7) * .16, lean = (r(8) - .5) * .16;
     // The outline of this leaf: each lobe a little longer or shorter, the teeth sharper or blunter, the sinuses deeper or shallower, the whole leaning to one side.
@@ -60,7 +62,10 @@ export function maple(kit) {
       tint: (i, out) => { const at = Math.min(1, Math.max(0, Math.pow(out, pale) * (1 - .4 * ON_VEIN[i] * (1 - out * .6)) + blush * (i < MIDDLE ? -1 : 1) * out * .4)); return mixed(low(at), high(at), share); },
       stalkTint: STALKS(tone),
     });
+    const lit = material.color.r;
     group.userData.fade = own ? value => { material.opacity = value; } : null;
+    // For a leaf with a material of its own: `green` (0-1) is the share of its green it keeps. 1 leaves it as it was made; less turns it toward orange and red-orange.
+    group.userData.turn = own ? green => { material.color.setRGB(lit, lit * green, lit); material.emissive.setRGB(1, green, 1); } : null;
     return group;
   }
 
