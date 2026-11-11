@@ -1,5 +1,27 @@
 # Project status
 
+## A Transparency slider for the 3D scenes — 2026-11-11 (#670)
+
+Source candidate, not installed. The see-through level of the 3D scenes was changed twice in
+two days by rebuilds (#653, #664); the owner asked for "a transperancy slider for the extra
+elements so i can modify it myself". Style now has a Transparency slider, 0% (solid) to 100%
+(the most see-through), shown whenever a theme is on. 50% is exactly the look before it, the
+default, and stored as no key (`appearance.theme.transparency`, an optional whole number;
+older data loads and saves unchanged). It scales the kit's glass look and every see-through
+body a scene sets itself (Autumn's leaves, Winter's snow and four other parts) through one
+kit helper; the layer's brightness, the tier and quiet rules and the amount of weather are
+unchanged, and the flat fallback ignores it. In the editor a drag rebuilds the preview once,
+in the same WebGL context; that path now also releases the environment map's render target
+(part of #638). Details: [Ambient themes](docs/ambient-themes.md#transparency-670-owner-request-2026-11-11).
+
+Verified on 2026-11-11 with source builds and synthetic data only: both typechecks, the
+production build, the unit tests (validation, storage, byte-identical loading, the editor
+draft, the curve, and that no scene reads the setting), the `scene3d` suite on SwiftShader and
+on the GPU (a drag is one rebuild with nothing left behind; 0% and 100% draw; the display
+builds at a saved 100%), and the `themes` suite (keyboard slider, Save and Cancel, saving,
+reload, Off). Still frames at 50% match `main` within the GPU's own run-to-run noise.
+Not verified: installation, the TV, and the owner's choice of a value.
+
 ## Combined mode always draws the weather over the scene — 2026-11-10 (#655)
 
 Source candidate, not installed. Owner direction after seeing Autumn on the TV: "the
