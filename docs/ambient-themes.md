@@ -188,10 +188,30 @@ drawn alone.
   berry. One fan at a time lets go and swings down the left edge (one and a half to three
   and a half minutes); then the air is empty for three to six minutes. Gold and amber on
   the ginkgo; the middle of the screen and of the bottom edge stay black.
-- **Winter** ([#616](https://github.com/8roundshock/living-room-display/issues/616)):
-  frost ferns growing in from the bottom-left corner and a bare twig glazed in clear ice in
-  the top-right corner. Still air (coordinator decision on #616): the 3D Winter scene draws
-  no snowfall of its own, so falling snow over it always means the forecast says snow.
+- **Winter** ([#665](https://github.com/8roundshock/living-room-display/issues/665); owner
+  direction, 2026-11-11: "for winter i want like an evergreen with some wintery elements",
+  which overturns the "no fir" decision of the first plan,
+  [#616](https://github.com/8roundshock/living-room-display/issues/616), and replaces its
+  frost ferns): the side of a white spruce outdoors. Three boughs come in from the left edge
+  at different heights, angles and depths, the trunk beyond the frame, each sagging under
+  pads of snow that lie along its upper side and out along its side twigs; short blue-green
+  needles show under and through the snow, four light brown cones hang under the twigs the
+  way a spruce's cones hang, and short icicles of different lengths hang under two of the
+  bough tips. Low on the right edge, as the one companion, the bare twig glazed in clear ice
+  from #616, smaller. Not Christmas and not the New Year tree: no ornament, light, ribbon,
+  star, wreath or garland, another conifer habit (short needles, a heavy snow load, cones)
+  and another place on the screen. Glass with bodies that read: the snow's body is 0.8 as
+  solid as its rim, the needles take 0.45 of the see-through look and the wood 0.6. Still
+  air (coordinator decision on #616, kept): the scene draws no snowfall of its own, so
+  falling snow over it always means the forecast says snow. Each bough breathes a fraction
+  of a degree as one piece and a few glints on the snow rise and fall in turn; nothing else
+  moves. A quiet date keeps the evergreen alone. Every piece keeps `renderOrder` 0 and an
+  origin that does not move in depth
+  ([#662](https://github.com/8roundshock/living-room-display/issues/662),
+  [#663](https://github.com/8roundshock/living-room-display/issues/663)). Measured
+  2026-11-11 at 1920×1080: 102,000 triangles, 28 draw calls, build 97 ms, 23 ms/s of
+  main-thread time, 4.4% of the pixels lit at full opacity on an empty board (the first
+  Winter: 75,000, 43, 72 ms, 26 ms/s; the season figures below were taken with it).
 
 Measured as above on 2026-11-10 at 1920×1080: 30,000 to 75,000 triangles (Winter's frost
 is about 5,000 crystals in one instanced mesh), 43 to 76 draw calls, build 62 to 115 ms,
