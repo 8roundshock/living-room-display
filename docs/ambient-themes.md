@@ -240,7 +240,7 @@ drawn alone.
   from the owner's verdict on the TV: "more canadian, with like a maple tree ... orange and
   yellow", "less transparent", a leaf every "1.5-2 minutes"): a sugar-maple branch rising
   along the left edge, branching in opposite pairs, with thirty-two leaves in sprays at the
-  shoot tips, clear yellow and gold inside, fire orange and red-orange on the outer shoots,
+  shoot tips, golden yellow and gold inside, fire orange and red-orange on the outer shoots,
   and a few bare twig ends; a few fallen leaves in the bottom-left corner. Low on the right
   edge, as a lighter and smaller companion, a paper-birch twig: white bark with dark
   lenticels and two peeling curls, fine dark side twigs, nine small yellow leaves, some
@@ -249,7 +249,10 @@ drawn alone.
   [#653](https://github.com/8roundshock/living-room-display/issues/653)). One maple leaf at
   a time lets go and rocks down the left edge (about two to two and a half minutes); then
   the air is empty for one and a half to two minutes. Orange and yellow only: the pure red
-  leaf is Canada Day's. The middle of the screen and of the bottom edge stay black.
+  leaf is Canada Day's. The middle of the screen and of the bottom edge stay black. The
+  leaf colours follow photos of Canadian maples, birches and aspens in October and are shown
+  as painted, past the engine's tone curve, which dulled them to amber
+  ([#671](https://github.com/8roundshock/living-room-display/issues/671)).
 - **Winter** ([#665](https://github.com/8roundshock/living-room-display/issues/665); owner
   direction, 2026-11-11: "for winter i want like an evergreen with some wintery elements",
   which overturns the "no fir" decision of the first plan,

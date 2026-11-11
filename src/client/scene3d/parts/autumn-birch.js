@@ -23,12 +23,13 @@ export function birch(kit) {
     g.strokeStyle = colour; g.lineCap = 'round'; line(POINTS, 0, POINTS, .99, 2.2); line(POINTS, 0, POINTS, .55, 4.6);
     for (const side of [-1, 1]) { for (let k = 1; k <= 5; k++) line(POINTS, .7 - k * .125, POINTS + side * k * 4, .98, 1.7); line(POINTS, .8, POINTS + side * 2, .98, 1.1); }
   };
-  const textures = leafTextures(kit, veins, { mottle: '176,104,16', specks: 34, salt: 90 }), leaves = leafLook(kit, textures, 1.15);
-  // From the stalk out to the rim, for a clear gold, a deeper gold and an amber-edged leaf; `tone` (0-1) blends
-  // between them. A dry one has a brown rim. Paints, deeper and redder than they read on screen (see the maple
-  // part); none is yellower than a golden yellow, because a dim lemon yellow reads olive on black.
-  const TONES = [ramp(kit, [[0, '#ff9e00'], [.5, '#fb9600'], [1, '#f48600']]), ramp(kit, [[0, '#fb9600'], [.5, '#f28200'], [1, '#e87000']]), ramp(kit, [[0, '#f88e00'], [.5, '#ee7a00'], [1, '#d86000']])], DRY = new T.Color('#795000').convertSRGBToLinear();
-  const STALK = ramp(kit, [[0, '#b07000'], [1, '#8a5200']]), mixed = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+  const textures = leafTextures(kit, veins, { mottle: '176,104,16', specks: 34, salt: 90 }), leaves = leafLook(kit, textures);
+  // From the stalk out to the rim, for a golden yellow, a gold and an amber-edged leaf; `tone` (0-1) blends
+  // between them. A dry one has a brown rim. Nearly the colours on screen (see the maple part), as the yellow
+  // birches and aspens beside the maples in photos of a Canadian October (#671): golden yellow at a hue of
+  // about 42 degrees. None is yellower than a golden yellow, because a dim lemon yellow reads olive on black.
+  const TONES = [ramp(kit, [[0, '#ffe430'], [.5, '#ffd828'], [1, '#ffcc20']]), ramp(kit, [[0, '#ffd828'], [.5, '#ffcc20'], [1, '#ffbc1a']]), ramp(kit, [[0, '#ffcc20'], [.5, '#ffbc1a'], [1, '#ffa816']])], DRY = new T.Color('#8a5414').convertSRGBToLinear();
+  const STALK = ramp(kit, [[0, '#c08c18'], [1, '#98661a']]), mixed = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
   const reachAt = degrees => { let i = 0; while (i < HALF.length - 2 && degrees > HALF[i + 1][0]) i++; const [a0, r0] = HALF[i], [a1, r1] = HALF[i + 1]; return r0 + (r1 - r0) * (degrees - a0) / (a1 - a0); };
 
   /** One leaf (see leafOn in autumn-leaf.js for where its origin is and how it is drawn).
