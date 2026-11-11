@@ -29,8 +29,9 @@ export function jogakbo(kit, { width = 2.8, height = 3.6, salt = 8 } = {}) {
     seams(g, 'rgba(255,252,242,.85)', 6.5); seams(g, 'rgba(150,138,112,.7)', 1);
   }, { anisotropy: 8 });
   const alpha = canvasTexture(PX, PY, g => {
-    panes.forEach(([x, y, w, h], i) => { const v = Math.round(255 * (.5 + rnd(i, salt + 7) * .2)); g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(x, y, w, h); });
-    seams(g, '#d8d8d8', 6.5);
+    // How solid the ramie is (a pane 0.5-0.7, a sealed seam 0.85) at the standard look; kit.solidity applies the Transparency setting (#670).
+    panes.forEach(([x, y, w, h], i) => { const v = Math.round(255 * kit.solidity(.5 + rnd(i, salt + 7) * .2)); g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(x, y, w, h); });
+    const seam = Math.round(255 * kit.solidity(216 / 255)); seams(g, `rgb(${seam},${seam},${seam})`, 6.5);
   }, { srgb: false, anisotropy: 8 });
   const geometry = new T.PlaneGeometry(width, height, 28, 36); geometry.translate(0, -height / 2, 0);
   const p = geometry.attributes.position, rest = p.array.slice();

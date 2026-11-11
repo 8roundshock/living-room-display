@@ -7,7 +7,7 @@ import { through, tubes, turned } from './new-year-tree-tubes.js';
 export function teaGlass(kit, { radius = .26, height = .7, seed = 0 } = {}) {
   const { T, V, rnd } = kit, group = new T.Group(), sleeve = height * .56;
   // ---------- the tea, drawn first so it is seen through the glass ----------
-  const level = height * .84, tea = new T.Mesh(new T.CylinderGeometry(radius * .9, radius * .86, level - .06, 32), kit.mat({ color: 0xa04a0a, roughness: .12, clearcoat: 1, transparent: true, opacity: .92, emissive: 0xc05a14, emissiveIntensity: .7 }, .8));
+  const level = height * .84, tea = new T.Mesh(new T.CylinderGeometry(radius * .9, radius * .86, level - .06, 32), kit.mat({ color: 0xa04a0a, roughness: .12, clearcoat: 1, transparent: true, opacity: kit.solidity(.92), emissive: 0xc05a14, emissiveIntensity: .7 }, .8));
   tea.position.y = .06 + (level - .06) / 2; group.add(tea);
   const lemon = kit.canvasTexture(128, 128, g => {
     g.translate(64, 64); g.fillStyle = '#e9b820'; g.beginPath(); g.arc(0, 0, 62, 0, 7); g.fill(); g.fillStyle = '#fbf2c8'; g.beginPath(); g.arc(0, 0, 54, 0, 7); g.fill();

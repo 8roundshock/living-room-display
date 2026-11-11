@@ -5,7 +5,8 @@
 import { sheets } from './spring-blade.js';
 
 /** How solid a leaf's body is beside its veins, rim and stalk, which are solid (#664: "less
- * transparent"; the ginkgo fan of #653 was 0.55, the first 3D Autumn about 0.82). */
+ * transparent"; the ginkgo fan of #653 was 0.55, the first 3D Autumn about 0.82). This is the
+ * standard look: the Transparency setting moves it through kit.solidity (#670). */
 export const BODY = .7;
 
 /** The three textures of a kind of leaf, drawn in the blade's own coordinates: across is the
@@ -25,7 +26,7 @@ export function leafTextures(kit, veins, { mottle = '150,90,20', speck = '96,44,
   }, { anisotropy: 8 });
   const relief = kit.canvasTexture(W, H, g => { g.fillStyle = '#787878'; g.fillRect(0, 0, W, H); softened(s => veins(s, W, H, '#ffffff', 2.2), 1.5)(g); }, { srgb: false });
   const solid = kit.canvasTexture(W, H, g => {
-    const body = Math.round(BODY * 255); g.fillStyle = `rgb(${body},${body},${body})`; g.fillRect(0, 0, W, H);
+    const body = Math.round(kit.solidity(BODY) * 255); g.fillStyle = `rgb(${body},${body},${body})`; g.fillRect(0, 0, W, H);
     softened(s => { veins(s, W, H, '#ffffff', 2.6); s.fillStyle = '#fff'; s.fillRect(0, 0, W, H * .045); s.fillRect(0, H * .96, W, H * .04); }, 1.1)(g);
   }, { srgb: false, anisotropy: 8 });
   return { map, relief, solid };

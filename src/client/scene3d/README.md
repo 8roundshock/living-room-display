@@ -136,7 +136,8 @@ you add yourself; nothing is added for you except `part()`.
 | `view` | `halfW`, `halfH`, `aspect`, `depth`, `halfWAt(z)`, `halfHAt(z)`. |
 | `V(x, y, z)`, `C(colour)`, `mix(a, b, k)`, `shift(colour, hue, sat, light)`, `rnd(i, salt)` | Vector; sRGB to linear colour; blend two colours; turn a colour around the wheel; a deterministic value in [0, 1). Never use `Math.random`. |
 | `tick(fn)`, `own(resource)` | Per-frame update; register a texture or geometry you made for disposal with the scene. |
-| `mat(options, env = 1, physical = true)` | The material factory: three.js material options with sRGB colours, glass-patched (a lit body thins out, its rim and highlights stay). `env` scales the studio reflections. Use it for every lit surface. The extra option `see` (0-1) is the share of the see-through look a surface takes, for the rare one that must stay solid (a national flag). |
+| `mat(options, env = 1, physical = true)` | The material factory: three.js material options with sRGB colours, glass-patched (a lit body thins out, its rim and highlights stay). `env` scales the studio reflections. Use it for every lit surface. The extra option `see` (0-1) is the share of the see-through look a surface takes, for the rare one that must stay solid (a national flag). The owner's Transparency setting scales that share for you. |
+| `solidity(body)` | How solid to draw a body you make see-through yourself, under the owner's Transparency setting (#670): `body` is the solidity you chose (0-1) and the result is what to draw, `body` itself at the standard 50%, 1 at 0%, thinner toward 100% but never zero. Pass every such alpha through it: an alpha map's grey (`Math.round(kit.solidity(.7) * 255)`), a uniform, `opacity: kit.solidity(.6)`. A cut-out outline (`alphaTest`), light and particles are not bodies. |
 | `gold()`, `satin(colour)` | Polished gold; ribbon satin. |
 | `glow(colour, size, opacity, { texture, twinkle })`, `bulb(colour, radius, halo)`, `bokeh(colour, size, opacity, twinkle)` | An additive halo; a small lit bulb with its halo; a soft out-of-focus light disc. Their strength follows the owner's glow setting. |
 | `tex.glow()`, `tex.disc()`, `tex.flame()`, `canvasTexture(w, h, draw, opts)`, `patternTex(base, accent, kind)` | Shared soft textures; a texture drawn once on a 2D canvas; a repeating pattern (`dots`, `stripes`, `grid`, `bands`, `diamonds`). Blur a whole layer once, never per stroke. |
@@ -162,6 +163,15 @@ brightness share, amount) and the tier and quiet multipliers; `tier.ts` derives 
 the registry group and the holiday policy window. A scene module never reads or overrides
 them. If a scene looks too strong or too weak at these settings, change the scene.
 
+One of them the owner sets himself: **Transparency** in Style (#670, 0-100%, 50% standard).
+It reaches a scene through the kit only. `mat()` applies it to the glass look, and
+`kit.solidity(body)` applies it to any see-through body the scene draws itself; write your
+body's solidity for the standard look and pass it through. Never read the setting, the look
+or `settings.ts` from a scene. `transparency.test.ts` fails on a literal `opacity` below 1
+in `mat()` and lists the parts that call `solidity`: add yours there. The curve
+(`settings.ts` `thinned`) and what does and does not follow it are in
+[Ambient themes](../../../docs/ambient-themes.md#transparency-670-owner-request-2026-11-11).
+
 ## Runtime behaviour (engine.js, Scene3D.tsx)
 
 - Nothing 3D is in the dashboard bundle. The engine with three.js (about 620 kB, 160 kB
@@ -171,6 +181,11 @@ them. If a scene looks too strong or too weak at these settings, change the scen
 - The backing store is at most 2560 x 1440. Frames are drawn about 20 times a second, never
   while the document is hidden, and never before the GPU has finished the previous one.
 - One stage owns one canvas and one WebGL context and releases both on unmount.
+- `stage.retune({ seeScale })` (a new Transparency) builds the scene again 250 ms after the
+  last call, in the same canvas and context, and draws it; a drag of the slider is one
+  rebuild. Any rebuild (this one or after a resize) releases the old scene only after the new
+  one has drawn, so shared shader programs are reused, and releases the environment map's
+  render target with its scene. `stats()` reports `builds`, `seeScale` and `programs`.
 - A software rasteriser is refused, and a GPU that needs more than 120 ms a frame ten frames
   running gives up; so does a lost context or a scene that throws. In each case the flat
   renderer takes over for that scene, and nothing is thrown to the page.
@@ -190,7 +205,8 @@ The tool opens the built app on an isolated synthetic server, on each scene's ow
 weather, and writes one 1920 x 1080 PNG per scene into the folder you name (outside the
 checkout). `--full` shows the scene at full opacity, which is how to judge the art; without it
 you see the real, much dimmer layer. `--empty` hides the widgets, `--measure` prints build,
-frame and main-thread times, `--size 3840x2160` and `--size 2560x1080` check other shapes.
+frame and main-thread times, `--size 3840x2160` and `--size 2560x1080` check other shapes,
+and `--transparency 0` or `--transparency 100` shows the scene at another Transparency.
 Look at the images, fix what is wrong, and delete the folder: the project keeps no
 screenshots. Check that nothing important sits in the middle, nothing is cut by an edge that
 should stand on it, and no two neighbours are copies.

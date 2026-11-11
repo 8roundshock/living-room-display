@@ -641,7 +641,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
           animated={!reducedMotion && !layoutEditing && settings.appearance.animation !== 'off'}
           still={embedded && layoutEditing && !reducedMotion && settings.appearance.animation !== 'off'}
           exclusions={themeExclusions} layoutKey={layoutKey} inkRevision={themeInkRevision}
-          foreground={settings.appearance.theme.foreground} passageMeasure={themePassageGeometry} />
+          foreground={settings.appearance.theme.foreground} transparency={settings.appearance.theme.transparency} passageMeasure={themePassageGeometry} />
         <div
           ref={plane}
           className={['ambient-content', 'widget-grid-plane', reveal.active ? 'revealing' : ''].filter(Boolean).join(' ')}

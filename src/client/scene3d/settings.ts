@@ -1,5 +1,6 @@
 /** Look of the 3D scene layer. Read src/client/scene3d/README.md and docs/ambient-themes.md
  * ("3D scenes") before changing a number here: these are the owner's picks, not defaults to tune. */
+import { TRANSPARENCY } from '../../shared/themes.ts';
 
 /** Owner's pick in the scene style picker, 2026-11-10 (#600), for the "All together"
  * compositions: brightness 45%, how much 30% (Canada Day 15%), size 85%, glow 65%, motion 5%,
@@ -45,23 +46,43 @@ export const RENDER_LIMITS = { maxWidth: 2560, maxHeight: 1440, framesPerSecond:
 /** Scene clock at start, and the fixed instant of a still or quiet frame (the picker's thumbnail instant). */
 export const SCENE_CLOCK = { start: 12, still: 14 } as const;
 
+/** The Transparency setting (#670, `appearance.theme.transparency`, 0-100; absent is the standard 50)
+ * as the multiplier the kit applies to every see-through value: 0 is solid, 1 is the owner's picks
+ * exactly (the standard 50%), 2 is the most see-through (100%). The kit's curve for it is `thinned`. */
+export function seeScale(transparency: number | undefined): number {
+  const value = transparency ?? TRANSPARENCY.standard;
+  return Math.min(TRANSPARENCY.max, Math.max(TRANSPARENCY.min, value)) / TRANSPARENCY.standard;
+}
+
+/** How much of a surface is left after the see-through look: `alpha` is the surface's alpha at the
+ * owner's picks (a body's own solidity, or the kit glass's factor) and `scale` the seeScale share it
+ * takes. Up to 1 it moves from solid (1) to `alpha` along a straight line, exactly as the picks always
+ * did; beyond 1, toward 2, it is `alpha` raised to `scale`, so a body thins further but never reaches
+ * zero and a solid rim (alpha 1) stays solid. kit/core.js uses the same curve in its shader. Pure. */
+export function thinned(alpha: number, scale: number): number {
+  return scale <= 1 ? alpha * scale + (1 - scale) : alpha ** scale;
+}
+
 export interface SceneLook {
   amount: number; size: number;
   /** Multiplier of the ambient brightness; never above 1. */
   opacity: number;
   glow: number; shine: number; seeThrough: number; timeScale: number; fadeToMiddle: number;
+  /** The Transparency setting as a multiplier of every see-through value (see seeScale): 1 is the standard look. */
+  seeScale: number;
   particles: boolean; saturation: number;
 }
 
-/** The owner's picks with the tier and quiet-date rules applied. Pure. */
-export function sceneLook(sceneId: string, tier: SceneTier, quiet = false): SceneLook {
+/** The owner's picks with the tier and quiet-date rules applied, and the Transparency setting. Pure.
+ * Transparency applies on a quiet date too: the quiet rule does not touch see-through. */
+export function sceneLook(sceneId: string, tier: SceneTier, quiet = false, transparency?: number): SceneLook {
   const rule = TIER_LOOK[tier];
   return {
     amount: (OWNER_SCENE_AMOUNT[sceneId] ?? OWNER_LOOK.amount) * rule.amount * (quiet ? QUIET_LOOK.amount : 1),
     size: OWNER_LOOK.size * rule.size,
     // Share and tier are clamped together first, so no tier is ever above the saved brightness; a quiet date dims that.
     opacity: Math.min(1, OWNER_LOOK.brightness * rule.opacity) * (quiet ? QUIET_LOOK.opacity : 1),
-    glow: OWNER_LOOK.glow, shine: OWNER_LOOK.shine, seeThrough: OWNER_LOOK.seeThrough,
+    glow: OWNER_LOOK.glow, shine: OWNER_LOOK.shine, seeThrough: OWNER_LOOK.seeThrough, seeScale: seeScale(transparency),
     timeScale: quiet ? QUIET_LOOK.timeScale : OWNER_LOOK.timeScale,
     fadeToMiddle: OWNER_LOOK.fadeToMiddle,
     particles: quiet ? QUIET_LOOK.particles : true,

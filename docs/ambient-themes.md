@@ -71,7 +71,7 @@ Chosen in the picker for its "All together" compositions, and held as named cons
 | Glow | 65% | Strength of halos and soft light discs. |
 | Motion | 5% | The scene clock runs at 5/40 of the picker's default speed, one eighth of real time. |
 | Shine | 80% | Strength of the studio reflections. |
-| See-through | 100% | A lit body thins to glass; its rim and highlights stay. |
+| See-through | 100% | A lit body thins to glass; its rim and highlights stay. This is the standard 50% of the [Transparency](#transparency-670-owner-request-2026-11-11) setting. |
 | Fade to middle | 60% | The picker's radial mask: full strength at the edges, 40% in the middle. |
 
 His words on the direction: "something like this, just improve the elements, less
@@ -87,6 +87,65 @@ dimmed by the saved brightness, so the scene takes 0.95 of it. Scene pixels alon
 1920×1080 board at a saved 36%: 8-10% lit, median luminance 21-43 and 99th percentile
 48-63 of 255, against widget text at about 69. (With the first rule, saved brightness ×
 0.45, the 99th percentile was 24-33.)
+
+### Transparency (#670, owner request 2026-11-11)
+
+The see-through level was changed twice in two days by rebuilds (#653 more see-through,
+#664 less). The owner asked to set it himself: "make sure there is a transperancy slider for
+the extra elements so i can modify it myself." In the picker he used, see-through was one of
+the sliders, so Transparency is that quantity, not the layer's brightness: the layer opacity
+stays tied to the saved brightness as above.
+
+- **The setting.** Style > Transparency, a slider from 0% (solid) to 100% (the most
+  see-through), shown whenever a theme is on (and under Off while it holds a saved value,
+  so it can be put back). 50% is the standard look: the owner's picks and every scene's own
+  values exactly as they were before the slider. It is saved with the other appearance
+  settings (`appearance.theme.transparency`, see [API](api.md#ambient-themes-and-holiday-sources-575-458)),
+  so a saved style and a style schedule carry it; 50% is stored as no key.
+- **One multiplier, one curve.** The value becomes `seeScale = value / 50` (0 to 2,
+  `settings.ts`). The kit's glass look multiplies the share each surface takes by it. A scene's
+  own see-through body (an alpha map's grey, a uniform, `opacity`) goes through
+  `kit.solidity(body)`. Both use one curve, `thinned(alpha, scale)`: up to 1 a straight line
+  from solid to the chosen alpha, exactly as before; beyond 1, toward 100%, the alpha raised
+  to the scale, so a body keeps thinning but never vanishes, and a solid rim stays solid.
+  A scene never reads the setting.
+
+  | Value | Kit glass, a surface that takes the whole look | Autumn leaf body | Winter snow body |
+  | --- | --- | --- | --- |
+  | 0% | solid | 1 | 1 |
+  | 50% | the picker's factor f: 0.14 for a dark body facing the room, up to 1 at its rim and highlights | 0.7 | 0.8 |
+  | 100% | f²: 0.02 for that dark body; the rim stays 1 | 0.49 | 0.64 |
+
+- **What follows it.** Every surface made with `kit.mat` (with its own `see` share; a flag
+  keeps a third of it), in every scene and in the weather overlays' solid pieces (the snow
+  plates). Scene bodies routed through `kit.solidity`: Autumn's leaf body (0.7), Winter's
+  snow pads (0.8), the Korean birthday's ramie panes (0.5-0.7) and seams (0.85), the tea in
+  the Russian birthday's glass (0.92), Maslenitsa's melted butter (0.6) and amber honey
+  (0.92), and the water in Women's Day's vase (0.5). A unit test lists them and fails on a
+  new literal `opacity` below 1 in `kit.mat`.
+- **What does not.** Cut-out outlines (alpha-tested leaf, kite, fringe, carved-pumpkin and
+  pierced-metal shapes, the open weave of the Chuseok tray, the mimosa fronds and the soft lower edge of
+  the snow pads) are shapes, not bodies. Light is not a body: halos, bulbs, flames, sparks,
+  the additive mimosa down and willow halo, and the unlit moon disc, which would only grow
+  brighter. Thin lines (cords, cobweb, kite thread, seed hairs) and the weather's particles
+  and volumes (rain threads, flakes, the rain pool, the fog veil and the storm cloud) keep
+  their strength: Transparency does not change how much weather there is.
+- **Unchanged.** The layer's opacity and brightness share, the tier rule, and the quiet-date
+  rule (a quiet date's frozen frame takes the Transparency like any other). The flat
+  fallback renderer ignores it ([#634](https://github.com/8roundshock/living-room-display/issues/634) removes that renderer).
+- **Live in the editor.** While the slider moves the draft changes at once; the 3D stage
+  builds the scene again 250 ms after the last step, in the same canvas and WebGL context,
+  and draws the new frame. A drag is one rebuild. The scene it replaces is released only
+  after the new one has drawn, so the shared shader programs are reused instead of
+  compiled again, and the environment map's render target is now released with its scene
+  (it leaked one per rebuild, an item of [#638](https://github.com/8roundshock/living-room-display/issues/638)). A "Try a scene" demonstration
+  stays up while the slider moves. The display takes the saved value when its stage is built,
+  and a later saved change through the same retune.
+- **50% is today's look.** Still editor frames (1376×774) of Autumn (with #672's colours),
+  Winter, Christmas, Women's Day, Maslenitsa and both accented birthdays, from a build of
+  `main` and a build of this change at 50%, differ in 0.007-0.055% of their pixels by a mean
+  of under 0.001 of a level: the same as two captures of the same `main` build (0.010-0.050%;
+  the GPU does not draw an identical frame twice). The textures' greys are the same numbers.
 
 ### Tier rule
 
@@ -475,9 +534,12 @@ multi-round agent reviews for taste: the owner judges taste on the display.
 ### Verification and limits
 
 `node --test "src/client/scene3d/*.test.ts"` covers the picks, the tier rule, scene
-resolution and the module-file contract. The `scene3d` browser suite runs with WebGL
-(software-rendered on the CI runner, `--gpu` for a real GPU) and covers the 3D path; the
-`themes` suite runs without WebGL and covers the flat fallback for all 26 scenes. See
+resolution, the module-file contract and the Transparency curve; `src/server/theme-transparency.test.ts`
+covers the setting's validation, storage and editor draft. The `scene3d` browser suite runs with WebGL
+(software-rendered on the CI runner, `--gpu` for a real GPU) and covers the 3D path,
+including a Transparency drag in the editor (one rebuild in the same context, nothing left
+behind, 0% and 100% drawn) and a display built at 100%; the `themes` suite runs without WebGL
+and covers the flat fallback for all 26 scenes and the slider's draft, Save and Cancel. See
 [development](development.md).
 
 Not verified: the installed app, the native screensaver host (whether its browser gives the

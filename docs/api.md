@@ -900,7 +900,7 @@ weather, snapshot pixels, and native tokens are excluded. Store backups privatel
 
 At rest, `state.json`, `state.backup.json` and exports omit additive values while
 they equal the current read default: `appearance.accentMode` `color`,
-`appearance.animation` `subtle`, `appearance.theme` Off with all three calendars (and `theme.foreground` unless `true`),
+`appearance.animation` `subtle`, `appearance.theme` Off with all three calendars (and `theme.foreground` unless `true`, and `theme.transparency` while 50),
 `appearance.daylightBrightness` `null` (Fixed,
 #439), default `widgetData` sections, and disabled widget ids the previous installed
 release does not know. The previous release (`d66832b`) reads `accentMode`, `animation`
@@ -934,8 +934,9 @@ alert service when their dedicated widget is enabled.
 ### Ambient themes and holiday sources (#575, #458)
 
 `appearance.theme` is `{ mode: 'off' | 'weather' | 'seasonal' | 'combined',
-calendars: ('CA' | 'KR' | 'RU')[], foreground?: boolean }`. Missing persisted
-fields default to Off with all three calendars and no foreground passage.
+calendars: ('CA' | 'KR' | 'RU')[], foreground?: boolean, transparency?: number }`. Missing persisted
+fields default to Off with all three calendars, no foreground passage and the standard
+Transparency.
 Calendar entries are unique; an empty list keeps seasons.
 Settings patches replace this small object completely; saved styles and their
 scheduled activation use the same appearance field. The default is omitted at
@@ -947,6 +948,17 @@ rejected. Because a patch replaces the whole theme object, a patch that sends
 `mode` and `calendars` without `foreground` turns it off. `foreground: true` in
 current settings or a saved style is an older-reader rollback exception; see the
 [install table](install.md#additive-data-and-rollback-compatibility-84).
+
+`transparency` (#670, Style > Transparency) is an optional whole number from 0 (solid) to
+100 (the most see-through) for the 3D scenes; the flat fallback renderer ignores it. Absent
+means 50, the standard look. Only another value is stored: `50` is accepted and normalised
+to omission, and a fraction, a value outside 0-100 or any other type is rejected. Nothing
+adds the key on load, on startup or in a migration, so data saved before it is read and
+written back unchanged. Like `foreground`, a patch that sends the theme without it returns it
+to 50. A stored value in current settings or a saved style is an older-reader rollback
+exception (see the [install table](install.md#additive-data-and-rollback-compatibility-84)).
+How the value maps onto the scenes is in
+[Ambient themes](ambient-themes.md#transparency-670-owner-request-2026-11-11).
 `widgetData.dynamic.holidays` defaults false and is omitted while false. It uses
 the same calendar list and adds offline today/tomorrow cards only when opted in.
 Weather details remain API-only and are excluded from private settings exports.

@@ -10,6 +10,7 @@
 //   ... --empty                 no widgets
 //   ... --size 3840x2160        viewport (default 1920x1080)
 //   ... --brightness 0.36       saved brightness (default 0.36)
+//   ... --transparency 80       saved Transparency, 0-100 (#670; default none: the standard 50)
 //   ... --seconds 20            let the scene run this long before the capture (default 3)
 //   ... --measure               print build, frame and main-thread times instead of only capturing
 //   ... --webgl gpu|software|off   real GPU (default), SwiftShader as on the CI runner, or the flat fallback
@@ -21,7 +22,7 @@ import { parseArgs } from 'node:util';
 import { openScene, startSceneServer, WEBGL_ARGS } from '../lib/scene-cases.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  playwright: { type: 'string' }, edge: { type: 'string' }, out: { type: 'string' }, size: { type: 'string', default: '1920x1080' }, brightness: { type: 'string', default: '0.36' },
+  playwright: { type: 'string' }, edge: { type: 'string' }, out: { type: 'string' }, size: { type: 'string', default: '1920x1080' }, brightness: { type: 'string', default: '0.36' }, transparency: { type: 'string' },
   seconds: { type: 'string', default: '3' }, webgl: { type: 'string', default: 'gpu' }, full: { type: 'boolean' }, 'no-fade': { type: 'boolean' }, empty: { type: 'boolean' }, measure: { type: 'boolean' },
 } });
 const fail = message => { console.error(message); process.exit(1); };
@@ -31,6 +32,8 @@ if (!WEBGL_ARGS[values.webgl]) fail(`--webgl takes one of: ${Object.keys(WEBGL_A
 const out = resolve(values.out), checkout = fileURLToPath(new URL('../../..', import.meta.url));
 if (!relative(checkout, out).startsWith('..')) fail('Choose a folder outside the checkout: screenshots are never kept in the repository.');
 const [width, height] = values.size.split('x').map(Number);
+const transparency = values.transparency === undefined ? undefined : Number(values.transparency);
+if (transparency !== undefined && !(Number.isInteger(transparency) && transparency >= 0 && transparency <= 100)) fail('--transparency takes a whole number from 0 to 100');
 if (!(width > 0 && height > 0)) fail('--size takes WIDTHxHEIGHT, for example 1920x1080');
 await mkdir(out, { recursive: true });
 
@@ -40,7 +43,7 @@ const browser = await chromium.launch({ executablePath: values.edge, headless: t
 try {
   for (const spec of positionals) {
     const [scene, weather = null] = spec.split('+'), errors = [];
-    const { context, page } = await openScene(browser, server, { scene, weather, viewport: { width, height }, brightness: Number(values.brightness), empty: values.empty, allowSoftware: values.webgl === 'software', pageErrors: errors });
+    const { context, page } = await openScene(browser, server, { scene, weather, viewport: { width, height }, brightness: Number(values.brightness), transparency, empty: values.empty, allowSoftware: values.webgl === 'software', pageErrors: errors });
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text().slice(0, 300)); });
     const layer = page.locator('.ambient-theme');
     await layer.waitFor({ timeout: 15_000 });
@@ -75,7 +78,7 @@ try {
       luminance.sort((a, b) => a - b);
       return { litPercent: Number((lit / (data.length / 4) * 100).toFixed(1)), medianLuminance: Math.round(luminance[Math.floor(luminance.length / 2)] ?? 0), p99Luminance: Math.round(luminance[Math.floor(luminance.length * .99)] ?? 0) };
     }, shot.toString('base64')));
-    const file = join(out, `${spec.replace('+', '-with-')}-${width}x${height}${values.full ? '-full' : ''}${values['no-fade'] ? '-nofade' : ''}${values.empty ? '-empty' : ''}.png`);
+    const file = join(out, `${spec.replace('+', '-with-')}-${width}x${height}${transparency === undefined ? '' : `-t${transparency}`}${values.full ? '-full' : ''}${values['no-fade'] ? '-nofade' : ''}${values.empty ? '-empty' : ''}.png`);
     await writeFile(file, shot);
     console.log(JSON.stringify({ ...report, file, ...(errors.length ? { errors } : {}) }));
     await context.close();

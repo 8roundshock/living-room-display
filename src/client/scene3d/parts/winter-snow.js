@@ -10,8 +10,10 @@ const LIE = { spine: [.24, .1, .18, .09], twig: [.11, .06, .15, .07], twiglet: [
 
 /** The snow's material. `body` is how solid the snow is where it faces the room, as a share of
  * its rim, which stays whole: the kit's see-through look thins dark surfaces and leaves a bright
- * one solid, so white snow sets its own. (three.js r128 shader text; if a later three.js words
- * that line differently nothing is replaced and the snow is simply solid.) */
+ * one solid, so white snow sets its own. `body` is the standard look; the Transparency setting
+ * moves it through kit.solidity (#670). The `under` fade is the pad's soft lower edge, a shape,
+ * and stays. (three.js r128 shader text; if a later three.js words that line differently nothing
+ * is replaced and the snow is simply solid.) */
 export function snowLook(kit, { body = .7 } = {}) {
   const { rnd } = kit;
   const grain = kit.canvasTexture(128, 128, (g, w, h) => {
@@ -21,7 +23,7 @@ export function snowLook(kit, { body = .7 } = {}) {
   // Round a pad: whole over its top and sides, fading out underneath, so its lower edge is a soft shadow and not a line.
   const under = kit.canvasTexture(64, 4, (g, w, h) => { for (let x = 0; x < w; x++) { const lit = Math.sin((x + .5) / w * Math.PI * 2), value = Math.round(255 * Math.min(1, Math.max(.06, .62 + lit * 1.5))); g.fillStyle = `rgb(${value},${value},${value})`; g.fillRect(x, 0, 1, h); } }, { srgb: false, repeat: true });
   const material = kit.mat({ color: 0xffffff, vertexColors: true, roughness: .9, metalness: 0, bumpMap: grain, bumpScale: .01, alphaMap: under, emissive: 0x6a8cc8, emissiveIntensity: .2, see: 0 }, .3, false);
-  const solid = { value: body }, patch = material.onBeforeCompile;
+  const solid = { value: kit.solidity(body) }, patch = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
     patch(shader, renderer); shader.uniforms.uSnowBody = solid;
     shader.fragmentShader = 'uniform float uSnowBody;\n' + shader.fragmentShader.replace('#include <tonemapping_fragment>',

@@ -43,17 +43,17 @@ export async function startSceneServer() {
 
 /**
  * Save synthetic settings that resolve to `scene` (a registered id), optionally with `weather` over it
- * (Combined mode), and open a page on it. The page's Date is fixed to the scene's day; timers and
+ * (Combined mode) and a saved Transparency (#670, 0-100), and open a page on it. The page's Date is fixed to the scene's day; timers and
  * animation frames run in real time. `prepare(context)` and `onPage(page)` run before the page loads.
  * Returns { context, page, date }.
  */
-export async function openScene(browser, server, { scene, weather = null, path = '/display', viewport = { width: 1920, height: 1080 }, brightness = .36, animation = 'subtle', reduced = 'no-preference', mode, empty = false, allowSoftware = false, pageErrors, prepare, onPage } = {}) {
+export async function openScene(browser, server, { scene, weather = null, path = '/display', viewport = { width: 1920, height: 1080 }, brightness = .36, animation = 'subtle', reduced = 'no-preference', mode, transparency, empty = false, allowSoftware = false, pageErrors, prepare, onPage } = {}) {
   const found = SCENE_CASES.find(([id]) => id === scene);
   if (!found) throw new Error(`Unknown scene ${scene}; known: ${SCENE_CASES.map(([id]) => id).join(', ')}`);
   const [, civil, code, calendars = ['CA', 'KR', 'RU'], birthday] = found, date = `${civil}T18:30:00Z`, own = WEATHER_IDS.includes(scene);
   const reading = weather ? WEATHER_READING[weather] : own ? WEATHER_READING[scene] : { code, wind: 8 };
   const settings = defaultSettings();
-  settings.appearance.theme = { mode: mode ?? (weather ? 'combined' : own ? 'weather' : 'seasonal'), calendars };
+  settings.appearance.theme = { mode: mode ?? (weather ? 'combined' : own ? 'weather' : 'seasonal'), calendars, ...(transparency === undefined ? {} : { transparency }) };
   settings.appearance.animation = animation; settings.appearance.brightness = brightness; settings.appearance.motionEnabled = false;
   if (birthday) settings.birthdays = [{ id: '00000000-0000-4000-8000-000000000600', name: 'Birthday A', date: civil.slice(5), treatment: birthday }];
   if (empty) { for (const id of Object.keys(settings.widgets)) settings.widgets[id] = false; settings.preview.enabled = false; }

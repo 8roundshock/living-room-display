@@ -68,6 +68,10 @@ export interface SceneKit {
   patternTex(base: string, accent: string, kind: 'dots' | 'stripes' | 'grid' | 'bands' | 'diamonds'): any;
   /** three.js material options with sRGB colours, plus `see` (0-1): the share of the see-through look this surface takes. */
   mat(options: Record<string, unknown>, env?: number, physical?: boolean): any;
+  /** How solid to draw a body the scene makes see-through itself (an alpha map's grey, a uniform, `opacity`): `body` is
+   * its solidity at the owner's picks, 0-1. Follows the Transparency setting (#670): 1 at 0%, `body` at the standard 50%,
+   * thinner toward 100% but never zero. A scene never reads the setting; it passes its own values through this. */
+  solidity(body: number): number;
   gold(): any;
   satin(colour: Colour): any;
   glow(colour: Colour, size: number, opacity: number, options?: { texture?: any; twinkle?: number }): Object3D;
@@ -101,7 +105,9 @@ export interface SceneKit {
 /** The default export of every file under scenes/ and weather/. */
 export type SceneBuilder = (kit: SceneKit, ctx: SceneContext) => void;
 
-export interface StageLook { glow: number; shine: number; seeThrough: number; timeScale: number }
+/** `seeScale` is the Transparency setting as a multiplier (settings.ts seeScale): 0 solid, 1 the owner's picks
+ * (the default when it is left out), 2 the most see-through. */
+export interface StageLook { glow: number; shine: number; seeThrough: number; timeScale: number; seeScale?: number }
 export interface StageOptions {
   build: SceneBuilder;
   overlay?: SceneBuilder | null;
@@ -116,12 +122,17 @@ export interface StageOptions {
   /** Called once if the stage fails after it started (lost context, a throwing tick, a GPU that is too slow). */
   onFail?: (error: unknown) => void;
 }
-/** frameMs is main-thread time of the last frame; gpuMs is how long the GPU took to finish it (to the nearest animation frame). */
-export interface StageStats { frames: number; running: boolean; frozen: boolean; disposed: boolean; time: number; buildMs: number; frameMs: number; gpuMs: number; backing: [number, number]; triangles: number; calls: number; geometries: number; textures: number }
+/** frameMs is main-thread time of the last frame; gpuMs is how long the GPU took to finish it (to the nearest animation frame).
+ * builds counts how often the scene was built (once at start, again after a resize or a retune); seeScale is the look's
+ * current one; geometries, textures and programs are what the renderer holds on the GPU. */
+export interface StageStats { frames: number; builds: number; running: boolean; frozen: boolean; disposed: boolean; time: number; buildMs: number; frameMs: number; gpuMs: number; seeScale: number; backing: [number, number]; triangles: number; calls: number; geometries: number; textures: number; programs: number }
 export interface Stage {
   dispose(): void;
   stats(): StageStats;
   measure(count?: number): (StageStats & { script: number; finished: number }) | null;
+  /** A new look for the same scene (the Transparency setting, #670). The scene is built again 250 ms after the
+   * last call, in the same canvas and WebGL context, and drawn at once. A call that changes nothing does nothing. */
+  retune(changes: Pick<StageLook, 'seeScale'>): void;
 }
 /** Throws when WebGL or the scene module fails; the caller falls back to the flat renderer. */
 export function createStage(host: HTMLElement, options: StageOptions): Stage;
