@@ -141,10 +141,11 @@ stays tied to the saved brightness as above.
   (it leaked one per rebuild, an item of [#638](https://github.com/8roundshock/living-room-display/issues/638)). A "Try a scene" demonstration
   stays up while the slider moves. The display takes the saved value when its stage is built,
   and a later saved change through the same retune.
-- **50% is today's look.** Still editor frames (1376×774) of Autumn, Winter, Christmas,
-  Women's Day, Maslenitsa and both accented birthdays, built from `main` and from this
-  change at 50%, differ in 0.008-0.046% of their pixels, the same as two builds of `main`
-  against each other (0.010-0.050%; the GPU does not draw the identical frame twice).
+- **50% is today's look.** Still editor frames (1376×774) of Autumn (with #672's colours),
+  Winter, Christmas, Women's Day, Maslenitsa and both accented birthdays, from a build of
+  `main` and a build of this change at 50%, differ in 0.007-0.055% of their pixels by a mean
+  of under 0.001 of a level: the same as two captures of the same `main` build (0.010-0.050%;
+  the GPU does not draw an identical frame twice). The textures' greys are the same numbers.
 
 ### Tier rule
 
