@@ -28,15 +28,19 @@ export function maple(kit) {
     }
     for (let i = 0; i < 70; i++) { const at = rnd(i, 71) * AROUND, out = .25 + rnd(i, 72) * .7; line(at, out, at + (rnd(i, 73) - .5) * 2.4, out + (rnd(i, 74) - .5) * .16, .55); }
   };
-  const textures = leafTextures(kit, veins, { salt: 80 }), leaves = leafLook(kit, textures);
+  // A maple leaf's own light: a little more than the birch's, so that most of the tree shows its colours at full
+  // strength and the leaves the key light also falls on are brighter still, as sunlit ones are.
+  const GLOW = 1.1, textures = leafTextures(kit, veins, { salt: 80 }), leaves = leafLook(kit, textures, GLOW);
 
-  // From the stalk and the veins out to the rim, for a clear yellow, a gold, a fire-orange and a red-orange
-  // leaf; a leaf's `tone` (0-1) blends between them. These are paints, not what is seen: the engine's tone
-  // curve lifts a bright colour and turns it toward yellow, so each is deeper and redder than it reads on
-  // screen ('#ff9e00' shows as golden yellow, '#da5b00' as orange, '#c03f00' as red-orange). The yellow end
-  // stops at a golden yellow (a hue of about 47 to 50 degrees): a lemon yellow dimmed on black reads olive.
-  const TONES = [ramp(kit, [[0, '#ff9e00'], [.5, '#fb9600'], [1, '#f28200']]), ramp(kit, [[0, '#fb9600'], [.5, '#f28200'], [1, '#da5b00']]), ramp(kit, [[0, '#f28a00'], [.5, '#da5b00'], [1, '#c03f00']]), ramp(kit, [[0, '#e56e00'], [.5, '#cd4b00'], [1, '#ad3500']])];
-  const STALKS = ramp(kit, [[0, '#c06a00'], [.5, '#a04a00'], [1, '#894200']]), mixed = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+  // From the stalk and the veins out to the rim, for a golden yellow, a gold, a fire-orange and a red-orange
+  // leaf; a leaf's `tone` (0-1) blends between them. A leaf skips the tone curve (see autumn-leaf.js), so these
+  // are nearly the colours on screen (about 5 degrees redder there, from the veins and mottling of the texture).
+  // They follow photos of sugar maples in an Ontario and Quebec October (#671): red-orange at a hue of about 17
+  // degrees, orange at about 28, golden yellow at 40 to 45, all vivid (saturation 0.8 to 0.9). Nothing is redder
+  // than red-orange (the pure red leaf is Canada Day's), and the yellow end stops at a golden yellow: a lemon
+  // yellow dimmed on black reads olive.
+  const TONES = [ramp(kit, [[0, '#ffe430'], [.5, '#ffd424'], [1, '#ffc41c']]), ramp(kit, [[0, '#ffd020'], [.5, '#ffb818'], [1, '#ff9e14']]), ramp(kit, [[0, '#ffa012'], [.5, '#ff780c'], [1, '#fa560a']]), ramp(kit, [[0, '#ff8a0e'], [.5, '#f85a0a'], [1, '#e83c08']])];
+  const STALKS = ramp(kit, [[0, '#e08018'], [.5, '#c8541a'], [1, '#b03c14']]), mixed = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
   // How near each outline point is to a vein that runs to a lobe tip: 1 on it, 0 three points away.
   const ON_VEIN = Array.from({ length: AROUND + 1 }, (_, i) => { const at = Math.abs(i - MIDDLE); return Math.max(0, 1 - Math.min(...TIPS.map(tip => Math.abs(at - tip))) / 3); });
 
@@ -54,7 +58,7 @@ export function maple(kit) {
     });
     const k = Math.min(2.999, Math.max(0, tone * 3)), low = TONES[Math.floor(k)], high = TONES[Math.floor(k) + 1], share = k - Math.floor(k), blush = (r(9) - .5) * .5, pale = .75 + r(10) * .5;
     const fold = .1 + r(11) * .16, droop = .08 + r(12) * .2, wave = .03 + r(13) * .04, p1 = r(14) * 6, twist = (r(15) - .5) * .2;
-    const material = own ? leafLook(kit, textures) : leaves, group = leafOn(kit, material, {
+    const material = own ? leafLook(kit, textures, GLOW) : leaves, group = leafOn(kit, material, {
       outline, size, stalk, about, girth: .006 + size * .012, bow: (r(16) - .5) * .5, turn: (r(17) - .5) * .7, pitch: -.15 - r(18) * .45,
       // A shallow fold along the middle vein, lobes that droop toward their tips, a wavy rim and a slight twist.
       lift: (x, y, out, i) => size * (fold * Math.abs(x / size) * out - droop * out * out * (.4 + .6 * Math.abs(x / size)) + wave * out * out * Math.sin(i * .9 + p1) + twist * x * y / (size * size)),

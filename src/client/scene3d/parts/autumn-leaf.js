@@ -31,24 +31,27 @@ export function leafTextures(kit, veins, { mottle = '150,90,20', speck = '96,44,
   return { map, relief, solid };
 }
 
-/** A leaf colour as the material needs it. The engine's tone curve mixes a share of the red
- * and green of a bright colour into its blue, which turns a bright yellow to straw and a
- * bright orange to peach; taking that share out beforehand (a blue below zero) keeps them
- * yellow and orange at any brightness. Changes and returns `rgb` (linear). */
-export const unbleached = rgb => { rgb[2] -= .034 * rgb[0] + .16 * rgb[1]; return rgb; };
-
 /** The material of a leaf. A dimmed yellow is olive and a dimmed orange is brown, and a leaf
  * that the key light misses is dimmed. So a leaf is lit only weakly by the scene's lights (they
  * model its relief) and holds light of its own in its own colour, as a leaf does with the sun
  * behind it; `glow` is how much. It is matt. It takes only a small share of the kit's
  * see-through look, which thins a surface by how dark it is; its thinness is drawn by the
- * `solid` texture instead. */
+ * `solid` texture instead.
+ *
+ * Colours as painted (#671: "brighter colours"). The engine's tone curve (filmic, exposure 1.15)
+ * is made for a scene of lit objects: it compresses whatever is bright, lifts it toward white
+ * and turns a saturated orange toward yellow, so a fire-orange leaf came out a dull amber and
+ * its red-orange was lost. A leaf is mostly its own light, so it skips the curve
+ * (`toneMapped: false`, a property of this material alone): the colour of a vertex is the
+ * colour on screen when the leaf's light adds up to 1, a little brighter where the key light
+ * also falls on it. The kit's glass look still applies (it is computed before the curve). */
 export function leafLook(kit, { map, relief, solid }, glow = 1) {
   const material = kit.mat({ color: 0x707070, vertexColors: true, map, alphaMap: solid, bumpMap: relief, bumpScale: .012, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: glow, roughness: 1, metalness: 0, side: kit.T.DoubleSide, see: .15 }, 0, false);
   // The leaf's own light takes the leaf's own colour, which is per vertex (three.js r128 shader text; if a later
   // three.js words that line differently nothing is replaced and the light is simply white-gold on every leaf).
   const patch = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => { shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n#ifdef USE_COLOR\n\ttotalEmissiveRadiance *= vColor;\n#endif'); patch(shader, renderer); };
+  material.toneMapped = false;
   return material;
 }
 
@@ -69,13 +72,13 @@ export function leafLook(kit, { map, relief, solid }, glow = 1) {
  * geometry to itself), to say which of two overlapping leaves is drawn first, and may call
  * `userData.carry(offset)` to bring a blade nearer on its stalk, clear of the leaf behind it. */
 export function leafOn(kit, material, { outline, size = .4, stalk = .3, rows = 5, lift = () => 0, tint, stalkTint, girth = .009, pitch = 0, turn = 0, bow = 0, about = 0 }) {
-  const { T } = kit, S = sheets(kit), cols = outline.length - 1, TURN = Math.PI * 2, wood = unbleached([...stalkTint]);
+  const { T } = kit, S = sheets(kit), cols = outline.length - 1, TURN = Math.PI * 2;
   const place = new T.Matrix4().makeTranslation(0, stalk - about, 0).multiply(new T.Matrix4().makeRotationZ(turn)).multiply(new T.Matrix4().makeRotationX(pitch));
   S.add(cols, rows, (u, v, out) => { const i = Math.round(u * cols), [a, reach] = outline[i], r = v * reach * size, x = Math.sin(a) * r, y = Math.cos(a) * r; out.set(x, y, lift(x, y, v, i)); },
-    (u, v) => unbleached(tint(Math.round(u * cols), v)), { matrix: place });
+    (u, v) => tint(Math.round(u * cols), v), { matrix: place });
   // The stalk: a thin bowed tube from the origin to the blade, in the same geometry (one draw call a leaf).
   if (stalk > 0) S.add(5, 4, (u, v, out) => { const a = u * TURN, r = girth * (1 - .3 * v), sag = Math.sin(v * Math.PI) * bow * stalk; out.set(sag + Math.cos(a) * r, v * stalk - about, sag * .5 + Math.sin(a) * r); },
-    () => wood, { wrap: true, map: () => [.5, .008] });
+    () => stalkTint, { wrap: true, map: () => [.5, .008] });
   const group = new T.Group(), blade = new T.Mesh(S.geometry(), material), points = (cols + 1) * (rows + 1);
   // Carries the blade by `offset` (a vector in the leaf's own coordinates) without moving the foot of the stalk: the stalk leans to follow.
   const carry = offset => { const position = blade.geometry.attributes.position; for (let n = 0; n < position.count; n++) { const share = n < points ? 1 : Math.floor((n - points) / 6) / 4; position.setXYZ(n, position.getX(n) + offset.x * share, position.getY(n) + offset.y * share, position.getZ(n) + offset.z * share); } position.needsUpdate = true; };
