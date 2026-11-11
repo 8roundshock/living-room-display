@@ -22,7 +22,10 @@ export function sceneModuleFor(sceneId: string, sceneModules: readonly string[])
 }
 
 /** Null means the flat renderer draws this scene: no module yet, or weather is over the scene
- * and its overlay does not exist yet (the flat renderer still shows that weather). */
+ * and its overlay does not exist yet (the flat renderer still shows that weather).
+ * In Combined mode the resolver always keeps the season, holiday or birthday scene as `habitat`
+ * and names the weather as `motif` (#655), so every kind is an overlay over every scene here;
+ * a weather scene with no habitat is Weather mode. */
 export function planScene3d(scene: Pick<ThemeScene, 'motif' | 'habitat' | 'source'>, sceneModules: readonly string[], weatherModules: readonly string[]): Scene3dPlan | null {
   const sceneId = scene.habitat ?? scene.motif;
   const module = sceneModuleFor(sceneId, sceneModules);

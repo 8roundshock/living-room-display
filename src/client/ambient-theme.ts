@@ -8,6 +8,8 @@ import { gustForecastSpells } from './weather-hazards.ts';
 
 export type WeatherMotif = 'rain' | 'snow' | 'storm' | 'fog' | 'wind';
 export type ThemeMotif = ThemeSceneId;
+/** `motif` is what the scene is about. With weather in Combined mode it is the weather kind and `habitat`
+ * is the season, holiday or birthday scene that stays on screen under it; in Weather mode there is no habitat. */
 export interface ThemeScene { motif: ThemeMotif; habitat?: ThemeMotif; tint: string; companion: string; accent: string; label: string; source: 'weather' | 'season' | 'holiday' | 'birthday'; holiday: string | null; forecast: boolean; quiet: boolean }
 const HOUR = 3_600_000;
 export const THEME_WEATHER_HORIZON = 3 * HOUR;
@@ -73,10 +75,14 @@ export function resolveTheme(settings: Settings, weather: WeatherState, now: Dat
     source: birthday ? 'birthday' : holiday ? 'holiday' : 'season', holiday: birthday ? null : holiday?.observance.name ?? null, forecast: false, quiet };
   const weatherEffect = theme.mode === 'weather' || theme.mode === 'combined' ? weatherScene(weather, settings, now.getTime(), disconnected) : null;
   if (!weatherEffect) return seasonal ? baseline : null;
+  // Colours: over a holiday or birthday the weather takes that scene's palette, so the day keeps its colours;
+  // over a plain season it brings its own; on a selected quiet date everything is the quiet grey.
   const weatherPalette = quiet ? QUIET_PALETTE : theme.mode === 'combined' && (holiday || birthday) ? palette : THEME_SCENES[weatherEffect.motif].palette;
-  const habitat = seasonal && THEME_SCENES[motif].composition?.weather.includes(weatherEffect.motif) ? motif : undefined;
+  // Combined (#655, owner direction 2026-11-10: "the weather sync should be always"): the season, holiday or
+  // birthday scene always stays and every weather kind is drawn over it. A weather scene on its own is Weather mode only.
+  const habitat = seasonal ? motif : undefined;
   return { motif: weatherEffect.motif, ...(habitat ? { habitat } : {}), tint: weatherPalette[0], companion: weatherPalette[1], accent: weatherPalette[2], quiet,
-    label: `${WEATHER_LABEL[weatherEffect.motif]}${weatherEffect.forecast ? ' expected soon' : ' now'}${birthday ? ' · Birthday' : holiday ? ` · ${holiday.observance.shortName}` : ''}`,
+    label: `${WEATHER_LABEL[weatherEffect.motif]}${weatherEffect.forecast ? ' expected soon' : ' now'}${birthday ? ' · Birthday' : holiday ? ` · ${holiday.observance.shortName}` : seasonal ? ` · ${THEME_SCENES[season].label}` : ''}`,
     source: 'weather', holiday: birthday ? null : holiday?.observance.name ?? null, forecast: weatherEffect.forecast };
 }
 

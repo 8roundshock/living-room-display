@@ -143,13 +143,14 @@ test('particles stay in flight as four seamless depth layers', () => {
   }
 });
 
-test('every scene and Combined weather pairing stays inside the animation budget on empty 1080p, 4K and ultrawide boards', () => {
-  const standalone: Record<string, 'rain' | 'storm' | 'fog' | 'wind' | 'snow'> = { rain: 'rain', storm: 'storm', fog: 'fog', wind: 'wind', snow: 'snow' };
+test('every scene, and every weather kind over every Combined scene, stays inside the animation budget on empty 1080p, 4K and ultrawide boards', () => {
+  const KINDS = ['rain', 'snow', 'storm', 'fog', 'wind'] as const;
   let highest = 0;
   for (const [width, height] of [[1920, 1080], [3840, 2160], [3440, 1440]] as const) for (const id of THEME_SCENE_IDS) {
-    const art = LIVING_SCENE_ART[id]!, dressing = SCENE_DRESSING[id]!;
-    // The scene on its own (a weather scene with its own weather), then every Combined adaptation it declares.
-    for (const weather of [standalone[id], ...(standalone[id] ? [] : art.weather)]) {
+    const art = LIVING_SCENE_ART[id]!, dressing = SCENE_DRESSING[id]!, own = KINDS.find(kind => kind === id);
+    // A weather scene with its own weather (Weather mode). Any other scene on its own, then under each of the
+    // five kinds: in Combined every kind is drawn over every scene (#655), so none of the 105 pairings is skipped.
+    for (const weather of own ? [own] : [undefined, ...KINDS]) {
       const count = sceneAnimationCount(art, dressing, width, height, [], weather, id);
       highest = Math.max(highest, count);
       assert.ok(count <= LIVING_SCENE_BUDGET.animations, `${id}${weather ? ` with ${weather}` : ''} at ${width}x${height}: ${count} animations`);

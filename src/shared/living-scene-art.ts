@@ -46,7 +46,6 @@ export interface ScenePassageArt {
 export interface LivingSceneArt {
   patches: readonly ScenePatch[];
   passage: ScenePassageArt;
-  weather: readonly ('rain' | 'snow' | 'storm' | 'fog' | 'wind')[];
   /** Authored seasonal air in place of detached drifting forms; not a weather claim. */
   air?: 'snow';
 }
@@ -215,7 +214,6 @@ const SUMMER_MEADOW: LivingSceneArt = {
       { d: 'M11 29L3 31 M61 8L69 4', tone: 0, stroke: .9, opacity: .74 },
     ],
   },
-  weather: ['rain', 'wind', 'storm'],
 };
 
 /** New drawings use absolute M/L/C/Q/H/V/Z commands. Their control hull is a
@@ -280,7 +278,7 @@ const WINTER_SCENE: LivingSceneArt = {
       line('M203 181L190 160 M225 190L233 170 M307 180L291 169 M202 204L183 190', 0, 1.3),
       filled('M146 149L154 157L147 169L140 158Z M314 157L321 165L315 177L308 165Z', 2, .4, .9),
     ])] },
-  ], passage: FLAKE_PASSAGE, weather: ['snow', 'wind', 'fog'], air: 'snow',
+  ], passage: FLAKE_PASSAGE, air: 'snow',
 };
 const SNOW_SCENE: LivingSceneArt = {
   patches: [
@@ -304,7 +302,7 @@ const SNOW_SCENE: LivingSceneArt = {
       filled('M440 250L405 212L437 226L455 201L456 249Z M365 230L331 191L364 208L381 184L382 229Z M290 205L258 169L290 184L302 161L308 211Z', 2, .40, .9),
       line('M406 214Q419 218 437 228L455 204 M331 194Q346 198 364 209L381 187 M258 172Q275 178 289 186L302 164', 0, 2, .83),
     ])] },
-  ], passage: FLAKE_PASSAGE, weather: ['snow', 'wind'],
+  ], passage: FLAKE_PASSAGE,
 };
 
 const PETAL_PASSAGE: ScenePassageArt = { kind: 'petal', viewBox: [80, 48], paths: [
@@ -344,7 +342,7 @@ const SPRING_SCENE: LivingSceneArt = {
       filled('M391 207Q368 181 369 169Q396 178 407 211Z M254 175Q231 194 205 192Q223 173 254 175Z', 0, .52, .8),
       filled('M333 149Q318 144 321 132Q332 126 340 137Q352 130 356 141Q348 155 333 149Z M135 162Q118 159 121 147Q134 139 142 151Q152 160 135 162Z', 1, .63, .9),
     ])] },
-  ], passage: PETAL_PASSAGE, weather: ['rain', 'wind', 'fog'],
+  ], passage: PETAL_PASSAGE,
 };
 const AUTUMN_SCENE: LivingSceneArt = {
   patches: [
@@ -375,7 +373,7 @@ const AUTUMN_SCENE: LivingSceneArt = {
       filled('M339 229Q310 201 279 203Q300 229 339 229Z M366 222Q384 197 410 190Q405 219 366 222Z', 0, .53, .9),
       filled('M358 166Q346 162 341 173Q352 183 361 179Z M358 186Q373 175 380 184Q375 198 359 198Z M245 195Q231 181 219 190Q227 204 245 205Z', 2, .63, .8),
     ])] },
-  ], passage: LEAF_PASSAGE, weather: ['rain', 'wind', 'fog'],
+  ], passage: LEAF_PASSAGE,
 };
 
 const RAIN_SCENE: LivingSceneArt = {
@@ -401,7 +399,7 @@ const RAIN_SCENE: LivingSceneArt = {
       filled('M326 118C330 139 309 166 282 172Q278 140 326 118Z M227 35Q195 26 173 45Q194 66 227 35Z M163 79Q139 95 103 87Q120 63 163 79Z', 2, .43, .9),
       line('M287 179L282 190 M108 94L103 105 M184 52L179 63', 0, 1.3, .78),
     ], .67)] },
-  ], passage: SUMMER_MEADOW.passage, weather: ['rain', 'wind', 'storm'],
+  ], passage: SUMMER_MEADOW.passage,
 };
 const STORM_SCENE: LivingSceneArt = {
   patches: [
@@ -426,7 +424,7 @@ const STORM_SCENE: LivingSceneArt = {
       line('M16 159Q76 141 139 158 M28 174Q89 195 158 170 M215 123Q267 106 324 125 M235 140Q289 157 345 138 M388 177Q451 155 518 177 M406 192Q465 209 540 188', 0, 1.8),
       line('M74 159L67 173 M270 122L264 139 M458 177L450 192', 1, 1.4),
     ], .79)] },
-  ], passage: LEAF_PASSAGE, weather: ['storm', 'rain', 'wind'],
+  ], passage: LEAF_PASSAGE,
 };
 const FOG_SCENE: LivingSceneArt = {
   patches: [
@@ -449,7 +447,7 @@ const FOG_SCENE: LivingSceneArt = {
       line('M-18 133C91 98 152 156 255 139C352 121 403 117 496 146Q582 176 724 136 M93 173Q177 152 258 174 M396 183Q475 164 553 186', 0, 1.9, .66),
       filled('M16 137Q97 117 173 142L170 147Q95 123 16 142Z M420 138Q472 137 525 156L522 161Q469 143 420 144Z', 1, .13, 0),
     ], .81)] },
-  ], passage: SUMMER_MEADOW.passage, weather: ['fog', 'wind'],
+  ], passage: SUMMER_MEADOW.passage,
 };
 const WIND_SCENE: LivingSceneArt = {
   patches: [
@@ -484,7 +482,7 @@ const WIND_SCENE: LivingSceneArt = {
       filled('M259 77Q219 69 178 95Q219 109 259 77Z M180 80Q145 76 110 103Q148 114 180 80Z M94 55Q52 48 14 78Q57 87 94 55Z', 0, .48, .8),
       line('M260 77L193 93 M181 80L124 100', 1, 1.1, .70),
     ], .87)] },
-  ], passage: LEAF_PASSAGE, weather: ['wind', 'rain', 'storm'],
+  ], passage: LEAF_PASSAGE,
 };
 
 function birthdayScene(treatment: 'classic' | 'russian' | 'korean'): LivingSceneArt {
@@ -539,7 +537,7 @@ function birthdayScene(treatment: 'classic' | 'russian' | 'korean'): LivingScene
           line('M688 249Q656 234 649 247Q663 260 688 249Q719 232 729 245Q716 257 688 249', 0, 1.7),
         ]),
       ] },
-    ], passage: RIBBON_PASSAGE, weather: ['wind', 'rain'],
+    ], passage: RIBBON_PASSAGE,
   };
 }
 
