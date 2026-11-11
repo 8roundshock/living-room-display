@@ -92,7 +92,7 @@ the rules are about not meeting in the same file:
 | `amount` | How much to put in the scene, 0-1. Owner default 0.3; about 0.24 for an everyday scene, 0.1 on a quiet date. Turn it into counts: `Math.round(3 + ctx.amount * 6)`. |
 | `size` | Scale of objects (radius, length). Owner default 0.85. Never multiply positions by it. |
 | `tier` | `'special'` or `'everyday'`. Already applied; read it only to choose between two designs. |
-| `weather` | Weather shown over this scene in Combined mode (`'snow'`, ...) or `null`. The overlay draws the weather; a scene may adapt, for example drop its own decorative snow. |
+| `weather` | Weather drawn over this scene in Combined mode: `'rain'`, `'snow'`, `'storm'`, `'fog'`, `'wind'`, or `null`. In Combined the scene always stays and any of the five kinds can be over it (#655), including ones its season rarely sees: snow over Spring, rain over Winter, a storm over Christmas. The overlay draws the weather; a scene may adapt, for example drop its own decorative snow. |
 | `quiet` | A selected quiet date. The stage is frozen and reduced; see below. |
 | `palette` | The scene's three registry colours as CSS strings; neutral greys when quiet. |
 | `seed` | A stable whole number for this scene id. Use it as the salt of `kit.rnd` for a layout that is yours. It does not change from day to day. |

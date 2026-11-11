@@ -115,7 +115,7 @@ silhouettes with different colours.
 | Birthday · Classic | Edge-anchored balloon/ribbon cluster and a lower cake/gift arrangement. | Buoyant balloon tension, related ribbon motion and rare confetti; birthday silhouette comes first. |
 | Birthday · Russian accents | The same birthday vocabulary with a small original diamond-band textile accent inside wrapping/ribbon/cake detail. | Cranberry/gold/cool colour roles are art choices; no costume, flags or assumed ritual. |
 | Birthday · Korean accents | Birthday grouping with a few asymmetric patchwork panels inside wrapping/cake detail. | Jade/coral/gold roles and restrained fabric motion; no full-screen patchwork grid or generic lantern replacement. |
-| Rain | A neutral dark vegetation/ripple edge in Weather mode, or the compatible seasonal habitat in Combined, with directional rainfall in depth. | Rain direction, droplets, ground ripples and bending vegetation share one event; no uniform full-screen veil. |
+| Rain | A neutral dark vegetation/ripple edge in Weather mode, or the current scene in Combined (every scene since #655; this plan first said only a compatible seasonal habitat), with directional rainfall in depth. | Rain direction, droplets, ground ripples and bending vegetation share one event; no uniform full-screen veil. |
 | Snow | Drifts and a small twig/evergreen fragment, with separated flake scales/depths. | Falling/swaying crystals and slow drift changes; no opaque snow curtain. |
 | Storms | Dark cloud/branch-edge grouping and stronger directional rain. | Coordinated wind/rain with calm intervals; no lightning, flashes or screen shake. |
 | Fog | Sparse edge reeds/branch silhouettes and separated local contour ribbons. | Slow horizontal layers; black gaps stay open. No blurred full-screen grey wash. |
@@ -138,9 +138,19 @@ ground edge and palette instead of mounting a second unrelated set of icons.
 Examples: rain bends the summer grass and creates sparse edge ripples; snow rests
 on the winter/Christmas bough composition; a windy birthday scene changes balloon
 tension and ribbon direction. A storm reduces celebratory detail rather than
-adding a simultaneous party layer. Each primary scene declares supported weather
-adaptations; an unsupported pair uses the standalone weather composition with
-the existing contextual tint. Do not invent new combinations by stacking layers.
+adding a simultaneous party layer.
+
+**Current rule (#655, owner direction 2026-11-10).** Combined always keeps the
+season, holiday or birthday scene and draws the current or approaching weather
+over it, for every weather kind. No scene lists the weather it supports any more,
+and a weather scene on its own is Weather mode only; see
+[Ambient themes](ambient-themes.md#combined-the-weather-is-always-drawn-over-the-scene-655-owner-direction-2026-11-10).
+
+History, superseded by #655 and no longer followed: "Each primary scene declares
+supported weather adaptations; an unsupported pair uses the standalone weather
+composition with the existing contextual tint. Do not invent new combinations by
+stacking layers."
+
 Weather-only mode never displays holiday/birthday emblems. Stale/disconnected
 weather follows the existing honest fallback, with no extra provider requests.
 Use factual wind direction only when supported by the selected fresh forecast
@@ -301,7 +311,7 @@ unbuilt design already meets them. Record failures and before/after corrections.
 | Initial resource cap | At most 3 depth planes, 4 habitat patches, 6 middle detail groups and 1 foreground actor; at most 240 SVG path elements and 32 simultaneous decorative transform/opacity animations. Includes incoming/outgoing fragments. These cap structure, not quality. |
 | Active/idle cost | Reuse fixed 4.2-second production-browser samples and the existing task (<150ms), paint (≤5) and total-layer (≤40) ceilings on the established synthetic fixture. Report mount separately. Track actual scheduled renewals and layout/style work; do not import the old per-slot formula into a different topology without measurement. Off leaves no scene observer/timer/animation work. Keep the continuous-work negative control. |
 | UI and data | Existing Theme/Try a scene, labelled local previews, Automatic return, global Save/Cancel, concurrent changes, default 720px Style fit, 44px controls, 320px phone and short-window scroll/alert checks. A retained foreground field gets strict schema, saved-style/schedule, omission and frozen-reader tests; no birthdays duplicated into style data. |
-| Semantics | Unit/browser checks retain current civil-date/Dangi/Julian rules, mode/calendar selection, exact quiet days, birthday collisions/leap day, fresh/near/stale/disconnected weather and unchanged provider demand. Combined adapters need explicit priority/fallback tests. |
+| Semantics | Unit/browser checks retain current civil-date/Dangi/Julian rules, mode/calendar selection, exact quiet days, birthday collisions/leap day, fresh/near/stale/disconnected weather and unchanged provider demand. Combined adapters need explicit priority/fallback tests (#655 removed the unsupported-pair fallback to the standalone weather scene, so that fallback has no test any more). |
 
 Use the existing isolated production source harness, mocked Windows status and
 wake locks, loopback ephemeral ports and synthetic data. Images/clips and pixel

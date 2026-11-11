@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import type { WeatherState } from '../../shared/contracts.ts';
+import { defaultSettings } from '../../shared/defaults.ts';
 import type { ThemeSceneId } from '../../shared/theme-registry.ts';
-import { previewTheme, type WeatherMotif } from '../ambient-theme.ts';
+import { previewTheme, resolveTheme, type WeatherMotif } from '../ambient-theme.ts';
 import { planScene3d } from './resolve.ts';
 import { sceneTier } from './tier.ts';
 
@@ -24,6 +26,21 @@ test('Every weather kind has its own 3D scene and its own overlay', () => {
 test('Combined weather over any 3D scene is drawn in 3D: no pairing waits on a missing overlay', () => {
   for (const habitat of SCENES.filter(id => !(KINDS as readonly string[]).includes(id))) for (const motif of KINDS)
     assert.deepEqual(planScene3d({ motif, habitat: habitat as ThemeSceneId, source: 'weather' }, SCENES, OVERLAYS), { sceneId: habitat, module: habitat, weather: motif }, `${motif} over ${habitat}`);
+});
+test('From the resolver to the stage: in Combined the scene keeps its own module and the weather is its overlay, also for pairings that used to swap the scene (#655)', () => {
+  const now = new Date('2026-12-20T18:30:00Z'), settings = defaultSettings(); settings.appearance.theme = { mode: 'combined', calendars: ['CA', 'KR', 'RU'] };
+  const reading = (code: number, wind: number): WeatherState => ({ status: 'fresh', updatedAt: now.toISOString(), error: null, source: 'Open-Meteo', sourceUrl: 'https://open-meteo.com/', location: settings.location,
+    units: { temperature: '°C', windSpeed: 'km/h', precipitation: 'mm' }, current: { time: now.toISOString(), temperature: 4, feelsLike: 2, weatherCode: code, isDay: true, windSpeed: wind }, daily: [], hourly: [], details: [] });
+  // [civil date, scene, weather kind, code]: snow in November, rain in a winter thaw, a storm in December, snow in April,
+  // a storm on Canada Day, and snow in winter, which always worked.
+  for (const [date, id, kind, code] of [['2026-11-04', 'autumn', 'snow', 73], ['2026-02-01', 'winter', 'rain', 63], ['2026-12-20', 'christmas', 'storm', 95], ['2026-04-25', 'spring', 'snow', 73], ['2026-07-01', 'canada-day', 'storm', 95], ['2026-02-01', 'winter', 'snow', 73]] as const) {
+    const scene = resolveTheme(settings, reading(code, 8), now, false, date)!;
+    assert.deepEqual(planScene3d(scene, SCENES, OVERLAYS), { sceneId: id, module: id, weather: kind }, `${kind} over ${id}`);
+    assert.equal(sceneTier(scene, 2026), sceneTier(previewTheme(id), 2026), `${kind} over ${id} keeps the scene's tier`);
+  }
+  // Weather mode is the only place a weather scene stands alone.
+  settings.appearance.theme.mode = 'weather';
+  assert.deepEqual(planScene3d(resolveTheme(settings, reading(73, 8), now, false, '2026-11-04')!, SCENES, OVERLAYS), { sceneId: 'snow', module: 'snow', weather: null });
 });
 test('Storms have no bolt and no flash: the only light is the slow glow inside the cloud', () => {
   const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');

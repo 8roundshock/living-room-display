@@ -235,16 +235,19 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     for(const motion of ['grass','branch','hanging','drift']) assert.ok(motionsSeen.has(motion),`${motion} choreography was phase-sampled`);
     record('All26 living scenes keep their named principal form on the default board at26%1080p/36%4K, trueblack and bounded structure');
     for(const [name,options,expectation] of [['summer rain',{date:'2026-07-20T18:30:00Z',mode:'combined',code:63},{motif:'rain',habitat:'summer',weather:'rain'}],['winter snow',{date:'2026-02-01T18:30:00Z',mode:'combined',code:73},{motif:'snow',habitat:'winter',weather:undefined}],
+      // #655: weather a scene's art was not first drawn for used to replace the scene. Now the scene stays under it.
+      ['autumn snow',{date:'2026-11-04T18:30:00Z',mode:'combined',code:73},{motif:'snow',habitat:'autumn',weather:undefined}],['christmas storm',{date:'2026-12-20T18:30:00Z',mode:'combined',code:95},{motif:'storm',habitat:'christmas',weather:'storm'}],
       ['weather-only rain',{date:'2026-12-20T18:30:00Z',mode:'weather',code:63},{motif:'rain',habitat:'rain',weather:'rain'}]]) {
       await open({...options,path:'/display',viewport:{width:1920,height:1080},brightness:.26}); await page.locator('.living-theme').waitFor(); await settle();
       const state=await page.locator('.living-theme').evaluate(layer=>({motif:layer.dataset.themeMotif,habitat:layer.dataset.themeHabitat,weather:layer.querySelector('[data-scene-weather]')?.dataset.sceneWeather,particles:layer.querySelector('[data-scene-particles]')?.dataset.sceneParticles,count:Number(layer.querySelector('[data-particle-count]')?.dataset.particleCount??0),rain:layer.querySelectorAll('.living-rain path').length,patches:[...layer.querySelectorAll('[data-scene-patch]')].map(p=>p.dataset.scenePatch)}));
       assert.deepEqual({motif:state.motif,habitat:state.habitat,weather:state.weather},expectation,name);
-      if(name==='winter snow') {assert.equal(state.particles,'flake');assert.ok(state.count>=14,'Combined snow is visibly heavier than Winter alone');}
+      if(expectation.motif==='snow') {assert.equal(state.particles,'flake');assert.ok(state.count>=14,'Combined snow is visibly heavier than Winter alone');}
       else {assert.equal(state.particles,undefined,'rain replaces seasonal particles');assert.ok(state.rain>=6,'rain falls in two depths');}
       if(options.mode==='weather') assert.ok(state.patches.every(id=>id.startsWith('rain-')),'Weather mode shows no seasonal or holiday habitat');
+      else assert.ok(state.patches.length>0&&state.patches.every(id=>id.startsWith(`${expectation.habitat}-`)),`${name}: Combined keeps the scene's own drawings under the weather: ${state.patches}`);
       await photo(`combined-${name}`);
     }
-    record('Combined weather adapts the seasonal habitat with one precipitation field; Weather mode stays weather-only');
+    record('Combined keeps the season or holiday scene under the weather with one precipitation field, also for snow over Autumn and a storm over Christmas, which replaced the scene before #655; Weather mode stays weather-only');
     for(const code of [0,63]) {
       await open({date:'2026-11-11T18:30:00Z',mode:'combined',code,path:'/display',brightness:.26,birthday:'classic',foreground:true}); await page.locator('.living-theme').waitFor(); await settle(); await photo(`quiet-${code}`);
       const quiet=await page.locator('.living-theme').evaluate(layer=>({quiet:layer.hasAttribute('data-theme-quiet'),patches:layer.querySelectorAll('[data-scene-patch]').length,opacity:Number(getComputedStyle(layer).opacity),brightness:parseFloat(getComputedStyle(layer).getPropertyValue('--ambient-brightness')),drift:layer.querySelectorAll('.living-particle-layer,.living-band,.living-pendulum,.living-glow,.living-side,.living-twinkle').length,

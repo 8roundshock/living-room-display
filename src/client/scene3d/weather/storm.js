@@ -1,7 +1,9 @@
-// A storm over a scene (Combined mode; overlay rules of #619; today only Summer lists storms).
+// A storm over a scene (Combined mode; overlay rules of #619). Since #655 it is drawn over every
+// season, holiday and birthday scene, not only Summer.
 // Driven rain in the far and middle depth bands at 60% of the standalone count, and a reduced
-// cloud of five volumes in the top-left corner, which Summer leaves free, with the inner glow at
-// 60% of its peak and no echo. Dropped: the travelling sheets and the near rain band. The glow
+// cloud of five volumes in the top-left corner, with the inner glow at 60% of its peak and no
+// echo. The corner was chosen because Summer leaves it free; the cloud stands 5.5 units behind
+// the plane a scene's objects are on, so over a scene that uses that corner it is behind them. Dropped: the travelling sheets and the near rain band. The glow
 // is slow and soft, inside the cloud, with no bolt (coordinator decision on #619). Over a
 // holiday or birthday the rain takes 35% of that scene's colour; the cloud stays slate.
 import { rainFall } from '../parts/rain-threads.js';

@@ -12,6 +12,9 @@ is retired; unfinished acceptance in #7, #532, #156 and #446 remains open.
 Whole-screen weather, seasonal/holiday and combined atmosphere is tracked in #575,
 with accurate hourly forecast timing (#452) and optional holiday cards (#458).
 See [theme design and compatibility](ambient-themes.md).
+In Combined the season, holiday or birthday scene always stays and the real weather
+(rain, snow, storm, fog or wind, now or forecast within three hours) is drawn over it,
+lightly; a weather scene on its own is the Weather mode (#655, owner direction 2026-11-10).
 The #579 refinement separates major visual celebrations from factual holiday
 cards, uses larger sparse original contours, and makes the normal editor's
 enabled atmosphere visible as a still sample. Try a scene is a labelled local
@@ -214,7 +217,7 @@ widget is enabled.
 Settings includes optional private month/day birthdays with Classic, Russian
 accents or Korean accents. These global entries survive style changes and use
 ordinary Save/Cancel. Seasonal/Combined show birthday atmosphere on the exact
-annual civil day (February 29 only in leap years), subject to quiet-day and
-Combined weather priority. No age, year, public built-in personal dates or new
+annual civil day (February 29 only in leap years), except on a selected quiet date;
+in Combined the weather is drawn over the birthday scene, never in place of it. No age, year, public built-in personal dates or new
 widget is introduced. See the theme contract for researched accent sources,
 same-day collision policy and rollback behavior.

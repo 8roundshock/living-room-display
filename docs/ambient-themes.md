@@ -195,9 +195,10 @@ opacity on an empty board a season lights 2.2 to 3.4% of the pixels; Christmas l
 
 The weather family ([#617](https://github.com/8roundshock/living-room-display/issues/617)
 to [#621](https://github.com/8roundshock/living-room-display/issues/621)). Each kind is a
-standalone scene (`scenes/<kind>.js`: Weather mode, and Combined where the scene underneath
-does not list that weather) and an overlay (`weather/<kind>.js`: Combined, over a scene that
-lists it). Nothing of it is drawn unless the resolver returns that weather from fresh
+standalone scene (`scenes/<kind>.js`: Weather mode only) and an overlay (`weather/<kind>.js`:
+Combined, over whichever season, holiday or birthday scene is showing; see
+[Combined](#combined-the-weather-is-always-drawn-over-the-scene-655-owner-direction-2026-11-10)).
+Nothing of it is drawn unless the resolver returns that weather from fresh
 forecast data. One quiet density per kind: it follows the amount setting, never a light or
 heavy weather code. Rain leans one way and wind blows right to left as art choices; the
 resolver passes no direction. Particles are weighted to the sides, each kind has a far, a
@@ -211,12 +212,13 @@ middle and an out-of-focus near depth, and on a quiet date nothing falls or sail
 - **Snow** scene: small sharp flakes far away, soft ones in focus, a few large soft discs
   near the glass, a few clear hexagonal plates, two low rim-lit drifts in the bottom corners.
 - **Snow** overlay: the far and middle flakes at half the count and two near discs; no
-  drifts, and plates only over Winter. The scene underneath leaves out its own snow.
+  drifts, and plates only over a plain season. The scene underneath leaves out its own snow.
 - **Storms** scene: a dark cloud mass in the top-left corner thinning along the top edge,
   lit from inside by a slow, soft glow; driven rain leaning 16° at three depths, with a wider
   sheet of heavier rain crossing now and then.
-- **Storms** overlay: five cloud volumes in the top-left corner, the glow at 60% with no
-  echo, driven rain at 60% of the count; no sheets and no near band.
+- **Storms** overlay: five cloud volumes in the top-left corner (behind whatever a scene
+  has there), the glow at 60% with no echo, driven rain at 60% of the count; no sheets and
+  no near band.
 - **Fog** scene: four birch trunks at three depths (three on the left, one far on the right)
   and bands of fog that slide between them, thin across the middle; nothing falls.
 - **Fog** overlay: three bands (far, middle, one low near band held to 0.04) at 60%
@@ -226,6 +228,52 @@ middle and an out-of-focus near depth, and on a quiet date nothing falls or sail
   tumbling low; one gust drives all of it.
 - **Wind** overlay: half the seeds, far and middle depths, always behind the scene's own
   objects; no branch, loose leaves or backlight. The scene underneath shows the rest.
+
+#### Combined: the weather is always drawn over the scene (#655, owner direction 2026-11-10)
+
+The owner, after seeing Autumn on the TV: "winter should also have snow falling (synced to
+if its snow falling/rain/weather pattterns, but same thing not overbearing). the weather sync
+should be always". Until then a scene kept its place only under the two or three kinds of
+weather its flat art had been drawn for; any other kind replaced it with the standalone
+weather scene (snow in November replaced Autumn, rain in a thaw replaced Winter, a storm
+replaced everything but Summer).
+
+- **Rule.** In Combined mode the season, holiday or birthday scene always stays, and the
+  weather the resolver reports (rain, snow, storm, fog or wind) is drawn over it: 105
+  pairings, none excluded. A weather scene on its own is Weather mode only. Off and
+  Seasonal & holidays are unchanged, and so is when weather counts as present (current, or
+  forecast within three hours).
+- **In the data.** `resolveTheme` returns the weather kind as `motif` and the scene that
+  stays as `habitat`. The per-scene list of kinds in the flat art data, which used to gate
+  this, had no other reader and is removed.
+- **Colours.** Unchanged: over a holiday or birthday the weather takes that scene's
+  palette, so the day keeps its colours; over a plain season it brings its own; on a
+  selected quiet date everything is the quiet grey. In 3D the season scenes paint their own
+  objects and ignore the palette, so there this only tints the overlay (a holiday's rain is
+  35% that holiday's colour). In the flat fallback the palette colours the whole scene, so
+  a season under weather is drawn in the weather's colours, as it already was for the
+  kinds it listed.
+- **Quiet dates and tier.** A selected quiet date keeps its rule: the quiet season stays
+  under the weather, grey. In 3D the frame is frozen with nothing falling. The flat
+  fallback is not the same: under rain or a storm it still draws one moving streak group
+  with its ripples, and under fog two drifting blobs, as it did before #655 (#659). Weather
+  over a scene keeps that scene's tier.
+- **Flat fallback.** The flat renderer never had per-pairing art: it draws the scene's own
+  patches and one generic treatment per kind (rain or storm streaks with ripples, 14 flakes
+  and a snow drift, gust streaks with the scene's own particles blown sideways, five fog
+  blobs). That now applies to every pairing. All 126 combinations of 21 scenes alone and
+  under each kind stay inside the animation budget (busiest: rain or a storm over Summer,
+  36 of 48).
+- **Low-key.** The overlays were already reduced versions of the weather scenes (half the
+  particles, no near band, no drifts, pool or trunks). Captures of snow over Autumn, snow
+  and rain over Winter, a storm over Christmas, snow over Spring and rain over a birthday
+  were looked at for this change: the weather reads as light and the scene is not hidden.
+- **Not covered here.** A scene changing its own objects for the weather over it is
+  [#646](https://github.com/8roundshock/living-room-display/issues/646). Two cases are now
+  reachable that were not before: Christmas and Orthodox Christmas keep their own
+  decorative snowfall under rain or a storm (they leave it out only under real snow).
+- **The current-scene line** in Style names both: "Snow now · Autumn", "Rain now ·
+  Christmas", "Storms expected soon · Birthday".
 
 The Storms glow (coordinator decision on #619) is not lightning and not a flash: no bolt
 is drawn; the glow takes 1.6 s to rise, holds 0.4 s and fades over 5 s, 48 to 128 s apart;
@@ -581,8 +629,11 @@ Style inspector over scene cards (too tall) or an automatic-only switch (hides
 the requested modes). The choices are Off, Weather, Seasonal & holidays and
 Combined. Seasonal/Combined reveal Canada, Korea and Russia checkboxes. Dynamic's
 opt-in Holidays source exposes the same choices directly, including with themes
-Off. Empty calendars still keep seasons. Combined means “Seasonal until noteworthy weather
-is near.” The resolved scene distinguishes current conditions from forecasts.
+Off. Empty calendars still keep seasons. Combined first meant “Seasonal until noteworthy weather
+is near”: weather a scene did not list replaced it. Since #655 the scene always stays and
+the weather is drawn over it (see
+[Combined](#combined-the-weather-is-always-drawn-over-the-scene-655-owner-direction-2026-11-10)).
+The resolved scene distinguishes current conditions from forecasts.
 
 History (#579, removed renderer): cultural research and concept critique compared
 enlarged repeated icons, a fixed botanical vignette and migrating contour
@@ -693,7 +744,8 @@ facts just to change a decorative lead window.
 
 ## Source verification
 
-The `scene3d` browser suite (#600) covers the 3D renderer with WebGL enabled: the three
+The `scene3d` browser suite (#600) covers the 3D renderer with WebGL enabled (and one
+pairing that used to replace its scene, a storm over Canada Day, #655): the three
 reference scenes' canvas, data attributes, drawn pixels and brightness bound, the 20
 frames-a-second loop and its pause while hidden, fallback to the flat scene on a lost or
 refused context, the still preview's single frame, release of every context on unmount,
@@ -707,7 +759,8 @@ all 26 living scenes at 26%/1080p and 36%/4K: named principal forms visible and
 complete on the default board, structural budgets, true black and a pixel proof
 that no art touches reading ink (the scene is recoloured pure green in one RAM
 screenshot; controls show a masked full-screen wash passes and an unmasked one
-fails). It also covers Combined rain/snow, Weather-only isolation, quiet dates,
+fails). It also covers Combined rain/snow, including pairings that replaced the scene
+before #655 (snow over Autumn, a storm over Christmas), Weather-only isolation, quiet dates,
 typography growth, 30-second step/glide swaps, Off/Animation Off/reduced motion,
 finite transform/opacity animation, local patch renewal, foreground cadence and
 opacity with glyph protection, bottom-edge coverage, the second edge, particles,
@@ -740,8 +793,8 @@ block Save. February 29 appears only in leap years, with conditional help.
 
 Seasonal and Combined use the exact civil day only. A birthday takes precedence
 over public festive windows and seasons; selected exact quiet dates retain
-neutral subdued geometry. Weather mode stays weather. In Combined, noteworthy
-weather keeps its geometry with birthday colours. Same-day birthdays share their
+neutral subdued geometry. Weather mode stays weather. In Combined the birthday scene
+stays and noteworthy weather is drawn over it in the birthday colours (#655). Same-day birthdays share their
 treatment when identical; mixed treatments use Classic, independent of list order.
 No personal label enters scene metadata or generic Try a scene options.
 

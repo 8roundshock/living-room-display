@@ -18,7 +18,7 @@ export function ThemeControls({ settings, weather, disconnected, onChange, savin
     </select></label>
     {showCalendars && <HolidayCalendars value={theme.calendars} disabled={saving} onChange={calendars => onChange({ ...theme, calendars })} />}
     {theme.mode !== 'off' && <p className="theme-current">{scene?.label ?? 'No weather effect right now'}
-      <small>{reduced ? 'Atmosphere hidden by your system’s reduced-motion setting.' : settings.appearance.animation === 'off' ? 'Turn on Animation to show the atmosphere.' : theme.mode === 'combined' ? 'Seasonal until noteworthy weather is near.' : theme.mode === 'weather' ? 'Current weather and the next few hours.' : 'Changes with the season and selected holidays.'}</small>
+      <small>{reduced ? 'Atmosphere hidden by your system’s reduced-motion setting.' : settings.appearance.animation === 'off' ? 'Turn on Animation to show the atmosphere.' : theme.mode === 'combined' ? 'The season or holiday scene, with current or approaching weather drawn over it.' : theme.mode === 'weather' ? 'Current weather and the next few hours.' : 'Changes with the season and selected holidays.'}</small>
     </p>}
     {(theme.mode !== 'off' || theme.foreground) && <details className="theme-scene-options">
       <summary>Scene options</summary>
