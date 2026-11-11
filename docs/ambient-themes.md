@@ -177,9 +177,17 @@ drawn alone.
   a morning-glory vine hanging down the right edge (two wound stems, heart leaves, three
   periwinkle flowers, furled buds, tendrils), a short runner low on the left, and a few
   fireflies that are lights only.
-- **Autumn** ([#615](https://github.com/8roundshock/living-room-display/issues/615)):
-  a ginkgo branch rising along the left edge with gold fans on spur shoots, a few fallen
-  fans in the bottom-left corner, now and then one more falling. Gold and amber only.
+- **Autumn** ([#615](https://github.com/8roundshock/living-room-display/issues/615),
+  reworked in [#653](https://github.com/8roundshock/living-room-display/issues/653) from
+  the owner's verdict on the TV: "more transparent, a little smaller, and something else on
+  the other side"): a ginkgo branch rising along the left edge with gold fans on spur
+  shoots, at 85% of its first size, its wood, stalks and fans thin glass that keeps its
+  veins and rims; a few fallen fans in the bottom-left corner. Low on the right edge, as a
+  lighter and smaller companion, a Chinese-lantern stem (physalis) with five papery husks,
+  from green-gold at its tip to deep orange-red, one worn to a lace of veins round its
+  berry. One fan at a time lets go and swings down the left edge (one and a half to three
+  and a half minutes); then the air is empty for three to six minutes. Gold and amber on
+  the ginkgo; the middle of the screen and of the bottom edge stay black.
 - **Winter** ([#616](https://github.com/8roundshock/living-room-display/issues/616)):
   frost ferns growing in from the bottom-left corner and a bare twig glazed in clear ice in
   the top-right corner. Still air (coordinator decision on #616): the 3D Winter scene draws
@@ -190,6 +198,8 @@ is about 5,000 crystals in one instanced mesh), 43 to 76 draw calls, build 62 to
 23 to 38 ms/s of main-thread time and frame script of about 1 ms or less, on a PC that was
 busy with other captures (Christmas measured 39 to 48 ms/s in the same runs). At full
 opacity on an empty board a season lights 2.2 to 3.4% of the pixels; Christmas lights 11.7%.
+Autumn after #653: 43,000 triangles, 88 draw calls (90 while a fan is in the air), build
+91 ms, 28 ms/s, 2.2% of the pixels lit, with Christmas at 29 ms/s in the same run.
 
 #### Weather scenes and overlays
 
