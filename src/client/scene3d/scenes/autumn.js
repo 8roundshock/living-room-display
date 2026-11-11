@@ -18,6 +18,8 @@ import { physalis } from '../parts/autumn-physalis.js';
 
 /** The ginkgo is drawn at this share of the size it was designed at, positions and sizes together, about the point where it enters the frame (#653). */
 const SMALLER = .85;
+/** Drawing order (see the note in build): the wood's meshes have their origins this far behind the wood itself; the leaves of one spur hang a GAP apart in depth; CELL is the grid on which two leaves are compared. */
+const WOOD_BEHIND = .3, GAP = .05, CELL = .05;
 /** Scene seconds in a real minute: the scene clock runs at an eighth of real time. */
 const MINUTE = 60 / 8;
 /** The empty air after each falling fan, in real minutes, as a short repeating sequence; the day chooses where it starts. */
@@ -36,7 +38,21 @@ export default function build(kit, ctx) {
   // ---------- the branch: one piece, made smaller about the point where it enters the frame, and rocking about it ----------
   const enter = at(0, -1.04, -.07), shrunk = point => point.clone().sub(enter).multiplyScalar(SMALLER).add(enter);
   const root = at(-.55, -1.62, -.2), branch = new T.Group(), body = new T.Group(); branch.position.copy(enter); branch.scale.setScalar(SMALLER); body.position.copy(enter).negate(); branch.add(body); stage.add(branch);
-  const grow = (points, from, to, sides = 7) => { const mesh = limb(kit, points, taper(from * S, to * S, .9), wood, { sides }); body.add(mesh); return mesh; };
+  // Drawing order. three.js draws see-through meshes from the farthest origin to the nearest, and what is drawn
+  // first hides what is drawn later behind it; an order that changes shows as a jump in brightness where two
+  // pieces overlap. So nothing here has an origin that moves in depth (see also the ginkgo part). The wood is
+  // drawn before every leaf: its origins lie behind all the spurs, the wood itself stays where it is. A leaf
+  // is then hidden where it passes behind a branch and shows the branch through it where it passes in front.
+  const behind = mesh => { mesh.geometry.translate(0, 0, WOOD_BEHIND); mesh.position.z = -WOOD_BEHIND; body.add(mesh); return mesh; };
+  const grow = (points, from, to, sides = 7) => behind(limb(kit, points, taper(from * S, to * S, .9), wood, { sides }));
+  // A fan as it hangs from its spur, seen from the room: the depth of its surface in each cell of a fine grid.
+  const hanging = leaf => {
+    leaf.updateMatrix(); const from = leaf.userData.fan.geometry.attributes.position, p = V(), cells = new Map();
+    for (let n = 0; n < from.count; n++) { p.fromBufferAttribute(from, n).applyMatrix4(leaf.matrix); const key = `${Math.round(p.x / CELL)},${Math.round(p.y / CELL)}`, cell = cells.get(key) ?? [0, 0]; cell[0] += p.z; cell[1]++; cells.set(key, cell); }
+    return cells;
+  };
+  // Whether hanging fan `a` is nearer the room than `b` in most of the cells that both cover.
+  const inFront = (a, b) => { let score = 0; for (const [key, [depth, n]] of a) { const other = b.get(key); if (other) score += Math.sign(depth / n - other[0] / other[1]); } return score > 0; };
   const main = grow([root, at(.3, -.72, 0), at(.92, .3, .15), at(1.42, 1.42, .2), at(1.96, 2.46, .15), at(2.42, 3.3, .05), at(2.82, 3.92, -.05)], .13, .036);
   const inner = grow([main.userData.at(.34), at(.56, .92, .25), at(.48, 1.8, .35), at(.74, 2.7, .3), at(.7, 3.52, .2)], .07, .03);
   const outer = grow([main.userData.at(.62), at(2.2, 2.04, .3), at(2.78, 2.56, .4), at(3.18, 3.3, .3)], .062, .03);
@@ -54,22 +70,21 @@ export default function build(kit, ctx) {
     const way = tip ? along.clone() : V(-along.y, along.x, 0).multiplyScalar(side).add(V(0, .25, .5 * (s % 2 ? 1 : -.6))).addScaledVector(along, .35).normalize(), reach = (tip ? .12 : .17 + rnd(s, seed + 2) * .1) * S;
     const end = base.clone().addScaledVector(way, reach), girth = Math.max(.034, parent.userData.radius(share) / S * .7);
     grow([base, base.clone().addScaledVector(way, reach * .55), end], girth, girth * .8, 6);
-    const knob = new T.Mesh(kit.ballGeo, wood); knob.scale.setScalar(girth * S * .95); knob.position.copy(end); body.add(knob);
+    behind(new T.Mesh(kit.ballGeo.clone().scale(girth * S * .95, girth * S * .95, girth * S * .95).translate(end.x, end.y, end.z), wood));   // the knob at the end of the spur
     const count = counts[s], hung = [];
     for (let k = 0; k < count; k++) {
       const i = index++, size = (.46 + rnd(i, seed + 3) * .42) * S, stalk = (.28 + rnd(i, seed + 4) * .24) * S, fan = (k - (count - 1) / 2) * 1.15 + (rnd(i, seed + 5) - .5) * .4;
+      const leaf = G.leaf({ size, stalk, tint: TINTS[i % 5] + (rnd(i, seed + 6) - .5) * .12, hold: i + s, brown: i === 4 || i === 11, seed: seed + i * 17 });
       // Each stalk leaves the spur in its own direction and the fan hangs: mostly down, a little out to its side and toward the room.
       const hang = V(Math.sin(fan) * .8 + way.x * .3, -1 + Math.abs(Math.sin(fan)) * .45, .15 + Math.cos(fan * 1.7) * .3 + way.z * .2), face = V(Math.sin(fan * .7 + (rnd(i, seed + 7) - .5) * .9), .1, Math.cos(fan * .7));
-      hung.push({ i, size, stalk, hang, face, toward: hang.clone().normalize().z * (stalk + size * .3) });
-    }
-    // The leaves of one spur sway about the same point, so three.js draws them in the order they are made
-    // (see the note on drawing order in the ginkgo part): the one that hangs farthest from the room is made first.
-    hung.sort((a, b) => a.toward - b.toward).forEach(({ i, size, stalk, hang, face }) => {
-      const leaf = G.leaf({ size, stalk, tint: TINTS[i % 5] + (rnd(i, seed + 6) - .5) * .12, hold: i + s, brown: i === 4 || i === 11, seed: seed + i * 17 });
-      const pivot = new T.Group(); pivot.position.copy(end); aim(kit, leaf, hang, face); pivot.add(leaf); body.add(pivot);
+      const pivot = new T.Group(); pivot.position.copy(end); aim(kit, leaf, hang, face); pivot.add(leaf); body.add(pivot); hung.push({ pivot, shape: hanging(leaf) });
       const pace = 1.43 + rnd(i, seed + 8) * 1.05, phase = rnd(i, today + 9) * 6;
       tick(t => { pivot.rotation.z = Math.sin(t * pace + phase) * .044; pivot.rotation.x = Math.sin(t * pace * .63 + phase) * .02; });
-    });
+    }
+    // The leaves of one spur sway about one point, which is the origin of each (see the ginkgo part), so sway
+    // cannot change their order. They are set apart in depth about that point, each a GAP nearer for every leaf
+    // of its spur that it hangs in front of: far enough that swaying never takes one leaf through another.
+    for (const one of hung) one.pivot.position.z += GAP * (hung.filter(other => other !== one && inFront(one.shape, other.shape)).length - (count - 1) / 2);
     if (count && end.x < -W + 2.6) released.push(shrunk(end.clone().add(V(0, -.5 * S, .1))));   // where a fan of this spur hangs, as drawn
   });
   tick(t => { branch.rotation.z = Math.sin(t * 1.005) * .0052; });
@@ -121,10 +136,10 @@ export default function build(kit, ctx) {
     // the fan keeps to it from the moment it lets go, turning about its own origin: three.js draws see-through
     // meshes in the order of their depth, and a fan that changed depth on the way down traded places with
     // whatever it passed. So it starts where its spur is seen from the room (`seen` is that scale), not at the
-    // spur's own depth. In front: nearer than the tree (its wood and fans are drawn from depths between about
-    // -0.1 and 0.4) and the fallen fans (up to 0.62), short of the fog's near band (1.5). Behind: farther than
-    // the fallen fans, the glow under them (-0.6) and the snow's middle band (-1), short of the wind's seeds
-    // (-1.4 and farther).
+    // spur's own depth. In front: nearer than the tree (its fans are drawn from depths between about -0.1 and
+    // 0.4, its wood from -0.3) and the fallen fans (up to 0.62), short of the fog's near band (1.5). Behind:
+    // farther than the tree, the fallen fans, the glow under them (-0.6) and the snow's middle band (-1), short
+    // of the wind's seeds (-1.4 and farther).
     const LANES = [1, -1.2, 1.25, -1.1, -1.15], leaf = G.leaf({ size: .54 * S * SMALLER, stalk: .2 * S * SMALLER, tint: .5, hold: 2, seed: seed + 500, own: true, about: .3 * S * SMALLER }), holder = new T.Group();
     holder.add(leaf); holder.visible = false; stage.add(holder);
     const falls = []; let round = 0;

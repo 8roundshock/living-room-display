@@ -61,9 +61,10 @@ export function ginkgo(kit) {
    * and a nearer fan drawn first hides the one behind it. So the fan's own origin is the foot
    * of the stalk too, the point a hanging leaf sways about, and the fan is placed at the end
    * of the stalk inside its geometry: sway does not move that origin, so two overlapping fans
-   * never trade places (with the origin on the fan, they did so every few seconds). Leaves
-   * hung from one point share one origin and are drawn in the order they were made: make the
-   * farthest first. Turn or sway a leaf only about its origin. */
+   * never trade places (with the origin on the fan, they did so every few seconds). Turn or
+   * sway a leaf only about its origin. Leaves hung from one point would share one origin, and
+   * equal depths are drawn in the order of making: set them apart in depth in the order they
+   * hang, by enough that swaying takes none through another (scenes/autumn.js does). */
   function leaf({ size = .6, stalk = .35, tint = .5, hold = 0, brown = false, seed = 0, own = false, about = 0 } = {}) {
     const S = sheets(kit), shape = HOLDS[((hold % 3) + 3) % 3], radius = size * .55, spread = 1.12 + rnd(seed, 1) * .34, notch = .1 + rnd(seed, 2) * .3, gap = .07 + rnd(seed, 3) * .04;
     const p1 = rnd(seed, 4) * 6, p2 = rnd(seed, 5) * 6, p3 = rnd(seed, 6) * 6, lopsided = (rnd(seed, 7) - .5) * .12, cup = shape.cup * (.7 + rnd(seed, 8) * .6), k = Math.min(1.999, Math.max(0, tint * 2)), low = TONES[Math.floor(k)], high = TONES[Math.floor(k) + 1], share = k - Math.floor(k);
