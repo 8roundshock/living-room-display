@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState, type CSSProperties } from 'react';
 import type { Settings, WeatherState } from '../shared/contracts';
-import { THEME_LABELS, THEME_MODES, type ThemeSettings } from '../shared/themes';
+import { THEME_LABELS, THEME_MODES, TRANSPARENCY, themeTransparency, withTransparency, type ThemeSettings } from '../shared/themes';
 import { resolveTheme } from './ambient-theme';
 import { usePrefersReducedMotion } from './useMotion';
 import { HolidayCalendars } from './HolidayCalendars';
 import { THEME_SCENES, THEME_SCENE_IDS, THEME_GROUPS, type ThemeSceneId } from '../shared/theme-registry';
 
-export function ThemeControls({ settings, weather, disconnected, onChange, saving }: { settings: Settings; weather: WeatherState; disconnected: boolean; onChange: (value: ThemeSettings) => void; saving: boolean }) {
-  const theme = settings.appearance.theme;
+/** `onChange(value, keepPreview)`: keepPreview is true for a change that leaves the scene itself alone
+ * (Transparency, #670), so a "Try a scene" demonstration stays up while the slider moves. */
+export function ThemeControls({ settings, weather, disconnected, onChange, saving }: { settings: Settings; weather: WeatherState; disconnected: boolean; onChange: (value: ThemeSettings, keepPreview?: boolean) => void; saving: boolean }) {
+  const theme = settings.appearance.theme, transparencyId = useId(), transparency = themeTransparency(theme);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 60_000); return () => window.clearInterval(timer); }, []);
   const reduced = usePrefersReducedMotion(), scene = resolveTheme(settings, weather, now, disconnected);
@@ -20,6 +22,18 @@ export function ThemeControls({ settings, weather, disconnected, onChange, savin
     {theme.mode !== 'off' && <p className="theme-current">{scene?.label ?? 'No weather effect right now'}
       <small>{reduced ? 'Atmosphere hidden by your system’s reduced-motion setting.' : settings.appearance.animation === 'off' ? 'Turn on Animation to show the atmosphere.' : theme.mode === 'combined' ? 'The season or holiday scene, with current or approaching weather drawn over it.' : theme.mode === 'weather' ? 'Current weather and the next few hours.' : 'Changes with the season and selected holidays.'}</small>
     </p>}
+    {/* #670: shown whenever a theme is on, and under Off while it holds a saved value, so it can be put back. */}
+    {(theme.mode !== 'off' || theme.transparency !== undefined) && <div className="control-block theme-transparency">
+      <span className="control-label">
+        <label htmlFor={transparencyId}>Transparency</label>
+        <output aria-hidden="true">{transparency}%</output>
+      </span>
+      <input id={transparencyId} className="range-input" type="range" min={TRANSPARENCY.min} max={TRANSPARENCY.max} step={1} value={transparency} disabled={saving}
+        aria-valuetext={`${transparency}%`} aria-describedby={`${transparencyId}-hint`}
+        onChange={event => onChange(withTransparency(theme, Number(event.target.value)), true)}
+        style={{ '--range-fill': `${(transparency - TRANSPARENCY.min) / (TRANSPARENCY.max - TRANSPARENCY.min) * 100}%` } as CSSProperties} />
+      <small id={`${transparencyId}-hint`} className="theme-transparency-hint">How see-through the scene’s leaves, snow and glass are. {TRANSPARENCY.standard}% is the standard look.</small>
+    </div>}
     {(theme.mode !== 'off' || theme.foreground) && <details className="theme-scene-options">
       <summary>Scene options</summary>
       <label className="theme-passage-option"><input type="checkbox" checked={theme.foreground ?? false} disabled={saving}

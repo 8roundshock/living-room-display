@@ -367,7 +367,8 @@ export function Editor({
   }, [namingStyle]);
   const newStyleId = useRef<string | null>(null);
   const [builtinSelection, setBuiltinSelection] = useState('');
-  const themeChoice = JSON.stringify(draft.appearance.theme);
+  // A change of which scene shows ends a "Try a scene" demonstration; Transparency (#670) only changes how it looks.
+  const { transparency: _transparency, ...themeShown } = draft.appearance.theme, themeChoice = JSON.stringify(themeShown);
   useLayoutEffect(() => { setThemePreview(null); }, [themeChoice, presetId, builtinSelection]);
   const [pendingStyle, setPendingStyle] = useState<string | null>(null);
   const [styleNotice, setStyleNotice] = useState('');
@@ -1742,7 +1743,7 @@ export function Editor({
             {section === 'Style' && (
               <>
                 <h2>Make it yours</h2>
-                <ThemeControls settings={draft} weather={state.weather} saving={saving} disconnected={!!connectionError} onChange={theme => { setThemePreview(null); change(previous => withAppearance(previous, { theme })); }} />
+                <ThemeControls settings={draft} weather={state.weather} saving={saving} disconnected={!!connectionError} onChange={(theme, keepPreview) => { if (!keepPreview) setThemePreview(null); change(previous => withAppearance(previous, { theme })); }} />
                 {/* #439: Fixed (one level) or Follow daylight (Dimmest to Brightest with a dim
                     time, #591). The mode sits on the label line, so the default Fixed tab keeps
                     its height at 1280×720. */}
