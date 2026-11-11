@@ -43,9 +43,9 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     return page.evaluate(async base64 => {
       const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), character => character.charCodeAt(0))], { type: 'image/png' }));
       const surface = new OffscreenCanvas(bitmap.width, bitmap.height), context = surface.getContext('2d'); context.drawImage(bitmap, 0, 0);
-      const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height), total = data.length / 4; let lit = 0, coloured = 0;
-      for (let i = 0; i < data.length; i += 4) { if (data[i] + data[i + 1] + data[i + 2] > 36) lit++; if (Math.max(data[i], data[i + 1], data[i + 2]) - Math.min(data[i], data[i + 1], data[i + 2]) > 40) coloured++; }
-      return { lit: lit / total, coloured: coloured / total };
+      const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height), total = data.length / 4; let lit = 0, coloured = 0, light = 0;
+      for (let i = 0; i < data.length; i += 4) { light += data[i] + data[i + 1] + data[i + 2]; if (data[i] + data[i + 1] + data[i + 2] > 36) lit++; if (Math.max(data[i], data[i + 1], data[i + 2]) - Math.min(data[i], data[i + 1], data[i + 2]) > 40) coloured++; }
+      return { lit: lit / total, coloured: coloured / total, mean: light / total / 765 };
     }, shot);
   }
   try {
@@ -149,6 +149,42 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     const preview = await drawnShare({ clip: await canvas().boundingBox() });
     assert.ok(preview.lit > .01 && preview.coloured > .002, `the single still frame is on screen: ${JSON.stringify(preview)}`);
     record('The editor still preview draws exactly one frame, runs no loop and shows it');
+
+    // ---------- Transparency (#670): the Style slider retunes the live stage in place ----------
+    // At 1280 x 720 the preview and the Style panel are side by side, so the slider and the frame are both on screen.
+    await open({ scene: 'canada-day', path: '/editor', viewport: { width: 1280, height: 720 } }); await ready();
+    await page.getByRole('tab', { name: 'Style', exact: true }).click();
+    const slider = page.getByRole('slider', { name: 'Transparency', exact: true }), sceneBox = await canvas().boundingBox(), sameCanvas = await canvas().elementHandle();
+    const built = count => page.waitForFunction(least => [...window.__lrdScene3d][0]?.stats().builds >= least, count, { timeout: READY });
+    const light = async () => (await drawnShare({ clip: sceneBox })).mean, held = stage => [stage.textures, stage.geometries, stage.programs];
+    const standard = (await stages())[0], atStandard = await light();
+    assert.equal(await slider.inputValue(), '50'); assert.equal(standard.seeScale, 1); assert.equal(standard.builds, 1);
+    // A drag: three steps inside the 250 ms delay, then a rest. One rebuild, in the same canvas and context.
+    await slider.focus(); await page.keyboard.press('End'); await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowRight');
+    await built(2); await page.waitForTimeout(700);
+    const most = (await stages())[0], atMost = await light();
+    assert.equal(most.builds, 2, 'one rebuild for the whole drag'); assert.equal(most.seeScale, 2); assert.equal((await stages()).length, 1, 'no second stage');
+    assert.ok(await sameCanvas.evaluate(node => node.isConnected), 'the same canvas, so the same WebGL context');
+    // The first build also uploads helper geometry three.js keeps for the environment map, so compare totals with the first build loosely and between rebuilds exactly.
+    assert.ok(held(most).every((count, index) => count <= held(standard)[index]) && most.programs === standard.programs, `the rebuild releases what it replaced and compiles no new shader program: ${held(most)} after ${held(standard)}`);
+    assert.ok(most.frozen && !most.running && most.frames === standard.frames + 1, `the still preview drew the new frame once and runs no loop: ${JSON.stringify(most)}`);
+    await page.keyboard.press('Home'); await built(3);
+    const solid = (await stages())[0], atSolid = await light();
+    assert.equal(solid.seeScale, 0); assert.deepEqual(held(solid), held(most), 'a second rebuild holds exactly what the first did');
+    assert.ok(atSolid > atStandard && atStandard > atMost && atMost > .001, `0% draws more of the scene than 50%, and 50% more than 100%, which still draws it: ${[atSolid, atStandard, atMost].map(value => value.toFixed(4))}`);
+    for (let step = 0; step < 5; step++) await page.keyboard.press('PageUp');
+    await built(4); const back = (await stages())[0], atBack = await light();
+    assert.equal(await slider.inputValue(), '50'); assert.equal(back.seeScale, 1); assert.deepEqual(held(back), held(most), 'and so does a third');
+    assert.ok(Math.abs(atBack - atStandard) <= atStandard * .01, `back at 50% the frame is the first one again: ${atBack} and ${atStandard}`);
+    console.log(`SCENE3D_TRANSPARENCY ${JSON.stringify({ light: { solid: +atSolid.toFixed(4), standard: +atStandard.toFixed(4), most: +atMost.toFixed(4), back: +atBack.toFixed(4) }, held: { first: held(standard), rebuilt: held(back) }, rebuildMs: Math.round(back.buildMs) })}`);
+    record('Transparency retunes the live 3D preview: one rebuild per drag in the same canvas and context, nothing left behind, 0% and 100% build and draw, 0% draws more than 50% and 50% more than 100%');
+    // The display takes the saved value when it builds its stage.
+    await open({ scene: 'canada-day', transparency: 100 }); await ready();
+    const saved = await attributes(), [shown] = await stages(), shownLight = await drawnShare();
+    assert.equal(saved.sceneTransparency, '100'); assert.deepEqual([shown.seeScale, shown.builds], [2, 1], 'built once, with the saved value');
+    assert.ok(shownLight.lit > .005, `the display draws the scene at 100%: ${JSON.stringify(shownLight)}`);
+    record('The display builds its 3D stage with the saved Transparency');
+    await open({ scene: 'canada-day', path: '/editor' }); await ready();
 
     // ---------- unmount and remount: every context is given back ----------
     const canvases = await page.evaluateHandle(() => { window.sceneCanvases = [document.querySelector('canvas.scene3d-canvas')]; return window.sceneCanvases; });

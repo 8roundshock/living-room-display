@@ -192,6 +192,38 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     await page.locator('.theme-passage-option input').uncheck(); await button('Save changes').click(); await page.locator('.studio-savebar').waitFor({state:'detached'});
     assert.deepEqual(saved().appearance.theme,{mode:'combined',calendars:['CA','KR','RU']},'turning it off removes the field at rest');
     record('Foreground moments is an opt-in cancellable style draft that is omitted at rest when off');
+    // #670 Transparency: a slider shown whenever a theme is on, a cancellable draft, omitted at rest at the standard 50%.
+    await open({mode:'off'}); assert.equal(await page.getByRole('slider',{name:'Transparency',exact:true}).count(),0,'no slider while the theme is Off');
+    await open({mode:'combined'}); const transparency=page.getByRole('slider',{name:'Transparency',exact:true});
+    assert.equal(await transparency.inputValue(),'50'); assert.equal(await transparency.getAttribute('aria-valuetext'),'50%');
+    assert.match(await page.locator('.theme-transparency').innerText(),/Transparency\s+50%[\s\S]*How see-through the scene’s leaves, snow and glass are\. 50% is the standard look\./);
+    assert.equal(await page.locator('.theme-scene-options').getAttribute('open'),null,'it is outside the collapsed Scene options');
+    await transparency.focus(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+    assert.equal(await transparency.inputValue(),'52'); assert.equal(await transparency.getAttribute('aria-valuetext'),'52%');
+    await button('Save changes').waitFor(); assert.equal(saved().appearance.theme.transparency,undefined,'a draft writes nothing');
+    await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft'); await page.locator('.studio-savebar').waitFor({state:'detached'});
+    assert.equal(await transparency.inputValue(),'50','moving back to the saved value clears Save and Cancel');
+    await page.keyboard.press('End'); assert.equal(await transparency.inputValue(),'100'); await button('Cancel').click(); await page.locator('.studio-savebar').waitFor({state:'detached'});
+    assert.equal(await transparency.inputValue(),'50','Cancel returns the slider to the saved value');
+    await page.locator('.theme-try summary').click(); await page.getByRole('combobox',{name:'Scene preview',exact:true}).selectOption('winter');
+    await transparency.focus(); await page.keyboard.press('Home'); for(let step=0;step<3;step++) await page.keyboard.press('PageUp');
+    assert.equal(await transparency.inputValue(),'30'); assert.equal(await page.getByRole('combobox',{name:'Scene preview',exact:true}).inputValue(),'winter','a scene being tried stays up while the slider moves');
+    let release; const gate=new Promise(done=>{release=done;}); await page.route('**/api/settings',async route=>{await gate;await route.continue();});
+    await button('Save changes').click(); await page.locator('.theme-transparency input:disabled').waitFor();
+    release(); await page.locator('.studio-savebar').waitFor({state:'detached'}); await page.unroute('**/api/settings');
+    assert.equal(await transparency.isDisabled(),false,'the slider is disabled only while saving');
+    assert.deepEqual(saved().appearance.theme,{mode:'combined',calendars:['CA','KR','RU'],transparency:30});
+    await page.reload(); await page.getByRole('tab',{name:'Style',exact:true}).click(); assert.equal(await transparency.inputValue(),'30','the saved value survives reload');
+    await page.getByRole('combobox',{name:'Theme',exact:true}).selectOption('off');
+    assert.equal(await transparency.inputValue(),'30','under Off a saved value stays visible, so it can be put back');
+    await transparency.focus(); await page.keyboard.press('PageUp'); await page.keyboard.press('PageUp');
+    await page.locator('.theme-transparency').waitFor({state:'detached'}); await button('Save changes').click(); await page.locator('.studio-savebar').waitFor({state:'detached'});
+    assert.deepEqual(saved().appearance.theme,{mode:'off',calendars:['CA','KR','RU']},'Off at the standard Transparency is the default theme again');
+    for(const viewport of [{width:320,height:480},{width:640,height:300}]) {
+      await open({mode:'combined',viewport}); const slider=page.getByRole('slider',{name:'Transparency',exact:true}); await slider.scrollIntoViewIfNeeded(); const box=await slider.boundingBox();
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)); assert.ok(box.x>=0&&box.x+box.width<=viewport.width+1&&box.height>=30,`slider fits ${viewport.width}x${viewport.height}: ${JSON.stringify(box)}`);
+    }
+    record('Transparency is a keyboard slider outside Scene options, a cancellable draft whose Save and Cancel clear when it returns to the saved value, disabled while saving, saved, reloaded, kept under Off until put back, and omitted at rest at 50%');
     const scenes=SCENE_CASES;
     assert.deepEqual(scenes.map(([id])=>id).sort(),[...THEME_SCENE_IDS].sort(),'matrix covers every registered scene');
     const motionsSeen=new Set();

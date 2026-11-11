@@ -525,7 +525,8 @@ for the scenes you name (`christmas canada-day birthday christmas+snow`) on thei
 and weather and writes one PNG each into a temporary folder that you name with `--out`
 (it refuses a folder inside the checkout). `--full` shows the scene at full opacity,
 `--empty` hides the widgets, `--measure` prints build, frame and main-thread times,
-`--webgl gpu|software|off` picks the renderer. Look, then delete the folder: the rule
+`--webgl gpu|software|off` picks the renderer, `--transparency N` saves a Transparency of
+N% (#670; the file name gains `-tN`). Look, then delete the folder: the rule
 against keeping screenshots applies to it. The scene contract is in
 [src/client/scene3d/README.md](../src/client/scene3d/README.md).
 
