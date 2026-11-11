@@ -192,19 +192,44 @@ drawn alone.
   a time lets go and rocks down the left edge (about two to two and a half minutes); then
   the air is empty for one and a half to two minutes. Orange and yellow only: the pure red
   leaf is Canada Day's. The middle of the screen and of the bottom edge stay black.
-- **Winter** ([#616](https://github.com/8roundshock/living-room-display/issues/616)):
-  frost ferns growing in from the bottom-left corner and a bare twig glazed in clear ice in
-  the top-right corner. Still air (coordinator decision on #616): the 3D Winter scene draws
-  no snowfall of its own, so falling snow over it always means the forecast says snow.
+- **Winter** ([#665](https://github.com/8roundshock/living-room-display/issues/665); owner
+  direction, 2026-11-11: "for winter i want like an evergreen with some wintery elements",
+  which overturns the "no fir" decision of the first plan,
+  [#616](https://github.com/8roundshock/living-room-display/issues/616), and replaces its
+  frost ferns): the side of a white spruce outdoors, its trunk beyond the left edge. Three
+  different boughs of the one tree: only a short tip in the top-left corner, heavy with
+  snow; the hero below it, the longest and nearest, with the snow slipping on one twig; and
+  a smaller forked one lower down that hangs steeply, turns up at its tip and has shed its
+  snow along a stretch. Snow lies in pads along the upper side of each spine and of the
+  twigs that are level enough to hold it, and fades out underneath; short blue-green
+  needles show under and through it, four light brown cones hang under the twigs the way a
+  spruce's cones hang, and short icicles of different lengths hang under two of the bough
+  tips. Low on the right edge, as the one companion, the bare twig glazed in clear ice from
+  #616, smaller. Not Christmas and not the New Year tree: no ornament, light, ribbon, star,
+  wreath or garland, another conifer habit (short needles, a snow load, cones) and another
+  place on the screen. Glass with bodies that read: the snow's body is 0.8 as solid as its
+  rim, the needles take 0.45 of the see-through look and the wood 0.6. Still air
+  (coordinator decision on #616, kept): the scene draws no snowfall of its own, so falling
+  snow over it always means the forecast says snow. Each bough breathes a fraction of a
+  degree as one piece and a few glints on the snow rise and fall in turn; nothing else
+  moves. A quiet date keeps the evergreen alone. Every piece keeps `renderOrder` 0 and an
+  origin that does not move in depth
+  ([#662](https://github.com/8roundshock/living-room-display/issues/662),
+  [#663](https://github.com/8roundshock/living-room-display/issues/663)).
 
-Measured as above on 2026-11-10 at 1920×1080: 30,000 to 75,000 triangles (Winter's frost
-is about 5,000 crystals in one instanced mesh), 43 to 76 draw calls, build 62 to 115 ms,
-23 to 38 ms/s of main-thread time and frame script of about 1 ms or less, on a PC that was
-busy with other captures (Christmas measured 39 to 48 ms/s in the same runs). At full
-opacity on an empty board a season lights 2.2 to 3.4% of the pixels; Christmas lights 11.7%.
+Measured as above on 2026-11-10 at 1920×1080, when all four seasons were in their first
+build: 30,000 to 75,000 triangles (the first Winter's frost was about 5,000 crystals in one
+instanced mesh), 43 to 76 draw calls, build 62 to 115 ms, 23 to 38 ms/s of main-thread time
+and frame script of about 1 ms or less, on a PC that was busy with other captures (Christmas
+measured 39 to 48 ms/s in the same runs). At full opacity on an empty board a season lights
+2.2 to 3.4% of the pixels; Christmas lights 11.7%. Spring and Summer have not been rebuilt
+since; Autumn and Winter have, and their figures follow.
 Autumn after #664 (the maple): 28,000 triangles, 74 draw calls (75 while a leaf is in the
 air), build about 105 ms, 25 ms/s, 3.4% of the pixels lit, with Christmas at 30 ms/s in the
 same run.
+Winter after #665 (the evergreen), measured on 2026-11-11: 81,000 triangles, 30 draw
+calls, build 92 ms, 27 ms/s, 3.2% of the pixels lit, with Christmas at 32 ms/s in the same
+run.
 
 #### Weather scenes and overlays
 
