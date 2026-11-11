@@ -53,8 +53,10 @@ edge before it shortens or omits anything, so art that bleeds off a side must
 taper below the frame rather than end in a cut edge. Give tall groups a complete
 compact drawing. Register the principal group ids for a new scene.
 Do not substitute one generic lantern/star for different cultures. Choose one
-scene at a time; selected exact quiet dates constrain festive shapes and palette,
-while factual weather retains priority. Minor cards leave the season intact.
+scene at a time; selected exact quiet dates constrain festive shapes and palette.
+In Combined the scene always stays and factual weather is drawn over it, any of the
+five kinds over any scene (#655); only Weather mode shows a weather scene on its own.
+Minor cards leave the season intact.
 
 To add a researched major scene, add one `THEME_SCENES` entry (label, group,
 palette) and its composition in the art module, then an explicit observance policy such as

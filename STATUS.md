@@ -1,5 +1,38 @@
 # Project status
 
+## Combined mode always draws the weather over the scene — 2026-11-10 (#655)
+
+Source candidate, not installed. Owner direction after seeing Autumn on the TV: "the
+weather sync should be always", and "not overbearing". Until now, in Combined mode, a
+season, holiday or birthday scene stayed on screen only under the two or three kinds of
+weather it listed; any other kind replaced it with the standalone weather scene (snow in
+November replaced Autumn, rain in a thaw replaced Winter, a storm replaced everything but
+Summer). Now the scene always stays and the weather the resolver reports (rain, snow,
+storm, fog or wind) is drawn over it, in both renderers. A weather scene on its own is the
+Weather mode only. The other modes, quiet dates, the tier rule and when weather counts as
+present are unchanged. The rule and the colour rule are in
+[Ambient themes](docs/ambient-themes.md#combined-the-weather-is-always-drawn-over-the-scene-655-owner-direction-2026-11-10).
+
+The change is one line in `resolveTheme`; the 3D overlays already worked over any scene, and
+the flat fallback already drew one generic treatment per weather kind over whatever scene it
+was given. The per-scene list of kinds in the flat art data had no other reader and is
+removed. The Combined hint in Style and the current-scene line ("Snow now · Autumn") say
+what is on screen.
+
+Verified on 2026-11-10 with source builds and synthetic data only: both typechecks, the
+production build, the unit tests (resolver tests for every kind over eleven season and
+holiday scenes, a birthday and a quiet date; the flat animation budget for all 126
+scene-and-weather combinations), the `themes` suite on the flat fallback with snow over
+Autumn and a storm over Christmas, and the `scene3d` suite with a storm over Canada Day.
+The author looked at captures of snow over Autumn, snow and rain over Winter, a storm over
+Christmas, snow over Spring and rain over a birthday, with the layer at full opacity and at
+the app's opacity: the weather is light and the scene is not hidden.
+
+Not done or not verified: installation, the TV, and the owner's judgement. A scene does not
+yet change its own objects for the weather over it
+([#646](https://github.com/8roundshock/living-room-display/issues/646)); in particular Christmas and Orthodox Christmas keep their decorative
+snowfall under rain or a storm. Review and CI evidence belongs to the pull request for #655.
+
 ## 3D scenes: foundation and three reference scenes — 2026-11-10 (#600)
 
 Source candidate, not installed. The owner rejected every flat SVG version of the living
@@ -11,8 +44,8 @@ Canada Day and Birthday (which also serves the Russian and Korean birthday treat
 with their own colourway). A scene is one file discovered at build time, so the other 23
 scenes ([#606](https://github.com/8roundshock/living-room-display/issues/606) to
 [#631](https://github.com/8roundshock/living-room-display/issues/631)) can be added
-without touching shared code. Combined snow has its overlay; rain, storm, fog and wind
-over a 3D scene still use the flat renderer. The contract is in
+without touching shared code. Combined snow has its overlay (the other four kinds
+followed in #617 to #621, and since #655 every kind is drawn over every scene). The contract is in
 [the scene README](src/client/scene3d/README.md) and
 [Ambient themes](docs/ambient-themes.md#3d-scenes-600-owner-decision-2026-11-10).
 
