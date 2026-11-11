@@ -1,12 +1,14 @@
 // Winter (#665, the owner's direction of 2026-11-11: "for winter i want like an evergreen with
 // some wintery elements"; it overturns the "no fir" decision of the first plan, #616, whose
-// frost ferns are gone). The side of a white spruce outdoors: three boughs come in from the
-// left edge at different heights and depths, the trunk beyond the frame, each sagging under
-// thick pads of snow that lie along its upper side and out along its side twigs, with short
-// blue-green needles showing under and through the snow, a few light brown cones hanging
-// under the twigs the way a spruce's cones hang, and short icicles of different lengths under
-// two of the bough tips. Low on the right edge, as the one light companion, the bare twig
-// glazed in clear ice from #616, smaller, with its frozen drops. Nothing falls by itself:
+// frost ferns are gone). The side of a white spruce outdoors, its trunk beyond the left edge:
+// three different boughs of the one tree (a short snow-heavy tip in the top corner, the long
+// hero below it, and a smaller forked one lower down that hangs steeply and has shed its snow
+// along a stretch), sagging under pads of snow that lie along their upper sides and on the
+// twigs level enough to hold it, with short blue-green needles showing under and through the
+// snow, a few light brown cones hanging under the twigs the way a spruce's cones hang, and
+// short icicles of different lengths under two of the bough tips. Low on the right edge, as
+// the one light companion, the bare twig glazed in clear ice from #616, smaller, with its
+// frozen drops. Nothing falls by itself:
 // falling snow (or rain, or any weather) is drawn over the scene only when the forecast says
 // so (#655). The boughs breathe a fraction of a degree, each as one piece; a few glints on the
 // snow rise and fall in turn; nothing else moves. A quiet date keeps the evergreen alone.
@@ -28,13 +30,17 @@ import { fused, settle } from '../parts/winter-order.js';
 const ORDER = { wood: -.08, needles: -.06, snow: 0, core: .02, scales: .03, ice: .045, glint: .06 };
 /** How solid the snow's body is against its rim. Autumn's leaves are moving to about 0.7 (#664); white at 0.7 reads as grey on black, so the snow keeps a little more. */
 const SNOW_BODY = .8;
-/** The boughs, from the top down: where each leaves the trunk (height, depth), how far it reaches, how far it
- * sinks, how far its tip swings toward the room, the length of its longest twigs, how far the spray leans toward
- * the room, how many side twigs, and how much of it lies under snow. The middle one is the nearest and largest. */
+/** Three different boughs of one tree, from the top down: where each leaves the trunk (height, depth), how far it
+ * reaches, how far it sinks, how far its tip swings toward the room and turns back up, the length of its longest
+ * twigs, how far the spray is turned to face the room, how many side twigs, and its snow.
+ * The top one is only a short tip in the corner, heavy with snow. The middle one is the hero: the longest and
+ * nearest, with the snow slipping on one twig. The lowest is smaller and of another habit: it hangs steeply and
+ * turns up at its tip, it has shed its snow along a stretch, and a lighter secondary branch forks from it. */
 const BOUGHS = [
-  { y: 4.2, z: -.25, reach: 3.3, drop: 1.2, swing: .1, spread: .52, tilt: .95, twigs: 12, load: .6 },
-  { y: 2.3, z: .3, reach: 4, drop: 1.75, swing: .25, spread: .82, tilt: 1.2, twigs: 15, load: 1 },
-  { y: .95, z: -.6, reach: 2.85, drop: 3.1, swing: .05, spread: .64, tilt: 1.1, twigs: 11, load: .8 },
+  { y: 4.3, z: -.25, reach: 1.9, drop: .62, swing: .1, spread: .4, tilt: .95, twigs: 8, load: 1 },
+  { y: 2.3, z: .3, reach: 3.85, drop: 1.7, swing: .25, spread: .78, tilt: 1.2, twigs: 15, load: 1, slip: [3] },
+  { y: .25, z: -.6, reach: 1.95, drop: 2.5, curl: .46, swing: .05, spread: .38, tilt: 1.1, twigs: 8, load: .75, shed: [.36, .7], slip: [1],
+    fork: { at: .3, reach: 1.12, drop: .45, swing: .22, spread: .32, tilt: 1, twigs: 6, load: .6 } },
 ];
 /** Cones, in order of who stays when there are few: [bough, which near twig (counted outward), length, girth, how open, tone]. No two alike. */
 const CONES = [[1, 1, .42, .13, .25, .35], [2, 2, .34, .12, .6, .7], [1, 3, .3, .105, .1, .15], [0, 1, .36, .125, .4, .55]];
@@ -44,17 +50,23 @@ const ICICLES = [[1, .965, 0, .46, .042], [1, -1, .02, .26, .032], [2, .955, 0, 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed;
-  // Rain and a storm halve the glints and the glow, as in Autumn; fog takes the glints away.
+  // Rain and a storm halve the glints, as they halve Autumn's glows; fog takes them away.
   const dim = ctx.weather === 'rain' || ctx.weather === 'storm' ? .5 : 1;
   const snow = snowLook(kit, { body: SNOW_BODY }), glaze = ice(kit);
 
   // ---------- the evergreen: three snow-laden boughs from the left edge ----------
   const cones = Math.min(CONES.length, Math.max(2, Math.round(1.6 + A * 10))), drips = ctx.quiet ? 0 : Math.min(ICICLES.length, Math.round(1 + A * 17)), glints = [];
-  BOUGHS.forEach(({ y, z, ...shape }, b) => {
+  BOUGHS.forEach(({ y, z, fork, ...shape }, b) => {
     const from = V(-W - .6, y, z), group = new T.Group(); group.position.set(from.x, from.y, 0); stage.add(group);
     const hold = (object, order) => { settle(kit, object, V(from.x, from.y, z + order)); object.position.sub(group.position); group.add(object); };
     const bough = spruceBough(kit, { from, ...shape, needle: .12 * S, girth: .052 * S, seed: seed + b * 31 }), pads = snowPads(kit, bough.segments, { material: snow, thick: S / .85, seed: seed + b * 7 });
     hold(bough.wood, ORDER.wood); hold(bough.needles, ORDER.needles); hold(pads.mesh, ORDER.snow);
+    // A secondary branch leaves the bough part of the way along it and goes its own way. Its meshes share the bough's
+    // origins and are made after the bough's, so all the wood is still drawn before all the needles, and those before all the snow.
+    if (fork) {
+      const { at: share, ...branch } = fork, second = spruceBough(kit, { from: bough.at(share), ...branch, needle: .12 * S, girth: .03 * S, seed: seed + b * 31 + 17 });
+      hold(second.wood, ORDER.wood); hold(second.needles, ORDER.needles); hold(snowPads(kit, second.segments, { material: snow, thick: S / .85, seed: seed + b * 7 + 3 }).mesh, ORDER.snow);
+    }
     CONES.slice(0, cones).forEach(([on, twig, length, girth, open, tone], i) => {
       if (on !== b) return;
       const hang = bough.hangs[Math.min(twig, bough.hangs.length - 1)].point, cone = spruceCone(kit, { at: hang.clone().add(V(-.05, -.02 * S, 0)), length: length * S / .85, girth: girth * S / .85, open, tone, lean: (rnd(i, seed + 21) - .5) * .22, turn: rnd(i, seed + 22) * 6, seed: seed + 60 + i * 9 });
@@ -78,8 +90,7 @@ export default function build(kit, ctx) {
       tick(t => { const age = ((t - ROUND[i % ROUND.length] * slot) % round + round) % round; glint.userData.o = age < slot * 1.2 ? .95 * dim * Math.pow(Math.sin(age / (slot * 1.2) * Math.PI), 2) : 0; });
     });
   }
-  // A faint cold light far behind the boughs, and two small still lamps behind the icicles: clear ice is seen by what lights it from behind.
-  const cold = kit.glow(0x9db8e8, 6, .045 * dim, { twinkle: 0 }); cold.position.set(-W + 1.9, 1.5, -2.5); stage.add(cold);
+  // Two small still lamps behind the icicles: clear ice is seen by what lights it from behind.
   stage.add(backlight(kit, [[V(-W + 3.1, .5, -1.3), 3.5], [V(-W + 2.4, -1.5, -1.9), 3]], { range: 6, sweep: 0 }));
 
   // ---------- the companion: a bare forked twig glazed in clear ice, low on the right edge, with a few frozen drops ----------
