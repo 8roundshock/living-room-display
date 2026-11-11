@@ -7,7 +7,7 @@ import { ANIMATION_LEVELS } from '../shared/motion.ts';
 import { KEEP_DONE_MS, TIMER_ADD_MAX_MS, TIMER_LABEL_MAX, TIMER_LIMIT, TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts';
 import { checkPhotoUpload, photoAssetSchema, photoAssetShape } from './photo.ts';
 import { AT_REST } from './persistence.ts';
-import { defaultTheme, HOLIDAY_CALENDARS, THEME_MODES } from '../shared/themes.ts';
+import { defaultTheme, HOLIDAY_CALENDARS, THEME_MODES, TRANSPARENCY } from '../shared/themes.ts';
 import { DEFAULT_DIM_TIME, isDimTime } from '../shared/daylight.ts';
 import { BIRTHDAY_LIMIT, BIRTHDAY_TREATMENTS, validBirthdayDate } from '../shared/birthdays.ts';
 
@@ -48,8 +48,11 @@ const daylightBrightness = z.object({
 // Field schemas carry no defaults: zod applies .default() inside .partial(), which made a
 // brightness-only PATCH reset a saved clock style (#83). Only the persisted reader fills defaults.
 const appearanceFields = {
-  theme: z.object({ mode: z.enum(THEME_MODES), calendars: z.array(z.enum(HOLIDAY_CALENDARS)).max(3).refine(values => new Set(values).size === values.length, 'Choose each calendar once'), foreground: z.boolean().optional() }).strict()
-    .transform(({ foreground, ...theme }) => foreground ? { ...theme, foreground: true } : theme),
+  // Optional keys are never added: `foreground` is kept only when true and `transparency` (#670) only
+  // when it is not the standard 50, so default data parses, and is written back, without either key.
+  theme: z.object({ mode: z.enum(THEME_MODES), calendars: z.array(z.enum(HOLIDAY_CALENDARS)).max(3).refine(values => new Set(values).size === values.length, 'Choose each calendar once'), foreground: z.boolean().optional(),
+    transparency: z.number().int().min(TRANSPARENCY.min).max(TRANSPARENCY.max).optional() }).strict()
+    .transform(({ foreground, transparency, ...theme }) => ({ ...theme, ...(foreground ? { foreground: true } : {}), ...(transparency === undefined || transparency === TRANSPARENCY.standard ? {} : { transparency }) })),
   preset: z.enum(['phone', 'room', 'night', 'custom']), accentColor: color, textColor: color,
   brightness: brightnessLevel, fontScale: z.number().min(0.7).max(1.5),
   fontFamily: z.enum(['sans', 'serif', 'mono']), layout: z.enum(['balanced', 'minimal', 'weather-first']),
