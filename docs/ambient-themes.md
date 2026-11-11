@@ -199,7 +199,7 @@ is about 5,000 crystals in one instanced mesh), 43 to 76 draw calls, build 62 to
 busy with other captures (Christmas measured 39 to 48 ms/s in the same runs). At full
 opacity on an empty board a season lights 2.2 to 3.4% of the pixels; Christmas lights 11.7%.
 Autumn after #653: 43,000 triangles, 88 draw calls (90 while a fan is in the air), build
-75 ms, 25 ms/s, 2.2% of the pixels lit, with Christmas at 25 ms/s in the same run.
+91 ms, 28 ms/s, 2.2% of the pixels lit, with Christmas at 29 ms/s in the same run.
 
 #### Weather scenes and overlays
 
