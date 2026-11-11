@@ -14,7 +14,7 @@ export function glassVase(kit, { height = 1.7, radius = .42, water = .6 } = {}) 
   // Clear glass shows only where it turns away from the eye or catches a light: almost no body colour, a strong sheen.
   const glass = kit.mat({ color: 0x1c2a30, roughness: .04, metalness: 0, clearcoat: 1, clearcoatRoughness: .03, side: T.DoubleSide, depthWrite: false, emissive: 0xcfe6ef, emissiveIntensity: .05 }, 2.4);
   const body = new T.Mesh(turned(kit, [...outer, ...inner], 64), glass); body.renderOrder = 3; group.add(body);
-  const level = height * water, surface = new T.Mesh(new T.CircleGeometry(wall(water) - .03, 48), kit.mat({ color: 0x8fc4d8, roughness: .03, metalness: .2, clearcoat: 1, transparent: true, opacity: .5, side: T.DoubleSide, depthWrite: false }, 2.2));
+  const level = height * water, surface = new T.Mesh(new T.CircleGeometry(wall(water) - .03, 48), kit.mat({ color: 0x8fc4d8, roughness: .03, metalness: .2, clearcoat: 1, transparent: true, opacity: kit.solidity(.5), side: T.DoubleSide, depthWrite: false }, 2.2));
   surface.rotation.x = -Math.PI / 2; surface.position.y = level; surface.renderOrder = 2; group.add(surface);
   const line = new T.Mesh(new T.TorusGeometry(wall(water) - .03, .008, 6, 64), kit.mat({ color: 0xcfe6ef, roughness: .05, clearcoat: 1, emissive: 0xcfe6ef, emissiveIntensity: .25, depthWrite: false }, 2)); line.rotation.x = Math.PI / 2; line.position.y = level; line.renderOrder = 2; group.add(line);
   group.userData.mouth = height; group.userData.neck = wall(1) - .05;

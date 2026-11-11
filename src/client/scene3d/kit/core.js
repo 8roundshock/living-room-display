@@ -1,10 +1,13 @@
 // Core of the scene kit: world, colour, materials, light, lines and registration.
 // Ported from the owner-approved scene style picker (2026-11-10, #600). See ../README.md.
+import { thinned } from '../settings.ts';
 
 /** Deterministic value in [0, 1) for an index and a salt; the same everywhere, on every run. */
 export const rnd = (i, s) => { const v = Math.sin(i * 127.1 + s * 311.7) * 43758.5453; return v - Math.floor(v); };
 
 export function createCore(T, renderer, ctx, look, view) {
+  /** The Transparency setting as a multiplier (#670; settings.ts seeScale): 1 is the owner's picks. */
+  const seeScale = look.seeScale ?? 1;
   const V = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z);
   /** An sRGB colour (0xrrggbb or '#rrggbb') as the linear colour the lit materials expect. */
   const C = hex => new T.Color(hex).convertSRGBToLinear();
@@ -59,8 +62,10 @@ export function createCore(T, renderer, ctx, look, view) {
     const wall = new T.MeshBasicMaterial({ color: 0x040406, side: T.BackSide }); disposables.push(wall); studio.add(new T.Mesh(room, wall));
     const panel = (width, height, colour, strength, position) => { const geometry = new T.PlaneGeometry(width, height), material = new T.MeshBasicMaterial({ color: new T.Color(colour).multiplyScalar(strength), side: T.DoubleSide }), mesh = new T.Mesh(geometry, material); disposables.push(geometry, material); mesh.position.set(...position); mesh.lookAt(0, 0, 0); studio.add(mesh); };
     panel(16, 10, 0xfff0dc, 4.5, [-11, 13, 11]); panel(9, 16, 0xbcd2ff, 2.2, [17, 2, 6]); panel(22, 3, 0xffffff, 2.6, [0, -9, 15]); panel(12, 12, 0xffd2a8, 1.6, [0, 16, -7]);
-    const generator = new T.PMREMGenerator(renderer), texture = generator.fromScene(studio, .04).texture; generator.dispose(); disposables.forEach(item => item.dispose());
-    return own(texture);
+    // The render target is owned, not only its texture: disposing the texture alone leaves the target's
+    // framebuffer and texture on the GPU, one per rebuild (#638), and the Transparency slider rebuilds (#670).
+    const generator = new T.PMREMGenerator(renderer), target = generator.fromScene(studio, .04); generator.dispose(); disposables.forEach(item => item.dispose());
+    return own(target).texture;
   })();
   function lights(scene) {
     const key = new T.DirectionalLight(C(0xfff1e0), 2.6), rim = new T.DirectionalLight(C(0x9fbfff), 1.8), fill = new T.DirectionalLight(0xffffff, .35);
@@ -70,17 +75,24 @@ export function createCore(T, renderer, ctx, look, view) {
 
   // ---------- materials ----------
   /** The glass patch: a lit body thins out while its rim (Fresnel) and its highlights stay.
-   * `share` (0-1) is how much of the owner's see-through setting this material takes. */
+   * `share` (0-1) is how much of the owner's see-through setting this material takes; the
+   * Transparency setting scales it (0 to 2), and the shader follows settings.ts `thinned`. */
   function glassify(material, share = 1) {
-    const see = { value: look.seeThrough * Math.min(1, Math.max(0, share)) };
+    const see = { value: look.seeThrough * seeScale * Math.min(1, Math.max(0, share)) };
     material.transparent = true;
     material.onBeforeCompile = shader => {
       shader.uniforms.uSee = see;
       shader.fragmentShader = 'uniform float uSee;\n' + shader.fragmentShader.replace('#include <tonemapping_fragment>',
-        'float gFres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 1.6);\n float gLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));\n gl_FragColor.a *= mix(1.0, clamp(0.14 + gFres * 0.85 + gLum * 0.75, 0.0, 1.0), uSee);\n#include <tonemapping_fragment>');
+        'float gFres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 1.6);\n float gLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));\n float gGlass = clamp(0.14 + gFres * 0.85 + gLum * 0.75, 0.0, 1.0);\n gl_FragColor.a *= uSee <= 1.0 ? mix(1.0, gGlass, uSee) : pow(gGlass, uSee);\n#include <tonemapping_fragment>');
     };
     return material;
   }
+  /** How solid a scene's own see-through body is under the Transparency setting (#670). `body` is the
+   * solidity the scene chose (0-1, at the owner's picks); the result is what to draw: 1 at 0%, `body`
+   * itself at the standard 50%, thinner toward 100% but never zero. Pass every alpha a scene sets for
+   * a body through it (an alpha map's grey, a uniform, `opacity`). A cut-out outline (alphaTest) is a
+   * shape, not a body, and light (halos, flames, particles) is not a body either. */
+  const solidity = body => thinned(body, seeScale);
   /** The material factory. `options` are three.js material options with sRGB colours, plus `see`
    * (0-1, default 1): the share of the see-through look this surface takes, for the rare surface
    * that must stay solid, such as a national flag. `env` scales the studio reflections;
@@ -133,5 +145,5 @@ export function createCore(T, renderer, ctx, look, view) {
   }
   function dispose() { for (const item of owned) item.dispose?.(); owned.clear(); materials.clear(); ticks.length = 0; glows.length = 0; patterns.clear(); }
 
-  return { T, ctx, view, stage, V, C, mix, shift, rnd, own, tick, part, tex, canvasTexture, patternTex, environment, lights, mat, gold, satin, glow, bulb, ballGeo, sphereGeo, line, catenary, ribbonGeo, animate, dispose };
+  return { T, ctx, view, stage, V, C, mix, shift, rnd, own, tick, part, tex, canvasTexture, patternTex, environment, lights, mat, solidity, gold, satin, glow, bulb, ballGeo, sphereGeo, line, catenary, ribbonGeo, animate, dispose };
 }

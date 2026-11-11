@@ -15,7 +15,10 @@ scenes and approved lit, partly see-through 3D objects. New and reworked scene a
 in `src/client/scene3d/scenes/<id>.js` (weather over a scene in `weather/<kind>.js`);
 read `src/client/scene3d/README.md` first: it holds the module contract, the kit, the
 owner's art rules and the look-at-it loop. The owner's look and the special/everyday tier
-are constants in `settings.ts` and `tier.ts`; a scene never overrides them. Each scene
+are constants in `settings.ts` and `tier.ts`; a scene never overrides them. The owner sets
+Transparency himself in Style (#670): a see-through body a scene draws itself (an alpha
+map's grey, a uniform, `opacity`) goes through `kit.solidity(body)`, written for the
+standard 50%. Each scene
 has a design ticket (#606 to #631): implement that plan. The flat renderer described
 below is only the fallback for scenes without a module and browsers without hardware
 WebGL; do not polish flat art. Iterate cheaply: edit, `npm run build`, capture two or three

@@ -9,6 +9,9 @@ import { renderSize } from './settings.ts';
 const FOV = 30, HALF_HEIGHT = 4.5, DEPTH = HALF_HEIGHT / Math.tan(FOV / 2 * Math.PI / 180);
 /** Rebuild the scene when the view's shape changes by more than this, so edges stay dressed. */
 const ASPECT_TOLERANCE = .02;
+/** A new Transparency (#670) is built this long after the last change, so dragging the slider
+ * rebuilds once when it rests, in the same canvas and context, and not once per step. */
+const RETUNE_DELAY_MS = 250;
 /** A GPU that needs longer than this for a frame, this many frames in a row, is too weak for
  * these scenes: the stage gives up and the caller shows the flat renderer. */
 const SLOW_FRAME_MS = 120, SLOW_FRAMES = 10;
@@ -36,16 +39,22 @@ function disposeObjects(root) {
  * Draw a scene into `host`. Throws if WebGL or the scene module fails; the caller falls back
  * to the flat renderer. After a successful start, a later failure calls `onFail` once.
  */
-export function createStage(host, { build, overlay = null, ctx: given, look, still = false, limits, clock, allowSoftware = false, onFail = () => {} }) {
+export function createStage(host, { build, overlay = null, ctx: given, look: initialLook, still = false, limits, clock, allowSoftware = false, onFail = () => {} }) {
   const canvas = document.createElement('canvas'); canvas.className = 'scene3d-canvas'; canvas.setAttribute('aria-hidden', 'true');
+  let look = { seeScale: 1, ...initialLook };
   const frozen = still || !(look.timeScale > 0), interval = 1000 / limits.framesPerSecond;
-  let renderer = null, gl = null, made = null, scene = null, camera = null, observer = null, pending = null;
-  let disposed = false, raf = 0, rebuildTimer = 0, frames = 0, time = frozen ? clock.still : clock.start, lastRender = 0, builtAspect = 0, buildMs = 0, frameMs = 0, gpuMs = 0, slowRun = 0;
-  const stage = { dispose, stats, measure };
+  let renderer = null, gl = null, made = null, scene = null, camera = null, observer = null, pending = null, retired = null;
+  let disposed = false, raf = 0, rebuildTimer = 0, retuneTimer = 0, frames = 0, builds = 0, time = frozen ? clock.still : clock.start, lastRender = 0, builtAspect = 0, buildMs = 0, frameMs = 0, gpuMs = 0, slowRun = 0;
+  const stage = { dispose, stats, measure, retune };
 
-  function clear() { if (scene) disposeObjects(scene); made?.dispose(); scene = null; made = null; }
+  function release(old) { if (old.scene) disposeObjects(old.scene); old.made?.dispose(); }
+  function clear() { if (retired) release(retired); retired = null; release({ scene, made }); scene = null; made = null; }
+  /** Builds the scene afresh. The scene it replaces is released only after the new one has been drawn
+   * once (draw()), so the shader programs both use stay compiled instead of being dropped and rebuilt. */
   function compose() {
-    const started = performance.now(); clear();
+    const started = performance.now();
+    if (retired) release(retired);
+    retired = scene || made ? { scene, made } : null; scene = null; made = null;
     const width = host.clientWidth, height = host.clientHeight, aspect = width / height;
     const view = Object.freeze({ halfW: HALF_HEIGHT * aspect, halfH: HALF_HEIGHT, aspect, depth: DEPTH,
       halfWAt: z => HALF_HEIGHT * aspect * (1 - z / DEPTH), halfHAt: z => HALF_HEIGHT * (1 - z / DEPTH) });
@@ -55,7 +64,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look, sti
     made.lights(scene); scene.add(made.kit.stage);
     build(made.kit, ctx);
     if (overlay) overlay(made.kit, ctx);
-    builtAspect = aspect; buildMs = performance.now() - started;
+    builtAspect = aspect; buildMs = performance.now() - started; builds += 1;
   }
   function fit() {
     const size = renderSize(host.clientWidth, host.clientHeight, window.devicePixelRatio || 1, limits);
@@ -71,6 +80,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look, sti
     made.animate(time);
     if (!frozen) made.kit.stage.position.set(Math.sin(time * 2 * Math.PI / DRIFT.periodX) * DRIFT.x, Math.sin(time * 2 * Math.PI / DRIFT.periodY) * DRIFT.y, 0);
     renderer.render(scene, camera);
+    if (retired) { release(retired); retired = null; }
     frameMs = performance.now() - started; frames += 1;
     if (frames === 1 || frames % 40 === 0) host.dataset.sceneFrames = String(frames);
   }
@@ -106,10 +116,20 @@ export function createStage(host, { build, overlay = null, ctx: given, look, sti
     });
   }
   function onLost(event) { event.preventDefault(); fail(new Error('WebGL context lost')); }
+  /** A new look for the same scene (#670: `seeScale`, the Transparency setting). The scene is built
+   * again RETUNE_DELAY_MS after the last call, in this canvas and context, and drawn at once; a still
+   * or frozen stage shows the new frame, a running one carries on from the same scene clock. */
+  function retune(changes) {
+    if (disposed) return;
+    const next = { ...look, ...changes };
+    if (Object.keys(changes).every(key => Object.is(next[key], look[key]))) return;
+    look = next; clearTimeout(retuneTimer);
+    retuneTimer = setTimeout(() => guarded(() => { if (disposed) return; compose(); draw(); }), RETUNE_DELAY_MS);
+  }
 
   function dispose() {
     if (disposed) return; disposed = true;
-    stop(); clearTimeout(rebuildTimer); observer?.disconnect(); document.removeEventListener('visibilitychange', onVisibility); canvas.removeEventListener('webglcontextlost', onLost);
+    stop(); clearTimeout(rebuildTimer); clearTimeout(retuneTimer); observer?.disconnect(); document.removeEventListener('visibilitychange', onVisibility); canvas.removeEventListener('webglcontextlost', onLost);
     try { clear(); } catch { /* releasing must not throw */ }
     // Give the context back at once: browsers keep only a few alive per page.
     try { renderer?.dispose(); renderer?.forceContextLoss(); } catch { /* already lost */ }
@@ -117,7 +137,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look, sti
   }
   function stats() {
     const size = renderer && !disposed ? renderer.getSize(new T.Vector2()) : { x: 0, y: 0 }, info = renderer?.info;
-    return { frames, running: raf !== 0, frozen, disposed, time, buildMs, frameMs, gpuMs, backing: [size.x, size.y], triangles: info?.render.triangles ?? 0, calls: info?.render.calls ?? 0, geometries: info?.memory.geometries ?? 0, textures: info?.memory.textures ?? 0 };
+    return { frames, builds, running: raf !== 0, frozen, disposed, time, buildMs, frameMs, gpuMs, seeScale: look.seeScale, backing: [size.x, size.y], triangles: info?.render.triangles ?? 0, calls: info?.render.calls ?? 0, geometries: info?.memory.geometries ?? 0, textures: info?.memory.textures ?? 0, programs: info?.programs?.length ?? 0 };
   }
   /** Developer measurement: draw `count` frames back to back. `script` is the main-thread time per
    * frame (ticks and draw submission); `finished` adds waiting for the GPU to complete the frame. */

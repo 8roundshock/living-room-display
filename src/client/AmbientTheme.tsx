@@ -10,12 +10,13 @@ import { webglAvailable } from './scene3d/webgl';
 import './ambient-theme.css';
 
 type Exclusions = () => readonly ThemeRect[];
-interface ThemeProps { scene: ThemeScene | null; animated: boolean; still?: boolean; exclusions: Exclusions; layoutKey: string; inkRevision: number; foreground?: boolean; passageMeasure: PassageMeasure }
+interface ThemeProps { scene: ThemeScene | null; animated: boolean; still?: boolean; exclusions: Exclusions; layoutKey: string; inkRevision: number; foreground?: boolean; transparency?: number; passageMeasure: PassageMeasure }
 
 /** Static editor art is explicit; disabled/reduced display motion never mounts a scene.
  * A scene with a 3D module is drawn in WebGL (#600); the flat SVG renderer remains the fallback
- * when WebGL is unavailable, the 3D stage fails, or the scene has no 3D module yet. */
-export const AmbientTheme = memo(function AmbientTheme({ scene, animated, still = false, exclusions, layoutKey, inkRevision, foreground = false, passageMeasure }: ThemeProps) {
+ * when WebGL is unavailable, the 3D stage fails, or the scene has no 3D module yet.
+ * `transparency` (#670) reaches the 3D scene only; the flat renderer ignores it. */
+export const AmbientTheme = memo(function AmbientTheme({ scene, animated, still = false, exclusions, layoutKey, inkRevision, foreground = false, transparency, passageMeasure }: ThemeProps) {
   const history = useRef<PassageHistory>({ lastGlobal: performance.now() - 45_000, lastByTarget: {} });
   const [failed3d, setFailed3d] = useState<string | null>(null);
   const plan = scene && (animated || still) ? planScene3d(scene, SCENE_MODULE_IDS, WEATHER_MODULE_IDS) : null;
@@ -26,7 +27,7 @@ export const AmbientTheme = memo(function AmbientTheme({ scene, animated, still 
   if (!composition) return null;
   return <>
     {plan && key3d && failed3d !== key3d && webglAvailable()
-      ? <Scene3D key={key3d} scene={scene} plan={plan} still={still} onFail={fail3d} />
+      ? <Scene3D key={key3d} scene={scene} plan={plan} still={still} transparency={transparency} onFail={fail3d} />
       : <LivingTheme key={`${scene.motif}:${scene.habitat}:${scene.quiet}:${still}:${layoutKey}`} scene={scene} art={composition} still={still} exclusions={exclusions} inkRevision={inkRevision} />}
     <SceneForeground scene={scene} art={composition.passage} enabled={foreground && animated && !still} measure={passageMeasure} inkRevision={inkRevision} history={history.current} />
   </>;
