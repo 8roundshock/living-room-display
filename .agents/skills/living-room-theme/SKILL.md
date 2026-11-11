@@ -30,8 +30,9 @@ the `scene3d` suite (and `themes`, which now runs without WebGL on the flat fall
   scene consume it. Adding an observance must not automatically create a scene.
 - `src/shared/living-scene-art.ts` and `living-celebration-art.ts` own each
   scene's authored composition: edge patches of rooted groups with complete and
-  compact drawings, a passage form and supported weather. Bounds are derived
-  from the path control hull; the art test verifies them.
+  compact drawings and a passage form. A scene does not list the weather it
+  supports: in Combined every weather kind is drawn over every scene (#655).
+  Bounds are derived from the path control hull; the art test verifies them.
 - `src/client/ambient-theme.ts` resolves current scenes and fresh noteworthy
   weather. An illustration uses `previewTheme`, never a fake clock or forecast.
 - `LivingTheme.tsx` with `living-scene.ts` fits and animates the composition
@@ -53,8 +54,10 @@ edge before it shortens or omits anything, so art that bleeds off a side must
 taper below the frame rather than end in a cut edge. Give tall groups a complete
 compact drawing. Register the principal group ids for a new scene.
 Do not substitute one generic lantern/star for different cultures. Choose one
-scene at a time; selected exact quiet dates constrain festive shapes and palette,
-while factual weather retains priority. Minor cards leave the season intact.
+scene at a time; selected exact quiet dates constrain festive shapes and palette.
+In Combined the scene always stays and factual weather is drawn over it, any of the
+five kinds over any scene (#655); only Weather mode shows a weather scene on its own.
+Minor cards leave the season intact.
 
 To add a researched major scene, add one `THEME_SCENES` entry (label, group,
 palette) and its composition in the art module, then an explicit observance policy such as

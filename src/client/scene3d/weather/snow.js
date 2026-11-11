@@ -1,8 +1,9 @@
 // Snow over a scene (Combined mode; overlay rules of #618). The far and middle flake bands at
 // half the standalone count, and two large out-of-focus discs that keep to the lanes between the
 // widgets and the corners. The flakes share the scene's 3D space and pass behind its near
-// objects. Dropped: the corner drifts, and over a holiday the plate crystals, which could be
-// taken for ornaments or sparkle (they stay over Winter). Over a holiday the white takes a
+// objects. Dropped: the corner drifts, and over a holiday or birthday the plate crystals, which
+// could be taken for ornaments or sparkle (they stay over a plain season: Winter, and since #655
+// a snowy day in Spring or Autumn too). Over a holiday the white takes a
 // quarter of that scene's lightest colour. One snowfall, never two: a scene with decorative
 // snow of its own leaves it out while ctx.weather is 'snow'.
 import { snowfall, snowPlates } from '../parts/snow-fall.js';

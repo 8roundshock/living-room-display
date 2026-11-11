@@ -17,11 +17,61 @@ test('Off is the default; pure Weather has no decorative fallback when quiet', (
   const { settings, weather } = fixture(); settings.appearance.theme.mode = 'off'; assert.equal(resolveTheme(settings, weather, now), null);
   settings.appearance.theme.mode = 'weather'; assert.equal(resolveTheme(settings, weather, now), null);
 });
-test('Combined keeps the holiday while quiet, weather replaces geometry and retains its tint', () => {
+test('Combined keeps the holiday scene and draws the weather over it in the holiday colours', () => {
   const { settings, weather } = fixture(); const calm = resolveTheme(settings, weather, now, false, '2026-12-20')!;
-  assert.equal(calm.motif, 'christmas'); weather.current!.weatherCode = 63;
+  assert.equal(calm.motif, 'christmas'); assert.equal(calm.habitat, undefined); weather.current!.weatherCode = 63;
   const wet = resolveTheme(settings, weather, now, false, '2026-12-20')!;
-  assert.equal(wet.motif, 'rain'); assert.equal(wet.tint, calm.tint); assert.equal(wet.source, 'weather'); assert.match(wet.label, /Rain now/);
+  // Rain was never one of the kinds the Christmas art was first drawn for: until #655 it replaced the scene.
+  assert.equal(wet.motif, 'rain'); assert.equal(wet.habitat, 'christmas'); assert.equal(wet.source, 'weather');
+  assert.deepEqual([wet.tint, wet.companion, wet.accent], [calm.tint, calm.companion, calm.accent]); assert.match(wet.label, /^Rain now · Christmas/);
+});
+const KINDS = { rain: [63, 8], snow: [73, 8], storm: [95, 8], fog: [45, 8], wind: [0, 40] } as const;
+type Kind = keyof typeof KINDS;
+const KIND_NAMES: Record<Kind, string> = { rain: 'Rain', snow: 'Snow', storm: 'Storms', fog: 'Fog', wind: 'Wind' };
+const under = (weather: WeatherState, kind: Kind) => { weather.current!.weatherCode = KINDS[kind][0]; weather.current!.windSpeed = KINDS[kind][1]; return weather; };
+test('In Combined every weather kind is drawn over every season and holiday scene, and none replaces it (#655)', () => {
+  const days = [['2026-04-25', 'spring'], ['2026-07-20', 'summer'], ['2026-11-04', 'autumn'], ['2026-02-01', 'winter'], ['2026-12-20', 'christmas'], ['2026-07-01', 'canada-day'],
+    ['2026-10-25', 'halloween'], ['2026-10-12', 'thanksgiving'], ['2026-04-05', 'easter'], ['2026-03-08', 'mimosa'], ['2027-01-07', 'orthodox-christmas']] as const;
+  for (const [date, id] of days) for (const kind of Object.keys(KINDS) as Kind[]) {
+    const { settings, weather } = fixture(), calm = resolveTheme(settings, weather, now, false, date)!, scene = resolveTheme(settings, under(weather, kind), now, false, date)!;
+    assert.equal(calm.motif, id, date); assert.equal(calm.habitat, undefined);
+    assert.deepEqual([scene.motif, scene.habitat, scene.source, scene.quiet], [kind, id, 'weather', false], `${kind} over ${id}`);
+    // Colours: a holiday keeps its own palette under the weather; over a plain season the weather brings its palette.
+    const expected = THEME_SCENES[id].group === 'Seasons' ? THEME_SCENES[kind].palette : THEME_SCENES[id].palette;
+    assert.deepEqual([scene.tint, scene.companion, scene.accent], [...expected], `${kind} over ${id}: palette`);
+    assert.ok(scene.label.startsWith(`${KIND_NAMES[kind]} now · `), scene.label);
+  }
+  // The pairings named by the owner and on the ticket. None of them kept its scene before.
+  const pair = (date: string, kind: Kind) => { const { settings, weather } = fixture(), scene = resolveTheme(settings, under(weather, kind), now, false, date)!; return [scene.motif, scene.habitat, scene.label]; };
+  assert.deepEqual(pair('2026-11-04', 'snow'), ['snow', 'autumn', 'Snow now · Autumn']);
+  assert.deepEqual(pair('2026-02-01', 'rain'), ['rain', 'winter', 'Rain now · Winter']);
+  assert.deepEqual(pair('2026-12-20', 'storm').slice(0, 2), ['storm', 'christmas']);
+  assert.deepEqual(pair('2026-04-25', 'snow'), ['snow', 'spring', 'Snow now · Spring']);
+});
+test('Only Weather mode shows a weather scene on its own; Seasonal ignores the weather; stale weather leaves the scene alone', () => {
+  for (const kind of Object.keys(KINDS) as Kind[]) {
+    const { settings, weather } = fixture(); under(weather, kind);
+    const shown = () => { const scene = resolveTheme(settings, weather, now, false, '2026-11-04'); return [scene?.motif, scene?.habitat]; };
+    settings.appearance.theme.mode = 'weather';
+    const alone = resolveTheme(settings, weather, now, false, '2026-11-04')!;
+    assert.deepEqual([alone.motif, alone.habitat, alone.tint, alone.label], [kind, undefined, THEME_SCENES[kind].palette[0], `${KIND_NAMES[kind]} now`], `${kind} in Weather mode`);
+    settings.appearance.theme.mode = 'seasonal'; assert.deepEqual(shown(), ['autumn', undefined]);
+    settings.appearance.theme.mode = 'combined'; weather.status = 'stale'; assert.deepEqual(shown(), ['autumn', undefined]);
+  }
+});
+test('A birthday and a quiet date keep their scene under any weather too', () => {
+  for (const kind of Object.keys(KINDS) as Kind[]) {
+    const { settings, weather } = fixture(); settings.birthdays = [{ id: 'a', name: 'Birthday A', date: '11-04', treatment: 'korean' }];
+    const dry = resolveTheme(settings, weather, now, false, '2026-11-04')!, wet = resolveTheme(settings, under(weather, kind), now, false, '2026-11-04')!;
+    assert.equal(dry.motif, 'birthday-korean');
+    assert.deepEqual([wet.motif, wet.habitat, wet.source, wet.holiday], [kind, 'birthday-korean', 'weather', null], `${kind} over a birthday`);
+    assert.deepEqual([wet.tint, wet.companion, wet.accent], [dry.tint, dry.companion, dry.accent], 'the birthday keeps its colours');
+    assert.equal(wet.label, `${KIND_NAMES[kind]} now · Birthday`, 'no private name in the label');
+    // 11 November is a selected quiet date on the Canada calendar: the season stays, grey and quiet, and no birthday shows.
+    settings.birthdays[0]!.date = '11-11'; settings.appearance.theme.calendars = ['CA'];
+    const quiet = resolveTheme(settings, weather, now, false, '2026-11-11')!;
+    assert.deepEqual([quiet.motif, quiet.habitat, quiet.quiet, quiet.tint], [kind, 'autumn', true, QUIET_PALETTE[0]], `${kind} on a quiet date`);
+  }
 });
 test('Seasonal ignores weather and selected calendars may be empty without losing seasons', () => {
   const { settings, weather } = fixture(); settings.appearance.theme = { mode: 'seasonal', calendars: [] }; weather.current!.weatherCode = 95;
@@ -84,7 +134,7 @@ test('minor civic cards retain the season; selected exact quiet days constrain w
   assert.equal(resolveTheme(settings,weather,now,false,'2026-11-15')?.motif,'christmas');
   settings.appearance.theme.mode='combined'; weather.current!.weatherCode=95;
   const scene=resolveTheme(settings,weather,now,false,'2026-11-11')!;
-  assert.equal(scene.motif,'storm'); assert.equal(scene.quiet,true); assert.equal(scene.tint,QUIET_PALETTE[0]);
+  assert.equal(scene.motif,'storm'); assert.equal(scene.habitat,'autumn','the quiet season stays under the storm (#655)'); assert.equal(scene.quiet,true); assert.equal(scene.tint,QUIET_PALETTE[0]);
   settings.appearance.theme.calendars=['KR']; assert.equal(resolveTheme(settings,weather,now,false,'2026-11-11')?.quiet,false);
 });
 
@@ -151,14 +201,14 @@ test('personal birthdays are exact-day global scenes with explicit quiet/weather
   assert.equal(resolveTheme(settings, weather, now, false, '2027-12-20')?.motif, 'birthday-russian', 'independent of public calendars/year');
   weather.current!.weatherCode = 63;
   const wet = resolveTheme(settings, weather, now, false, '2026-12-20')!;
-  assert.equal(wet.motif, 'rain'); assert.equal(wet.tint, birthday.tint); assert.equal(wet.holiday, null);
+  assert.equal(wet.motif, 'rain'); assert.equal(wet.habitat, 'birthday-russian'); assert.equal(wet.tint, birthday.tint); assert.equal(wet.holiday, null);
   settings.appearance.theme.mode = 'weather';
   assert.equal(resolveTheme(settings, weather, now, false, '2026-12-20')?.tint, THEME_SCENES.rain.palette[0]);
   settings.appearance.theme.mode = 'off'; assert.equal(resolveTheme(settings, weather, now), null);
   settings.appearance.theme = { mode: 'combined', calendars: ['CA'] };
   settings.birthdays[0]!.date = '11-11';
   const quiet = resolveTheme(settings, weather, now, false, '2026-11-11')!;
-  assert.equal(quiet.quiet, true); assert.equal(quiet.motif, 'rain'); assert.equal(quiet.tint, QUIET_PALETTE[0]);
+  assert.equal(quiet.quiet, true); assert.equal(quiet.motif, 'rain'); assert.equal(quiet.habitat, 'autumn'); assert.equal(quiet.tint, QUIET_PALETTE[0]);
   settings.appearance.theme.mode = 'seasonal';
   assert.equal(resolveTheme(settings, weather, now, false, '2026-11-11')?.motif, 'autumn');
 });

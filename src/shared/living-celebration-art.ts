@@ -138,7 +138,7 @@ const CHRISTMAS: LivingSceneArt = {
         p('M480 0Q295 23 4 78', 0, undefined, 3.8),
         p('M423 7L365 2L379 25L312 13L326 36L244 27L262 50L179 44L196 64L96 58L123 80L4 79L45 96Q248 60 423 7Z', 0, .58, 1.3),
       ]), .42)] },
-  ], passage: ribbonPassage, weather: ['snow', 'wind', 'fog'], air: 'snow',
+  ], passage: ribbonPassage, air: 'snow',
 };
 
 const NEW_YEAR: LivingSceneArt = {
@@ -169,7 +169,7 @@ const NEW_YEAR: LivingSceneArt = {
         p('M490 -8C336 5 319 94 194 88Q95 60 5 108L8 122Q97 75 194 103C328 115 357 18 490 8Z', 1, .5, 2),
         p('M78 96L90 83M270 88L285 71', 2, undefined, 2.8),
       ]), .38)] },
-  ], passage: ribbonPassage, weather: ['wind', 'snow', 'fog'],
+  ], passage: ribbonPassage,
 };
 
 const NEW_YEAR_TREE: LivingSceneArt = {
@@ -210,7 +210,7 @@ const NEW_YEAR_TREE: LivingSceneArt = {
         p('M629 248Q342 158 2 170', 0, undefined, 3.6),
         p('M575 231L497 178L504 210L398 153L423 194L295 137L326 180L196 130L232 173L104 147L139 180L2 169L56 202Q348 181 575 245Z', 0, .61, 1.4),
       ]), .45)] },
-  ], passage: ribbonPassage, weather: ['snow', 'wind', 'fog'], air: 'snow',
+  ], passage: ribbonPassage, air: 'snow',
 };
 
 const ORTHODOX_CHRISTMAS: LivingSceneArt = {
@@ -244,8 +244,7 @@ const ORTHODOX_CHRISTMAS: LivingSceneArt = {
         p('M302 29L310 52L335 57L313 68L313 92L298 74L276 84L283 62L265 49L290 49Z', 1, .32, 2.2),
         p('M69 107L76 120L91 121L79 132L79 146L67 138L54 142L59 128L50 118L64 119Z', 0, .25, 1.5),
       ]), .35)] },
-  ], passage: { kind: 'flake', viewBox: [62, 62], paths: [p('M31 5V57M9 18L53 44M9 44L53 18M22 12L31 20L40 12M14 28L23 25L22 15M40 48L31 40L22 48', 0, undefined, 1.5)] },
-  weather: ['snow', 'wind', 'fog'], air: 'snow',
+  ], passage: { kind: 'flake', viewBox: [62, 62], paths: [p('M31 5V57M9 18L53 44M9 44L53 18M22 12L31 20L40 12M14 28L23 25L22 15M40 48L31 40L22 48', 0, undefined, 1.5)] }, air: 'snow',
 };
 
 const HALLOWEEN: LivingSceneArt = {
@@ -293,7 +292,7 @@ const HALLOWEEN: LivingSceneArt = {
         p('M366 -4Q217 32 194 98Q177 132 41 144', 2, undefined, 2.7),
         p('M248 50Q219 27 198 58Q205 87 248 50ZM147 126Q113 93 86 126Q96 152 147 126Z', 1, .46, 1.6),
       ]), .5)] },
-  ], passage: leafPassage, weather: ['wind', 'rain', 'fog'],
+  ], passage: leafPassage,
 };
 
 const THANKSGIVING: LivingSceneArt = {
@@ -342,7 +341,7 @@ const THANKSGIVING: LivingSceneArt = {
         p('M455 301Q244 226 11 224', 0, undefined, 2.6),
         p('M56 226Q22 199 8 220Q16 246 56 226ZM154 240Q129 211 113 233Q120 256 154 240ZM270 266Q248 235 230 253Q229 273 270 266Z', 0, .58, 1.4),
       ]), .5)] },
-  ], passage: huskPassage, weather: ['rain', 'wind', 'fog'],
+  ], passage: huskPassage,
 };
 
 const CANADA_DAY: LivingSceneArt = {
@@ -381,7 +380,7 @@ const CANADA_DAY: LivingSceneArt = {
         p('M630 -8Q480 79 350 64T1 100L6 117Q195 64 347 81T630 8Z', 1, .48, 2),
         p('M626 0Q481 83 348 74T5 108', 0, undefined, 1.4),
       ]), .4)] },
-  ], passage: leafPassage, weather: ['wind', 'rain', 'fog'],
+  ], passage: leafPassage,
 };
 
 const EASTER: LivingSceneArt = {
@@ -432,7 +431,7 @@ const EASTER: LivingSceneArt = {
         p('M510 -4Q297 72 27 139', 0, undefined, 3),
         p('M164 103C146 89 134 104 148 116C132 129 147 142 162 128C178 143 191 129 176 117C194 103 179 92 164 103Z', 1, .57, 1.5),
       ]), .45)] },
-  ], passage: petalPassage, weather: ['rain', 'wind', 'fog'],
+  ], passage: petalPassage,
 };
 
 /** The bangpae kite has a black circular opening, four asymmetric cloth panels,
@@ -477,7 +476,7 @@ const SEOLLAL: LivingSceneArt = {
         p('M294 231L313 246L351 240L368 219L380 225L365 254C402 276 416 316 367 327Q307 344 288 310C271 281 290 261 313 246Z', 1, .56, 2.1),
         p('M306 259Q336 270 368 260M330 266L329 299L339 310L347 298M295 302Q334 319 386 300', 2, undefined, 1.7),
       ]), .36)] },
-  ], passage: ribbonPassage, weather: ['wind', 'snow', 'fog'],
+  ], passage: ribbonPassage,
 };
 
 const CHUSEOK: LivingSceneArt = {
@@ -524,7 +523,7 @@ const CHUSEOK: LivingSceneArt = {
         p('M647 210Q366 149 3 190M407 174L351 142M201 175L143 144', 1, undefined, 2.3),
         p('M351 142Q322 124 311 145Q319 163 351 155ZM143 144Q115 127 105 148Q114 164 143 157Z', 0, .45, 1.2),
       ]), .46)] },
-  ], passage: huskPassage, weather: ['wind', 'rain', 'fog'],
+  ], passage: huskPassage,
 };
 
 /** Petal shells are attached to the sag of an open festival garland. These are
@@ -570,7 +569,7 @@ const LOTUS_LANTERNS: LivingSceneArt = {
         p('M408 -6Q237 54 1 72M168 49L168 67', 2, undefined, 2.4),
         p('M169 69Q138 49 130 82Q131 116 167 130Q204 114 209 84Q200 51 169 69ZM167 128Q139 94 168 61Q197 94 167 128ZM167 132L167 148', 0, .55, 1.8),
       ]), .42)] },
-  ], passage: petalPassage, weather: ['wind', 'rain', 'fog'],
+  ], passage: petalPassage,
 };
 
 const MASLENITSA: LivingSceneArt = {
@@ -617,7 +616,7 @@ const MASLENITSA: LivingSceneArt = {
         p('M530 233Q345 164 187 172Q96 168 0 213L8 231Q105 189 187 189Q346 180 530 251Z', 2, .42, 1.8),
         p('M530 242Q344 173 188 181M33 217L41 236M83 201L93 223', 1, undefined, 1.6),
       ]), .48)] },
-  ], passage: ribbonPassage, weather: ['snow', 'wind', 'fog'],
+  ], passage: ribbonPassage,
 };
 
 /** Canadian Easter uses floral curves; Pascha's eggs use small original geometric
@@ -664,7 +663,7 @@ const PASCHA: LivingSceneArt = {
         p('M-8 -5Q145 71 293 75Q425 81 504 144', 1, undefined, 2.7),
         p('M183 71Q182 44 157 46Q145 64 183 71ZM325 80Q342 60 360 75Q356 96 331 99ZM439 116Q443 88 463 93Q476 113 439 116Z', 2, .38, 1.4),
       ]), .48)] },
-  ], passage: leafPassage, weather: ['rain', 'wind', 'fog'],
+  ], passage: leafPassage,
 };
 
 const MIMOSA: LivingSceneArt = {
@@ -717,7 +716,7 @@ const MIMOSA: LivingSceneArt = {
   ], passage: { kind: 'seed', viewBox: [80, 48], paths: [
     p('M5 36Q29 19 69 7M31 22Q29 10 41 9M50 14Q58 17 65 28', 0, undefined, 1.4),
     p('M42 5C33 3 29 13 36 18C45 24 53 14 47 9ZM65 24C56 22 52 33 59 38C68 43 76 34 71 28Z', 1, undefined, 1.8),
-  ] }, weather: ['rain', 'wind', 'fog'],
+  ] },
 };
 
 export const LIVING_CELEBRATION_ART: Readonly<Record<string, LivingSceneArt | undefined>> = {

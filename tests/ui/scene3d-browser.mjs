@@ -111,11 +111,14 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     record('A lost context, or WebGL that fails when the renderer is created, leaves the flat scene on screen and throws nothing to the page');
 
     // ---------- weather over a scene: every kind has its overlay module (#617 to #621), so it stays in 3D ----------
-    const overlayRequests = []; await open({ scene: 'canada-day', weather: 'wind', onPage: target => target.on('request', request => overlayRequests.push(new URL(request.url()).pathname)) }); await ready();
-    const windy = await attributes();
-    assert.deepEqual([windy.sceneRenderer, windy.sceneModule, windy.sceneWeather, windy.themeMotif, windy.themeHabitat, windy.canvases, windy.flat], ['3d', 'canada-day', 'wind', 'wind', 'canada-day', 1, 0]);
-    assert.ok(overlayRequests.some(path => path.includes('/assets/wind-')), 'the wind overlay was fetched on demand'); assert.equal((await stages()).length, 1);
-    record('Weather over a 3D scene is drawn in 3D with its overlay module (wind over Canada Day); the flat renderer is not mounted');
+    // A storm over Canada Day is a pairing that replaced the scene with the standalone Storms scene before #655:
+    // in Combined the scene now always stays and the weather is its overlay.
+    const overlayRequests = []; await open({ scene: 'canada-day', weather: 'storm', onPage: target => target.on('request', request => overlayRequests.push(new URL(request.url()).pathname)) }); await ready();
+    const stormy = await attributes();
+    assert.deepEqual([stormy.sceneRenderer, stormy.sceneModule, stormy.sceneWeather, stormy.themeMotif, stormy.themeHabitat, stormy.themeSource, stormy.sceneTier, stormy.canvases, stormy.flat], ['3d', 'canada-day', 'storm', 'storm', 'canada-day', 'weather', 'special', 1, 0]);
+    assert.ok(overlayRequests.some(path => path.includes('/assets/canada-day-')), 'the scene keeps its own module under the storm');
+    assert.ok(overlayRequests.some(path => path.includes('/assets/storm-')), 'the storm overlay was fetched on demand'); assert.equal((await stages()).length, 1);
+    record('Weather over a 3D scene is drawn in 3D with its overlay module, also for a pairing that used to replace the scene (a storm over Canada Day, #655); the flat renderer is not mounted');
     // The next check builds its own stage and counts the live ones: give it a page with WebGL and no scene.
     await open({ scene: 'christmas', mode: 'off' }); assert.deepEqual(await stages(), []);
 
