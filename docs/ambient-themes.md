@@ -192,32 +192,35 @@ drawn alone.
   direction, 2026-11-11: "for winter i want like an evergreen with some wintery elements",
   which overturns the "no fir" decision of the first plan,
   [#616](https://github.com/8roundshock/living-room-display/issues/616), and replaces its
-  frost ferns): the side of a white spruce outdoors. Three boughs come in from the left edge
-  at different heights, angles and depths, the trunk beyond the frame, each sagging under
-  pads of snow that lie along its upper side and out along its side twigs; short blue-green
-  needles show under and through the snow, four light brown cones hang under the twigs the
-  way a spruce's cones hang, and short icicles of different lengths hang under two of the
-  bough tips. Low on the right edge, as the one companion, the bare twig glazed in clear ice
-  from #616, smaller. Not Christmas and not the New Year tree: no ornament, light, ribbon,
-  star, wreath or garland, another conifer habit (short needles, a heavy snow load, cones)
-  and another place on the screen. Glass with bodies that read: the snow's body is 0.8 as
-  solid as its rim, the needles take 0.45 of the see-through look and the wood 0.6. Still
-  air (coordinator decision on #616, kept): the scene draws no snowfall of its own, so
-  falling snow over it always means the forecast says snow. Each bough breathes a fraction
-  of a degree as one piece and a few glints on the snow rise and fall in turn; nothing else
+  frost ferns): the side of a white spruce outdoors, its trunk beyond the left edge. Three
+  different boughs of the one tree: only a short tip in the top-left corner, heavy with
+  snow; the hero below it, the longest and nearest, with the snow slipping on one twig; and
+  a smaller forked one lower down that hangs steeply, turns up at its tip and has shed its
+  snow along a stretch. Snow lies in pads along the upper side of each spine and of the
+  twigs that are level enough to hold it, and fades out underneath; short blue-green
+  needles show under and through it, four light brown cones hang under the twigs the way a
+  spruce's cones hang, and short icicles of different lengths hang under two of the bough
+  tips. Low on the right edge, as the one companion, the bare twig glazed in clear ice from
+  #616, smaller. Not Christmas and not the New Year tree: no ornament, light, ribbon, star,
+  wreath or garland, another conifer habit (short needles, a snow load, cones) and another
+  place on the screen. Glass with bodies that read: the snow's body is 0.8 as solid as its
+  rim, the needles take 0.45 of the see-through look and the wood 0.6. Still air
+  (coordinator decision on #616, kept): the scene draws no snowfall of its own, so falling
+  snow over it always means the forecast says snow. Each bough breathes a fraction of a
+  degree as one piece and a few glints on the snow rise and fall in turn; nothing else
   moves. A quiet date keeps the evergreen alone. Every piece keeps `renderOrder` 0 and an
   origin that does not move in depth
   ([#662](https://github.com/8roundshock/living-room-display/issues/662),
-  [#663](https://github.com/8roundshock/living-room-display/issues/663)). Measured
-  2026-11-11 at 1920×1080: 102,000 triangles, 28 draw calls, build 97 ms, 23 ms/s of
-  main-thread time, 4.4% of the pixels lit at full opacity on an empty board (the first
-  Winter: 75,000, 43, 72 ms, 26 ms/s; the season figures below were taken with it).
+  [#663](https://github.com/8roundshock/living-room-display/issues/663)).
 
-Measured as above on 2026-11-10 at 1920×1080: 30,000 to 75,000 triangles (Winter's frost
-is about 5,000 crystals in one instanced mesh), 43 to 76 draw calls, build 62 to 115 ms,
-23 to 38 ms/s of main-thread time and frame script of about 1 ms or less, on a PC that was
-busy with other captures (Christmas measured 39 to 48 ms/s in the same runs). At full
-opacity on an empty board a season lights 2.2 to 3.4% of the pixels; Christmas lights 11.7%.
+Measured as above on 2026-11-10 at 1920×1080, with the first Winter: 30,000 to 75,000
+triangles, 43 to 76 draw calls, build 62 to 115 ms, 23 to 38 ms/s of main-thread time and
+frame script of about 1 ms or less, on a PC that was busy with other captures (Christmas
+measured 39 to 48 ms/s in the same runs). At full opacity on an empty board a season lights
+2.2 to 3.4% of the pixels; Christmas lights 11.7%. The evergreen Winter (#665), measured on
+2026-11-11: 81,000 triangles, 30 draw calls, build 92 ms, 27 ms/s of main-thread time,
+frame script 0.4 ms, and 3.2% of the pixels lit (the first Winter: 75,000 triangles, 43
+draw calls, build 72 ms, 26 ms/s).
 Autumn after #653: 43,000 triangles, 88 draw calls (90 while a fan is in the air), build
 91 ms, 28 ms/s, 2.2% of the pixels lit, with Christmas at 29 ms/s in the same run.
 
