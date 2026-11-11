@@ -1,7 +1,8 @@
 // Ginkgo for Autumn (#615): a fan leaf on its long stalk. The fan has a wavy outer edge and a
 // notch in the middle, veins that fork toward the rim, and colour that runs from green-gold at
-// the stalk to pale gold at the rim; every leaf is its own geometry, so no two share an outline,
-// a curl or a tint. Gold and amber only: red leaves belong to Canada Day.
+// the stalk to gold at the rim; every leaf is its own geometry, so no two share an outline,
+// a curl or a tint. Gold and amber only: red leaves belong to Canada Day. Since #653 a fan is
+// thin glass: its body is see-through and its veins, rim and edges stay.
 // A part: call ginkgo(kit) once and build with what it returns. See ../README.md.
 import { blade, ramp, sheets } from './spring-blade.js';
 import { limb, taper } from './spring-limb.js';
@@ -16,26 +17,35 @@ export function ginkgo(kit) {
       for (let k = 0; k < count; k++) { const x = (k + (level ? .5 : .25)) / count * w + (rnd(k, 31 + level) - .5) * w / count * .5; g.lineWidth = thick * width; g.beginPath(); g.moveTo(x, h * (1 - from)); g.lineTo(x + (rnd(k, 35 + level) - .5) * 3, 0); g.stroke(); }
     });
   };
+  const softened = (w, h, draw, blur) => g => { const sharp = document.createElement('canvas'); sharp.width = w; sharp.height = h; draw(sharp.getContext('2d')); try { g.filter = `blur(${blur}px)`; } catch { /* no canvas filter: sharp veins */ } g.drawImage(sharp, 0, 0); try { g.filter = 'none'; } catch { /* no canvas filter */ } };
   const map = kit.canvasTexture(512, 256, (g, w, h) => {
     g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
     for (let i = 0; i < 300; i++) { g.fillStyle = `rgba(${rnd(i, 21) < .5 ? '150,100,30' : '255,250,220'},${.03 + rnd(i, 22) * .05})`; g.beginPath(); g.ellipse(rnd(i, 23) * w, rnd(i, 24) * h, 3 + rnd(i, 25) * 8, 10 + rnd(i, 26) * 30, 0, 0, 7); g.fill(); }
-    veins(g, w, h, 'rgba(140,98,30,.26)', 1.3);
+    veins(g, w, h, 'rgba(140,98,30,.14)', 1.3);
   }, { anisotropy: 8 });
-  const relief = kit.canvasTexture(512, 256, (g, w, h) => {
-    g.fillStyle = '#787878'; g.fillRect(0, 0, w, h);
-    const sharp = document.createElement('canvas'); sharp.width = w; sharp.height = h; veins(sharp.getContext('2d'), w, h, '#ffffff', 2.4);
-    try { g.filter = 'blur(1.6px)'; } catch { /* no canvas filter: sharp veins */ }
-    g.drawImage(sharp, 0, 0); try { g.filter = 'none'; } catch { /* no canvas filter */ }
-  }, { srgb: false });
-  // Yellow turns to khaki when a surface is see-through on black, and to straw under a sheen: a fan takes most of
-  // the see-through look but not all of it, and is nearly matt.
-  const fanLook = () => kit.mat({ color: 0xf4f4f4, vertexColors: true, map, bumpMap: relief, bumpScale: .014, roughness: .58, metalness: 0, clearcoat: .15, clearcoatRoughness: .45, side: T.DoubleSide, see: .6 }, .35);
-  const stalkLook = () => kit.mat({ color: 0xa89a3e, roughness: .6, metalness: 0, see: .6 }, .5, false);
+  const relief = kit.canvasTexture(512, 256, (g, w, h) => { g.fillStyle = '#787878'; g.fillRect(0, 0, w, h); softened(w, h, s => veins(s, w, h, '#ffffff', 2.4), 1.6)(g); }, { srgb: false });
+  // How solid a fan is, place by place (#653: "more transparent"): its body between the veins is thin, and what
+  // stays is what a leaf is seen by against the light: the veins, which crowd toward the rim, the rim itself and
+  // the two straight edges that run out from the stalk. THIN is the body's share; 1 is solid.
+  const THIN = .55;
+  const solid = kit.canvasTexture(512, 256, (g, w, h) => {
+    const body = Math.round(THIN * 255); g.fillStyle = `rgb(${body},${body},${body})`; g.fillRect(0, 0, w, h);
+    softened(w, h, s => { veins(s, w, h, '#ffffff', 3); s.fillStyle = '#fff'; s.fillRect(0, 0, w, h * .05); s.fillRect(0, 0, w * .012, h); s.fillRect(w * .988, 0, w * .012, h); }, 1.2)(g);
+  }, { srgb: false, anisotropy: 8 });
+  // A dimmed yellow is gold only while it has no blue and no grey in it, and the engine's key light and tone
+  // curve put both into anything bright (a fan lit at full strength comes out straw, and straw thinned on black
+  // is khaki). So a fan is lit at about half strength (DEPTH), is matt, has tones without blue and
+  // holds a little amber light of its own. A fan that dark would all but vanish under the kit's see-through
+  // look, which thins a surface by how dark it is; so the fan takes only GLASS of that look, and its thinness
+  // is drawn by `solid` above instead.
+  const DEPTH = 0xbcbcbc, GLASS = .15;
+  const fanLook = () => kit.mat({ color: DEPTH, vertexColors: true, map, alphaMap: solid, bumpMap: relief, bumpScale: .014, emissive: 0xe08a00, emissiveMap: map, emissiveIntensity: .2, roughness: 1, metalness: 0, side: T.DoubleSide, see: GLASS }, 0, false);
+  const stalkLook = () => kit.mat({ color: 0xb07c10, roughness: .6, metalness: 0, see: .7 }, .3, false);
   const fans = fanLook(), stalks = stalkLook();
 
   // From the stalk out to the rim, for a green-gold, a gold and an amber leaf; a leaf's `tint` (0-1) blends between them.
-  // (Deeper than they read on screen: the key light and the tone curve bleach a pale yellow to straw.)
-  const TONES = [ramp(kit, [[0, '#8fa420'], [.5, '#c6aa0c'], [1, '#e4bc22']]), ramp(kit, [[0, '#a89e1a'], [.5, '#e69200'], [1, '#f4b41e']]), ramp(kit, [[0, '#b8800c'], [.5, '#da6c00'], [1, '#ea8e18']])];
+  // (Deeper and more orange than they read on screen: the key light and the tone curve bleach a yellow toward straw.)
+  const TONES = [ramp(kit, [[0, '#a89a00'], [.5, '#d8a400'], [1, '#f2b800']]), ramp(kit, [[0, '#b88c00'], [.5, '#e89c00'], [1, '#f6b000']]), ramp(kit, [[0, '#b87c00'], [.5, '#e08400'], [1, '#f09800']])];
   const BROWN = kit.C(0x8a5a2b), mixed = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
   /** Three ways a fan holds itself: nearly flat, cupped, and with a ruffled edge. */
   const HOLDS = [{ cup: .04, ruffle: .015, curl: .05 }, { cup: .3, ruffle: .02, curl: .1 }, { cup: .1, ruffle: .07, curl: .18 }];
