@@ -54,7 +54,8 @@ export function ginkgo(kit) {
    * toward +y and the fan opens beyond it, facing +z. `size` is the fan's width, `stalk` the
    * stalk's length, `tint` 0 (green-gold) to 1 (amber), `hold` one of three curvatures,
    * `brown` gives it a dry brown rim. `own` gives it materials of its own and
-   * `userData.fade(k)`, for a leaf that must fade out by itself.
+   * `userData.fade(k)`, for a leaf that must fade out by itself. `about` moves the origin that
+   * far up from the foot of the stalk, for a leaf that turns in the air about its middle.
    *
    * Drawing order. three.js draws see-through meshes from the farthest origin to the nearest,
    * and a nearer fan drawn first hides the one behind it. So the fan's own origin is the foot
@@ -62,8 +63,8 @@ export function ginkgo(kit) {
    * of the stalk inside its geometry: sway does not move that origin, so two overlapping fans
    * never trade places (with the origin on the fan, they did so every few seconds). Leaves
    * hung from one point share one origin and are drawn in the order they were made: make the
-   * farthest first. */
-  function leaf({ size = .6, stalk = .35, tint = .5, hold = 0, brown = false, seed = 0, own = false } = {}) {
+   * farthest first. Turn or sway a leaf only about its origin. */
+  function leaf({ size = .6, stalk = .35, tint = .5, hold = 0, brown = false, seed = 0, own = false, about = 0 } = {}) {
     const S = sheets(kit), shape = HOLDS[((hold % 3) + 3) % 3], radius = size * .55, spread = 1.12 + rnd(seed, 1) * .34, notch = .1 + rnd(seed, 2) * .3, gap = .07 + rnd(seed, 3) * .04;
     const p1 = rnd(seed, 4) * 6, p2 = rnd(seed, 5) * 6, p3 = rnd(seed, 6) * 6, lopsided = (rnd(seed, 7) - .5) * .12, cup = shape.cup * (.7 + rnd(seed, 8) * .6), k = Math.min(1.999, Math.max(0, tint * 2)), low = TONES[Math.floor(k)], high = TONES[Math.floor(k) + 1], share = k - Math.floor(k);
     const reach = a => radius * (1 - notch * Math.exp(-(((a - lopsided) / gap) ** 2))) * (1 + .03 * Math.sin(a * 9 + p1) + .018 * Math.sin(a * 21 + p2)) * (1 - .2 * Math.pow(Math.abs(a) / spread, 6)) * (1 + lopsided * a);
@@ -71,9 +72,9 @@ export function ginkgo(kit) {
       lift: (x, y, r, a) => size * (cup * r * r * (a / spread) ** 2 + shape.ruffle * Math.pow(r, 2.5) * Math.sin(a * 6 + p3) - shape.curl * r * r - .05 * r * Math.exp(-((a / .3) ** 2))),
       tint: (u, v) => { const a = (u * 2 - 1) * spread, colour = mixed(low(v), high(v), share), dry = brown ? Math.min(1, Math.max(0, (v - (.8 + .06 * Math.sin(a * 9 + p2) + .03 * Math.sin(a * 23 + p1))) / .1)) : 0; return dry ? mixed(colour, [BROWN.r, BROWN.g, BROWN.b], dry * .85) : colour; } });
     const group = new T.Group(), bow = (rnd(seed, 9) - .5) * .5, fanMaterial = own ? fanLook() : fans, stalkMaterial = own ? stalkLook() : stalks;
-    const geometry = S.geometry(); geometry.rotateZ(-bow * .9); geometry.translate(0, stalk, 0);   // the fan sits at the end of the stalk; its mesh stays at the foot
+    const geometry = S.geometry(); geometry.rotateZ(-bow * .9); geometry.translate(0, stalk - about, 0);   // the fan sits at the end of the stalk; its mesh stays at the origin
     const fan = new T.Mesh(geometry, fanMaterial);
-    if (stalk > 0) group.add(limb(kit, [V(), V(bow * stalk * .45, stalk * .5, bow * stalk * .2), V(0, stalk, 0)], taper(.011 * (.6 + size), .008 * (.6 + size)), stalkMaterial, { sides: 5 }));
+    if (stalk > 0) group.add(limb(kit, [V(0, -about, 0), V(bow * stalk * .45, stalk * .5 - about, bow * stalk * .2), V(0, stalk - about, 0)], taper(.011 * (.6 + size), .008 * (.6 + size)), stalkMaterial, { sides: 5 }));
     group.add(fan); group.userData = { fan, size, fade: own ? value => { fanMaterial.opacity = stalkMaterial.opacity = value; } : null };
     return group;
   }

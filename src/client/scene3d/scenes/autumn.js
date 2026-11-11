@@ -117,14 +117,16 @@ export default function build(kit, ctx) {
   // ---------- one fan at a time lets go of a spur, swings down the left edge and fades into the fallen ones; then the air is empty for minutes ----------
   if (!wet && released.length) {
     // One fan does every fall, in a short repeating round. A fall has its own spur, lane, size, pace and swing,
-    // and its own empty air after it. A lane is a depth in front of or behind everything the fan can pass, with
-    // room for its own turning: the tree (its wood and fans are drawn from depths between about -0.1 and 0.4),
-    // the fallen fans (-0.5 to 0.62) and the glows (-0.6 and farther). The fan keeps to its lane from the moment
-    // it lets go: three.js draws see-through meshes in the order of their depth, and a fan that changed depth on
-    // the way down traded places with whatever it passed. So it starts where its spur is seen from the room
-    // (`seen` is that scale), not at the spur's own depth.
-    const LANES = [1, -1.3, 1.25, -1.7, -1.1], leaf = G.leaf({ size: .54 * S * SMALLER, stalk: .2 * S * SMALLER, tint: .5, hold: 2, seed: seed + 500, own: true }), holder = new T.Group();
-    leaf.position.y = -.3 * S * SMALLER; holder.add(leaf); holder.visible = false; stage.add(holder);
+    // and its own empty air after it. A lane is a depth in front of or behind everything the fan can pass, and
+    // the fan keeps to it from the moment it lets go, turning about its own origin: three.js draws see-through
+    // meshes in the order of their depth, and a fan that changed depth on the way down traded places with
+    // whatever it passed. So it starts where its spur is seen from the room (`seen` is that scale), not at the
+    // spur's own depth. In front: nearer than the tree (its wood and fans are drawn from depths between about
+    // -0.1 and 0.4) and the fallen fans (up to 0.62), short of the fog's near band (1.5). Behind: farther than
+    // the fallen fans, the glow under them (-0.6) and the snow's middle band (-1), short of the wind's seeds
+    // (-1.4 and farther).
+    const LANES = [1, -1.2, 1.25, -1.1, -1.15], leaf = G.leaf({ size: .54 * S * SMALLER, stalk: .2 * S * SMALLER, tint: .5, hold: 2, seed: seed + 500, own: true, about: .3 * S * SMALLER }), holder = new T.Group();
+    holder.add(leaf); holder.visible = false; stage.add(holder);
     const falls = []; let round = 0;
     GAPS.forEach((gap, k) => {
       const from = released[(k * 2 + 1) % released.length], z = LANES[k % LANES.length], seen = (1 - z / view.depth) / (1 - from.z / view.depth), floor = (-view.halfHAt(z) + .3) / seen, speed = .24 + rnd(k, seed + 51) * .16, fall = (from.y - floor) / speed;
