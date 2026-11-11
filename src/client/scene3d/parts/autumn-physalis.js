@@ -57,7 +57,9 @@ export function physalis(kit) {
   /** A lantern hanging from its origin (the node on the stem): a short bowed stalk and the husk
    * under it. `length` is the husk's, `stalk` the stalk's, `ripe` 0 (green-gold) to 1 (deep
    * orange-red). `lace` makes it the worn one: the net of veins alone, with the berry inside.
-   * `userData.heart` is the middle of the husk, for a light inside it. */
+   * `userData.heart` is the middle of the husk, for a light inside it. Every mesh of a lantern
+   * has its origin at the node, the point it swings about, so swinging never changes the order
+   * three.js draws two lanterns in (see the note on drawing order in autumn-ginkgo.js). */
   function lantern({ length = .45, stalk = .18, ripe = .5, lace: isWorn = false, seed = 0 } = {}) {
     const S = sheets(kit), radius = length * (.37 + rnd(seed, 1) * .05), lean = (rnd(seed, 2) - .5) * .16, crumple = .02 + rnd(seed, 3) * .03, p1 = rnd(seed, 4) * 6, facing = rnd(seed, 5) * TURN;
     const k = Math.min(1.999, Math.max(0, ripe * 2)), low = TONES[Math.floor(k)], high = TONES[Math.floor(k) + 1], share = k - Math.floor(k);
@@ -67,10 +69,11 @@ export function physalis(kit) {
       const r = radius * outline(s) * (1 + body * (.085 * rib + .03 * lesser - .035 + crumple * Math.sin(3 * a + p1 + s * 5)));
       out.set(Math.sin(a + facing) * r + lean * length * s * s, -length * s, Math.cos(a + facing) * r);
     }, (u, v) => { const s = down(v); if (isWorn) return STRAW(s); const colour = mixed(low(s), high(s), share), deep = 1 - .14 * Math.pow(.5 + .5 * Math.cos(5 * u * TURN), 3); return [colour[0] * deep, colour[1] * deep, colour[2] * deep]; }, { wrap: true });
-    const group = new T.Group(), bow = (rnd(seed, 6) - .5) * .5, foot = V(bow * stalk * .5, -stalk, 0), geometry = S.geometry(), husk = new T.Mesh(geometry, isWorn ? worn : paper);
-    husk.position.copy(foot); husk.rotation.z = bow * .5; husk.renderOrder = 2;
+    const group = new T.Group(), bow = (rnd(seed, 6) - .5) * .5, foot = V(bow * stalk * .5, -stalk, 0), geometry = S.geometry();
+    geometry.rotateZ(bow * .5); geometry.translate(foot.x, foot.y, foot.z);   // the husk hangs at the end of the stalk; its mesh stays at the node
+    const husk = new T.Mesh(geometry, isWorn ? worn : paper); husk.renderOrder = 2;
     group.add(limb(kit, [V(), V(bow * stalk * .55, -stalk * .45, bow * stalk * .2), foot], taper(.012 * (.5 + length), .008 * (.5 + length)), stem, { sides: 5 }), husk);
-    if (isWorn) { const berry = new T.Mesh(kit.ballGeo, fruit); berry.scale.setScalar(radius * .46); berry.position.set(0, -length * .42, 0); husk.add(berry); }
+    if (isWorn) { const berry = new T.Mesh(kit.ballGeo, fruit); berry.scale.setScalar(radius * .46); berry.position.set(0, -length * .42, 0).applyAxisAngle(V(0, 0, 1), bow * .5).add(foot); husk.add(berry); }
     else { const far = new T.Mesh(geometry, lining); far.renderOrder = 1; husk.add(far); }
     group.userData = { husk, length, heart: foot.clone().add(V(0, -length * .4, 0)) };
     return group;

@@ -55,16 +55,21 @@ export default function build(kit, ctx) {
     const end = base.clone().addScaledVector(way, reach), girth = Math.max(.034, parent.userData.radius(share) / S * .7);
     grow([base, base.clone().addScaledVector(way, reach * .55), end], girth, girth * .8, 6);
     const knob = new T.Mesh(kit.ballGeo, wood); knob.scale.setScalar(girth * S * .95); knob.position.copy(end); body.add(knob);
-    const count = counts[s];
+    const count = counts[s], hung = [];
     for (let k = 0; k < count; k++) {
       const i = index++, size = (.46 + rnd(i, seed + 3) * .42) * S, stalk = (.28 + rnd(i, seed + 4) * .24) * S, fan = (k - (count - 1) / 2) * 1.15 + (rnd(i, seed + 5) - .5) * .4;
-      const leaf = G.leaf({ size, stalk, tint: TINTS[i % 5] + (rnd(i, seed + 6) - .5) * .12, hold: i + s, brown: i === 4 || i === 11, seed: seed + i * 17 });
       // Each stalk leaves the spur in its own direction and the fan hangs: mostly down, a little out to its side and toward the room.
       const hang = V(Math.sin(fan) * .8 + way.x * .3, -1 + Math.abs(Math.sin(fan)) * .45, .15 + Math.cos(fan * 1.7) * .3 + way.z * .2), face = V(Math.sin(fan * .7 + (rnd(i, seed + 7) - .5) * .9), .1, Math.cos(fan * .7));
+      hung.push({ i, size, stalk, hang, face, toward: hang.clone().normalize().z * (stalk + size * .3) });
+    }
+    // The leaves of one spur sway about the same point, so three.js draws them in the order they are made
+    // (see the note on drawing order in the ginkgo part): the one that hangs farthest from the room is made first.
+    hung.sort((a, b) => a.toward - b.toward).forEach(({ i, size, stalk, hang, face }) => {
+      const leaf = G.leaf({ size, stalk, tint: TINTS[i % 5] + (rnd(i, seed + 6) - .5) * .12, hold: i + s, brown: i === 4 || i === 11, seed: seed + i * 17 });
       const pivot = new T.Group(); pivot.position.copy(end); aim(kit, leaf, hang, face); pivot.add(leaf); body.add(pivot);
       const pace = 1.43 + rnd(i, seed + 8) * 1.05, phase = rnd(i, today + 9) * 6;
       tick(t => { pivot.rotation.z = Math.sin(t * pace + phase) * .044; pivot.rotation.x = Math.sin(t * pace * .63 + phase) * .02; });
-    }
+    });
     if (count && end.x < -W + 2.6) released.push(shrunk(end.clone().add(V(0, -.5 * S, .1))));   // where a fan of this spur hangs, as drawn
   });
   tick(t => { branch.rotation.z = Math.sin(t * 1.005) * .0052; });
@@ -96,7 +101,7 @@ export default function build(kit, ctx) {
   // ---------- backlight behind the upper branch, and a faint warm light in the two ripest lanterns ----------
   const haze = kit.glow(0xf2b65a, 6, .06 * dim, { twinkle: .24 }); haze.position.copy(shrunk(at(1.9, 2.5, -2.5))); stage.add(haze);
   [[.7, 3.2, 1.0, .05], [2.2, 1.3, .8, .04], [2.9, 3.6, 1.2, .03]].forEach(([x, y, size, strength]) => { const z = -7, scale = 1 - z / view.depth, disc = kit.bokeh(0xf2b65a, size * S * scale, strength * dim, .2); disc.position.set((-W + x) * scale, y * scale * .8, z); stage.add(disc); });
-  lit.slice(0, 2).forEach(([pivot, lantern], i) => { const ember = kit.glow(0xff9440, lantern.userData.length * 1.7, (.13 - i * .03) * dim, { twinkle: .15 }); ember.position.copy(lantern.userData.heart); pivot.add(ember); });
+  lit.slice(0, 2).forEach(([pivot, lantern], i) => { const ember = kit.glow(0xff9440, lantern.userData.length * 1.7, (.13 - i * .03) * dim, { twinkle: .15 }); ember.position.copy(lantern.userData.heart).add(V(0, 0, -.06)); pivot.add(ember); });   // a little behind the lantern's own origin, so it is always drawn before the stalk
 
   // ---------- fans that have fallen: in the corner under the branch, resting on the bottom edge ----------
   // [x from the left edge, depth, how far it is laid back, turn in its own plane]: a loose overlapping group, not a row.
@@ -111,24 +116,28 @@ export default function build(kit, ctx) {
 
   // ---------- one fan at a time lets go of a spur, swings down the left edge and fades into the fallen ones; then the air is empty for minutes ----------
   if (!wet && released.length) {
-    // A short repeating round of falls. Each has its own fan, spur, depth, pace and swing, and its own empty air after it.
+    // One fan does every fall, in a short repeating round. A fall has its own spur, lane, size, pace and swing,
+    // and its own empty air after it. A lane is a depth in front of or behind everything the fan can pass, with
+    // room for its own turning: the tree (its wood and fans are drawn from depths between about -0.1 and 0.4),
+    // the fallen fans (-0.5 to 0.62) and the glows (-0.6 and farther). The fan keeps to its lane from the moment
+    // it lets go: three.js draws see-through meshes in the order of their depth, and a fan that changed depth on
+    // the way down traded places with whatever it passed. So it starts where its spur is seen from the room
+    // (`seen` is that scale), not at the spur's own depth.
+    const LANES = [1, -1.3, 1.25, -1.7, -1.1], leaf = G.leaf({ size: .54 * S * SMALLER, stalk: .2 * S * SMALLER, tint: .5, hold: 2, seed: seed + 500, own: true }), holder = new T.Group();
+    leaf.position.y = -.3 * S * SMALLER; holder.add(leaf); holder.visible = false; stage.add(holder);
     const falls = []; let round = 0;
     GAPS.forEach((gap, k) => {
-      const from = released[(k * 2 + 1) % released.length], z = [.5, -1.4, 1.1, -2.4, -.3][k % 5], floor = -view.halfHAt(z) + .3, speed = .24 + rnd(k, seed + 51) * .16, fall = (from.y - floor) / speed;
-      const leaf = G.leaf({ size: (.44 + rnd(k, seed + 57) * .2) * S * SMALLER, stalk: .2 * S * SMALLER, tint: TINTS[(k * 2 + 1) % 5], hold: k + 2, seed: seed + 500 + k * 13, own: true }), holder = new T.Group();
-      leaf.position.y = -.3 * S * SMALLER; holder.add(leaf); holder.visible = false; stage.add(holder);
-      falls.push({ from, z, floor, speed, fall, start: round, swing: 4.2 + rnd(k, seed + 54) * 1.4, reach: .32 + rnd(k, seed + 55) * .14, phase: rnd(k, seed + 56) * 6, leaf, holder }); round += fall + gap * MINUTE;
+      const from = released[(k * 2 + 1) % released.length], z = LANES[k % LANES.length], seen = (1 - z / view.depth) / (1 - from.z / view.depth), floor = (-view.halfHAt(z) + .3) / seen, speed = .24 + rnd(k, seed + 51) * .16, fall = (from.y - floor) / speed;
+      falls.push({ from, z, seen, floor, speed, fall, start: round, size: .82 + rnd(k, seed + 57) * .36, swing: 4.2 + rnd(k, seed + 54) * 1.4, reach: .32 + rnd(k, seed + 55) * .14, phase: rnd(k, seed + 56) * 6 }); round += fall + gap * MINUTE;
     });
     const offset = falls[((today % falls.length) + falls.length) % falls.length].start - FIRST_RELEASE;
     tick(t => {
-      const now = ((t + offset) % round + round) % round;
-      for (const { from, z, floor, speed, fall, start, swing, reach, phase, leaf, holder } of falls) {
-        const age = now - start, falling = age >= 0 && age < fall; holder.visible = falling; if (!falling) continue;
-        const drop = age * speed, ease = Math.min(1, drop / .7), beat = age * swing + phase;
-        holder.position.set(Math.min(-W + 2.9, Math.max(-W + .45, from.x + .3 * ease + Math.sin(beat) * reach * ease)), from.y - drop + Math.abs(Math.cos(beat)) * .07 * ease, from.z + (z - from.z) * Math.min(1, drop / 2));
-        holder.rotation.set(-.35 + Math.cos(beat) * .25, Math.sin(age * .35 + phase) * 1.1, Math.sin(beat) * .55 * ease);   // stalk first, the fan trailing above it and turning slowly on the stalk
-        leaf.userData.fade(Math.min(1, drop / .3, (from.y - drop - floor) / .5));
-      }
+      const now = ((t + offset) % round + round) % round, current = falls.find(({ start, fall }) => now >= start && now < start + fall);
+      holder.visible = Boolean(current); if (!current) return;
+      const { from, z, seen, floor, speed, start, size, swing, reach, phase } = current, age = now - start, drop = age * speed, ease = Math.min(1, drop / .7), beat = age * swing + phase;
+      holder.position.set(Math.min(-W + 2.9, Math.max(-W + .45, from.x + .3 * ease + Math.sin(beat) * reach * ease)) * seen, (from.y - drop + Math.abs(Math.cos(beat)) * .07 * ease) * seen, z);
+      holder.rotation.set(-.35 + Math.cos(beat) * .25, Math.sin(age * .35 + phase) * 1.1, Math.sin(beat) * .55 * ease);   // stalk first, the fan trailing above it and turning slowly on the stalk
+      holder.scale.setScalar(size); leaf.userData.fade(Math.min(1, drop / .3, (from.y - drop - floor) / .5));
     });
   }
 }
