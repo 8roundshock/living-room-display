@@ -6,7 +6,7 @@
 const RAMIE = '#efe9da', TINTS = ['#49c9a3', '#f2718f', '#e0b443', '#6f93dc'];
 
 /** The cloth hanging below the group's origin, which is the middle of its rod: `width` x `height`. */
-export function jogakbo(kit, { width = 2.8, height = 3.6, salt = 8 } = {}) {
+export function jogakbo(kit, { width = 2.8, height = 3.6, salt = 8, weather = null } = {}) {
   const { T, V, rnd, tick, mat, canvasTexture } = kit, group = new T.Group(), PX = 512, PY = 660, hw = width / 2;
   // A seeded, irregular subdivision into about two dozen panes.
   const panes = []; let calls = 0;
@@ -36,13 +36,16 @@ export function jogakbo(kit, { width = 2.8, height = 3.6, salt = 8 } = {}) {
   const geometry = new T.PlaneGeometry(width, height, 28, 36); geometry.translate(0, -height / 2, 0);
   const p = geometry.attributes.position, rest = p.array.slice();
   const cloth = new T.Mesh(geometry, mat({ map, alphaMap: alpha, roughness: .8, side: T.DoubleSide, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: .4, see: .4, depthWrite: false, clear: true }, .3, false)); cloth.position.y = -.1;   // ramie gauze: really see-through (#683)
+  // `weather` (the scene's parts/wind-underneath.js, #646): in the wind the ripple runs twice as deep and the cloth leans left from its rod.
   tick(t => {
+    const sway = weather ? weather.wind.sway : 1;
     for (let i = 0; i < p.count; i++) {
       const x = rest[i * 3], y = rest[i * 3 + 1], down = -y / height, middle = 1 - (x / hw) ** 2;
       // Tied only at its corners, the top edge dips a little between them; a slow ripple travels down the cloth.
-      p.setY(i, y - .09 * middle * Math.max(0, 1 - down * 2.5)); p.setZ(i, Math.sin(x * 1.7 + y * .8 - t * 2.4) * .04 * (.25 + down) + Math.sin(x * 3.9 - t * 1.7) * .012 * down);
+      p.setY(i, y - .09 * middle * Math.max(0, 1 - down * 2.5)); p.setZ(i, (Math.sin(x * 1.7 + y * .8 - t * 2.4) * .04 * (.25 + down) + Math.sin(x * 3.9 - t * 1.7) * .012 * down) * sway);
     }
-    p.needsUpdate = true; geometry.computeVertexNormals(); group.rotation.z = Math.sin(t * 2.8) * .0087;
+    const calm = Math.sin(t * 2.8) * .0087;
+    p.needsUpdate = true; geometry.computeVertexNormals(); group.rotation.z = weather ? weather.sway(calm, -1) : calm;
   });
   // The rod, and a strap from each top corner tied around it.
   const wood = mat({ color: 0xd8c29a, roughness: .55, clearcoat: .3 }, .7), rod = new T.Mesh(new T.CylinderGeometry(.035, .035, width + .4, 12), wood); rod.rotation.z = Math.PI / 2;

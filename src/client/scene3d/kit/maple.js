@@ -69,14 +69,16 @@ export function createMaple(core) {
   function leaf(tint, scale, variant = 0) { const mesh = new T.Mesh(leafGeos[((variant % 3) + 3) % 3], leafMaterial(tint)); mesh.scale.setScalar(scale); return mesh; }
 
   /** A cloth that waves slowly from its hoist edge (local x = 0). `fly` is +1 to fly toward +x, -1 toward -x;
-   * `wave` scales the wave; `see` is the share of the see-through look it takes (a flag should not look faded). */
-  function flagCloth(texture, { width = 3.5, height = width / 2, fly = 1, wave: strength = 1, see = .35 } = {}) {
+   * `wave` scales the wave: a number, or a function of the scene clock read once a frame (a scene's wind, #646);
+   * `see` is the share of the see-through look it takes (a flag should not look faded). */
+  function flagCloth(texture, { width = 3.5, height = width / 2, fly = 1, wave: waving = 1, see = .35 } = {}) {
     const geometry = new T.PlaneGeometry(width, height, 80, 40); geometry.translate(width / 2, 0, 0);
     if (fly < 0) { const uv = geometry.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i)); }
     const cloth = new T.Mesh(geometry, mat({ map: texture, emissiveMap: texture, emissive: 0xffffff, emissiveIntensity: .22, roughness: .7, metalness: 0, side: T.DoubleSide, see }, .35, false));
     cloth.scale.x = fly < 0 ? -1 : 1;
     const p = geometry.attributes.position, base = p.array.slice();
     const wave = t => {
+      const strength = typeof waving === 'function' ? waving(t) : waving;
       for (let i = 0; i < p.count; i++) {
         const x = base[i * 3], y = base[i * 3 + 1], u = x / width, amp = (.03 + .3 * u) * strength;
         p.setZ(i, Math.sin(x * 2.2 - t * 1.5 + y * .9) * amp + Math.sin(x * 4.9 - t * 2.3 + y * 1.7) * amp * .35 + Math.sin(x * 9 - t * 3 + y * 3) * amp * .08);

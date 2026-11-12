@@ -32,23 +32,33 @@ const T = { ...THREE, PMREMGenerator: Environment };
 const renderer = { capabilities: { getMaxAnisotropy: () => 1 } };
 const FOV = 30, HALF_HEIGHT = 4.5, DEPTH = HALF_HEIGHT / Math.tan(FOV / 2 * Math.PI / 180);
 
-/** What `id` (a scene, or with `overlay` that weather kind drawn alone) puts on the stage at 16:9, after one frame at the still instant. */
-export async function census(id, { overlay = null, quiet = false } = {}) {
+/** Builds `id` (a scene, or with `overlay` that weather kind drawn alone) at 16:9 and returns the kit's build (the caller disposes it).
+ * `weather` builds the scene as it is under that weather (ctx.weather, #646) without drawing the overlay; `gust` (0-1) holds the wind's gust. */
+export async function built(id, { overlay = null, quiet = false, weather = null, gust = null } = {}) {
   const build = (await import(pathToFileURL(`${folder(overlay ? 'weather' : 'scenes')}${overlay ?? id}.js`).href)).default;
   const shown = previewTheme(id), tier = sceneTier(shown, 2026), look = sceneLook(id, tier, quiet), aspect = 16 / 9;
   const view = Object.freeze({ halfW: HALF_HEIGHT * aspect, halfH: HALF_HEIGHT, aspect, depth: DEPTH, halfWAt: z => HALF_HEIGHT * aspect * (1 - z / DEPTH), halfHAt: z => HALF_HEIGHT * (1 - z / DEPTH) });
-  const ctx = Object.freeze({ id, amount: look.amount, size: look.size, tier, weather: overlay, quiet, palette: Object.freeze([shown.tint, shown.companion, shown.accent]), seed: sceneSeed(id), day: 20404, width: 1920, height: 1080 });
+  const ctx = Object.freeze({ id, amount: look.amount, size: look.size, tier, weather: overlay ?? weather, ...(gust === null ? {} : { gust }), quiet, palette: Object.freeze([shown.tint, shown.companion, shown.accent]), seed: sceneSeed(id), day: 20404, width: 1920, height: 1080 });
   const made = createKit(T, renderer, ctx, look, view);
-  build(made.kit, ctx); made.animate(14);
-  let objects = 0, triangles = 0;
+  build(made.kit, ctx);
+  return made;
+}
+
+/** What `id` (a scene, or with `overlay` that weather kind drawn alone) puts on the stage at 16:9, after one frame at the still instant.
+ * `weather` builds the scene as it is under that weather (ctx.weather, #646) without drawing the overlay; `drawn` counts what is visible. */
+export async function census(id, { overlay = null, quiet = false, weather = null } = {}) {
+  const made = await built(id, { overlay, quiet, weather }); made.animate(14);
+  let objects = 0, triangles = 0, drawn = 0;
   made.kit.stage.traverse(object => {
     if (!(object.isMesh || object.isLine || object.isPoints || object.isSprite)) return;
     objects++;
+    let visible = true; for (let up = object; up; up = up.parent) if (!up.visible) visible = false;
+    if (visible) drawn++;
     const geometry = object.geometry, count = object.isInstancedMesh ? object.count : 1;
     if (object.isMesh && geometry) triangles += (geometry.index ? geometry.index.count : geometry.attributes.position?.count ?? 0) / 3 * count;
   });
   made.dispose();
-  return { objects, triangles: Math.round(triangles) };
+  return weather ? { objects, triangles: Math.round(triangles), drawn } : { objects, triangles: Math.round(triangles) };
 }
 
 /** One baseline file's counts: a scene everyday and quiet, or an overlay (`weather-<kind>`) over a season. */

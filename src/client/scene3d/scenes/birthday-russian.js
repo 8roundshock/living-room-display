@@ -11,11 +11,15 @@ import { linenRunner, wrappedBunch } from '../parts/birthday-russian-bouquet.js'
 import { cakeSlice, honeyCake } from '../parts/birthday-russian-medovik.js';
 import { teaGlass } from '../parts/birthday-russian-tea.js';
 import { plate, steam } from '../parts/maslenitsa-tableware.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick, shift } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.07;
   const [cranberry] = ctx.palette, GLAZE = 0xf6f2ea, GOLD = 0xd9b25a;
+  // The weather over the scene (#646): wind leans the balloons left about their tie and doubles their swing, and blows the
+  // tea's steam left. Nothing here falls or is backlit; in fog the kit stops the twinkle.
+  const weather = weatherOver(kit, ctx);
 
   // ---------- the table: everything on the runner is one group, tipped toward the viewer ----------
   // The table and the bunch keep clear of the corners the float's zoom crops (#675).
@@ -28,7 +32,7 @@ export default function build(kit, ctx) {
 
   // ---------- tea in a glass holder, and the slice that was cut ----------
   const tea = teaGlass(kit, { seed }); tea.position.set(-1.42, .012, -.42); tea.rotation.y = 2.5; table.add(tea);
-  const vapour = steam(kit, { height: .9, width: .34, strength: .13, wisps: 1, salt: seed }); vapour.position.set(tea.position.x, tea.userData.top + .05, tea.position.z); table.add(vapour);
+  const vapour = steam(kit, { height: .9, width: .34, strength: .13, wisps: 1, salt: seed, weather }); vapour.position.set(tea.position.x, tea.userData.top + .05, tea.position.z); table.add(vapour);
   if (A > .15) {
     const saucer = plate(kit, { radius: .62, colour: GLAZE, line: GOLD }); saucer.position.set(-1.0, .012, .66); table.add(saucer);
     const slice = cakeSlice(kit, { seed }); slice.scale.setScalar(.66); slice.rotation.y = .55; slice.position.set(saucer.position.x - .02, saucer.position.y + saucer.userData.top, saucer.position.z - .12); table.add(slice);
@@ -50,6 +54,6 @@ export default function build(kit, ctx) {
     balloon.quaternion.slerp(new T.Quaternion().setFromUnitVectors(V(0, -1, 0), float.clone().negate().normalize()), .45);
     const knot = float.clone().add(V(0, -1.2 * size, 0).applyQuaternion(balloon.quaternion));
     group.add(balloon, kit.line(new T.QuadraticBezierCurve3(knot, knot.clone().multiplyScalar(.5).add(V(.1, -.4, 0)), V()).getPoints(24))); stage.add(group);
-    const phase = rnd(i, seed + 3) * 6; tick(t => { group.rotation.z = Math.sin(t * .45 + phase) * .03; group.rotation.x = Math.sin(t * .33 + phase) * .018; });
+    const phase = rnd(i, seed + 3) * 6; tick(t => { group.rotation.z = weather.sway(Math.sin(t * .45 + phase) * .03, 1); group.rotation.x = Math.sin(t * .33 + phase) * .018 * weather.wind.sway; });
   });
 }

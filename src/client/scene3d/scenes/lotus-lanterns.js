@@ -6,11 +6,15 @@
 // on #630: no temple wind-bell). No red globe lanterns, no sky lanterns, no living lotus, no
 // figure, symbol or writing. Art rules: ../README.md.
 import { LOTUS_SHORT, LOTUS_TWO_ROWS, LOTUS_WHITE, LOTUS_YELLOW, lanternTag, lotusLantern, palmoLantern } from '../parts/lotus-lanterns-lantern.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   // The plan's sizes are on-screen sizes at the special look; K follows the owner's size setting from there.
   const { T, V, stage, view, tick } = kit, W = view.halfW, A = ctx.amount, K = ctx.size / .935, CORD = 0xcfc8d8;
+  // The weather over the scene (#646): wind leans each lantern left on its cord (its tag with it), doubles its swing and
+  // turn, and lifts the lantern line twice as far. The lanterns' own light is the scene, not a backlight: it stays.
+  const weather = weatherOver(kit, ctx);
 
   /** Hang a lantern from `from` on a cord `drop` long (to the lantern's centre), with its tag, its halo and its own slow sway. */
   const hang = (lantern, from, drop, { tag, halo, sway, turn, phase, parent = stage }) => {
@@ -21,7 +25,7 @@ export default function build(kit, ctx) {
     parent.add(pivot);
     tick(t => {
       // Each sways on its cord and turns a little at its own pace; the light breathes, never flickers.
-      pivot.rotation.z = Math.sin(t * sway + phase) * .021; lantern.rotation.y = phase + Math.sin(t * turn + phase) * .105; breathe(1 + Math.sin(t * 7.2 + phase * 2.3) * .06);
+      pivot.rotation.z = weather.sway(Math.sin(t * sway + phase) * .021, -1); lantern.rotation.y = phase + Math.sin(t * turn + phase) * .105 * weather.wind.sway; breathe(1 + Math.sin(t * 7.2 + phase * 2.3) * .06);
     });
     return pivot;
   };
@@ -42,6 +46,6 @@ export default function build(kit, ctx) {
     ];
     strung.slice(0, Math.min(3, Math.max(1, Math.round(1 + A * 7)))).forEach(([x, make, drop, options]) => hang(make(), at(x), drop, { ...options, parent: line }));
     // The line itself lifts and settles a little.
-    tick(t => { line.position.y = Math.sin(t * 1.1) * .03; });
+    tick(t => { line.position.y = Math.sin(t * 1.1) * .03 * weather.wind.sway; });
   }
 }

@@ -100,16 +100,19 @@ export function createFir(core) {
   const bauble = (color, radius, thread, satinFinish) => ornament({ color, radius, thread, finish: satinFinish ? 'satin' : 'mirror' });
 
   /** Slow falling snow as soft points across the whole view. `salt` gives a second field its own
-   * flakes instead of a copy of the first. Nothing on quiet dates. */
-  function snow(count, { size = .16, opacity = .8, colour = 0xdfeeff, salt = 0 } = {}) {
+   * flakes instead of a copy of the first. `drift(t)`, if given, is how far the wind has carried the
+   * whole fall sideways (world units, read once a frame; the flakes wrap round the view). Nothing on quiet dates. */
+  function snow(count, { size = .16, opacity = .8, colour = 0xdfeeff, salt = 0, drift = null } = {}) {
     if (ctx.quiet || count < 1) return new T.Group();
     const n = Math.round(count), position = new Float32Array(n * 3), geometry = new T.BufferGeometry(), half = core.view.halfW * 1.375;
     geometry.setAttribute('position', new T.BufferAttribute(position, 3));
     const points = new T.Points(geometry, new T.PointsMaterial({ map: tex.glow(), size, transparent: true, opacity, depthWrite: false, color: C(colour), blending: T.AdditiveBlending }));
     points.frustumCulled = false;
     tick(t => {
+      const carried = drift ? drift(t) : 0, span = 2 * half;
       for (let i = 0; i < n; i++) {
-        position[i * 3] = (rnd(i, 1 + salt) - .5) * 2 * half + Math.sin(t * .3 + i) * .3;
+        const x = (rnd(i, 1 + salt) - .5) * span + Math.sin(t * .3 + i) * .3 + carried;
+        position[i * 3] = carried ? ((x + half) % span + span) % span - half : x;
         position[i * 3 + 1] = ((rnd(i, 2 + salt) * 12 - t * (.12 + rnd(i, 3 + salt) * .14)) % 12 + 12) % 12 - 6;
         position[i * 3 + 2] = -9 + rnd(i, 4 + salt) * 11;
       }

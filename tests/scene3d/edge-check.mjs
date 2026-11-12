@@ -190,14 +190,15 @@ function anchored(elements) {
 
 /**
  * Builds `id` (a scene, or with `overlay` the weather kind drawn alone over an empty stage) at `aspect`
- * and returns the elements anchored at each edge with the least reach first.
+ * and returns the elements anchored at each edge with the least reach first. `weather` builds the scene as it
+ * is under that weather (ctx.weather, #646) with its overlay drawn over it, and `gust` (0-1) holds the wind's gust.
  */
-export async function measure(id, { aspect = ASPECTS['16:9'], overlay = null, day = DAYS[0] } = {}) {
-  const sceneId = id, build = overlay ? null : await load('scenes', id), over = overlay ? await load('weather', overlay) : null;
+export async function measure(id, { aspect = ASPECTS['16:9'], overlay = null, weather = null, gust = null, day = DAYS[0] } = {}) {
+  const sceneId = id, build = overlay ? null : await load('scenes', id), over = overlay || weather ? await load('weather', overlay ?? weather) : null;
   const shown = previewTheme(sceneId), tier = sceneTier(shown, 2026);
   const look = sceneLook(sceneId, tier), depth = CAMERA.halfHeight / Math.tan(CAMERA.fov / 2 * Math.PI / 180);
   const view = Object.freeze({ halfW: CAMERA.halfHeight * aspect, halfH: CAMERA.halfHeight, aspect, depth, halfWAt: z => CAMERA.halfHeight * aspect * (1 - z / depth), halfHAt: z => CAMERA.halfHeight * (1 - z / depth) });
-  const ctx = Object.freeze({ id: sceneId, amount: look.amount, size: look.size, tier, weather: overlay, quiet: false, palette: Object.freeze([shown.tint, shown.companion, shown.accent]), seed: sceneSeed(sceneId), day, width: Math.round(1080 * aspect), height: 1080 });
+  const ctx = Object.freeze({ id: sceneId, amount: look.amount, size: look.size, tier, weather: overlay ?? weather, ...(gust === null ? {} : { gust }), quiet: false, palette: Object.freeze([shown.tint, shown.companion, shown.accent]), seed: sceneSeed(sceneId), day, width: Math.round(1080 * aspect), height: 1080 });
   const made = createKit(T, renderer, ctx, look, view);
   build?.(made.kit, ctx); over?.(made.kit, ctx);
   const camera = new THREE.PerspectiveCamera(CAMERA.fov, aspect, .1, 120); camera.position.set(0, 0, depth); camera.updateMatrixWorld(true); camera.updateProjectionMatrix();
@@ -281,6 +282,9 @@ export async function measureAll() {
   for (const [label, aspect] of Object.entries(ASPECTS)) {
     for (const id of SCENE_IDS) for (const day of daily.has(id) ? DAYS : DAYS.slice(0, 1)) rows.push({ case: id, aspect: label, day, edges: await measure(id, { aspect, day }) });
     for (const kind of WEATHER_KINDS) for (const over of ['summer', 'christmas']) rows.push({ case: `${kind} over ${over}`, aspect: label, day: DAYS[0], edges: await measure(over, { aspect, overlay: kind }) });
+    // Every scene in the wind (#646), with the gust held at its lull and at its peak: the lean turns pieces about where they
+    // are held, and the sway is twice as wide, so a cut end could show or a piece reach the cropped band.
+    for (const id of SCENE_IDS.filter(id => !WEATHER_KINDS.includes(id))) for (const gust of [0, 1]) rows.push({ case: `${id} in wind (gust ${gust})`, aspect: label, day: DAYS[0], edges: await measure(id, { aspect, weather: 'wind', gust }) });
   }
   return rows;
 }

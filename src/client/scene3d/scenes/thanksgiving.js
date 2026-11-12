@@ -8,18 +8,22 @@
 import { horn } from '../parts/thanksgiving-horn.js';
 import { apple, pear, grapes, cranberries } from '../parts/thanksgiving-fruit.js';
 import { sheaf } from '../parts/thanksgiving-wheat.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { V, rnd, stage, view } = kit, W = view.halfW, A = ctx.amount, seed = ctx.seed;
   // The plan gives on-screen sizes at the everyday size (0.85); U carries the tier's size from there.
   const U = ctx.size / .85;
+  // The weather over the scene (#646): wind leans the wheat's ears left and doubles their sway; rain and a storm halve the
+  // warm light behind the horn and the sheaf, fog dims it by 40%. Nothing here falls.
+  const weather = weatherOver(kit, ctx);
   // Everything rests a little below the bottom edge at its own depth, so the stage's slow drift never lifts it off the edge.
   const floor = z => -view.halfHAt(z) - .06, rest = (object, x, z, height) => { object.position.set(x, floor(z) + height + .28, z); stage.add(object); return object; };   // fruit sits clear of the band the float's zoom crops (#675)
 
   // ---------- the horn of plenty, lying on the bottom edge, its mouth toward the middle ----------
   const basket = horn(kit, { rise: view.halfH / view.depth }); basket.scale.setScalar(U); basket.position.set(-W + 3.75, floor(0), 0); stage.add(basket);
-  const warm = kit.glow(0xffb060, 6.5 * U, .1, { twinkle: .06 }); warm.position.set(-W + 3.3, -view.halfH + .3, -1.6); stage.add(warm);
+  const warm = kit.glow(0xffb060, 6.5 * U, .1 * weather.backlight, { twinkle: .06 }); warm.position.set(-W + 3.3, -view.halfH + .3, -1.6); stage.add(warm);
 
   // ---------- the spill: no two neighbours alike ----------
   // A golden apple still inside the mouth, grapes draped over the lip, a red apple on the edge and a pear leaning on it.
@@ -33,6 +37,6 @@ export default function build(kit, ctx) {
   stage.add(cranberries(kit, BERRIES.slice(0, Math.max(3, Math.round(3 + A * 17))).map(([dx, z, radius], i) => [-W + dx + (rnd(i, seed + 9) - .5) * .08, floor(z) + radius * U * .85, z, radius * U])));
 
   // ---------- the wheat sheaf, standing in the other corner, leaning a little inward ----------
-  const wheat = sheaf(kit, { stalks: 28 + A * 75, salt: seed + 11 }); wheat.scale.setScalar(U); wheat.position.set(W - 1.55, floor(-.2), -.2); wheat.rotation.z = .105; stage.add(wheat);
-  const straw = kit.glow(0xf0b23a, 4.5 * U, .07, { twinkle: .06 }); straw.position.set(W - 1.6, -view.halfH + 1.6, -1.8); stage.add(straw);
+  const wheat = sheaf(kit, { stalks: 28 + A * 75, salt: seed + 11, weather }); wheat.scale.setScalar(U); wheat.position.set(W - 1.55, floor(-.2), -.2); wheat.rotation.z = .105; stage.add(wheat);
+  const straw = kit.glow(0xf0b23a, 4.5 * U, .07 * weather.backlight, { twinkle: .06 }); straw.position.set(W - 1.6, -view.halfH + 1.6, -1.8); stage.add(straw);
 }

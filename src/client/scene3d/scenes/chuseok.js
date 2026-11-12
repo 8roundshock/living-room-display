@@ -11,11 +11,16 @@ import { persimmon, persimmonLeaves } from '../parts/chuseok-persimmon.js';
 import { riceStalk } from '../parts/chuseok-rice.js';
 import { chaeban, pineBed, songpyeon } from '../parts/chuseok-songpyeon.js';
 import { taperTube } from '../parts/seollal-forms.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   // The plan's sizes are on-screen sizes at the everyday look; K follows the owner's size setting from there.
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, A = ctx.amount, K = ctx.size / .85, seed = ctx.seed, lifted = ctx.tier === 'special';
+  // The weather over the scene (#646): wind leans the fruit, the leaves and the rice to the left and doubles their sway,
+  // and carries the loose leaf and the steam left; rain and a storm keep the loose leaf on the branch and halve the lilac
+  // light behind the tray, fog dims it by 40%. The moon is the hero and stays as it is.
+  const weather = weatherOver(kit, ctx);
 
   // ---------- the tray of songpyeon, bottom left, tilted toward the viewer so its top reads ----------
   {
@@ -30,12 +35,12 @@ export default function build(kit, ctx) {
       seat.position.set(x * K, .1 * K, z * K); seat.rotation.y = turn; cake.rotation.set(back, 0, roll); seat.add(cake); tray.add(seat);
     });
     // A lilac rim from behind, the scene's third colour as light only.
-    const rim = new T.PointLight(0xd79ae0, .9, 5, 2); rim.position.set(1.3 * K, .9 * K, -1.5 * K); tray.add(rim);
+    const rim = new T.PointLight(0xd79ae0, .9 * weather.backlight, 5, 2); rim.position.set(1.3 * K, .9 * K, -1.5 * K); tray.add(rim);
     if (!ctx.quiet) {
       // Two faint wisps of steam rise from the pile and fade.
       for (let i = 0; i < 2; i++) {
         const wisp = kit.glow(0xfff4e0, 1, 0, { twinkle: 0 }), x0 = tray.position.x + (i ? .45 : -.3) * K, y0 = tray.position.y + .5 * K; stage.add(wisp);
-        tick(t => { const life = (t / 1.125 + i * .5) % 1; wisp.position.set(x0 + Math.sin(life * 4 + i * 2) * .12, y0 + life * .8, .4); wisp.scale.set((.35 + life * .35) * K, (.8 + life * .5) * K, 1); wisp.userData.o = .09 * Math.sin(Math.PI * life); });
+        tick(t => { const life = (t / 1.125 + i * .5) % 1; wisp.position.set(x0 + Math.sin(life * 4 + i * 2) * .12 + weather.drift(life * 10), y0 + life * .8, .4); wisp.scale.set((.35 + life * .35) * K, (.8 + life * .5) * K, 1); wisp.userData.o = .09 * Math.sin(Math.PI * life); });
       }
     }
   }
@@ -73,25 +78,25 @@ export default function build(kit, ctx) {
     const sway = [];
     [[.36, .64, .95, V(-.1, -.3, .25)], [.63, .5, .5, V(.1, -.24, -.2)], [.9, .57, .75, V(-.12, -.22, .15)]].forEach(([u, size, ripe, off], i) => {
       const at = spine.getPointAt(u), tip = at.clone().add(off); twig(at, tip, .028);
-      const fruit = persimmon(kit, { size: size * K, ripe, salt: 3 + i * 7, stalk: .1 }); fruit.position.copy(tip); fruit.rotation.x = .5 + i * .08; fruit.rotation.z = (rnd(i, seed + 5) - .5) * .25; branch.add(fruit); sway.push([fruit, fruit.rotation.z, i * 1.9]);
+      const fruit = persimmon(kit, { size: size * K, ripe, salt: 3 + i * 7, stalk: .1 }); fruit.position.copy(tip); fruit.rotation.x = .5 + i * .08; fruit.rotation.z = (rnd(i, seed + 5) - .5) * .25; branch.add(fruit); sway.push([fruit, fruit.rotation.z, i * 1.9, -1]);
     });
     // Six leaves, alternating along the branch, in three curls and three tints.
     const leaf = persimmonLeaves(kit), TINTS = [0xffffff, 0xf2ffd8, 0xffe9c4];
     const leaves = Math.min(6, Math.max(3, Math.round(3 + A * 12)));
     [[.2, 1, .95, 2.5], [.3, -1, .8, 1.2], [.5, 1, .9, 2.9], [.74, -1, .72, 1.5], [.8, 1, .82, -2.7], [1, -1, .78, 1.9]].slice(0, leaves).forEach(([u, side, scale, hang], i) => {
       const blade = leaf(scale * K * .78, i, TINTS[i % 3]); blade.position.copy(spine.getPointAt(u)).add(V(0, side * .03, side * .06));
-      blade.rotation.set((rnd(i, seed + 6) - .5) * .5 + side * .25, (rnd(i, seed + 7) - .5) * .9, hang + (rnd(i, seed + 9) - .5) * .25); branch.add(blade); sway.push([blade, blade.rotation.z, i * 1.3 + 4]);
+      blade.rotation.set((rnd(i, seed + 6) - .5) * .5 + side * .25, (rnd(i, seed + 7) - .5) * .9, hang + (rnd(i, seed + 9) - .5) * .25); branch.add(blade); sway.push([blade, blade.rotation.z, i * 1.3 + 4, Math.cos(blade.rotation.z)]);   // a leaf grows along its +y: this is how far it points up
     });
     tick(t => {
-      branch.rotation.z = Math.sin(t * 3.1) * .0105;
+      branch.rotation.z = weather.sway(Math.sin(t * 3.1) * .0105, 0);
       // Fruit and leaves follow a little behind the branch.
-      for (const [item, rest, phase] of sway) item.rotation.z = rest + Math.sin(t * 3.1 - .7 + phase * .2) * .03;
+      for (const [item, rest, phase, hold] of sway) item.rotation.z = rest + weather.sway(Math.sin(t * 3.1 - .7 + phase * .2) * .03, hold);
     });
     // About once every ninety seconds a leaf lets go and falls down the right edge.
     const loose = leaf(.6 * K, 1, TINTS[2]); stage.add(loose);
     tick(t => {
-      const cycle = (t / 11.25) % 1, fall = cycle / .5; loose.visible = fall < 1;
-      loose.position.set(W - 1.5 + Math.sin(fall * 9) * .45, 3.2 - fall * 8.4, -.6); loose.rotation.set(fall * 5, fall * 4, -2 + Math.sin(fall * 7) * .8);
+      const cycle = (t / 11.25) % 1, fall = cycle / .5; loose.visible = fall < 1 && weather.falls;   // rain or a storm keeps it on the branch (#646)
+      loose.position.set(W - 1.5 + Math.sin(fall * 9) * .45 + weather.drift(fall * 5.625), 3.2 - fall * 8.4, -.6); loose.rotation.set(fall * 5, fall * 4, -2 + Math.sin(fall * 7) * .8);
     });
   }
 
@@ -100,7 +105,7 @@ export default function build(kit, ctx) {
     const stalks = [[1.0, 2.5, .62, 48], [1.45, 2.15, .5, 40], [1.95, 2.35, .75, 45], [2.4, 1.9, .42, 36], [2.85, 2.2, .55, 42]];
     stalks.forEach(([x, height, lean, grains], i) => {
       const stalk = riceStalk(kit, { height: height * K, lean: lean * K, grains, salt: 21 + i * 13 }); stalk.position.set(W - x, -view.halfH - .3, -.3 + (i % 3) * .3); stage.add(stalk);
-      const phase = i * 1.1; tick(t => { stalk.rotation.z = Math.sin(t * 4.2 + phase) * .0175; });
+      const phase = i * 1.1; tick(t => { stalk.rotation.z = weather.sway(Math.sin(t * 4.2 + phase) * .0175, 1); });
     });
   }
 }

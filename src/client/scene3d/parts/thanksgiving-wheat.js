@@ -7,7 +7,7 @@ const WAIST = 1.35;
 
 /** A wheat sheaf standing on the group's origin. `stalks` is how many; the ears nod very
  * slightly in three groups, out of step. */
-export function sheaf(kit, { stalks = 46, salt = 0 } = {}) {
+export function sheaf(kit, { stalks = 46, salt = 0, weather = null } = {}) {
   const { T, V, C, rnd, mix, tick } = kit, group = new T.Group(), count = Math.max(8, Math.round(stalks));
   const up = V(0, 1, 0), depth = V(0, 0, 1), turn = new T.Quaternion(), span = V();
   const list = () => ({ matrices: [], colours: [] });
@@ -52,7 +52,8 @@ export function sheaf(kit, { stalks = 46, salt = 0 } = {}) {
   };
   group.add(instanced(segment, strawMaterial, lower));
   const heads = upper.map(set => { const pivot = new T.Group(); pivot.position.y = WAIST; for (const mesh of [instanced(segment, strawMaterial, set.stalks), instanced(grain, grainMaterial, set.kernels), instanced(awn, awnMaterial, set.awns)]) { mesh.position.y = -WAIST; pivot.add(mesh); } group.add(pivot); return pivot; });
-  tick(t => heads.forEach((pivot, k) => { pivot.rotation.z = Math.sin(t * .45 + k * 2.1) * .0105; }));
+  // `weather` (the scene's parts/wind-underneath.js, #646): in the wind the ears lean left above the binding and sway twice as far.
+  tick(t => heads.forEach((pivot, k) => { const calm = Math.sin(t * .45 + k * 2.1) * .0105; pivot.rotation.z = weather ? weather.sway(calm, 1) : calm; }));
 
   // Twine wound three times round the waist, knotted in front, two loose ends.
   const twine = kit.mat({ color: 0xa98c5a, roughness: .78 }, .4, false);

@@ -8,11 +8,14 @@
 import { aim } from '../parts/spring-blade.js';
 import { limb, taper } from '../parts/spring-limb.js';
 import { morningGlory } from '../parts/summer-morning-glory.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, today = ctx.seed + ctx.day;
-  const G = morningGlory(kit), wet = ctx.weather === 'rain' || ctx.weather === 'storm', TURN = Math.PI * 2;
+  // The weather over the scene (#646): wind leans each leaf and flower to the left and doubles its sway; rain and a storm
+  // put out the fireflies and halve the glows; fog dims the glows and the fireflies by 40% and stops the twinkle.
+  const weather = weatherOver(kit, ctx), G = morningGlory(kit), TURN = Math.PI * 2;
   const at = (x, y, z = 0) => V(W - x, y, z);   // measured from the right edge, so the vine keeps its edge on any screen shape
 
   /** A leaf on its stalk from a node. The group turns a little about the node. */
@@ -22,7 +25,8 @@ export default function build(kit, ctx) {
     aim(kit, blade, V(side * .3 + (rnd(index, seed + 2) - .5) * .5, -1, .12), V(Math.sin(yaw), .12, Math.cos(yaw)));
     pivot.position.copy(node); pivot.add(blade, limb(kit, [V(), end.clone().multiplyScalar(.5).add(V(0, .03 * S, 0)), end], taper(.014 * S, .009 * S), G.stem, { sides: 5 })); parent.add(pivot);
     const pace = 1 + rnd(index, seed + 3) * .68, phase = rnd(index, today + 4) * 6;
-    tick(t => { pivot.rotation.z = Math.sin(t * pace + phase) * .026; pivot.rotation.x = Math.sin(t * pace * .7 + phase) * .012; });
+    // The leaf hangs below its node: its free end is below the pivot.
+    tick(t => { pivot.rotation.z = weather.sway(Math.sin(t * pace + phase) * .026, -.7); pivot.rotation.x = Math.sin(t * pace * .7 + phase) * .012 * weather.wind.sway; });
     return pivot;
   };
   /** A bud on a short stalk. */
@@ -61,12 +65,12 @@ export default function build(kit, ctx) {
     const pivot = new T.Group(), base = at(...foot).sub(node), flower = G.flower({ radius: radius * S, seed: seed + i }), way = V(...face).normalize();
     flower.position.copy(base); flower.quaternion.setFromUnitVectors(V(0, 1, 0), way);
     pivot.position.copy(node); pivot.add(flower, limb(kit, [V(), base.clone().multiplyScalar(.5).add(V(0, .04, 0)), base], taper(.016 * S, .013 * S), G.stem, { sides: 5 })); body.add(pivot);
-    if (!ctx.quiet) { const light = kit.glow(0xe9f0ff, .5 * S, wet ? .07 : .14, { twinkle: .1 }); light.position.copy(base).addScaledVector(way, flower.userData.deep * .7); pivot.add(light); }
-    const phase = rnd(i, seed + 21) * 6; tick(t => { pivot.rotation.z = Math.sin(t * 1.2 + phase) * .0175; });
+    if (!ctx.quiet) { const light = kit.glow(0xe9f0ff, .5 * S, .14 * weather.backlight, { twinkle: .1 }); light.position.copy(base).addScaledVector(way, flower.userData.deep * .7); pivot.add(light); }
+    const phase = rnd(i, seed + 21) * 6, hold = base.y / base.length(); tick(t => { pivot.rotation.z = weather.sway(Math.sin(t * 1.2 + phase) * .0175, hold); });
   });
   hangBud(body, high.userData.at(1), V(.5, .7, .3), .36, 1); hangBud(body, mid.userData.at(.9), V(-.5, -.6, .5), .3, 2); hangBud(body, wound(0, .88), V(.7, -.2, .5), .27, 3);
   [[high.userData.at(.3), V(-.3, -1, .2), .5, 1], [mid.userData.at(1), V(-.2, -1, .1), .42, -1], [wound(0, .62), V(-.75, -.6, .3), .55, 1], [low.userData.at(1), V(-.8, -.5, .1), .36, -1]].forEach(([from, way, reach, side]) => body.add(G.tendril({ from, way, reach: reach * S, coil: .1 * S, side, thick: .011 * S })));
-  tick(t => { vine.rotation.z = Math.sin(t * 1.257) * .0087; });
+  tick(t => { vine.rotation.z = weather.sway(Math.sin(t * 1.257) * .0087, 0); });
 
   if (ctx.quiet) return;   // a quiet date keeps the vine alone: no runner, no fireflies, no backlight
 
@@ -79,21 +83,22 @@ export default function build(kit, ctx) {
   }
 
   // ---------- backlight behind the upper vine ----------
-  const haze = kit.glow(0x7fb8a0, 6, .05, { twinkle: .24 }); haze.position.copy(at(1.6, 2.6, -2.5)); stage.add(haze);
+  const haze = kit.glow(0x7fb8a0, 6, .05 * weather.backlight, { twinkle: .24 }); haze.position.copy(at(1.6, 2.6, -2.5)); stage.add(haze);
 
   // ---------- fireflies: lights only, four over the runner in the bottom-left corner and two beside the vine ----------
-  if (!wet) {
+  // Rain or a storm puts the fireflies out (#646): they stay built and hidden.
+  {
     const SPOTS = [[-W + 1.5, -2.5, -1], [W - 2.3, -.7, .6], [-W + 2.6, -3.3, 1.6], [-W + .9, -1.7, -4.5], [W - 2.2, 2.0, -3], [-W + 2.9, -2.1, -6], [-W + 1.9, -3.7, 2.6], [W - 2.9, -2.9, -1.5], [-W + .7, -3.0, .4], [-W + 2.2, -1.5, -2.4]];
     const smooth = k => k * k * (3 - 2 * k);
     SPOTS.slice(0, Math.min(10, Math.round(4 + 6 * A))).forEach(([x, y, z], i) => {
       // Far ones are small and sharp; near ones are larger, softer and fainter.
       const scale = 1 - z / view.depth, near = z > 1, colour = i % 2 ? 0xf3e58a : 0xd9f27a, home = V(x * scale, y * scale, z);
-      const core = kit.glow(colour, .14 * S * (near ? 2.6 : 1), 0, { twinkle: 0 }), halo = kit.glow(colour, .9 * S * (near ? 1.5 : 1), 0, { twinkle: 0 }); stage.add(core, halo);
+      const core = kit.glow(colour, .14 * S * (near ? 2.6 : 1), 0, { twinkle: 0 }), halo = kit.glow(colour, .9 * S * (near ? 1.5 : 1), 0, { twinkle: 0 }); core.visible = halo.visible = !weather.wet; stage.add(core, halo);
       // Three seconds up, two held, four down, then five to fourteen dark, on a clock that runs at an eighth of real time.
       const dark = .625 + rnd(i, today + 31) * 1.125, cycle = 1.125 + dark, offset = rnd(i, today + 32) * cycle + i * .37, pace = .25 + rnd(i, seed + 33) * .15, phase = rnd(i, seed + 34) * 6;
       tick(t => {
         const age = ((t + offset) % cycle + cycle) % cycle, lit = age < .375 ? smooth(age / .375) : age < .625 ? 1 : age < 1.125 ? 1 - smooth((age - .625) / .5) : 0;
-        core.userData.o = lit * (near ? .5 : 1); halo.userData.o = lit * (near ? .16 : .3);
+        core.userData.o = lit * (near ? .5 : 1) * weather.far; halo.userData.o = lit * (near ? .16 : .3) * weather.far;
         core.position.set(home.x + Math.cos(t * pace + phase) * .6, home.y + Math.sin(t * pace * 1.3 + phase) * .35, home.z + Math.sin(t * pace * .7 + phase) * .25); halo.position.copy(core.position);
       });
     });

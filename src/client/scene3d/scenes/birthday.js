@@ -4,10 +4,15 @@
 // all differ tied to a present in the right corner, and a short swag of bunting in each top
 // corner. No confetti or streamers (New Year has them), no lettering, no age. The middle stays
 // empty. Art rules: ../README.md.
+import { weatherOver } from '../parts/wind-underneath.js';
+
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick, mix, shift } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed;
   const [first, second, third] = ctx.palette, CREAM = 0xf6ead8, GOLD = 0xf2c94c;
+  // The weather over the scene (#646): wind leans the balloons left about their tie and doubles their swing, and leans
+  // the bunting's flags left and doubles their flap. Nothing here falls or is backlit; in fog the kit stops the twinkle.
+  const weather = weatherOver(kit, ctx);
   const css = colour => `#${new T.Color(colour).getHexString()}`, deep = (colour, k = .3) => mix(colour, 0x000000, k), pale = (colour, k = .55) => mix(colour, 0xffffff, k);
   // The colourway: the scene's three registry colours and two neighbours on the colour wheel, a little deepened so they glow rather than wash out.
   const TONES = [first, third, second, shift(first, -.16), shift(second, -.13)].map(colour => shift(colour, 0, .08, -.07));
@@ -30,7 +35,7 @@ export default function build(kit, ctx) {
     balloon.quaternion.slerp(new T.Quaternion().setFromUnitVectors(V(0, -1, 0), at.clone().negate().normalize()), .45);
     const knot = at.clone().add(V(0, -(star ? 1.07 : 1.2) * radius, 0).applyQuaternion(balloon.quaternion));
     group.add(balloon, kit.line(new T.QuadraticBezierCurve3(knot, knot.clone().multiplyScalar(.5).add(V(-.12, -.45, 0)), V()).getPoints(24))); stage.add(group);
-    const phase = i * 1.3; tick(t => { group.rotation.z = Math.sin(t * .45 + phase) * .035; group.rotation.x = Math.sin(t * .33 + phase) * .02; });
+    const phase = i * 1.3; tick(t => { group.rotation.z = weather.sway(Math.sin(t * .45 + phase) * .035, 1); group.rotation.x = Math.sin(t * .33 + phase) * .02 * weather.wind.sway; });
   }
 
   // ---------- a cake between two presents, left corner ----------
@@ -41,5 +46,5 @@ export default function build(kit, ctx) {
 
   // ---------- a short swag of bunting in each top corner ----------
   const papers = TONES.map((tone, i) => [css(tone), css(pale(tone)), ['dots', 'stripes', 'grid', 'dots', 'stripes'][i]]), flags = Math.max(2, Math.round(3 + A * 6));
-  stage.add(kit.bunting(V(-W - .35, 4.7, 0), V(-W + 4.6, 4.62, 0), { flags, papers }), kit.bunting(V(W - 3.7, 4.62, 0), V(W + .35, 4.7, 0), { flags: flags - 1, papers, start: 2 }));
+  stage.add(kit.bunting(V(-W - .35, 4.7, 0), V(-W + 4.6, 4.62, 0), { flags, papers, weather }), kit.bunting(V(W - 3.7, 4.62, 0), V(W + .35, 4.7, 0), { flags: flags - 1, papers, start: 2, weather }));
 }

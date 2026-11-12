@@ -22,10 +22,10 @@ const KINDS = {
  * and `to` the colour of a trail's body and of its tip, `offset` shifts its cycle so blooms take
  * turns, `wander` is how far a reopening may move, `floor` the y of the bottom edge at that
  * depth, where its faint rising streak starts. The caller leaves blooms out on a quiet date. */
-export function bloom(kit, { kind = 'chrysanthemum', centre, radius = 1.9, trails = 110, from = 0xf6cf4e, to = 0xffffff, offset = 0, wander = .6, floor = -4.5, salt = 0 } = {}) {
+export function bloom(kit, { kind = 'chrysanthemum', centre, radius = 1.9, trails = 110, from = 0xf6cf4e, to = 0xffffff, offset = 0, wander = .6, floor = -4.5, strength = 1, salt = 0 } = {}) {
   const { T, V, C, rnd, tick } = kit, group = new T.Group(), how = KINDS[kind] ?? KINDS.chrysanthemum, count = Math.max(1, Math.round(trails)) * how.strands;
   const perTrail = (SAMPLES - 1) * 2, rest = new Float32Array(count * SAMPLES * 3), position = new Float32Array(count * perTrail * 3), colour = new Float32Array(count * perTrail * 3);
-  const tipPosition = new Float32Array(count * 3), tipColour = new Float32Array(count * 3), body = C(from), end = C(to), shade = new T.Color();
+  const tipPosition = new Float32Array(count * 3), tipColour = new Float32Array(count * 3), body = C(from).multiplyScalar(strength), end = C(to).multiplyScalar(strength), shade = new T.Color();
   const lines = new T.BufferGeometry(); lines.setAttribute('position', new T.BufferAttribute(position, 3)); lines.setAttribute('color', new T.BufferAttribute(colour, 3));
   const tips = new T.BufferGeometry(); tips.setAttribute('position', new T.BufferAttribute(tipPosition, 3)); tips.setAttribute('color', new T.BufferAttribute(tipColour, 3));
   const trailsMesh = new T.LineSegments(lines, new T.LineBasicMaterial({ vertexColors: true, transparent: true, blending: T.AdditiveBlending, depthWrite: false }));
@@ -74,7 +74,7 @@ export function bloom(kit, { kind = 'chrysanthemum', centre, radius = 1.9, trail
     }
     if (!same) lines.attributes.position.needsUpdate = lines.attributes.color.needsUpdate = true;
     tips.attributes.position.needsUpdate = tips.attributes.color.needsUpdate = true;
-    heart.userData.o = .1 * level * Math.min(1, reveal * 2);
+    heart.userData.o = .1 * strength * level * Math.min(1, reveal * 2);
   }
 
   let shown = null;
