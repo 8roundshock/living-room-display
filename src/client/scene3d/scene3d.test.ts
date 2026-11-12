@@ -13,11 +13,11 @@ const near = (actual: number, expected: number, label: string) => assert.ok(Math
 const moduleIds = (folder: string) => readdirSync(fileURLToPath(new URL(`./${folder}/`, import.meta.url))).filter(file => file.endsWith('.js') && !file.startsWith('_')).map(file => file.slice(0, -3));
 const SCENE_FILES = moduleIds('scenes'), WEATHER_FILES = moduleIds('weather');
 
-test('The owner’s picks of 2026-11-10 are the look of an everyday scene, before the tier rule', () => {
-  assert.deepEqual({ ...OWNER_LOOK }, { seeThrough: 1, glow: .65, shine: .8, size: .85, timeScale: 5 / 40, fadeToMiddle: .6, brightness: .95, amount: .3 });
+test('The owner’s picks of 2026-11-10 are the look of an everyday scene, before the tier rule; shine follows his 2026-11-12 direction (#691)', () => {
+  assert.deepEqual({ ...OWNER_LOOK }, { seeThrough: 1, glow: .65, shine: .3, size: .85, timeScale: 5 / 40, fadeToMiddle: .6, brightness: .95, amount: .3 });
   const christmas = sceneLook('christmas', 'everyday');
   near(christmas.amount, .3 * .8, 'everyday amount'); near(christmas.size, .85, 'everyday size'); near(christmas.opacity, .95 * .9, 'everyday opacity');
-  assert.deepEqual([christmas.glow, christmas.shine, christmas.seeThrough, christmas.timeScale, christmas.fadeToMiddle, christmas.particles, christmas.saturation], [.65, .8, 1, .125, .6, true, 1]);
+  assert.deepEqual([christmas.glow, christmas.shine, christmas.seeThrough, christmas.timeScale, christmas.fadeToMiddle, christmas.particles, christmas.saturation], [.65, .3, 1, .125, .6, true, 1]);
 });
 test('Special occasions are a little brighter and bigger; Canada Day keeps its own lower amount', () => {
   const birthday = sceneLook('birthday', 'special'), canada = sceneLook('canada-day', 'special');

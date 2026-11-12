@@ -32,7 +32,7 @@ export default function build(kit, ctx) {
   const crystal = cutGlassBowl(kit, { radius: .42 }); crystal.position.set(-2.02, 0, -.12); table.add(crystal);
   // Red caviar heaped in the glass: the scene's jewel.
   {
-    const count = Math.min(200, Math.round(70 + A * 220)), roe = new T.InstancedMesh(new T.SphereGeometry(1, 10, 8), kit.mat({ color: 0xd22a04, roughness: .12, clearcoat: 1, clearcoatRoughness: .06, emissive: 0xc41e00, emissiveIntensity: .34 }, .6), count), o = new T.Object3D();
+    const count = Math.min(200, Math.round(70 + A * 220)), roe = new T.InstancedMesh(new T.SphereGeometry(1, 10, 8), kit.mat({ color: 0xd82e06, roughness: .3, clearcoat: .5, clearcoatRoughness: .2, gloss: true, emissive: 0xc41e00, emissiveIntensity: .3, own: .35 }, .4), count), o = new T.Object3D();
     for (let i = 0; i < count; i++) {
       const k = (i + .5) / count, r = Math.sqrt(k) * crystal.userData.inner * .96, a = i * 2.39996, lift = (1 - k * k) * .11 + rnd(i, seed + 1) * .02;
       o.position.set(crystal.position.x + Math.cos(a) * r, crystal.userData.fill - .04 + lift, crystal.position.z + Math.sin(a) * r); o.scale.setScalar(.03 + rnd(i, seed + 2) * .007); o.updateMatrix(); roe.setMatrixAt(i, o.matrix);

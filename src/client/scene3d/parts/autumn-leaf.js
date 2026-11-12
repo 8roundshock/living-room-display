@@ -64,7 +64,7 @@ export function leafTextures(kit, veins, { mottle = '150,90,20', speck = '96,44,
  * colour on screen when the leaf's light adds up to 1, a little brighter where the key light
  * also falls on it. The kit's glass look still applies (it is computed before the curve). */
 export function leafLook(kit, { map, relief, solid }, glow = 1) {
-  const material = kit.mat({ color: 0x707070, vertexColors: true, map, alphaMap: solid, bumpMap: relief, bumpScale: .012, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: glow, roughness: 1, metalness: 0, side: kit.T.DoubleSide, see: .15 }, 0, false);
+  const material = kit.mat({ color: 0x707070, vertexColors: true, map, alphaMap: solid, bumpMap: relief, bumpScale: .012, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: glow, roughness: 1, metalness: 0, side: kit.T.DoubleSide, see: .15, own: 0 }, 0, false);
   // The leaf's own light takes the leaf's own colour, which is per vertex (three.js r128 shader text; if a later
   // three.js words that line differently nothing is replaced and the light is simply white-gold on every leaf).
   const patch = material.onBeforeCompile;

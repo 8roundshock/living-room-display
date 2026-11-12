@@ -6,10 +6,10 @@ import { merged } from './new-year-tree-tubes.js';
 
 /** Colourways of the ray papers: [body, bands...] from the rim to the tip, with foil where a band is 'foil'. */
 const PAPERS = [
-  ['#b0343c', [0, .07, 'foil'], [.56, .6, 'foil'], [.6, .74, '#30509c'], [.74, .78, 'foil']],
-  ['#30509c', [0, .07, 'foil'], [.3, .34, 'foil'], [.82, 1, 'foil']],
-  ['foil', [0, .12, '#b0343c'], [.42, .54, '#30509c'], [.86, 1, '#b0343c']],
-  ['#b0343c', [0, .07, 'foil'], [.4, .44, 'foil'], [.44, 1, '#30509c']],
+  ['#d8323e', [0, .07, 'foil'], [.56, .6, 'foil'], [.6, .74, '#3c66cc'], [.74, .78, 'foil']],
+  ['#3c66cc', [0, .07, 'foil'], [.3, .34, 'foil'], [.82, 1, 'foil']],
+  ['foil', [0, .12, '#d8323e'], [.42, .54, '#3c66cc'], [.86, 1, '#d8323e']],
+  ['#d8323e', [0, .07, 'foil'], [.4, .44, 'foil'], [.44, 1, '#3c66cc']],
 ];
 const ORDER = [0, 1, 2, 3, 1, 0, 3, 2];
 
@@ -44,10 +44,11 @@ export function carolStar(kit, { radius = .62, depth = .24, reach = .83, base = 
   // ---------- eight rays: four-sided paper pyramids, no two neighbours in the same paper ----------
   const papers = PAPERS.map(([body, ...bands]) => {
     const fill = (g, value) => { g.fillStyle = value; g.fillRect(0, 0, 32, 256); }, band = (g, from, to, value) => { g.fillStyle = value; g.fillRect(0, 256 * (1 - to), 32, 256 * (to - from)); };
-    const map = kit.canvasTexture(32, 256, g => { fill(g, body === 'foil' ? '#e2bd62' : body); for (const [from, to, value] of bands) band(g, from, to, value === 'foil' ? '#e2bd62' : value); });
+    const map = kit.canvasTexture(32, 256, g => { fill(g, body === 'foil' ? '#f0c860' : body); for (const [from, to, value] of bands) band(g, from, to, value === 'foil' ? '#f0c860' : value); });
     // Green is roughness and blue is metalness: matte paper, bright foil.
     const finish = kit.canvasTexture(32, 256, g => { fill(g, body === 'foil' ? 'rgb(0,70,255)' : 'rgb(0,185,0)'); for (const [from, to, value] of bands) band(g, from, to, value === 'foil' ? 'rgb(0,70,255)' : 'rgb(0,185,0)'); }, { srgb: false });
-    return kit.mat({ map, roughnessMap: finish, metalnessMap: finish, roughness: 1, metalness: 1, flatShading: true, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: .1 }, 1.2, false);
+    // Coloured paper and gold foil that keep their colour in the dark street (#691): they hold light of their own.
+    return kit.mat({ map, roughnessMap: finish, metalnessMap: finish, roughness: 1, metalness: 1, flatShading: true, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: .1, own: .5 }, 1, false);
   });
   const spike = new T.ConeGeometry(base / Math.SQRT2, reach, 4, 1); spike.rotateY(Math.PI / 4);
   const strips = [[], []];

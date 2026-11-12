@@ -49,12 +49,12 @@ function feather(kit, variant) {
  */
 export function mimosaSpray(kit, { stems, panicles = 6, leaves = 14, inside = 1.5, seed = 0 } = {}) {
   const { T, V, C, rnd } = kit, group = new T.Group(), own = [], up = V(0, 1, 0);
-  const STEM = C(0x7f9a5a), SHOOT = C(0xa9c070), DEEP = C(0xd89400), LIGHT = C(0xf4c000), BUD = C(0xb9c860);
+  const STEM = C(0x7f9a5a), SHOOT = C(0xa9c070), DEEP = C(0xecb400), LIGHT = C(0xffe000), BUD = C(0xb9c860);
   const round = new T.SphereGeometry(1, 8, 6);
   const fuzz = kit.canvasTexture(64, 64, g => { g.fillStyle = '#6a6a6a'; g.fillRect(0, 0, 64, 64); for (let i = 0; i < 520; i++) { const v = Math.round(90 + rnd(i, seed + 3) * 165); g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(rnd(i, seed + 1) * 64, rnd(i, seed + 2) * 64, 1.6, 1.6); } }, { srgb: false, repeat: true });
   // Yellow that stays yellow when the screen is dim: soft, matte, and a little lit from within.
   // Painted deeper than #ffd91f: the key light and the tone curve lift it to that, instead of to cream.
-  const blossom = kit.mat({ color: 0xffffff, roughness: 1, bumpMap: fuzz, bumpScale: .02, emissive: 0xe89c00, emissiveIntensity: .5 }, .1, false);
+  const blossom = kit.mat({ color: 0xffffff, roughness: 1, bumpMap: fuzz, bumpScale: .02, emissive: 0xf6c800, emissiveIntensity: .5 }, .1, false);   // #691: the lemon-gold of a photo of Acacia dealbata (hue about 52 degrees)
   const down = new T.MeshBasicMaterial({ color: C(0xf2b000), alphaMap: fuzz, transparent: true, opacity: .2, depthWrite: false, blending: T.AdditiveBlending });
   const fronds = [0, 1, 2].map(variant => kit.mat({ color: [0x6f9a7c, 0x4f8a62, 0x7fa88c][variant], alphaMap: feather(kit, variant), roughness: .7, side: T.DoubleSide, depthWrite: false, clear: true, emissive: 0x4f8a62, emissiveIntensity: .45 }, .3, false));
   const blade = new T.PlaneGeometry(1, .46, 12, 2), q = blade.attributes.position;
