@@ -24,7 +24,7 @@ export default function build(kit, ctx) {
 
   // ---------- shed blossom: a few balls at the foot of the vase, a few drifting down under the spray ----------
   const o = new T.Object3D(), fallen = spray.ball(Math.min(9, Math.max(3, Math.round(1 + A * 20))));
-  for (let i = 0; i < fallen.count; i++) { const size = .045 + rnd(i, seed + 5) * .025; o.position.set(-.8 + i * .34 + rnd(i, seed + 6) * .2 + (i > 2 ? .5 : 0), size - .08, -.55 + rnd(i, seed + 7) * .5); o.scale.setScalar(size); o.updateMatrix(); fallen.setMatrixAt(i, o.matrix); }
+  for (let i = 0; i < fallen.count; i++) { const size = .045 + rnd(i, seed + 5) * .025; o.position.set(-.8 + i * .34 + rnd(i, seed + 6) * .2 + (i > 2 ? .5 : 0), size - .1, -.55 + rnd(i, seed + 7) * .5); o.scale.setScalar(size); o.updateMatrix(); fallen.setMatrixAt(i, o.matrix); }
   corner.add(fallen);
   if (!ctx.quiet && A > .04) {
     const drifting = spray.ball(Math.min(12, Math.round(A * 30))), top = 4.6; corner.add(drifting);

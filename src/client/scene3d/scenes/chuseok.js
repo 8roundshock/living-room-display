@@ -45,7 +45,7 @@ export default function build(kit, ctx) {
   // ---------- on the ground beside the tray: an opened chestnut burr and jujubes ----------
   {
     // A little above the bottom edge (#675: the float's zoom crops the lowest 2% of the screen at its centre).
-    const ground = z => -view.halfHAt(z) + .14;
+    const ground = z => -view.halfHAt(z) + .13;
     const burr = chestnutBurr(kit, { radius: .34 * K, salt: seed % 53 }); burr.position.set(-W + 4.4, ground(.6) + .56 * K, .6); burr.rotation.set(.15, -.3, .1); stage.add(burr);
     const fallen = Math.min(3, Math.max(1, Math.round(1 + A * 9)));
     [[4.95, 1.1, .3, .85, .3], [5.3, .3, -.5, .5, .26], [3.85, 1.5, 1.2, .95, .28]].slice(0, fallen).forEach(([x, z, turn, ripe, length], i) => {

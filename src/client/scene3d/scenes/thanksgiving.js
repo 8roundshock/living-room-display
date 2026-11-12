@@ -23,7 +23,7 @@ export default function build(kit, ctx) {
 
   // ---------- the spill: no two neighbours alike ----------
   // A golden apple still inside the mouth, grapes draped over the lip, a red apple on the edge and a pear leaning on it.
-  const golden = rest(apple(kit, { radius: .37 * U, skin: 'gold', salt: seed + 3 }), -W + 3.42, .5, .5 * U); golden.rotation.set(.45, .3, -.6);
+  const golden = rest(apple(kit, { radius: .37 * U, skin: 'gold', salt: seed + 3 }), -W + 3.42, .5, .5 * U - .18); golden.rotation.set(.45, .3, -.6);
   const bunch = grapes(kit, { size: .8 * U, salt: seed + 5 }); bunch.position.set(-W + 3.78, floor(1.1) + .66 * U, 1.1);
   bunch.quaternion.setFromUnitVectors(V(0, -1, 0), V(.8, -.42, .43).normalize()); bunch.scale.z = .86; stage.add(bunch);
   const red = rest(apple(kit, { radius: .43 * U, skin: 'red', salt: seed + 1 }), -W + 4.95, .5, .37 * U); red.rotation.set(.18, 1.9, .2);
