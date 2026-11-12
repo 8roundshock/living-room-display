@@ -14,8 +14,10 @@ What changed:
   over what was behind; it is now the object's colour times that alpha, drawn opaque, which
   is the same on black. Cut-out outlines stay cut out, with no dark fringes.
 - What is really see-through stays clear: glass (the Women's Day vase, the tea glass, the
-  cut-glass bowl), water, tea, melted butter and honey, clear ice, rain on the glass, the
-  ramie gauze of the Korean birthday and the mimosa's feathery fronds.
+  cut-glass bowl), water, tea, melted butter and honey, clear ice, rain on the glass, the snow
+  overlay's ice plates, the ramie gauze of the Korean birthday and the mimosa's feathery fronds.
+  Winter's snow pads are cut where their underside used to fade, so they lay no dark band over
+  the needles.
 - The Transparency slider still works, as how thin and dim the objects look.
 - Leaf veins are a little darker and browner than the blade, thin and low in relief, with no
   glowing rim: Autumn's maple and birch leaves, Canada Day's maple leaves, Chuseok's persimmon

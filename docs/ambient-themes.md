@@ -184,8 +184,14 @@ look more realistic/nicer".
   | Winter | clear ice: the glaze, frozen drops and icicles |
   | Korean birthday | the ramie wrapping cloth, a gauze |
   | Rain overlay | drops and their trails on the glass |
+  | Snow overlay | the few hexagonal plates of clear ice among the flakes |
 
   Everything else is solid, including silvered glass ornaments, satin, balloons and snow.
+  Winter's snow pads used to fade out over their underside; on solid snow that fade would be a
+  dark band over the needles behind, so the pad is cut where the fade reached half, with the
+  kit's smoothed coverage, and the needles show below it. The Chuseok tray's woven gaps are
+  the only other soft alpha shape on a solid surface; it lies on black, and its captures are
+  unchanged.
   `transparency.test.ts` holds the list; a `mat()` call may not ask for blending any other way.
 - **Fading.** Something that appears or goes as a whole (the falling maple leaf, which fades
   into the fallen ones) fades with `kit.fade`; a solid surface is blended only while it fades.

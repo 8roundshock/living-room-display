@@ -83,7 +83,8 @@ test('Solid is the default: opaque at its colour times its alpha, after the tone
   assert.match(core, /\.replace\('#include <dithering_fragment>', 'if \(uSolid > 0\.5\) \{\\n  float gFade = uSolid > 1\.5 \? max\(opacity, 0\.0001\) : 1\.0;\\n  gl_FragColor\.rgb \*= clamp\(gl_FragColor\.a \/ gFade, 0\.0, 1\.0\);\\n  gl_FragColor\.a = \(uSolid > 1\.5 \? opacity : 1\.0\) \* gCover;/);
   // An outline cut by alphaTest is where the surface is, not how dim: coverage, smoothed across samples when there are some.
   assert.match(core, /\.replace\('#include <alphatest_fragment>'/);
-  assert.match(core, /material\.alphaToCoverage = solid\.value === SOLID\.solid && multisampled && material\.alphaTest > 0;/);
+  assert.match(core, /if \(!clear\) material\.depthWrite = true;\n[^\n]*\n\s+material\.alphaToCoverage = !clear && multisampled && material\.alphaTest > 0;/, 'set with the material state, not at compile time');
+  assert.doesNotMatch(core, /onBeforeCompile = shader => \{\n\s+material\.alphaToCoverage/);
   assert.match(core, /gl\.getParameter\(gl\.SAMPLES\) > 1/);
   assert.match(core, /\bfade,/, 'fade is part of the kit'); assert.match(read('./engine.d.ts'), /fade\(material: any, amount: number\): void;/);
   assert.match(read('./engine.d.ts'), /surfaces: \{ solid: number; clear: number \}/, 'stats report solid and clear surfaces');
@@ -98,6 +99,7 @@ test('Clear surfaces are marked by their scenes; nothing asks for blending witho
     'parts/maslenitsa-tableware.js': 1,   // the cut-glass bowl
     'parts/winter-ice.js': 1,             // clear ice
     'parts/rain-beads.js': 2,             // rain drops and their trails on the glass
+    'parts/snow-fall.js': 1,              // the snow overlay's hexagonal plates of clear ice
     'parts/birthday-korean-jogakbo.js': 1, // the ramie wrapping cloth, a gauze that light and shapes show through
   }, 'the clear surfaces (update this list, the README and docs/ambient-themes.md with a new one)');
   for (const [name, source] of KIT) for (const options of matOptions(source)) {

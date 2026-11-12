@@ -99,9 +99,10 @@ export function createCore(T, renderer, ctx, look, view) {
     const see = { value: look.seeThrough * seeScale * Math.min(1, Math.max(0, share)) }, solid = { value: clear ? SOLID.clear : SOLID.solid }, sharp = { value: multisampled ? 0 : 1 };
     material.transparent = clear;
     if (!clear) material.depthWrite = true;
+    // Set here, with the rest of the material's state, not when its program is compiled (fade() changes it too).
+    material.alphaToCoverage = !clear && multisampled && material.alphaTest > 0;
     solids.set(material, solid);
     material.onBeforeCompile = shader => {
-      material.alphaToCoverage = solid.value === SOLID.solid && multisampled && material.alphaTest > 0;
       Object.assign(shader.uniforms, { uSee: see, uSolid: solid, uSharp: sharp });
       shader.fragmentShader = 'uniform float uSee;\nuniform float uSolid;\nuniform float uSharp;\n' + shader.fragmentShader
         // A cut-out: where the outline is (its coverage of this pixel), apart from how dim the surface is (`opacity`).

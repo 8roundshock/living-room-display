@@ -207,8 +207,10 @@ and dim, but hides what is behind it, whatever order things are drawn in. Every 
 surface has is how dim it is. An `alphaTest` outline is a shape: it becomes coverage, smoothed
 across the pixel's samples, so outlines have no dark fringe. Mark `clear: true` only what is really
 see-through; a clear surface is blended over what is behind it and drawn after every solid one, so
-the order of two clear surfaces still follows their origins. Weather particles, halos and the fog
-are not `mat()` surfaces and are unchanged; a solid leaf hides a far flake and a near one still
+the order of two clear surfaces still follows their origins. An alpha map that is a soft shape
+(a fade at an edge) belongs on a clear surface or behind an `alphaTest`: on a solid one it is a
+dark band over what is behind. Weather particles, halos and the fog are not `mat()` surfaces and
+are unchanged (the snow overlay's ice plates are, and are clear); a solid leaf hides a far flake and a near one still
 shows. The origin offsets of #663 (Autumn, Winter, `parts/winter-order.js`) now only order clear
 surfaces. `transparency.test.ts` lists the clear surfaces: add yours there, and to
 [Ambient themes](../../../docs/ambient-themes.md#solid-and-clear-683-owner-direction-2026-11-12).
