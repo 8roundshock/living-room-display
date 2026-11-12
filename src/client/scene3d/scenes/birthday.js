@@ -9,7 +9,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick, mix, shift } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed;
-  const [first, second, third] = ctx.palette, CREAM = 0xf6ead8, GOLD = 0xf2c94c;
+  const [first, second, third] = ctx.palette, CREAM = 0xfaf4ec, GOLD = 0xf2c94c;   // buttercream white (#691: cream read peach once colours kept their saturation)
   // The weather over the scene (#646): wind leans the balloons left about their tie and widens their swing, and widens
   // the flap of the bunting's flags. Nothing here falls or is backlit; in fog the kit stops the twinkle.
   const weather = weatherOver(kit, ctx);

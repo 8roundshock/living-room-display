@@ -214,6 +214,35 @@ look more realistic/nicer".
   69). Each leaf has a margin a shade deeper and a few soft patches of deeper colour. Magnolia
   tepals keep their faint lengthwise veins at a lower relief.
 
+### Vivid and soft (#691, owner direction 2026-11-12)
+
+The owner: "i feel like on average colours are too dull, can you make the scenes more vibrant?
+i like the vibrancy of the autumn one also some things like the pumpkins are too shiny and the
+things like maslenista, too 3d from 2005, can you improve it (doesn't have to be so obvious 3d,
+i dont know, just think of something)." The art direction (coordinator, as he delegated it):
+generalise what made Autumn vivid (#671) through the kit, less shine, softer and less dated.
+
+- **Every `mat()` surface** gives off a share of its own colour as light of its own (0.22, half
+  for a clear surface, less for a metal), a little more toward its silhouette; the warm and white
+  lights wrap round curved surfaces (no hard edge between lit and dark); and the kit's own tone
+  curve replaces the engine's filmic one on these surfaces, keeping hue and saturation and only
+  softly compressing the brightest channel (bright near-whites go white). The engine, its lights
+  and the layer's opacity are unchanged: the layer still never exceeds the saved brightness.
+- **Shine** is 0.3 (the picker's 80% before). A surface that is neither metal nor clear is matte
+  or satin unless it is really glossy (`gloss: true`: glaze, lacquer, ribbon satin, glass
+  ornaments); polished metal keeps more of the studio than other surfaces.
+- **Colours from photos** of the real objects, sampled for hue, saturation and value on the
+  same pixel rule as #671: blini (hue about 33 degrees), a pumpkin's skin (about 18), red glass
+  ornaments (about 1), mimosa (about 52), kulich crust (about 26).
+- **Scenes with work of their own:** Maslenitsa (golden matte blini, satin butter, clear honey
+  that holds light, a speckled glazed plate with a hand-painted line, a grained spoon, softly wet
+  caviar); Halloween (pumpkins with a matte, waxy, streaked skin and deeper creases, a dry
+  stem); Christmas (ornaments and the bow in jewel tones, coloured glass that holds its colour
+  instead of a black mirror); the kit's glass ornaments, balloons and ribbon satin; the New Year
+  tree's silvered glass; the Orthodox Christmas star's paper and foil; mimosa toward its lemon
+  gold; the birthday cakes in buttercream white, their tiers made by hand rather than machined.
+  The low-detail sphere has 24 × 18 segments (16 × 12).
+
 ### Float (#675, owner direction 2026-11-12)
 
 "The elements in the scenes need to move and shift as well, so they don't burn in over a

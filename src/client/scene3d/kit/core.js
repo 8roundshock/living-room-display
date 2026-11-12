@@ -99,7 +99,9 @@ export function createCore(T, renderer, ctx, look, view) {
   const k = LOOK.knee.toFixed(3), room = (1 - LOOK.knee).toFixed(3);
   /** Shader text that replaces the filmic curve; the include stays (with TONE_MAPPING undefined it is empty) so a part that adds its own text before it still finds it. */
   const curve = '#ifdef TONE_MAPPING\n { vec3 gC = gl_FragColor.rgb * ' + LOOK.exposure.toFixed(3) + '; float gM = max(max(gC.r, gC.g), gC.b);\n'
-    + '   if (gM > ' + k + ') gC *= (' + k + ' + ' + room + ' * (1.0 - exp(-(gM - ' + k + ') / ' + room + '))) / gM;\n   gl_FragColor.rgb = gC; }\n #undef TONE_MAPPING\n#endif\n#include <tonemapping_fragment>';
+    + '   if (gM > ' + k + ') {\n    float gS = (gM - min(min(gC.r, gC.g), gC.b)) / gM, gTo = ' + k + ' + ' + room + ' * (1.0 - exp(-(gM - ' + k + ') / ' + room + '));\n    gC *= gTo / gM;\n'
+    // A near-white that bright goes whiter (a white cake under the warm key light stays white, not peach); a saturated colour keeps its saturation.
+    + '    gC = mix(gC, vec3(gTo), (1.0 - gS) * (1.0 - gS) * clamp(gM - ' + k + ', 0.0, 1.0) * 0.7);\n   }\n   gl_FragColor.rgb = gC; }\n #undef TONE_MAPPING\n#endif\n#include <tonemapping_fragment>';
   /** The solid state of a material (#683): 0 clear, 1 solid, 2 solid while it fades (fade()). */
   const SOLID = { clear: 0, solid: 1, fading: 2 };
   const solids = new WeakMap();

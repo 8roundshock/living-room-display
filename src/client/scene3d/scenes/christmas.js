@@ -21,7 +21,7 @@ export default function build(kit, ctx) {
 
   // A mixed box: no two neighbours share colour, shape and finish.
   // Jewel tones, as coloured glass holds them (#691): crimson, gold, champagne, emerald, garnet, silver.
-  const COLOURS = [0xd8162a, 0xe6b422, 0xf0e2c2, 0x15a062, 0xb81a40, 0xd4d8e2];
+  const COLOURS = [0xdc1c20, 0xe6b422, 0xf0e2c2, 0x15a062, 0xb81a40, 0xd4d8e2];
   const SHAPES = ['ball', 'drop', 'onion', 'ball', 'finial', 'facet'];
   const FINISHES = ['mirror', 'satin', 'pearl', 'banded', 'glitter'];
   let made = 0;

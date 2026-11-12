@@ -59,6 +59,16 @@ export function createParty(core) {
   }
 
   // ---------- cake ----------
+  /** A cylinder made by hand (#691: "too 3d from 2005"): its round a little uneven and its side a little full in the
+   * middle, so a tier is not a machined drum. Changes and returns `geometry` (a CylinderGeometry about the y axis). */
+  function handmade(geometry, height, salt, amount = .012) {
+    const p = geometry.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), z = p.getZ(i), y = p.getY(i), a = Math.atan2(z, x), k = 1 + amount * (Math.sin(a * 3 + salt) * .6 + Math.sin(a * 5 + salt * 2.3) * .4) + amount * .8 * (1 - Math.pow(2 * y / height, 2));
+      p.setX(i, x * k); p.setZ(i, z * k);
+    }
+    geometry.computeVertexNormals(); return geometry;
+  }
   /** A tiered cake on a plate, standing on y = 0, lit by its own candles. `tiers` are [radius, height, sponge colour, glaze colour]
    * from the bottom up; `sprinkles` and `candleColours` are colour lists. */
   function cake({ candles = 5, tiers = [[1.45, .95, 0xf6ead8, 0xe8456a], [1.02, .8, 0xf2b6c6, 0xf6ead8], [.66, .66, 0xf6ead8, 0x3fa7d6]], sprinkles = [0xe8456a, 0xf2a93b, 0x3fa7d6, 0x58c98a, 0x9b6bd6], candleColours = ['#e8456a', '#3fa7d6', '#f2a93b'] } = {}) {
@@ -66,11 +76,11 @@ export function createParty(core) {
     const plate = new T.Mesh(new T.CylinderGeometry(base * 1.28, base * 1.21, .08, 64), mat({ color: 0xd8dbe2, metalness: 1, roughness: .2 }, 1.2, false)); plate.position.y = .04; group.add(plate);
     let y = .08; const pearl = new T.SphereGeometry(.06, 12, 10), matrix = new T.Matrix4(), o = new T.Object3D(), tops = [];
     for (const [r, h, sponge, glazeColour] of tiers) {
-      const tier = new T.Mesh(new T.CylinderGeometry(r, r, h, 64), mat({ color: sponge, roughness: .55, clearcoat: .25, clearcoatRoughness: .5 }, .6)); tier.position.y = y + h / 2; group.add(tier);
+      const tier = new T.Mesh(handmade(new T.CylinderGeometry(r, r, h, 64, 6), h, r * 7), mat({ color: sponge, roughness: .55, clearcoat: .25, clearcoatRoughness: .5 }, .6)); tier.position.y = y + h / 2; group.add(tier);
       const count = Math.round(r * 28), pearls = new T.InstancedMesh(pearl, mat({ color: glazeColour, roughness: .3, clearcoat: .8 }, .9), count * 2);
       for (let i = 0; i < count; i++) { const a = i / count * 6.283; pearls.setMatrixAt(i, matrix.makeTranslation(Math.cos(a) * r, y + h, Math.sin(a) * r)); pearls.setMatrixAt(count + i, matrix.makeTranslation(Math.cos(a) * (r + .01), y + .05, Math.sin(a) * (r + .01))); }
       pearls.frustumCulled = false; group.add(pearls);
-      const glaze = new T.Mesh(new T.CylinderGeometry(r + .015, r + .015, .1, 64), mat({ color: glazeColour, roughness: .22, clearcoat: 1, clearcoatRoughness: .1 }, 1)); glaze.position.y = y + h - .04; group.add(glaze);
+      const glaze = new T.Mesh(handmade(new T.CylinderGeometry(r + .015, r + .015, .1, 64), 1e9, r * 7), mat({ color: glazeColour, roughness: .22, clearcoat: 1, clearcoatRoughness: .1 }, 1)); glaze.position.y = y + h - .04; group.add(glaze);
       const drips = new T.InstancedMesh(ballGeo, glaze.material, count);
       for (let i = 0; i < count; i++) { const a = (i + .5) / count * 6.283, L = .08 + rnd(i, r * 10) * .22; o.position.set(Math.cos(a) * (r + .01), y + h - .08 - L * .5, Math.sin(a) * (r + .01)); o.rotation.set(0, 0, 0); o.scale.set(.055, L, .04); o.updateMatrix(); drips.setMatrixAt(i, o.matrix); }
       drips.frustumCulled = false; group.add(drips); y += h; tops.push(y);

@@ -15,7 +15,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 export default function build(kit, ctx) {
   // The plan's sizes are on-screen sizes at the special look; K follows the owner's size setting from there.
   const { T, V, rnd, stage, view, tick, mix, shift } = kit, W = view.halfW, A = ctx.amount, K = ctx.size / .935, seed = ctx.seed;
-  const [jade, coral, gold] = ctx.palette, CREAM = 0xf6ecd8, deep = colour => shift(colour, 0, .06, -.08);
+  const [jade, coral, gold] = ctx.palette, CREAM = 0xf9f3e8, deep = colour => shift(colour, 0, .06, -.08);
   // The weather over the scene (#646): wind leans the balloons left about their tie and widens their swing, ripples the
   // cloth half as deep again and leans it left from its rod, and blows the steam left. Nothing here falls or is backlit.
   const weather = weatherOver(kit, ctx);

@@ -194,7 +194,7 @@ you add yourself; nothing is added for you except `part()`.
 | `view` | `halfW`, `halfH`, `aspect`, `depth`, `halfWAt(z)`, `halfHAt(z)`. |
 | `V(x, y, z)`, `C(colour)`, `mix(a, b, k)`, `shift(colour, hue, sat, light)`, `rnd(i, salt)` | Vector; sRGB to linear colour; blend two colours; turn a colour around the wheel; a deterministic value in [0, 1). Never use `Math.random`. |
 | `tick(fn)`, `own(resource)` | Per-frame update; register a texture or geometry you made for disposal with the scene. |
-| `mat(options, env = 1, physical = true)` | The material factory: three.js material options with sRGB colours, glass-patched (a lit body thins out, its rim and highlights stay). `env` scales the studio reflections. Use it for every lit surface. The extra option `see` (0-1) is the share of the see-through look a surface takes, for the rare one that must stay solid (a national flag). The owner's Transparency setting scales that share for you. A surface is solid (#683): thin and dim on black, but it hides whatever is behind it. Pass `clear: true` only for something really see-through (glass, ice, water, tea, gauze); it is blended over what is behind it. Never pass `transparent: true`, and `depthWrite: false` only with `clear`. |
+| `mat(options, env = 1, physical = true)` | The material factory: three.js material options with sRGB colours, glass-patched (a lit body thins out, its rim and highlights stay). `env` scales the studio reflections. Use it for every lit surface. The extra option `see` (0-1) is the share of the see-through look a surface takes, for the rare one that must stay solid (a national flag). The owner's Transparency setting scales that share for you. A surface is solid (#683): thin and dim on black, but it hides whatever is behind it. Pass `clear: true` only for something really see-through (glass, ice, water, tea, gauze); it is blended over what is behind it. Never pass `transparent: true`, and `depthWrite: false` only with `clear`. It draws in the illustrated look below: pass `own` (0-1) to set how much of its own colour a surface gives off (0 for one that brings its own glow), and `gloss: true` for a surface that really is glossy (glaze, lacquer, satin ribbon), which keeps the roughness and clearcoat it asks for. |
 | `solidity(body)` | How solid to draw a body you make see-through yourself, under the owner's Transparency setting (#670): `body` is the solidity you chose (0-1) and the result is what to draw, `body` itself at the standard 50%, 1 at 0%, thinner toward 100% but never zero. Pass every such alpha through it: an alpha map's grey (`Math.round(kit.solidity(.7) * 255)`), a uniform, `opacity: kit.solidity(.6)`. On a solid surface it is how dim the body is; on a clear one, how much shows through. A cut-out outline (`alphaTest`), light and particles are not bodies. |
 | `fade(material, amount)` | Fade a `mat()` surface as a whole (0-1) over what is behind it, for something that appears or goes. A solid surface is blended only while it fades. Do not set `material.opacity` on a solid surface: that dims it, it does not fade it. |
 | `gold()`, `satin(colour)` | Polished gold; ribbon satin. |
@@ -211,13 +211,29 @@ you add yourself; nothing is added for you except `part()`.
 | `balloon(colour, radius, { skin, shape, pattern })`, `puffyBow(colour, scale)`, `gift(w, h, d, base, accent, kind, ribbon)`, `cake(options)` | Party pieces. Balloons: `latex`, `pearl`, `foil`; `round` or `star`. |
 | `bunting(a, b, options)`, `confetti(count, options)`, `streamer(length, radius, colour, options)` | Flags on a cord, tumbling foil, a curled paper streamer. Give `bunting` the scene's `weather` (`weatherOver`) and its flags lean and flap in the wind. |
 
+**The illustrated look** (#691, owner 2026-11-12: "on average colours are too dull ... i like the vibrancy of the
+autumn one", "the pumpkins are too shiny", Maslenitsa "too 3d from 2005"). What made Autumn vivid (#671) is in
+`mat()` for every scene (`LOOK` in `kit/core.js`):
+
+- A surface gives off a share of its own colour as light of its own (0.22 by default, half for a clear surface,
+  less for a metal), a little more toward its silhouette, so its shadow side keeps its colour and its shape reads
+  on black.
+- The warm and white lights wrap round a curved surface, so there is no hard line between its lit and dark sides.
+- The kit's own tone curve replaces the engine's filmic one on `mat()` surfaces: it keeps hue and saturation (a
+  red stays red, an orange orange) and only softly compresses the brightest channel; bright near-whites go white.
+- Less shine: a surface that is neither metal (metalness 0.5 or more) nor clear is matte or satin (roughness at
+  least 0.5, a quarter of its clearcoat) unless it passes `gloss: true`. Polished metal keeps more reflection.
+- Paint colours as the real thing is: sample a photo of the object (hue, saturation, value of its pixels) and match
+  it on a `--full` capture. Use `gloss` only where the real material is glossy, never on fruit, bread, cloth,
+  wood, paper, pumpkins or balloons.
+
 The studio environment (four soft light panels), the key, rim and fill lights, the black fog,
 tone mapping and the camera are set by the engine and are the same for every scene. Do not add
 scene-wide lights; a small local `T.PointLight` (the cake's candles) is fine.
 
 ## The look is not yours to tune
 
-`settings.ts` holds the owner's picks (see-through, glow, shine, size, speed, fade to middle,
+`settings.ts` holds the owner's picks (see-through, glow, shine (lowered on 2026-11-12, #691), size, speed, fade to middle,
 brightness share, amount) and the tier and quiet multipliers; `tier.ts` derives the tier from
 the registry group and the holiday policy window. A scene module never reads or overrides
 them. If a scene looks too strong or too weak at these settings, change the scene.
