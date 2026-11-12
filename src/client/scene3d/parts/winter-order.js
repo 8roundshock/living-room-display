@@ -1,4 +1,5 @@
 // A fixed drawing order for pieces that keep still (#663, introduced by Winter, #665).
+// Since #683 only clear surfaces (the ice) depend on it: solid ones are sorted out by the depth buffer.
 // three.js draws see-through meshes from the farthest origin to the nearest, and with the
 // kit's look every mesh is see-through: what is drawn first hides what is drawn later behind
 // it. So the order of two overlapping pieces is decided by where their origins are, not by

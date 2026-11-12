@@ -80,7 +80,9 @@ export function leafLook(kit, { map, relief, solid }, glow = 1) {
  * `stalkTint` is the stalk's colour and `girth` its thickness.
  * `about` moves the origin that far up from the foot, for a leaf that turns in the air.
  *
- * Drawing order. three.js draws see-through meshes from the farthest origin to the nearest,
+ * Drawing order (since #683 a leaf is solid and the depth buffer decides, so this no longer
+ * changes what is seen; `carry` still keeps overlapping leaves apart in depth). three.js draws
+ * see-through meshes from the farthest origin to the nearest,
  * and a nearer leaf drawn first hides the one behind it. The mesh's origin is the foot of
  * the stalk, the point a leaf sways about, and blade and stalk are placed inside the
  * geometry: sway does not move that origin. Turn or sway a leaf only about its origin. The
