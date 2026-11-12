@@ -1,5 +1,27 @@
 # Project status
 
+## The 3D scenes float like the widgets — 2026-11-12 (#675)
+
+Source candidate, not installed. Owner direction: "the elements in the scenes need to move and
+shift as well, so they don't burn in over a long time, same as the other elements."
+
+What changed:
+- The 3D scene layer now floats like the board, on its own track out of step with the board
+  and the widgets, with the same motion interval and Float gently setting: up to ±3% of the
+  display sideways and ±2.5% up and down. Before, it only drifted ±0.9% × ±0.7%.
+- It is drawn 6% larger, so anything entering from an edge or standing on the bottom edge
+  stays anchored at the extremes.
+- Quiet dates float too, with their scene still frozen; the old scene-clock drift is gone.
+- A Node check builds every scene and weather overlay at 16:9 and 21:9 and fails if an
+  edge element's end would show. No scene needed a change.
+
+Details: [Ambient themes](docs/ambient-themes.md#float-675-owner-direction-2026-11-12).
+
+Verified with source builds and synthetic data only: the unit tests (the track, the zoom rule
+and the edge check over 72 cases) and the `scene3d` suite on the GPU (the float's travel,
+easing and interval change, the floating quiet date, the still preview). Not verified:
+installation, the TV, and long-run behaviour.
+
 ## A Transparency slider for the 3D scenes — 2026-11-11 (#670)
 
 Source candidate, not installed. The see-through level of the 3D scenes was changed twice in

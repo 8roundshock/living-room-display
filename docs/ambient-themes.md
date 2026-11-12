@@ -147,6 +147,52 @@ stays tied to the saved brightness as above.
   of under 0.001 of a level: the same as two captures of the same `main` build (0.010-0.050%;
   the GPU does not draw an identical frame twice). The textures' greys are the same numbers.
 
+### Float (#675, owner direction 2026-11-12)
+
+"The elements in the scenes need to move and shift as well, so they don't burn in over a
+long time, same as the other elements." The scene layer now floats like the board (#436)
+instead of the old drift (±0.9% × ±0.7% of the display on the scene clock, and none on a
+quiet date).
+
+- **Its own track.** `SCENE_TRACK` in `src/shared/float.ts`: the board's low-discrepancy
+  waypoints from another start (lead 3; the board's is 0, the widgets' are multiples of 7),
+  half an interval out of step with the board. It reaches a new spot every motion interval,
+  easing in and out with Float gently, or jumping once per interval at its own boundaries
+  without it. It runs on real time from the epoch, so a scene that is rebuilt or replaced
+  (a new day, weather arriving) carries on from where the float was. A new motion interval
+  keeps the current position, as the board's does.
+- **Travel and zoom** (`SCENE_FLOAT` in `settings.ts`). Up to ±3% of the display sideways
+  and ±2.5% up and down (±58 × ±27 px at 1920×1080). The picture is drawn 6% larger about
+  the screen's centre, so about 3% of each edge is outside the frame at the centre position.
+  The float is applied to the camera's projection: every pixel moves alike, as the board
+  does, and depth, parallax and lighting are unchanged.
+  - **Why these numbers:** the zoom is exactly the sideways travel, so anything that crosses
+    a side edge, however little, still crosses it at the far end of the travel.
+  - **Bottom and top:** things that stand on the bottom edge or hang from the top keep about
+    0.4% of the height (4 px at 1080p) to spare.
+  - **A wider or slower float** would need more zoom: the board's ±3.5% sideways would need 7%.
+- **Checked, not eyeballed.** `tests/scene3d/edge-check.mjs` (run by
+  `src/client/scene3d/float.test.ts`) builds every scene and weather overlay in Node with
+  three.js r128 and the real kit, at 16:9 and 21:9, samples the scene clock over an hour of
+  real time (and a week of days for the four seasons) and finds every element anchored at an
+  edge:
+  - an element that crosses a side edge at every sample;
+  - an element that crosses or stands within 0.1% of the bottom or top edge.
+
+  It fails if the float's extremes would bring the end or base of any of them into view. All
+  72 cases pass; no scene needed a change. Whole objects that are merely near a side edge
+  may show more of themselves at times; things moving through an edge (falling leaves,
+  particles, the weather's shader-drawn rain, flakes, fog and cloud) are not anchored.
+- **No scale breath.** A slow zoom about the centre would move only the edge pixels. It would
+  also need more zoom to keep standing things down, the axis that is already the tightest.
+  The translation moves every pixel by the full travel.
+- **Quiet dates float.** Their own clock stays stopped: no sway, nothing falling, no
+  particles. A timer checks the float four times a second and draws a frame only when the
+  picture has moved half a pixel of the canvas, or at a step. At the default 180 s interval
+  that is at most about one frame a second at 2560×1440, and none between steps when Float
+  gently is off. A still editor preview does not float: it shows the centre position at the same zoom.
+- **Not a guarantee.** This spreads wear over more pixels; it does not prevent burn-in.
+
 ### Tier rule
 
 `tier.ts` derives one of two tiers from the registry group and the holiday policy's
@@ -483,7 +529,7 @@ still attributes.
 Unchanged rules: Theme Off, Animation Off and system reduced motion mount nothing (and
 download nothing 3D); the editor's still preview draws one static frame and runs no loop;
 a selected quiet date draws a frozen, desaturated frame with nothing in the air, amount
-×0.4 and opacity ×0.38; saved brightness is never raised; true black; no audio and no
+×0.4 and opacity ×0.38, which since #675 the float still moves; saved brightness is never raised; true black; no audio and no
 flashes (the Storms scene's slow glow inside its cloud is described under
 [Weather scenes and overlays](#weather-scenes-and-overlays)). The opt-in foreground passage is untouched, and because it starts from the flat
 renderer's patches it does not start over a 3D scene
@@ -502,9 +548,9 @@ renderer's patches it does not start over a 3D scene
 - The backing store is at most 2560×1440. About 20 frames a second, none while the
   document is hidden, and never a frame queued behind one the GPU has not finished.
 - One stage owns one canvas and one WebGL context and releases both on unmount.
-- The whole scene drifts on a slow closed path (about 17 px sideways and 7 px up and down
-  at 1080p, over seven and five minutes) so standing objects do not light the same pixels
-  for weeks. This reduces fixed patterns; it is not a burn-in guarantee.
+- The whole picture floats like the board (#675, [Float](#float-675-owner-direction-2026-11-12)):
+  ±3% × ±2.5% of the display at a 6% zoom, also on a quiet date. This reduces fixed
+  patterns; it is not a burn-in guarantee.
 
 Measured on 2026-11-10, source build, headless Edge on the development PC's GeForce GTX
 1080 Ti, default board:
