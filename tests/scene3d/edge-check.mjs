@@ -77,8 +77,9 @@ const touching = (a, b, slack = .01) => a[0] <= b[1] + slack && b[0] <= a[1] + s
 
 /** The NDC extent of every element of one build at every sampled instant: `elements` (a mesh, a line or a
  * whole instanced mesh) for the cut-end rule, and `pieces` for the crop rule (see below). */
-function sample(made, camera) {
-  const extents = new Map(), leaves = new Map(), matrix = new THREE.Matrix4(), instance = new THREE.Matrix4();
+function sample(made, camera, calm = null) {
+  const extents = new Map(), leaves = new Map(), matrix = new THREE.Matrix4(), instance = new THREE.Matrix4(), order = new Map();
+  made.kit.stage.traverse(node => order.set(node, order.size));   // a place in the tree, the same in calm and under a weather
   for (const t of TIMES) {
     made.animate(t); made.kit.stage.updateMatrixWorld(true);
     made.kit.stage.traverse(object => {
@@ -103,14 +104,14 @@ function sample(made, camera) {
       if (!(box[0] <= box[1])) return;
       const colour = materials[0]?.color ? `#${materials[0].color.clone().convertLinearToSRGB().getHexString()}` : '';
       const name = `${object.type}:${object.geometry.type}(${position.count}${count > 1 ? `x${count}` : ''})${colour}${object.name ? ` "${object.name}"` : ''}`;
-      const key = object.uuid, entry = extents.get(key) ?? { name, boxes: [] };
+      const key = object.uuid, entry = extents.get(key) ?? { name, boxes: [], at: order.get(object) };
       entry.boxes.push(box); extents.set(key, entry);
       const leaf = leaves.get(object) ?? { name, box: empty(), each: each.map(() => empty()), times: 0, at: [], z: object.getWorldPosition(new THREE.Vector3()).z };
       grow(leaf.box, box); each.forEach((own, i) => { if (leaf.each[i]) grow(leaf.each[i], own); }); leaf.times++; leaf.at.push(box); leaves.set(object, leaf);
     });
   }
   const steady = list => [...list.values()].filter(entry => entry.boxes.length === TIMES.length);
-  return { elements: steady(extents), pieces: pieces(made.kit.stage, leaves), supports: [...leaves.values()].filter(leaf => leaf.times === TIMES.length).map(leaf => leaf.box) };
+  return { elements: steady(extents), pieces: pieces(made.kit.stage, leaves, calm), supports: [...leaves.values()].filter(leaf => leaf.times === TIMES.length).map(leaf => leaf.box) };
 }
 
 /** Whether something else holds `piece` up: a drawn element whose top is at the piece's bottom (a napkin under an
@@ -136,9 +137,13 @@ function supported(piece, boxes) {
  * parts (needles, grains) and go with it. A piece that touches an element crossing an edge (a cone on a bough,
  * a bulb on a garland, a lantern on its cord) is attached to it and may be cropped with it, unless it rests
  * near the bottom edge: an egg on a napkin or a gift on a table must still keep to the resting rule.
+ * `calm` (the pieces of the same scene built without weather, #646) makes the pieces exactly those, found by their
+ * place in the scene's tree, which a weather does not change: a piece the wind pushes out of the frame is then still
+ * checked, where on its own it would no longer count as a piece that was whole before the float.
  */
-function pieces(stage, leaves) {
-  const out = [], boxes = new Map(), paths = new Map();
+function pieces(stage, leaves, calm = null) {
+  const out = [], boxes = new Map(), paths = new Map(), nodes = [], index = new Map();
+  stage.traverse(node => { index.set(node, nodes.length); nodes.push(node); });
   /** Where the middle of a node is at each sampled instant: a piece that travels (a seed on the wind, a drifting
    * leaf) passes through the edges as it goes and is not cropped by the float alone. */
   const path = node => {
@@ -157,17 +162,21 @@ function pieces(stage, leaves) {
     boxes.set(node, box); return box;
   };
   const crossing = []; stage.traverse(item => { const leaf = leaves.get(item); if (leaf && leaf.times === TIMES.length && !inside(leaf.box)) crossing.push(leaf.box); });
-  const add = (name, box, part, z) => out.push({ name, box, z, resting: box[2] <= -1 + RESTING && box[3] - box[2] <= RESTING_TALL, part, attached: part || crossing.some(anchor => touching(box, anchor)) });
+  const add = (name, box, part, z, at, instance = null) => out.push({ name, box, z, resting: box[2] <= -1 + RESTING && box[3] - box[2] <= RESTING_TALL, part, attached: part || crossing.some(anchor => touching(box, anchor)), at, instance });
   const depth = node => { let z = 0, size = -1; node.traverse(item => { const leaf = leaves.get(item); if (leaf) { const area = (leaf.box[1] - leaf.box[0]) * (leaf.box[3] - leaf.box[2]); if (area > size) { size = area; z = leaf.z; } } }); return z; };
   const split = node => {
     const box = extent(node);
     if (!(box[0] <= box[1])) return;
-    if (inside(box)) { if (!travels(node) && !tiny(box)) add(describe(node, leaves), box, false, depth(node)); return; }
+    if (inside(box)) { if (!travels(node) && !tiny(box)) add(describe(node, leaves), box, false, depth(node), index.get(node)); return; }
     const leaf = leaves.get(node);
     // The instances of an instanced mesh that reaches past an edge are that element's own parts (needles, grains).
-    if (leaf && leaf.times === TIMES.length && leaf.each.length > 1) leaf.each.forEach((each, i) => { if (inside(each) && !tiny(each)) add(`${leaf.name} [${i}]`, each, true, leaf.z); });
+    if (leaf && leaf.times === TIMES.length && leaf.each.length > 1) leaf.each.forEach((each, i) => { if (inside(each) && !tiny(each)) add(`${leaf.name} [${i}]`, each, true, leaf.z, index.get(node), i); });
     for (const child of node.children) split(child);
   };
+  if (calm) return calm.map(piece => {
+    const node = nodes[piece.at], box = piece.instance === null ? extent(node) : leaves.get(node)?.each[piece.instance] ?? empty();
+    return { ...piece, box };
+  });
   for (const child of stage.children) split(child);
   return out;
 }
@@ -176,13 +185,19 @@ const describe = (node, leaves) => {
   return names.length === 1 ? names[0] : `${node.type}${node.name ? ` "${node.name}"` : ''} of ${names.length}: ${names.slice(0, 2).join(', ')}${names.length > 2 ? ', ...' : ''}`;
 };
 
-/** For each edge, the elements anchored there at every sampled instant and how far each reaches beyond it at least. */
-function anchored(elements) {
-  const edges = { left: [], right: [], bottom: [], top: [] };
-  for (const { name, boxes } of elements) {
-    const reach = (pick, sign) => Math.min(...boxes.map(box => sign * pick(box) - 1));
-    const sides = { left: reach(box => box[0], -1), right: reach(box => box[1], 1), bottom: reach(box => box[2], -1), top: reach(box => box[3], 1) };
-    for (const [edge, value] of Object.entries(sides)) if (edge === 'left' || edge === 'right' ? value > 0 : value >= -TOUCH) edges[edge].push({ name, reach: value });
+/** For each edge, the elements anchored there at every sampled instant and how far each reaches beyond it at least.
+ * `calm` (the same scene's anchored elements without weather, #646) adds every element anchored in calm, found by its
+ * place in the tree, with its reach under the weather: one the wind pulls back off its edge is then measured (its reach
+ * falls below what the float needs) instead of no longer counting as anchored. */
+function anchored(elements, calm = null) {
+  const edges = { left: [], right: [], bottom: [], top: [] }, at = new Map(elements.map(element => [element.at, element]));
+  const sides = boxes => { const reach = (pick, sign) => Math.min(...boxes.map(box => sign * pick(box) - 1)); return { left: reach(box => box[0], -1), right: reach(box => box[1], 1), bottom: reach(box => box[2], -1), top: reach(box => box[3], 1) }; };
+  for (const { name, boxes, at: place } of elements) {
+    for (const [edge, value] of Object.entries(sides(boxes))) if (edge === 'left' || edge === 'right' ? value > 0 : value >= -TOUCH) edges[edge].push({ name, reach: value, at: place });
+  }
+  if (calm) for (const [edge, list] of Object.entries(calm)) for (const item of list) {
+    if (edges[edge].some(other => other.at === item.at)) continue;
+    const element = at.get(item.at); edges[edge].push({ name: item.name, reach: element ? sides(element.boxes)[edge] : -1, at: item.at });
   }
   for (const list of Object.values(edges)) list.sort((a, b) => a.reach - b.reach);
   return edges;
@@ -190,20 +205,25 @@ function anchored(elements) {
 
 /**
  * Builds `id` (a scene, or with `overlay` the weather kind drawn alone over an empty stage) at `aspect`
- * and returns the elements anchored at each edge with the least reach first.
+ * and returns the elements anchored at each edge with the least reach first. `weather` builds the scene as it
+ * is under that weather (ctx.weather, #646) with its overlay drawn over it, and `gust` (0-1) holds the wind's gust.
  */
-export async function measure(id, { aspect = ASPECTS['16:9'], overlay = null, day = DAYS[0] } = {}) {
-  const sceneId = id, build = overlay ? null : await load('scenes', id), over = overlay ? await load('weather', overlay) : null;
+export async function measure(id, { aspect = ASPECTS['16:9'], overlay = null, weather = null, gust = null, day = DAYS[0] } = {}) {
+  const sceneId = id, build = overlay ? null : await load('scenes', id), over = overlay || weather ? await load('weather', overlay ?? weather) : null;
   const shown = previewTheme(sceneId), tier = sceneTier(shown, 2026);
   const look = sceneLook(sceneId, tier), depth = CAMERA.halfHeight / Math.tan(CAMERA.fov / 2 * Math.PI / 180);
   const view = Object.freeze({ halfW: CAMERA.halfHeight * aspect, halfH: CAMERA.halfHeight, aspect, depth, halfWAt: z => CAMERA.halfHeight * aspect * (1 - z / depth), halfHAt: z => CAMERA.halfHeight * (1 - z / depth) });
-  const ctx = Object.freeze({ id: sceneId, amount: look.amount, size: look.size, tier, weather: overlay, quiet: false, palette: Object.freeze([shown.tint, shown.companion, shown.accent]), seed: sceneSeed(sceneId), day, width: Math.round(1080 * aspect), height: 1080 });
+  const ctx = Object.freeze({ id: sceneId, amount: look.amount, size: look.size, tier, weather: overlay ?? weather, ...(gust === null ? {} : { gust }), quiet: false, palette: Object.freeze([shown.tint, shown.companion, shown.accent]), seed: sceneSeed(sceneId), day, width: Math.round(1080 * aspect), height: 1080 });
+  // Under a weather the pieces and the anchored elements include the scene's own in calm, measured as the weather moves
+  // them (see pieces() and anchored()).
+  const calm = weather ? await measure(id, { aspect, day }) : null;
   const made = createKit(T, renderer, ctx, look, view);
   build?.(made.kit, ctx); over?.(made.kit, ctx);
   const camera = new THREE.PerspectiveCamera(CAMERA.fov, aspect, .1, 120); camera.position.set(0, 0, depth); camera.updateMatrixWorld(true); camera.updateProjectionMatrix();
-  const { elements, pieces, supports } = sample(made, camera);
+  const { elements, pieces, supports } = sample(made, camera, calm?.pieces ?? null);
   made.dispose();
-  return Object.assign(anchored(elements), { pieces: pieces.map(piece => ({ ...piece, supported: supported(piece, supports), grounded: grounded(piece, supports) })) });
+  const calmEdges = calm ? { left: calm.left, right: calm.right, bottom: calm.bottom, top: calm.top } : null;
+  return Object.assign(anchored(elements, calmEdges), { pieces: pieces.map(piece => ({ ...piece, supported: supported(piece, supports), grounded: grounded(piece, supports) })) });
 }
 
 /** The least reach on each axis among anchored elements (Infinity when none sits at that axis's edges). */
@@ -281,6 +301,9 @@ export async function measureAll() {
   for (const [label, aspect] of Object.entries(ASPECTS)) {
     for (const id of SCENE_IDS) for (const day of daily.has(id) ? DAYS : DAYS.slice(0, 1)) rows.push({ case: id, aspect: label, day, edges: await measure(id, { aspect, day }) });
     for (const kind of WEATHER_KINDS) for (const over of ['summer', 'christmas']) rows.push({ case: `${kind} over ${over}`, aspect: label, day: DAYS[0], edges: await measure(over, { aspect, overlay: kind }) });
+    // Every scene in the wind (#646), with the gust held at its lull and at its peak: the lean turns pieces about where they
+    // are held, and the sway is twice as wide, so a cut end could show or a piece reach the cropped band.
+    for (const id of SCENE_IDS.filter(id => !WEATHER_KINDS.includes(id))) for (const gust of [0, 1]) rows.push({ case: `${id} in wind (gust ${gust})`, aspect: label, day: DAYS[0], edges: await measure(id, { aspect, weather: 'wind', gust }) });
   }
   return rows;
 }

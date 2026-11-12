@@ -7,10 +7,14 @@
 // under the spray. No numeral, text, hearts or gift boxes. Art rules: ../README.md.
 import { glassVase, mimosaSpray } from '../parts/mimosa-spray.js';
 import { ribbonTie, tulip } from '../parts/mimosa-tulip.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.07;
+  // The weather over the scene (#646): wind leans the stems left in their vase, widens their sway and carries the
+  // drifting blossom left; rain and a storm keep the blossom on the spray. The tulips lie still; nothing is backlit.
+  const weather = weatherOver(kit, ctx);
 
   // ---------- the mimosa in its vase, bottom-left corner, leaning a little toward the room ----------
   // A little above the bottom edge (#675: the float's zoom crops the lowest 2%).
@@ -20,18 +24,18 @@ export default function build(kit, ctx) {
   const STEMS = [[.03, .02, 4.15, .5], [.27, .1, 3.7, .85], [-.2, -.1, 3.4, .7], [.46, -.06, 3.05, 1], [-.3, .12, 2.6, .75]];
   const spray = mimosaSpray(kit, { stems: STEMS.slice(0, Math.max(3, Math.round(2 + A * 10))), panicles: Math.min(8, 2 + A * 13), leaves: Math.min(20, Math.round(5 + A * 30)), inside: 1.5, seed });
   spray.group.position.y = vase.userData.mouth; corner.add(spray.group, vase);
-  spray.stems.forEach((stem, i) => { const phase = rnd(i, seed + 3) * 6; tick(t => { stem.rotation.z = Math.sin(t * .45 + phase) * .009; stem.rotation.x = Math.sin(t * .33 + phase) * .006; }); });
+  spray.stems.forEach((stem, i) => { const phase = rnd(i, seed + 3) * 6; tick(t => { stem.rotation.z = weather.sway(Math.sin(t * .45 + phase) * .009, 1); stem.rotation.x = Math.sin(t * .33 + phase) * .006 * weather.wind.sway; }); });
 
   // ---------- shed blossom: a few balls at the foot of the vase, a few drifting down under the spray ----------
   const o = new T.Object3D(), fallen = spray.ball(Math.min(9, Math.max(3, Math.round(1 + A * 20))));
   for (let i = 0; i < fallen.count; i++) { const size = .045 + rnd(i, seed + 5) * .025; o.position.set(-.8 + i * .34 + rnd(i, seed + 6) * .2 + (i > 2 ? .5 : 0), size - .1, -.55 + rnd(i, seed + 7) * .5); o.scale.setScalar(size); o.updateMatrix(); fallen.setMatrixAt(i, o.matrix); }
   corner.add(fallen);
   if (!ctx.quiet && A > .04) {
-    const drifting = spray.ball(Math.min(12, Math.round(A * 30))), top = 4.6; corner.add(drifting);
+    const drifting = spray.ball(Math.min(12, Math.round(A * 30))), top = 4.6; drifting.visible = weather.falls; corner.add(drifting);   // rain or a storm keeps the blossom on the spray
     tick(t => {
       for (let i = 0; i < drifting.count; i++) {
-        const fall = (rnd(i, seed + 8) + t * (.07 + rnd(i, seed + 9) * .03)) % 1, phase = rnd(i, seed + 10) * 6, size = .04 + rnd(i, seed + 11) * .022;
-        o.position.set(-.7 + rnd(i, seed + 12) * 2.9 + Math.sin(t * .5 + phase) * .12, top * (1 - fall) * (.5 + rnd(i, seed + 13) * .5) + size, -.3 + rnd(i, seed + 14) * .8); o.scale.setScalar(size * Math.min(1, fall * 12)); o.updateMatrix(); drifting.setMatrixAt(i, o.matrix);
+        const pace = .07 + rnd(i, seed + 9) * .03, fall = (rnd(i, seed + 8) + t * pace) % 1, phase = rnd(i, seed + 10) * 6, size = .04 + rnd(i, seed + 11) * .022;
+        o.position.set(-.7 + rnd(i, seed + 12) * 2.9 + Math.sin(t * .5 + phase) * .12 + weather.drift(fall / pace) / unit, top * (1 - fall) * (.5 + rnd(i, seed + 13) * .5) + size, -.3 + rnd(i, seed + 14) * .8); o.scale.setScalar(size * Math.min(1, fall * 12)); o.updateMatrix(); drifting.setMatrixAt(i, o.matrix);
       }
       drifting.instanceMatrix.needsUpdate = true;
     });

@@ -5,7 +5,7 @@
 /** A quarter web. The group's origin is the hub, which belongs just outside a top corner; the
  * web spreads toward -x and -y (mirror the group for the other corner). `reach` is how far it
  * runs along the two edges, `dew` the number of beads. It sways very slightly as one piece. */
-export function cobweb(kit, { radials = 9, rows = 11, reach = 4, dew = 70, salt = 0 } = {}) {
+export function cobweb(kit, { radials = 9, rows = 11, reach = 4, dew = 70, salt = 0, weather = null } = {}) {
   const { T, V, C, rnd, tick } = kit, group = new T.Group(), segments = [], spans = [];
   const thread = (a, b) => { segments.push(a.x, a.y, a.z, b.x, b.y, b.z); };
   /** A thread that sags under its own weight: `at(u)` is the point at 0-1 along it. */
@@ -38,7 +38,7 @@ export function cobweb(kit, { radials = 9, rows = 11, reach = 4, dew = 70, salt 
   for (let i = 0; i < count; i++) {
     const at = spans[Math.floor(rnd(i, salt + 5) * spans.length)](.12 + rnd(i, salt + 6) * .76), radius = .012 + Math.pow(rnd(i, salt + 7), 2) * .02;
     o.position.set(at.x, at.y - radius * .7, at.z); o.scale.set(radius, radius * 1.12, radius); o.updateMatrix(); beads.setMatrixAt(i, o.matrix);
-    if (i % Math.max(1, Math.floor(count / 6)) === 0) { const glint = kit.glow(0xe8f0ff, .2 + radius * 4, .5, { twinkle: .7 }); glint.position.copy(o.position); group.add(glint); }
+    if (i % Math.max(1, Math.floor(count / 6)) === 0) { const glint = kit.glow(0xe8f0ff, .2 + radius * 4, .5, { twinkle: .7 }); glint.position.copy(o.position); glint.visible = !weather || weather.glints; group.add(glint); }   // no glints in fog (#646)
   }
   beads.frustumCulled = false; group.add(beads);
   tick(t => { group.rotation.z = Math.sin(t * .3) * .007; });

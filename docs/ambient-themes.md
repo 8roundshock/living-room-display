@@ -562,12 +562,82 @@ replaced everything but Summer).
   particles, no near band, no drifts, pool or trunks). Captures of snow over Autumn, snow
   and rain over Winter, a storm over Christmas, snow over Spring and rain over a birthday
   were looked at for this change: the weather reads as light and the scene is not hidden.
-- **Not covered here.** A scene changing its own objects for the weather over it is
-  [#646](https://github.com/8roundshock/living-room-display/issues/646). Two cases are now
-  reachable that were not before: Christmas and Orthodox Christmas keep their own
-  decorative snowfall under rain or a storm (they leave it out only under real snow).
+- **The scene underneath** ([#646](https://github.com/8roundshock/living-room-display/issues/646)):
+  each scene now responds to the weather over it; see the next section.
 - **The current-scene line** in Style names both: "Snow now · Autumn", "Rain now ·
   Christmas", "Storms expected soon · Birthday".
+
+**The scene underneath responds** ([#646](https://github.com/8roundshock/living-room-display/issues/646),
+owner 2026-11-12: "can you work on 646", after asking whether scene elements sway; on
+2026-11-10 he asked for the weather over the scenes "but same thing not overbearing"). Every
+season, holiday and birthday scene reads the weather through `parts/wind-underneath.js` and
+applies the five plans' rules for the scene underneath, calmly:
+
+- **Wind (#621):** every attached thing (a leaf, a flower, an ornament, a lantern, a pouch, a
+  balloon bunch, a streamer, a bunting flag, the wheat's ears, a cone) takes a steady lean of
+  2 to 4 degrees toward the left, about where it is held, following the gust the overlay's
+  seeds ride on (the same `windGust` with the same salt), and sways one and a half times as far,
+  at the same slow pace (the plan's twice as far was too energetic for "not overbearing":
+  coordinator decision on #646). Whole boughs and vines only sway farther; only the outermost
+  thing leans, a slow turn on a cord or stem (a pouch, Canada Day's hanging leaves) keeps its
+  calm pace and reach, and bunting flags, held at both corners, only flap farther. The lean is
+  at most 4 degrees, and no attached piece turns more than 7 degrees from its calm pose at any
+  instant (a test over every scene, at the gust's lull and peak). Measured in Node with the gust held (the average turn
+  over 120 instants, wind against calm): hanging and standing pieces lean 4.0 degrees at the
+  peak and 2.0 at the lull (Christmas ornaments and wreath, Seollal's pouches, the lanterns,
+  the New Year streamers, Winter's cones, the birthday balloons; Autumn's maple leaves 3.8 to
+  4.0, Chuseok's fruit 3.5, leaves pointing sideways less). Falling petals, leaves, blossom
+  and embers drift left by up to 0.9 units over their first seconds; a scene's own snow is
+  carried left, each flake wrapping round only where it is out of sight at its own depth.
+  Cloth: Canada Day's flag waves up to one and a half times as hard with the gust, the Korean
+  birthday's cloth ripples half as deep again and leans from its rod, steam blows left. The
+  largest turn from the calm pose at any instant, at the gust's peak: Birthday 6.3 degrees (a
+  bunting flag's flap), Christmas 6.2, Seollal 5.9, Lotus Lanterns and New Year 5.5, Autumn
+  5.4, Canada Day and Chuseok 5.1, New Year tree 5.0, Orthodox Christmas and the Russian
+  birthday 4.9, the Korean birthday 4.6, Easter, Women's Day, Spring and Thanksgiving 4.3,
+  Pascha 4.2, Winter 4.1, Summer 3.8, Halloween 2.8, Maslenitsa 0 (only its steam moves).
+- **Rain (#617) and storms (#619):** no falling petals, leaves, blossom or embers of the
+  scene's own and no decorative snow (Christmas and Orthodox Christmas now drop it under rain
+  and storms too); the backlight (halos and discs behind the scene, the lamps behind
+  Winter's ice, the lilac light behind the Chuseok tray) is halved; Summer's fireflies go out.
+- **Fog (#620):** the backlight keeps 60%, glints the scene draws itself are hidden
+  (Winter's snow, Orthodox Christmas's drift, the Halloween dew), nothing twinkles (the kit
+  holds every halo still in fog), and far elements keep 60% (Seollal's far kite, the New
+  Year palm, Orthodox Christmas's first star, Summer's fireflies). The hero is untouched.
+- **Snow (#618):** one snowfall, never two: Christmas and Orthodox Christmas hide their own.
+- **Nothing is removed and quiet dates keep still.** A weather hides what it stops (the
+  census of every scene under every weather builds exactly what it builds in calm), and a
+  quiet date takes no motion from the wind.
+- **The float's rules hold in the wind.** The edge and crop checks build every scene in the
+  wind with the gust held at its lull and its peak; all pass with the leans above.
+
+| Scene | Wind | Rain and storms | Fog | Snow |
+| --- | --- | --- | --- | --- |
+| Autumn | maple and birch leaves lean, boughs sway ×1.5, falling leaf drifts | falling leaf stays on the tree, glows ×0.5 | glows ×0.6 | — |
+| Spring | blooms and the leaf spray lean, petals drift | no falling petals, glows ×0.5 | glows ×0.6 | — |
+| Summer | leaves and flowers lean, vine sway ×1.5 | fireflies out, glows ×0.5 | glows and fireflies ×0.6 | — |
+| Winter | boughs sway ×1.5, cones lean (ice keeps still) | glints and lamps ×0.5 | no glints, lamps ×0.6 | — |
+| Christmas | ornaments and wreath lean on their threads, snow carried left | own snow hidden, far lights ×0.5 | far lights ×0.6 | own snow hidden |
+| Orthodox Christmas | ribbons lean, pole and star sway ×1.5, snow carried left | own snow hidden | first star ×0.6, drift glints hidden | own snow hidden |
+| New Year | streamers lean, embers drift | embers out | far palm ×0.6 | — |
+| New Year tree | glass and foil rain lean | warm light ×0.5 | warm light ×0.6 | — |
+| Canada Day | flag waves up to ×1.5, hanging leaves lean, falling leaves drift | no falling leaves, red glow ×0.5 | red glow ×0.6 | — |
+| Seollal | kite's figure of eight ×1.5 and roll, pouches lean | sky light ×0.5 | sky light and far kite ×0.6 | — |
+| Chuseok | fruit, leaves and rice lean, loose leaf and steam drift | loose leaf stays, tray light ×0.5 | tray light ×0.6 (the moon is the hero) | — |
+| Birthday | balloons lean, bunting flags flap ×1.5 | — | (no twinkle) | — |
+| Korean birthday | balloons and the cloth lean, steam drifts | — | — | — |
+| Russian birthday | balloons lean, steam drifts | — | — | — |
+| Lotus Lanterns | lanterns lean on their cords, line lifts ×1.5 | — (their light is the scene) | — | — |
+| Women's Day | stems lean, blossom drifts | no drifting blossom | — | — |
+| Maslenitsa | steam drifts | low sun ×0.5 | low sun ×0.6 | — |
+| Easter | lily trumpets lean, branch sway ×1.5 | pale light ×0.5 | pale light ×0.6 | — |
+| Pascha | willow twigs lean | — | — | — |
+| Thanksgiving | wheat ears lean | warm lights ×0.5 | warm lights ×0.6 | — |
+| Halloween | the web leans from its corner | warm light ×0.5 | warm light ×0.6, dew glints hidden | — |
+
+The five weather scenes (Rain, Snow, Storms, Fog, Wind) are the weather themselves (Weather
+mode) and are never given a weather over them. Not done: the hero hand-off ("where the hero
+is"), for overlays to keep clear of a scene's hero; no capture showed an overlay crowding one.
 
 The Storms glow (coordinator decision on #619) is not lightning and not a flash: no bolt
 is drawn; the glow takes 1.6 s to rise, holds 0.4 s and fades over 5 s, 48 to 128 s apart;

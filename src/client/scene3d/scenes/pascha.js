@@ -8,10 +8,14 @@
 import { plate } from '../parts/maslenitsa-tableware.js';
 import { dyedEgg, kulich, linenNapkin } from '../parts/pascha-kulich.js';
 import { clayJug, willowTwigs } from '../parts/pascha-willow.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.18;
+  // The weather over the scene (#646): wind leans the willow twigs left in their jug and widens their stir. Nothing here
+  // falls or is backlit; in fog the kit stops the twinkle.
+  const weather = weatherOver(kit, ctx);
 
   // ---------- the kulich on its plate and napkin, bottom-left corner, seen a little from above ----------
   // The napkin lies a little higher, so the eggs on it are not cut by the float's zoom (#675).
@@ -33,5 +37,5 @@ export default function build(kit, ctx) {
   // [lean sideways, lean in depth, length, curl]: seven twigs, none alike, fanning a little toward the room.
   const BENDS = [[-.2, .05, 3.45, .1], [.06, -.08, 3.1, .07], [-.34, .1, 2.75, .12], [.16, .12, 2.5, .09], [-.08, -.14, 3.9, .08], [-.46, -.04, 2.3, .1], [.24, -.02, 2.9, .06]];
   const willow = willowTwigs(kit, { bends: BENDS.slice(0, Math.max(3, Math.round(2 + A * 21))), seed, inside: .75 }); willow.group.position.y = jug.userData.mouth; stand.add(willow.group);
-  willow.twigs.forEach((twig, i) => { const phase = rnd(i, seed + 5) * 6; tick(t => { twig.rotation.z = Math.sin(t * .45 + phase) * .008; twig.rotation.x = Math.sin(t * .31 + phase) * .006; }); });
+  willow.twigs.forEach((twig, i) => { const phase = rnd(i, seed + 5) * 6; tick(t => { twig.rotation.z = weather.sway(Math.sin(t * .45 + phase) * .008, 1); twig.rotation.x = Math.sin(t * .31 + phase) * .006 * weather.wind.sway; }); });
 }

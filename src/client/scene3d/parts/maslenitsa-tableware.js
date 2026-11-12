@@ -68,7 +68,7 @@ export function woodenSpoon(kit, { length = 1.05, colour = 0xc8a878 } = {}) {
 }
 
 /** A wisp of steam rising from the group's origin and thinning out. Nothing on quiet dates (it is in the air). */
-export function steam(kit, { height = 1.3, width = .5, strength = .1, wisps = 2, salt = 0 } = {}) {
+export function steam(kit, { height = 1.3, width = .5, strength = .1, wisps = 2, salt = 0, weather = null } = {}) {
   const { T, rnd } = kit, group = new T.Group(); if (kit.ctx.quiet) return group;
   const curl = kit.canvasTexture(64, 256, g => {
     g.lineCap = 'round';
@@ -86,7 +86,8 @@ export function steam(kit, { height = 1.3, width = .5, strength = .1, wisps = 2,
     group.add(wisp);
     kit.tick(t => {
       const k = (t * .3 + phase) % 1;
-      wisp.position.set(side + Math.sin(t * .4 + i * 2) * width * .1, height * (.4 + k * .45), 0); wisp.scale.set((i % 2 ? -1 : 1) * width * (.7 + k * .7), height * (.8 + k * .4), 1); wisp.userData.o = strength * Math.pow(Math.sin(Math.PI * k), 1.2);
+      // `weather` (the scene's parts/wind-underneath.js, #646): in the wind the steam is blown left as it rises.
+      wisp.position.set(side + Math.sin(t * .4 + i * 2) * width * .1 + (weather ? weather.drift(k * 10) : 0), height * (.4 + k * .45), 0); wisp.scale.set((i % 2 ? -1 : 1) * width * (.7 + k * .7), height * (.8 + k * .4), 1); wisp.userData.o = strength * Math.pow(Math.sin(Math.PI * k), 1.2);
     });
   }
   return group;

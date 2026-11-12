@@ -9,12 +9,16 @@
 import { bojagiGift } from '../parts/birthday-korean-bojagi.js';
 import { jogakbo } from '../parts/birthday-korean-jogakbo.js';
 import { soban, soupBowl, sujeo } from '../parts/birthday-korean-soban.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   // The plan's sizes are on-screen sizes at the special look; K follows the owner's size setting from there.
   const { T, V, rnd, stage, view, tick, mix, shift } = kit, W = view.halfW, A = ctx.amount, K = ctx.size / .935, seed = ctx.seed;
   const [jade, coral, gold] = ctx.palette, CREAM = 0xf6ecd8, deep = colour => shift(colour, 0, .06, -.08);
+  // The weather over the scene (#646): wind leans the balloons left about their tie and widens their swing, ripples the
+  // cloth half as deep again and leans it left from its rod, and blows the steam left. Nothing here falls or is backlit.
+  const weather = weatherOver(kit, ctx);
 
   // ---------- the birthday table, bottom right: cake, seaweed soup, spoon and chopsticks on a soban ----------
   const table = soban(kit, { width: 3.2 * K, depth: 2 * K, height: 1.2 * K }), tableZ = -.3;
@@ -32,7 +36,7 @@ export default function build(kit, ctx) {
       const from = V(.82 * K, top + bowl.userData.surface, .3 * K).applyEuler(table.rotation).add(table.position);
       for (let i = 0; i < 3; i++) {
         const wisp = kit.glow(0xfff1dc, 1, 0, { twinkle: 0 }); stage.add(wisp);
-        tick(t => { const life = (t / 1.125 + i / 3) % 1; wisp.position.set(from.x + Math.sin(life * 4 + i * 2.1) * .1 + (i - 1) * .1, from.y + .1 + life * .8, from.z); wisp.scale.set((.26 + life * .3) * K, (.6 + life * .5) * K, 1); wisp.userData.o = (.1 + i * .03) * Math.sin(Math.PI * life); });
+        tick(t => { const life = (t / 1.125 + i / 3) % 1; wisp.position.set(from.x + Math.sin(life * 4 + i * 2.1) * .1 + (i - 1) * .1 + weather.drift(life * 10), from.y + .1 + life * .8, from.z); wisp.scale.set((.26 + life * .3) * K, (.6 + life * .5) * K, 1); wisp.userData.o = (.1 + i * .03) * Math.sin(Math.PI * life); });
       }
     }
   }
@@ -50,7 +54,7 @@ export default function build(kit, ctx) {
       const knot = at.clone().add(V(0, -1.2 * r, 0).applyQuaternion(balloon.quaternion));
       // The string swings out past the rim of the table before it rises.
       group.add(balloon, kit.line(new T.QuadraticBezierCurve3(knot, bend.clone().add(V(0, i * .25, 0)), V()).getPoints(28))); stage.add(group);
-      const phase = i * 1.3 + rnd(i, seed) * 2; tick(t => { group.rotation.z = Math.sin(t * .45 + phase) * .02; group.rotation.x = Math.sin(t * .33 + phase) * .012; });
+      const phase = i * 1.3 + rnd(i, seed) * 2; tick(t => { group.rotation.z = weather.sway(Math.sin(t * .45 + phase) * .02, 1); group.rotation.x = Math.sin(t * .33 + phase) * .012 * weather.wind.sway; });
     }
   }
 
@@ -64,7 +68,7 @@ export default function build(kit, ctx) {
 
   // ---------- a patchwork cloth hanging from its rod, top left ----------
   {
-    const cloth = jogakbo(kit, { width: 2.8 * K, height: 3.5 * K }), at = V(-W + 2.05, 4.1, -.8); cloth.position.copy(at); stage.add(cloth);
+    const cloth = jogakbo(kit, { width: 2.8 * K, height: 3.5 * K, weather }), at = V(-W + 2.05, 4.1, -.8); cloth.position.copy(at); stage.add(cloth);
     for (const end of cloth.userData.ends) stage.add(kit.line([at.clone().add(end), at.clone().add(end).add(V(end.x * .12, 1.1, 0))], 0xcfc8d8, .55));
   }
 }

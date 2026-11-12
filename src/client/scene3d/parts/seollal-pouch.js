@@ -52,7 +52,7 @@ function chrysanthemum(g, raised) {
 }
 
 /** Hang a pouch body under the group's origin on a cord `drop` long, and let it swing and turn a little. */
-function hung(kit, body, { size, drop, cord, lean, phase, mouth, tassels }) {
+function hung(kit, body, { size, drop, cord, lean, phase, mouth, tassels, weather }) {
   const { T, V, tick } = kit, group = new T.Group(), length = drop / size;
   // Two strands leave the mouth, meet in a knot, and one cord runs up to the hook.
   for (const side of [-1, 1]) body.add(new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([V(side * mouth[0], mouth[1], 0), V(side * mouth[0] * .86, mouth[1] + .2, .01), V(side * mouth[0] * .25, mouth[1] + .44, 0), V(0, mouth[1] + .56, 0)]), 20, .014, 6), cord));
@@ -60,9 +60,12 @@ function hung(kit, body, { size, drop, cord, lean, phase, mouth, tassels }) {
   const rope = new T.Mesh(new T.TubeGeometry(new T.LineCurve3(V(0, mouth[1] + .6, 0), V(0, length, 0)), 8, .014, 6), cordMaterial(kit, ...cord.userData.pair, Math.round(length * 9)));
   body.add(join, rope); body.scale.setScalar(size); body.position.y = -drop; group.add(body);
   tick(t => {
-    group.rotation.z = lean + Math.sin(t * 3.6 + phase) * .026; body.rotation.y = Math.sin(t * 2.3 + phase) * .14;
+    // `weather` (parts/wind-underneath.js, #646): in the wind the pouch leans left on its cord and swings half as far again; its
+    // turn on the cord stays as it is, so it never turns more than 7 degrees from its calm pose.
+    const calm = Math.sin(t * 3.6 + phase) * .026, sway = weather ? weather.wind.sway : 1;
+    group.rotation.z = lean + (weather ? weather.sway(calm, -1) : calm); body.rotation.y = Math.sin(t * 2.3 + phase) * .14;
     // The tassels follow a quarter of a swing behind.
-    for (const item of tassels) item.rotation.z = item.userData.rest + Math.sin(t * 3.6 + phase - 1.57) * .06;
+    for (const item of tassels) item.rotation.z = item.userData.rest + Math.sin(t * 3.6 + phase - 1.57) * .06 * sway;
   });
   return group;
 }
@@ -71,7 +74,7 @@ const pairOf = (kit, [first, second], turns) => { const material = cordMaterial(
 
 /** The round pouch (duru-jumeoni): a pleated neck and frill over a round belly, about 1 x 1 times `size`.
  * The group's origin is the hook it hangs from; its belly hangs `drop` below. */
-export function roundPouch(kit, { size = 1, drop = 2.5, colour = 0xd8433b, cord = [0xf5cf52, 0x5fbfa0], lean = 0, phase = 0 } = {}) {
+export function roundPouch(kit, { size = 1, drop = 2.5, colour = 0xd8433b, cord = [0xf5cf52, 0x5fbfa0], lean = 0, phase = 0, weather = null } = {}) {
   const { T } = kit, body = new T.Group();
   const profile = new T.SplineCurve([[.001, -.5], [.2, -.485], [.39, -.39], [.49, -.2], [.47, 0], [.36, .14], [.2, .225], [.135, .275], [.15, .32], [.23, .39], [.31, .5]].map(([x, y]) => new T.Vector2(x, y))).getSpacedPoints(56);
   // The seam of the lathe is turned to the back; the embroidered front is the middle of the texture.
@@ -94,12 +97,12 @@ export function roundPouch(kit, { size = 1, drop = 2.5, colour = 0xd8433b, cord 
     const item = tassel(kit, { head: cord[0], skirt: side < 0 ? cord[1] : cord[0], length: side < 0 ? .3 : .36 }); item.position.set(side * .23, .22, .12); item.userData.rest = side * .62; item.rotation.x = -.25;
     body.add(tie, item); return item;
   });
-  return hung(kit, body, { size, drop, cord: string, lean, phase, mouth: [.15, .29], tassels });
+  return hung(kit, body, { size, drop, cord: string, lean, phase, mouth: [.15, .29], tassels, weather });
 }
 
 /** The eared pouch (gwi-jumeoni): a flat pouch with a pointed ear at each lower corner and a
  * folded mouth, about 1 x 0.95 times `size`. Plain silk. The origin is the hook it hangs from. */
-export function earedPouch(kit, { size = 1, drop = 3.5, colour = 0x5fbfa0, cord = [0xd8433b, 0xf5cf52], lean = 0, phase = 0 } = {}) {
+export function earedPouch(kit, { size = 1, drop = 3.5, colour = 0x5fbfa0, cord = [0xd8433b, 0xf5cf52], lean = 0, phase = 0, weather = null } = {}) {
   const { T } = kit, body = new T.Group();
   const outline = new T.Shape(); outline.moveTo(-.2, .46); outline.lineTo(.2, .46); outline.bezierCurveTo(.2, .16, .3, -.1, .53, -.36); outline.quadraticCurveTo(0, -.5, -.53, -.36); outline.bezierCurveTo(-.3, -.1, -.2, .16, -.2, .46);
   const edge = outline.getPoints(40);
@@ -124,7 +127,7 @@ export function earedPouch(kit, { size = 1, drop = 3.5, colour = 0x5fbfa0, cord 
   const tie = knot(kit, string, .05); tie.position.set(0, .3, .13);
   const item = tassel(kit, { head: cord[1], skirt: cord[0], length: .4 }); item.position.set(0, .27, .15); item.userData.rest = 0;
   body.add(new T.Mesh(geometry, cloth), band, tie, item);
-  return hung(kit, body, { size, drop, cord: string, lean, phase, mouth: [.13, .44], tassels: [item] });
+  return hung(kit, body, { size, drop, cord: string, lean, phase, mouth: [.13, .44], tassels: [item], weather });
 }
 
 /** Plain silk whose only marks are the creases that fan down from a folded mouth at the top of the texture. */

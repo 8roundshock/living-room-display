@@ -94,14 +94,16 @@ export function createParty(core) {
 
   // ---------- bunting, confetti, streamers ----------
   /** Triangular flags on a cord hanging from a to b. `papers` are [base, accent, kind] patternTex triples, cycled. */
-  function bunting(a, b, { flags = 6, sag = .36, drop = 1.25, papers = [['#e8456a', '#f6a8b8', 'dots'], ['#f2a93b', '#fbe0a8', 'stripes'], ['#3fa7d6', '#a8dcf2', 'grid'], ['#58c98a', '#b8f0d0', 'dots'], ['#9b6bd6', '#d6c0f2', 'stripes']], start = 0 } = {}) {
+  function bunting(a, b, { weather = null, flags = 6, sag = .36, drop = 1.25, papers = [['#e8456a', '#f6a8b8', 'dots'], ['#f2a93b', '#fbe0a8', 'stripes'], ['#3fa7d6', '#a8dcf2', 'grid'], ['#58c98a', '#b8f0d0', 'dots'], ['#9b6bd6', '#d6c0f2', 'stripes']], start = 0 } = {}) {
     const group = new T.Group(), count = Math.max(1, Math.round(flags)), points = catenary(a, b, sag, count * 6); group.add(line(points, 0xd8d2c4, .8));
     for (let j = 0; j < count; j++) {
       const p0 = points[j * 6 + 1], p1 = points[j * 6 + 5], width = p0.distanceTo(p1), geometry = new T.BufferGeometry(), size = .8 + rnd(j + start, 41) * .4;
       geometry.setAttribute('position', new T.Float32BufferAttribute([0, 0, 0, width, 0, 0, width / 2, -width * drop * size, 0], 3)); geometry.setAttribute('uv', new T.Float32BufferAttribute([0, 1, 1, 1, .5, 0], 2)); geometry.computeVertexNormals();
       const flag = new T.Mesh(geometry, mat({ map: patternTex(...papers[(j + start) % papers.length]), roughness: .7, side: T.DoubleSide }, .4, false));
       flag.position.copy(p0); flag.rotation.z = Math.atan2(p1.y - p0.y, p1.x - p0.x); group.add(flag);
-      const phase = (j + start) * 1.1; tick(t => { flag.rotation.x = Math.sin(t * .8 + phase) * .22; });
+      // `weather` (the scene's parts/wind-underneath.js, #646): in the wind each flag flaps half as far again about the cord. It is
+      // held at both top corners, so it does not lean.
+      const phase = (j + start) * 1.1; tick(t => { flag.rotation.x = Math.sin(t * .8 + phase) * .22 * (weather ? weather.wind.sway : 1); });
     }
     return group;
   }
