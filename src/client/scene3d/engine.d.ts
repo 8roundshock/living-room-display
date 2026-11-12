@@ -113,8 +113,11 @@ export interface StageOptions {
   overlay?: SceneBuilder | null;
   ctx: Omit<SceneContext, 'width' | 'height'>;
   look: StageLook;
-  /** One static frame and no loop (editor still previews). */
+  /** One static frame and no loop (editor still previews). A still stage does not float. */
   still?: boolean;
+  /** The float (#675): the board's motion interval in seconds, and whether the picture eases between
+   * waypoints (Float gently on, motion allowed) or steps once per interval. Null or absent: no float. */
+  float?: { interval: number; gentle: boolean } | null;
   limits: { maxWidth: number; maxHeight: number; framesPerSecond: number };
   clock: { start: number; still: number };
   /** Source checks only: accept a software rasteriser and never give up for being slow. */
@@ -124,8 +127,11 @@ export interface StageOptions {
 }
 /** frameMs is main-thread time of the last frame; gpuMs is how long the GPU took to finish it (to the nearest animation frame).
  * builds counts how often the scene was built (once at start, again after a resize or a retune); seeScale is the look's
- * current one; geometries, textures and programs are what the renderer holds on the GPU. */
-export interface StageStats { frames: number; builds: number; running: boolean; frozen: boolean; disposed: boolean; time: number; buildMs: number; frameMs: number; gpuMs: number; seeScale: number; backing: [number, number]; triangles: number; calls: number; geometries: number; textures: number; programs: number }
+ * current one; geometries, textures and programs are what the renderer holds on the GPU. `frozen`: the scene's own clock
+ * is stopped (a still preview or a quiet date); `floating`: the frame loop or the float's low-rate timer is live; `float`
+ * is the last drawn offset in normalised device coordinates (the frame is -1 to 1), `zoom` the overscan, and
+ * `floatFrames` how many frames the float alone has drawn on a frozen stage. */
+export interface StageStats { frames: number; builds: number; running: boolean; frozen: boolean; floating: boolean; disposed: boolean; time: number; buildMs: number; frameMs: number; gpuMs: number; seeScale: number; float: { x: number; y: number }; zoom: number; floatFrames: number; backing: [number, number]; triangles: number; calls: number; geometries: number; textures: number; programs: number }
 export interface Stage {
   dispose(): void;
   stats(): StageStats;
@@ -133,6 +139,10 @@ export interface Stage {
   /** A new look for the same scene (the Transparency setting, #670). The scene is built again 250 ms after the
    * last call, in the same canvas and WebGL context, and drawn at once. A call that changes nothing does nothing. */
   retune(changes: Pick<StageLook, 'seeScale'>): void;
+  /** New float settings (#675); a new interval keeps the current position. A still stage ignores them. */
+  setFloat(float: { interval: number; gentle: boolean }): void;
+  /** For tools and tests: pin the float at a track position in [-1, 1]² (null resumes the float) and draw. */
+  holdFloat(unit: { x: number; y: number } | null): void;
 }
 /** Throws when WebGL or the scene module fails; the caller falls back to the flat renderer. */
 export function createStage(host: HTMLElement, options: StageOptions): Stage;

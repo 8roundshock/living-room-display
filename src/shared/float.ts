@@ -94,6 +94,17 @@ function progressTime(p: number): number {
   return p / PEAK + EASE / 2;
 }
 
+/** The 3D scene layer (#675): its own waypoints (no widget's lead is 3) and half an interval out of step with the board. */
+export const SCENE_TRACK: FloatTrack = { lead: 3, phase: 0.5 };
+/**
+ * A track's position in [-1, 1]² after `seconds`: eased between waypoints when `floating`, or (Float
+ * gently off, reduced motion) the waypoint of the current interval, jumping at the track's own
+ * boundaries (its phase shifts them, unlike stepPath, which the board and widgets share).
+ */
+export function trackPosition(seconds: number, intervalSeconds: number, floating: boolean, track: FloatTrack): Point {
+  return floating ? floatPath(seconds, intervalSeconds, track) : stepPath(seconds + track.phase * intervalSeconds, intervalSeconds, track);
+}
+
 /** Widget `index` follows its own waypoints, out of step with the board and with the other widgets. */
 export function widgetTrack(index: number): FloatTrack {
   return { lead: 7 * (index + 1), phase: fraction((index + 1) * GOLDEN) };

@@ -8,16 +8,19 @@ import { sceneTier } from './tier';
 import { softwareAllowed } from './webgl';
 import './scene3d.css';
 
-/** `transparency` is the saved or draft Transparency setting (#670, 0-100; undefined is the standard look). */
-interface Props { scene: ThemeScene; plan: Scene3dPlan; still: boolean; transparency?: number; onFail: () => void }
+/** `transparency` is the saved or draft Transparency setting (#670, 0-100; undefined is the standard look).
+ * `float` (#675) is the board's motion interval and whether it eases (Float gently on, motion allowed). */
+interface Props { scene: ThemeScene; plan: Scene3dPlan; still: boolean; transparency?: number; float?: SceneFloat; onFail: () => void }
+export interface SceneFloat { interval: number; gentle: boolean }
 
 /** The 3D scene behind the widgets. The engine, three.js and the scene module load only when
  * this mounts. Any failure calls `onFail`, and the caller shows the flat renderer instead.
  * A new Transparency retunes the live stage (one rebuild in the same WebGL context once the
  * slider rests), never a new stage. */
-export const Scene3D = memo(function Scene3D({ scene, plan, still, transparency, onFail }: Props) {
+export const Scene3D = memo(function Scene3D({ scene, plan, still, transparency, float, onFail }: Props) {
   const host = useRef<HTMLDivElement>(null), failed = useRef(onFail), live = useRef<Stage | null>(null), see = seeScale(transparency), seeNow = useRef(see);
-  failed.current = onFail; seeNow.current = see;
+  const floatInterval = float?.interval ?? 180, floatGentle = float?.gentle ?? true, floatNow = useRef({ interval: floatInterval, gentle: floatGentle });
+  failed.current = onFail; seeNow.current = see; floatNow.current = { interval: floatInterval, gentle: floatGentle };
   const { tint, companion, accent, quiet } = scene, today = new Date(), day = civilDay(today);
   const tier = sceneTier(scene, today.getFullYear()), look = sceneLook(plan.sceneId, tier, quiet);
   useEffect(() => {
@@ -33,7 +36,7 @@ export const Scene3D = memo(function Scene3D({ scene, plan, still, transparency,
         build: sceneModule.default, overlay: weatherModule?.default ?? null,
         ctx: { id: plan.sceneId, amount: settings.amount, size: settings.size, tier, weather: plan.weather, quiet, palette: [tint, companion, accent], seed: sceneSeed(plan.sceneId), day },
         // The Transparency in effect when the modules arrived; later changes go through retune().
-        look: { ...settings, seeScale: seeNow.current }, still, limits: RENDER_LIMITS, clock: SCENE_CLOCK, allowSoftware: softwareAllowed(), onFail: fail,
+        look: { ...settings, seeScale: seeNow.current }, still, float: floatNow.current, limits: RENDER_LIMITS, clock: SCENE_CLOCK, allowSoftware: softwareAllowed(), onFail: fail,
       });
       live.current = stage;
     }).catch(fail);
@@ -41,6 +44,8 @@ export const Scene3D = memo(function Scene3D({ scene, plan, still, transparency,
   }, [plan.module, plan.sceneId, plan.weather, still, quiet, tier, tint, companion, accent, day]);
   // The stage waits RETUNE_DELAY_MS after the last change before it builds again, so a drag is one rebuild.
   useEffect(() => { live.current?.retune({ seeScale: see }); }, [see]);
+  // The float follows the board's settings without rebuilding the scene (#675).
+  useEffect(() => { live.current?.setFloat({ interval: floatInterval, gentle: floatGentle }); }, [floatInterval, floatGentle]);
   const mask = fadeMask(look.fadeToMiddle);
   return <div ref={host} className="ambient-theme scene3d" aria-hidden="true" data-scene-renderer="3d" data-scene-module={plan.module} data-scene-tier={tier}
     data-scene-weather={plan.weather ?? undefined} data-theme-motif={scene.motif} data-theme-habitat={scene.habitat ?? scene.motif} data-theme-source={scene.source}

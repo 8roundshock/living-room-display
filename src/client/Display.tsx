@@ -203,6 +203,8 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   // floats (the plane and each widget's content), or steps once each interval without animation. Swap
   // places (`rearrange`, opt-in) also trades cells every interval, gliding (or dimming) without going dark.
   const floating = motionEnabled && !reducedMotion && !layoutEditing;
+  // #675: the 3D scene floats on its own track with the board's interval, eased or stepping like the board.
+  const sceneFloat = useMemo(() => ({ interval: motionIntervalSeconds, gentle: motionEnabled && !reducedMotion }), [motionIntervalSeconds, motionEnabled, reducedMotion]);
   const swapsAllowed = rearrange && !layoutEditing;
   const swapping = swapsAllowed && compositionOverride === undefined && !controlled;
   const glide = floating && fadeSeconds > 0;
@@ -641,7 +643,7 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
           animated={!reducedMotion && !layoutEditing && settings.appearance.animation !== 'off'}
           still={embedded && layoutEditing && !reducedMotion && settings.appearance.animation !== 'off'}
           exclusions={themeExclusions} layoutKey={layoutKey} inkRevision={themeInkRevision}
-          foreground={settings.appearance.theme.foreground} transparency={settings.appearance.theme.transparency} passageMeasure={themePassageGeometry} />
+          foreground={settings.appearance.theme.foreground} transparency={settings.appearance.theme.transparency} float={sceneFloat} passageMeasure={themePassageGeometry} />
         <div
           ref={plane}
           className={['ambient-content', 'widget-grid-plane', reveal.active ? 'revealing' : ''].filter(Boolean).join(' ')}
