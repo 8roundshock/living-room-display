@@ -97,7 +97,7 @@ test('The engine floats the picture in the projection and has no scene-clock dri
   const engine = readFileSync(new URL('./engine.js', import.meta.url), 'utf8');
   assert.doesNotMatch(engine, /DRIFT/);
   assert.match(engine, /camera\.projectionMatrix\.premultiply\(zoomMatrix\)/);
-  assert.match(engine, /seconds = real - originOf\(float\.interval\);/);
+  assert.match(engine, /seconds = clock\.track\(real, originOf\(float\.interval\)\);/, 'real seconds less the origin, or the movement preview’s time (#678)');
   assert.match(engine, /floatOffset\(trackPosition\(seconds, float\.interval, float\.gentle, SCENE_TRACK\)\)/);
   assert.match(engine, /^const floatOrigins = new Map\(\);$/m, 'the float origin is shared by every stage on the page, so a new stage does not jump');
   assert.equal((engine.match(/floatOrigins\.set\(/g) ?? []).length, 1, 'only setFloat moves an origin, so stages at different intervals never race');

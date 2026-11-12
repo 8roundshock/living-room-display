@@ -204,7 +204,9 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
   // places (`rearrange`, opt-in) also trades cells every interval, gliding (or dimming) without going dark.
   const floating = motionEnabled && !reducedMotion && !layoutEditing;
   // #675: the 3D scene floats on its own track with the board's interval, eased or stepping like the board.
-  const sceneFloat = useMemo(() => ({ interval: motionIntervalSeconds, gentle: motionEnabled && !reducedMotion }), [motionIntervalSeconds, motionEnabled, reducedMotion]);
+  // #678: under the editor's movement preview it follows the same preview time as the board, scene clock included.
+  const scenePreview = controlled ? previewTime : null;
+  const sceneFloat = useMemo(() => ({ interval: motionIntervalSeconds, gentle: motionEnabled && !reducedMotion, preview: scenePreview }), [motionIntervalSeconds, motionEnabled, reducedMotion, scenePreview]);
   const swapsAllowed = rearrange && !layoutEditing;
   const swapping = swapsAllowed && compositionOverride === undefined && !controlled;
   const glide = floating && fadeSeconds > 0;

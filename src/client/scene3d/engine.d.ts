@@ -123,6 +123,8 @@ export interface StageOptions {
   /** The float (#675): the board's motion interval in seconds, and whether the picture eases between
    * waypoints (Float gently on, motion allowed) or steps once per interval. Null or absent: no float. */
   float?: { interval: number; gentle: boolean } | null;
+  /** The editor's movement-preview time in seconds when the stage is made while one is shown (#678); null or absent: real time. */
+  preview?: number | null;
   limits: { maxWidth: number; maxHeight: number; framesPerSecond: number };
   clock: { start: number; still: number };
   /** Source checks only: accept a software rasteriser and never give up for being slow. */
@@ -136,9 +138,10 @@ export interface StageOptions {
  * is stopped (a still preview or a quiet date); `floating`: the frame loop or the float's low-rate timer is live; `float`
  * is the last drawn offset in normalised device coordinates (the frame is -1 to 1), `zoom` the overscan, and
  * `floatFrames` how many frames the float alone has drawn on a frozen stage. `floatSample` is the real clock (seconds since
- * the epoch) and the track's time at the last floated frame, null before one (for tests and tools). `surfaces` counts the
- * scene's kit.mat surfaces that are solid and clear (#683). */
-export interface StageStats { frames: number; builds: number; running: boolean; frozen: boolean; floating: boolean; disposed: boolean; time: number; buildMs: number; frameMs: number; gpuMs: number; seeScale: number; float: { x: number; y: number }; floatSample: { real: number; seconds: number } | null; zoom: number; floatFrames: number; surfaces: { solid: number; clear: number }; backing: [number, number]; triangles: number; calls: number; geometries: number; textures: number; programs: number }
+ * the epoch) and the track's time at the last floated frame, and whether that time was the movement preview's (#678), null
+ * before one (for tests and tools). `preview` is the movement-preview time the stage follows, null on real time; `time` is
+ * the scene clock. `surfaces` counts the scene's kit.mat surfaces that are solid and clear (#683). */
+export interface StageStats { frames: number; builds: number; running: boolean; frozen: boolean; floating: boolean; disposed: boolean; time: number; preview: number | null; buildMs: number; frameMs: number; gpuMs: number; seeScale: number; float: { x: number; y: number }; floatSample: { real: number; seconds: number; preview: boolean } | null; zoom: number; floatFrames: number; surfaces: { solid: number; clear: number }; backing: [number, number]; triangles: number; calls: number; geometries: number; textures: number; programs: number }
 export interface Stage {
   dispose(): void;
   stats(): StageStats;
@@ -148,9 +151,16 @@ export interface Stage {
   retune(changes: Pick<StageLook, 'seeScale'>): void;
   /** New float settings (#675); a new interval keeps the current position. A still stage ignores them. */
   setFloat(float: { interval: number; gentle: boolean }): void;
+  /** The editor's movement-preview time in seconds (#678), or null to return to real time. The float reads it as its track
+   * time and a running scene clock as `clock.start + seconds × timeScale`; a held time draws nothing new. On return the float
+   * reads real time at once and the scene clock carries on from the preview's. A still stage ignores it; nothing is rebuilt. */
+  setPreview(seconds: number | null): void;
   /** For tools and tests: pin the float at a track position in [-1, 1]² (null resumes the float) and draw. */
   holdFloat(unit: { x: number; y: number } | null): void;
 }
 /** Throws when WebGL or the scene module fails; the caller falls back to the flat renderer. */
 export function createStage(host: HTMLElement, options: StageOptions): Stage;
+/** A stage's scene clock and float track time, and how the movement preview drives them (#678). Exported for tests. */
+export interface StageClock { readonly time: number; readonly preview: number | null; advance(seconds: number): void; follow(seconds: number | null | undefined): void; track(real: number, origin: number): number }
+export function stageClock(options: { frozen: boolean; start: number; still: number; timeScale: number }): StageClock;
 export const liveStages: Set<Stage>;
