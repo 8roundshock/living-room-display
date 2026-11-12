@@ -417,10 +417,22 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
         const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
         if (animation.playState === 'idle' || !target?.isConnected || !root.current?.contains(target)) previewLoops.current.delete(animation);
       }
+      // Lively glyph loops use the same CSS animations, sampled by this clock. Information still
+      // updates normally; its one-shot value transitions are not time-travelled or replayed. They are
+      // sampled first and each widget's ink measured after them (#686), so a moment's content offsets
+      // never depend on the moment shown before it.
+      for (const animation of root.current?.getAnimations({ subtree: true }) ?? []) {
+        if (animation.id === 'lrd-preview') continue;
+        if (animation.effect?.getTiming().iterations === Infinity) {
+          if (!previewLoops.current.has(animation)) previewLoops.current.set(animation, { time: animation.currentTime, running: animation.playState === 'running' });
+          animation.pause(); animation.currentTime = previewTime * 1000;
+        }
+      }
       const { width, height } = size.current, dpr = window.devicePixelRatio || 1;
       const unit = floating ? floatPath(previewTime, motionIntervalSeconds) : stepPath(previewTime, motionIntervalSeconds);
       element.style.transform = `translate(${snap(unit.x * FLOAT_TRAVEL * width, dpr)}px, ${snap(unit.y * FLOAT_TRAVEL * height, dpr)}px)`;
       for (const [id, entry] of registry.current) {
+        entry.measure();
         const range = floatRange(entry.slack, width, height, dpr), track = widgetTrack(WIDGET_IDS.indexOf(id));
         const offset = widgetFloatTarget(previewTime, motionIntervalSeconds, floating, track, range, entry.slack, dpr);
         entry.offset = offset;
@@ -445,15 +457,6 @@ export function AmbientDisplay({ state, settings = state.settings, embedded = fa
         previewAnimations.current = { key, animations };
       }
       for (const animation of previewAnimations.current.animations) animation.currentTime = elapsed * 1000;
-      // Lively glyph loops use the same CSS animations, sampled by this clock. Information still
-      // updates normally; its one-shot value transitions are not time-travelled or replayed.
-      for (const animation of root.current?.getAnimations({ subtree: true }) ?? []) {
-        if (animation.id === 'lrd-preview') continue;
-        if (animation.effect?.getTiming().iterations === Infinity) {
-          if (!previewLoops.current.has(animation)) previewLoops.current.set(animation, { time: animation.currentTime, running: animation.playState === 'running' });
-          animation.pause(); animation.currentTime = previewTime * 1000;
-        }
-      }
     };
     applyPreview.current = draw; kick.current = draw; draw();
   }, [controlled, previewTime, grid, floating, glide, fadeSeconds, motionIntervalSeconds, layoutKey, visible.join(',')]);
