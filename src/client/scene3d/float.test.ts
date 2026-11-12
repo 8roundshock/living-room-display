@@ -68,10 +68,22 @@ test('Every scene and weather overlay, at 16:9 and 21:9: no edge element shows i
   assert.ok(pieces > 300, `the check found whole pieces to measure: ${pieces}`);
 });
 
-test('The crop check can fail: with the first candidate (±3% × ±2.5% at a 6% zoom) Pascha’s eggs and kulich are cut', async () => {
-  const edges = await measure('pascha', { aspect: ASPECTS['16:9'] }), wider = floatExtremes({ travelX: .03, travelY: .025, zoom: 1.06 });
+test('The crop check can fail: a fallen leaf above the visible bottom, a cake cut below it, a whole piece near an edge', async () => {
+  const k = SCENE_FLOAT.zoom, onBottom = -1 / k, piece = (box: number[], extra = {}) => ({ name: 'test', box, resting: box[2] <= -.85, part: false, attached: false, supported: false, grounded: true, ...extra });
+  // A flat leaf: lying on the visible bottom it passes, cut at the low extreme or not; 0.5% of the height above it, it floats.
+  assert.deepEqual(crops([piece([-.5, -.45, onBottom, onBottom + .05])]), []);
+  assert.equal(crops([piece([-.5, -.45, onBottom + .01, onBottom + .06])]).length, 1, 'a leaf floating 0.5% above the visible bottom fails');
+  // Resting on something else (an egg on a napkin) it may sit higher.
+  assert.deepEqual(crops([piece([-.5, -.45, onBottom + .01, onBottom + .06], { supported: true })]), []);
+  // A tall piece (a cake) must be whole at the centre: sunk 1% of the height below the visible bottom, it fails.
+  assert.equal(crops([piece([-.6, -.3, onBottom - .02, onBottom + .4])]).length, 1, 'a cake cut at the centre fails');
+  assert.deepEqual(crops([piece([-.6, -.3, onBottom, onBottom + .4])]), []);
+  // A whole piece in the open, close to a side edge: cut at an extreme, it fails.
+  assert.equal(crops([piece([.88, .95, 0, .1])]).length, 1, 'a lantern 2.5% from the right edge fails');
+  // And on a real scene: Birthday's cake and presents pass at the chosen float and are cut at the first candidate (±3% × ±2.5%, 6% zoom).
+  const edges = await measure('birthday', { aspect: ASPECTS['16:9'] }), wider = floatExtremes({ travelX: .03, travelY: .025, zoom: 1.06 });
   assert.deepEqual(crops(edges.pieces), []);
-  assert.ok(crops(edges.pieces, wider).some((item: { resting: boolean }) => item.resting), 'a resting piece is cut at the wider float');
+  assert.ok(crops(edges.pieces, wider).length > 0, 'a piece is cut at the wider float');
 });
 
 test('The edge check can fail: Autumn’s twig that barely crosses the left edge would show its end with less zoom', async () => {
@@ -85,8 +97,9 @@ test('The engine floats the picture in the projection and has no scene-clock dri
   const engine = readFileSync(new URL('./engine.js', import.meta.url), 'utf8');
   assert.doesNotMatch(engine, /DRIFT/);
   assert.match(engine, /camera\.projectionMatrix\.premultiply\(zoomMatrix\)/);
-  assert.match(engine, /seconds = real - floatOriginFor\(float\.interval\);/);
+  assert.match(engine, /seconds = real - originOf\(float\.interval\);/);
   assert.match(engine, /floatOffset\(trackPosition\(seconds, float\.interval, float\.gentle, SCENE_TRACK\)\)/);
-  assert.match(engine, /^const floatOrigin = \{ interval: 0, at: 0 \};$/m, 'the float origin is shared by every stage on the page, so a new stage does not jump');
+  assert.match(engine, /^const floatOrigins = new Map\(\);$/m, 'the float origin is shared by every stage on the page, so a new stage does not jump');
+  assert.equal((engine.match(/floatOrigins\.set\(/g) ?? []).length, 1, 'only setFloat moves an origin, so stages at different intervals never race');
   assert.match(engine, /let float = still \? null : initialFloat/, 'a still preview does not float');
 });

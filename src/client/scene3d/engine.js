@@ -22,15 +22,12 @@ const FLOAT_CHECK_MS = 250, FLOAT_MIN_PIXELS = .5;
 /** The float's clock: real seconds since the epoch, the same for every stage, so a scene that is
  * rebuilt or replaced carries on from where the float was instead of starting over. */
 const floatClock = () => (performance.timeOrigin + performance.now()) / 1000;
-/** The float's origin, shared by every stage on the page: when the motion interval changes the origin
- * moves so that the position stays where it is, and a stage made after that (a rebuild at midnight,
- * weather arriving, a quiet date beginning) carries on from the same position instead of jumping. */
-const floatOrigin = { interval: 0, at: 0 };
-function floatOriginFor(interval) {
-  if (floatOrigin.interval && floatOrigin.interval !== interval) { const now = floatClock(); floatOrigin.at = now - (now - floatOrigin.at) * interval / floatOrigin.interval; }
-  floatOrigin.interval = interval;
-  return floatOrigin.at;
-}
+/** The float's origin for each motion interval, shared by every stage on the page (the epoch until the
+ * interval changes). setFloat sets the new interval's origin so the position stays where it is, and a
+ * stage made after that (a rebuild at midnight, weather arriving, a quiet date beginning) reads the same
+ * origin and carries on instead of jumping. Two stages at different intervals never disturb each other. */
+const floatOrigins = new Map();
+const originOf = interval => floatOrigins.get(interval) ?? 0;
 
 /** Live stages, for tests and tools: each has stats() and measure(). Also at window.__lrdScene3d. */
 export const liveStages = new Set();
@@ -91,21 +88,20 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
     camera.aspect = host.clientWidth / host.clientHeight; camera.updateProjectionMatrix();
     return true;
   }
-  /** Where the float puts the picture now, in normalised device coordinates. */
+  /** Where the float puts the picture now, in normalised device coordinates, and the clocks it was read at. */
   function floatTarget() {
-    if (held) return floatOffset(held);
-    if (!float) return { x: 0, y: 0 };
-    const real = floatClock(), seconds = real - floatOriginFor(float.interval);
-    floatSample = { real, seconds };
-    return floatOffset(trackPosition(seconds, float.interval, float.gentle, SCENE_TRACK));
+    if (held) return { offset: floatOffset(held), sample: null };
+    if (!float) return { offset: { x: 0, y: 0 }, sample: null };
+    const real = floatClock(), seconds = real - originOf(float.interval);
+    return { offset: floatOffset(trackPosition(seconds, float.interval, float.gentle, SCENE_TRACK)), sample: { real, seconds } };
   }
   /** The camera's projection, then the float: the picture is zoomed about the screen's centre and moved,
    * every pixel alike, as the board is (a projection change, so depth and parallax are untouched). */
-  function frame(offset) {
+  function frame({ offset, sample }) {
     camera.updateProjectionMatrix();
     zoomMatrix.set(SCENE_FLOAT.zoom, 0, 0, offset.x, 0, SCENE_FLOAT.zoom, 0, offset.y, 0, 0, 1, 0, 0, 0, 0, 1);
     camera.projectionMatrix.premultiply(zoomMatrix); camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-    shown = offset;
+    shown = offset; floatSample = sample;
   }
   function draw() {
     const started = performance.now();
@@ -138,10 +134,10 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   function floatLoop() {
     floatTimer = 0;
     if (disposed || document.hidden || !frozen || !(float || held)) return;
-    const next = floatTarget(), size = renderer.getSize(new T.Vector2());
+    const next = floatTarget().offset, size = renderer.getSize(new T.Vector2());
     if (Math.abs(next.x - shown.x) * size.x / 2 >= FLOAT_MIN_PIXELS || Math.abs(next.y - shown.y) * size.y / 2 >= FLOAT_MIN_PIXELS) { guarded(draw); floatFrames += 1; }
     if (disposed || !float || held) return;
-    const seconds = floatClock() - floatOriginFor(float.interval), boundary = (Math.floor(seconds / float.interval + SCENE_TRACK.phase) + 1 - SCENE_TRACK.phase) * float.interval;
+    const seconds = floatClock() - originOf(float.interval), boundary = (Math.floor(seconds / float.interval + SCENE_TRACK.phase) + 1 - SCENE_TRACK.phase) * float.interval;
     floatTimer = setTimeout(floatLoop, float.gentle ? FLOAT_CHECK_MS : Math.max(FLOAT_CHECK_MS, (boundary - seconds) * 1000 + 5));
   }
   function start() {
@@ -177,7 +173,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   function setFloat(next) {
     if (disposed || still || !next) return;
     if (float && next.interval === float.interval && next.gentle === float.gentle) return;
-    floatOriginFor(next.interval);
+    if (float && next.interval !== float.interval) { const now = floatClock(); floatOrigins.set(next.interval, now - (now - originOf(float.interval)) * next.interval / float.interval); }
     float = { interval: next.interval, gentle: next.gentle };
     if (frozen) { stop(); start(); }
   }

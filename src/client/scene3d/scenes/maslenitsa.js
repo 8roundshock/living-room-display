@@ -15,7 +15,7 @@ export default function build(kit, ctx) {
 
   // Everything on the table is one group, tipped toward the viewer and standing on the bottom edge.
   // The table stands a little above the bottom edge (#675: the float's zoom crops the lowest 2% of the screen at its centre).
-  const table = new T.Group(); table.position.set(W - Math.max(2.3, W * .29), -view.halfH + .97, 0); table.rotation.x = .35; table.scale.setScalar(unit); stage.add(table);
+  const table = new T.Group(); table.position.set(W - Math.max(2.3, W * .29), -view.halfH + .96, 0); table.rotation.x = .35; table.scale.setScalar(unit); stage.add(table);
 
   // ---------- the blini stack on its plate ----------
   const dish = plate(kit, { radius: 1.6 }); table.add(dish);

@@ -49,7 +49,7 @@ export default function build(kit, ctx) {
 
   // ---------- tangerines in the bottom-right corner: four fruits in four states ----------
   // Clear of the band the float's zoom crops (#675).
-  const fruit = citrus(kit), z = .3, pile = new T.Group(); pile.position.set(W - 1.6, -view.halfHAt(z) + .28, z); pile.scale.setScalar(unit); stage.add(pile);
+  const fruit = citrus(kit), z = .3, pile = new T.Group(); pile.position.set(W - 1.6, -view.halfHAt(z) + .33, z); pile.scale.setScalar(unit); stage.add(pile);
   const lay = (piece, x, y, depth, turn) => { piece.position.set(x, y, depth); piece.userData.fruit.rotation.set(...turn); pile.add(piece); };
   lay(fruit.whole({ radius: .36, leaves: 2, salt: 1.3 }), .5, 0, -.3, [.1, .6, -.12]);
   lay(fruit.whole({ radius: .31, salt: 4.1 }), -.16, 0, .12, [.9, .3, .75]);

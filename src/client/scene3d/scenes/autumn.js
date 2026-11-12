@@ -158,15 +158,16 @@ export default function build(kit, ctx) {
   [[.7, 3.2, 1.0, .05], [2.2, 1.3, .8, .04], [2.9, 3.6, 1.2, .03]].forEach(([x, y, size, strength]) => { const z = -7, scale = 1 - z / view.depth, disc = kit.bokeh(0xf2a85a, size * S * scale, strength * dim, .2); disc.position.set((-W + x) * scale, y * scale * .8, z); stage.add(disc); });
 
   // ---------- leaves that have fallen: in the corner under the branch, resting on the bottom edge ----------
-  // [x from the left edge, depth, how far it is laid back, turn in its own plane, how far it has turned colour]: a loose overlapping group, not a row.
-  const fallen = Math.min(7, Math.round(3 + 5 * A)), LIE = [[.62, -.3, -1.1, .5, .75], [1.3, .3, -1.0, 2.0, .15], [1.96, -.1, -1.16, -1.0, .95], [.98, .62, -.6, .3, .45], [2.4, .45, -1.05, .9, .6], [.24, .1, -1.0, -1.2, .3], [1.62, -.5, -1.15, 1.6, .85]], lying = [];
+  // [x from the left edge, depth, how far it is laid back, turn in its own plane, how far it has turned colour, a lift so it lies on the
+  // visible bottom]: a loose overlapping group, not a row.
+  const FLOOR = .9588, fallen = Math.min(7, Math.round(3 + 5 * A)), LIE = [[.62, -.3, -1.1, .5, .75], [1.3, .3, -1.0, 2.0, .15, .03], [1.96, -.1, -1.16, -1.0, .95], [.98, .62, -.6, .3, .45], [2.4, .45, -1.05, .9, .6], [.24, .1, -1.0, -1.2, .3], [1.62, -.5, -1.15, 1.6, .85]], lying = [];
   const glow = kit.glow(0xf2a04a, 3.6, .04 * dim, { twinkle: .1 }); glow.position.set(-W + 1.5, -view.halfH + .1, -.6); stage.add(glow);
-  LIE.slice(0, fallen).forEach(([x, z, tilt, turn, tone], i) => {
+  LIE.slice(0, fallen).forEach(([x, z, tilt, turn, tone, lift = 0], i) => {
     const size = (.34 + rnd(i, seed + 41) * .16) * S * SMALLER, leaf = M.leaf({ size, stalk: size * (.3 + rnd(i, seed + 42) * .3), tone, seed: seed + 300 + i * 11 }), holder = new T.Group();
     // The leaf is turned in its own plane, then laid back; one leans on its neighbour instead of lying flat.
     leaf.rotation.z = turn; holder.add(leaf); holder.rotation.set(tilt, (rnd(i, seed + 43) - .5) * .6, 0);
-    // A little in from the corner and above the bottom edge (#675: the float's zoom crops the lowest and outermost 2% at its centre).
-    holder.position.set(-W + x + .35, -view.halfHAt(z) + .46 + (tilt > -.9 ? .12 : 0) + rnd(i, seed + 44) * .05, z); stage.add(holder); lying.push(leaf);
+    // A little in from the corner, resting on the visible bottom: the float's zoom crops the lowest 2% at its centre (#675).
+    holder.position.set(-W + x + .35, -view.halfHAt(z) * FLOOR + .04 + lift + (tilt > -.9 ? .12 : 0) + rnd(i, seed + 44) * .05, z); stage.add(holder); lying.push(leaf);
   });
   arrange(lying, .5);
 

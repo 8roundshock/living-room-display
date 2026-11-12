@@ -5,8 +5,11 @@
 // - Cut ends: an element anchored at an edge keeps its cut end (or its base on the bottom edge) out of
 //   sight only if zoom × (1 + reach) − travel ≥ 1 on that axis.
 // - Crop: a piece that was wholly in the frame before the float (float 0, no zoom) must stay whole at
-//   every float position, or, resting near the bottom edge, be whole at the centre and keep at least
-//   60% of its area in view at every position.
+//   every float position. A piece resting near the bottom edge sits on the visible bottom at the centre
+//   position (or on whatever it rests on), never above it by more than 0.3% of the height; one taller
+//   than twice the vertical travel is whole at the centre and keeps 60% in view at every position, while
+//   flat litter (a fallen leaf, a petal) keeps 60% at the centre and may be cut further at the low extreme
+//   (owner decision on #675, 2026-11-12).
 // src/client/scene3d/float.test.ts runs it.
 //
 //   node tests/scene3d/edge-check.mjs            a table of every scene and overlay at 16:9 and 21:9
@@ -52,8 +55,14 @@ const renderer = { capabilities: { getMaxAnisotropy: () => 1 } };
 const load = async (kind, id) => (await import(pathToFileURL(`${folder(kind)}${id}.js`).href)).default;
 /** A piece whose lowest point is this close to the bottom edge (NDC; the lowest 7.5% of the height) rests on it. */
 export const RESTING = .15;
-/** A resting piece keeps at least this share of its area in view at every float position. */
+/** A piece taller than this (NDC, 40% of the height) is a composition anchored low (a balloon bunch on its string), not a resting piece. */
+const RESTING_TALL = .8;
+/** A resting piece keeps at least this share of its area in view at every float position (flat litter: at the centre). */
 export const RESTING_SHARE = .6;
+/** At the centre position a resting piece that stands on nothing else sits on the visible bottom: no higher than this (NDC, 0.3% of the height). */
+export const RESTING_GAP = .006;
+/** A resting piece at most this tall (NDC, twice the vertical travel) is flat litter. */
+const LITTER = () => 4 * SCENE_FLOAT.travelY;
 /** A piece whose middle moves further than this (NDC) over the sampled instants travels, and is not checked for crop. */
 const MOVING = .05;
 /** Slack for "whole" (NDC): half a pixel at 1080p. */
@@ -101,7 +110,22 @@ function sample(made, camera) {
     });
   }
   const steady = list => [...list.values()].filter(entry => entry.boxes.length === TIMES.length);
-  return { elements: steady(extents), pieces: pieces(made.kit.stage, leaves) };
+  return { elements: steady(extents), pieces: pieces(made.kit.stage, leaves), supports: [...leaves.values()].filter(leaf => leaf.times === TIMES.length).map(leaf => leaf.box) };
+}
+
+/** Whether something else holds `piece` up: a drawn element whose top is at the piece's bottom (a napkin under an
+ * egg, a table under a cake, a neighbour a leaf leans on), overlapping it sideways. A tall element behind it (a
+ * tree, a branch) is not a support: its top is far above the piece's bottom. */
+/** Whether nothing else is drawn lower than `piece` across its width: it lies on the bare bottom (a fallen leaf, a
+ * vase on the ground), not at the end of something that reaches lower (a bud on a runner, an ornament on a tree). */
+function grounded(piece, boxes) {
+  const [left, right, bottom] = piece.box, width = right - left;
+  return !boxes.some(box => box[2] < bottom - .005 && Math.min(right, box[1]) - Math.max(left, box[0]) > width * .3);
+}
+function supported(piece, boxes) {
+  const [left, right, bottom, top] = piece.box, width = right - left, height = top - bottom;
+  return boxes.some(box => box[2] < bottom - .002 && box[3] >= bottom - .01 && box[3] <= bottom + Math.max(.02, height * .5)
+    && Math.min(right, box[1]) - Math.max(left, box[0]) > width * .3);
 }
 
 /**
@@ -133,7 +157,7 @@ function pieces(stage, leaves) {
     boxes.set(node, box); return box;
   };
   const crossing = []; stage.traverse(item => { const leaf = leaves.get(item); if (leaf && leaf.times === TIMES.length && !inside(leaf.box)) crossing.push(leaf.box); });
-  const add = (name, box, part, z) => out.push({ name, box, z, resting: box[2] <= -1 + RESTING, part, attached: part || crossing.some(anchor => touching(box, anchor)) });
+  const add = (name, box, part, z) => out.push({ name, box, z, resting: box[2] <= -1 + RESTING && box[3] - box[2] <= RESTING_TALL, part, attached: part || crossing.some(anchor => touching(box, anchor)) });
   const depth = node => { let z = 0, size = -1; node.traverse(item => { const leaf = leaves.get(item); if (leaf) { const area = (leaf.box[1] - leaf.box[0]) * (leaf.box[3] - leaf.box[2]); if (area > size) { size = area; z = leaf.z; } } }); return z; };
   const split = node => {
     const box = extent(node);
@@ -177,9 +201,9 @@ export async function measure(id, { aspect = ASPECTS['16:9'], overlay = null, da
   const made = createKit(T, renderer, ctx, look, view);
   build?.(made.kit, ctx); over?.(made.kit, ctx);
   const camera = new THREE.PerspectiveCamera(CAMERA.fov, aspect, .1, 120); camera.position.set(0, 0, depth); camera.updateMatrixWorld(true); camera.updateProjectionMatrix();
-  const { elements, pieces } = sample(made, camera);
+  const { elements, pieces, supports } = sample(made, camera);
   made.dispose();
-  return Object.assign(anchored(elements), { pieces });
+  return Object.assign(anchored(elements), { pieces: pieces.map(piece => ({ ...piece, supported: supported(piece, supports), grounded: grounded(piece, supports) })) });
 }
 
 /** The least reach on each axis among anchored elements (Infinity when none sits at that axis's edges). */
@@ -218,22 +242,35 @@ function inView(box, zoom, at) {
   return { share: seenX * seenY, whole };
 }
 /**
- * Every piece that was wholly in the frame before the float and is cut by it: not resting, cut at any position;
- * resting near the bottom edge, cut at the centre or with less than RESTING_SHARE of it in view at some position.
- * Each comes with the share of the track's time it is whole and its least share in view.
+ * Every piece that was wholly in the frame before the float and is cut by it, or floats above the bottom:
+ * - not resting: cut at any position (unless attached to an element that crosses an edge);
+ * - resting near the bottom edge and standing on nothing else: more than RESTING_GAP above the visible bottom at
+ *   the centre position;
+ * - resting and taller than flat litter: cut at the centre, or less than RESTING_SHARE of it in view at some position;
+ * - flat litter: less than RESTING_SHARE in view at the centre (it may be cut further at the low extreme).
+ * Each comes with the share of the track's time it is whole, its least share in view and its gap at the centre.
  */
 export function crops(pieces, float = floatExtremes()) {
   const { zoom, list, track } = positions(float), out = [];
   for (const piece of pieces) {
-    let whole = 0, least = 1, centre = true;
+    let whole = 0, least = 1, centre = true, centreShare = 1;
     list.forEach((at, index) => {
       const seen = inView(piece.box, zoom, at);
-      if (index === 0) centre = seen.whole;
+      if (index === 0) { centre = seen.whole; centreShare = seen.whole ? 1 : seen.share; }
       if (index >= 5 && seen.whole) whole++;
       least = Math.min(least, seen.whole ? 1 : seen.share);
     });
-    const fails = piece.resting && !piece.part ? !centre || least < RESTING_SHARE : !piece.attached && least < 1;
-    if (fails) out.push({ ...piece, wholeShare: whole / track, least, centre });
+    // The gap between the piece's lowest point and the visible bottom at the centre position (screen NDC; negative is below it).
+    const gap = zoom * piece.box[2] + 1, litter = piece.box[3] - piece.box[2] <= LITTER(), floats = !piece.supported && gap > RESTING_GAP;
+    let fails;
+    // Near the bottom but held by an element that enters from an edge (a bud on its runner, an ornament on its tree)
+    // and standing on nothing: it hangs, it does not rest.
+    // Near the bottom, held by an element that enters from an edge and with something of it reaching lower (a bud on
+    // its runner, an ornament on its tree): it hangs there, it does not rest on the bottom.
+    if (!piece.resting || piece.part || (piece.attached && !piece.supported && !piece.grounded)) fails = !piece.attached && least < 1;
+    else if (litter) fails = floats || centreShare < RESTING_SHARE;
+    else fails = floats || !centre || least < RESTING_SHARE;
+    if (fails) out.push({ ...piece, wholeShare: whole / track, least, centre, centreShare, gap, litter });
   }
   return out;
 }

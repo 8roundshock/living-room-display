@@ -15,7 +15,7 @@ export default function build(kit, ctx) {
   const PAPER = ctx.id === 'birthday-russian' ? ['diamonds', 'stripes', 'diamonds'] : ctx.id === 'birthday-korean' ? ['grid', 'bands', 'grid'] : ['dots', 'stripes', 'grid'];
   // Things stand a little above the bottom edge (#675): the float's zoom crops the lowest 2% of the screen at its
   // centre, and a cake or a present standing in that band would be cut. FLOOR is the share of the half-height they stand at.
-  const FLOOR = .955, stand = (object, x, z, front) => { object.position.set(x, -view.halfHAt(z + front) * FLOOR, z); stage.add(object); };
+  const FLOOR = .9585, stand = (object, x, z, front, sink = 0) => { object.position.set(x, -view.halfHAt(z + front) * FLOOR - sink, z); stage.add(object); };
 
   // ---------- five balloons tied to a present, right corner ----------
   // The bunch keeps clear of the right edge, so the float never cuts a balloon (#675).
@@ -35,7 +35,7 @@ export default function build(kit, ctx) {
 
   // ---------- a cake between two presents, left corner ----------
   const cake = kit.cake({ candles: 3 + A * 6, tiers: [[1.45, .95, CREAM, deep(first, .1)], [1.02, .8, pale(first, .6), CREAM], [.66, .66, CREAM, deep(second, .1)]], sprinkles: TONES, candleColours: [css(first), css(second), css(third)] });
-  cake.scale.setScalar(S * .92); stand(cake, -W + 2.45, 0, 1.75 * S);
+  cake.scale.setScalar(S * .92); stand(cake, -W + 2.45, 0, 1.75 * S, .03);
   const presents = [[.85, 1.25, 1.5, 1.25, deep(first, .35), pale(first), PAPER[2], GOLD, .5, -1.1], [4.45, .74, .56, .74, deep(third, .25), pale(third, .7), PAPER[1], first, -.4, .95]];
   for (const [offset, w, h, d, base, accent, kind, ribbon, turn, z] of presents) { const present = kit.gift(w * S, h * S, d * S, css(base), css(accent), kind, ribbon); present.rotation.y = turn; stand(present, -W + offset, z, d * S * .7); }
 

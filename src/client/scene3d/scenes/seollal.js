@@ -48,7 +48,7 @@ export default function build(kit, ctx) {
   // ---------- four yut sticks as they fell, bottom right: both faces show, one lies across another ----------
   {
     // Above the band the float's zoom crops (#675).
-    const floor = new T.Group(), z = .2; floor.position.set(W - 2.3, -view.halfHAt(z) + .72, z); floor.rotation.x = .5; stage.add(floor);
+    const floor = new T.Group(), z = .2; floor.position.set(W - 2.3, -view.halfHAt(z) + .7, z); floor.rotation.x = .5; stage.add(floor);
     // [x, z, turn on the floor, belly up, lift, tilt along its length]
     const THROW = [[-.8, -.1, .22, true, 0, 0], [.2, .32, -.5, false, 0, 0], [.84, -.28, 1.15, true, 0, 0], [.02, -.3, -1.05, false, .13, .2]];
     THROW.forEach(([x, depth, turn, bellyUp, lift, tilt], i) => {

@@ -15,7 +15,7 @@ export default function build(kit, ctx) {
   // The plan gives on-screen sizes at the everyday size (0.85); U carries the tier's size from there.
   const U = ctx.size / .85;
   // Everything rests a little below the bottom edge at its own depth, so the stage's slow drift never lifts it off the edge.
-  const floor = z => -view.halfHAt(z) - .06, rest = (object, x, z, height) => { object.position.set(x, floor(z) + height + .3, z); stage.add(object); return object; };   // fruit sits clear of the band the float's zoom crops (#675)
+  const floor = z => -view.halfHAt(z) - .06, rest = (object, x, z, height) => { object.position.set(x, floor(z) + height + .28, z); stage.add(object); return object; };   // fruit sits clear of the band the float's zoom crops (#675)
 
   // ---------- the horn of plenty, lying on the bottom edge, its mouth toward the middle ----------
   const basket = horn(kit, { rise: view.halfH / view.depth }); basket.scale.setScalar(U); basket.position.set(-W + 3.75, floor(0), 0); stage.add(basket);
