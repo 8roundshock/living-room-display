@@ -68,6 +68,12 @@ test('Every scene and weather overlay, at 16:9 and 21:9: no edge element shows i
   assert.ok(pieces > 300, `the check found whole pieces to measure: ${pieces}`);
 });
 
+test('The wind rows can fail: an exaggerated lean (20 degrees) pulls the Halloween web off its edge', async () => {
+  // Under a weather, the elements anchored at an edge in calm are still measured (#646): one the wind pulls back fails.
+  const real = await measure('halloween', { weather: 'wind', gust: 1 }), exaggerated = await measure('halloween', { weather: 'wind', gust: 9 });
+  assert.deepEqual(exposed(real), [], 'the real lean keeps the web on its edges');
+  assert.ok(exposed(exaggerated).length > 0, 'a 20 degree lean shows a cut end');
+});
 test('The crop check can fail: a fallen leaf above the visible bottom, a cake cut below it, a whole piece near an edge', async () => {
   const k = SCENE_FLOAT.zoom, onBottom = -1 / k, piece = (box: number[], extra = {}) => ({ name: 'test', box, resting: box[2] <= -.85, part: false, attached: false, supported: false, grounded: true, ...extra });
   // A flat leaf: lying on the visible bottom it passes, cut at the low extreme or not; 0.5% of the height above it, it floats.

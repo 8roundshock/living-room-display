@@ -21,6 +21,7 @@ import { snowLook, snowPads } from '../parts/winter-snow.js';
 import { spruceCone } from '../parts/winter-cone.js';
 import { backlight, ice } from '../parts/winter-ice.js';
 import { fused, settle } from '../parts/winter-order.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** Drawing order (#663). Every mesh of a bough has its origin where the bough leaves the trunk, at the bough's
  * depth plus one of these: wood is drawn first, then needles, snow, cones and ice, so needles show through the
@@ -50,8 +51,10 @@ const ICICLES = [[1, .965, 0, .46, .042], [1, -1, .02, .26, .032], [2, .955, 0, 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed;
-  // Rain and a storm halve the glints, as they halve Autumn's glows; fog takes them away.
-  const dim = ctx.weather === 'rain' || ctx.weather === 'storm' ? .5 : 1;
+  // The weather over the scene (#646): wind widens each bough's breathing and leans the cones that hang under it to the
+  // left (the ice is stiff and keeps still); rain and a storm halve the glints and the lamps behind the ice; fog dims the
+  // lamps by 40% and takes the glints away.
+  const weather = weatherOver(kit, ctx), dim = weather.backlight;
   const snow = snowLook(kit, { body: SNOW_BODY }), glaze = ice(kit);
 
   // ---------- the evergreen: three snow-laden boughs from the left edge ----------
@@ -67,31 +70,34 @@ export default function build(kit, ctx) {
       const { at: share, ...branch } = fork, second = spruceBough(kit, { from: bough.at(share), ...branch, needle: .12 * S, girth: .03 * S, seed: seed + b * 31 + 17 });
       hold(second.wood, ORDER.wood); hold(second.needles, ORDER.needles); hold(snowPads(kit, second.segments, { material: snow, thick: S / .85, seed: seed + b * 7 + 3 }).mesh, ORDER.snow);
     }
+    // Each cone hangs from its own point, so the wind can lean it (#646); it is solid, so its origin no longer orders it.
+    const hanging = [];
     CONES.slice(0, cones).forEach(([on, twig, length, girth, open, tone], i) => {
       if (on !== b) return;
-      const hang = bough.hangs[Math.min(twig, bough.hangs.length - 1)].point, cone = spruceCone(kit, { at: hang.clone().add(V(-.05, -.02 * S, 0)), length: length * S / .85, girth: girth * S / .85, open, tone, lean: (rnd(i, seed + 21) - .5) * .22, turn: rnd(i, seed + 22) * 6, seed: seed + 60 + i * 9 });
-      hold(cone.core, ORDER.core); hold(cone.scales, ORDER.scales);
+      const hang = bough.hangs[Math.min(twig, bough.hangs.length - 1)].point, top = hang.clone().add(V(-.05, -.02 * S, 0)), cone = spruceCone(kit, { at: top, length: length * S / .85, girth: girth * S / .85, open, tone, lean: (rnd(i, seed + 21) - .5) * .22, turn: rnd(i, seed + 22) * 6, seed: seed + 60 + i * 9 });
+      const pivot = new T.Group(); pivot.position.copy(top).sub(group.position); group.add(pivot); hanging.push(pivot);
+      for (const part of [cone.core, cone.scales]) { settle(kit, part, top); part.position.set(0, 0, 0); pivot.add(part); }
     });
     const hung = ICICLES.slice(0, drips).filter(([on]) => on === b).map(([, share, aside, length, girth]) => [(share < 0 ? bough.hangs[bough.hangs.length - 1].point.clone() : bough.at(share)).add(V(aside, -.035 * S, .02)), length * S / .85, girth * S / .85]);
     if (hung.length) hold(glaze.icicles(hung, seed + b * 5), ORDER.ice);
     // Where glints may sit: on top of this bough's snow, seen from the room at the depth that draws them after everything of the bough.
     pads.crests(b === 1 ? 3 : b === 0 ? 2 : 1).forEach(point => { const depth = z + ORDER.glint, seen = (view.depth - depth) / (view.depth - point.z); glints.push([group, V(point.x * seen, point.y * seen, depth).sub(group.position), seen]); });
     // Each bough breathes as one piece about the point where it leaves the trunk, in the plane of the screen.
-    tick(t => { group.rotation.z = Math.sin(t * (.72 + b * .11) + b * 2.1) * .0038; });
+    tick(t => { group.rotation.z = weather.sway(Math.sin(t * (.72 + b * .11) + b * 2.1) * .0038, 0); for (const pivot of hanging) pivot.rotation.z = weather.sway(0, -1); });
   });
 
   if (ctx.quiet) return;   // a quiet date keeps the evergreen alone: no icicles, no glints, no lamps, no twig
 
   // Glints on the snow: each rises and falls in its own slot of a slow round, so no two neighbours are lit together.
-  if (ctx.weather !== 'fog') {
+  {
     const ROUND = [0, 3, 1, 4, 2, 5], slot = 1.4, round = slot * ROUND.length;
     glints.forEach(([group, place, seen], i) => {
-      const glint = kit.glow(0xeaf4ff, .2 * S * seen, 0, { twinkle: 0 }); glint.position.copy(place); group.add(glint);
+      const glint = kit.glow(0xeaf4ff, .2 * S * seen, 0, { twinkle: 0 }); glint.position.copy(place); glint.visible = weather.glints; group.add(glint);   // fog takes the glints away
       tick(t => { const age = ((t - ROUND[i % ROUND.length] * slot) % round + round) % round; glint.userData.o = age < slot * 1.2 ? .95 * dim * Math.pow(Math.sin(age / (slot * 1.2) * Math.PI), 2) : 0; });
     });
   }
   // Two small still lamps behind the icicles: clear ice is seen by what lights it from behind.
-  stage.add(backlight(kit, [[V(-W + 3.1, .5, -1.3), 3.5], [V(-W + 2.4, -1.5, -1.9), 3]], { range: 6, sweep: 0 }));
+  stage.add(backlight(kit, [[V(-W + 3.1, .5, -1.3), 3.5 * dim], [V(-W + 2.4, -1.5, -1.9), 3 * dim]], { range: 6, sweep: 0 }));
 
   // ---------- the companion: a bare forked twig glazed in clear ice, low on the right edge, with a few frozen drops ----------
   {
@@ -115,7 +121,7 @@ export default function build(kit, ctx) {
     // Two meshes: the wood, and all the ice. The wood's origin is behind the ice's, so the twig is drawn first and shows inside its glaze.
     const twig = new T.Group(); twig.position.set(root.x, root.y, 0); stage.add(twig);
     [[fused(kit, woods, wood), -.08], [fused(kit, ices, glaze.material), 0]].forEach(([mesh, order]) => { settle(kit, mesh, V(root.x, root.y, .1 + order)); mesh.position.sub(twig.position); twig.add(mesh); });
-    stage.add(backlight(kit, [[at(2.6, 3.9, -1.6), 14], [at(1.3, 2, -1.5), 14]], { sweep: 0 }));
-    tick(t => { twig.rotation.z = Math.sin(t * .838) * .0035; });
+    stage.add(backlight(kit, [[at(2.6, 3.9, -1.6), 14 * dim], [at(1.3, 2, -1.5), 14 * dim]], { sweep: 0 }));
+    tick(t => { twig.rotation.z = weather.sway(Math.sin(t * .838) * .0035, 0); });
   }
 }

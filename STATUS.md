@@ -36,6 +36,38 @@ context), and the `widgets` and `screen` suites. Not verified: installation and 
 2 of #678 (point sprites under the float's zoom) is not done; a far jump at a 30 s interval
 with Swap places and many widgets may pause the editor for about a second (#690).
 
+## The scenes respond to the weather over them — 2026-11-12 (#646)
+
+Source candidate, not installed. The owner asked whether scene elements sway with the motion and
+then "can you work on 646"; on 2026-11-10 he asked for the weather over the scenes "but same
+thing not overbearing".
+
+What changed:
+- In Combined mode every season, holiday and birthday scene now responds to the weather drawn
+  over it, through one shared part (`parts/wind-underneath.js`):
+  - **Wind:** attached things (leaves, flowers, ornaments, lanterns, pouches, balloons,
+    streamers, bunting, wheat, cones) lean 2 to 4 degrees to the left with the gust the
+    overlay's seeds ride on, and sway one and a half times as far at the same slow pace (no
+    attached piece turns more than 7 degrees from its calm pose). Falling petals and
+    leaves drift left; Canada Day's flag waves harder.
+  - **Rain or a storm:** no falling petals or leaves and no decorative snow of the scene's own
+    (Christmas and Orthodox Christmas now drop theirs under rain too); the backlight is
+    halved; Summer's fireflies go out.
+  - **Fog:** the backlight and far elements keep 60%, glints are hidden and nothing twinkles.
+  - **Snow:** one snowfall, never two.
+- Nothing is removed (a weather hides what it stops) and a quiet date stays still.
+
+Details: [Ambient themes](docs/ambient-themes.md#combined-the-weather-is-always-drawn-over-the-scene-655-owner-direction-2026-11-10).
+
+Verified with source builds and synthetic data only: both typechecks, the unit tests (each
+rule per scene in the source; every scene under every weather builds what it builds in calm;
+in the wind every scene moves something left, no piece leans more than 4 degrees on
+average and no attached piece turns more than 7 degrees at any instant; a scene's own snow
+wraps only out of sight; the edge and crop checks with every scene in the wind at the gust's
+lull and peak, against the scene's calm pieces and edges, with a self-test that a 20 degree
+lean fails),
+and the `scene3d` suite on SwiftShader. Not verified: installation, the TV.
+
 ## Scene objects stop showing through each other; darker leaf veins — 2026-11-12 (#683)
 
 Source candidate, not installed. Owner direction: "the leafs themselves shouldn't be

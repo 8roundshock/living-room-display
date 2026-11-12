@@ -9,10 +9,14 @@
 import { beadThread, clipBird, foilRain, glassCone, icicle, pyramidDrop, reflectorBall, spire } from '../parts/new-year-tree-glass.js';
 import { spruceTop } from '../parts/new-year-tree-spruce.js';
 import { citrus } from '../parts/new-year-tree-tangerine.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.18;
+  // The weather over the scene (#646): wind leans the glass and the foil rain to the left on their threads and widens
+  // their swing; rain and a storm halve the warm light behind the tangerines, fog dims it by 40%.
+  const weather = weatherOver(kit, ctx);
 
   // ---------- the spruce top with its spire, bottom-left corner ----------
   const tree = spruceTop(kit, { seed });
@@ -34,7 +38,7 @@ export default function build(kit, ctx) {
   GLASS.slice(0, Math.max(3, Math.round(2 + A * 17))).forEach(([make, whorl, index, along, nudge, turn], i) => {
     const piece = make(), phase = rnd(i, seed + 11) * 6;
     piece.position.copy(on(whorl, index, along)).add(V(0, -.02, nudge)); tree.group.add(piece);
-    tick(t => { piece.rotation.z = Math.sin(t * .45 + phase) * .035; piece.rotation.x = Math.sin(t * .33 + phase) * .02; piece.userData.body.rotation.y = turn > 1 ? t * .09 + phase : Math.sin(t * .2 + phase) * turn; });
+    tick(t => { piece.rotation.z = weather.sway(Math.sin(t * .45 + phase) * .035, -1); piece.rotation.x = Math.sin(t * .33 + phase) * .02 * weather.wind.sway; piece.userData.body.rotation.y = turn > 1 ? t * .09 + phase : Math.sin(t * .2 + phase) * turn; });
   });
   // The clip-on bird stands upright on a bough of its own.
   if (A > .1) { const bird = clipBird(kit, { size: .56 }); bird.position.copy(on(1, 4, .5)).add(V(0, .02, .04)); bird.rotation.y = -.35; tree.group.add(bird); }
@@ -44,7 +48,7 @@ export default function build(kit, ctx) {
   [[3, 0, .95, 1], [2, 3, .95, 1.2], [1, 0, .9, .9]].slice(0, Math.max(1, Math.round(A * 12))).forEach(([whorl, index, along, length], i) => {
     const wisp = foilRain(kit, { strands: 12, length, salt: seed + i * 31 }), phase = i * 2.1;
     wisp.position.copy(on(whorl, index, along)); tree.group.add(wisp);
-    tick(t => { wisp.rotation.z = Math.sin(t * .4 + phase) * .012; wisp.rotation.x = Math.sin(t * .31 + phase) * .01; });
+    tick(t => { wisp.rotation.z = weather.sway(Math.sin(t * .4 + phase) * .012, -1); wisp.rotation.x = Math.sin(t * .31 + phase) * .01 * weather.wind.sway; });
   });
 
   // ---------- tangerines in the bottom-right corner: four fruits in four states ----------
@@ -55,5 +59,5 @@ export default function build(kit, ctx) {
   lay(fruit.whole({ radius: .31, salt: 4.1 }), -.16, 0, .12, [.9, .3, .75]);
   lay(fruit.peeled({ radius: .33, salt: 2.2 }), -.98, 0, .2, [.32, .25, .1]);
   if (A > .1) lay(fruit.whole({ radius: .3, leaves: 1, salt: 7.7 }), .2, .5, -.08, [-.15, 2.4, .2]);
-  const warmth = kit.glow(0xf29a2e, 3.4 * S, .1, { twinkle: .08 }); warmth.position.set(W - 1.6, -view.halfH + .2, -1.2); stage.add(warmth);
+  const warmth = kit.glow(0xf29a2e, 3.4 * S, .1 * weather.backlight, { twinkle: .08 }); warmth.position.set(W - 1.6, -view.halfH + .2, -1.2); stage.add(warmth);
 }

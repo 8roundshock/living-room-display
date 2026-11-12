@@ -32,7 +32,7 @@ function trumpetGeometry(kit, length, open) {
 }
 
 /** A potted Easter lily standing on the group's origin. Its flowers nod very slightly, each on its own time. */
-export function lily(kit, { salt = 0 } = {}) {
+export function lily(kit, { salt = 0, weather = null } = {}) {
   const { T, V, C, rnd, mix, tick } = kit, group = new T.Group(), up = V(0, 1, 0);
 
   // ---------- the pot: a plain cylinder with a rolled rim, matte celadon glaze, dark soil ----------
@@ -97,8 +97,9 @@ export function lily(kit, { salt = 0 } = {}) {
     const top = STEMS[stem].getPointAt(1), way = V(...facing).normalize(), neck = top.clone().addScaledVector(way, stalk * .75).add(V(0, stalk * .45, 0));
     group.add(new T.Mesh(loft(kit, new T.QuadraticBezierCurve3(top, top.clone().add(V(way.x * stalk * .2, stalk * .5, way.z * stalk * .2)), neck), () => .02, { rings: 8, sides: 6 }), green));
     const head = length ? trumpet(length, measure) : bud(measure * 7.2, measure, colour), pivot = new T.Group();
-    pivot.position.copy(neck); head.quaternion.setFromUnitVectors(up, way); pivot.add(head); group.add(pivot); nodding.push([pivot, i * 1.7]);
+    pivot.position.copy(neck); head.quaternion.setFromUnitVectors(up, way); pivot.add(head); group.add(pivot); nodding.push([pivot, i * 1.7, way.y]);
   });
-  tick(t => nodding.forEach(([pivot, phase]) => { pivot.rotation.z = Math.sin(t * .4 + phase) * .014; pivot.rotation.x = Math.sin(t * .31 + phase) * .008; }));
+  // `weather` (the scene's parts/wind-underneath.js, #646): in the wind each trumpet leans left on its stalk and nods half as far again.
+  tick(t => nodding.forEach(([pivot, phase, hold]) => { const calm = Math.sin(t * .4 + phase) * .014; pivot.rotation.z = weather ? weather.sway(calm, hold) : calm; pivot.rotation.x = Math.sin(t * .31 + phase) * .008 * (weather ? weather.wind.sway : 1); }));
   return group;
 }

@@ -98,7 +98,7 @@ the rules are about not meeting in the same file:
 | `amount` | How much to put in the scene, 0-1. Owner default 0.3; about 0.24 for an everyday scene, 0.1 on a quiet date. Turn it into counts: `Math.round(3 + ctx.amount * 6)`. |
 | `size` | Scale of objects (radius, length). Owner default 0.85. Never multiply positions by it. |
 | `tier` | `'special'` or `'everyday'`. Already applied; read it only to choose between two designs. |
-| `weather` | Weather drawn over this scene in Combined mode: `'rain'`, `'snow'`, `'storm'`, `'fog'`, `'wind'`, or `null`. In Combined the scene always stays and any of the five kinds can be over it (#655), including ones its season rarely sees: snow over Spring, rain over Winter, a storm over Christmas. The overlay draws the weather; a scene may adapt, for example drop its own decorative snow. |
+| `weather` | Weather drawn over this scene in Combined mode: `'rain'`, `'snow'`, `'storm'`, `'fog'`, `'wind'`, or `null`. In Combined the scene always stays and any of the five kinds can be over it (#655), including ones its season rarely sees: snow over Spring, rain over Winter, a storm over Christmas. The overlay draws the weather; the scene responds through `parts/wind-underneath.js` (#646, see "The weather over a scene" below), never by reading this itself. Always `null` in a weather scene of its own (Weather mode). |
 | `quiet` | A selected quiet date. The stage is frozen and reduced; see below. |
 | `palette` | The scene's three registry colours as CSS strings; neutral greys when quiet. |
 | `seed` | A stable whole number for this scene id. Use it as the salt of `kit.rnd` for a layout that is yours. It does not change from day to day. |
@@ -148,6 +148,33 @@ float moves it. In the editor's movement preview (#678) `t` is the moment on its
 keep state that assumes `t` only grows (a value cached for the current cycle of `t`, as
 `parts/rain-beads.js` does, is fine).
 
+The weather over a scene (#646). In Combined mode any of the five weather kinds can be drawn
+over your scene; the overlay draws the weather and your scene responds, calmly. Call
+`const weather = weatherOver(kit, ctx)` from `parts/wind-underneath.js` first in `build()` (its
+tick reads the gust once a frame before yours run) and use it:
+
+- **Wind:** turn every attached thing with `weather.sway(calm, hold)`, where `calm` is the angle
+  you would set without wind and `hold` says which way its free end lies from where it is held
+  (1 above, -1 below, a share between, 0 for a whole bough that only sways). It is the calm
+  angle one and a half times over (`SWAY`, 1.5: the plan's twice was too much on the display)
+  plus a steady lean of 2 to 4 degrees toward the left that follows the gust the overlay's seeds
+  ride on. Multiply any other swing in the plane of the screen by `weather.wind.sway`; leave a
+  slow turn about a cord or stem as it is. Lean only the outermost thing (a leaf, not also its
+  branch). The lean is at most 4 degrees, and a piece turns at most 7 degrees from its calm pose
+  at any instant: its lean plus half its own calm swing (a test checks every scene). A falling
+  piece adds `weather.drift(age)` to its x; an endless fall passes `weather.carry` to
+  `kit.snow`. Give cloth and hanging parts the `weather` object when they own their motion.
+- **Rain or a storm:** hide (`visible = weather.falls`) your own falling petals, leaves and
+  embers, and multiply your backlight (halos and discs behind the scene) by `weather.backlight`.
+- **Fog:** `weather.backlight` dims your backlight by 40%; hide glints you animate yourself
+  (`visible = weather.glints`); pass far elements through `weather.farther(object)`. The kit
+  stops every twinkle. Leave the hero as it is.
+- **Snow, rain or a storm:** your own decorative snow is hidden (`visible = weather.ownSnow`).
+- Hide, never leave out: a weather must not change what is built (the census of every scene
+  under every weather is a test), and a quiet date takes no motion.
+`weather-underneath.test.ts` checks every scene for these, and the edge and crop checks build
+every scene in the wind with the gust held at its lull and its peak.
+
 Quiet dates: `ctx.amount` is already reduced. `kit.snow`, `kit.bokeh`, `kit.confetti` and
 `kit.fireworks` return an empty group, so `stage.add(kit.snow(40))` is always safe. Guard your
 own things that are in the air with `if (!ctx.quiet)`. The layer is also dimmed and
@@ -170,18 +197,18 @@ you add yourself; nothing is added for you except `part()`.
 | `solidity(body)` | How solid to draw a body you make see-through yourself, under the owner's Transparency setting (#670): `body` is the solidity you chose (0-1) and the result is what to draw, `body` itself at the standard 50%, 1 at 0%, thinner toward 100% but never zero. Pass every such alpha through it: an alpha map's grey (`Math.round(kit.solidity(.7) * 255)`), a uniform, `opacity: kit.solidity(.6)`. On a solid surface it is how dim the body is; on a clear one, how much shows through. A cut-out outline (`alphaTest`), light and particles are not bodies. |
 | `fade(material, amount)` | Fade a `mat()` surface as a whole (0-1) over what is behind it, for something that appears or goes. A solid surface is blended only while it fades. Do not set `material.opacity` on a solid surface: that dims it, it does not fade it. |
 | `gold()`, `satin(colour)` | Polished gold; ribbon satin. |
-| `glow(colour, size, opacity, { texture, twinkle })`, `bulb(colour, radius, halo)`, `bokeh(colour, size, opacity, twinkle)` | An additive halo; a small lit bulb with its halo; a soft out-of-focus light disc. Their strength follows the owner's glow setting. |
+| `glow(colour, size, opacity, { texture, twinkle })`, `bulb(colour, radius, halo)`, `bokeh(colour, size, opacity, twinkle)` | An additive halo; a small lit bulb with its halo; a soft out-of-focus light disc. Their strength follows the owner's glow setting. In fog nothing twinkles (#646). |
 | `tex.glow()`, `tex.disc()`, `tex.flame()`, `canvasTexture(w, h, draw, opts)`, `patternTex(base, accent, kind)` | Shared soft textures; a texture drawn once on a 2D canvas; a repeating pattern (`dots`, `stripes`, `grid`, `bands`, `diamonds`). Blur a whole layer once, never per stroke. |
 | `line(points, colour, opacity)`, `catenary(a, b, sag, n)`, `ribbonGeo(points, width, side)` | A thread or cord; points of a hanging cord; a flat band along points. |
 | `ballGeo`, `sphereGeo` | Shared low and high detail unit spheres. |
 | `needles()`, `twig(...)`, `bough(...)` | Fir: a needle collector (`.mesh()` once at the end), needles along a twig (with a share of them snow-white), a drooping bough that returns `pt(t)` for hanging things on it. |
 | `ornament({ color, radius, thread, shape, finish, accent })`, `bauble(colour, radius, thread, satin)` | A hanging ornament: `ball`, `drop`, `onion`, `finial`, `facet` in `mirror`, `satin`, `pearl`, `glitter`, `banded`. The origin is the point it hangs from. |
-| `snow(count, { size, opacity, colour, salt })` | Slow snow points over the whole view. |
+| `snow(count, { size, opacity, colour, salt, drift })` | Slow snow points over the whole view. `drift(t)` is how far the wind has carried the fall sideways (`weather.carry`); the flakes wrap round. |
 | `leaf(tint, scale, variant)`, `LEAF_TINTS`, `MAPLE_OUTLINE` | A curled, veined maple leaf (texture, alpha, bump); its tints; its outline for drawing. |
-| `flagCloth(texture, { width, height, fly, wave, see })` | A cloth waving from its hoist edge, for any texture. It keeps only a third of the see-through look, so a flag never reads as faded. |
+| `flagCloth(texture, { width, height, fly, wave, see })` | A cloth waving from its hoist edge, for any texture. It keeps only a third of the see-through look, so a flag never reads as faded. `wave` may be a function of the scene clock, read once a frame (a flag flying harder in the wind). |
 | `fireworks(bursts, { per, size, tints, flash, period, life })` | Slow bursts of light points. |
 | `balloon(colour, radius, { skin, shape, pattern })`, `puffyBow(colour, scale)`, `gift(w, h, d, base, accent, kind, ribbon)`, `cake(options)` | Party pieces. Balloons: `latex`, `pearl`, `foil`; `round` or `star`. |
-| `bunting(a, b, options)`, `confetti(count, options)`, `streamer(length, radius, colour, options)` | Flags on a cord, tumbling foil, a curled paper streamer. |
+| `bunting(a, b, options)`, `confetti(count, options)`, `streamer(length, radius, colour, options)` | Flags on a cord, tumbling foil, a curled paper streamer. Give `bunting` the scene's `weather` (`weatherOver`) and its flags lean and flap in the wind. |
 
 The studio environment (four soft light panels), the key, rim and fill lights, the black fog,
 tone mapping and the camera are set by the engine and are the same for every scene. Do not add

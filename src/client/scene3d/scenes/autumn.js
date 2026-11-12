@@ -15,6 +15,7 @@ import { aim } from '../parts/spring-blade.js';
 import { bark, limb, taper } from '../parts/spring-limb.js';
 import { maple } from '../parts/autumn-maple.js';
 import { birch } from '../parts/autumn-birch.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** The maple is drawn at this share of the size it was designed at, positions and sizes together, about the point where it enters the frame (#653, kept in #664). */
 const SMALLER = .85;
@@ -30,8 +31,9 @@ const FIRST_RELEASE = 12.4;
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, today = ctx.seed + ctx.day;
-  // Rain (and a storm, which is rain) keeps the leaves on the tree; rain, a storm and fog halve the glows.
-  const wet = ctx.weather === 'rain' || ctx.weather === 'storm', dim = wet || ctx.weather === 'fog' ? .5 : 1;
+  // The weather over the scene (#646): wind leans every leaf to the left and widens its sway, and the falling leaf
+  // drifts left; rain and a storm keep the leaves on the tree and halve the glows; fog dims them by 40% and stops their twinkle.
+  const weather = weatherOver(kit, ctx), dim = weather.backlight;
   const M = maple(kit), wood = bark(kit, 0x6a5648, { see: .62, salt: 7 });
   const at = (x, y, z = 0) => V(-W + x, y, z);   // measured from the left edge
 
@@ -75,8 +77,9 @@ export default function build(kit, ctx) {
   };
   // Every hanging leaf sways a little about the foot of its stalk: [pivot, pace, phase, how far].
   const swaying = [];
-  const hang = (leaf, where, holder, i, salt, far) => { const pivot = new T.Group(); pivot.position.copy(where); pivot.add(leaf); holder.add(pivot); swaying.push([pivot, 1.4 + rnd(i, salt) * 1.05, rnd(i, today + salt + 1) * 6, far]); };
-  tick(t => { for (let i = 0; i < swaying.length; i++) { const s = swaying[i]; s[0].rotation.z = Math.sin(t * s[1] + s[2]) * s[3]; s[0].rotation.x = Math.sin(t * s[1] * .63 + s[2]) * s[3] * .45; } });
+  // `toward` is the way the leaf points from its stalk's foot: the wind leans its free end to the left (#646).
+  const hang = (leaf, where, holder, i, salt, far, toward) => { const pivot = new T.Group(); pivot.position.copy(where); pivot.add(leaf); holder.add(pivot); swaying.push([pivot, 1.4 + rnd(i, salt) * 1.05, rnd(i, today + salt + 1) * 6, far, toward.y / toward.length()]); };
+  tick(t => { const sway = weather.wind.sway; for (let i = 0; i < swaying.length; i++) { const s = swaying[i]; s[0].rotation.z = weather.sway(Math.sin(t * s[1] + s[2]) * s[3], s[4]); s[0].rotation.x = Math.sin(t * s[1] * .63 + s[2]) * s[3] * .45 * sway; } });
 
   // ---------- the maple: one piece, made smaller about the point where it enters the frame, and rocking about it ----------
   const enter = at(0, -1.04, -.07), shrunk = point => point.clone().sub(enter).multiplyScalar(SMALLER).add(enter);
@@ -114,11 +117,11 @@ export default function build(kit, ctx) {
       const node = shoot.userData.at(1 - Math.min(.5, pair * .15 * S / shoot.userData.length)), spread = side * (.62 + pair * .7 + (rnd(i, seed + 5) - .5) * .4) + (rnd(i, seed + 6) - .5) * .3, c = Math.cos(spread), n = Math.sin(spread);
       const way = V(along.x * c - along.y * n, along.x * n + along.y * c - .3 - rnd(i, seed + 7) * .25, .08 + rnd(i, seed + 8) * .3), face = V((rnd(i, seed + 9) - .5) * .9, .28, 1);
       const size = (.36 + rnd(i, seed + 3) * .24) * S, leaf = aim(kit, M.leaf({ size, stalk: size * (.5 + rnd(i, seed + 4) * .4), tone: Math.min(1, Math.max(0, turned + (rnd(i, seed + 10) - .5) * .42)), seed: seed + i * 17 }), way, face);
-      hang(leaf, node, body, i, seed + 11, .03 + rnd(i, seed + 12) * .014); foliage.push(leaf);
+      hang(leaf, node, body, i, seed + 11, .03 + rnd(i, seed + 12) * .014, way); foliage.push(leaf);
     }
     if (end.x < -W + 2.6) released.push(shrunk(end.clone().add(V(0, -.3 * S, .1))));   // where a leaf of this shoot hangs, as drawn
   });
-  tick(t => { branch.rotation.z = Math.sin(t * 1.005) * .0052; });
+  tick(t => { branch.rotation.z = weather.sway(Math.sin(t * 1.005) * .0052, 0); });
   // Where two leaves overlap, the one that lies over the other is carried nearer the room on its stalk, a LAYER
   // for every level, so that neither passes through the other as they sway; then the order is taken again from
   // the leaves as they now hang.
@@ -142,15 +145,15 @@ export default function build(kit, ctx) {
     const count = Math.min(spots.length, Math.round(5 + 16 * A));
     spots.slice(0, count).forEach(([twig, where], i) => {
       const size = (.22 + rnd(i, seed + 81) * .14) * S, tilt = (i % 2 ? 1 : -1) * (.12 + rnd(i, seed + 82) * .5), turned = (rnd(i, seed + 85) - .5) * 2.6;
-      const leaf = aim(kit, B.leaf({ size, stalk: size * (.45 + rnd(i, seed + 83) * .3), tone: rnd(i, seed + 84), dry: i === 3 || i === 6, seed: seed + 800 + i * 13 }), V(Math.sin(tilt) * .6, -1, .1 + (i % 3) * .1), V(Math.sin(turned), .12, Math.cos(turned)));
-      hang(leaf, twig.userData.at(where), held, i, seed + 86, .03 + rnd(i, seed + 87) * .02); leaves.push(leaf);
+      const down = V(Math.sin(tilt) * .6, -1, .1 + (i % 3) * .1), leaf = aim(kit, B.leaf({ size, stalk: size * (.45 + rnd(i, seed + 83) * .3), tone: rnd(i, seed + 84), dry: i === 3 || i === 6, seed: seed + 800 + i * 13 }), down, V(Math.sin(turned), .12, Math.cos(turned)));
+      hang(leaf, twig.userData.at(where), held, i, seed + 86, .03 + rnd(i, seed + 87) * .02, down); leaves.push(leaf);
     });
     // Bark peels from the white stem in thin curls.
     [[.34, 1], [.63, -1]].forEach(([share, side], i) => {
       const along = stem.userData.dir(share), out = V(-along.y, along.x, 0).multiplyScalar(side), peel = aim(kit, B.curl({ length: (.17 + rnd(i, seed + 88) * .06) * S, width: (.06 + rnd(i, seed + 89) * .025) * S, seed: seed + 880 + i }), along, V(0, 0, 1));
       if (side > 0) peel.rotateY(Math.PI); peel.position.copy(stem.userData.at(share)).addScaledVector(out, stem.userData.radius(share) * .8); held.add(peel);   // a curl peels toward its own +x, so one on the other side is turned round
     });
-    tick(t => { plant.rotation.z = Math.sin(t * .9 + 1.3) * .004; });
+    tick(t => { plant.rotation.z = weather.sway(Math.sin(t * .9 + 1.3) * .004, 0); });
     arrange(leaves, -.054);
   }
 
@@ -175,7 +178,7 @@ export default function build(kit, ctx) {
   arrange(lying, .5);
 
   // ---------- one leaf at a time lets go of a shoot, rocks down the left edge and fades into the fallen ones; then the air is empty for a minute or two ----------
-  if (!wet && released.length) {
+  if (released.length) {
     // One leaf does every fall, in a short repeating round. A fall has its own shoot, lane, size, colour, pace and
     // swing, and its own empty air after it. The leaf is a gold one, and each fall keeps a share of its green
     // (TURNS), which makes it gold, amber, orange or red-orange; the share is set as a fall begins, while the leaf
@@ -197,10 +200,11 @@ export default function build(kit, ctx) {
     tick(t => {
       const now = ((t + offset) % round + round) % round; let current = null;
       for (let k = 0; k < falls.length; k++) if (now >= falls[k].start && now < falls[k].start + falls[k].fall) current = falls[k];
-      holder.visible = current !== null; if (!current) return;
+      // Rain or a storm keeps the leaves on the tree (#646): the leaf stays built and hidden.
+      holder.visible = current !== null && weather.falls; if (!holder.visible) return;
       if (current !== showing) { showing = current; leaf.userData.turn(current.turn); }
       const from = current.from, age = now - current.start, drop = age * current.speed, ease = Math.min(1, drop / .7), beat = age * current.swing + current.phase, slide = Math.sin(beat);
-      holder.position.set(Math.min(-W + 2.9, Math.max(-W + .45, from.x + .3 * ease + slide * current.reach * ease)) * current.seen, (from.y - drop + Math.abs(Math.cos(beat)) * .07 * ease) * current.seen, current.z);
+      holder.position.set(Math.min(-W + 2.9, Math.max(-W + .45, from.x + .3 * ease + slide * current.reach * ease + weather.drift(age))) * current.seen, (from.y - drop + Math.abs(Math.cos(beat)) * .07 * ease) * current.seen, current.z);
       // A maple leaf does not spin on its stalk: it lies back on the air, banks into each slide from side to side, nods, and turns slowly in its own plane.
       holder.rotation.z = -Math.cos(beat) * .5 * ease; laid.rotation.x = -.7 + Math.cos(beat * 2) * .24 * ease; leaf.rotation.z = current.phase + age * .22;
       holder.scale.setScalar(current.size); leaf.userData.fade(Math.min(1, drop / .3, (from.y - drop - current.floor) / .5));

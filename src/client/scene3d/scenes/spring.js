@@ -7,11 +7,15 @@
 // season (coordinator decision on #613). Art rules: ../README.md.
 import { bark, limb, taper } from '../parts/spring-limb.js';
 import { magnolia } from '../parts/spring-magnolia.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, today = ctx.seed + ctx.day;
-  const M = magnolia(kit), wood = bark(kit, 0x54463e), rain = ctx.weather === 'rain', dim = rain || ctx.weather === 'fog' ? .5 : 1;
+  // The weather over the scene (#646): wind leans each bloom and the leaf spray to the left, widens every sway and carries
+  // the falling petals left; rain and a storm keep the petals on the blooms and halve the glows; fog dims the glows by 40%.
+  const weather = weatherOver(kit, ctx), dim = weather.backlight;
+  const M = magnolia(kit), wood = bark(kit, 0x54463e);
   const at = (x, y, z = 0) => V(-W + x, y, z);   // measured from the left edge, so the bough keeps its corner on any screen shape
 
   // ---------- the bough: it rocks as one piece about the point where it leaves the frame ----------
@@ -51,11 +55,11 @@ export default function build(kit, ctx) {
     if (i < blooms) {
       const flower = M.bloom({ size: size * S, stage: opening, tepals, blush: .85 + rnd(i, seed + 3) * .25, seed: seed + i * 13, axis, turn: rnd(i, seed + 4) * 6 }); flower.position.copy(end); body.add(flower);
       const pace = 1.12 + rnd(i, seed + 5) * .56, phase = rnd(i, seed + 6) * 6;
-      tick(t => { flower.rotation.z = Math.sin(t * pace + phase) * .0175; flower.rotation.x = Math.sin(t * pace * .8 + phase) * .01; });
+      tick(t => { flower.rotation.z = weather.sway(Math.sin(t * pace + phase) * .0175, axis.y); flower.rotation.x = Math.sin(t * pace * .8 + phase) * .01 * weather.wind.sway; });
       if (end.x < -W + 2.4) released.push(end.clone().addScaledVector(axis, size * S * .5));
     } else { const closed = M.bud({ length: (.16 + rnd(i, seed + 7) * .11) * S, seed: seed + i, axis }); closed.position.copy(end); body.add(closed); }
   });
-  tick(t => { bough.rotation.z = Math.sin(t * 1.047) * .0052; });
+  tick(t => { bough.rotation.z = weather.sway(Math.sin(t * 1.047) * .0052, 0); });
 
   if (ctx.quiet) return;   // a quiet date keeps the bough alone: no spray, no petal, no backlight
 
@@ -79,18 +83,19 @@ export default function build(kit, ctx) {
       young.position.copy(stem.userData.at(share)); young.quaternion.setFromUnitVectors(V(0, 1, 0), way); young.rotateY((rnd(i, seed + 24) - .5) * 1.2); inner.add(young);
     });
     [.5, .78].forEach((share, k) => { const closed = M.bud({ length: (.13 + k * .03) * S, seed: seed + 40 + k, axis: V(k ? .4 : -.5, .8, .2) }); closed.position.copy(stem.userData.at(share)); inner.add(closed); });
-    tick(t => { spray.rotation.z = Math.sin(t * 1.396 + 2) * .0087; });
+    // The spray hangs from the right edge toward the lower left: its free end is below where it is held.
+    tick(t => { spray.rotation.z = weather.sway(Math.sin(t * 1.396 + 2) * .0087, -.65); });
   }
 
   // ---------- a petal lets go of a bloom on the left and leaves through the bottom edge ----------
-  if (!rain && released.length) for (let i = 0; i < Math.min(6, Math.round(2 + 4 * A)); i++) {
+  if (released.length) for (let i = 0; i < Math.min(6, Math.round(2 + 4 * A)); i++) {
     const from = released[i % released.length], z = [-1.6, .9, -3, .2, -2.2, 1.4][i], size = (.3 + rnd(i, seed + 31) * .2) * S, speed = .16 + rnd(i, seed + 32) * .16, floor = -view.halfHAt(z) - .6;
     const fall = (from.y - floor) / speed, pause = 1.25 + rnd(i, today + 33) * 2.5, cycle = fall + pause, offset = cycle * (([.42, .12, .74, .28, .6, .9][i] + rnd(i, today + 34) * .2) % 1) - 13;
     const petal = M.petal(size), turn = .72 + rnd(i, seed + 35) * .5, phase = rnd(i, seed + 36) * 6, sway = .35 + rnd(i, seed + 37) * .15; stage.add(petal);
     tick(t => {
       const age = ((t + offset) % cycle + cycle) % cycle, falling = age < fall, drop = age * speed, ease = Math.min(1, drop / .8);
-      petal.visible = falling; if (!falling) return;
-      petal.position.set(Math.min(-W + 2.9, from.x + (Math.sin(age * .42 + phase) * sway - .25 * Math.min(1, drop / 3)) * ease), from.y - drop, from.z + (z - from.z) * Math.min(1, drop / 2.5));
+      petal.visible = falling && weather.falls; if (!petal.visible) return;   // rain or a storm keeps the petals on the blooms (#646)
+      petal.position.set(Math.min(-W + 2.9, from.x + (Math.sin(age * .42 + phase) * sway - .25 * Math.min(1, drop / 3)) * ease + weather.drift(age)), from.y - drop, from.z + (z - from.z) * Math.min(1, drop / 2.5));
       petal.rotation.set(age * turn + phase, age * turn * .6 + phase * 2, Math.sin(age * .5 + phase) * .9);
     });
   }

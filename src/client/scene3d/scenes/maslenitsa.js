@@ -8,10 +8,14 @@
 // seen a little from above, so the lace on top shows. Art rules: ../README.md.
 import { bliniStack, foldedBlin } from '../parts/maslenitsa-blini.js';
 import { clayBowl, creamSwirl, cutGlassBowl, plate, steam, woodenSpoon } from '../parts/maslenitsa-tableware.js';
+import { weatherOver } from '../parts/wind-underneath.js';
 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.07;
+  // The weather over the scene (#646): wind blows the steam left; rain and a storm halve the low sun, fog dims it by 40%.
+  // Nothing here hangs or falls.
+  const weather = weatherOver(kit, ctx);
 
   // Everything on the table is one group, tipped toward the viewer and standing on the bottom edge.
   // The table stands a little above the bottom edge (#675: the float's zoom crops the lowest 2% of the screen at its centre).
@@ -22,7 +26,7 @@ export default function build(kit, ctx) {
   const stack = bliniStack(kit, { count: Math.min(24, Math.round(12 + A * 27)), drips: A > .2 ? 2 : 1, seed }); stack.group.position.y = dish.userData.top; table.add(stack.group);
   // One blin folded in quarters leans on the stack: its corner on the plate, its curved edge on the stack's shoulder.
   const folded = foldedBlin(kit, { radius: .98, seed }); folded.position.set(-1.5, dish.userData.top + .06, .42); folded.quaternion.setFromUnitVectors(V(0, 1, 0), V(.8, .56, -.22).normalize()); table.add(folded);
-  const vapour = steam(kit, { height: 1.5, width: .7, strength: .15, salt: seed }); vapour.position.set(.1, dish.userData.top + stack.top + .1, 0); table.add(vapour);
+  const vapour = steam(kit, { height: 1.5, width: .7, strength: .15, salt: seed, weather }); vapour.position.set(.1, dish.userData.top + stack.top + .1, 0); table.add(vapour);
 
   // ---------- two small bowls of different make, and a wooden spoon ----------
   const crystal = cutGlassBowl(kit, { radius: .42 }); crystal.position.set(-2.02, 0, -.12); table.add(crystal);
@@ -40,7 +44,7 @@ export default function build(kit, ctx) {
   const spoon = woodenSpoon(kit, { length: .95 }); spoon.position.set(bowl.position.x - .06, bowl.userData.fill + .09, bowl.position.z + .04); spoon.rotation.set(0, 2.55, .42); table.add(spoon);
 
   // ---------- a low sun in the opposite bottom corner: light, not an emblem ----------
-  const core = kit.glow(0xffd27a, 2.6 * S, .5, { twinkle: .1 }), halo = kit.glow(0xf6a23a, 9.5 * S, .17, { twinkle: .1 });
+  const core = kit.glow(0xffd27a, 2.6 * S, .5 * weather.backlight, { twinkle: .1 }), halo = kit.glow(0xf6a23a, 9.5 * S, .17 * weather.backlight, { twinkle: .1 });
   core.position.set(-W + .8, -view.halfH - .1, -3); halo.position.copy(core.position); stage.add(halo, core);
   tick(t => { const breath = 1 + Math.sin(t * .16) * .05; core.scale.setScalar(2.6 * S * breath); });
 }

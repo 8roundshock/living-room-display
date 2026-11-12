@@ -7,9 +7,15 @@
 // with its top belongs to the Russian New Year scene (#622), the star to Orthodox Christmas.
 // The middle of the screen and the middle of the top and bottom edges stay empty.
 // Art rules: ../README.md.
+import { weatherOver } from '../parts/wind-underneath.js';
+
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed;
+  // The weather over the scene (#646): wind leans the ornaments and the wreath to the left on their threads and widens
+  // their swing, and carries the snow left; rain, a storm or real snow leave the scene's own snow out; rain and a storm
+  // halve the far lights, fog dims them by 40% (and the kit stops every twinkle).
+  const weather = weatherOver(kit, ctx);
   const N = kit.needles(), pick = (list, i) => list[((i % list.length) + list.length) % list.length];
   const WARM = [0xffd9a0, 0xffd9a0, 0xffb070, 0xffd9a0, 0xffc860];
 
@@ -22,7 +28,7 @@ export default function build(kit, ctx) {
     const i = made++, shape = pick(SHAPES, i), slim = shape === 'finial';
     const group = kit.ornament({ color: pick(COLOURS, i), shape, finish: shape === 'facet' ? 'mirror' : pick(FINISHES, i * 3), radius: radius * (slim ? 1.2 : shape === 'ball' ? 1 : .88), thread });
     const phase = rnd(i, seed + 11) * 6, reach = .012 + thread * .012;
-    tick(t => { group.rotation.z = Math.sin(t * .5 + phase) * reach * 2; group.rotation.x = Math.sin(t * .37 + phase) * reach; group.userData.body.rotation.y = t * .1 + phase; });
+    tick(t => { group.rotation.z = weather.sway(Math.sin(t * .5 + phase) * reach * 2, -1); group.rotation.x = Math.sin(t * .37 + phase) * reach * weather.wind.sway; group.userData.body.rotation.y = t * .1 + phase; });
     return group;
   }
 
@@ -57,7 +63,7 @@ export default function build(kit, ctx) {
     }
     for (let i = 0; i < Math.round(4 + A * 12); i++) { const a = i * 2.4 + .7, bulb = kit.bulb(0xffd9a0, .036); bulb.position.set(Math.cos(a) * R * (.92 + rnd(i, 7) * .16), cy + Math.sin(a) * R * (.92 + rnd(i, 8) * .16), .32); hang.add(bulb); }
     const bow = kit.puffyBow(0xb3121d, 1.3 * S); bow.position.set(0, cy - R, .42); hang.add(bow);
-    tick(t => { hang.rotation.z = Math.sin(t * .35) * .018; });
+    tick(t => { hang.rotation.z = weather.sway(Math.sin(t * .35) * .018, -1); });
   }
 
   // ---------- one snow-dusted bough reaching in low from the left ----------
@@ -87,8 +93,9 @@ export default function build(kit, ctx) {
 
   // ---------- depth and air: a few soft lights far behind, a little snow ----------
   for (let i = 0; i < Math.round(3 + A * 12); i++) {
-    const side = i % 3 ? 1 : -1, x0 = side * (W * (1.05 + rnd(i, seed + 31) * .55)), y0 = (rnd(i, seed + 32) - .35) * 8, disc = kit.bokeh(pick(WARM, i), (1 + rnd(i, seed + 33)) * 1.1 * S, .1 + rnd(i, seed + 34) * .1);
+    const side = i % 3 ? 1 : -1, x0 = side * (W * (1.05 + rnd(i, seed + 31) * .55)), y0 = (rnd(i, seed + 32) - .35) * 8, disc = kit.bokeh(pick(WARM, i), (1 + rnd(i, seed + 33)) * 1.1 * S, (.1 + rnd(i, seed + 34) * .1) * weather.backlight);
     disc.position.set(x0, y0, -12 + rnd(i, seed + 35) * 7); stage.add(disc); const phase = rnd(i, seed + 36) * 6; tick(t => { disc.position.x = x0 + Math.sin(t * .12 + phase) * .25; disc.position.y = y0 + Math.cos(t * .1 + phase) * .18; });
   }
-  if (ctx.weather !== 'snow') stage.add(kit.snow(14 + A * 70)); // real snow has its own overlay
+  // One snowfall, never two, and no snow with the rain (#646): the scene's own snow stays built and hidden.
+  const own = kit.snow(14 + A * 70, { drift: weather.carry }); own.visible = weather.ownSnow; stage.add(own);
 }

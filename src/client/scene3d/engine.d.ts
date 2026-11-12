@@ -92,17 +92,20 @@ export interface SceneKit {
   bough(needles: NeedleCollector, base: Vector3, direction: Vector3, length: number, droop: number, side: Vector3, needleLength: number, snow: number, seed: number, clumps?: number[][] | null, density?: number): (along: number) => Vector3;
   ornament(options?: { color?: Colour; radius?: number; thread?: number; shape?: 'ball' | 'drop' | 'onion' | 'finial' | 'facet'; finish?: 'mirror' | 'satin' | 'pearl' | 'glitter' | 'banded'; accent?: Colour }): Object3D;
   bauble(colour: Colour, radius: number, thread: number, satinFinish?: boolean): Object3D;
-  snow(count: number, options?: { size?: number; opacity?: number; colour?: Colour; salt?: number }): Object3D;
+  /** `drift(t)`: how far the wind has carried the fall sideways (parts/wind-underneath.js `carry`, #646). */
+  snow(count: number, options?: { size?: number; opacity?: number; colour?: Colour; salt?: number; drift?: ((time: number) => number) | null }): Object3D;
   leaf(tint: Colour, scale: number, variant?: number): Object3D;
   readonly LEAF_TINTS: readonly number[];
   readonly MAPLE_OUTLINE: readonly (readonly [number, number])[];
-  flagCloth(texture: any, options?: { width?: number; height?: number; fly?: 1 | -1; wave?: number; see?: number }): Object3D;
+  /** `wave` may be a function of the scene clock, read once a frame (#646). */
+  flagCloth(texture: any, options?: { width?: number; height?: number; fly?: 1 | -1; wave?: number | ((time: number) => number); see?: number }): Object3D;
   fireworks(bursts: readonly (readonly [number, number, number, number])[], options?: { per?: number; size?: number; tints?: readonly (readonly [number, number])[]; flash?: readonly Colour[]; period?: number; life?: number }): Object3D;
   balloon(colour: Colour, radius: number, options?: { skin?: 'latex' | 'pearl' | 'foil'; shape?: 'round' | 'star'; pattern?: readonly [Colour, 'dots' | 'stripes' | 'grid' | 'bands' | 'diamonds'] }): Object3D;
   puffyBow(colour: Colour, scale: number): Object3D;
   gift(width: number, height: number, depth: number, base: string, accent: string, kind: 'dots' | 'stripes' | 'grid' | 'bands' | 'diamonds', ribbon: Colour): Object3D;
   cake(options?: { candles?: number; tiers?: readonly (readonly [number, number, Colour, Colour])[]; sprinkles?: readonly Colour[]; candleColours?: readonly string[] }): Object3D;
-  bunting(a: Vector3, b: Vector3, options?: { flags?: number; sag?: number; drop?: number; papers?: readonly (readonly [string, string, string])[]; start?: number }): Object3D;
+  /** `weather`: the scene's parts/wind-underneath.js weatherOver(), so the flags lean and flap in the wind (#646). */
+  bunting(a: Vector3, b: Vector3, options?: { weather?: unknown; flags?: number; sag?: number; drop?: number; papers?: readonly (readonly [string, string, string])[]; start?: number }): Object3D;
   confetti(count: number, options?: { colours?: readonly Colour[]; size?: number }): Object3D;
   streamer(length: number, radius: number, colour: Colour, options?: { width?: number; phase?: number }): Object3D;
 }

@@ -150,8 +150,10 @@ export function createCore(T, renderer, ctx, look, view) {
   const satin = colour => mat({ color: colour, metalness: .25, roughness: .32, clearcoat: .6, clearcoatRoughness: .3, side: T.DoubleSide });
 
   // ---------- light: halos and bulbs ----------
-  /** An additive halo sprite. `opacity` is its strength before the owner's glow setting; `twinkle` (0-1) is how far it breathes. */
+  /** An additive halo sprite. `opacity` is its strength before the owner's glow setting; `twinkle` (0-1) is how far it
+   * breathes. In fog nothing twinkles (#620, #646): every halo, bulb and soft disc holds still. */
   function glow(colour, size, opacity, { texture = tex.glow(), twinkle = .25 } = {}) {
+    if (ctx.weather === 'fog') twinkle = 0;
     const sprite = new T.Sprite(new T.SpriteMaterial({ map: texture, color: C(colour), transparent: true, opacity, blending: T.AdditiveBlending, depthWrite: false, depthTest: false }));
     sprite.scale.setScalar(size); sprite.userData = { o: opacity, tw: twinkle, ph: glows.length * 1.7 }; glows.push(sprite); return sprite;
   }
