@@ -229,6 +229,22 @@ quiet date).
   is arbitrary. A scene that is rebuilt or replaced (a new day, weather arriving, a quiet date)
   carries on from where the float was, also after a change of motion interval: the float's
   origin is shared by every stage on the page.
+- **Movement preview** (#678, owner report 2026-11-12: "does preview movement work for the
+  scenes? from my testing they stay still while all other elements move"). While the editor's
+  Preview movement is shown, the float reads the preview's time instead of real time, the same
+  time the board and the widgets read, so at each moment of the hour slider (#686) the scene is
+  where its track puts it, and an interval apart it has moved as far as it would on the display.
+  The scene's own clock follows the preview too, mapped like real time (`12 + seconds × 1/8`),
+  so sway, a falling leaf, a passing firework or the wind's gust over the scene (#646) show that
+  moment; scenes write motion as a function of the clock, so any moment can be shown, in any
+  order. A resting slider holds the
+  picture and draws nothing new. A quiet date keeps its frozen clock; only its float follows.
+  The stage takes each step in place (`setPreview`), never as a new stage or WebGL context.
+  When the preview ends the float is on real time again at once, as the board is; the scene
+  clock carries on from the preview's moment. (In the editor, leaving the preview also returns
+  to the still preview, which does not float.) The preview starts the scene's track at 0, as
+  it starts the board's, so it shows how the two move relative to each other over that stretch
+  of time; on the display their phase is arbitrary. Outside the preview nothing changes.
 - **Travel and zoom** (`SCENE_FLOAT` in `settings.ts`): ±2% of the display on each axis
   (±38 × ±22 px at 1920×1080), the least the ticket asks for. The picture is drawn 4.3%
   larger about the screen's centre. That crops about 2% of each edge at the centre position
@@ -766,7 +782,8 @@ renderer's patches it does not start over a 3D scene
 - One stage owns one canvas and one WebGL context and releases both on unmount.
 - The whole picture floats like the board (#675, [Float](#float-675-owner-direction-2026-11-12)):
   ±2% of the display on each axis at a 4.3% zoom, also on a quiet date. This reduces fixed
-  patterns; it is not a burn-in guarantee.
+  patterns; it is not a burn-in guarantee. In the editor's movement preview the float and the
+  scene clock follow the preview's time (#678).
 
 Measured on 2026-11-10, source build, headless Edge on the development PC's GeForce GTX
 1080 Ti, default board:

@@ -54,7 +54,7 @@ busy dashboards. The application must produce no audio.
 | Reminders | Home owns adding, editing, deleting and checking off one-time/undated reminders, with Undo and local history (restore, delete, clear; the latest 500 kept locally). Its calendar turns a chosen day into a dated reminder. The editor retains widget size and hide-empty appearance options. The display fits pending reminders soonest first with honest “+N more”. The widget supports whole-cell sizes from 2 × 2 to full grid height and two-thirds width (#73, #203, #517). |
 | Appearance | User-editable layout, colors, typography, motion, brightness (one fixed level, or following daylight between a chosen dimmest and brightest level: brightest while it is light outside, an evening level until a chosen dim time, 11 PM by default, then dimmest until dawn, #439 and #591), and saved presets. The accent is one colour or Native, where each widget uses its own tone from one harmonious dim palette (default for new installs and built-in styles). |
 | Scheduled styles | Optional local weekday/time ranges select saved visual styles, with explicit overlap priority, overnight rules and fallback. Home offers a temporary manual override. Missing styles are repairable and skipped; scheduling does not rewrite canonical settings (#514). |
-| Movement preview | A local editor timeline seeks/plays the same float/relocation model over a labeled finite interval window. It never changes the running display or saved configuration (#515). |
+| Movement preview | One slider over an hour (0:00 to 60:00, #686) in the editor. Each moment shows where the board, every widget's content and the 3D scene (#678) would be at that time with the draft's motion settings (interval, Float gently, Swap places and its fade) and the system's reduced-motion preference; a settings change keeps the moment. It never changes the running display or saved configuration, and live data keeps updating (#515). |
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 | Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |
 | World clocks | Time in up to four other cities. |
@@ -163,6 +163,15 @@ resting on the bottom (a cake, fallen leaves) sit on the visible bottom edge at 
 position and, like the board, rise or are cut by up to the vertical travel at the extremes;
 small flat litter may be cut further at the low extreme (coordinator decision on #675,
 2026-11-12). Tests check every scene against these rules and against what it drew before.
+
+The editor's **Preview movement** (#686, owner direction 2026-11-12: "no need for the
+intervals, can just be a preset slider with an hour and the person can scrub through, and
+just matches to your settings to show what it would look like") is one slider over an hour.
+At each moment the board, each widget's content and the 3D scene are where the display would
+put them with the settings being edited; the scene's own life (sway, falling leaves) shows
+that moment too (#678, owner report 2026-11-12: "does preview movement work for the scenes?
+from my testing they stay still while all other elements move"). Changing a setting keeps the
+moment. The preview never changes the display or the saved settings.
 
 Floating in place smears edges across about 270 × 150 device pixels at 4K, but it
 does not even out wear between screen regions the way swapping does: a bright

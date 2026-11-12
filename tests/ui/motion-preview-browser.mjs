@@ -11,7 +11,7 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { WIDGET_IDS } from '../../src/shared/widgets.ts';
-import { floatPath, FLOAT_TRAVEL } from '../../src/shared/float.ts';
+import { floatPath, FLOAT_TRAVEL, stepPath } from '../../src/shared/float.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
 
@@ -23,13 +23,11 @@ export async function settleClockEntrance(page) {
   });
 }
 
-// #537: changing the native range maximum commits before the passive local-clock reset.
-// Poll both rendered values with Playwright's interval rather than advancing the frozen clock.
-export function motionPreviewResetReady(maximum) {
-  const slider = document.querySelector('[aria-label="Movement preview time"]');
-  return slider?.value === '0' && slider.max === maximum
-    && document.querySelector('.grid-ambient')?.getAttribute('data-preview-seconds') === '0.000'
-    && document.querySelector('[aria-label="Play movement preview"]') !== null;
+// #686: the preview is one slider over an hour that follows the draft settings. A settings change keeps the
+// slider where it is and redraws that moment; poll the rendered frame for the new mode instead of advancing the clock.
+export function motionPreviewModeReady({ seconds, float }) {
+  const slider = document.querySelector('[aria-label="Movement preview time"]'), ambient = document.querySelector('.preview-surface .grid-ambient');
+  return slider?.value === String(seconds) && ambient?.getAttribute('data-preview-seconds') === Number(seconds).toFixed(3) && ambient.getAttribute('data-float') === float;
 }
 
 export async function runMotionPreviewQa({ playwright, edge, capture = false } = {}) {
@@ -130,7 +128,7 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
       return { same: glyph === document.querySelector('.weather-glyph[data-glyph-hero]'), running: loops.every(animation => animation.playState === 'running') };
     }), { same: true, running: true }, 'Back to layout resumes the same previously running glyph loops');
     await lifecycle.evaluate(() => { for (const animation of globalThis.__lrdGlyphFixture.loops) { animation.pause(); animation.currentTime = 1234; } });
-    await lifecycle.getByRole('button', { name: 'Preview movement', exact: true }).click(); await seek(lifecycle, 31.5);
+    await lifecycle.getByRole('button', { name: 'Preview movement', exact: true }).click(); await seek(lifecycle, 31);
     await lifecycle.getByRole('button', { name: 'Back to layout', exact: true }).click();
     assert.ok(await lifecycle.evaluate(() => globalThis.__lrdGlyphFixture.loops.every(animation => animation.playState === 'paused' && animation.currentTime === 1234)), 'preview restores an already-paused loop without taking over its play state or time');
     await lifecycle.getByRole('button', { name: 'Preview movement', exact: true }).click(); await seek(lifecycle, 15);
@@ -141,7 +139,7 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     });
     await lifecycle.clock.runFor(30_100);
     await lifecycle.locator('.weather-glyph[data-glyph-hero][data-glyph="rain"]').waitFor();
-    await seek(lifecycle, 31.5);
+    await seek(lifecycle, 31);
     assert.deepEqual(await lifecycle.evaluate(() => {
       const old = globalThis.__lrdGlyphFixture.loops;
       const fresh = document.querySelector('.weather-glyph[data-glyph-hero]').getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations === Infinity);
@@ -154,14 +152,19 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     checks.push('Back to layout restores the same mounted Lively glyph loops and prior paused clocks; condition changes seek/restore the live replacement without reviving cancelled predecessors');
 
     const live = await open('/display'), liveBefore = await readFrame(live), page = await open();
-    assert.equal(await page.getByRole('button', { name: 'Play movement preview' }).count(), 1, 'preview starts paused');
+    // #686: one hour slider and nothing else: no Play/Pause, one-second buttons, window chooser or interval jumps.
+    const controls = page.getByRole('region', { name: 'Movement preview', exact: true });
+    assert.deepEqual(await controls.evaluate(region => ({ sliders: region.querySelectorAll('input[type="range"]').length, buttons: region.querySelectorAll('button').length, selects: region.querySelectorAll('select').length, details: region.querySelectorAll('details').length,
+      range: [...region.querySelectorAll('input[type="range"]')].map(input => [input.min, input.max, input.step, input.value]), time: region.querySelector('.motion-preview-time').textContent, note: region.querySelectorAll('p').length })),
+    { sliders: 1, buttons: 0, selects: 0, details: 0, range: [['0', '3600', '1', '0']], time: '0:00 / 60:00', note: 1 }, 'one slider from 0:00 to 60:00 in seconds, the time and one line');
+    assert.match(await controls.locator('p').innerText(), /an hour with these settings\. Nothing changes on the display or in saved settings\./);
     const frames = new Map();
-    for (const time of [0, 15, 29.95, 30, 31.5, 33, 60, 61.5, 123]) {
+    for (const time of [0, 15, 29, 30, 31, 33, 60, 61, 123, 1801, 3600]) {
       await seek(page, time); frames.set(time, await readFrame(page));
       const expected = floatPath(time, 30);
       const actual = await page.locator('.grid-ambient').evaluate((el, args) => {
         const dpr = devicePixelRatio || 1, snap = v => Math.round(v * dpr) / dpr;
-        return { actual: el.querySelector('.widget-grid-plane').style.transform, expected: `translate(${snap(args.x * args.travel * el.clientWidth)}px, ${snap(args.y * args.travel * el.clientHeight)}px)` };
+        return { actual: el.querySelector('.widget-grid-plane').style.transform, expected: `translate(${snap(args.x * args.travel * parseFloat(getComputedStyle(el).width))}px, ${snap(args.y * args.travel * parseFloat(getComputedStyle(el).height))}px)` };
       }, { ...expected, travel: FLOAT_TRAVEL });
       assert.equal(actual.actual, actual.expected, `time ${time} uses runtime floatPath`);
       const ink = await inkGeometry(page);
@@ -171,60 +174,64 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
         const one = ink[a].ink, two = ink[b].ink;
         if (Math.min(one.right, two.right) - Math.max(one.left, two.left) > 1 && Math.min(one.bottom, two.bottom) - Math.max(one.top, two.top) > 1) overlaps.push([ink[a].id, ink[b].id]);
       }
-      if ([0, 15, 29.95, 33, 123].includes(time)) assert.deepEqual(overlaps, [], `settled frame ${time} has no content overlap`);
+      if ([0, 15, 29, 33, 123].includes(time)) assert.deepEqual(overlaps, [], `settled frame ${time} has no content overlap`);
       else if (overlaps.length) crossings.push({ time, pairs: overlaps });
     }
-    assert.equal(frames.get(29.95).cycle, '0'); assert.equal(frames.get(30).cycle, '1'); assert.equal(frames.get(60).cycle, '2'); assert.equal(frames.get(123).cycle, '4');
-    assert.notDeepEqual(frames.get(30).widgets.map(w => w.transform), frames.get(31.5).widgets.map(w => w.transform), 'complete swap progression is seekable');
-    for (const time of [31.5, 15, 123, 30, 61.5, 0]) { await seek(page, time); assert.deepEqual(await readFrame(page), frames.get(time), `backward seek ${time} is deterministic`); }
-    checks.push('0%, intermediate, transition boundaries and 100% sample shared float paths; backward and repeated seeks replay identical composition history and glide frames');
+    assert.equal(frames.get(29).cycle, '0'); assert.equal(frames.get(30).cycle, '1'); assert.equal(frames.get(60).cycle, '2'); assert.equal(frames.get(123).cycle, '4');
+    assert.equal(frames.get(1801).cycle, '60'); assert.equal(frames.get(3600).cycle, '120', 'the end of the hour is the 120th swap at a 30 s interval');
+    assert.notDeepEqual(frames.get(30).widgets.map(w => w.transform), frames.get(31).widgets.map(w => w.transform), 'complete swap progression is seekable');
+    for (const time of [31, 15, 3600, 123, 30, 61, 1801, 0]) { await seek(page, time); assert.deepEqual(await readFrame(page), frames.get(time), `backward seek ${time} is deterministic`); }
+    checks.push('One hour slider only (0:00-60:00, 1 s steps, the time and one line; no Play, one-second, window or interval controls); start, intermediate, transition boundaries, the middle and the end of the hour sample shared float paths; backward and repeated seeks replay identical composition history and glide frames');
 
-    await seek(page, 31.5); const paused = await readFrame(page); await page.clock.runFor(2500);
-    assert.deepEqual(await readFrame(page), paused, 'paused movement stays stable while live information ticks');
+    await seek(page, 31); const paused = await readFrame(page); await page.clock.runFor(2500);
+    assert.deepEqual(await readFrame(page), paused, 'a resting slider holds the movement while live information ticks');
     const animations = await page.locator('.grid-ambient').evaluate(el => el.getAnimations({ subtree: true }).filter(a => a.id === 'lrd-preview').map(a => ({ time: a.currentTime, state: a.playState })));
-    assert.ok(animations.length > 0); assert.ok(animations.every(a => a.time === 1500 && a.state === 'paused'));
-    await page.getByRole('button', { name: 'Play movement preview' }).click(); await page.clock.runFor(1200);
-    await page.getByRole('button', { name: 'Pause movement preview' }).click();
-    assert.ok(Number(await page.locator('.grid-ambient').getAttribute('data-preview-seconds')) > 32.5, 'resume advances from sought position');
-    await page.getByRole('button', { name: 'Back one second' }).click();
-    const afterBack = Number(await page.locator('.grid-ambient').getAttribute('data-preview-seconds'));
-    await page.getByRole('button', { name: 'Forward one second' }).click();
-    assert.ok(Math.abs(Number(await page.locator('.grid-ambient').getAttribute('data-preview-seconds')) - afterBack - 1) < .01);
-    const slider = page.getByRole('slider', { name: 'Movement preview time', exact: true });
-    await slider.focus(); await page.keyboard.press('Home'); assert.equal(await slider.inputValue(), '0');
-    await page.keyboard.press('ArrowRight'); assert.equal(await slider.inputValue(), '0.05');
-    await page.keyboard.press('End'); assert.equal(await slider.inputValue(), '123');
-    await page.getByRole('button', { name: 'Play movement preview' }).click(); await page.clock.runFor(300);
-    assert.ok(Number(await slider.inputValue()) < 1, 'Play at the end restarts');
-    await page.getByRole('button', { name: 'Pause movement preview' }).click();
-    await page.getByRole('combobox', { name: 'Movement preview window' }).selectOption('24'); assert.equal(await slider.getAttribute('max'), '723');
-    await page.getByRole('button', { name: 'Jump to interval 24', exact: true }).click(); assert.equal(await slider.inputValue(), '720');
-    await page.getByRole('combobox', { name: 'Movement preview window' }).selectOption('4'); assert.equal(await slider.inputValue(), '123');
-    checks.push('Paused stability, resume, one-second nudges, range keyboard Home/End/arrows, restart at end, 4/12/24 interval windows and boundary jumps');
+    assert.ok(animations.length > 0); assert.ok(animations.every(a => a.time === 1000 && a.state === 'paused'));
+    // Keyboard (#686): arrows move 5 s, Page Up and Page Down a minute, Home and End to the ends, all clamped to the hour.
+    const slider = page.getByRole('slider', { name: 'Movement preview time', exact: true }), shown = () => controls.locator('.motion-preview-time').textContent();
+    await slider.focus();
+    for (const [key, value, label] of [['Home', '0', '0:00'], ['ArrowRight', '5', '0:05'], ['ArrowUp', '10', '0:10'], ['PageUp', '70', '1:10'], ['PageDown', '10', '0:10'], ['ArrowLeft', '5', '0:05'], ['ArrowDown', '0', '0:00'], ['ArrowLeft', '0', '0:00'], ['PageDown', '0', '0:00'],
+      ['End', '3600', '60:00'], ['ArrowRight', '3600', '60:00'], ['PageUp', '3600', '60:00'], ['PageDown', '3540', '59:00']]) {
+      await page.keyboard.press(key);
+      assert.equal(await slider.inputValue(), value, `${key} moves the slider to ${value} s`);
+      assert.equal(await shown(), `${label} / 60:00`); assert.equal(await slider.getAttribute('aria-valuetext'), `${label} of 60:00`);
+      assert.equal(await page.locator('.grid-ambient').getAttribute('data-preview-seconds'), Number(value).toFixed(3), `the canvas shows ${value} s`);
+    }
+    checks.push('A resting slider holds the movement while live information ticks; keyboard arrows move 5 s, Page Up/Down a minute, Home/End to 0:00 and 60:00, clamped, with the time shown and announced');
 
     await page.getByRole('tab', { name: 'Style', exact: true }).click(); await page.locator('summary', { hasText: 'Motion' }).click();
+    // The slider follows the draft (#686): a settings change keeps the moment and draws it with the new settings.
+    await seek(page, 1234); assert.equal(await page.locator('.grid-ambient').getAttribute('data-float'), 'float');
     await page.getByRole('checkbox', { name: 'Float gently', exact: true }).uncheck();
-    await page.waitForFunction(motionPreviewResetReady, '121.2', { polling: 10 });
-    assert.equal(await slider.inputValue(), '0', 'mode change resets local preview'); assert.equal(await slider.getAttribute('max'), '121.2');
-    await seek(page, 30.3); assert.equal((await readFrame(page)).cycle, '0');
-    await seek(page, 30.6); assert.equal((await readFrame(page)).cycle, '1');
-    assert.ok((await readFrame(page)).widgets.some(w => Number(w.opacity) <= .401), 'dim midpoint is inspectable');
-    await page.getByRole('checkbox', { name: 'Swap places', exact: true }).uncheck(); await seek(page, 120);
+    await page.waitForFunction(motionPreviewModeReady, { seconds: 1234, float: 'step' }, { polling: 10 });
+    assert.equal(await slider.inputValue(), '1234', 'a settings change keeps the slider where it is'); assert.equal(await slider.getAttribute('max'), '3600');
+    const stepped = await page.locator('.grid-ambient').evaluate((el, args) => {
+      const dpr = devicePixelRatio || 1, snap = v => Math.round(v * dpr) / dpr;
+      return { actual: el.querySelector('.widget-grid-plane').style.transform, expected: `translate(${snap(args.x * args.travel * parseFloat(getComputedStyle(el).width))}px, ${snap(args.y * args.travel * parseFloat(getComputedStyle(el).height))}px)` };
+    }, { ...stepPath(1234, 30), travel: FLOAT_TRAVEL });
+    assert.equal(stepped.actual, stepped.expected, 'the same moment now steps, as the display would without Float gently');
+    assert.equal(await page.locator('.grid-ambient').getAttribute('data-swap'), 'dim');
+    await seek(page, 30); assert.equal((await readFrame(page)).cycle, '0');
+    await seek(page, 31); assert.equal((await readFrame(page)).cycle, '1');
+    assert.ok((await readFrame(page)).widgets.some(w => Number(w.opacity) < .99), 'a dim swap is inspectable');
+    await page.getByRole('checkbox', { name: 'Swap places', exact: true }).uncheck();
+    await page.waitForFunction(() => !document.querySelector('.preview-surface .grid-ambient')?.hasAttribute('data-swap'));
+    assert.equal(await slider.inputValue(), '31'); await seek(page, 120);
     assert.equal((await readFrame(page)).cycle, '0');
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await assertNoPersistedWrites();
     assert.deepEqual(await readFrame(live), liveBefore, 'editor clock cannot mutate an already-open display');
-    checks.push('Mode changes reset only the local clock; dim midpoint and swaps-off behavior are correct, Cancel restores settings, and only valid ephemeral display-presence requests occur without persisted writes or live-display changes');
+    checks.push('Settings changes keep the slider position and redraw that moment with the draft settings (stepping without Float gently); dim and swaps-off behavior are correct, Cancel restores settings, and only valid ephemeral display-presence requests occur without persisted writes or live-display changes');
 
-    await seek(page, 31.5);
+    await seek(page, 31);
     if (capture) images.push({ name: 'motion-preview-desktop', bytes: await page.screenshot() });
     for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 740 }]) {
       const mobile = await open('/editor', viewport); const controls = mobile.getByRole('region', { name: 'Movement preview' });
       await controls.scrollIntoViewIfNeeded();
       assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no horizontal page overflow');
-      const targets = await controls.locator('button, select').evaluateAll(elements => elements.map(el => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; }));
-      assert.ok(targets.every(r => r.width >= 40 && r.height >= 44), JSON.stringify(targets));
-      await mobile.getByRole('button', { name: 'Jump to interval 2', exact: true }).click(); assert.equal((await readFrame(mobile)).cycle, '2');
+      const target = await controls.getByRole('slider', { name: 'Movement preview time', exact: true }).evaluate(el => { const r = el.getBoundingClientRect(), time = el.parentElement.querySelector('.motion-preview-time').getBoundingClientRect(); return { width: r.width, height: r.height, sameRow: Math.abs((r.top + r.bottom) / 2 - (time.top + time.bottom) / 2) < 12, timeInside: time.right <= innerWidth }; });
+      assert.ok(target.width >= 160 && target.height >= 44 && target.sameRow && target.timeInside, `a touch-sized slider with the time beside it: ${JSON.stringify(target)}`);
+      await seek(mobile, 60); assert.equal((await readFrame(mobile)).cycle, '2');
       if (capture) images.push({ name: `motion-preview-${viewport.width}`, bytes: await mobile.screenshot({ fullPage: true }) });
       await mobile.getByRole('button', { name: 'Back to layout', exact: true }).click();
       assert.equal(await mobile.getByRole('slider', { name: 'Movement preview time', exact: true }).count(), 0);
@@ -232,9 +239,9 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
     }
     const reduced = await open('/editor', { width: 1280, height: 720 }, 'reduce');
     await seek(reduced, 15); assert.equal((await readFrame(reduced)).plane, 'translate(0px, 0px)');
-    await seek(reduced, 30.6); assert.equal((await readFrame(reduced)).cycle, '1');
+    await seek(reduced, 31); assert.equal((await readFrame(reduced)).cycle, '1');
     assert.equal(await reduced.locator('.grid-ambient').getAttribute('data-float'), 'step');
-    checks.push('320/390px mobile controls fit with touch targets and preserve return/reopen behavior; reduced motion keeps stepped positions and dim swaps');
+    checks.push('320/390px mobile: a touch-sized slider with the time beside it, no page overflow, and return/reopen starts again at 0:00; reduced motion keeps stepped positions and dim swaps');
     assert.deepEqual(errors, []); await assertNoPersistedWrites();
     return { checks, images, crossings };
   } finally {

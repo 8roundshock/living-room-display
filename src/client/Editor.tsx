@@ -413,8 +413,8 @@ export function Editor({
   // #76: the editor's own reduced-motion preference turns its animation off; the canvas replays
   // the entrance once after a level is chosen.
   const editorReducedMotion = usePrefersReducedMotion();
-  const previewTiming = { interval: draft.appearance.motionIntervalSeconds, swaps: draft.appearance.rearrange, floating: draft.appearance.motionEnabled && !editorReducedMotion, glide: draft.appearance.motionEnabled && !editorReducedMotion && draft.appearance.fadeSeconds > 0, fade: draft.appearance.fadeSeconds };
-  const movementClock = useMotionPreview(movementPreview && !layoutEditing, previewTiming, JSON.stringify([previewTiming, draft.widgetGrid, draft.widgets, draft.preview.enabled]));
+  // #686: one hour of movement; the canvas draws it with the draft's motion settings, so it follows every change.
+  const movementClock = useMotionPreview(movementPreview && !layoutEditing);
   const displayControls = useDisplayWindow();
   const [revealNonce, setRevealNonce] = useState(0);
   // Style > Motion reads the Windows power status only once opened (#436).
@@ -1639,7 +1639,7 @@ export function Editor({
             )}
             {layoutEditing && <InfoTip label="About editing the layout">Drag a widget to move it or its corner to resize. Arrow keys work too; Escape cancels a drag.</InfoTip>}
           </div>
-          {movementPreview && !layoutEditing && <MotionPreviewControls clock={movementClock} timing={previewTiming} reducedMotion={editorReducedMotion} />}
+          {movementPreview && !layoutEditing && <MotionPreviewControls clock={movementClock} swaps={draft.appearance.rearrange} />}
           {/* One reserved line for layout messages and the weather note (#231). */}
           <div className="canvas-messages">
             {/* The one live region for layout messages, mounted before any text arrives (#311, #341). */}

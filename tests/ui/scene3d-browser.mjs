@@ -10,8 +10,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openScene, SCENE_CASES, startSceneServer, WEATHER_IDS, WEBGL_ARGS } from './lib/scene-cases.mjs';
-import { SCENE_TRACK, trackPosition } from '../../src/shared/float.ts';
-import { floatOffset } from '../../src/client/scene3d/settings.ts';
+import { FLOAT_TRAVEL, SCENE_TRACK, stepPath, trackPosition } from '../../src/shared/float.ts';
+import { floatOffset, SCENE_CLOCK, sceneLook } from '../../src/client/scene3d/settings.ts';
 
 const VIEWPORT = { width: 640, height: 360 }, BRIGHTNESS = .36, READY = 120_000;
 // A season or holiday scene that has no file under scenes/ yet (and borrows none), read from the folder so that
@@ -193,6 +193,46 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     console.log(`SCENE3D_HANDOVER ${JSON.stringify({ rebuildSeconds: +elapsed.toFixed(3), moved: +Math.hypot(after.float.x - before.float.x, after.float.y - before.float.y).toFixed(4) })}`);
     record('On a quiet date the scene is frozen with nothing in the air, and the float alone moves it on a low-rate timer; a new stage after an interval change continues the float (#675)');
 
+    // ---------- the movement preview's clock (#678), asked of the engine itself ----------
+    const previewed = await page.evaluate(async ({ enginePath, scenePath }) => {
+      const [engine, scene] = await Promise.all([import(enginePath), import(scenePath)]), wait = ms => new Promise(done => setTimeout(done, ms));
+      const until = async (test, ms = 60_000) => { const end = performance.now() + ms; while (!test()) { if (performance.now() > end) throw new Error('timed out'); await wait(20); } };
+      const make = (quiet, preview) => { const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:0;top:0;width:320px;height:180px'; document.body.append(host);
+        const stage = engine.createStage(host, { build: scene.default, ctx: { id: 'canada-day', amount: .06, size: .85, tier: 'special', weather: null, quiet, palette: ['#858f94', '#798788', '#858a90'], seed: 1, day: 1 },
+          look: { glow: .65, shine: .8, seeThrough: 1, timeScale: quiet ? 0 : .125 }, float: { interval: 7, gentle: true }, preview, limits: { maxWidth: 2560, maxHeight: 1440, framesPerSecond: 20 }, clock: { start: 12, still: 14 }, allowSoftware: true });
+        return { stage, done: () => { stage.dispose(); host.remove(); } }; };
+      const sample = stage => { const { float, floatSample, time, preview, frames, floatFrames, running, floating, builds } = stage.stats(); return { float, sample: floatSample, time, preview, frames, floatFrames, running, floating, builds }; };
+      const at = (stage, seconds) => until(() => stage.stats().floatSample?.seconds === seconds);
+      // A running scene made during a preview draws its first frame at the preview's moment, and holds it.
+      const live = make(false, 600), first = sample(live.stage); await wait(500); const held = sample(live.stage);
+      live.stage.setPreview(607); await at(live.stage, 607); const later = sample(live.stage);
+      live.stage.setPreview(600); await at(live.stage, 600); const back = sample(live.stage);
+      live.stage.setPreview(null); await until(() => live.stage.stats().floatSample?.preview === false); const real = sample(live.stage), realNow = (performance.timeOrigin + performance.now()) / 1000;
+      await wait(300); const runningOn = sample(live.stage); live.done();
+      // A quiet date: the scene clock stays frozen and only the float follows the preview, drawn at once with no timer.
+      const quiet = make(true, null), quietly = [sample(quiet.stage)];
+      quiet.stage.setPreview(300); quietly.push(sample(quiet.stage)); quiet.stage.setPreview(303.5); quietly.push(sample(quiet.stage));
+      await wait(700); quietly.push(sample(quiet.stage)); quiet.stage.setPreview(null); quietly.push(sample(quiet.stage)); quiet.done();
+      return { first, held, later, back, real, realNow, runningOn, quietly, left: window.__lrdScene3d.size };
+    }, { enginePath: chunks.engine, scenePath: chunks['canada-day'] });
+    const onTrack = (frame, seconds, gentle = true, interval = 7) => { const expected = floatOffset(trackPosition(seconds, interval, gentle, SCENE_TRACK)); return Math.abs(frame.float.x - expected.x) < 1e-9 && Math.abs(frame.float.y - expected.y) < 1e-9; };
+    { const { first, held, later, back, real, realNow, runningOn, quietly, left } = previewed;
+      assert.ok(first.preview === 600 && first.sample.preview && first.sample.seconds === 600 && onTrack(first, 600) && first.time === SCENE_CLOCK.start + 600 * .125, `a stage made during a preview starts at its moment, float and scene clock: ${JSON.stringify(first)}`);
+      assert.ok(held.running && held.frames === first.frames && held.time === first.time, `a held preview draws nothing new: ${JSON.stringify(held)}`);
+      assert.ok(onTrack(later, 607) && later.time === SCENE_CLOCK.start + 607 * .125 && Math.hypot(later.float.x - first.float.x, later.float.y - first.float.y) > .005, `an interval later the scene has moved and lived on: ${JSON.stringify(later)}`);
+      assert.deepEqual([back.float, back.time], [first.float, first.time], 'seeking back shows the same moment');
+      assert.ok(!real.sample.preview && real.preview === null && Math.abs(real.sample.real - realNow) < 2 && onTrack(real, real.sample.seconds), `after the preview the float is on real time at once: ${JSON.stringify(real)}`);
+      assert.ok(real.time >= back.time && runningOn.time > back.time && runningOn.time - back.time < .2, `and the scene clock carries on from the preview's without a jump: ${back.time} then ${real.time}, ${runningOn.time}`);
+      assert.equal(new Set([first, held, later, back, real, runningOn].map(frame => frame.builds)).size, 1, 'nothing is rebuilt');
+      const [before, three, threeHalf, rested, returned] = quietly;
+      assert.ok(before.floating && !before.sample?.preview, `a quiet stage floats on real time on its timer: ${JSON.stringify(before)}`);
+      assert.ok(three.sample.preview && three.sample.seconds === 300 && onTrack(three, 300) && three.floatFrames === before.floatFrames + 1 && three.time === SCENE_CLOCK.still && !three.floating, `a preview step redraws a quiet stage at once, with its clock still frozen and no timer: ${JSON.stringify(three)}`);
+      assert.ok(threeHalf.sample.seconds === 303.5 && onTrack(threeHalf, 303.5) && rested.floatFrames === threeHalf.floatFrames && rested.time === SCENE_CLOCK.still, `and holds it: ${JSON.stringify([threeHalf, rested])}`);
+      assert.ok(returned.floating && returned.preview === null && returned.time === SCENE_CLOCK.still, `back on real time the timer resumes: ${JSON.stringify(returned)}`);
+      assert.equal(left, 0);
+    }
+    record('The engine follows the movement preview (#678): the float reads the preview time and a running scene clock is that time mapped like real time, a held preview draws nothing new, seeking back repeats a moment, a quiet stage moves only its float, at once, and the end of the preview returns the float to real time at once while the scene clock carries on, all without a rebuild');
+
     // ---------- the editor's still preview: one frame, no loop ----------
     await open({ scene: 'canada-day', path: '/editor' }); await ready();
     const still = await attributes(), [stillStage] = await stages();
@@ -204,6 +244,94 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     const preview = await drawnShare({ clip: await canvas().boundingBox() });
     assert.ok(preview.lit > .01 && preview.coloured > .002, `the single still frame is on screen: ${JSON.stringify(preview)}`);
     record('The editor still preview draws exactly one frame, runs no loop and shows it');
+
+    // ---------- Preview movement (#678, #686): the scene follows the hour slider with the board ----------
+    // The synthetic settings step once per 180 s interval (Float gently off); the board and the scene step at their own boundaries.
+    await open({ scene: 'canada-day', path: '/editor', viewport: { width: 1280, height: 720 } }); await ready();
+    await page.getByRole('button', { name: 'Preview movement', exact: true }).click();
+    await page.waitForFunction(() => { const stats = [...(window.__lrdScene3d ?? [])][0]?.stats(); return stats && !stats.frozen && stats.preview === 0; }, null, { timeout: READY });
+    const previewCanvas = await canvas().elementHandle(), timeScale = sceneLook('canada-day', 'special').timeScale;
+    const moment = async seconds => {
+      await page.getByRole('slider', { name: 'Movement preview time', exact: true }).evaluate((input, value) => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, String(value));
+        input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, seconds);
+      await page.waitForFunction(value => { const stats = [...window.__lrdScene3d][0]?.stats(); return stats?.preview === value && stats.floatSample?.seconds === value && document.querySelector('.preview-surface .grid-ambient')?.getAttribute('data-preview-seconds') === value.toFixed(3); }, seconds, { timeout: READY });
+      const board = await page.locator('.preview-surface .grid-ambient').evaluate(el => ({ plane: el.querySelector('.widget-grid-plane').style.transform, width: parseFloat(getComputedStyle(el).width), height: parseFloat(getComputedStyle(el).height), dpr: devicePixelRatio || 1 }));
+      const step = stepPath(seconds, 180), snap = value => Math.round(value * board.dpr) / board.dpr;
+      return { stage: (await stages())[0], plane: board.plane, expectedPlane: `translate(${snap(step.x * FLOAT_TRAVEL * board.width)}px, ${snap(step.y * FLOAT_TRAVEL * board.height)}px)` };
+    };
+    const seen = {};
+    for (const seconds of [600, 780, 1500]) {
+      const { stage, plane, expectedPlane } = seen[seconds] = await moment(seconds);
+      assert.ok(stage.floatSample.preview && onTrack(stage, seconds, false, 180), `at ${seconds} s the scene is where its track puts it on the preview clock: ${JSON.stringify(stage.float)}`);
+      assert.equal(stage.time, SCENE_CLOCK.start + seconds * timeScale, `at ${seconds} s the scene's own clock is that moment's`);
+      assert.equal(plane, expectedPlane, `at ${seconds} s the board is where the display would put it`);
+    }
+    const apart = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    assert.ok(apart(seen[600].stage.float, seen[780].stage.float) > .005 && seen[600].plane !== seen[780].plane, `an interval apart, the scene and the board have both moved: ${JSON.stringify([seen[600].stage.float, seen[780].stage.float, seen[600].plane, seen[780].plane])}`);
+    const resting = (await stages())[0]; await page.waitForTimeout(1000); const rested = (await stages())[0];
+    assert.ok(rested.running && rested.frames === resting.frames && rested.time === resting.time && apart(rested.float, resting.float) === 0, `a resting slider holds the scene and draws nothing new: ${JSON.stringify([resting.frames, rested.frames])}`);
+    const again = await moment(600);
+    assert.deepEqual([again.stage.float, again.stage.time, again.plane], [seen[600].stage.float, seen[600].stage.time, seen[600].plane], 'seeking back shows the same moment');
+    // The slider follows the draft (#686): Float gently on keeps the moment and eases the scene and the board on it.
+    await page.getByRole('tab', { name: 'Style', exact: true }).click(); await page.locator('summary', { hasText: 'Motion' }).click();
+    await page.getByRole('checkbox', { name: 'Float gently', exact: true }).check();
+    await page.waitForFunction(() => document.querySelector('.preview-surface .grid-ambient')?.getAttribute('data-float') === 'float');
+    await page.waitForFunction(({ seconds, expected }) => { const stats = [...window.__lrdScene3d][0]?.stats(); return stats?.floatSample?.seconds === seconds && Math.abs(stats.float.x - expected.x) < 1e-9 && Math.abs(stats.float.y - expected.y) < 1e-9; },
+      { seconds: 600, expected: floatOffset(trackPosition(600, 180, true, SCENE_TRACK)) }, { timeout: READY });
+    assert.equal(await page.getByRole('slider', { name: 'Movement preview time', exact: true }).inputValue(), '600', 'the slider stays at its moment');
+    const eased = (await stages())[0];
+    assert.ok(await previewCanvas.evaluate(node => node.isConnected) && (await stages()).length === 1 && eased.builds === 1, `one stage, one canvas and one build for the whole preview: ${JSON.stringify({ stages: (await stages()).length, builds: eased.builds })}`);
+    await page.getByRole('button', { name: 'Back to layout', exact: true }).click();
+    await page.waitForFunction(() => { const stats = [...(window.__lrdScene3d ?? [])][0]?.stats(); return stats?.frozen && stats.preview === null && stats.float.x === 0 && stats.float.y === 0; }, null, { timeout: READY });
+    assert.equal((await stages()).length, 1, 'back to layout: the still preview again, and no context left behind');
+    record('Preview movement moves the 3D scene with the board on the hour slider: at each moment the float and the scene clock are that moment’s, an interval apart both have moved, a resting slider draws nothing new, seeking back repeats a moment, a settings change keeps the moment, all in one stage and context; Back to layout returns the still preview');
+    // A windy moment (#646): the gust the scene leans and sways with (Canada Day's flag flies harder, its bunting leans) is a
+    // function of the scene clock, so the preview drives it, and a moment draws the same picture however it is reached. The
+    // float is held, so only the scene's own life differs. SwiftShader redraws a frame bit for bit; a GPU's multisampled
+    // coverage need not (measured 2026-11-12 on a GTX 1080 Ti: up to about 160 pixels at 2/255 for the same frame drawn
+    // twice), so a seek back may differ from the first frame by no more than redrawing that frame does.
+    await open({ scene: 'canada-day', weather: 'wind', path: '/editor', viewport: { width: 1280, height: 720 } }); await ready();
+    await page.getByRole('button', { name: 'Preview movement', exact: true }).click();
+    await page.waitForFunction(() => { const stats = [...(window.__lrdScene3d ?? [])][0]?.stats(); return stats && !stats.frozen && stats.preview === 0; }, null, { timeout: READY });
+    assert.equal((await attributes()).sceneWeather, 'wind', 'Canada Day under the wind overlay');
+    await page.evaluate(() => [...window.__lrdScene3d][0].holdFloat({ x: 0, y: 0 }));
+    const windyBox = await canvas().boundingBox();
+    const picture = async () => {
+      const style = await page.addStyleTag({ content: '.ambient-content{visibility:hidden!important}.ambient-theme{opacity:1!important}.scene3d-canvas{animation:none!important}' });
+      await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+      const shot = (await page.screenshot({ clip: windyBox })).toString('base64'); await style.evaluate(node => node.remove()); return shot;
+    };
+    const windy = async seconds => {
+      const before = (await stages())[0].frames;
+      await page.getByRole('slider', { name: 'Movement preview time', exact: true }).evaluate((input, value) => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, String(value));
+        input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, seconds);
+      await page.waitForFunction(({ value, seen }) => { const stats = [...window.__lrdScene3d][0]?.stats(); return stats?.preview === value && stats.frames > seen; }, { value: seconds, seen: before }, { timeout: READY });
+      return { shot: await picture(), stats: (await stages())[0] };
+    };
+    const pixelDiff = (a, b) => page.evaluate(async ([one, two]) => {
+      const read = async base64 => { const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), character => character.charCodeAt(0))], { type: 'image/png' }));
+        const context = new OffscreenCanvas(bitmap.width, bitmap.height).getContext('2d'); context.drawImage(bitmap, 0, 0); return context.getImageData(0, 0, bitmap.width, bitmap.height).data; };
+      const [p, q] = await Promise.all([read(one), read(two)]); let differing = 0, most = 0;
+      for (let i = 0; i < p.length; i += 4) { const d = Math.max(Math.abs(p[i] - q[i]), Math.abs(p[i + 1] - q[i + 1]), Math.abs(p[i + 2] - q[i + 2])); if (d) { differing++; most = Math.max(most, d); } }
+      return { differing, most };
+    }, [a, b]);
+    const gustA = await windy(600);
+    await page.evaluate(() => [...window.__lrdScene3d][0].holdFloat({ x: 0, y: 0 })); const redrawn = await picture(), noise = await pixelDiff(gustA.shot, redrawn);
+    const gustB = await windy(613), gustAgain = await windy(600);
+    await page.waitForTimeout(1000); const gustHeld = (await stages())[0];
+    const moved = await pixelDiff(gustA.shot, gustB.shot), returned = await pixelDiff(gustA.shot, gustAgain.shot);
+    console.log(`SCENE3D_WINDY_PREVIEW ${JSON.stringify({ noise, returned, moved })}`);
+    assert.equal(gustA.stats.time, SCENE_CLOCK.start + 600 * timeScale); assert.equal(gustB.stats.time, SCENE_CLOCK.start + 613 * timeScale);
+    if (!gpu) assert.deepEqual([noise.differing, returned.differing], [0, 0], 'on SwiftShader a windy moment draws exactly the same picture however it is reached');
+    assert.ok(returned.differing <= 2 * noise.differing + 10 && returned.most <= Math.max(2, noise.most), `back at the same moment the windy scene differs no more than redrawing that frame does: ${JSON.stringify({ noise, returned })}`);
+    assert.ok(moved.differing > 50 * (returned.differing + 20), `thirteen seconds later the windy scene has moved on its own (flag, bunting, sway): ${JSON.stringify(moved)}`);
+    assert.ok(gustHeld.frames === gustAgain.stats.frames && gustHeld.time === gustAgain.stats.time, `a resting slider holds the windy scene: ${JSON.stringify([gustAgain.stats.frames, gustHeld.frames])}`);
+    await page.evaluate(() => [...window.__lrdScene3d][0].holdFloat(null));
+    record(`Under Combined wind (#646) the preview drives the scene's gust too: a windy moment draws the same picture however it is reached (${gpu ? `within the GPU's own redraw noise, ${returned.differing} pixels` : 'bit for bit'}), 13 s later ${moved.differing} pixels differ, and a resting slider holds it`);
 
     // ---------- Transparency (#670): the Style slider retunes the live stage in place ----------
     // At 1280 x 720 the preview and the Style panel are side by side, so the slider and the frame are both on screen.

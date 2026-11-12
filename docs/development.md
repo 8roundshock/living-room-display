@@ -170,14 +170,12 @@ elapsed age rather than assuming the fixture is still within the first hour.
 
 ## Browser suites
 
-The movement-preview mode-reset step (#537) waits for both the native range and
-rendered local frame to reach zero with Play paused after changing Float gently.
-Its range maximum can commit before React's passive reset. Controlled callback
-breakpoints reproduce that intermediate state on unchanged baseline clients;
-the readiness predicate remains pending until the real reset runs. Keep the exact
-value/frame assertions and frozen clocks; do not replace this with a delay,
-time advancement or a weaker tolerance. The separate Clock entrance barrier
-(#530) covers CSS reveal timing, not this local-clock reset.
+The movement preview is one hour slider (#686) and a settings change no longer resets
+it, so the #537 mode-reset readiness step is gone. Its replacement waits, with the
+frozen clocks, for the native range and the rendered frame to show the same moment in
+the new mode (`motionPreviewModeReady`, after unchecking Float gently) before its exact
+value/frame assertions; do not replace this with a delay, time advancement or a weaker
+tolerance. The separate Clock entrance barrier (#530) covers CSS reveal timing.
 
 The `tests/ui/*-browser.mjs` suites drive the built app in headless Microsoft Edge
 through Playwright. Each starts its own loopback server on an ephemeral port with

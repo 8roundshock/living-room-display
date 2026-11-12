@@ -29,6 +29,34 @@ const floatClock = () => (performance.timeOrigin + performance.now()) / 1000;
 const floatOrigins = new Map();
 const originOf = interval => floatOrigins.get(interval) ?? 0;
 
+/**
+ * A stage's clocks (#678). The scene clock (`time`, what ticks are given) starts at `start` and runs at
+ * `timeScale` of real time, or stays at `still` when frozen (a still preview, a quiet date). The float's
+ * track time is real seconds since the epoch less its interval's origin. While the editor's movement
+ * preview is shown, its time drives both: the float reads it as the track time, as the board reads it,
+ * and a running scene clock is `start + preview × timeScale`, real time mapped the same way, so a seek
+ * shows the scene's life at that moment and a held preview holds it. A frozen clock never moves. When
+ * the preview ends the float reads real time again at once (as the board does) and the scene clock
+ * carries on from where the preview left it, so its life does not jump.
+ */
+export function stageClock({ frozen, start, still, timeScale }) {
+  let time = frozen ? still : start, preview = null;
+  return {
+    get time() { return time; },
+    /** The preview time in seconds, or null on real time. */
+    get preview() { return preview; },
+    /** Real time since the last frame in seconds, counted up to 0.1. Nothing moves while a preview is shown. */
+    advance(seconds) { if (!frozen && preview === null) time += Math.min(.1, seconds) * timeScale; },
+    /** Follow the preview at `seconds` (clamped at 0), or real time again for anything that is not a finite number. */
+    follow(seconds) {
+      preview = typeof seconds === 'number' && Number.isFinite(seconds) ? Math.max(0, seconds) : null;
+      if (preview !== null && !frozen) time = start + preview * timeScale;
+    },
+    /** The float's track time at real seconds `real` for an interval whose origin is `origin`. */
+    track(real, origin) { return preview ?? real - origin; },
+  };
+}
+
 /** Live stages, for tests and tools: each has stats() and measure(). Also at window.__lrdScene3d. */
 export const liveStages = new Set();
 if (typeof window !== 'undefined') window.__lrdScene3d = liveStages;
@@ -47,7 +75,7 @@ function disposeObjects(root) {
  * Draw a scene into `host`. Throws if WebGL or the scene module fails; the caller falls back
  * to the flat renderer. After a successful start, a later failure calls `onFail` once.
  */
-export function createStage(host, { build, overlay = null, ctx: given, look: initialLook, still = false, float: initialFloat = null, limits, clock, allowSoftware = false, onFail = () => {} }) {
+export function createStage(host, { build, overlay = null, ctx: given, look: initialLook, still = false, float: initialFloat = null, preview: initialPreview = null, limits, clock: clockSettings, allowSoftware = false, onFail = () => {} }) {
   const canvas = document.createElement('canvas'); canvas.className = 'scene3d-canvas'; canvas.setAttribute('aria-hidden', 'true');
   let look = { seeScale: 1, ...initialLook };
   const frozen = still || !(look.timeScale > 0), interval = 1000 / limits.framesPerSecond;
@@ -55,10 +83,15 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   // on with motion allowed), or null for a still preview, which stays at the centre. `held` pins a
   // position for tools.
   let float = still ? null : initialFloat, held = null, shown = { x: 0, y: 0 }, floatTimer = 0, floatFrames = 0, floatSample = null;
+  // The scene clock and the float's track time; the editor's movement preview drives both (#678). A still stage ignores it.
+  const clock = stageClock({ frozen, start: clockSettings.start, still: clockSettings.still, timeScale: look.timeScale });
+  if (!still) clock.follow(initialPreview);
+  // The preview time of the last drawn frame: a held preview draws nothing new until it or the float settings change.
+  let drawnPreview = null;
   const zoomMatrix = new T.Matrix4();
   let renderer = null, gl = null, made = null, scene = null, camera = null, observer = null, pending = null, retired = null;
-  let disposed = false, raf = 0, rebuildTimer = 0, retuneTimer = 0, frames = 0, builds = 0, time = frozen ? clock.still : clock.start, lastRender = 0, builtAspect = 0, buildMs = 0, frameMs = 0, gpuMs = 0, slowRun = 0;
-  const stage = { dispose, stats, measure, retune, setFloat, holdFloat };
+  let disposed = false, raf = 0, rebuildTimer = 0, retuneTimer = 0, frames = 0, builds = 0, lastRender = 0, builtAspect = 0, buildMs = 0, frameMs = 0, gpuMs = 0, slowRun = 0;
+  const stage = { dispose, stats, measure, retune, setFloat, setPreview, holdFloat };
 
   function release(old) { if (old.scene) disposeObjects(old.scene); old.made?.dispose(); }
   function clear() { if (retired) release(retired); retired = null; release({ scene, made }); scene = null; made = null; }
@@ -88,12 +121,13 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
     camera.aspect = host.clientWidth / host.clientHeight; camera.updateProjectionMatrix();
     return true;
   }
-  /** Where the float puts the picture now, in normalised device coordinates, and the clocks it was read at. */
+  /** Where the float puts the picture now, in normalised device coordinates, and the clocks it was read at
+   * (the track time is the movement preview's while one is shown, #678). */
   function floatTarget() {
     if (held) return { offset: floatOffset(held), sample: null };
     if (!float) return { offset: { x: 0, y: 0 }, sample: null };
-    const real = floatClock(), seconds = real - originOf(float.interval);
-    return { offset: floatOffset(trackPosition(seconds, float.interval, float.gentle, SCENE_TRACK)), sample: { real, seconds } };
+    const real = floatClock(), seconds = clock.track(real, originOf(float.interval));
+    return { offset: floatOffset(trackPosition(seconds, float.interval, float.gentle, SCENE_TRACK)), sample: { real, seconds, preview: clock.preview !== null } };
   }
   /** The camera's projection, then the float: the picture is zoomed about the screen's centre and moved,
    * every pixel alike, as the board is (a projection change, so depth and parallax are untouched). */
@@ -105,7 +139,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   }
   function draw() {
     const started = performance.now();
-    made.animate(time); frame(floatTarget());
+    made.animate(clock.time); frame(floatTarget()); drawnPreview = clock.preview;
     renderer.render(scene, camera);
     if (retired) { release(retired); retired = null; }
     frameMs = performance.now() - started; frames += 1;
@@ -126,17 +160,21 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
     if (!gpuReady()) return;
     if (slowRun >= SLOW_FRAMES && !allowSoftware) { fail(new Error('The GPU is too slow for the 3D scene')); return; }
     const elapsed = now - lastRender; if (elapsed < interval - 4) return;
-    lastRender = now; time += Math.min(.1, elapsed / 1000) * look.timeScale;
+    lastRender = now;
+    // A movement preview held at one moment (#678): the frame on screen is already that moment's.
+    if (clock.preview !== null && clock.preview === drawnPreview) return;
+    clock.advance(elapsed / 1000);
     guarded(() => { draw(); if (gl.fenceSync) { pending = { sync: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0), at: performance.now() }; gl.flush(); } });
   }
   /** A scene with its clock stopped (a quiet date) is drawn again only when the float has moved it:
-   * at most four checks a second while it eases, one wake at each step without Float gently. */
+   * at most four checks a second while it eases, one wake at each step without Float gently. Under a
+   * movement preview it is checked when the preview moves (setPreview), not on a timer. */
   function floatLoop() {
     floatTimer = 0;
     if (disposed || document.hidden || !frozen || !(float || held)) return;
     const next = floatTarget().offset, size = renderer.getSize(new T.Vector2());
     if (Math.abs(next.x - shown.x) * size.x / 2 >= FLOAT_MIN_PIXELS || Math.abs(next.y - shown.y) * size.y / 2 >= FLOAT_MIN_PIXELS) { guarded(draw); floatFrames += 1; }
-    if (disposed || !float || held) return;
+    if (disposed || !float || held || clock.preview !== null) return;
     const seconds = floatClock() - originOf(float.interval), boundary = (Math.floor(seconds / float.interval + SCENE_TRACK.phase) + 1 - SCENE_TRACK.phase) * float.interval;
     floatTimer = setTimeout(floatLoop, float.gentle ? FLOAT_CHECK_MS : Math.max(FLOAT_CHECK_MS, (boundary - seconds) * 1000 + 5));
   }
@@ -174,8 +212,17 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
     if (disposed || still || !next) return;
     if (float && next.interval === float.interval && next.gentle === float.gentle) return;
     if (float && next.interval !== float.interval) { const now = floatClock(); floatOrigins.set(next.interval, now - (now - originOf(float.interval)) * next.interval / float.interval); }
-    float = { interval: next.interval, gentle: next.gentle };
+    float = { interval: next.interval, gentle: next.gentle }; drawnPreview = null;
     if (frozen) { stop(); start(); }
+  }
+  /** The editor's movement-preview time in seconds (#678), or null to return to real time. The float and
+   * a running scene clock follow it at the next frame; a frozen stage is checked at once. A still stage
+   * ignores it. Nothing is rebuilt and no context is made. */
+  function setPreview(seconds) {
+    if (disposed || still) return;
+    const before = clock.preview; clock.follow(seconds);
+    if (clock.preview === before) return;
+    if (frozen) { clearTimeout(floatTimer); floatTimer = 0; floatLoop(); }
   }
   /** For tools and tests: pin the float at a track position in [-1, 1]² (null resumes it) and draw. */
   function holdFloat(unit) {
@@ -194,7 +241,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   }
   function stats() {
     const size = renderer && !disposed ? renderer.getSize(new T.Vector2()) : { x: 0, y: 0 }, info = renderer?.info;
-    return { frames, builds, running: raf !== 0, frozen, disposed, time, buildMs, frameMs, gpuMs, seeScale: look.seeScale,
+    return { frames, builds, running: raf !== 0, frozen, disposed, time: clock.time, preview: clock.preview, buildMs, frameMs, gpuMs, seeScale: look.seeScale,
       floating: !disposed && (raf !== 0 || floatTimer !== 0), float: { ...shown }, floatSample, zoom: SCENE_FLOAT.zoom, floatFrames, surfaces: made?.surfaces() ?? { solid: 0, clear: 0 }, backing: [size.x, size.y], triangles: info?.render.triangles ?? 0, calls: info?.render.calls ?? 0, geometries: info?.memory.geometries ?? 0, textures: info?.memory.textures ?? 0, programs: info?.programs?.length ?? 0 };
   }
   /** Developer measurement: draw `count` frames back to back. `script` is the main-thread time per
@@ -203,7 +250,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
     if (disposed) return null;
     const pixel = new Uint8Array(4); let script = 0, finished = 0;
     for (let i = 0; i < count; i++) {
-      const started = performance.now(); time += look.timeScale / limits.framesPerSecond; made.animate(time); renderer.render(scene, camera);
+      const started = performance.now(); clock.advance(1 / limits.framesPerSecond); made.animate(clock.time); renderer.render(scene, camera);
       const submitted = performance.now(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
       script += submitted - started; finished += performance.now() - started;
     }

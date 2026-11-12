@@ -1,5 +1,41 @@
 # Project status
 
+## Movement preview: one hour slider, and the 3D scene moves with it — 2026-11-12 (#686, #678)
+
+Source candidate, not installed. Owner report: "does preview movement work for the scenes?
+from my testing they stay still while all other elements move." Owner direction: "also for the
+preview movement, no need for the intervals, can just be a preset slider with an hour and the
+person can scrub through, and just matches to your settings to show what it would look like."
+
+What changed:
+- Preview movement in the editor is one slider over an hour (0:00 to 60:00, one-second steps)
+  with the moment beside it and one line of explanation. Arrow keys move 5 s, Page Up and
+  Page Down a minute. Play/Pause, the one-second buttons, the 4/12/24-interval window and the
+  per-interval jump buttons are gone; nothing else used them except two browser checks.
+- The slider follows the settings being edited: changing the interval, Float gently, Swap
+  places or its fade keeps the moment and shows it with the new settings (it used to reset to
+  the start). It starts at 0:00 each time the preview opens.
+- The 3D scene now moves with the board and the widgets in the preview (#678 part 1): its
+  float reads the preview's time, and its own clock (sway, falling leaves) shows that moment.
+  A resting slider draws nothing new. A quiet date keeps its frozen scene and only floats.
+  Leaving the preview returns the float to real time at once, as the board does. The display,
+  and the editor outside the preview, are unchanged.
+- A moment in the preview now looks the same however it was reached: each widget's content
+  is measured after its glyph loops are set to that moment (a far seek and back could leave a
+  widget one pixel off before).
+
+Details: [Ambient themes](docs/ambient-themes.md#float-675-owner-direction-2026-11-12),
+[UI](docs/ui.md), [product](docs/product.md#movement-and-oled-considerations).
+
+Verified with source builds and synthetic data only: both typechecks and the build, the unit
+tests (the stage's preview clock, the hour and its label), the `motion-preview` suite (one
+slider, keyboard steps, seeks across the hour and back, settings changes keep the moment, no
+saved writes), the `scene3d` suite on SwiftShader and on the GPU (the engine and the editor's
+slider move the scene with the board, a resting slider draws nothing new, one stage and
+context), and the `widgets` and `screen` suites. Not verified: installation and the TV. Part
+2 of #678 (point sprites under the float's zoom) is not done; a far jump at a 30 s interval
+with Swap places and many widgets may pause the editor for about a second (#690).
+
 ## The scenes respond to the weather over them — 2026-11-12 (#646)
 
 Source candidate, not installed. The owner asked whether scene elements sway with the motion and
