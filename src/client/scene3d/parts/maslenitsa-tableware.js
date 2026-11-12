@@ -11,8 +11,14 @@ export function plate(kit, { radius = 1.6, colour = 0xf3ecdd, line = 0xc9973a, f
   const base = foot ? [[0, 0], [.36, 0], [.38, .018], [.34, .04], [.2, foot * .55], [.19, foot * .8], [.3, foot], [.5, foot + .012]] : [[0, 0], [.5, 0], [.56, .02]];
   const lift = foot ? foot - .008 : 0, profile = [...base, [.8, lift + .07], [.97, lift + .115], [1, lift + .13], [1.006, lift + .142], [.992, lift + .15], [.955, lift + .14], [.8, lift + .095], [.62, lift + .05], [.52, lift + .04], [0, lift + .04]];
   const lip = base.length + 3, last = profile.length - 1;
-  const glaze = kit.canvasTexture(8, 256, g => { g.fillStyle = css(kit, colour); g.fillRect(0, 0, 8, 256); g.fillStyle = css(kit, line); g.fillRect(0, 256 * (1 - (lip + 1.6) / last), 8, 256 * 1.1 / last); });
-  const mesh = new kit.T.Mesh(turned(kit, profile, 72), kit.mat({ map: glaze, roughness: .2, clearcoat: 1, clearcoatRoughness: .08 }, .9));
+  // The glaze has a faint speckle and the painted line is hand-drawn, not printed (#691).
+  const glaze = kit.canvasTexture(256, 256, g => {
+    g.fillStyle = css(kit, colour); g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 420; i++) { g.fillStyle = `rgba(${kit.rnd(i, 3) < .6 ? '120,96,60' : '255,250,240'},${.08 + kit.rnd(i, 4) * .14})`; g.beginPath(); g.arc(kit.rnd(i, 5) * 256, kit.rnd(i, 6) * 256, .5 + kit.rnd(i, 7) * 1.2, 0, 7); g.fill(); }
+    g.fillStyle = css(kit, line); for (let x = 0; x < 256; x += 2) g.fillRect(x, 256 * (1 - (lip + 1.6) / last) + Math.sin(x * .09) * 1.2, 2, 256 * 1.1 / last * (.85 + .3 * kit.rnd(x, 8)));
+  }, { anisotropy: 4 });
+  // Glazed ceramic is really glossy, so it keeps a coat, softly.
+  const mesh = new kit.T.Mesh(turned(kit, profile, 72), kit.mat({ map: glaze, roughness: .35, clearcoat: .45, clearcoatRoughness: .25, gloss: true }, .5));
   mesh.scale.setScalar(radius); mesh.userData.top = (lift + .04) * radius;
   return mesh;
 }
@@ -43,7 +49,7 @@ export function clayBowl(kit, { radius = .36, glaze = 0x4c98bc, inside = 0xe9eef
     // Under what the bowl holds the inside is as dark as the outside, so nothing pale shows through the wall.
     g.fillStyle = css(kit, kit.mix(glaze, 0x000000, .3)); g.fillRect(0, 0, 8, y(10.4));
   });
-  const mesh = new kit.T.Mesh(turned(kit, profile, 56), kit.mat({ map: paint, roughness: .22, clearcoat: 1, clearcoatRoughness: .1, emissiveMap: paint, emissive: 0xffffff, emissiveIntensity: .14 }, .9));
+  const mesh = new kit.T.Mesh(turned(kit, profile, 56), kit.mat({ map: paint, roughness: .38, clearcoat: .45, clearcoatRoughness: .25, gloss: true, emissiveMap: paint, emissive: 0xffffff, emissiveIntensity: .12 }, .5));
   mesh.scale.setScalar(radius); mesh.userData.fill = .78 * radius; mesh.userData.inner = .88 * radius;
   return mesh;
 }

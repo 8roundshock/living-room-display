@@ -1,6 +1,7 @@
-// Art-glass pumpkins of the Halloween scene (#608): a ribbed, dimpled body in clear-coated
-// glass with a twisted stem, optionally carved with a calm face and lit from inside. See
-// ../README.md, "Shared parts".
+// Pumpkins of the Halloween scene (#608): a ribbed, dimpled body with a twisted stem, optionally
+// carved with a calm face and lit from inside. Until #691 they were clear-coated art glass; the
+// owner found them "too shiny" (2026-11-12), so the skin is now a pumpkin's: matte and waxy, with
+// fine streaks along the ribs, and the stem is dry. See ../README.md, "Shared parts".
 import { loft, through, smoothSeam } from './thanksgiving-loft.js';
 
 /** The carved face on the body's alpha map (1024 x 512, the face centred on the side that faces
@@ -29,10 +30,17 @@ export function pumpkin(kit, { colour = 0xff8a1f, width = 1.5, height = 1.1, rib
     const out = Math.pow(flat, .85) * (1 - groove * uneven * (1 - swell) * Math.min(1, flat * 1.8)) / (flat || 1);
     const dimple = (y > 0 ? TOP : -BOTTOM) * Math.exp(-Math.pow(flat / .32, 2));
     p.setXYZ(i, x * out * width / 2, ((y - dimple) / CROWN + 1) * height / 2, z * out * width / 2);
-    const shade = .42 + .58 * swell; tone[i * 3] = tone[i * 3 + 1] = tone[i * 3 + 2] = shade;
+    const shade = .3 + .7 * Math.pow(swell, .8); tone[i * 3] = tone[i * 3 + 1] = tone[i * 3 + 2] = shade;   // darker in the creases, so the ribs read on a matte skin
   }
   geometry.setAttribute('color', new T.BufferAttribute(tone, 3)); smoothSeam(kit, geometry, columns);
-  const glass = { color: colour, vertexColors: true, roughness: .12, metalness: 0, clearcoat: 1, clearcoatRoughness: .06, see };
+  // The skin: fine streaks that run along the ribs and a few small blemishes, in its relief only.
+  const skin = kit.canvasTexture(512, 256, g => {
+    g.fillStyle = '#808080'; g.fillRect(0, 0, 512, 256);
+    for (let i = 0; i < 1100; i++) { const value = rnd(i, salt + 44) < .5 ? 96 : 168; g.fillStyle = `rgba(${value},${value},${value},${.2 + rnd(i, salt + 45) * .3})`; g.fillRect(rnd(i, salt + 41) * 512, rnd(i, salt + 42) * 256, 1 + rnd(i, salt + 46) * 1.5, 6 + rnd(i, salt + 43) * 44); }
+    for (let i = 0; i < 40; i++) { g.fillStyle = 'rgba(70,70,70,.35)'; g.beginPath(); g.arc(rnd(i, salt + 47) * 512, rnd(i, salt + 48) * 256, 1 + rnd(i, salt + 49) * 2.5, 0, 7); g.fill(); }
+  }, { srgb: false, repeat: true });
+  // Matte and waxy: a broad soft sheen, no clear coat.
+  const glass = { color: colour, vertexColors: true, roughness: .62, metalness: 0, bumpMap: skin, bumpScale: .006, see };
   if (carved) Object.assign(glass, { alphaMap: kit.canvasTexture(1024, 512, face, { srgb: false, anisotropy: 4 }), alphaTest: .5 });
   group.add(new T.Mesh(geometry, kit.mat(glass, 1.15)));
 
@@ -52,7 +60,8 @@ export function pumpkin(kit, { colour = 0xff8a1f, width = 1.5, height = 1.1, rib
   // A twisted five-sided stem rising from the top dimple and bending over.
   const [lean, tall] = stem, crown = height * ((1 - TOP) / CROWN + 1) / 2, w = Math.min(width, height * 1.3) * .5;
   const stalk = through(kit, [[0, crown - .04 * w, 0], [lean * .03 * w, crown + .22 * w * tall, .02 * w], [lean * .16 * w, crown + .42 * w * tall, .05 * w], [lean * .4 * w, crown + .5 * w * tall, .08 * w]]);
-  const bronze = kit.mat({ color: 0x5f7a4a, roughness: .42, metalness: .45, flatShading: true }, .9, false);
+  // A dry, ridged stem: grey-green going to tan, matte.
+  const bronze = kit.mat({ color: 0x7c7650, roughness: .9, metalness: 0, flatShading: true, own: .12 }, .2, false);
   group.add(new T.Mesh(loft(kit, stalk, u => w * (.085 - .035 * u + .09 * Math.exp(-u * 9)) * Math.min(1, Math.sqrt((1 - u) / .05)), { rings: 22, sides: 5, twist: .7 }), bronze));
   if (tendril) {
     const points = []; for (let k = 0; k <= 60; k++) { const s = k / 60, a = s * Math.PI * 7, r = .07 * w * (1 - .45 * s); points.push([-lean * (.05 + .75 * s) * w + Math.cos(a) * r * .5, crown + .06 * w + s * .12 * w + Math.sin(a) * r, .12 * w + .2 * s * w + Math.cos(a) * r]); }

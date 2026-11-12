@@ -70,7 +70,7 @@ Chosen in the picker for its "All together" compositions, and held as named cons
 | Size | 85% | `ctx.size`: object radius and length, not position. The scene float's 4.3% zoom (#675) draws everything that much larger on screen, so the framing is about 89% of the picker's. |
 | Glow | 65% | Strength of halos and soft light discs. |
 | Motion | 5% | The scene clock runs at 5/40 of the picker's default speed, one eighth of real time. |
-| Shine | 80% | Strength of the studio reflections. |
+| Shine | 80%, then 30% | Strength of the studio reflections. Lowered on 2026-11-12 (#691), owner: "some things like the pumpkins are too shiny". |
 | See-through | 100% | A lit body thins to glass; its rim and highlights stay. This is the standard 50% of the [Transparency](#transparency-670-owner-request-2026-11-11) setting. Since #683 that is a look against the black only: an object hides what is behind it unless it is [clear](#solid-and-clear-683-owner-direction-2026-11-12). |
 | Fade to middle | 60% | The picker's radial mask: full strength at the edges, 40% in the middle. |
 

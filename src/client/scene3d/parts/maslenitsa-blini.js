@@ -22,7 +22,8 @@ function lace(kit, salt) {
 /** One blin as a thin disc lying on y = 0 (its top surface): a wavy rim that droops a little, darker at the edge. */
 function blin(kit, { radius, thickness, salt, tone = 1 }) {
   const { T, C, rnd } = kit, around = 56, rings = [0, .36, .66, .86, .95, 1, 1, .93], position = [], colour = [], uv = [], index = [];
-  const pale = C(0xfff0d0).multiplyScalar(tone), crust = C(0xa9682a).multiplyScalar(tone), edge = C(0xdca458).multiplyScalar(tone);
+  // Golden, from a photo of blini on a plate (#691: hue about 33 degrees, saturation 0.7): a warm pale centre, a browner crust and rim.
+  const pale = C(0xf8cf86).multiplyScalar(tone), crust = C(0xb4621e).multiplyScalar(tone), edge = C(0xe39c4c).multiplyScalar(tone);
   const phases = [rnd(1, salt) * 6, rnd(2, salt) * 6, rnd(3, salt) * 6, rnd(4, salt) * 6];
   rings.forEach((ring, i) => {
     for (let j = 0; j <= around; j++) {
@@ -63,19 +64,22 @@ export function bliniStack(kit, { count = 20, radius = 1.2, thickness = .034, dr
     geometry.dispose();
   }
   const all = new T.BufferGeometry(); all.setAttribute('position', new T.Float32BufferAttribute(position, 3)); all.setAttribute('color', new T.Float32BufferAttribute(tones, 3)); all.setAttribute('uv', new T.Float32BufferAttribute(uvs, 2)); all.setIndex(index); all.computeVertexNormals();
-  const fried = lace(kit, seed), crumb = kit.mat({ map: fried, bumpMap: fried, bumpScale: .012, vertexColors: true, roughness: .55, clearcoat: .35, clearcoatRoughness: .45, emissive: 0xd08a2a, emissiveIntensity: .1 }, .45);
+  // Matte, as fried batter is (#691): no coat; it holds more of its own warm colour than a plain surface.
+  const fried = lace(kit, seed), crumb = kit.mat({ map: fried, bumpMap: fried, bumpScale: .016, vertexColors: true, roughness: .75, emissive: 0xd08a2a, emissiveIntensity: .08, own: .3 }, .25);
   group.add(new T.Mesh(all, crumb));
 
   // ---------- butter: a soft block slumping into its own melted pool ----------
   const block = new T.SphereGeometry(1, 24, 16), p = block.attributes.position, soft = value => Math.sign(value) * Math.pow(Math.abs(value), .42);
   for (let i = 0; i < p.count; i++) { const y = soft(p.getY(i)), slump = 1 + .16 * (1 - y) * .5; p.setXYZ(i, soft(p.getX(i)) * .17 * slump, y * .065 + .06, soft(p.getZ(i)) * .12 * slump); }
   block.computeVertexNormals();
-  const butter = kit.mat({ color: 0xfbe9a4, roughness: .22, clearcoat: 1, clearcoatRoughness: .12, emissive: 0xf2d060, emissiveIntensity: .2 }, .9), melted = kit.mat({ color: 0xf2c84a, roughness: .08, clearcoat: 1, clearcoatRoughness: .05, clear: true, opacity: kit.solidity(.6), emissive: 0xe8b030, emissiveIntensity: .15 }, 1);
+  // Butter is soft and satin, not glazed; the melted pool is clear and wet, its shine soft (#691).
+  const butter = kit.mat({ color: 0xf8de86, roughness: .45, emissive: 0xf2d060, emissiveIntensity: .12, own: .35 }, .35), melted = kit.mat({ color: 0xf2c84a, roughness: .18, clearcoat: .6, clearcoatRoughness: .2, clear: true, opacity: kit.solidity(.6), emissive: 0xe8b030, emissiveIntensity: .15, own: .3 }, .6);
   const pat = new T.Mesh(block, butter), pool = new T.Mesh(puddle(kit, .34, seed + 31), melted);
   pat.position.set(-.12, top, .1); pat.rotation.y = .5; pool.position.set(-.08, top + .004, .14); group.add(pool, pat);
 
   // ---------- honey: a pool beside the butter that runs over the near edge in drips of different lengths ----------
-  const amber = kit.mat({ color: 0xc86400, roughness: .1, clearcoat: 1, clearcoatRoughness: .06, clear: true, opacity: kit.solidity(.92), emissive: 0xb85000, emissiveIntensity: .4 }, .8);
+  // Honey with depth: amber that holds light inside it, deeper where it is thick; a soft wet shine on top (#691).
+  const amber = kit.mat({ color: 0xd06c06, roughness: .16, clearcoat: .6, clearcoatRoughness: .18, clear: true, opacity: kit.solidity(.92), emissive: 0xb85000, emissiveIntensity: .35, own: .45 }, .6);
   const honey = new T.Mesh(puddle(kit, .42, seed + 37, .014), amber); honey.position.set(.36, top + .006, .5); group.add(honey);
   const runs = tubes(kit, 8), white = C(0xffffff);
   [[1.3, .58, .05], [1.72, .32, .04], [1.05, .2, .034]].slice(0, drips).forEach(([angle, fall, width], i) => {
@@ -96,6 +100,6 @@ export function foldedBlin(kit, { radius = 1.1, seed = 0 } = {}) {
     layers.push(sector);
   }
   const geometry = merged(kit, layers);
-  const mesh = new T.Mesh(geometry, kit.mat({ map: fried, bumpMap: fried, bumpScale: .012, color: C(0xfff0d8).multiplyScalar(.92 + rnd(1, seed) * .06), roughness: .5, clearcoat: .4, clearcoatRoughness: .4, side: T.DoubleSide, emissive: 0xe0a84a, emissiveIntensity: .12 }, .6));
+  const mesh = new T.Mesh(geometry, kit.mat({ map: fried, bumpMap: fried, bumpScale: .012, color: C(0xffe0aa).multiplyScalar(.92 + rnd(1, seed) * .06), roughness: .75, side: T.DoubleSide, emissive: 0xe0a84a, emissiveIntensity: .1, own: .3 }, .25));
   return mesh;
 }

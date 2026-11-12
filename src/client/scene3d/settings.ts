@@ -4,14 +4,15 @@ import { TRANSPARENCY } from '../../shared/themes.ts';
 
 /** Owner's pick in the scene style picker, 2026-11-10 (#600), for the "All together"
  * compositions: brightness 45%, how much 30% (Canada Day 15%), size 85%, glow 65%, motion 5%,
- * shine 80%, see-through 100%, fade to middle 60%. */
+ * shine 80%, see-through 100%, fade to middle 60%. Shine is superseded (#691, below). */
 export const OWNER_LOOK = {
   /** How far a lit body thins to glass: its rim and highlights stay, the body fades. */
   seeThrough: 1,
   /** Strength of halos around lights and of soft out-of-focus discs. */
   glow: .65,
-  /** Strength of the studio reflections on metal, glaze and satin. */
-  shine: .8,
+  /** Strength of the studio reflections on metal, glaze and satin. The picker's 80% is superseded by the owner's
+   * direction of 2026-11-12 (#691): "some things like the pumpkins are too shiny". */
+  shine: .3,
   /** Scale of objects (their radius and length), not of their positions. */
   size: .85,
   /** Scene seconds per real second. The picker advanced its clock by `motion / 40`; the owner chose motion 5. */

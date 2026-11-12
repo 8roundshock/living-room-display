@@ -76,7 +76,7 @@ const matOptions = (source: string) => [...source.matchAll(/\bmat\(\{([^{}]*)\}/
 
 test('Solid is the default: opaque at its colour times its alpha, after the tone curve, with cut-outs as coverage', () => {
   const core = read('./kit/core.js');
-  assert.match(core, /const \{ see = 1, clear = false, \.\.\.o \} = options;/, 'mat() takes clear and defaults it to false');
+  assert.match(core, /const \{ see = 1, clear = false, [^}]*\.\.\.o \} = options;/, 'mat() takes clear and defaults it to false');
   assert.match(core, /material\.transparent = clear;\n\s+if \(!clear\) material\.depthWrite = true;/, 'a solid surface is in the opaque pass and writes depth');
   // The colour is multiplied by the alpha after the tone curve, the output encoding and the fog (just before
   // dithering), which is exactly what blending over black did; then it is drawn opaque.

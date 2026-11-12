@@ -20,7 +20,7 @@ export default function build(kit, ctx) {
   const sit = (object, x, z, sunk) => { object.position.set(x, floor(z) - sunk, z); stage.add(object); return object; };
 
   // ---------- three glass pumpkins that differ in shape, colour and size; the base of each is cut by the frame ----------
-  const lantern = sit(pumpkin(kit, { colour: 0xc65a08, width: 2.3 * U, height: 1.9 * U, ribs: 10, carved: true, stem: [.7, 1], salt: seed + 1, see: .6 }), -W + 2.15, 0, .09); lantern.rotation.y = .3;
+  const lantern = sit(pumpkin(kit, { colour: 0xe8681c, width: 2.3 * U, height: 1.9 * U, ribs: 10, carved: true, stem: [.7, 1], salt: seed + 1, see: .6 }), -W + 2.15, 0, .09); lantern.rotation.y = .3;
   const squat = sit(pumpkin(kit, { colour: 0x6d4a9c, width: 1.5 * U, height: 1 * U, ribs: 12, groove: .14, stem: [-.8, .8], salt: seed + 2 }), -W + 3.95, .7, .08); squat.rotation.y = 1.1;
   const pale = sit(pumpkin(kit, { colour: 0xb4d6a8, width: .9 * U, height: .86 * U, ribs: 9, groove: .1, stem: [.5, 1.25], tendril: true, salt: seed + 3 }), -W + .78, -.6, .08); pale.rotation.y = -.4;
   const warm = kit.glow(0xff8a2a, 6 * U, .1 * weather.backlight, { twinkle: .06 }); warm.position.set(-W + 2.2, -view.halfH + .5, -1.6); stage.add(warm);
