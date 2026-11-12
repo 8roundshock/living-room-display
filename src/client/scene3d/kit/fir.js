@@ -77,13 +77,15 @@ export function createFir(core) {
   };
   const shape = name => { if (!shapes.has(name)) shapes.set(name, (SHAPES[name] ?? SHAPES.ball)()); return shapes.get(name); };
   const sparkle = (() => { let texture; return () => texture ?? (texture = canvasTexture(256, 256, g => { g.fillStyle = '#808080'; g.fillRect(0, 0, 256, 256); for (let i = 0; i < 2600; i++) { const v = Math.round(rnd(i, 3) * 255); g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(rnd(i, 1) * 256, rnd(i, 2) * 256, 2, 2); } }, { srgb: false, repeat: true })); })();
-  /** Surface finishes: [material options, studio reflection strength]. */
+  /** Surface finishes: [material options, studio reflection strength]. Glass ornaments are coloured glass
+   * silvered inside (#691): a jewel's clear rich colour that holds light of its own, with a soft highlight, not
+   * a mirror that goes black where it reflects the dark room. They are really glossy, so they keep a soft coat. */
   const FINISH = {
-    mirror: colour => [{ color: colour, metalness: 1, roughness: .27 }, 1.5],
-    satin: colour => [{ color: colour, metalness: .85, roughness: .5 }, 1.5],
-    pearl: colour => [{ color: colour, metalness: .1, roughness: .24, clearcoat: 1, clearcoatRoughness: .14 }, 1],
-    glitter: colour => [{ color: colour, metalness: .75, roughness: .46, bumpMap: sparkle(), bumpScale: .035 }, 1.6],
-    banded: (colour, accent) => [{ map: patternTex(`#${new T.Color(colour).getHexString()}`, `#${new T.Color(accent).getHexString()}`, 'bands'), metalness: .9, roughness: .34 }, 1.4],
+    mirror: colour => [{ color: colour, metalness: .4, roughness: .22, clearcoat: .4, clearcoatRoughness: .16, gloss: true, own: .7 }, 1.2],
+    satin: colour => [{ color: colour, metalness: .4, roughness: .45, gloss: true, own: .5 }, 1],
+    pearl: colour => [{ color: colour, metalness: .1, roughness: .3, clearcoat: .5, clearcoatRoughness: .2, gloss: true, own: .35 }, .9],
+    glitter: colour => [{ color: colour, metalness: .45, roughness: .46, bumpMap: sparkle(), bumpScale: .035, gloss: true, own: .5 }, 1.2],
+    banded: (colour, accent) => [{ map: patternTex(`#${new T.Color(colour).getHexString()}`, `#${new T.Color(accent).getHexString()}`, 'bands'), metalness: .45, roughness: .3, gloss: true, own: .5 }, 1.1],
   };
   /** A hanging ornament. The group's origin is the point it hangs from; `thread` is the thread length.
    * shape: ball | drop | onion | finial | facet. finish: mirror | satin | pearl | glitter | banded. */

@@ -80,8 +80,9 @@ export function createCore(T, renderer, ctx, look, view) {
   /** The illustrated look (#691, owner 2026-11-12: "on average colours are too dull ... i like the vibrancy of the autumn
    * one", and Maslenitsa looked "too 3d from 2005"). What made Autumn vivid (#671), for every kit surface:
    * - own: the share of its own colour a surface gives off as light of its own, so its shadow side keeps its colour
-   *   instead of going dark and muddy (a scene may set its own with mat's `own` option). Metals take none: their
-   *   colour is their reflection.
+   *   instead of going dark and muddy (a scene may set its own with mat's `own` option). A metal takes less of it
+   *   (its colour is mostly its reflection), but enough that gold or a silvered ornament never reads black where it
+   *   reflects the dark room.
    * - rim: a little more of that light toward the silhouette, so a shape reads on black.
    * - wrap: the lights reach round a curved surface (a wrapped Lambert term), so there is no hard line between its
    *   lit and its dark side.
@@ -134,7 +135,7 @@ export function createCore(T, renderer, ctx, look, view) {
         .replace('#include <tonemapping_fragment>',
           'float gFres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 1.6);\n'
           // The illustrated look (LOOK): a share of the surface's own colour as light of its own, a little more toward its rim.
-          + ' gl_FragColor.rgb += diffuseColor.rgb * uOwn * (1.0 - metalnessFactor) * (1.0 + ' + LOOK.rim.toFixed(3) + ' * gFres * gFres);\n'
+          + ' gl_FragColor.rgb += diffuseColor.rgb * uOwn * (1.0 - 0.6 * metalnessFactor) * (1.0 + ' + LOOK.rim.toFixed(3) + ' * gFres * gFres);\n'
           + ' float gLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));\n float gGlass = clamp(0.14 + gFres * 0.85 + gLum * 0.75, 0.0, 1.0);\n gl_FragColor.a *= uSee <= 1.0 ? mix(1.0, gGlass, uSee) : pow(gGlass, uSee);\n' + curve)
         // Solid: the colour times its alpha, drawn opaque (or, while it fades, blended by its fade alone).
         .replace('#include <dithering_fragment>', 'if (uSolid > 0.5) {\n  float gFade = uSolid > 1.5 ? max(opacity, 0.0001) : 1.0;\n  gl_FragColor.rgb *= clamp(gl_FragColor.a / gFade, 0.0, 1.0);\n  gl_FragColor.a = (uSolid > 1.5 ? opacity : 1.0) * gCover;\n }\n#include <dithering_fragment>');
@@ -180,11 +181,13 @@ export function createCore(T, renderer, ctx, look, view) {
       if (o.clearcoat) { o.clearcoat *= .25; o.clearcoatRoughness = Math.max(o.clearcoatRoughness ?? 0, .4); }
     }
     const material = physical ? new T.MeshPhysicalMaterial(o) : new T.MeshStandardMaterial(o);
-    material.userData.env = env; material.envMapIntensity = env * look.shine; materials.add(material);
+    // Polished metal really reflects: it keeps more of the studio than other surfaces under the lower shine (#691).
+    material.userData.env = env; material.envMapIntensity = env * look.shine * ((o.metalness ?? 0) >= .5 ? 1.8 : 1); materials.add(material);
     return glassify(material, see, clear, own);
   }
   const gold = () => mat({ color: 0xd9b25a, metalness: 1, roughness: .25 }, 1, false);
-  const satin = colour => mat({ color: colour, metalness: .25, roughness: .32, clearcoat: .6, clearcoatRoughness: .3, side: T.DoubleSide });
+  // Ribbon satin has a real sheen: a soft one, and its colour rich in the folds (#691).
+  const satin = colour => mat({ color: colour, metalness: .2, roughness: .38, clearcoat: .3, clearcoatRoughness: .3, side: T.DoubleSide, gloss: true, own: .4 });
 
   // ---------- light: halos and bulbs ----------
   /** An additive halo sprite. `opacity` is its strength before the owner's glow setting; `twinkle` (0-1) is how far it
@@ -194,8 +197,8 @@ export function createCore(T, renderer, ctx, look, view) {
     const sprite = new T.Sprite(new T.SpriteMaterial({ map: texture, color: C(colour), transparent: true, opacity, blending: T.AdditiveBlending, depthWrite: false, depthTest: false }));
     sprite.scale.setScalar(size); sprite.userData = { o: opacity, tw: twinkle, ph: glows.length * 1.7 }; glows.push(sprite); return sprite;
   }
-  // The low-detail sphere has enough segments that its facets do not show at the sizes scenes use it (#691).
-  const ballGeo = own(new T.SphereGeometry(1, 32, 24)), sphereGeo = own(new T.SphereGeometry(1, 48, 32));
+  // The low-detail sphere has enough segments (24 x 18, was 16 x 12) that its facets do not show at the sizes scenes use it (#691).
+  const ballGeo = own(new T.SphereGeometry(1, 24, 18)), sphereGeo = own(new T.SphereGeometry(1, 48, 32));
   /** A small lit bulb with its halo. */
   function bulb(colour, radius = .05, halo = 16) {
     const group = new T.Group(), core = new T.Mesh(ballGeo, new T.MeshBasicMaterial({ color: C(colour).multiplyScalar(1.7) }));

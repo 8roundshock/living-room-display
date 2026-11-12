@@ -5,7 +5,7 @@
 import { merged, resmooth, turned } from './new-year-tree-tubes.js';
 
 // Silvered glass in a dark room: a mirror finish would show mostly black, so the silvering is a little soft and the colour glows faintly.
-const mirror = (kit, colour, roughness = .34, more = {}) => kit.mat({ color: colour, metalness: .9, roughness, emissive: colour, emissiveIntensity: .1, ...more }, 1.6);
+const mirror = (kit, colour, roughness = .34, more = {}) => kit.mat({ color: colour, metalness: .45, roughness, emissive: colour, emissiveIntensity: .1, gloss: true, own: .6, ...more }, 1.3);   // #691: a jewel's colour with its own light, not mirror-black
 
 /** Hang a body (its top at its own y = 0) on a thread, under a small gold cap with a wire loop. */
 function hung(kit, body, neck, thread) {

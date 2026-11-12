@@ -20,7 +20,8 @@ export default function build(kit, ctx) {
   const WARM = [0xffd9a0, 0xffd9a0, 0xffb070, 0xffd9a0, 0xffc860];
 
   // A mixed box: no two neighbours share colour, shape and finish.
-  const COLOURS = [0xb3121d, 0xd4a017, 0xe8dcc0, 0x0f6b3c, 0x7a1024, 0xc9ccd6];
+  // Jewel tones, as coloured glass holds them (#691): crimson, gold, champagne, emerald, garnet, silver.
+  const COLOURS = [0xd8162a, 0xe6b422, 0xf0e2c2, 0x15a062, 0xb81a40, 0xd4d8e2];
   const SHAPES = ['ball', 'drop', 'onion', 'ball', 'finial', 'facet'];
   const FINISHES = ['mirror', 'satin', 'pearl', 'banded', 'glitter'];
   let made = 0;
@@ -54,15 +55,15 @@ export default function build(kit, ctx) {
       const a = i / 110 * 6.283 + rnd(i, 1) * .1, rr = R * (.9 + rnd(i, 2) * .2), base = V(Math.cos(a) * rr, cy + Math.sin(a) * rr, (rnd(i, 3) - .5) * .3), tangent = V(-Math.sin(a), Math.cos(a), 0), radial = V(Math.cos(a), Math.sin(a), 0);
       const d = tangent.multiplyScalar(.78).addScaledVector(radial, (rnd(i, 4) - .35) * .7).add(V(0, 0, (rnd(i, 5) - .4) * .55)).normalize(); kit.twig(WN, base, base.clone().addScaledVector(d, (.46 + rnd(i, 6) * .34) * S), .2, rnd(i, 7) < .1 ? .5 : 0, i * 17);
     }
-    hang.add(WN.mesh(), new T.Mesh(kit.ribbonGeo([V(0, 0, .02), V(.02, (cy + R) * .5, .05), V(0, cy + R + .1, .08)], .15 * S, V(1, 0, 0)), kit.satin(0x8f1420)));
+    hang.add(WN.mesh(), new T.Mesh(kit.ribbonGeo([V(0, 0, .02), V(.02, (cy + R) * .5, .05), V(0, cy + R + .1, .08)], .15 * S, V(1, 0, 0)), kit.satin(0xb81826)));
     // Berries in uneven clusters of two to four, not a ring of triplets.
-    const berry = kit.mat({ color: 0xc2101c, roughness: .18, clearcoat: 1, clearcoatRoughness: .1 }, 1.1), clusters = Math.max(3, Math.round(3 + A * 8));
+    const berry = kit.mat({ color: 0xd8141e, roughness: .3, clearcoat: .5, clearcoatRoughness: .2, gloss: true, own: .35 }, .7), clusters = Math.max(3, Math.round(3 + A * 8));
     for (let i = 0; i < clusters; i++) {
       const a = i / clusters * 6.283 + .4 + (rnd(i, 21) - .5) * .7, count = 2 + Math.floor(rnd(i, 22) * 3);
       for (let k = 0; k < count; k++) { const m = new T.Mesh(kit.ballGeo, berry); m.scale.setScalar((.06 + rnd(i * 4 + k, 23) * .03) * S); m.position.set(Math.cos(a) * R + Math.cos(k * 2.1 + i) * .09, cy + Math.sin(a) * R + Math.sin(k * 2.1 + i) * .09, .26 + k * .03); hang.add(m); }
     }
     for (let i = 0; i < Math.round(4 + A * 12); i++) { const a = i * 2.4 + .7, bulb = kit.bulb(0xffd9a0, .036); bulb.position.set(Math.cos(a) * R * (.92 + rnd(i, 7) * .16), cy + Math.sin(a) * R * (.92 + rnd(i, 8) * .16), .32); hang.add(bulb); }
-    const bow = kit.puffyBow(0xb3121d, 1.3 * S); bow.position.set(0, cy - R, .42); hang.add(bow);
+    const bow = kit.puffyBow(0xd01a26, 1.3 * S); bow.position.set(0, cy - R, .42); hang.add(bow);
     tick(t => { hang.rotation.z = weather.sway(Math.sin(t * .35) * .018, -1); });
   }
 

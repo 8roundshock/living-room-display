@@ -21,11 +21,12 @@ export function createParty(core) {
       made.translate(0, 0, -.03); made.computeVertexNormals(); return made;
     })());
   })();
-  /** Balloon skins: [material options, studio reflection strength]. */
+  /** Balloon skins: [material options, studio reflection strength]. Latex is satin, not glossy plastic (#691): mat()
+   * softens it; its colour is rich because it holds light of its own, as a balloon does with light through it. */
   const SKIN = {
-    latex: colour => [{ color: colour, roughness: .22, metalness: 0, clearcoat: 1, clearcoatRoughness: .08, emissive: C(colour).multiplyScalar(.12) }, .55],
-    pearl: colour => [{ color: colour, roughness: .34, metalness: .4, clearcoat: .7, clearcoatRoughness: .25, emissive: C(colour).multiplyScalar(.08) }, .9],
-    foil: colour => [{ color: colour, roughness: .28, metalness: .9, emissive: C(colour).multiplyScalar(.22) }, 1.6],
+    latex: colour => [{ color: colour, roughness: .22, metalness: 0, clearcoat: 1, clearcoatRoughness: .08, emissive: C(colour).multiplyScalar(.12), own: .35 }, .55],
+    pearl: colour => [{ color: colour, roughness: .34, metalness: .4, clearcoat: .7, clearcoatRoughness: .25, emissive: C(colour).multiplyScalar(.08), own: .3 }, .9],
+    foil: colour => [{ color: colour, roughness: .28, metalness: .9, emissive: C(colour).multiplyScalar(.22), own: .4 }, 1.6],
   };
   /** A balloon with its knot; the group's origin is the balloon's centre and the knot hangs at y = -1.17 x radius.
    * skin: latex | pearl | foil. shape: round | star. `pattern` = [accent colour, kind] prints a patternTex on it. */

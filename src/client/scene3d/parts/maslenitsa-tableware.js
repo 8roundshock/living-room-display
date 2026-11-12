@@ -66,7 +66,12 @@ export function creamSwirl(kit, { radius = .3, colour = 0xe9e2d2 } = {}) {
 
 /** A plain carved wooden spoon: its origin is the middle of its bowl, the handle runs toward +x and rises. */
 export function woodenSpoon(kit, { length = 1.05, colour = 0xc8a878 } = {}) {
-  const { T, V } = kit, group = new T.Group(), wood = kit.mat({ color: colour, roughness: .55, clearcoat: .3, clearcoatRoughness: .5 }, .5);
+  // Carved birch with its grain running along the spoon (#691: real surface detail, not a plain colour).
+  const grain = kit.canvasTexture(256, 64, g => {
+    g.fillStyle = css(kit, colour); g.fillRect(0, 0, 256, 64);
+    for (let i = 0; i < 26; i++) { const y = kit.rnd(i, 61) * 64, wave = 1 + kit.rnd(i, 62) * 3; g.strokeStyle = `rgba(${kit.rnd(i, 63) < .5 ? '140,104,62' : '226,200,150'},${.25 + kit.rnd(i, 64) * .3})`; g.lineWidth = .6 + kit.rnd(i, 65) * 1.4; g.beginPath(); for (let x = 0; x <= 256; x += 8) g.lineTo(x, y + Math.sin(x * .03 + i) * wave); g.stroke(); }
+  }, { repeat: true });
+  const { T, V } = kit, group = new T.Group(), wood = kit.mat({ color: 0xffffff, map: grain, roughness: .8, own: .25 }, .2);
   const scoop = new T.Mesh(kit.sphereGeo, wood); scoop.scale.set(.15, .055, .105); group.add(scoop);
   const handle = tubes(kit, 8).add([V(.11, .012, 0), V(.3, .03, 0), V(.6, .06, 0), V(length, .1, 0)], .028, .024, undefined, undefined, (k, r) => r * (1 + .5 * Math.pow(k, 6))).mesh(wood);
   handle.scale.set(1, .7, 1); group.add(handle);
