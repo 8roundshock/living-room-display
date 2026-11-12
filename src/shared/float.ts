@@ -94,7 +94,9 @@ function progressTime(p: number): number {
   return p / PEAK + EASE / 2;
 }
 
-/** The 3D scene layer (#675): its own waypoints (no widget's lead is 3) and half an interval out of step with the board. */
+/** The 3D scene layer (#675): its own waypoints (no widget's lead is 3). It runs on its own clock (time since
+ * the epoch), not the board's (time since the display opened), so the two are not in step; the phase only
+ * moves its interval boundaries half an interval off the epoch's. */
 export const SCENE_TRACK: FloatTrack = { lead: 3, phase: 0.5 };
 /**
  * A track's position in [-1, 1]² after `seconds`: eased between waypoints when `floating`, or (Float

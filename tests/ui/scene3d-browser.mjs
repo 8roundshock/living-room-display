@@ -103,8 +103,8 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     // ---------- the float (#675): the picture moves on its own track, zoomed, within its travel ----------
     // The synthetic settings have Float gently off, so the display steps once per 180 s interval; ease it on a 2 s interval here.
     const stepping = (await stages())[0];
-    assert.equal(stepping.zoom, 1.06); assert.ok(stepping.floating, 'a running scene floats');
-    assert.ok(Math.abs(stepping.float.x) <= .06 + 1e-9 && Math.abs(stepping.float.y) <= .05 + 1e-9, `within its travel: ${JSON.stringify(stepping.float)}`);
+    assert.equal(stepping.zoom, 1.043); assert.ok(stepping.floating, 'a running scene floats');
+    assert.ok(Math.abs(stepping.float.x) <= .04 + 1e-9 && Math.abs(stepping.float.y) <= .04 + 1e-9, `within its travel: ${JSON.stringify(stepping.float)}`);
     const travel = await page.evaluate(async () => {
       const stage = [...window.__lrdScene3d][0], seen = [], wait = ms => new Promise(done => setTimeout(done, ms));
       for (const unit of [{ x: 1, y: 1 }, { x: -1, y: -1 }]) { stage.holdFloat(unit); seen.push(stage.stats().float); }
@@ -113,10 +113,10 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
       stage.setFloat({ interval: 4, gentle: true }); await wait(100); const slower = stage.stats().float;
       return { seen, eased, later, slower };
     });
-    assert.deepEqual(travel.seen.map(point => [+point.x.toFixed(6), +point.y.toFixed(6)]), [[.06, .05], [-.06, -.05]], 'the extremes are ±3% × ±2.5% of the display (NDC ±0.06 × ±0.05)');
+    assert.deepEqual(travel.seen.map(point => [+point.x.toFixed(6), +point.y.toFixed(6)]), [[.04, .04], [-.04, -.04]], 'the extremes are ±2% of the display on each axis (NDC ±0.04)');
     assert.ok(Math.hypot(travel.later.x - travel.eased.x, travel.later.y - travel.eased.y) > .005, `with Float gently the picture moves continuously: ${JSON.stringify(travel)}`);
     assert.ok(Math.hypot(travel.slower.x - travel.later.x, travel.slower.y - travel.later.y) < .01, `a new motion interval keeps the position: ${JSON.stringify(travel)}`);
-    record('The scene floats on its own track within ±3% × ±2.5% of the display at a 6% zoom; a new motion interval keeps its position');
+    record('The scene floats on its own track within ±2% of the display on each axis at a 4.3% zoom; a new motion interval keeps its position');
 
     // ---------- failures leave the flat scene on screen ----------
     await page.evaluate(() => { const element = document.querySelector('canvas.scene3d-canvas'); (element.getContext('webgl2') ?? element.getContext('webgl')).getExtension('WEBGL_lose_context').loseContext(); });
@@ -157,13 +157,26 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     assert.ok(quiet.last.x !== quiet.first.x || quiet.last.y !== quiet.first.y, 'and moves it');
     assert.equal(quiet.points, 0, 'nothing is in the air on a quiet date: no fireworks or other particle field'); assert.ok(quiet.objects > 20, 'the reduced scene is still a scene');
     assert.deepEqual([quiet.live, quiet.left], [1, 0]);
-    record('On a quiet date the scene is frozen with nothing in the air, and the float alone moves it on a low-rate timer (#675)');
+    // A new stage after a change of interval (a rebuild at midnight, a quiet date beginning) carries on from the same position.
+    const handover = await page.evaluate(async ({ enginePath, scenePath }) => {
+      const [engine, scene] = await Promise.all([import(enginePath), import(scenePath)]), wait = ms => new Promise(done => setTimeout(done, ms));
+      const make = interval => { const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:0;top:0;width:320px;height:180px'; document.body.append(host);
+        const stage = engine.createStage(host, { build: scene.default, ctx: { id: 'canada-day', amount: .06, size: .85, tier: 'special', weather: null, quiet: true, palette: ['#858f94', '#798788', '#858a90'], seed: 1, day: 1 },
+          look: { glow: .65, shine: .8, seeThrough: 1, timeScale: 0 }, float: { interval, gentle: true }, limits: { maxWidth: 2560, maxHeight: 1440, framesPerSecond: 20 }, clock: { start: 12, still: 14 }, allowSoftware: true });
+        return { stage, done: () => { stage.dispose(); host.remove(); } }; };
+      const first = make(3); await wait(400); first.stage.setFloat({ interval: 7, gentle: true }); await wait(300); first.stage.holdFloat(null);
+      const before = first.stage.stats().float; first.done();
+      const second = make(7), after = second.stage.stats().float; second.done();
+      return { before, after };
+    }, { enginePath: chunks.engine, scenePath: chunks['canada-day'] });
+    assert.ok(Math.hypot(handover.after.x - handover.before.x, handover.after.y - handover.before.y) < .004, `a new stage continues the float without a jump: ${JSON.stringify(handover)}`);
+    record('On a quiet date the scene is frozen with nothing in the air, and the float alone moves it on a low-rate timer; a new stage after an interval change continues the float (#675)');
 
     // ---------- the editor's still preview: one frame, no loop ----------
     await open({ scene: 'canada-day', path: '/editor' }); await ready();
     const still = await attributes(), [stillStage] = await stages();
     assert.equal(still.themeStill, 'true'); assert.equal(still.sceneFrames, '1'); assert.ok(stillStage.frozen && !stillStage.running && stillStage.frames === 1, JSON.stringify(stillStage));
-    assert.ok(!stillStage.floating && stillStage.float.x === 0 && stillStage.float.y === 0 && stillStage.zoom === 1.06, `a still preview does not float; it shows the centre at the display's zoom: ${JSON.stringify(stillStage)}`);
+    assert.ok(!stillStage.floating && stillStage.float.x === 0 && stillStage.float.y === 0 && stillStage.zoom === 1.043, `a still preview does not float; it shows the centre at the display's zoom: ${JSON.stringify(stillStage)}`);
     assert.ok(still.opacity > 0 && still.opacity <= still.brightness + .0005, `the preview stays within its brightness: ${still.opacity} of ${still.brightness}`);
     assert.equal(await canvas().evaluate(element => element.getAnimations().length), 0, 'a still preview does not fade in');
     await page.waitForTimeout(900); assert.equal((await stages())[0].frames, 1, 'no loop runs behind a still preview');

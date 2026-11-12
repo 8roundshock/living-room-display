@@ -22,6 +22,15 @@ const FLOAT_CHECK_MS = 250, FLOAT_MIN_PIXELS = .5;
 /** The float's clock: real seconds since the epoch, the same for every stage, so a scene that is
  * rebuilt or replaced carries on from where the float was instead of starting over. */
 const floatClock = () => (performance.timeOrigin + performance.now()) / 1000;
+/** The float's origin, shared by every stage on the page: when the motion interval changes the origin
+ * moves so that the position stays where it is, and a stage made after that (a rebuild at midnight,
+ * weather arriving, a quiet date beginning) carries on from the same position instead of jumping. */
+const floatOrigin = { interval: 0, at: 0 };
+function floatOriginFor(interval) {
+  if (floatOrigin.interval && floatOrigin.interval !== interval) { const now = floatClock(); floatOrigin.at = now - (now - floatOrigin.at) * interval / floatOrigin.interval; }
+  floatOrigin.interval = interval;
+  return floatOrigin.at;
+}
 
 /** Live stages, for tests and tools: each has stats() and measure(). Also at window.__lrdScene3d. */
 export const liveStages = new Set();
@@ -46,9 +55,9 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   let look = { seeScale: 1, ...initialLook };
   const frozen = still || !(look.timeScale > 0), interval = 1000 / limits.framesPerSecond;
   // The float (#675): `float` is { interval, gentle } (the motion interval in seconds, and Float gently
-  // on with motion allowed), or null for a still preview, which stays at the centre. `floatOrigin` keeps
-  // the position when the interval changes, as the board's clock does. `held` pins a position for tools.
-  let float = still ? null : initialFloat, floatOrigin = 0, held = null, shown = { x: 0, y: 0 }, floatTimer = 0, floatFrames = 0;
+  // on with motion allowed), or null for a still preview, which stays at the centre. `held` pins a
+  // position for tools.
+  let float = still ? null : initialFloat, held = null, shown = { x: 0, y: 0 }, floatTimer = 0, floatFrames = 0;
   const zoomMatrix = new T.Matrix4();
   let renderer = null, gl = null, made = null, scene = null, camera = null, observer = null, pending = null, retired = null;
   let disposed = false, raf = 0, rebuildTimer = 0, retuneTimer = 0, frames = 0, builds = 0, time = frozen ? clock.still : clock.start, lastRender = 0, builtAspect = 0, buildMs = 0, frameMs = 0, gpuMs = 0, slowRun = 0;
@@ -86,7 +95,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   function floatTarget() {
     if (held) return floatOffset(held);
     if (!float) return { x: 0, y: 0 };
-    return floatOffset(trackPosition(floatClock() - floatOrigin, float.interval, float.gentle, SCENE_TRACK));
+    return floatOffset(trackPosition(floatClock() - floatOriginFor(float.interval), float.interval, float.gentle, SCENE_TRACK));
   }
   /** The camera's projection, then the float: the picture is zoomed about the screen's centre and moved,
    * every pixel alike, as the board is (a projection change, so depth and parallax are untouched). */
@@ -130,7 +139,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
     const next = floatTarget(), size = renderer.getSize(new T.Vector2());
     if (Math.abs(next.x - shown.x) * size.x / 2 >= FLOAT_MIN_PIXELS || Math.abs(next.y - shown.y) * size.y / 2 >= FLOAT_MIN_PIXELS) { guarded(draw); floatFrames += 1; }
     if (disposed || !float || held) return;
-    const seconds = floatClock() - floatOrigin, boundary = (Math.floor(seconds / float.interval + SCENE_TRACK.phase) + 1 - SCENE_TRACK.phase) * float.interval;
+    const seconds = floatClock() - floatOriginFor(float.interval), boundary = (Math.floor(seconds / float.interval + SCENE_TRACK.phase) + 1 - SCENE_TRACK.phase) * float.interval;
     floatTimer = setTimeout(floatLoop, float.gentle ? FLOAT_CHECK_MS : Math.max(FLOAT_CHECK_MS, (boundary - seconds) * 1000 + 5));
   }
   function start() {
@@ -165,8 +174,8 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
    * or step. A still stage ignores them. A new interval keeps the current position. */
   function setFloat(next) {
     if (disposed || still || !next) return;
-    if (float && next.interval !== float.interval) { const now = floatClock(); floatOrigin = now - (now - floatOrigin) * next.interval / float.interval; }
     if (float && next.interval === float.interval && next.gentle === float.gentle) return;
+    floatOriginFor(next.interval);
     float = { interval: next.interval, gentle: next.gentle };
     if (frozen) { stop(); start(); }
   }

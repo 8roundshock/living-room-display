@@ -12,7 +12,8 @@
 //   ... --brightness 0.36       saved brightness (default 0.36)
 //   ... --transparency 80       saved Transparency, 0-100 (#670; default none: the standard 50)
 //   ... --float 1,-1            hold the float (#675) at a track position in [-1, 1] on each axis: 1,1 is the far
-//                               right and top of its travel, -1,-1 the far left and bottom (default: where it is)
+//                               right and top of its travel, --float=-1,-1 the far left and bottom. The default
+//                               is the centre, 0,0, so captures are reproducible; --float live lets it move
 //   ... --seconds 20            let the scene run this long before the capture (default 3)
 //   ... --measure               print build, frame and main-thread times instead of only capturing
 //   ... --webgl gpu|software|off   real GPU (default), SwiftShader as on the CI runner, or the flat fallback
@@ -35,8 +36,8 @@ const out = resolve(values.out), checkout = fileURLToPath(new URL('../../..', im
 if (!relative(checkout, out).startsWith('..')) fail('Choose a folder outside the checkout: screenshots are never kept in the repository.');
 const [width, height] = values.size.split('x').map(Number);
 const transparency = values.transparency === undefined ? undefined : Number(values.transparency);
-const held = values.float === undefined ? null : values.float.split(',').map(Number);
-if (held && !(held.length === 2 && held.every(value => value >= -1 && value <= 1))) fail('--float takes two numbers from -1 to 1, for example 1,-1');
+const held = values.float === 'live' ? null : (values.float ?? '0,0').split(',').map(Number);
+if (held && !(held.length === 2 && held.every(value => value >= -1 && value <= 1))) fail('--float takes two numbers from -1 to 1 (for example 1,-1), or live');
 if (transparency !== undefined && !(Number.isInteger(transparency) && transparency >= 0 && transparency <= 100)) fail('--transparency takes a whole number from 0 to 100');
 if (!(width > 0 && height > 0)) fail('--size takes WIDTHxHEIGHT, for example 1920x1080');
 await mkdir(out, { recursive: true });
@@ -83,7 +84,7 @@ try {
       luminance.sort((a, b) => a - b);
       return { litPercent: Number((lit / (data.length / 4) * 100).toFixed(1)), medianLuminance: Math.round(luminance[Math.floor(luminance.length / 2)] ?? 0), p99Luminance: Math.round(luminance[Math.floor(luminance.length * .99)] ?? 0) };
     }, shot.toString('base64')));
-    const file = join(out, `${spec.replace('+', '-with-')}-${width}x${height}${transparency === undefined ? '' : `-t${transparency}`}${held ? `-float${held.join('_')}` : ''}${values.full ? '-full' : ''}${values['no-fade'] ? '-nofade' : ''}${values.empty ? '-empty' : ''}.png`);
+    const file = join(out, `${spec.replace('+', '-with-')}-${width}x${height}${transparency === undefined ? '' : `-t${transparency}`}${held && (held[0] || held[1]) ? `-float${held.join('_')}` : ''}${values.full ? '-full' : ''}${values['no-fade'] ? '-nofade' : ''}${values.empty ? '-empty' : ''}.png`);
     await writeFile(file, shot);
     console.log(JSON.stringify({ ...report, file, ...(errors.length ? { errors } : {}) }));
     await context.close();

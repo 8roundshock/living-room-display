@@ -11,7 +11,9 @@ import { ASPECTS, exposed, floatExtremes, measure, measureAll, TOUCH } from '../
 // anchored at an edge shows its end at the far ends of the travel.
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
 
-test('The scene track is its own: other waypoints than the board and every widget, half an interval out of step', () => {
+test('The scene track is its own: other waypoints than the board and every widget, even on the same clock', () => {
+  // At runtime the scene runs on time since the epoch and the board on time since the display opened, so
+  // their phase is arbitrary; on one shared clock the tracks must still part, which is what is checked here.
   const widgets = WIDGET_IDS.map((_, index) => widgetTrack(index));
   assert.equal(SCENE_TRACK.phase, .5); assert.notEqual(SCENE_TRACK.lead, PLANE_TRACK.lead);
   assert.ok(widgets.every(track => track.lead !== SCENE_TRACK.lead), 'no widget follows the scene’s waypoints');
@@ -42,7 +44,7 @@ test('The scene stays within its travel and uses most of it; Float gently eases,
 
 test('The zoom covers the travel: a side edge element keeps crossing its edge, a standing one keeps standing on it', () => {
   const { zoom, x, y } = floatExtremes();
-  assert.deepEqual(SCENE_FLOAT, { travelX: .03, travelY: .025, zoom: 1.06 });
+  assert.deepEqual(SCENE_FLOAT, { travelX: .02, travelY: .02, zoom: 1.043 });
   assert.ok(zoom * 1 - x - 1 >= -1e-12, 'anything that crosses a side edge, however little, still crosses it at the far end of the travel');
   assert.ok(zoom * (1 - TOUCH) - y - 1 > 0, 'anything standing on the bottom edge (or hanging from the top) still reaches it');
   assert.ok(SCENE_FLOAT.travelX >= .02 && SCENE_FLOAT.travelY >= .02, 'at least ±2% of the display on each axis');
@@ -69,6 +71,7 @@ test('The engine floats the picture in the projection and has no scene-clock dri
   const engine = readFileSync(new URL('./engine.js', import.meta.url), 'utf8');
   assert.doesNotMatch(engine, /DRIFT/);
   assert.match(engine, /camera\.projectionMatrix\.premultiply\(zoomMatrix\)/);
-  assert.match(engine, /trackPosition\(floatClock\(\) - floatOrigin, float\.interval, float\.gentle, SCENE_TRACK\)/);
+  assert.match(engine, /trackPosition\(floatClock\(\) - floatOriginFor\(float\.interval\), float\.interval, float\.gentle, SCENE_TRACK\)/);
+  assert.match(engine, /^const floatOrigin = \{ interval: 0, at: 0 \};$/m, 'the float origin is shared by every stage on the page, so a new stage does not jump');
   assert.match(engine, /let float = still \? null : initialFloat/, 'a still preview does not float');
 });
