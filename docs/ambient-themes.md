@@ -67,7 +67,7 @@ Chosen in the picker for its "All together" compositions, and held as named cons
 | --- | --- | --- |
 | Brightness | 45%, beside stand-in text of about the same luminance | Layer opacity is the saved brightness × 0.95 (× tier, clamped at 1): scene highlights about as bright as the text, never above the saved brightness. |
 | How much | 30% (Canada Day 15%) | `ctx.amount`; a scene turns it into counts. |
-| Size | 85% | `ctx.size`: object radius and length, not position. |
+| Size | 85% | `ctx.size`: object radius and length, not position. The scene float's 4.3% zoom (#675) draws everything that much larger on screen, so the framing is about 89% of the picker's. |
 | Glow | 65% | Strength of halos and soft light discs. |
 | Motion | 5% | The scene clock runs at 5/40 of the picker's default speed, one eighth of real time. |
 | Shine | 80% | Strength of the studio reflections. |
@@ -155,34 +155,108 @@ instead of the old drift (±0.9% × ±0.7% of the display on the scene clock, an
 quiet date).
 
 - **Its own track.** `SCENE_TRACK` in `src/shared/float.ts`: the board's low-discrepancy
-  waypoints from another start (lead 3; the board's is 0, the widgets' are multiples of 7),
-  half an interval out of step with the board. It reaches a new spot every motion interval,
-  easing in and out with Float gently, or jumping once per interval at its own boundaries
-  without it. It runs on real time from the epoch, so a scene that is rebuilt or replaced
-  (a new day, weather arriving) carries on from where the float was. A new motion interval
-  keeps the current position, as the board's does.
-- **Travel and zoom** (`SCENE_FLOAT` in `settings.ts`). Up to ±3% of the display sideways
-  and ±2.5% up and down (±58 × ±27 px at 1920×1080). The picture is drawn 6% larger about
-  the screen's centre, so about 3% of each edge is outside the frame at the centre position.
-  The float is applied to the camera's projection: every pixel moves alike, as the board
-  does, and depth, parallax and lighting are unchanged.
-  - **Why these numbers:** the zoom is exactly the sideways travel, so anything that crosses
-    a side edge, however little, still crosses it at the far end of the travel.
-  - **Bottom and top:** things that stand on the bottom edge or hang from the top keep about
-    0.4% of the height (4 px at 1080p) to spare.
-  - **A wider or slower float** would need more zoom: the board's ±3.5% sideways would need 7%.
+  waypoints from another start (lead 3; the board's is 0, the widgets' are multiples of 7).
+  It reaches a new spot every motion interval, easing in and out with Float gently, or
+  jumping once per interval without it. It runs on its own clock, real time since the epoch,
+  while the board's starts when the display opens, so the two are not in step and their phase
+  is arbitrary. A scene that is rebuilt or replaced (a new day, weather arriving, a quiet date)
+  carries on from where the float was, also after a change of motion interval: the float's
+  origin is shared by every stage on the page.
+- **Travel and zoom** (`SCENE_FLOAT` in `settings.ts`): ±2% of the display on each axis
+  (±38 × ±22 px at 1920×1080), the least the ticket asks for. The picture is drawn 4.3%
+  larger about the screen's centre. That crops about 2% of each edge at the centre position
+  and up to 4% of the far side at an extreme, so whatever crosses a side edge keeps crossing
+  it, and whatever stands on the bottom edge or hangs from the top keeps reaching it.
+
+  The float is applied to the camera's projection: every pixel moves alike, as the board does,
+  and depth, parallax and lighting are unchanged. The zoom also makes every object 4.3%
+  larger on screen, on top of the owner's size pick (85%, so about 89% of the picker's
+  framing).
+- **Why these numbers** (review of #676: the first candidate, ±3% × ±2.5% at a 6% zoom,
+  cropped whole pieces near the edges). Every per cent of travel costs about a per cent of
+  zoom, and so of crop. The crop rule below was run over every scene for each candidate, before
+  any piece was moved and while specks still counted:
+
+  | Travel x | Travel y | Zoom | Scenes with a cropped piece | Scenes with a visible cut end |
+  | --- | --- | --- | --- | --- |
+  | 3.5% | 2% | 1.07 | 15 (148 pieces) | 0 |
+  | 3% | 2.5% | 1.06 | 15 (134) | 0 |
+  | 3% | 2% | 1.06 | 15 (134) | 0 |
+  | 2.5% | 2% | 1.05 | 15 (122) | 0 |
+  | 2% | 2% | 1.045 | 15 (110) | 0 |
+  | 2% | 2% | **1.043** | 15 (108) | 0 |
+  | 2% | 2% | 1.04 | 14 (94) | 3 |
+  | 2.5% | 2% | 1.04 | 15 (97) | 8 |
+  | 3% | 2% | 1.04 | 15 (102) | 12 |
+  | 2% | 2% | 1.03 | 14 (79) | 13 |
+
+  Less zoom than 1 + 2 × travel lets cut ends show (things standing exactly on the bottom
+  edge reach no further). More travel crops more. No setting removes the crop in the bottom
+  band, where many scenes stand things on the edge, so the pieces were moved instead (below).
 - **Checked, not eyeballed.** `tests/scene3d/edge-check.mjs` (run by
   `src/client/scene3d/float.test.ts`) builds every scene and weather overlay in Node with
-  three.js r128 and the real kit, at 16:9 and 21:9, samples the scene clock over an hour of
-  real time (and a week of days for the four seasons) and finds every element anchored at an
-  edge:
-  - an element that crosses a side edge at every sample;
-  - an element that crosses or stands within 0.1% of the bottom or top edge.
+  three.js r128 and the real kit, at 16:9 and 21:9. It samples the scene clock over an hour of
+  real time (and a week of days for the four seasons) and the float over 300 intervals of the
+  real track plus its four corners. Two rules:
+  - **Cut ends.** An element that crosses a side edge, or crosses or stands within 0.1% of the
+    bottom or top edge, at every sample is anchored there. Its end or base must stay out of
+    view at every float position.
+  - **Crop.** A piece is the largest part of the scene that was whole in the frame before the
+    float (a cake, a gift, an egg, a lantern; a group reaching past an edge is split into its
+    children). It must stay whole at every float position. A piece resting near the bottom
+    edge (its lowest point in the lowest 7.5% of the height) must be whole at the centre
+    position and keep at least 60% of itself in view at every position.
 
-  It fails if the float's extremes would bring the end or base of any of them into view. All
-  72 cases pass; no scene needed a change. Whole objects that are merely near a side edge
-  may show more of themselves at times; things moving through an edge (falling leaves,
-  particles, the weather's shader-drawn rain, flakes, fog and cloud) are not anchored.
+    Not pieces: parts of an element that crosses an edge (a needle, a cone on a bough, a bulb
+    on a garland) unless they rest near the bottom; pieces that travel (a seed on the wind, a
+    falling leaf); and specks under 1.5% of the screen on both axes (a bulb, a bead, a flower's
+    eye).
+
+  Both rules can fail. The test shows the first candidate cutting Pascha's eggs, and Autumn's
+  twig showing its end without the zoom. All 72 cases pass, with several hundred anchored
+  elements and whole pieces measured.
+- **Pieces moved** (each in its own scene file, the smallest move that passes at 16:9 and 21:9;
+  1 unit is 1/9 of the screen height at the depth of the frame):
+  - **Standing things lifted onto the visible bottom.** Birthday: everything that stands
+    (cake, presents, the balloons' gift) at 95.5% of the half-height instead of on the edge;
+    the gifts of Birthday · Korean accents the same way.
+    Others by an amount:
+
+    | Scene | Pieces | Lifted by (units) |
+    | --- | --- | --- |
+    | Maslenitsa | table | 0.19 |
+    | Mimosa | vase corner (with its fallen blossom); tulips | 0.22; 0.22 |
+    | Pascha | napkin with the kulich and eggs | 0.2 |
+    | Seollal | yut sticks on their cloth | 0.2 |
+    | New Year · Russia | tangerine pile | 0.2 |
+    | Thanksgiving | apples and pear | 0.3 |
+    | Chuseok | burr and jujubes on the ground | 0.12 |
+    | Birthday · Russian accents | table | 0.33 |
+    | Autumn | fallen leaves | 0.42 |
+    | Summer | the low runner's tip | 0.1 |
+
+  - **Moved in from a side edge:**
+
+    | Scene | Piece | Moved |
+    | --- | --- | --- |
+    | Birthday | balloon bunch and its gift | 0.6 units left (more at 21:9: 18% of the half-width from the edge) |
+    | Birthday · Korean accents | balloons | 0.5 units left of the rail |
+    | Birthday · Russian accents | table | 0.55 units left (more at 21:9) |
+    | Maslenitsa | table | left at 21:9 only |
+    | Seollal | pouch hook | 0.35 units left |
+    | New Year · Russia | tangerine pile | 0.25 units left |
+    | New Year · Russia | tree | 0.25 units right (more at 21:9) |
+    | Easter | lily | 0.3 units right (1 at 21:9) |
+    | Pascha | scarlet egg | 0.75 units right on the napkin |
+    | Autumn | fallen leaves | 0.35 units right |
+
+  - **Started from the edge at its depth:** Buddha's Birthday's lantern cord starts at
+    `-view.halfWAt(z) - .5`. At its depth the old start was inside the frame (the #669 issue).
+  - **Sunk below the edge:** the wrapped bouquet of Birthday · Russian accents sits 0.44 units
+    lower, so its lowest flowers and leaves cross the bottom edge instead of resting just
+    above it.
+  - **Unchanged:** Christmas, Winter, Spring and the rest; Christmas's one flagged piece was
+    a bulb under the speck size.
 - **No scale breath.** A slow zoom about the centre would move only the edge pixels. It would
   also need more zoom to keep standing things down, the axis that is already the tightest.
   The translation moves every pixel by the full travel.
@@ -549,7 +623,7 @@ renderer's patches it does not start over a 3D scene
   document is hidden, and never a frame queued behind one the GPU has not finished.
 - One stage owns one canvas and one WebGL context and releases both on unmount.
 - The whole picture floats like the board (#675, [Float](#float-675-owner-direction-2026-11-12)):
-  ±3% × ±2.5% of the display at a 6% zoom, also on a quiet date. This reduces fixed
+  ±2% of the display on each axis at a 4.3% zoom, also on a quiet date. This reduces fixed
   patterns; it is not a burn-in guarantee.
 
 Measured on 2026-11-10, source build, headless Edge on the development PC's GeForce GTX

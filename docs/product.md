@@ -155,10 +155,11 @@ credit remains.
 The 3D scene behind the widgets floats too (#675, owner direction 2026-11-12: "the
 elements in the scenes need to move and shift as well, so they don't burn in over a long
 time, same as the other elements"). It follows the same motion interval and Float gently
-setting on its own track, out of step with the board and the widgets, up to ±3% of the
-display sideways and ±2.5% up and down, and it keeps floating on a quiet date. The scene is
-drawn 6% larger than the screen so that whatever enters from an edge or stands on the bottom
-edge still reaches past the frame at the far end of the travel.
+setting on its own track, independent of the board's and the widgets', up to ±2% of the
+display on each axis, and it keeps floating on a quiet date. The scene is drawn 4.3% larger
+than the screen so that whatever enters from an edge or stands on the bottom edge still
+reaches past the frame at the far end of the travel; things that must stay whole keep clear
+of the band that crops.
 
 Floating in place smears edges across about 270 × 150 device pixels at 4K, but it
 does not even out wear between screen regions the way swapping does: a bright

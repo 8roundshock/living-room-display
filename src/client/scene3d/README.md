@@ -107,22 +107,27 @@ less is visible, behind it more: `view.halfWAt(z)` and `view.halfHAt(z)` give th
 at a depth, so an object stands on the bottom edge at `y = -view.halfHAt(z)`. Things beyond
 about z = -9 fade into black fog. The scene is rebuilt when the view's shape changes.
 
-The engine floats the whole picture like the widget board (#675): up to ±3% of the display
-sideways and ±2.5% up and down, on its own track and the board's motion interval, also on a
-quiet date. It draws the picture 6% larger about the screen's centre, so about 3% of each edge
-is cropped at the centre position. You do not need to do anything for it, but keep to these
-rules:
+The engine floats the whole picture like the widget board (#675): up to ±2% of the display
+on each axis, on its own track and the board's motion interval, also on a quiet date. It draws
+the picture 4.3% larger about the screen's centre: about 2% of each edge is cropped at the
+centre position and up to 4% of the far side at an extreme. You do not need to do anything for
+it, but keep to these rules:
 
 - Anything that enters from a side edge must cross it: start cords, boughs and poles beyond
   the edge they come from (at their depth, `view.halfWAt(z)`). Ending exactly at the edge is
   not enough.
-- Stand things on the bottom edge (`y = -view.halfHAt(z)`) or hang them from the top: the
-  zoom keeps them there.
-- Do not put anything you need to be seen within about 3% of an edge: the float moves it
-  out of the frame part of the time.
+- Something whole near the bottom (a cake, a gift, an egg, a fallen leaf) stands on the
+  visible bottom, about 2% of the height up: `y = -view.halfHAt(z) * .955` or about 0.2 units
+  above the edge. Standing exactly on the edge, it is cut at the centre position. Otherwise
+  sink it past the edge, like a bouquet whose stems run off the bottom.
+- Keep anything else that must stay whole about 4% of the width (and height) in from an edge:
+  the float takes the far side of the frame that far in at an extreme. Things attached to
+  something that enters from the edge (cones on a bough, ornaments on a garland) may be cut
+  with it.
 - `node tests/scene3d/edge-check.mjs` prints, for every scene and overlay at 16:9 and 21:9,
-  how far the elements anchored at each edge reach beyond it. `npm test` fails when one
-  would show its end.
+  how far the elements anchored at each edge reach beyond it. `npm test` fails when one would
+  show its end, or when a whole piece would be cut (the crop rule in
+  [Ambient themes](../../../docs/ambient-themes.md#float-675-owner-direction-2026-11-12)).
 
 Time: `tick(fn)` registers `fn(t)`, called once per drawn frame with the scene clock in
 seconds. The clock runs at one eighth of real time (the owner's "motion 5%") and frames are
@@ -193,7 +198,7 @@ in `mat()` and lists the parts that call `solidity`: add yours there. The curve
   preview draws one frame and runs no loop. A quiet date runs no frame loop: a timer redraws
   its frozen scene only when the float has moved it half a pixel (at most four times a
   second), or once per step without Float gently.
-- The float is a change to the camera's projection (zoom 1.06 about the centre, then the
+- The float is a change to the camera's projection (zoom 1.043 about the centre, then the
   offset): `stage.setFloat({ interval, gentle })` follows the board's settings without a
   rebuild, `stage.holdFloat(unit)` pins a position for tools, and `stats()` reports `float`
   (NDC), `zoom`, `floating` and `floatFrames`.

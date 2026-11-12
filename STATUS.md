@@ -6,20 +6,23 @@ Source candidate, not installed. Owner direction: "the elements in the scenes ne
 shift as well, so they don't burn in over a long time, same as the other elements."
 
 What changed:
-- The 3D scene layer now floats like the board, on its own track out of step with the board
-  and the widgets, with the same motion interval and Float gently setting: up to ±3% of the
-  display sideways and ±2.5% up and down. Before, it only drifted ±0.9% × ±0.7%.
-- It is drawn 6% larger, so anything entering from an edge or standing on the bottom edge
+- The 3D scene layer now floats like the board, on its own track and clock, with the same
+  motion interval and Float gently setting: up to ±2% of the display on each axis. Before,
+  it only drifted ±0.9% × ±0.7%.
+- It is drawn 4.3% larger, so anything entering from an edge or standing on the bottom edge
   stays anchored at the extremes.
 - Quiet dates float too, with their scene still frozen; the old scene-clock drift is gone.
-- A Node check builds every scene and weather overlay at 16:9 and 21:9 and fails if an
-  edge element's end would show. No scene needed a change.
+- A Node check builds every scene and weather overlay at 16:9 and 21:9. It fails if an edge
+  element's end would show, or if a piece that was whole in the frame would be cut. Fourteen
+  scenes had pieces moved (standing things lifted about 0.2 units, a few moved in from a
+  side edge); the moves are listed in the docs.
 
 Details: [Ambient themes](docs/ambient-themes.md#float-675-owner-direction-2026-11-12).
 
 Verified with source builds and synthetic data only: the unit tests (the track, the zoom rule
-and the edge check over 72 cases) and the `scene3d` suite on the GPU (the float's travel,
-easing and interval change, the floating quiet date, the still preview). Not verified:
+and the edge and crop checks over 72 cases) and the `scene3d` suite on the GPU and on
+SwiftShader (the float's travel, easing and interval change, a new stage continuing the
+float, the floating quiet date, the still preview). Not verified:
 installation, the TV, and long-run behaviour.
 
 ## A Transparency slider for the 3D scenes — 2026-11-11 (#670)
