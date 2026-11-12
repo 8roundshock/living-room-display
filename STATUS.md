@@ -1,5 +1,39 @@
 # Project status
 
+## The 3D scenes float like the widgets — 2026-11-12 (#675)
+
+Source candidate, not installed. Owner direction: "the elements in the scenes need to move and
+shift as well, so they don't burn in over a long time, same as the other elements."
+
+What changed:
+- The 3D scene layer now floats like the board, on its own track and clock, with the same
+  motion interval and Float gently setting: up to ±2% of the display on each axis. Before,
+  it only drifted ±0.9% × ±0.7%.
+- It is drawn 4.3% larger, so anything entering from a side or top edge still crosses it at
+  the extremes. Pieces resting on the bottom sit on the visible bottom edge at the centre
+  position and rise or are cut by up to the vertical travel (2%) at the extremes, as the
+  board does (coordinator decision on #675, 2026-11-12); small flat litter may be cut further
+  at the low extreme.
+- Quiet dates float too, with their scene still frozen; the old scene-clock drift is gone.
+- A Node check builds every scene and weather overlay at 16:9 and 21:9. It fails if an edge
+  element's end would show, if a piece that was whole in the frame would be cut, or if a
+  resting piece floats above the visible bottom at the centre. Fourteen scenes had pieces
+  moved (resting things onto the visible bottom, a few moved in from a side edge); the moves
+  and their gaps are listed in the docs.
+- A content guard counts what every scene and overlay draws (everyday and quiet) and fails
+  if one loses more than 5% of its objects or triangles against its own baseline in
+  `tests/scene3d/census/`, taken at `c807ea4`. It was added after a review found three
+  scenes emptied by an edit in this change; a new scene without a baseline is skipped until
+  it writes one.
+
+Details: [Ambient themes](docs/ambient-themes.md#float-675-owner-direction-2026-11-12).
+
+Verified with source builds and synthetic data only: the unit tests (the track, the zoom rule
+and the edge and crop checks over 72 cases) and the `scene3d` suite on the GPU and on
+SwiftShader (the float's travel, easing and interval change, a new stage continuing the
+float, the floating quiet date, the still preview). Not verified:
+installation, the TV, and long-run behaviour.
+
 ## A Transparency slider for the 3D scenes — 2026-11-11 (#670)
 
 Source candidate, not installed. The see-through level of the 3D scenes was changed twice in

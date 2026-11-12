@@ -3,10 +3,11 @@
 // dispose. Read README.md in this folder before changing the kit or the contract.
 import * as T from 'three';
 import { createKit } from './kit/index.js';
-import { renderSize } from './settings.ts';
+import { CAMERA, floatOffset, renderSize, SCENE_FLOAT } from './settings.ts';
+import { SCENE_TRACK, trackPosition } from '../../shared/float.ts';
 
 /** Camera: 30 degree field of view looking at a world plane 9 units high at z = 0 (16 x 9 on a 16:9 screen). */
-const FOV = 30, HALF_HEIGHT = 4.5, DEPTH = HALF_HEIGHT / Math.tan(FOV / 2 * Math.PI / 180);
+const FOV = CAMERA.fov, HALF_HEIGHT = CAMERA.halfHeight, DEPTH = HALF_HEIGHT / Math.tan(FOV / 2 * Math.PI / 180);
 /** Rebuild the scene when the view's shape changes by more than this, so edges stay dressed. */
 const ASPECT_TOLERANCE = .02;
 /** A new Transparency (#670) is built this long after the last change, so dragging the slider
@@ -15,11 +16,18 @@ const RETUNE_DELAY_MS = 250;
 /** A GPU that needs longer than this for a frame, this many frames in a row, is too weak for
  * these scenes: the stage gives up and the caller shows the flat renderer. */
 const SLOW_FRAME_MS = 120, SLOW_FRAMES = 10;
-/** The whole scene drifts on a slow closed path, so standing objects (a wreath, a cake, a pole)
- * do not light the same pixels for weeks: world units and scene-clock seconds, about 17 and 7
- * pixels each way at 1080p over seven and five minutes. This reduces fixed patterns on an OLED
- * panel; it is not a burn-in guarantee. A frozen scene (still preview, quiet date) does not drift. */
-const DRIFT = { x: .14, y: .06, periodX: 53, periodY: 37 };
+/** A scene whose own clock is stopped (a quiet date) still floats (#675). It is checked this often and
+ * drawn again only when the float has moved it by this many pixels of the canvas (or at a step). */
+const FLOAT_CHECK_MS = 250, FLOAT_MIN_PIXELS = .5;
+/** The float's clock: real seconds since the epoch, the same for every stage, so a scene that is
+ * rebuilt or replaced carries on from where the float was instead of starting over. */
+const floatClock = () => (performance.timeOrigin + performance.now()) / 1000;
+/** The float's origin for each motion interval, shared by every stage on the page (the epoch until the
+ * interval changes). setFloat sets the new interval's origin so the position stays where it is, and a
+ * stage made after that (a rebuild at midnight, weather arriving, a quiet date beginning) reads the same
+ * origin and carries on instead of jumping. Two stages at different intervals never disturb each other. */
+const floatOrigins = new Map();
+const originOf = interval => floatOrigins.get(interval) ?? 0;
 
 /** Live stages, for tests and tools: each has stats() and measure(). Also at window.__lrdScene3d. */
 export const liveStages = new Set();
@@ -39,13 +47,18 @@ function disposeObjects(root) {
  * Draw a scene into `host`. Throws if WebGL or the scene module fails; the caller falls back
  * to the flat renderer. After a successful start, a later failure calls `onFail` once.
  */
-export function createStage(host, { build, overlay = null, ctx: given, look: initialLook, still = false, limits, clock, allowSoftware = false, onFail = () => {} }) {
+export function createStage(host, { build, overlay = null, ctx: given, look: initialLook, still = false, float: initialFloat = null, limits, clock, allowSoftware = false, onFail = () => {} }) {
   const canvas = document.createElement('canvas'); canvas.className = 'scene3d-canvas'; canvas.setAttribute('aria-hidden', 'true');
   let look = { seeScale: 1, ...initialLook };
   const frozen = still || !(look.timeScale > 0), interval = 1000 / limits.framesPerSecond;
+  // The float (#675): `float` is { interval, gentle } (the motion interval in seconds, and Float gently
+  // on with motion allowed), or null for a still preview, which stays at the centre. `held` pins a
+  // position for tools.
+  let float = still ? null : initialFloat, held = null, shown = { x: 0, y: 0 }, floatTimer = 0, floatFrames = 0, floatSample = null;
+  const zoomMatrix = new T.Matrix4();
   let renderer = null, gl = null, made = null, scene = null, camera = null, observer = null, pending = null, retired = null;
   let disposed = false, raf = 0, rebuildTimer = 0, retuneTimer = 0, frames = 0, builds = 0, time = frozen ? clock.still : clock.start, lastRender = 0, builtAspect = 0, buildMs = 0, frameMs = 0, gpuMs = 0, slowRun = 0;
-  const stage = { dispose, stats, measure, retune };
+  const stage = { dispose, stats, measure, retune, setFloat, holdFloat };
 
   function release(old) { if (old.scene) disposeObjects(old.scene); old.made?.dispose(); }
   function clear() { if (retired) release(retired); retired = null; release({ scene, made }); scene = null; made = null; }
@@ -75,10 +88,24 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
     camera.aspect = host.clientWidth / host.clientHeight; camera.updateProjectionMatrix();
     return true;
   }
+  /** Where the float puts the picture now, in normalised device coordinates, and the clocks it was read at. */
+  function floatTarget() {
+    if (held) return { offset: floatOffset(held), sample: null };
+    if (!float) return { offset: { x: 0, y: 0 }, sample: null };
+    const real = floatClock(), seconds = real - originOf(float.interval);
+    return { offset: floatOffset(trackPosition(seconds, float.interval, float.gentle, SCENE_TRACK)), sample: { real, seconds } };
+  }
+  /** The camera's projection, then the float: the picture is zoomed about the screen's centre and moved,
+   * every pixel alike, as the board is (a projection change, so depth and parallax are untouched). */
+  function frame({ offset, sample }) {
+    camera.updateProjectionMatrix();
+    zoomMatrix.set(SCENE_FLOAT.zoom, 0, 0, offset.x, 0, SCENE_FLOAT.zoom, 0, offset.y, 0, 0, 1, 0, 0, 0, 0, 1);
+    camera.projectionMatrix.premultiply(zoomMatrix); camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+    shown = offset; floatSample = sample;
+  }
   function draw() {
     const started = performance.now();
-    made.animate(time);
-    if (!frozen) made.kit.stage.position.set(Math.sin(time * 2 * Math.PI / DRIFT.periodX) * DRIFT.x, Math.sin(time * 2 * Math.PI / DRIFT.periodY) * DRIFT.y, 0);
+    made.animate(time); frame(floatTarget());
     renderer.render(scene, camera);
     if (retired) { release(retired); retired = null; }
     frameMs = performance.now() - started; frames += 1;
@@ -102,8 +129,23 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
     lastRender = now; time += Math.min(.1, elapsed / 1000) * look.timeScale;
     guarded(() => { draw(); if (gl.fenceSync) { pending = { sync: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0), at: performance.now() }; gl.flush(); } });
   }
-  function start() { if (frozen || disposed || raf || document.hidden) return; lastRender = performance.now(); raf = requestAnimationFrame(loop); }
-  function stop() { cancelAnimationFrame(raf); raf = 0; }
+  /** A scene with its clock stopped (a quiet date) is drawn again only when the float has moved it:
+   * at most four checks a second while it eases, one wake at each step without Float gently. */
+  function floatLoop() {
+    floatTimer = 0;
+    if (disposed || document.hidden || !frozen || !(float || held)) return;
+    const next = floatTarget().offset, size = renderer.getSize(new T.Vector2());
+    if (Math.abs(next.x - shown.x) * size.x / 2 >= FLOAT_MIN_PIXELS || Math.abs(next.y - shown.y) * size.y / 2 >= FLOAT_MIN_PIXELS) { guarded(draw); floatFrames += 1; }
+    if (disposed || !float || held) return;
+    const seconds = floatClock() - originOf(float.interval), boundary = (Math.floor(seconds / float.interval + SCENE_TRACK.phase) + 1 - SCENE_TRACK.phase) * float.interval;
+    floatTimer = setTimeout(floatLoop, float.gentle ? FLOAT_CHECK_MS : Math.max(FLOAT_CHECK_MS, (boundary - seconds) * 1000 + 5));
+  }
+  function start() {
+    if (disposed || document.hidden) return;
+    if (frozen) { if (!floatTimer && float) floatTimer = setTimeout(floatLoop, FLOAT_CHECK_MS); return; }
+    if (raf) return; lastRender = performance.now(); raf = requestAnimationFrame(loop);
+  }
+  function stop() { cancelAnimationFrame(raf); raf = 0; clearTimeout(floatTimer); floatTimer = 0; }
   function onVisibility() { if (document.hidden) stop(); else start(); }
   function onResize() {
     if (disposed || !host.clientWidth || !host.clientHeight) return;
@@ -126,10 +168,25 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
     look = next; clearTimeout(retuneTimer);
     retuneTimer = setTimeout(() => guarded(() => { if (disposed) return; compose(); draw(); }), RETUNE_DELAY_MS);
   }
+  /** New float settings (#675): the motion interval and whether to ease (Float gently on, motion allowed)
+   * or step. A still stage ignores them. A new interval keeps the current position. */
+  function setFloat(next) {
+    if (disposed || still || !next) return;
+    if (float && next.interval === float.interval && next.gentle === float.gentle) return;
+    if (float && next.interval !== float.interval) { const now = floatClock(); floatOrigins.set(next.interval, now - (now - originOf(float.interval)) * next.interval / float.interval); }
+    float = { interval: next.interval, gentle: next.gentle };
+    if (frozen) { stop(); start(); }
+  }
+  /** For tools and tests: pin the float at a track position in [-1, 1]² (null resumes it) and draw. */
+  function holdFloat(unit) {
+    if (disposed) return;
+    held = unit ? { x: Math.max(-1, Math.min(1, unit.x)), y: Math.max(-1, Math.min(1, unit.y)) } : null;
+    guarded(draw); if (frozen) { stop(); start(); }
+  }
 
   function dispose() {
     if (disposed) return; disposed = true;
-    stop(); clearTimeout(rebuildTimer); clearTimeout(retuneTimer); observer?.disconnect(); document.removeEventListener('visibilitychange', onVisibility); canvas.removeEventListener('webglcontextlost', onLost);
+    stop(); clearTimeout(rebuildTimer); clearTimeout(retuneTimer); clearTimeout(floatTimer); observer?.disconnect(); document.removeEventListener('visibilitychange', onVisibility); canvas.removeEventListener('webglcontextlost', onLost);
     try { clear(); } catch { /* releasing must not throw */ }
     // Give the context back at once: browsers keep only a few alive per page.
     try { renderer?.dispose(); renderer?.forceContextLoss(); } catch { /* already lost */ }
@@ -137,7 +194,8 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   }
   function stats() {
     const size = renderer && !disposed ? renderer.getSize(new T.Vector2()) : { x: 0, y: 0 }, info = renderer?.info;
-    return { frames, builds, running: raf !== 0, frozen, disposed, time, buildMs, frameMs, gpuMs, seeScale: look.seeScale, backing: [size.x, size.y], triangles: info?.render.triangles ?? 0, calls: info?.render.calls ?? 0, geometries: info?.memory.geometries ?? 0, textures: info?.memory.textures ?? 0, programs: info?.programs?.length ?? 0 };
+    return { frames, builds, running: raf !== 0, frozen, disposed, time, buildMs, frameMs, gpuMs, seeScale: look.seeScale,
+      floating: !disposed && (raf !== 0 || floatTimer !== 0), float: { ...shown }, floatSample, zoom: SCENE_FLOAT.zoom, floatFrames, backing: [size.x, size.y], triangles: info?.render.triangles ?? 0, calls: info?.render.calls ?? 0, geometries: info?.memory.geometries ?? 0, textures: info?.memory.textures ?? 0, programs: info?.programs?.length ?? 0 };
   }
   /** Developer measurement: draw `count` frames back to back. `script` is the main-thread time per
    * frame (ticks and draw submission); `finished` adds waiting for the GPU to complete the frame. */

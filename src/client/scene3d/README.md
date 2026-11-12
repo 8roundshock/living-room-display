@@ -31,7 +31,13 @@ all drawn by the flat SVG renderer (`LivingTheme`), which stays until every scen
    ```
 3. Build, capture, look, delete (see [Look at it](#look-at-it)). Run
    `node --test "src/client/scene3d/*.test.ts"`: it checks every file in `scenes/` and
-   `weather/` against this contract.
+   `weather/` against this contract, the float's edge and crop rules included.
+   When the scene looks right, write its content baseline in the same pull request:
+   `node tests/scene3d/census.mjs --write <id>` creates `tests/scene3d/census/<id>.json` (what it
+   draws, everyday and quiet). It is a file of its own, so no other pull request touches it.
+   From then on `scene3d.test.ts` fails if a later edit makes the scene draw more than 5% less.
+   Without the file the test only reports "no baseline yet". After a deliberate rework that draws
+   less, write the file again in that rework's pull request.
 4. One scene, one pull request, one independent code review. Do not edit `engine.js`, `kit/`,
    `settings.ts`, `resolve.ts` or another scene in a scene pull request. If the kit lacks
    something, build it inside your scene file from `kit.T`, or as a shared part (below).
@@ -107,16 +113,37 @@ less is visible, behind it more: `view.halfWAt(z)` and `view.halfHAt(z)` give th
 at a depth, so an object stands on the bottom edge at `y = -view.halfHAt(z)`. Things beyond
 about z = -9 fade into black fog. The scene is rebuilt when the view's shape changes.
 
-The engine drifts the whole stage on a slow closed path (0.14 units sideways and 0.06 up and
-down, over about seven and five minutes), so standing objects do not light the same pixels for
-weeks. Start cords, boughs and poles at least 0.3 units beyond the edge they come from, so the
-drift never shows their end.
+The engine floats the whole picture like the widget board (#675): up to ±2% of the display
+on each axis, on its own track and the board's motion interval, also on a quiet date. It draws
+the picture 4.3% larger about the screen's centre: about 2% of each edge is cropped at the
+centre position and up to 4% of the far side at an extreme. You do not need to do anything for
+it, but keep to these rules:
+
+- Anything that enters from a side edge must cross it: start cords, boughs and poles beyond
+  the edge they come from (at their depth, `view.halfWAt(z)`). Ending exactly at the edge is
+  not enough.
+- Something whole near the bottom (a cake, a gift, an egg, a fallen leaf) stands on the
+  visible bottom, about 2% of the height up: `y = -view.halfHAt(z) * .9588` (1 / 1.043), or
+  about 0.19 units above the edge, then nudged until its lowest point is within 0.3% of the
+  height of it (the check prints the gap). Standing exactly on the edge, it is cut at the
+  centre position; floating higher, it fails the check. Or sink it past the edge, like a
+  bouquet whose stems run off the bottom. Something resting on another thing (an egg on a
+  napkin) only needs that thing under it.
+- Keep anything else that must stay whole about 4% of the width (and height) in from an edge:
+  the float takes the far side of the frame that far in at an extreme. Things attached to
+  something that enters from the edge (cones on a bough, ornaments on a garland) may be cut
+  with it.
+- `node tests/scene3d/edge-check.mjs` prints, for every scene and overlay at 16:9 and 21:9,
+  how far the elements anchored at each edge reach beyond it. `npm test` fails when one would
+  show its end, or when a whole piece would be cut (the crop rule in
+  [Ambient themes](../../../docs/ambient-themes.md#float-675-owner-direction-2026-11-12)).
 
 Time: `tick(fn)` registers `fn(t)`, called once per drawn frame with the scene clock in
 seconds. The clock runs at one eighth of real time (the owner's "motion 5%") and frames are
 drawn about 20 times a second, so write motion as a function of `t` (`Math.sin(t * .4)`), never
 as a per-frame increment. A still editor preview and a quiet date call every tick once, at
-t = 14, and draw one frame.
+t = 14. A still preview draws that one frame; a quiet date's picture is redrawn only as the
+float moves it.
 
 Quiet dates: `ctx.amount` is already reduced. `kit.snow`, `kit.bokeh`, `kit.confetti` and
 `kit.fireworks` return an empty group, so `stage.add(kit.snow(40))` is always safe. Guard your
@@ -177,7 +204,13 @@ in `mat()` and lists the parts that call `solidity`: add yours there. The curve
 - Nothing 3D is in the dashboard bundle. The engine with three.js (about 620 kB, 160 kB
   gzipped) and each scene file are fetched only when a 3D scene is about to be shown.
 - Theme Off, Animation Off and system reduced motion mount nothing. The editor's still
-  preview and a quiet date draw one frame and run no loop.
+  preview draws one frame and runs no loop. A quiet date runs no frame loop: a timer redraws
+  its frozen scene only when the float has moved it half a pixel (at most four times a
+  second), or once per step without Float gently.
+- The float is a change to the camera's projection (zoom 1.043 about the centre, then the
+  offset): `stage.setFloat({ interval, gentle })` follows the board's settings without a
+  rebuild, `stage.holdFloat(unit)` pins a position for tools, and `stats()` reports `float`
+  (NDC), `zoom`, `floating` and `floatFrames`.
 - The backing store is at most 2560 x 1440. Frames are drawn about 20 times a second, never
   while the document is hidden, and never before the GPU has finished the previous one.
 - One stage owns one canvas and one WebGL context and releases both on unmount.

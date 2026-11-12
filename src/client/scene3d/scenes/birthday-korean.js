@@ -18,7 +18,8 @@ export default function build(kit, ctx) {
 
   // ---------- the birthday table, bottom right: cake, seaweed soup, spoon and chopsticks on a soban ----------
   const table = soban(kit, { width: 3.2 * K, depth: 2 * K, height: 1.2 * K }), tableZ = -.3;
-  table.position.set(W - 3.05, -view.halfHAt(tableZ + .7 * K) + .1, tableZ); table.rotation.x = .12; stage.add(table);
+  // Its feet on the visible bottom: the float's zoom crops the lowest 2% at its centre (#675).
+  table.position.set(W - 3.05, -view.halfHAt(tableZ + .7 * K) * .9588 + .12, tableZ); table.rotation.x = .12; stage.add(table);
   {
     const top = table.userData.top + .06 * K;
     // One low tier, cream with a coral glaze, on a plate; five plain candles, a fixed number.
@@ -41,9 +42,10 @@ export default function build(kit, ctx) {
   // ---------- three balloons, each different, tied to the table's rail ----------
   {
     const tie = table.userData.rail[3].clone().applyEuler(table.rotation).add(table.position), bend = V(1.05 * K, .75 * K, .1);
-    const SPOTS = [[.55, 4.75, .1], [1.0, 5.85, -.5], [.1, 6.5, .35]], KINDS = [[jade, .47, 'pearl'], [coral, .4, 'latex'], [gold, .35, 'foil']];
+    // They float clear of the right edge, so the float never cuts one (#675).
+    const SPOTS = [[.05, 4.75, .1], [.5, 5.85, -.5], [-.4, 6.5, .35]], KINDS = [[jade, .47, 'pearl'], [coral, .4, 'latex'], [gold, .35, 'foil']];
     for (let i = 0; i < Math.min(3, Math.max(2, Math.round(2 + A * 4))); i++) {
-      const [colour, radius, skin] = KINDS[i], r = radius * K, group = new T.Group(), at = V(...SPOTS[i]), balloon = kit.balloon(deep(colour), r, { skin });
+      const [colour, radius, skin] = KINDS[i], r = radius * K, group = new T.Group(), at = V(SPOTS[i][0] - (W - 8) * .3, SPOTS[i][1], SPOTS[i][2]), balloon = kit.balloon(deep(colour), r, { skin });
       group.position.copy(tie); balloon.position.copy(at); balloon.quaternion.slerp(new T.Quaternion().setFromUnitVectors(V(0, -1, 0), at.clone().negate().normalize()), .3);
       const knot = at.clone().add(V(0, -1.2 * r, 0).applyQuaternion(balloon.quaternion));
       // The string swings out past the rim of the table before it rises.
@@ -54,9 +56,10 @@ export default function build(kit, ctx) {
 
   // ---------- two gifts in knotted silk, bottom left: they differ in size, proportion, colour and knot ----------
   {
-    const stand = (gift, x, z, front, turn) => { gift.position.set(x, -view.halfHAt(z + front), z); gift.rotation.y = turn; stage.add(gift); };
-    stand(bojagiGift(kit, { width: 1.6 * K, height: 1.05 * K, depth: 1.6 * K, colour: deep(jade), lining: deep(coral), ears: 'upright', salt: 3 }), -W + 1.95, -.4, .8 * K, .45);
-    stand(bojagiGift(kit, { width: 1.3 * K, height: .45 * K, depth: .7 * K, colour: mix(gold, 0xb07a2a, .45), ears: 'lying', striped: true, salt: 9 }), -W + 3.55, .55, .35 * K, -.2);
+    // They stand a little above the bottom edge (#675: the float's zoom crops the lowest 2% of the screen at its centre).
+    const stand = (gift, x, z, front, turn, sink) => { gift.position.set(x, -view.halfHAt(z + front) * .955 - sink, z); gift.rotation.y = turn; stage.add(gift); };
+    stand(bojagiGift(kit, { width: 1.6 * K, height: 1.05 * K, depth: 1.6 * K, colour: deep(jade), lining: deep(coral), ears: 'upright', salt: 3 }), -W + 1.95, -.4, .8 * K, .45, .056);
+    stand(bojagiGift(kit, { width: 1.3 * K, height: .45 * K, depth: .7 * K, colour: mix(gold, 0xb07a2a, .45), ears: 'lying', striped: true, salt: 9 }), -W + 3.55, .55, .35 * K, -.2, .03);
   }
 
   // ---------- a patchwork cloth hanging from its rod, top left ----------

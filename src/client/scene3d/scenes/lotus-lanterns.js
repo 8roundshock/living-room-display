@@ -33,7 +33,7 @@ export default function build(kit, ctx) {
 
   // ---------- the lantern line, top left: one cord, three lanterns that differ in kind, colour and size ----------
   {
-    const line = new T.Group(), z = -1.5, cord = kit.catenary(V(-W - .7, 4.35, z), V(-W + 6.3, 4.8, z), .7, 40); line.add(kit.line(cord, CORD, .55)); stage.add(line);
+    const line = new T.Group(), z = -1.5, cord = kit.catenary(V(-view.halfWAt(z) - .5, 4.35, z), V(-W + 6.3, 4.8, z), .7, 40); line.add(kit.line(cord, CORD, .55)); stage.add(line);
     const at = x => cord.reduce((best, point) => Math.abs(point.x - x) < Math.abs(best.x - x) ? point : best);
     const strung = [
       [-W + 1.75, () => lotusLantern(kit, { size: .5 * K, paper: LOTUS_WHITE, rows: LOTUS_TWO_ROWS, leaves: 6, strength: .6, salt: 13 }), .95, { tag: { width: .14 * K, height: .46 * K, thread: .2 * K, salt: 15 }, halo: [1.9 * K, .2], sway: 3.6, turn: 1.5, phase: 1.9 }],

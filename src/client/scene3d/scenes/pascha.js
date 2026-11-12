@@ -14,7 +14,8 @@ export default function build(kit, ctx) {
   const { T, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.18;
 
   // ---------- the kulich on its plate and napkin, bottom-left corner, seen a little from above ----------
-  const table = new T.Group(); table.position.set(-W + 2.05, -view.halfH + .42, 0); table.rotation.x = .24; table.scale.setScalar(unit); stage.add(table);
+  // The napkin lies a little higher, so the eggs on it are not cut by the float's zoom (#675).
+  const table = new T.Group(); table.position.set(-W + 2.05, -view.halfH + .62, 0); table.rotation.x = .24; table.scale.setScalar(unit); stage.add(table);
   const napkin = linenNapkin(kit, { width: 3.1, depth: 2.1, seed }); napkin.rotation.y = .16; napkin.position.set(.15, 0, .1); table.add(napkin);
   const dish = plate(kit, { radius: 1.1, colour: 0xf6f3ec, line: 0xdcd6c8 }); dish.position.y = .03; table.add(dish);
   const bread = kulich(kit, { sprinkles: Math.min(110, 30 + A * 170), seed }); bread.position.set(-.08, dish.position.y + dish.userData.top, -.12); table.add(bread);
@@ -22,7 +23,7 @@ export default function build(kit, ctx) {
   // ---------- five eggs, each dyed and lying differently: three on the plate, two on the napkin ----------
   const rest = dish.position.y + dish.userData.top + .125, cloth = .16;
   // [shell, x, y, z, turn about the vertical, tilt of its long axis]
-  const EGGS = [['red', .7, rest, .38, .5, 1.42], ['skin-dark', -.74, rest, .3, -.9, 1.5], ['marble', .1, rest + .005, .78, 1.9, 1.62], ['skin-light', 1.38, cloth, .5, -.4, 1.5], ['scarlet', -1.3, cloth, .72, 1.1, 1.38]];
+  const EGGS = [['red', .7, rest, .38, .5, 1.42], ['skin-dark', -.74, rest, .3, -.9, 1.5], ['marble', .1, rest + .005, .78, 1.9, 1.62], ['skin-light', 1.38, cloth, .5, -.4, 1.5], ['scarlet', -.55, cloth, .72, 1.1, 1.38]];
   EGGS.slice(0, Math.max(3, Math.round(2 + A * 13))).forEach(([shell, x, y, z, turn, tilt], i) => {
     const egg = dyedEgg(kit, { shell, size: 1.04 - (i % 3) * .04, salt: seed + i * 13 }); egg.position.set(x, y, z); egg.rotation.set(0, turn, tilt, 'YZX'); table.add(egg);
   });

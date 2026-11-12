@@ -13,7 +13,8 @@ export default function build(kit, ctx) {
   const { T, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.07;
 
   // ---------- the mimosa in its vase, bottom-left corner, leaning a little toward the room ----------
-  const depth = -.2, corner = new T.Group(); corner.position.set(-W + 1.75, -view.halfHAt(depth) - .02, depth); corner.scale.setScalar(unit); stage.add(corner);
+  // A little above the bottom edge (#675: the float's zoom crops the lowest 2%).
+  const depth = -.2, corner = new T.Group(); corner.position.set(-W + 1.75, -view.halfHAt(depth) + .28, depth); corner.scale.setScalar(unit); stage.add(corner);
   const vase = glassVase(kit, { height: 1.7, radius: .42 });
   // [lean sideways, lean in depth, length above the vase, droop]: five stems, the longest nearly upright.
   const STEMS = [[.03, .02, 4.15, .5], [.27, .1, 3.7, .85], [-.2, -.1, 3.4, .7], [.46, -.06, 3.05, 1], [-.3, .12, 2.6, .75]];
@@ -23,7 +24,7 @@ export default function build(kit, ctx) {
 
   // ---------- shed blossom: a few balls at the foot of the vase, a few drifting down under the spray ----------
   const o = new T.Object3D(), fallen = spray.ball(Math.min(9, Math.max(3, Math.round(1 + A * 20))));
-  for (let i = 0; i < fallen.count; i++) { const size = .045 + rnd(i, seed + 5) * .025; o.position.set(-.8 + i * .34 + rnd(i, seed + 6) * .2 + (i > 2 ? .5 : 0), size + .03, -.55 + rnd(i, seed + 7) * .5); o.scale.setScalar(size); o.updateMatrix(); fallen.setMatrixAt(i, o.matrix); }
+  for (let i = 0; i < fallen.count; i++) { const size = .045 + rnd(i, seed + 5) * .025; o.position.set(-.8 + i * .34 + rnd(i, seed + 6) * .2 + (i > 2 ? .5 : 0), size - .1, -.55 + rnd(i, seed + 7) * .5); o.scale.setScalar(size); o.updateMatrix(); fallen.setMatrixAt(i, o.matrix); }
   corner.add(fallen);
   if (!ctx.quiet && A > .04) {
     const drifting = spray.ball(Math.min(12, Math.round(A * 30))), top = 4.6; corner.add(drifting);
@@ -37,7 +38,8 @@ export default function build(kit, ctx) {
   }
 
   // ---------- five tulips tied with a ribbon, lying along the bottom edge on the right ----------
-  const bunch = new T.Group(); bunch.position.set(W - 3.45, -view.halfH + .42, .1); bunch.scale.setScalar(unit); stage.add(bunch);
+  // Above the band the float's zoom crops (#675).
+  const bunch = new T.Group(); bunch.position.set(W - 3.65 - (W - 8) * .3, -view.halfH + .905, .1); bunch.scale.setScalar(unit); stage.add(bunch);
   // [colour, how open, stem length, bend, leaves, lift of the head, fan in depth, turn on its own stem, nudge]
   // The colours are painted deeper than they read: the light lifts coral, pink and cream to the plan's tints.
   const TULIPS = [[0xd6223c, .06, 3.2, .1, 1, -.03, -.12, .4, 0], [0xe4608e, .5, 2.5, -.08, 1, .08, .16, 2.2, .03], [0xe9d8b4, .92, 3.35, .1, 1, .2, .3, 4.1, -.03], [0xd6223c, .42, 2.3, .06, 1, .33, -.26, 1.3, .05], [0xe4608e, 0, 2.45, -.08, 1, .56, .05, 5.2, -.05]];

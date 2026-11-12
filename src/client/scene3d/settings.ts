@@ -41,6 +41,27 @@ export const TIER_LOOK: Readonly<Record<SceneTier, { opacity: number; amount: nu
 };
 /** Selected quiet dates: a much reduced, neutral, motionless version with nothing in the air. */
 export const QUIET_LOOK = { amount: .4, opacity: .38, timeScale: 0, particles: false, saturation: .15 } as const;
+/** The camera every scene is drawn with: a 30 degree vertical field of view onto the plane z = 0, 9 units high. */
+export const CAMERA = { fov: 30, halfHeight: 4.5 } as const;
+/**
+ * The scene float (#675, owner direction 2026-11-12: the scenes "need to move and shift as well, so
+ * they don't burn in over a long time, same as the other elements"). The whole picture moves up to
+ * `travelX` × `travelY` of the display each way on SCENE_TRACK (src/shared/float.ts) and is drawn
+ * `zoom` times larger about the screen's centre, so whatever enters from an edge or stands on the
+ * bottom edge still reaches past the frame at the far end of the travel: zoom − 1 is a little more than
+ * 2 × travel, so anything that crosses a side edge keeps crossing it, and anything standing on the bottom
+ * edge (or hanging from the top) keeps reaching it. The zoom also crops: about 2% of each edge is out of
+ * the frame at the centre position and 4% of the far side at an extreme, so nothing whole may sit that
+ * close to an edge. Both are the least that keeps ±2% of travel on each axis (the review of #676 tried
+ * more: every extra per cent of travel costs a per cent of zoom and crop).
+ * tests/scene3d/edge-check.mjs checks every scene and overlay against these numbers. This spreads wear;
+ * it is not a burn-in guarantee.
+ */
+export const SCENE_FLOAT = { travelX: .02, travelY: .02, zoom: 1.043 } as const;
+/** The float's offset in normalised device coordinates (the frame is −1 to 1) for a track position in [-1, 1]². */
+export function floatOffset(unit: { x: number; y: number }): { x: number; y: number } {
+  return { x: unit.x * 2 * SCENE_FLOAT.travelX, y: unit.y * 2 * SCENE_FLOAT.travelY };
+}
 /** Runtime caps: backing-store pixels and frame rate. Motion is very slow, so 20 frames a second is smooth. */
 export const RENDER_LIMITS = { maxWidth: 2560, maxHeight: 1440, framesPerSecond: 20 } as const;
 /** Scene clock at start, and the fixed instant of a still or quiet frame (the picker's thumbnail instant). */

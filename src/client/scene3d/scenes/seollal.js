@@ -39,7 +39,7 @@ export default function build(kit, ctx) {
 
   // ---------- two lucky pouches on one hook, top right: one round, one eared ----------
   {
-    const hook = V(W - 1.75, 4.95, 0);
+    const hook = V(W - 2.1, 4.95, 0);   // clear of the right edge, so the float never cuts what hangs here (#675)
     const round = roundPouch(kit, { size: 1.12 * K, drop: 2.55, colour: RED, cord: [YELLOW, JADE], lean: -.12, phase: 0 }); round.position.copy(hook);
     const eared = earedPouch(kit, { size: .98 * K, drop: 3.95, colour: JADE, cord: [RED, YELLOW], lean: .1, phase: 2.2 }); eared.position.copy(hook).add(V(0, 0, .24));
     stage.add(round, eared);
@@ -47,7 +47,8 @@ export default function build(kit, ctx) {
 
   // ---------- four yut sticks as they fell, bottom right: both faces show, one lies across another ----------
   {
-    const floor = new T.Group(), z = .2; floor.position.set(W - 2.3, -view.halfHAt(z) + .52, z); floor.rotation.x = .5; stage.add(floor);
+    // Above the band the float's zoom crops (#675).
+    const floor = new T.Group(), z = .2; floor.position.set(W - 2.3, -view.halfHAt(z) + .7, z); floor.rotation.x = .5; stage.add(floor);
     // [x, z, turn on the floor, belly up, lift, tilt along its length]
     const THROW = [[-.8, -.1, .22, true, 0, 0], [.2, .32, -.5, false, 0, 0], [.84, -.28, 1.15, true, 0, 0], [.02, -.3, -1.05, false, .13, .2]];
     THROW.forEach(([x, depth, turn, bellyUp, lift, tilt], i) => {

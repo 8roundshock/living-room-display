@@ -72,7 +72,7 @@ export default function build(kit, ctx) {
 
   // ---------- a short runner of the same vine, low on the left and set back ----------
   {
-    const z = -1.5, edge = view.halfWAt(z), start = V(-edge - .45, -3.16, z), shoot = limb(kit, [start, V(-edge + .5, -3.5, z), V(-edge + 1.4, -3.74, z + .1), V(-edge + 2.2, -4.2, z + .1), V(-edge + 2.75, -4.44, z)], taper(.024 * S, .011 * S), G.stem, { sides: 6 }); stage.add(shoot);
+    const z = -1.5, edge = view.halfWAt(z), start = V(-edge - .45, -3.16, z), shoot = limb(kit, [start, V(-edge + .5, -3.5, z), V(-edge + 1.4, -3.74, z + .1), V(-edge + 2.2, -4.3, z + .1), V(-edge + 2.75, -4.62, z)], taper(.024 * S, .011 * S), G.stem, { sides: 6 }); stage.add(shoot);
     [[.3, 1, .5, 0, .3], [.52, -1, .4, 2, -.4], [.74, 1, .33, 1, .5], [.93, -1, .25, 0, -.2]].forEach(([share, side, size, hold, yaw], i) => { const pivot = hangLeaf(stage, shoot.userData.at(share), side, size, hold, yaw, 60 + i); pivot.children[0].rotation.x -= .5; });
     hangBud(stage, shoot.userData.at(1), V(.8, .45, .2), .26, 7);
     stage.add(G.tendril({ from: shoot.userData.at(.62), way: V(.4, .9, .1), reach: .36 * S, coil: .08 * S, side: -1, thick: .01 * S }));

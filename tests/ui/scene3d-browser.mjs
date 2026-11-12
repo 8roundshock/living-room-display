@@ -10,6 +10,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openScene, SCENE_CASES, startSceneServer, WEATHER_IDS, WEBGL_ARGS } from './lib/scene-cases.mjs';
+import { SCENE_TRACK, trackPosition } from '../../src/shared/float.ts';
+import { floatOffset } from '../../src/client/scene3d/settings.ts';
 
 const VIEWPORT = { width: 640, height: 360 }, BRIGHTNESS = .36, READY = 120_000;
 // A season or holiday scene that has no file under scenes/ yet (and borrows none), read from the folder so that
@@ -100,6 +102,23 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); }); await framesBeyond(stillPaused.frames);
     const resumed = (await stages())[0]; assert.ok(resumed.running && resumed.time - stillPaused.time < .3, 'the scene clock does not jump after a pause');
     record('The loop draws at no more than about 20 frames a second on a slow scene clock, stops while the document is hidden and resumes without a jump');
+    // ---------- the float (#675): the picture moves on its own track, zoomed, within its travel ----------
+    // The synthetic settings have Float gently off, so the display steps once per 180 s interval; ease it on a 2 s interval here.
+    const stepping = (await stages())[0];
+    assert.equal(stepping.zoom, 1.043); assert.ok(stepping.floating, 'a running scene floats');
+    assert.ok(Math.abs(stepping.float.x) <= .04 + 1e-9 && Math.abs(stepping.float.y) <= .04 + 1e-9, `within its travel: ${JSON.stringify(stepping.float)}`);
+    const travel = await page.evaluate(async () => {
+      const stage = [...window.__lrdScene3d][0], seen = [], wait = ms => new Promise(done => setTimeout(done, ms));
+      for (const unit of [{ x: 1, y: 1 }, { x: -1, y: -1 }]) { stage.holdFloat(unit); seen.push(stage.stats().float); }
+      stage.holdFloat(null); stage.setFloat({ interval: 2, gentle: true }); await wait(300); const eased = stage.stats().float;
+      await wait(1200); const later = stage.stats().float;
+      stage.setFloat({ interval: 4, gentle: true }); await wait(100); const slower = stage.stats().float;
+      return { seen, eased, later, slower };
+    });
+    assert.deepEqual(travel.seen.map(point => [+point.x.toFixed(6), +point.y.toFixed(6)]), [[.04, .04], [-.04, -.04]], 'the extremes are ±2% of the display on each axis (NDC ±0.04)');
+    assert.ok(Math.hypot(travel.later.x - travel.eased.x, travel.later.y - travel.eased.y) > .005, `with Float gently the picture moves continuously: ${JSON.stringify(travel)}`);
+    assert.ok(Math.hypot(travel.slower.x - travel.later.x, travel.slower.y - travel.later.y) < .01, `a new motion interval keeps the position: ${JSON.stringify(travel)}`);
+    record('The scene floats on its own track within ±2% of the display on each axis at a 4.3% zoom; a new motion interval keeps its position');
 
     // ---------- failures leave the flat scene on screen ----------
     await page.evaluate(() => { const element = document.querySelector('canvas.scene3d-canvas'); (element.getContext('webgl2') ?? element.getContext('webgl')).getExtension('WEBGL_lose_context').loseContext(); });
@@ -127,22 +146,49 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
       const [engine, scene] = await Promise.all([import(enginePath), import(scenePath)]);
       const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:0;top:0;width:320px;height:180px'; document.body.append(host);
       let objects = 0, points = 0;
+      // A two-second motion interval, so the float moves the quiet picture within the check's 1.5 seconds.
       const stage = engine.createStage(host, { build: (kit, ctx) => { scene.default(kit, ctx); kit.stage.traverse(object => { objects++; if (object.isPoints) points++; }); },
         ctx: { id: 'canada-day', amount: .15 * .4, size: .85, tier: 'special', weather: null, quiet: true, palette: ['#858f94', '#798788', '#858a90'], seed: 1, day: 1 },
-        look: { glow: .65, shine: .8, seeThrough: 1, timeScale: 0 }, limits: { maxWidth: 2560, maxHeight: 1440, framesPerSecond: 20 }, clock: { start: 12, still: 14 }, allowSoftware: true });
-      await new Promise(done => setTimeout(done, 400));
+        look: { glow: .65, shine: .8, seeThrough: 1, timeScale: 0 }, float: { interval: 2, gentle: true }, limits: { maxWidth: 2560, maxHeight: 1440, framesPerSecond: 20 }, clock: { start: 12, still: 14 }, allowSoftware: true });
+      const first = stage.stats().float; await new Promise(done => setTimeout(done, 1500));
       const stats = stage.stats(), live = window.__lrdScene3d.size; stage.dispose(); host.remove();
-      return { objects, points, frames: stats.frames, running: stats.running, frozen: stats.frozen, time: stats.time, live, left: window.__lrdScene3d.size };
+      return { objects, points, frames: stats.frames, floatFrames: stats.floatFrames, floating: stats.floating, running: stats.running, frozen: stats.frozen, time: stats.time, first, last: stats.float, live, left: window.__lrdScene3d.size };
     }, { enginePath: chunks.engine, scenePath: chunks['canada-day'] });
-    assert.ok(quiet.frozen && !quiet.running && quiet.frames === 1 && quiet.time === 14, `a quiet scene is one frozen frame: ${JSON.stringify(quiet)}`);
+    assert.ok(quiet.frozen && !quiet.running && quiet.time === 14, `a quiet scene's own clock stays stopped and no frame loop runs: ${JSON.stringify(quiet)}`);
+    assert.ok(quiet.floating && quiet.floatFrames >= 1 && quiet.frames === 1 + quiet.floatFrames && quiet.floatFrames <= 7, `the float alone redraws it, at most four times a second: ${JSON.stringify(quiet)}`);
+    assert.ok(quiet.last.x !== quiet.first.x || quiet.last.y !== quiet.first.y, 'and moves it');
     assert.equal(quiet.points, 0, 'nothing is in the air on a quiet date: no fireworks or other particle field'); assert.ok(quiet.objects > 20, 'the reduced scene is still a scene');
     assert.deepEqual([quiet.live, quiet.left], [1, 0]);
-    record('On a quiet date the engine draws one frozen frame with nothing in the air');
+    // A new stage after a change of interval (a rebuild at midnight, a quiet date beginning) carries on from the same position.
+    const handover = await page.evaluate(async ({ enginePath, scenePath }) => {
+      const [engine, scene] = await Promise.all([import(enginePath), import(scenePath)]), wait = ms => new Promise(done => setTimeout(done, ms));
+      const make = interval => { const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:0;top:0;width:320px;height:180px'; document.body.append(host);
+        const stage = engine.createStage(host, { build: scene.default, ctx: { id: 'canada-day', amount: .06, size: .85, tier: 'special', weather: null, quiet: true, palette: ['#858f94', '#798788', '#858a90'], seed: 1, day: 1 },
+          look: { glow: .65, shine: .8, seeThrough: 1, timeScale: 0 }, float: { interval, gentle: true }, limits: { maxWidth: 2560, maxHeight: 1440, framesPerSecond: 20 }, clock: { start: 12, still: 14 }, allowSoftware: true });
+        return { stage, done: () => { stage.dispose(); host.remove(); } }; };
+      const first = make(3); await wait(400); first.stage.setFloat({ interval: 7, gentle: true }); await wait(300); first.stage.holdFloat(null);
+      const sample = stage => { const stats = stage.stats(); return { float: stats.float, ...stats.floatSample }; };
+      const before = sample(first.stage); first.done();
+      const second = make(7), after = sample(second.stage); second.done();
+      return { before, after };
+    }, { enginePath: chunks.engine, scenePath: chunks['canada-day'] });
+    // Real time moves on while the new stage is built (seconds on a software rasteriser), so the picture may have moved
+    // between the two frames. Continuity is that the new stage reads the same track: its track time has advanced exactly
+    // as far as real time has, and what it drew is the track's position at that time.
+    const { before, after } = handover, elapsed = after.real - before.real;
+    assert.ok(Math.abs((after.seconds - before.seconds) - elapsed) < .002, `the new stage continues the same track clock (no jump): ${JSON.stringify(handover)}`);
+    for (const frame of [before, after]) {
+      const expected = floatOffset(trackPosition(frame.seconds, 7, true, SCENE_TRACK));
+      assert.ok(Math.abs(frame.float.x - expected.x) < 1e-9 && Math.abs(frame.float.y - expected.y) < 1e-9, `the drawn position is the track's at that time: ${JSON.stringify({ frame, expected })}`);
+    }
+    console.log(`SCENE3D_HANDOVER ${JSON.stringify({ rebuildSeconds: +elapsed.toFixed(3), moved: +Math.hypot(after.float.x - before.float.x, after.float.y - before.float.y).toFixed(4) })}`);
+    record('On a quiet date the scene is frozen with nothing in the air, and the float alone moves it on a low-rate timer; a new stage after an interval change continues the float (#675)');
 
     // ---------- the editor's still preview: one frame, no loop ----------
     await open({ scene: 'canada-day', path: '/editor' }); await ready();
     const still = await attributes(), [stillStage] = await stages();
     assert.equal(still.themeStill, 'true'); assert.equal(still.sceneFrames, '1'); assert.ok(stillStage.frozen && !stillStage.running && stillStage.frames === 1, JSON.stringify(stillStage));
+    assert.ok(!stillStage.floating && stillStage.float.x === 0 && stillStage.float.y === 0 && stillStage.zoom === 1.043, `a still preview does not float; it shows the centre at the display's zoom: ${JSON.stringify(stillStage)}`);
     assert.ok(still.opacity > 0 && still.opacity <= still.brightness + .0005, `the preview stays within its brightness: ${still.opacity} of ${still.brightness}`);
     assert.equal(await canvas().evaluate(element => element.getAnimations().length), 0, 'a still preview does not fade in');
     await page.waitForTimeout(900); assert.equal((await stages())[0].frames, 1, 'no loop runs behind a still preview');

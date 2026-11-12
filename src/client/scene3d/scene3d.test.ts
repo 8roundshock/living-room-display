@@ -170,3 +170,29 @@ test('A processor-drawn WebGL is recognised by name', () => {
   for (const name of ['ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)', 'llvmpipe (LLVM 15.0.7, 256 bits)', 'Microsoft Basic Render Driver', 'Software Rasterizer']) assert.equal(softwareRendererName(name), true, name);
   for (const name of ['ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Ti (0x00001B06) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)', 'Apple M2', '']) assert.equal(softwareRendererName(name), false, name);
 });
+
+// Review of #676: a stray comment once swallowed the statements that put three scenes' heroes on the stage, and every
+// other check passed because an empty scene has nothing to crop. Each scene (everyday and quiet) and overlay is built
+// in Node and must keep most of what it drew at its baseline, tests/scene3d/census/<id>.json. A scene without a
+// baseline file yet is reported and skipped, so a new scene's pull request is never failed by this test.
+test('Every scene and overlay still draws most of what it drew: nothing is silently dropped', async (t) => {
+  // @ts-expect-error -- a plain JavaScript test tool without type declarations
+  const { CENSUS_NAMES, censusOf } = await import('../../../tests/scene3d/census.mjs');
+  type Counts = Record<string, { objects: number; triangles: number }>;
+  const lost: string[] = [], missing: string[] = [];
+  for (const name of CENSUS_NAMES as string[]) {
+    let baseline: Counts;
+    try { baseline = JSON.parse(readFileSync(new URL(`../../../tests/scene3d/census/${name}.json`, import.meta.url), 'utf8')); } catch { missing.push(name); continue; }
+    const now: Counts = await censusOf(name);
+    for (const [key, was] of Object.entries(baseline)) {
+      if (key === 'taken') continue;
+      const is = now[key]!;
+      if (is.objects === 0 || is.objects < was.objects * .95 || is.triangles < was.triangles * .95) lost.push(`${name} ${key}: ${JSON.stringify(is)}, was ${JSON.stringify(was)}`);
+    }
+  }
+  if (missing.length) t.diagnostic(`no baseline yet (skipped): ${missing.join(', ')}; write one with node tests/scene3d/census.mjs --write <id>`);
+  assert.deepEqual(lost, [], 'a scene lost part of what it draws (more than 5% of its objects or of its triangles); if that was meant, take a new census');
+  // The baselines taken at c807ea4, by name: removing one fails even after new scenes have added their own.
+  const ORIGINAL_CENSUS = ['autumn', 'birthday-korean', 'birthday-russian', 'birthday', 'canada-day', 'christmas', 'chuseok', 'easter', 'fog', 'halloween', 'lotus-lanterns', 'maslenitsa', 'mimosa', 'new-year-tree', 'new-year', 'orthodox-christmas', 'pascha', 'rain', 'seollal', 'snow', 'spring', 'storm', 'summer', 'thanksgiving', 'weather-fog', 'weather-rain', 'weather-snow', 'weather-storm', 'weather-wind', 'wind', 'winter'];
+  assert.deepEqual(ORIGINAL_CENSUS.filter(name => missing.includes(name) || !(CENSUS_NAMES as string[]).includes(name)), [], 'a baseline taken at c807ea4 was removed, or its scene is no longer counted');
+});
