@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { floatPath, SCENE_TRACK, trackPosition } from '../../shared/float.ts';
 import { stageClock } from './engine.js';
+import { windGust } from './parts/wind-gust.js';
+import { weatherOver } from './parts/wind-underneath.js';
 import { SCENE_CLOCK } from './settings.ts';
 
 // #678: the editor's movement preview drives the 3D scene's float and its own clock, as it drives the board.
@@ -59,6 +61,19 @@ test('A preview shows the scene and the board on the same clock: an interval apa
     assert.ok(Math.hypot(board[1].x - board[0].x, board[1].y - board[0].y) > .05, `the board moved over an interval from ${t} s`);
     assert.deepEqual(at(t), scene[0], 'seeking back shows the same position');
   }
+});
+
+test('The wind over a scene (#646) follows the preview clock: its gust, lean and carry are the moment’s, in any order', () => {
+  // weatherOver's own tick reads the gust from the scene clock; under a preview that clock is the preview's moment.
+  const ticks: ((t: number) => void)[] = [], kit = { rnd: () => .3, tick: (fn: (t: number) => void) => { ticks.push(fn); }, fade: () => {} };
+  const weather = weatherOver(kit, { weather: 'wind', quiet: false, seed: 5 }), gust = windGust(kit, { salt: 5 + 31 }), clock = running();
+  const at = (seconds: number) => { clock.follow(seconds); for (const fn of ticks) fn(clock.time); return { ...weather.wind, carry: weather.carry(clock.time), drift: weather.drift(6) }; };
+  const first = at(600), later = at(613), again = at(600);
+  assert.equal(first.gust, Math.min(1, Math.max(0, gust.lift(SCENE_CLOCK.start + 600 / 8))), 'the gust at the preview’s moment');
+  assert.notEqual(later.gust, first.gust, 'a moment later the gust has changed'); assert.notEqual(later.carry, first.carry);
+  assert.deepEqual(again, first, 'seeking back gives the same gust, lean, sway, carry and drift');
+  clock.follow(null); clock.advance(.05); for (const fn of ticks) fn(clock.time);
+  assert.equal(weather.wind.gust, Math.min(1, Math.max(0, gust.lift(SCENE_CLOCK.start + 600 / 8 + .05 / 8))), 'after the preview the gust runs on from that moment');
 });
 
 test('The preview reaches the live stage without a new stage: Display passes the preview time, Scene3D sets it in place', () => {

@@ -146,7 +146,8 @@ t = 14. A still preview draws that one frame; a quiet date's picture is redrawn 
 float moves it. In the editor's movement preview (#678) `t` is the moment on its hour slider,
 `12 + seconds / 8`, and the slider can go to any moment in any order, backwards too: never
 keep state that assumes `t` only grows (a value cached for the current cycle of `t`, as
-`parts/rain-beads.js` does, is fine).
+`parts/rain-beads.js` does, is fine). The wind's gust (`parts/wind-gust.js`, #646) is a
+function of `t` as well, so the preview shows the lean and sway of that moment.
 
 The weather over a scene (#646). In Combined mode any of the five weather kinds can be drawn
 over your scene; the overlay draws the weather and your scene responds, calmly. Call

@@ -287,6 +287,51 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     await page.waitForFunction(() => { const stats = [...(window.__lrdScene3d ?? [])][0]?.stats(); return stats?.frozen && stats.preview === null && stats.float.x === 0 && stats.float.y === 0; }, null, { timeout: READY });
     assert.equal((await stages()).length, 1, 'back to layout: the still preview again, and no context left behind');
     record('Preview movement moves the 3D scene with the board on the hour slider: at each moment the float and the scene clock are that moment’s, an interval apart both have moved, a resting slider draws nothing new, seeking back repeats a moment, a settings change keeps the moment, all in one stage and context; Back to layout returns the still preview');
+    // A windy moment (#646): the gust the scene leans and sways with (Canada Day's flag flies harder, its bunting leans) is a
+    // function of the scene clock, so the preview drives it, and a moment draws the same picture however it is reached. The
+    // float is held, so only the scene's own life differs. SwiftShader redraws a frame bit for bit; a GPU's multisampled
+    // coverage need not (measured 2026-11-12 on a GTX 1080 Ti: up to about 160 pixels at 2/255 for the same frame drawn
+    // twice), so a seek back may differ from the first frame by no more than redrawing that frame does.
+    await open({ scene: 'canada-day', weather: 'wind', path: '/editor', viewport: { width: 1280, height: 720 } }); await ready();
+    await page.getByRole('button', { name: 'Preview movement', exact: true }).click();
+    await page.waitForFunction(() => { const stats = [...(window.__lrdScene3d ?? [])][0]?.stats(); return stats && !stats.frozen && stats.preview === 0; }, null, { timeout: READY });
+    assert.equal((await attributes()).sceneWeather, 'wind', 'Canada Day under the wind overlay');
+    await page.evaluate(() => [...window.__lrdScene3d][0].holdFloat({ x: 0, y: 0 }));
+    const windyBox = await canvas().boundingBox();
+    const picture = async () => {
+      const style = await page.addStyleTag({ content: '.ambient-content{visibility:hidden!important}.ambient-theme{opacity:1!important}.scene3d-canvas{animation:none!important}' });
+      await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+      const shot = (await page.screenshot({ clip: windyBox })).toString('base64'); await style.evaluate(node => node.remove()); return shot;
+    };
+    const windy = async seconds => {
+      const before = (await stages())[0].frames;
+      await page.getByRole('slider', { name: 'Movement preview time', exact: true }).evaluate((input, value) => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, String(value));
+        input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, seconds);
+      await page.waitForFunction(({ value, seen }) => { const stats = [...window.__lrdScene3d][0]?.stats(); return stats?.preview === value && stats.frames > seen; }, { value: seconds, seen: before }, { timeout: READY });
+      return { shot: await picture(), stats: (await stages())[0] };
+    };
+    const pixelDiff = (a, b) => page.evaluate(async ([one, two]) => {
+      const read = async base64 => { const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), character => character.charCodeAt(0))], { type: 'image/png' }));
+        const context = new OffscreenCanvas(bitmap.width, bitmap.height).getContext('2d'); context.drawImage(bitmap, 0, 0); return context.getImageData(0, 0, bitmap.width, bitmap.height).data; };
+      const [p, q] = await Promise.all([read(one), read(two)]); let differing = 0, most = 0;
+      for (let i = 0; i < p.length; i += 4) { const d = Math.max(Math.abs(p[i] - q[i]), Math.abs(p[i + 1] - q[i + 1]), Math.abs(p[i + 2] - q[i + 2])); if (d) { differing++; most = Math.max(most, d); } }
+      return { differing, most };
+    }, [a, b]);
+    const gustA = await windy(600);
+    await page.evaluate(() => [...window.__lrdScene3d][0].holdFloat({ x: 0, y: 0 })); const redrawn = await picture(), noise = await pixelDiff(gustA.shot, redrawn);
+    const gustB = await windy(613), gustAgain = await windy(600);
+    await page.waitForTimeout(1000); const gustHeld = (await stages())[0];
+    const moved = await pixelDiff(gustA.shot, gustB.shot), returned = await pixelDiff(gustA.shot, gustAgain.shot);
+    console.log(`SCENE3D_WINDY_PREVIEW ${JSON.stringify({ noise, returned, moved })}`);
+    assert.equal(gustA.stats.time, SCENE_CLOCK.start + 600 * timeScale); assert.equal(gustB.stats.time, SCENE_CLOCK.start + 613 * timeScale);
+    if (!gpu) assert.deepEqual([noise.differing, returned.differing], [0, 0], 'on SwiftShader a windy moment draws exactly the same picture however it is reached');
+    assert.ok(returned.differing <= 2 * noise.differing + 10 && returned.most <= Math.max(2, noise.most), `back at the same moment the windy scene differs no more than redrawing that frame does: ${JSON.stringify({ noise, returned })}`);
+    assert.ok(moved.differing > 50 * (returned.differing + 20), `thirteen seconds later the windy scene has moved on its own (flag, bunting, sway): ${JSON.stringify(moved)}`);
+    assert.ok(gustHeld.frames === gustAgain.stats.frames && gustHeld.time === gustAgain.stats.time, `a resting slider holds the windy scene: ${JSON.stringify([gustAgain.stats.frames, gustHeld.frames])}`);
+    await page.evaluate(() => [...window.__lrdScene3d][0].holdFloat(null));
+    record(`Under Combined wind (#646) the preview drives the scene's gust too: a windy moment draws the same picture however it is reached (${gpu ? `within the GPU's own redraw noise, ${returned.differing} pixels` : 'bit for bit'}), 13 s later ${moved.differing} pixels differ, and a resting slider holds it`);
 
     // ---------- Transparency (#670): the Style slider retunes the live stage in place ----------
     // At 1280 x 720 the preview and the Style panel are side by side, so the slider and the frame are both on screen.

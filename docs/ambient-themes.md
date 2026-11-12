@@ -235,8 +235,9 @@ quiet date).
   time the board and the widgets read, so at each moment of the hour slider (#686) the scene is
   where its track puts it, and an interval apart it has moved as far as it would on the display.
   The scene's own clock follows the preview too, mapped like real time (`12 + seconds × 1/8`),
-  so sway, a falling leaf or a passing firework show that moment; scenes write motion as a
-  function of the clock, so any moment can be shown, in any order. A resting slider holds the
+  so sway, a falling leaf, a passing firework or the wind's gust over the scene (#646) show that
+  moment; scenes write motion as a function of the clock, so any moment can be shown, in any
+  order. A resting slider holds the
   picture and draws nothing new. A quiet date keeps its frozen clock; only its float follows.
   The stage takes each step in place (`setPreview`), never as a new stage or WebGL context.
   When the preview ends the float is on real time again at once, as the board is; the scene
