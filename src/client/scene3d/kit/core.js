@@ -92,10 +92,14 @@ export function createCore(T, renderer, ctx, look, view) {
    *   stay and nothing clips harshly. A surface that skips tone mapping altogether (toneMapped: false, Autumn's
    *   leaves) skips this as well. */
   const LOOK = { own: .22, rim: .9, wrap: .45, exposure: 1.3, knee: .72 };
-  const physicalLights = T.ShaderChunk.lights_physical_pars_fragment.replace('float dotNL = saturate( dot( geometry.normal, directLight.direction ) );',
-    // Only the warm and white lights wrap; the cool rim light behind the scene keeps to the edges it is there for
-    // (wrapped, it washed a cool cast over warm surfaces and turned golden blini mauve).
-    'float gWrap = directLight.color.b > directLight.color.r * 1.2 ? 0.0 : ' + LOOK.wrap.toFixed(3) + ';\n\tfloat dotNL = saturate( ( dot( geometry.normal, directLight.direction ) + gWrap ) / ( 1.0 + gWrap ) );');
+  // Only the diffuse light wraps, and only from the warm and white lights: the cool rim light behind the scene keeps to
+  // the edges it is there for (wrapped, it washed a cool cast over warm surfaces and turned golden blini mauve), and the
+  // highlight keeps the unwrapped light (wrapped, a surface facing away lit its grazing edges with white sparks).
+  const physicalLights = T.ShaderChunk.lights_physical_pars_fragment.replace('reflectedLight.directDiffuse += ( 1.0 - clearcoatDHR ) * irradiance * BRDF_Diffuse_Lambert( material.diffuseColor );',
+    'float gWrap = directLight.color.b > directLight.color.r * 1.2 ? 0.0 : ' + LOOK.wrap.toFixed(3) + ';\n'
+    + '\tvec3 gWrapped = saturate( ( dot( geometry.normal, directLight.direction ) + gWrap ) / ( 1.0 + gWrap ) ) * directLight.color;\n'
+    + '\t#ifndef PHYSICALLY_CORRECT_LIGHTS\n\t\tgWrapped *= PI;\n\t#endif\n'
+    + '\treflectedLight.directDiffuse += ( 1.0 - clearcoatDHR ) * gWrapped * BRDF_Diffuse_Lambert( material.diffuseColor );');
   const k = LOOK.knee.toFixed(3), room = (1 - LOOK.knee).toFixed(3);
   /** Shader text that replaces the filmic curve; the include stays (with TONE_MAPPING undefined it is empty) so a part that adds its own text before it still finds it. */
   const curve = '#ifdef TONE_MAPPING\n { vec3 gC = gl_FragColor.rgb * ' + LOOK.exposure.toFixed(3) + '; float gM = max(max(gC.r, gC.g), gC.b);\n'

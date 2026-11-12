@@ -34,6 +34,7 @@ test('The illustrated look (#691): own light, wrapped light and a hue-keeping cu
   assert.match(core, /const LOOK = \{ own: [\d.]+, rim: [\d.]+, wrap: [\d.]+, exposure: [\d.]+, knee: [\d.]+ \};/);
   assert.match(core, /\.replace\('#include <lights_physical_pars_fragment>', physicalLights\)/, 'the direct light wraps');
   assert.match(core, /directLight\.color\.b > directLight\.color\.r \* 1\.2 \? 0\.0/, 'the cool rim light does not wrap');
+  assert.match(core, /gWrapped \* BRDF_Diffuse_Lambert/, 'only the diffuse light wraps, not the highlight');
   assert.match(core, /gl_FragColor\.rgb \+= diffuseColor\.rgb \* uOwn/, 'a surface gives off its own colour');
   assert.match(core, /#undef TONE_MAPPING\\n#endif\\n#include <tonemapping_fragment>/, 'the filmic curve is replaced, its include kept for parts that add text before it');
   // A part that skips tone mapping (Autumn's leaves, #671) skips the kit's curve as well and takes no extra own light.
@@ -42,7 +43,7 @@ test('The illustrated look (#691): own light, wrapped light and a hue-keeping cu
 });
 
 test('The shader text the kit replaces is still in three.js, so each replacement takes effect', () => {
-  assert.ok(THREE.ShaderChunk.lights_physical_pars_fragment.includes('float dotNL = saturate( dot( geometry.normal, directLight.direction ) );'));
+  assert.ok(THREE.ShaderChunk.lights_physical_pars_fragment.includes('reflectedLight.directDiffuse += ( 1.0 - clearcoatDHR ) * irradiance * BRDF_Diffuse_Lambert( material.diffuseColor );'));
   const fragment = THREE.ShaderLib.physical.fragmentShader;
   for (const include of ['#include <lights_physical_pars_fragment>', '#include <tonemapping_fragment>', '#include <metalnessmap_fragment>', '#include <dithering_fragment>']) assert.ok(fragment.includes(include), include);
 });
