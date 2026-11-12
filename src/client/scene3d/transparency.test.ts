@@ -34,7 +34,7 @@ test('The curve: solid at 0, exactly the chosen alpha at the standard look, thin
   assert.equal(thinned(1, 2), 1, 'a solid rim stays solid at 100%');
   // The texture greys the standard look draws are unchanged, so 50% is today's look pixel for pixel.
   for (const body of [.7, .8, 216 / 255, .5, .6]) assert.equal(Math.round(thinned(body, 1) * 255), Math.round(body * 255));
-  assert.deepEqual([thinned(.7, 2), thinned(.8, 2)].map(value => +value.toFixed(2)), [.49, .64], 'Autumn’s leaf body and Winter’s snow at 100%');
+  assert.equal(+thinned(.8, 2).toFixed(2), .64, 'Autumn’s leaf body (0.8 since #683) and Winter’s snow at 100%');
 });
 
 test('A quiet date keeps its rule; Transparency still applies to it', () => {
@@ -65,4 +65,47 @@ test('No scene reads the setting; the bodies scenes make see-through themselves 
     'parts/autumn-leaf.js': 1, 'parts/winter-snow.js': 1, 'parts/birthday-korean-jogakbo.js': 2,
     'parts/birthday-russian-tea.js': 1, 'parts/maslenitsa-blini.js': 2, 'parts/mimosa-spray.js': 1,
   }, 'the scene parts with a see-through body of their own (update this list, and the README, with a new one)');
+});
+
+// #683 (owner, 2026-11-12: "leafs behind lefas shouldnt be see throuhg"): a kit.mat surface is solid unless its scene
+// marks it clear. A solid one is drawn opaque at its colour times its alpha, so it looks the same on black and hides
+// what is behind it; a clear one (glass, ice, water, tea) is blended as before.
+const KIT = [...MODULES, ...files('kit')];
+/** The option blocks of every kit.mat call in a source (none of them nests braces). */
+const matOptions = (source: string) => [...source.matchAll(/\bmat\(\{([^{}]*)\}/g)].map(match => match[1]);
+
+test('Solid is the default: opaque at its colour times its alpha, after the tone curve, with cut-outs as coverage', () => {
+  const core = read('./kit/core.js');
+  assert.match(core, /const \{ see = 1, clear = false, \.\.\.o \} = options;/, 'mat() takes clear and defaults it to false');
+  assert.match(core, /material\.transparent = clear;\n\s+if \(!clear\) material\.depthWrite = true;/, 'a solid surface is in the opaque pass and writes depth');
+  // The colour is multiplied by the alpha after the tone curve, the output encoding and the fog (just before
+  // dithering), which is exactly what blending over black did; then it is drawn opaque.
+  assert.match(core, /\.replace\('#include <dithering_fragment>', 'if \(uSolid > 0\.5\) \{\\n  float gFade = uSolid > 1\.5 \? max\(opacity, 0\.0001\) : 1\.0;\\n  gl_FragColor\.rgb \*= clamp\(gl_FragColor\.a \/ gFade, 0\.0, 1\.0\);\\n  gl_FragColor\.a = \(uSolid > 1\.5 \? opacity : 1\.0\) \* gCover;/);
+  // An outline cut by alphaTest is where the surface is, not how dim: coverage, smoothed across samples when there are some.
+  assert.match(core, /\.replace\('#include <alphatest_fragment>'/);
+  assert.match(core, /material\.alphaToCoverage = solid\.value === SOLID\.solid && multisampled && material\.alphaTest > 0;/);
+  assert.match(core, /gl\.getParameter\(gl\.SAMPLES\) > 1/);
+  assert.match(core, /\bfade,/, 'fade is part of the kit'); assert.match(read('./engine.d.ts'), /fade\(material: any, amount: number\): void;/);
+  assert.match(read('./engine.d.ts'), /surfaces: \{ solid: number; clear: number \}/, 'stats report solid and clear surfaces');
+});
+
+test('Clear surfaces are marked by their scenes; nothing asks for blending without clear', () => {
+  const clear = Object.fromEntries(KIT.map(([name, source]) => [name, matOptions(source).filter(options => /\bclear: true\b/.test(options)).length]).filter(([, count]) => count));
+  assert.deepEqual(clear, {
+    'parts/mimosa-spray.js': 4,           // the vase's glass, its water, the water line, the feathery fronds (sub-pixel leaflets)
+    'parts/birthday-russian-tea.js': 2,   // the tea and the tea glass
+    'parts/maslenitsa-blini.js': 2,       // melted butter and amber honey
+    'parts/maslenitsa-tableware.js': 1,   // the cut-glass bowl
+    'parts/winter-ice.js': 1,             // clear ice
+    'parts/rain-beads.js': 2,             // rain drops and their trails on the glass
+    'parts/birthday-korean-jogakbo.js': 1, // the ramie wrapping cloth, a gauze that light and shapes show through
+  }, 'the clear surfaces (update this list, the README and docs/ambient-themes.md with a new one)');
+  for (const [name, source] of KIT) for (const options of matOptions(source)) {
+    assert.doesNotMatch(options, /\btransparent: true\b/, `${name}: write clear: true, not transparent: true, in mat()`);
+    if (/\bdepthWrite: false\b/.test(options)) assert.match(options, /\bclear: true\b/, `${name}: depthWrite: false belongs to a clear surface`);
+  }
+  // A solid surface fades through kit.fade, which blends it only while it fades; assigning opacity would dim it instead.
+  assert.match(read('./parts/autumn-maple.js'), /kit\.fade\(material, value\)/, 'the falling maple leaf fades over the fallen ones');
+  const assigned = MODULES.filter(([, source]) => /\bmaterial\.opacity = /.test(source)).map(([name]) => name);
+  assert.deepEqual(assigned, ['parts/new-year-bloom.js', 'parts/rain-beads.js'], 'only a line (the bloom’s streak) and a clear surface (the rain trail) set opacity themselves');
 });

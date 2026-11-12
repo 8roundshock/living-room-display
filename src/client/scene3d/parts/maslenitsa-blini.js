@@ -70,12 +70,12 @@ export function bliniStack(kit, { count = 20, radius = 1.2, thickness = .034, dr
   const block = new T.SphereGeometry(1, 24, 16), p = block.attributes.position, soft = value => Math.sign(value) * Math.pow(Math.abs(value), .42);
   for (let i = 0; i < p.count; i++) { const y = soft(p.getY(i)), slump = 1 + .16 * (1 - y) * .5; p.setXYZ(i, soft(p.getX(i)) * .17 * slump, y * .065 + .06, soft(p.getZ(i)) * .12 * slump); }
   block.computeVertexNormals();
-  const butter = kit.mat({ color: 0xfbe9a4, roughness: .22, clearcoat: 1, clearcoatRoughness: .12, emissive: 0xf2d060, emissiveIntensity: .2 }, .9), melted = kit.mat({ color: 0xf2c84a, roughness: .08, clearcoat: 1, clearcoatRoughness: .05, transparent: true, opacity: kit.solidity(.6), emissive: 0xe8b030, emissiveIntensity: .15 }, 1);
+  const butter = kit.mat({ color: 0xfbe9a4, roughness: .22, clearcoat: 1, clearcoatRoughness: .12, emissive: 0xf2d060, emissiveIntensity: .2 }, .9), melted = kit.mat({ color: 0xf2c84a, roughness: .08, clearcoat: 1, clearcoatRoughness: .05, clear: true, opacity: kit.solidity(.6), emissive: 0xe8b030, emissiveIntensity: .15 }, 1);
   const pat = new T.Mesh(block, butter), pool = new T.Mesh(puddle(kit, .34, seed + 31), melted);
   pat.position.set(-.12, top, .1); pat.rotation.y = .5; pool.position.set(-.08, top + .004, .14); group.add(pool, pat);
 
   // ---------- honey: a pool beside the butter that runs over the near edge in drips of different lengths ----------
-  const amber = kit.mat({ color: 0xc86400, roughness: .1, clearcoat: 1, clearcoatRoughness: .06, transparent: true, opacity: kit.solidity(.92), emissive: 0xb85000, emissiveIntensity: .4 }, .8);
+  const amber = kit.mat({ color: 0xc86400, roughness: .1, clearcoat: 1, clearcoatRoughness: .06, clear: true, opacity: kit.solidity(.92), emissive: 0xb85000, emissiveIntensity: .4 }, .8);
   const honey = new T.Mesh(puddle(kit, .42, seed + 37, .014), amber); honey.position.set(.36, top + .006, .5); group.add(honey);
   const runs = tubes(kit, 8), white = C(0xffffff);
   [[1.3, .58, .05], [1.72, .32, .04], [1.05, .2, .034]].slice(0, drips).forEach(([angle, fall, width], i) => {

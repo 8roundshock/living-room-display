@@ -66,12 +66,17 @@ export interface SceneKit {
   readonly tex: { glow(): any; disc(): any; flame(): any };
   canvasTexture(width: number, height: number, draw: (context: CanvasRenderingContext2D, width: number, height: number) => void, options?: { srgb?: boolean; repeat?: boolean; anisotropy?: number }): any;
   patternTex(base: string, accent: string, kind: 'dots' | 'stripes' | 'grid' | 'bands' | 'diamonds'): any;
-  /** three.js material options with sRGB colours, plus `see` (0-1): the share of the see-through look this surface takes. */
+  /** three.js material options with sRGB colours, plus `see` (0-1): the share of the see-through look this surface takes,
+   * and `clear`: a really see-through surface (glass, ice, water, tea), blended over what is behind it. Every other surface
+   * is solid (#683): thin and dim on black, but it hides what is behind it. */
   mat(options: Record<string, unknown>, env?: number, physical?: boolean): any;
   /** How solid to draw a body the scene makes see-through itself (an alpha map's grey, a uniform, `opacity`): `body` is
    * its solidity at the owner's picks, 0-1. Follows the Transparency setting (#670): 1 at 0%, `body` at the standard 50%,
-   * thinner toward 100% but never zero. A scene never reads the setting; it passes its own values through this. */
+   * thinner toward 100% but never zero. On a solid surface it is how dim the body is (#683). A scene never reads the
+   * setting; it passes its own values through this. */
   solidity(body: number): number;
+  /** Fade a kit.mat surface as a whole (0-1) over what is behind it; a solid one is blended only while it fades. */
+  fade(material: any, amount: number): void;
   gold(): any;
   satin(colour: Colour): any;
   glow(colour: Colour, size: number, opacity: number, options?: { texture?: any; twinkle?: number }): Object3D;
@@ -131,8 +136,9 @@ export interface StageOptions {
  * is stopped (a still preview or a quiet date); `floating`: the frame loop or the float's low-rate timer is live; `float`
  * is the last drawn offset in normalised device coordinates (the frame is -1 to 1), `zoom` the overscan, and
  * `floatFrames` how many frames the float alone has drawn on a frozen stage. `floatSample` is the real clock (seconds since
- * the epoch) and the track's time at the last floated frame, null before one (for tests and tools). */
-export interface StageStats { frames: number; builds: number; running: boolean; frozen: boolean; floating: boolean; disposed: boolean; time: number; buildMs: number; frameMs: number; gpuMs: number; seeScale: number; float: { x: number; y: number }; floatSample: { real: number; seconds: number } | null; zoom: number; floatFrames: number; backing: [number, number]; triangles: number; calls: number; geometries: number; textures: number; programs: number }
+ * the epoch) and the track's time at the last floated frame, null before one (for tests and tools). `surfaces` counts the
+ * scene's kit.mat surfaces that are solid and clear (#683). */
+export interface StageStats { frames: number; builds: number; running: boolean; frozen: boolean; floating: boolean; disposed: boolean; time: number; buildMs: number; frameMs: number; gpuMs: number; seeScale: number; float: { x: number; y: number }; floatSample: { real: number; seconds: number } | null; zoom: number; floatFrames: number; surfaces: { solid: number; clear: number }; backing: [number, number]; triangles: number; calls: number; geometries: number; textures: number; programs: number }
 export interface Stage {
   dispose(): void;
   stats(): StageStats;

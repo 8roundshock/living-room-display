@@ -67,7 +67,7 @@ export function maple(kit) {
       stalkTint: STALKS(tone),
     });
     const lit = material.color.r;
-    group.userData.fade = own ? value => { material.opacity = value; } : null;
+    group.userData.fade = own ? value => kit.fade(material, value) : null;
     // For a leaf with a material of its own: `green` (0-1) is the share of its green it keeps. 1 leaves it as it was made; less turns it toward orange and red-orange.
     group.userData.turn = own ? green => { material.color.setRGB(lit, lit * green, lit); material.emissive.setRGB(1, green, 1); } : null;
     return group;

@@ -17,7 +17,7 @@ export function ice(kit) {
     g.fillStyle = '#808080'; g.fillRect(0, 0, w, h);
     for (let i = 0; i < 160; i++) { const value = rnd(i, 71) < .5 ? 60 : 200; g.fillStyle = `rgba(${value},${value},${value},${.12 + rnd(i, 72) * .2})`; g.beginPath(); g.ellipse(rnd(i, 73) * w, rnd(i, 74) * h, 6 + rnd(i, 75) * 16, 2 + rnd(i, 76) * 5, 0, 0, 7); g.fill(); }
   }, { srgb: false, repeat: true });
-  const material = kit.mat({ color: 0x36475c, roughness: .05, metalness: 0, clearcoat: 1, clearcoatRoughness: .04, bumpMap: ripple, bumpScale: .006 }, 1.3);
+  const material = kit.mat({ color: 0x36475c, roughness: .05, metalness: 0, clearcoat: 1, clearcoatRoughness: .04, bumpMap: ripple, bumpScale: .006, clear: true }, 1.3);
   // Clear ice is seen by its edge. The kit has no rim-lit surface, so this one adds a cold light of its own along
   // its silhouette, before the kit's see-through patch reads the colour (three.js r128 shader text; if a later
   // three.js words that line differently nothing is replaced and the ice is simply without the rim).

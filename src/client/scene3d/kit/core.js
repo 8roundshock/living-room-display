@@ -74,35 +74,76 @@ export function createCore(T, renderer, ctx, look, view) {
   }
 
   // ---------- materials ----------
+  /** A drawing buffer with several samples a pixel (the engine asks for antialiasing): a cut-out outline is then
+   * smoothed by alpha to coverage. Without it (or in a Node build with no context) an outline is a plain cut. */
+  const multisampled = (() => { try { const gl = renderer.getContext?.(); return !!gl && gl.getParameter(gl.SAMPLES) > 1; } catch { return false; } })();
+  /** The solid state of a material (#683): 0 clear, 1 solid, 2 solid while it fades (fade()). */
+  const SOLID = { clear: 0, solid: 1, fading: 2 };
+  const solids = new WeakMap();
   /** The glass patch: a lit body thins out while its rim (Fresnel) and its highlights stay.
    * `share` (0-1) is how much of the owner's see-through setting this material takes; the
-   * Transparency setting scales it (0 to 2), and the shader follows settings.ts `thinned`. */
-  function glassify(material, share = 1) {
-    const see = { value: look.seeThrough * seeScale * Math.min(1, Math.max(0, share)) };
-    material.transparent = true;
+   * Transparency setting scales it (0 to 2), and the shader follows settings.ts `thinned`.
+   *
+   * Solid or clear (#683, owner direction 2026-11-12: "leafs behind leafs shouldnt be see through").
+   * The background is true black, and a surface blended over black at alpha a shows a times its colour.
+   * So a solid surface (the default) is drawn opaque at its colour times that alpha, after the tone curve and
+   * the output encoding, exactly where blending would have put it: on black it looks as it always did, thin
+   * and dim, but whatever is behind it in the scene, another leaf or a branch, is hidden by it, in any order
+   * (the depth buffer decides). Every alpha it has is how dim it is: the glass look, an alpha map's grey,
+   * a body's kit.solidity, `opacity`. Only a cut-out outline (`alphaTest`) is a shape: its alpha says where the
+   * surface is, not how dim, and is turned into coverage, smoothed across the pixel's samples (alpha to
+   * coverage) when the buffer has them, so an outline has no dark fringe over what is behind it. A clear
+   * surface (`clear: true`: glass, ice, water, tea) is blended over what is behind it, as every surface was
+   * before #683. fade() lets a solid surface fade in or out over what is behind it. */
+  function glassify(material, share = 1, clear = false) {
+    const see = { value: look.seeThrough * seeScale * Math.min(1, Math.max(0, share)) }, solid = { value: clear ? SOLID.clear : SOLID.solid }, sharp = { value: multisampled ? 0 : 1 };
+    material.transparent = clear;
+    if (!clear) material.depthWrite = true;
+    solids.set(material, solid);
     material.onBeforeCompile = shader => {
-      shader.uniforms.uSee = see;
-      shader.fragmentShader = 'uniform float uSee;\n' + shader.fragmentShader.replace('#include <tonemapping_fragment>',
-        'float gFres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 1.6);\n float gLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));\n float gGlass = clamp(0.14 + gFres * 0.85 + gLum * 0.75, 0.0, 1.0);\n gl_FragColor.a *= uSee <= 1.0 ? mix(1.0, gGlass, uSee) : pow(gGlass, uSee);\n#include <tonemapping_fragment>');
+      material.alphaToCoverage = solid.value === SOLID.solid && multisampled && material.alphaTest > 0;
+      Object.assign(shader.uniforms, { uSee: see, uSolid: solid, uSharp: sharp });
+      shader.fragmentShader = 'uniform float uSee;\nuniform float uSolid;\nuniform float uSharp;\n' + shader.fragmentShader
+        // A cut-out: where the outline is (its coverage of this pixel), apart from how dim the surface is (`opacity`).
+        .replace('#include <alphatest_fragment>', 'float gCover = 1.0;\n#ifdef ALPHATEST\n float gShape = diffuseColor.a / max(opacity, 0.0001), gEdge = max(fwidth(gShape), 0.0001);\n if (uSolid > 0.5) {\n  gCover = uSharp > 0.5 ? step(ALPHATEST, gShape) : clamp((gShape - ALPHATEST) / gEdge + 0.5, 0.0, 1.0);\n  if (gCover <= 0.0) discard;\n  diffuseColor.a = opacity;\n } else if (diffuseColor.a < ALPHATEST) discard;\n#endif')
+        .replace('#include <tonemapping_fragment>',
+          'float gFres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 1.6);\n float gLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));\n float gGlass = clamp(0.14 + gFres * 0.85 + gLum * 0.75, 0.0, 1.0);\n gl_FragColor.a *= uSee <= 1.0 ? mix(1.0, gGlass, uSee) : pow(gGlass, uSee);\n#include <tonemapping_fragment>')
+        // Solid: the colour times its alpha, drawn opaque (or, while it fades, blended by its fade alone).
+        .replace('#include <dithering_fragment>', 'if (uSolid > 0.5) {\n  float gFade = uSolid > 1.5 ? max(opacity, 0.0001) : 1.0;\n  gl_FragColor.rgb *= clamp(gl_FragColor.a / gFade, 0.0, 1.0);\n  gl_FragColor.a = (uSolid > 1.5 ? opacity : 1.0) * gCover;\n }\n#include <dithering_fragment>');
     };
     return material;
+  }
+  /** How many of this scene's kit.mat surfaces are solid and how many clear, for tests and tools. */
+  function surfaces() { let solid = 0, clear = 0; for (const material of materials) if (solids.get(material)?.value === SOLID.clear) clear++; else solid++; return { solid, clear }; }
+  /** Fades a kit.mat surface as a whole to `amount` (0-1) over whatever is behind it. A solid surface is
+   * blended only while it fades and is solid again at 1; a clear one simply takes it as its opacity. */
+  function fade(material, amount) {
+    const solid = solids.get(material), value = Math.min(1, Math.max(0, amount));
+    material.opacity = value;
+    if (!solid || solid.value === SOLID.clear) return;
+    const fading = value < 1;
+    solid.value = fading ? SOLID.fading : SOLID.solid; material.transparent = fading;
+    material.alphaToCoverage = !fading && multisampled && material.alphaTest > 0;
   }
   /** How solid a scene's own see-through body is under the Transparency setting (#670). `body` is the
    * solidity the scene chose (0-1, at the owner's picks); the result is what to draw: 1 at 0%, `body`
    * itself at the standard 50%, thinner toward 100% but never zero. Pass every alpha a scene sets for
-   * a body through it (an alpha map's grey, a uniform, `opacity`). A cut-out outline (alphaTest) is a
+   * a body through it (an alpha map's grey, a uniform, `opacity`). On a solid surface (#683) it is how
+   * dim the body is; on a clear one, how much shows through it. A cut-out outline (alphaTest) is a
    * shape, not a body, and light (halos, flames, particles) is not a body either. */
   const solidity = body => thinned(body, seeScale);
   /** The material factory. `options` are three.js material options with sRGB colours, plus `see`
    * (0-1, default 1): the share of the see-through look this surface takes, for the rare surface
-   * that must stay solid, such as a national flag. `env` scales the studio reflections;
-   * `physical` adds clearcoat support. Always glass-patched. */
+   * that must stay solid, such as a national flag; and `clear` (default false): a surface that is
+   * really see-through, glass, ice, water or tea, blended over what is behind it. Every other surface
+   * is solid (see glassify, #683): thin and dim on black, but it hides what is behind it.
+   * `env` scales the studio reflections; `physical` adds clearcoat support. Always glass-patched. */
   function mat(options, env = 1, physical = true) {
-    const { see = 1, ...o } = options;
+    const { see = 1, clear = false, ...o } = options;
     for (const key of ['color', 'emissive']) if (typeof o[key] === 'number' || typeof o[key] === 'string') o[key] = C(o[key]);
     const material = physical ? new T.MeshPhysicalMaterial(o) : new T.MeshStandardMaterial(o);
     material.userData.env = env; material.envMapIntensity = env * look.shine; materials.add(material);
-    return glassify(material, see);
+    return glassify(material, see, clear);
   }
   const gold = () => mat({ color: 0xd9b25a, metalness: 1, roughness: .25 }, 1, false);
   const satin = colour => mat({ color: colour, metalness: .25, roughness: .32, clearcoat: .6, clearcoatRoughness: .3, side: T.DoubleSide });
@@ -145,5 +186,5 @@ export function createCore(T, renderer, ctx, look, view) {
   }
   function dispose() { for (const item of owned) item.dispose?.(); owned.clear(); materials.clear(); ticks.length = 0; glows.length = 0; patterns.clear(); }
 
-  return { T, ctx, view, stage, V, C, mix, shift, rnd, own, tick, part, tex, canvasTexture, patternTex, environment, lights, mat, solidity, gold, satin, glow, bulb, ballGeo, sphereGeo, line, catenary, ribbonGeo, animate, dispose };
+  return { T, ctx, view, stage, V, C, mix, shift, rnd, own, tick, part, tex, canvasTexture, patternTex, environment, lights, surfaces, mat, solidity, fade, gold, satin, glow, bulb, ballGeo, sphereGeo, line, catenary, ribbonGeo, animate, dispose };
 }
