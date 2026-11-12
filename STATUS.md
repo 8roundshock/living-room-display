@@ -27,8 +27,14 @@ What changed:
 Details: [Ambient themes](docs/ambient-themes.md#float-675-owner-direction-2026-11-12),
 [UI](docs/ui.md), [product](docs/product.md#movement-and-oled-considerations).
 
-Verified with source builds and synthetic data only: see the pull request. Not verified:
-installation and the TV. Part 2 of #678 (point sprites under the float's zoom) is not done.
+Verified with source builds and synthetic data only: both typechecks and the build, the unit
+tests (the stage's preview clock, the hour and its label), the `motion-preview` suite (one
+slider, keyboard steps, seeks across the hour and back, settings changes keep the moment, no
+saved writes), the `scene3d` suite on SwiftShader and on the GPU (the engine and the editor's
+slider move the scene with the board, a resting slider draws nothing new, one stage and
+context), and the `widgets` and `screen` suites. Not verified: installation and the TV. Part
+2 of #678 (point sprites under the float's zoom) is not done; a far jump at a 30 s interval
+with Swap places and many widgets may pause the editor for about a second (#690).
 
 ## Scene objects stop showing through each other; darker leaf veins — 2026-11-12 (#683)
 
