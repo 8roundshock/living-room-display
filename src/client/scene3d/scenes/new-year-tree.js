@@ -16,7 +16,8 @@ export default function build(kit, ctx) {
 
   // ---------- the spruce top with its spire, bottom-left corner ----------
   const tree = spruceTop(kit, { seed });
-  tree.group.position.set(-W + Math.max(1.8, W * .183), -view.halfH, 0);   // its lowest ornaments clear of the float's crop (#675) tree.group.scale.setScalar(unit); stage.add(tree.group);
+  // Its lowest ornaments clear of the float's crop (#675).
+  tree.group.position.set(-W + Math.max(1.8, W * .183), -view.halfH, 0); tree.group.scale.setScalar(unit); stage.add(tree.group);
   const crown = spire(kit); crown.position.copy(tree.top).add(V(0, -.15, 0)); crown.rotation.z = .025; tree.group.add(crown);
   const on = (whorl, index, along) => tree.boughs.find(bough => bough.whorl === whorl && !index--).pt(along);
 
@@ -47,7 +48,8 @@ export default function build(kit, ctx) {
   });
 
   // ---------- tangerines in the bottom-right corner: four fruits in four states ----------
-  const fruit = citrus(kit), z = .3, pile = new T.Group(); pile.position.set(W - 1.6, -view.halfHAt(z) + .28, z);   // clear of the band the float's zoom crops (#675) pile.scale.setScalar(unit); stage.add(pile);
+  // Clear of the band the float's zoom crops (#675).
+  const fruit = citrus(kit), z = .3, pile = new T.Group(); pile.position.set(W - 1.6, -view.halfHAt(z) + .28, z); pile.scale.setScalar(unit); stage.add(pile);
   const lay = (piece, x, y, depth, turn) => { piece.position.set(x, y, depth); piece.userData.fruit.rotation.set(...turn); pile.add(piece); };
   lay(fruit.whole({ radius: .36, leaves: 2, salt: 1.3 }), .5, 0, -.3, [.1, .6, -.12]);
   lay(fruit.whole({ radius: .31, salt: 4.1 }), -.16, 0, .12, [.9, .3, .75]);

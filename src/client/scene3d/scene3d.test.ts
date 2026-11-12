@@ -170,3 +170,17 @@ test('A processor-drawn WebGL is recognised by name', () => {
   for (const name of ['ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)', 'llvmpipe (LLVM 15.0.7, 256 bits)', 'Microsoft Basic Render Driver', 'Software Rasterizer']) assert.equal(softwareRendererName(name), true, name);
   for (const name of ['ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Ti (0x00001B06) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)', 'Apple M2', '']) assert.equal(softwareRendererName(name), false, name);
 });
+
+// Review of #676: a stray comment once swallowed the statements that put three scenes' heroes on the stage, and every
+// other check passed because an empty scene has nothing to crop. Each scene (everyday and quiet) and overlay is built
+// in Node and must keep most of what it drew at the baseline in tests/scene3d/census-baseline.json.
+test('Every scene and overlay still draws most of what it drew: nothing is silently dropped', async () => {
+  // @ts-expect-error -- a plain JavaScript test tool without type declarations
+  const { censusAll } = await import('../../../tests/scene3d/census.mjs');
+  const baseline: { counts: Record<string, { objects: number; triangles: number }> } = JSON.parse(readFileSync(new URL('../../../tests/scene3d/census-baseline.json', import.meta.url), 'utf8'));
+  const now: Record<string, { objects: number; triangles: number }> = await censusAll();
+  assert.deepEqual(Object.keys(now).sort(), Object.keys(baseline.counts).sort(), 'every scene and overlay has a baseline (take a census and add new ones)');
+  const lost = Object.entries(baseline.counts).filter(([key, was]) => { const is = now[key]!; return is.objects === 0 || is.objects < was.objects * .95 || is.triangles < was.triangles * .95; })
+    .map(([key, was]) => `${key}: ${JSON.stringify(now[key])}, was ${JSON.stringify(was)}`);
+  assert.deepEqual(lost, [], 'a scene lost part of what it draws (more than 5% of its objects or of its triangles); if that was meant, take a new census');
+});
