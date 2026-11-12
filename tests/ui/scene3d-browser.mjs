@@ -129,6 +129,15 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
     await flat('canada-day'); assert.equal(await canvas().count(), 0); assert.deepEqual(await stages(), []);
     record('A lost context, or WebGL that fails when the renderer is created, leaves the flat scene on screen and throws nothing to the page');
 
+    // ---------- solid and clear (#683): every lit surface hides what is behind it unless its scene marks it clear ----------
+    const surfaces = {};
+    for (const [scene, clear] of [['autumn', 0], ['mimosa', 6]]) {
+      await open({ scene }); await ready(); const [stage] = await stages(); surfaces[scene] = stage.surfaces;
+      assert.equal(stage.surfaces.clear, clear, `${scene} clear surfaces: ${JSON.stringify(stage.surfaces)}`); assert.ok(stage.surfaces.solid >= 5, `${scene} solid surfaces: ${JSON.stringify(stage.surfaces)}`);
+      const drawn = await drawnShare(); assert.ok(drawn.lit > .01 && drawn.coloured > .002, `${scene} draws: ${JSON.stringify(drawn)}`);
+    }
+    record(`Lit surfaces are solid unless their scene marks them clear: Autumn ${JSON.stringify(surfaces.autumn)}, Women's Day ${JSON.stringify(surfaces.mimosa)} (the vase's glass, water and water line and the feathery fronds), and both draw`);
+
     // ---------- weather over a scene: every kind has its overlay module (#617 to #621), so it stays in 3D ----------
     // A storm over Canada Day is a pairing that replaced the scene with the standalone Storms scene before #655:
     // in Combined the scene now always stays and the weather is its overlay.

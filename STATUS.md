@@ -1,5 +1,35 @@
 # Project status
 
+## Scene objects stop showing through each other; darker leaf veins — 2026-11-12 (#683)
+
+Source candidate, not installed. Owner direction: "the leafs themselves shouldn't be
+transparent to eachother (so leafs behind lefas shouldnt be see throuhg), and i thnk the
+spines of the leaves are too bright, if anything in real life they're darker. just make it
+look more realistic/nicer".
+
+What changed:
+- Every lit 3D object is now solid. On the black background it looks as thin and dim as
+  before, but it hides whatever is behind it, in any drawing order: a leaf in front of
+  another leaf, or of a branch, no longer shows it through. The see-through look was a blend
+  over what was behind; it is now the object's colour times that alpha, drawn opaque, which
+  is the same on black. Cut-out outlines stay cut out, with no dark fringes.
+- What is really see-through stays clear: glass (the Women's Day vase, the tea glass, the
+  cut-glass bowl), water, tea, melted butter and honey, clear ice, rain on the glass, the
+  ramie gauze of the Korean birthday and the mimosa's feathery fronds.
+- The Transparency slider still works, as how thin and dim the objects look.
+- Leaf veins are a little darker and browner than the blade, thin and low in relief, with no
+  glowing rim: Autumn's maple and birch leaves, Canada Day's maple leaves, Chuseok's persimmon
+  leaves, Summer's morning glory, Spring's magnolia leaves and the wind's leaves. Autumn's
+  leaves are an even 0.8 instead of 0.7 with whole veins and rims, which keeps the tree as
+  bright on average, and their colour varies across each blade in soft patches.
+
+Details: [Ambient themes](docs/ambient-themes.md#solid-and-clear-683-owner-direction-2026-11-12).
+
+Verified with source builds and synthetic data only: both typechecks, the unit tests (the
+solid patch, the clear list and that no material asks for blending another way; the census,
+edge and crop checks unchanged), and before-and-after captures of every scene. Not verified:
+installation, the TV.
+
 ## The 3D scenes float like the widgets — 2026-11-12 (#675)
 
 Source candidate, not installed. Owner direction: "the elements in the scenes need to move and
