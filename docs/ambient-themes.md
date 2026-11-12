@@ -203,60 +203,65 @@ quiet date).
     view at every float position.
   - **Crop.** A piece is the largest part of the scene that was whole in the frame before the
     float (a cake, a gift, an egg, a lantern; a group reaching past an edge is split into its
-    children). It must stay whole at every float position. A piece resting near the bottom
-    edge (its lowest point in the lowest 7.5% of the height) must be whole at the centre
-    position and keep at least 60% of itself in view at every position.
+    children). It must stay whole at every float position.
+  - **Resting pieces** (owner decision on #675, 2026-11-12). A piece resting near the bottom
+    edge has its lowest point in the lowest 7.5% of the height and is at most 40% of the height
+    tall (a balloon bunch on its string is not one).
+    - At the centre position it sits on the visible bottom: no more than 0.3% of the height
+      above it. A piece standing on something else is exempt from this, when that thing's top is
+      at the piece's bottom and overlaps it sideways (an egg on a napkin, a cake on a table, a
+      leaf leaning on a neighbour).
+    - Taller than twice the vertical travel (4% of the height): whole at the centre, and at
+      least 60% in view at every position, so it may rise or be cut by up to the travel at the
+      extremes.
+    - Flat litter (a fallen leaf, a petal, a fallen blossom): at least 60% in view at the
+      centre; it may be cut further at the low extreme rather than raised to stay whole.
+    - A piece held by an element that enters from an edge, with something of it reaching lower
+      (a bud on its runner, an ornament on its tree), hangs rather than rests and is exempt.
 
     Not pieces: parts of an element that crosses an edge (a needle, a cone on a bough, a bulb
-    on a garland) unless they rest near the bottom; pieces that travel (a seed on the wind, a
+    on a garland), unless they rest near the bottom; pieces that travel (a seed on the wind, a
     falling leaf); and specks under 1.5% of the screen on both axes (a bulb, a bead, a flower's
     eye).
 
-  Both rules can fail. The test shows the first candidate cutting Pascha's eggs, and Autumn's
-  twig showing its end without the zoom. All 72 cases pass, with several hundred anchored
-  elements and whole pieces measured.
+    Limit: support and hanging are judged from bounding boxes, so a piece can pass by
+    overlapping the wrong box (#679).
+
+  Both rules can fail. The test shows synthetic pieces failing: a leaf floating 0.5% above the
+  visible bottom, a cake cut at the centre, a lantern too near an edge. It also shows Birthday's
+  cake and presents being cut at the first, wider candidate float, and Autumn's twig showing its
+  end without the zoom. All 72 cases pass, with several hundred anchored elements and whole
+  pieces measured.
+- **Content guard.** `tests/scene3d/census.mjs` builds every scene (everyday and quiet) and
+  every overlay in Node and counts the objects and triangles it draws.
+  `src/client/scene3d/scene3d.test.ts` fails when one has lost more than 5% of either against
+  its baseline in `tests/scene3d/census/` (taken from `main` c807ea4). A scene without a
+  baseline file is reported and skipped. It was added after comments inserted mid-line swallowed
+  three scenes' `stage.add` calls while every other check passed.
 - **Pieces moved** (each in its own scene file, the smallest move that passes at 16:9 and 21:9;
-  1 unit is 1/9 of the screen height at the depth of the frame):
-  - **Standing things lifted onto the visible bottom.** Birthday: everything that stands
-    (cake, presents, the balloons' gift) at 95.5% of the half-height instead of on the edge;
-    the gifts of Birthday · Korean accents the same way.
-    Others by an amount:
+  1 unit is 1/9 of the screen height at the depth of the frame; `.9588` is 1 / 1.043, the
+  visible bottom at the centre as a share of the half-height). The last column is each resting
+  piece's gap above the visible bottom at the centre, in % of the height at 16:9:
 
-    | Scene | Pieces | Lifted by (units) |
-    | --- | --- | --- |
-    | Maslenitsa | table | 0.19 |
-    | Mimosa | vase corner (with its fallen blossom); tulips | 0.22; 0.22 |
-    | Pascha | napkin with the kulich and eggs | 0.2 |
-    | Seollal | yut sticks on their cloth | 0.2 |
-    | New Year · Russia | tangerine pile | 0.2 |
-    | Thanksgiving | apples and pear | 0.3 |
-    | Chuseok | burr and jujubes on the ground | 0.12 |
-    | Birthday · Russian accents | table | 0.33 |
-    | Autumn | fallen leaves | 0.42 |
-    | Summer | the low runner's tip | 0.1 |
+  | Scene | Change (from `main`) | Gaps |
+  | --- | --- | --- |
+  | Autumn | Fallen leaves at `-halfHAt(z) * .9588` instead of `-halfHAt(z)` (on the visible bottom, as they were on the edge), 0.35 right; one 0.03 higher. | 0.25, −0.32, −1.43 (litter, 62% in view); one leans on a neighbour |
+  | Birthday | Things stand at `* .9585` of the half-height; the cake 0.03 lower than that. Balloon bunch and its gift at `min(W - 1.4, W * .82)` instead of `W - .8`. | 0.03, 0.05, 0.09, 0.11 |
+  | Birthday · Korean accents | Gifts at `* .955`, sunk 0.056 and 0.03. Soban at `* .9588 + .12` instead of `+ .1`. Balloons 0.5 left of the rail, and `(W - 8) * .3` more. | 0.02, 0.27, 0.14 |
+  | Birthday · Russian accents | Table at `W - max(3.05, W * .36)`, `-halfH + .95` (was `W - 2.5`, `+ .62`). Wrapped bouquet at `-halfH - .5` (was `- .06`), so its lowest flowers cross the bottom edge. | cake plate 0.21; the rest stands on the table |
+  | Chuseok | Ground at `+ .13` (was `+ .02`); jujubes `+ .065` on it (was `+ .14`). | 0.28, 0.17, 0.11, 0.24 |
+  | Maslenitsa | Table at `W - max(2.3, W * .29)`, `-halfH + .96` (was `+ .78`). | 0.21 |
+  | Mimosa | Vase corner at `+ .28` (was `- .02`); its fallen blossom at `size - .1` in it (was `size + .03`). Tulips at `W - 3.65 - (W - 8) * .3`, `-halfH + .905` (was `W - 3.45`, `+ .42`). | vase −0.01, blossom 0.26, tulips 0.04 |
+  | New Year · Russia | Tangerines at `W - 1.6`, `+ .33` (was `W - 1.35`, `+ .08`). Tree at `-W + max(1.8, W * .183)` (was `+ 1.55`). | 0.05 |
+  | Pascha | Napkin with the kulich and eggs at `-halfH + .62` (was `+ .42`); the scarlet egg at `-.55` on it (was `-1.3`). | all on the napkin or plate |
+  | Seollal | Yut cloth at `+ .7` (was `+ .52`). Pouch hook at `W - 2.1` (was `W - 1.75`). | 0.27 |
+  | Thanksgiving | Fruit `+ .28` higher; the golden apple `.5 * U - .18`, so 0.1 higher in all. | 0.09, 0.05, 0.17 |
+  | Summer | The low runner's last two points 0.1 and 0.18 lower; its bud hangs from it. | bud −0.97 (litter, 68% in view) |
+  | Easter | Lily at `-W + max(2.5, W * .3)` (was `+ 2.2`). | |
+  | Buddha's Birthday | Lantern cord starts at `-view.halfWAt(z) - .5` (was `-W - .7`); at its depth the old start was inside the frame (the #669 issue). | |
 
-  - **Moved in from a side edge:**
-
-    | Scene | Piece | Moved |
-    | --- | --- | --- |
-    | Birthday | balloon bunch and its gift | 0.6 units left (more at 21:9: 18% of the half-width from the edge) |
-    | Birthday · Korean accents | balloons | 0.5 units left of the rail |
-    | Birthday · Russian accents | table | 0.55 units left (more at 21:9) |
-    | Maslenitsa | table | left at 21:9 only |
-    | Seollal | pouch hook | 0.35 units left |
-    | New Year · Russia | tangerine pile | 0.25 units left |
-    | New Year · Russia | tree | 0.25 units right (more at 21:9) |
-    | Easter | lily | 0.3 units right (1 at 21:9) |
-    | Pascha | scarlet egg | 0.75 units right on the napkin |
-    | Autumn | fallen leaves | 0.35 units right |
-
-  - **Started from the edge at its depth:** Buddha's Birthday's lantern cord starts at
-    `-view.halfWAt(z) - .5`. At its depth the old start was inside the frame (the #669 issue).
-  - **Sunk below the edge:** the wrapped bouquet of Birthday · Russian accents sits 0.44 units
-    lower, so its lowest flowers and leaves cross the bottom edge instead of resting just
-    above it.
-  - **Unchanged:** Christmas, Winter, Spring and the rest; Christmas's one flagged piece was
-    a bulb under the speck size.
+  Unchanged: Christmas, Winter, Spring, Halloween, Canada Day and the rest. Christmas's one
+  flagged piece was a bulb under the speck size; the weather overlays needed nothing.
 - **No scale breath.** A slow zoom about the centre would move only the edge pixels. It would
   also need more zoom to keep standing things down, the axis that is already the tightest.
   The translation moves every pixel by the full travel.

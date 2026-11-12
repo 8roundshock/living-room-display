@@ -31,7 +31,13 @@ all drawn by the flat SVG renderer (`LivingTheme`), which stays until every scen
    ```
 3. Build, capture, look, delete (see [Look at it](#look-at-it)). Run
    `node --test "src/client/scene3d/*.test.ts"`: it checks every file in `scenes/` and
-   `weather/` against this contract.
+   `weather/` against this contract, the float's edge and crop rules included.
+   When the scene looks right, write its content baseline in the same pull request:
+   `node tests/scene3d/census.mjs --write <id>` creates `tests/scene3d/census/<id>.json` (what it
+   draws, everyday and quiet). It is a file of its own, so no other pull request touches it.
+   From then on `scene3d.test.ts` fails if a later edit makes the scene draw more than 5% less.
+   Without the file the test only reports "no baseline yet". After a deliberate rework that draws
+   less, write the file again in that rework's pull request.
 4. One scene, one pull request, one independent code review. Do not edit `engine.js`, `kit/`,
    `settings.ts`, `resolve.ts` or another scene in a scene pull request. If the kit lacks
    something, build it inside your scene file from `kit.T`, or as a shared part (below).
@@ -117,9 +123,12 @@ it, but keep to these rules:
   the edge they come from (at their depth, `view.halfWAt(z)`). Ending exactly at the edge is
   not enough.
 - Something whole near the bottom (a cake, a gift, an egg, a fallen leaf) stands on the
-  visible bottom, about 2% of the height up: `y = -view.halfHAt(z) * .955` or about 0.2 units
-  above the edge. Standing exactly on the edge, it is cut at the centre position. Otherwise
-  sink it past the edge, like a bouquet whose stems run off the bottom.
+  visible bottom, about 2% of the height up: `y = -view.halfHAt(z) * .9588` (1 / 1.043), or
+  about 0.19 units above the edge, then nudged until its lowest point is within 0.3% of the
+  height of it (the check prints the gap). Standing exactly on the edge, it is cut at the
+  centre position; floating higher, it fails the check. Or sink it past the edge, like a
+  bouquet whose stems run off the bottom. Something resting on another thing (an egg on a
+  napkin) only needs that thing under it.
 - Keep anything else that must stay whole about 4% of the width (and height) in from an edge:
   the float takes the far side of the frame that far in at an extreme. Things attached to
   something that enters from the edge (cones on a bough, ornaments on a garland) may be cut

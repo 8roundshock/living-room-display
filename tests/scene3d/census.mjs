@@ -2,11 +2,13 @@
 // three.js r128 and the real kit (2D canvases and the environment map are stubbed: nothing here draws)
 // and counts what each puts on the stage, so a test can catch an edit that silently drops a hero.
 // Self-contained on purpose (no float or edge-check code), so it also runs against an older checkout
-// to take a baseline:
+// to take a baseline. Each scene's baseline is its own file, tests/scene3d/census/<id>.json (an overlay's
+// is weather-<kind>.json), so two pull requests never edit the same baseline:
 //
-//   node tests/scene3d/census.mjs          one JSON line per scene and overlay, everyday and quiet, at 16:9
+//   node tests/scene3d/census.mjs                print every scene and overlay, everyday and quiet, at 16:9
+//   node tests/scene3d/census.mjs --write my-scene   write (or replace) tests/scene3d/census/my-scene.json
 import * as THREE from 'three';
-import { readdirSync } from 'node:fs';
+import { readdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createKit } from '../../src/client/scene3d/kit/index.js';
 import { sceneLook, sceneSeed } from '../../src/client/scene3d/settings.ts';
@@ -49,12 +51,21 @@ export async function census(id, { overlay = null, quiet = false } = {}) {
   return { objects, triangles: Math.round(triangles) };
 }
 
-/** Every scene (everyday and quiet) and every overlay (over a season), keyed `id`, `id quiet`, `kind over summer`. */
-export async function censusAll() {
-  const out = {};
-  for (const id of SCENE_IDS) { out[id] = await census(id); out[`${id} quiet`] = await census(id, { quiet: true }); }
-  for (const kind of WEATHER_KINDS) out[`${kind} over summer`] = await census('summer', { overlay: kind });
-  return out;
+/** One baseline file's counts: a scene everyday and quiet, or an overlay (`weather-<kind>`) over a season. */
+export async function censusOf(name) {
+  if (name.startsWith('weather-')) return { 'over summer': await census('summer', { overlay: name.slice(8) }) };
+  return { everyday: await census(name), quiet: await census(name, { quiet: true }) };
 }
+/** The baseline file names: every scene and every overlay. */
+export const CENSUS_NAMES = [...SCENE_IDS, ...WEATHER_KINDS.map(kind => `weather-${kind}`)];
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) console.log(JSON.stringify(await censusAll()));
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const write = process.argv.indexOf('--write'), names = write < 0 ? CENSUS_NAMES : process.argv.slice(write + 1);
+  for (const name of names) {
+    if (!CENSUS_NAMES.includes(name)) throw new Error(`${name} is not a scene or weather-<kind>; known: ${CENSUS_NAMES.join(', ')}`);
+    const counts = await censusOf(name);
+    if (write < 0) { console.log(name, JSON.stringify(counts)); continue; }
+    writeFileSync(new URL(`./census/${name}.json`, import.meta.url), JSON.stringify({ taken: 'the pull request that added or reworked it', ...counts }) + '\n');
+    console.log(`wrote tests/scene3d/census/${name}.json`, JSON.stringify(counts));
+  }
+}

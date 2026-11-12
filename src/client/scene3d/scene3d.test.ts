@@ -173,14 +173,24 @@ test('A processor-drawn WebGL is recognised by name', () => {
 
 // Review of #676: a stray comment once swallowed the statements that put three scenes' heroes on the stage, and every
 // other check passed because an empty scene has nothing to crop. Each scene (everyday and quiet) and overlay is built
-// in Node and must keep most of what it drew at the baseline in tests/scene3d/census-baseline.json.
-test('Every scene and overlay still draws most of what it drew: nothing is silently dropped', async () => {
+// in Node and must keep most of what it drew at its baseline, tests/scene3d/census/<id>.json. A scene without a
+// baseline file yet is reported and skipped, so a new scene's pull request is never failed by this test.
+test('Every scene and overlay still draws most of what it drew: nothing is silently dropped', async (t) => {
   // @ts-expect-error -- a plain JavaScript test tool without type declarations
-  const { censusAll } = await import('../../../tests/scene3d/census.mjs');
-  const baseline: { counts: Record<string, { objects: number; triangles: number }> } = JSON.parse(readFileSync(new URL('../../../tests/scene3d/census-baseline.json', import.meta.url), 'utf8'));
-  const now: Record<string, { objects: number; triangles: number }> = await censusAll();
-  assert.deepEqual(Object.keys(now).sort(), Object.keys(baseline.counts).sort(), 'every scene and overlay has a baseline (take a census and add new ones)');
-  const lost = Object.entries(baseline.counts).filter(([key, was]) => { const is = now[key]!; return is.objects === 0 || is.objects < was.objects * .95 || is.triangles < was.triangles * .95; })
-    .map(([key, was]) => `${key}: ${JSON.stringify(now[key])}, was ${JSON.stringify(was)}`);
+  const { CENSUS_NAMES, censusOf } = await import('../../../tests/scene3d/census.mjs');
+  type Counts = Record<string, { objects: number; triangles: number }>;
+  const lost: string[] = [], missing: string[] = [];
+  for (const name of CENSUS_NAMES as string[]) {
+    let baseline: Counts;
+    try { baseline = JSON.parse(readFileSync(new URL(`../../../tests/scene3d/census/${name}.json`, import.meta.url), 'utf8')); } catch { missing.push(name); continue; }
+    const now: Counts = await censusOf(name);
+    for (const [key, was] of Object.entries(baseline)) {
+      if (key === 'taken') continue;
+      const is = now[key]!;
+      if (is.objects === 0 || is.objects < was.objects * .95 || is.triangles < was.triangles * .95) lost.push(`${name} ${key}: ${JSON.stringify(is)}, was ${JSON.stringify(was)}`);
+    }
+  }
+  if (missing.length) t.diagnostic(`no baseline yet (skipped): ${missing.join(', ')}; write one with node tests/scene3d/census.mjs --write <id>`);
   assert.deepEqual(lost, [], 'a scene lost part of what it draws (more than 5% of its objects or of its triangles); if that was meant, take a new census');
+  assert.ok(CENSUS_NAMES.length - missing.length >= 31, `the 31 baselines taken at c807ea4 are all still there (one was removed?): ${CENSUS_NAMES.length - missing.length}`);
 });
