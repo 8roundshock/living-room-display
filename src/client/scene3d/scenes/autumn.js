@@ -165,7 +165,8 @@ export default function build(kit, ctx) {
     const size = (.34 + rnd(i, seed + 41) * .16) * S * SMALLER, leaf = M.leaf({ size, stalk: size * (.3 + rnd(i, seed + 42) * .3), tone, seed: seed + 300 + i * 11 }), holder = new T.Group();
     // The leaf is turned in its own plane, then laid back; one leans on its neighbour instead of lying flat.
     leaf.rotation.z = turn; holder.add(leaf); holder.rotation.set(tilt, (rnd(i, seed + 43) - .5) * .6, 0);
-    holder.position.set(-W + x, -view.halfHAt(z) + .04 + (tilt > -.9 ? .12 : 0) + rnd(i, seed + 44) * .05, z); stage.add(holder); lying.push(leaf);
+    // A little in from the corner and above the bottom edge (#675: the float's zoom crops the lowest and outermost 2% at its centre).
+    holder.position.set(-W + x + .35, -view.halfHAt(z) + .46 + (tilt > -.9 ? .12 : 0) + rnd(i, seed + 44) * .05, z); stage.add(holder); lying.push(leaf);
   });
   arrange(lying, .5);
 

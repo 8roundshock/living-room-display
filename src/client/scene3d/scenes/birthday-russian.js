@@ -18,7 +18,8 @@ export default function build(kit, ctx) {
   const [cranberry] = ctx.palette, GLAZE = 0xf6f2ea, GOLD = 0xd9b25a;
 
   // ---------- the table: everything on the runner is one group, tipped toward the viewer ----------
-  const table = new T.Group(); table.position.set(W - 2.5, -view.halfH + .62, 0); table.rotation.x = .42; table.scale.setScalar(unit); stage.add(table);
+  // The table and the bunch keep clear of the corners the float's zoom crops (#675).
+  const table = new T.Group(); table.position.set(W - Math.max(3.05, W * .36), -view.halfH + .95, 0); table.rotation.x = .42; table.scale.setScalar(unit); stage.add(table);
   table.add(linenRunner(kit, { length: 4.5, width: 1.5, fall: .5, seed }));
 
   // ---------- the honey cake with its candles, on a low-footed plate ----------
@@ -37,7 +38,7 @@ export default function build(kit, ctx) {
   // [kind, diameter, petals, x, z, height, tilt toward the viewer, tilt sideways]
   const HEADS = [['daisy', .62, 21, -.5, .12, 2.12, .95, .35], ['gerbera', .78, 34, .02, .2, 2.42, .8, -.05], ['daisy', .7, 34, .62, .1, 2.2, .9, -.45], ['gerbera', .64, 21, -.22, .4, 1.8, 1.15, .15], ['daisy', .52, 21, .42, .44, 1.74, 1.2, -.25], ['gerbera', .56, 34, -.78, -.02, 1.66, .75, .7], ['daisy', .58, 34, .2, -.12, 2.86, .5, -.12]];
   const bunch = wrappedBunch(kit, { heads: HEADS.slice(0, A > .2 ? 7 : 5), seed });
-  bunch.group.position.set(-W + 1.9, -view.halfH - .06, .1); bunch.group.rotation.set(.14, .2, .44); bunch.group.scale.setScalar(unit * 1.06); stage.add(bunch.group);
+  bunch.group.position.set(-W + 1.9, -view.halfH - .5, .1); bunch.group.rotation.set(.14, .2, .44); bunch.group.scale.setScalar(unit * 1.06); stage.add(bunch.group);
 
   // ---------- three balloons, each different, tied to the bunch's ribbon ----------
   bunch.group.updateMatrixWorld(true);

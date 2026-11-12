@@ -5,7 +5,7 @@ import { floatPath, PLANE_TRACK, SCENE_TRACK, stepPath, trackPosition, widgetTra
 import { WIDGET_IDS } from '../../shared/widgets.ts';
 import { floatOffset, SCENE_FLOAT } from './settings.ts';
 // @ts-expect-error -- a plain JavaScript test tool without type declarations
-import { ASPECTS, exposed, floatExtremes, measure, measureAll, TOUCH } from '../../../tests/scene3d/edge-check.mjs';
+import { ASPECTS, crops, exposed, floatExtremes, measure, measureAll, RESTING_SHARE, TOUCH } from '../../../tests/scene3d/edge-check.mjs';
 
 // #675: the 3D scene layer floats like the board, on its own track, zoomed just enough that nothing
 // anchored at an edge shows its end at the far ends of the travel.
@@ -50,14 +50,28 @@ test('The zoom covers the travel: a side edge element keeps crossing its edge, a
   assert.ok(SCENE_FLOAT.travelX >= .02 && SCENE_FLOAT.travelY >= .02, 'at least ±2% of the display on each axis');
 });
 
-test('Every scene and weather overlay, at 16:9 and 21:9, keeps every edge element’s end out of sight at the float’s extremes', async () => {
-  const rows = await measureAll();
+type Row = { case: string; aspect: string; day: number; edges: Record<string, any> };
+test('Every scene and weather overlay, at 16:9 and 21:9: no edge element shows its end and no whole piece is cut by the float', async () => {
+  const rows: Row[] = await measureAll();
   assert.ok(rows.length >= 2 * (26 + 10), `${rows.length} cases`);
-  const failures = rows.flatMap((row: { case: string; aspect: string; day: number; edges: unknown }) => exposed(row.edges).map((item: { edge: string; name: string; reach: number; clearance: number }) =>
+  const failures = rows.flatMap(row => exposed(row.edges).map((item: { edge: string; name: string; reach: number; clearance: number }) =>
     `${row.case} ${row.aspect} day ${row.day}: ${item.edge} ${item.name} reaches ${item.reach.toFixed(4)} beyond the edge, ${(-item.clearance).toFixed(4)} short`));
   assert.deepEqual(failures, [], 'an edge element would show its cut end or lift off the bottom edge; extend it past the edge (view.halfWAt(z) or a wider margin)');
-  const anchored = rows.reduce((sum: number, row: { edges: Record<string, unknown[]> }) => sum + Object.values(row.edges).reduce((count, list) => count + list.length, 0), 0);
+  const anchored = rows.reduce((sum, row) => sum + ['left', 'right', 'bottom', 'top'].reduce((count, edge) => count + row.edges[edge].length, 0), 0);
   assert.ok(anchored > 200, `the check found edge elements to measure: ${anchored}`);
+  // The crop rule (review of #676): a piece that was whole in the frame before the float stays whole at every
+  // position; one resting near the bottom edge is whole at the centre and keeps RESTING_SHARE of itself in view.
+  const cropped = rows.flatMap(row => crops(row.edges.pieces).map((item: { name: string; box: number[]; resting: boolean; centre: boolean; least: number; wholeShare: number }) =>
+    `${row.case} ${row.aspect} day ${row.day}: ${item.resting ? 'resting' : 'free'} ${item.name} at (${((item.box[0] + item.box[1]) / 2).toFixed(2)}, ${((item.box[2] + item.box[3]) / 2).toFixed(2)}): whole ${Math.round(item.wholeShare * 100)}% of the time, at least ${Math.round(item.least * 100)}% in view${item.resting && !item.centre ? ', cut at the centre' : ''}`));
+  assert.deepEqual(cropped, [], `a whole piece would be cut by the float; move it inward (resting pieces keep ${RESTING_SHARE * 100}% in view)`);
+  const pieces = rows.reduce((sum, row) => sum + row.edges.pieces.length, 0);
+  assert.ok(pieces > 300, `the check found whole pieces to measure: ${pieces}`);
+});
+
+test('The crop check can fail: with the first candidate (±3% × ±2.5% at a 6% zoom) Pascha’s eggs and kulich are cut', async () => {
+  const edges = await measure('pascha', { aspect: ASPECTS['16:9'] }), wider = floatExtremes({ travelX: .03, travelY: .025, zoom: 1.06 });
+  assert.deepEqual(crops(edges.pieces), []);
+  assert.ok(crops(edges.pieces, wider).some((item: { resting: boolean }) => item.resting), 'a resting piece is cut at the wider float');
 });
 
 test('The edge check can fail: Autumn’s twig that barely crosses the left edge would show its end with less zoom', async () => {

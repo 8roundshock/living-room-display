@@ -18,7 +18,7 @@ export default function build(kit, ctx) {
   const U = ctx.size / .85;
 
   // ---------- the lily: its pot stands on the bottom edge ----------
-  const plant = lily(kit, { salt: seed + 1 }); plant.scale.setScalar(U); plant.position.set(-W + 2.2, -view.halfH - .08, 0); plant.rotation.y = .25; stage.add(plant);
+  const plant = lily(kit, { salt: seed + 1 }); plant.scale.setScalar(U); plant.position.set(-W + Math.max(2.5, W * .3), -view.halfH - .08, 0); plant.rotation.y = .25; stage.add(plant);
   const pale = kit.glow(0xf6f3ea, 5.5 * U, .06, { twinkle: .06 }); pale.position.set(-W + 2.3, -1.2, -2.2); stage.add(pale);
 
   // ---------- the branch from the right edge, forking toward the top edge, and the nest in its fork ----------

@@ -62,6 +62,8 @@ const WHOLE = .001;
 const grow = (box, other) => { box[0] = Math.min(box[0], other[0]); box[1] = Math.max(box[1], other[1]); box[2] = Math.min(box[2], other[2]); box[3] = Math.max(box[3], other[3]); return box; };
 const empty = () => [Infinity, -Infinity, Infinity, -Infinity];
 const inside = box => box[0] >= -1 && box[1] <= 1 && box[2] >= -1 && box[3] <= 1;
+/** A piece smaller than this on both axes (NDC: 1.5% of the width and of the height) is a speck: a bulb, a bead, a flower's eye. */
+const tiny = box => box[1] - box[0] < .03 && box[3] - box[2] < .03;
 const touching = (a, b, slack = .01) => a[0] <= b[1] + slack && b[0] <= a[1] + slack && a[2] <= b[3] + slack && b[2] <= a[3] + slack;
 
 /** The NDC extent of every element of one build at every sampled instant: `elements` (a mesh, a line or a
@@ -136,10 +138,10 @@ function pieces(stage, leaves) {
   const split = node => {
     const box = extent(node);
     if (!(box[0] <= box[1])) return;
-    if (inside(box)) { if (!travels(node)) add(describe(node, leaves), box, false, depth(node)); return; }
+    if (inside(box)) { if (!travels(node) && !tiny(box)) add(describe(node, leaves), box, false, depth(node)); return; }
     const leaf = leaves.get(node);
     // The instances of an instanced mesh that reaches past an edge are that element's own parts (needles, grains).
-    if (leaf && leaf.times === TIMES.length && leaf.each.length > 1) leaf.each.forEach((each, i) => { if (inside(each)) add(`${leaf.name} [${i}]`, each, true, leaf.z); });
+    if (leaf && leaf.times === TIMES.length && leaf.each.length > 1) leaf.each.forEach((each, i) => { if (inside(each) && !tiny(each)) add(`${leaf.name} [${i}]`, each, true, leaf.z); });
     for (const child of node.children) split(child);
   };
   for (const child of stage.children) split(child);

@@ -13,11 +13,14 @@ export default function build(kit, ctx) {
   const TONES = [first, third, second, shift(first, -.16), shift(second, -.13)].map(colour => shift(colour, 0, .08, -.07));
   // Textile-inspired accents stay secondary: a small diamond repeat or offset panels on the wrapping paper only.
   const PAPER = ctx.id === 'birthday-russian' ? ['diamonds', 'stripes', 'diamonds'] : ctx.id === 'birthday-korean' ? ['grid', 'bands', 'grid'] : ['dots', 'stripes', 'grid'];
-  const stand = (object, x, z, front) => { object.position.set(x, -view.halfHAt(z + front), z); stage.add(object); };
+  // Things stand a little above the bottom edge (#675): the float's zoom crops the lowest 2% of the screen at its
+  // centre, and a cake or a present standing in that band would be cut. FLOOR is the share of the half-height they stand at.
+  const FLOOR = .955, stand = (object, x, z, front) => { object.position.set(x, -view.halfHAt(z + front) * FLOOR, z); stage.add(object); };
 
   // ---------- five balloons tied to a present, right corner ----------
-  const anchor = kit.gift(.8 * S, .64 * S, .8 * S, css(deep(second, .35)), css(pale(second)), PAPER[0], GOLD); anchor.rotation.y = .5; stand(anchor, W - .8, 0, .55 * S);
-  const tie = V(W - .8, anchor.position.y + .6 * S, 0);
+  // The bunch keeps clear of the right edge, so the float never cuts a balloon (#675).
+  const anchor = kit.gift(.8 * S, .64 * S, .8 * S, css(deep(second, .35)), css(pale(second)), PAPER[0], GOLD); anchor.rotation.y = .5; stand(anchor, Math.min(W - 1.4, W * .82), 0, .55 * S);
+  const tie = V(anchor.position.x, anchor.position.y + .6 * S, 0);
   const SPOTS = [[-1.0, 2.6, .2], [-2.2, 3.3, -.5], [-.2, 3.9, .4], [-1.6, 4.7, -.2], [-3.1, 4.2, .5], [-.8, 5.6, -.6], [-2.7, 5.7, .1]];
   const KINDS = [{ skin: 'latex' }, { skin: 'pearl' }, { skin: 'foil', shape: 'star' }, { skin: 'latex', pattern: [CREAM, 'dots'] }, { skin: 'foil' }, { skin: 'latex' }, { skin: 'pearl' }];
   const bunch = Math.min(SPOTS.length, Math.max(3, Math.round(3 + A * 7)));
