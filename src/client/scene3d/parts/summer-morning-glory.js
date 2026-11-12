@@ -38,11 +38,13 @@ export function morningGlory(kit) {
       const colour = kit.canvasTexture(TW, TH, g => {
         const wash = g.createRadialGradient(X(0), Y(.1), 8, X(0), Y(.2), TW * .62); wash.addColorStop(0, '#2f8a50'); wash.addColorStop(.55, '#4aa85e'); wash.addColorStop(1, '#84d277'); g.fillStyle = wash; g.fillRect(0, 0, TW, TH);
         for (let i = 0; i < 260; i++) { g.fillStyle = `rgba(${rnd(i, 41) < .5 ? '150,210,120' : '10,60,40'},${.03 + rnd(i, 42) * .05})`; g.beginPath(); g.arc(rnd(i, 43) * TW, rnd(i, 44) * TH, 4 + rnd(i, 45) * 16, 0, 7); g.fill(); }
-        veins(g, 'rgba(159,217,160,.75)', 1);
+        // The veins a deeper green than the blade, faint and never lighter (#683), laid on whole at one strength.
+        const lines = document.createElement('canvas'); lines.width = TW; lines.height = TH; veins(lines.getContext('2d'), '#1c5230', .85);
+        g.globalAlpha = .3; g.drawImage(lines, 0, 0); g.globalAlpha = 1;
       }, { anisotropy: 8 });
       const relief = kit.canvasTexture(TW, TH, g => {
         g.fillStyle = '#707070'; g.fillRect(0, 0, TW, TH);
-        const sharp = document.createElement('canvas'); sharp.width = TW; sharp.height = TH; veins(sharp.getContext('2d'), '#ffffff', 1.6);
+        const sharp = document.createElement('canvas'); sharp.width = TW; sharp.height = TH; veins(sharp.getContext('2d'), '#565656', 1.6);   // shallow grooves, not ridges that catch the light (#683)
         try { g.filter = 'blur(2px)'; } catch { /* no canvas filter: sharp veins */ }
         g.drawImage(sharp, 0, 0); try { g.filter = 'none'; } catch { /* no canvas filter */ }
       }, { srgb: false });

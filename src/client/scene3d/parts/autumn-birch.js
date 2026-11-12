@@ -23,7 +23,8 @@ export function birch(kit) {
     g.strokeStyle = colour; g.lineCap = 'round'; line(POINTS, 0, POINTS, .99, 2.2); line(POINTS, 0, POINTS, .55, 4.6);
     for (const side of [-1, 1]) { for (let k = 1; k <= 5; k++) line(POINTS, .7 - k * .125, POINTS + side * k * 4, .98, 1.7); line(POINTS, .8, POINTS + side * 2, .98, 1.1); }
   };
-  const textures = leafTextures(kit, veins, { mottle: '176,104,16', specks: 34, salt: 90 }), leaves = leafLook(kit, textures);
+  // Its veins a light brown, a little darker than the gold, and its patches amber, as on a birch leaf in October (#683).
+  const textures = leafTextures(kit, veins, { mottle: '176,104,16', specks: 34, vein: '140,92,30', blush: '255,198,120', salt: 90 }), leaves = leafLook(kit, textures);
   // From the stalk out to the rim, for a golden yellow, a gold and an amber-edged leaf; `tone` (0-1) blends
   // between them. A dry one has a brown rim. Nearly the colours on screen (see the maple part), as the yellow
   // birches and aspens beside the maples in photos of a Canadian October (#671): golden yellow at a hue of

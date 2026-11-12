@@ -31,7 +31,8 @@ export function magnolia(kit) {
   }, { anisotropy: 4 });
   const bump = kit.canvasTexture(256, 512, (g, w, h) => {
     g.fillStyle = '#787878'; g.fillRect(0, 0, w, h);
-    const sharp = document.createElement('canvas'); sharp.width = w; sharp.height = h; veins(sharp.getContext('2d'), w, h, '#ffffff', 5);
+    // Low: high ridges caught the key light as pale stripes (#683).
+    const sharp = document.createElement('canvas'); sharp.width = w; sharp.height = h; veins(sharp.getContext('2d'), w, h, '#a4a4a4', 5);
     try { g.filter = 'blur(2.5px)'; } catch { /* no canvas filter: sharp veins */ }
     g.drawImage(sharp, 0, 0); try { g.filter = 'none'; } catch { /* no canvas filter */ }
   }, { srgb: false });
@@ -103,8 +104,9 @@ export function magnolia(kit) {
       for (let k = 0; k < 6; k++) for (const side of [-1, 1]) { const y = h * (.9 - k * .14); g.beginPath(); g.moveTo(w / 2, y); g.quadraticCurveTo(w / 2 + side * w * .3, y - h * .05, w / 2 + side * w * .5, y - h * .13); g.stroke(); }
     };
     return () => made ?? (made = (() => {
-      const colour = kit.canvasTexture(128, 256, (g, w, h) => { g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); ribs(g, w, h, 'rgba(226,246,196,.5)', 1.6); });
-      const relief = kit.canvasTexture(128, 256, (g, w, h) => { g.fillStyle = '#808080'; g.fillRect(0, 0, w, h); ribs(g, w, h, 'rgba(255,255,255,.8)', 2.4); }, { srgb: false });
+      // The ribs a deeper green than the blade, faint and never lighter (#683), laid on whole at one strength.
+      const colour = kit.canvasTexture(128, 256, (g, w, h) => { g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); const lines = document.createElement('canvas'); lines.width = w; lines.height = h; ribs(lines.getContext('2d'), w, h, '#3c6a2c', 1.3); g.globalAlpha = .28; g.drawImage(lines, 0, 0); g.globalAlpha = 1; });
+      const relief = kit.canvasTexture(128, 256, (g, w, h) => { g.fillStyle = '#808080'; g.fillRect(0, 0, w, h); ribs(g, w, h, '#6a6a6a', 2.4); }, { srgb: false });   // shallow grooves (#683)
       return kit.mat({ color: 0xd0d0d0, vertexColors: true, map: colour, bumpMap: relief, bumpScale: .012, roughness: .5, metalness: 0, clearcoat: .45, clearcoatRoughness: .3, side: T.DoubleSide }, .6);
     })());
   })();

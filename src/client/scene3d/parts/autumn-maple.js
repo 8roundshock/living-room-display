@@ -1,7 +1,7 @@
 // Sugar maple for Autumn (#664): one leaf on its long stalk, in the colours of an Ontario or
 // Quebec October. Five lobes with a few large teeth and rounded sinuses between them, five
-// veins that leave the stalk together; yellow at the stalk and along the veins, turning to
-// orange and red-orange toward the rim. Every leaf is its own geometry: its own lobes, teeth,
+// veins that leave the stalk together, a little darker than the blade (#683); yellow at the
+// stalk, turning to orange and red-orange toward the rim. Every leaf is its own geometry: its own lobes, teeth,
 // lean, curl and colour. Orange and yellow only: the pure red leaf belongs to Canada Day.
 // A part: call maple(kit) once and build with what it returns. See ../README.md.
 import { ramp } from './spring-blade.js';
@@ -62,8 +62,8 @@ export function maple(kit) {
       outline, size, stalk, about, girth: .006 + size * .012, bow: (r(16) - .5) * .5, turn: (r(17) - .5) * .7, pitch: -.15 - r(18) * .45,
       // A shallow fold along the middle vein, lobes that droop toward their tips, a wavy rim and a slight twist.
       lift: (x, y, out, i) => size * (fold * Math.abs(x / size) * out - droop * out * out * (.4 + .6 * Math.abs(x / size)) + wave * out * out * Math.sin(i * .9 + p1) + twist * x * y / (size * size)),
-      // Yellow at the stalk and along the veins, deeper toward the rim and away from the veins; one half often redder than the other.
-      tint: (i, out) => { const at = Math.min(1, Math.max(0, Math.pow(out, pale) * (1 - .4 * ON_VEIN[i] * (1 - out * .6)) + blush * (i < MIDDLE ? -1 : 1) * out * .4)); return mixed(low(at), high(at), share); },
+      // Yellow at the stalk, deeper toward the rim, only a shade yellower along the main veins (more read as bright bands, #683); one half often redder than the other.
+      tint: (i, out) => { const at = Math.min(1, Math.max(0, Math.pow(out, pale) * (1 - .12 * ON_VEIN[i] * (1 - out * .6)) + blush * (i < MIDDLE ? -1 : 1) * out * .4)); return mixed(low(at), high(at), share); },
       stalkTint: STALKS(tone),
     });
     const lit = material.color.r;
