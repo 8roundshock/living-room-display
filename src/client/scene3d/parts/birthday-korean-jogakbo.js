@@ -35,7 +35,7 @@ export function jogakbo(kit, { width = 2.8, height = 3.6, salt = 8 } = {}) {
   }, { srgb: false, anisotropy: 8 });
   const geometry = new T.PlaneGeometry(width, height, 28, 36); geometry.translate(0, -height / 2, 0);
   const p = geometry.attributes.position, rest = p.array.slice();
-  const cloth = new T.Mesh(geometry, mat({ map, alphaMap: alpha, roughness: .8, side: T.DoubleSide, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: .4, see: .4, depthWrite: false }, .3, false)); cloth.position.y = -.1;
+  const cloth = new T.Mesh(geometry, mat({ map, alphaMap: alpha, roughness: .8, side: T.DoubleSide, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: .4, see: .4, depthWrite: false, clear: true }, .3, false)); cloth.position.y = -.1;   // ramie gauze: really see-through (#683)
   tick(t => {
     for (let i = 0; i < p.count; i++) {
       const x = rest[i * 3], y = rest[i * 3 + 1], down = -y / height, middle = 1 - (x / hw) ** 2;

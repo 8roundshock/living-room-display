@@ -49,10 +49,12 @@ export function persimmonLeaves(kit) {
     // The first flush of autumn starts at the margin and the tip.
     for (const [width, strength] of [[70, .2], [42, .28], [20, .4]]) { g.strokeStyle = `rgba(201,106,43,${strength})`; g.lineWidth = width; outline(g); g.stroke(); }
     const tip = g.createLinearGradient(0, 0, 0, PY * .4); tip.addColorStop(0, 'rgba(201,106,43,.6)'); tip.addColorStop(1, 'rgba(201,106,43,0)'); g.fillStyle = tip; g.fillRect(0, 0, PX, PY * .4);
-    veins(g, 'rgba(196,214,140,.75)', 1);
+    // The veins a deeper green than the blade, faint and never lighter (#683), laid on whole at one strength.
+    const lines = document.createElement('canvas'); lines.width = PX; lines.height = PY; veins(lines.getContext('2d'), '#2a4a1e', .85);
+    g.globalAlpha = .3; g.drawImage(lines, 0, 0); g.globalAlpha = 1;
   }, { anisotropy: 8 });
   const alpha = canvasTexture(PX, PY, g => { g.fillStyle = '#000'; g.fillRect(0, 0, PX, PY); g.fillStyle = '#fff'; outline(g); g.fill(); }, { srgb: false });
-  const bump = canvasTexture(PX, PY, g => { g.fillStyle = '#707070'; g.fillRect(0, 0, PX, PY); veins(g, '#f0f0f0', 1.5); }, { srgb: false });
+  const bump = canvasTexture(PX, PY, g => { g.fillStyle = '#707070'; g.fillRect(0, 0, PX, PY); veins(g, '#5a5a5a', 1.5); }, { srgb: false });   // shallow grooves, not ridges that catch the light (#683)
   const geometries = [1, 2.6, 4.3].map(seed => {
     const geometry = new T.PlaneGeometry(1, 1.5, 10, 16); geometry.translate(0, .75, 0);
     const p = geometry.attributes.position;

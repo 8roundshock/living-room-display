@@ -71,7 +71,7 @@ Chosen in the picker for its "All together" compositions, and held as named cons
 | Glow | 65% | Strength of halos and soft light discs. |
 | Motion | 5% | The scene clock runs at 5/40 of the picker's default speed, one eighth of real time. |
 | Shine | 80% | Strength of the studio reflections. |
-| See-through | 100% | A lit body thins to glass; its rim and highlights stay. This is the standard 50% of the [Transparency](#transparency-670-owner-request-2026-11-11) setting. |
+| See-through | 100% | A lit body thins to glass; its rim and highlights stay. This is the standard 50% of the [Transparency](#transparency-670-owner-request-2026-11-11) setting. Since #683 that is a look against the black only: an object hides what is behind it unless it is [clear](#solid-and-clear-683-owner-direction-2026-11-12). |
 | Fade to middle | 60% | The picker's radial mask: full strength at the edges, 40% in the middle. |
 
 His words on the direction: "something like this, just improve the elements, less
@@ -113,12 +113,16 @@ stays tied to the saved brightness as above.
   | Value | Kit glass, a surface that takes the whole look | Autumn leaf body | Winter snow body |
   | --- | --- | --- | --- |
   | 0% | solid | 1 | 1 |
-  | 50% | the picker's factor f: 0.14 for a dark body facing the room, up to 1 at its rim and highlights | 0.7 | 0.8 |
-  | 100% | f²: 0.02 for that dark body; the rim stays 1 | 0.49 | 0.64 |
+  | 50% | the picker's factor f: 0.14 for a dark body facing the room, up to 1 at its rim and highlights | 0.88 (0.7 before #683) | 0.8 |
+  | 100% | f²: 0.02 for that dark body; the rim stays 1 | 0.77 | 0.64 |
+
+  Since [#683](https://github.com/8roundshock/living-room-display/issues/683) such a value is how
+  dim a solid surface is on black, or how much shows through a clear one (see
+  [Solid and clear](#solid-and-clear-683-owner-direction-2026-11-12)).
 
 - **What follows it.** Every surface made with `kit.mat` (with its own `see` share; a flag
   keeps a third of it), in every scene and in the weather overlays' solid pieces (the snow
-  plates). Scene bodies routed through `kit.solidity`: Autumn's leaf body (0.7), Winter's
+  plates). Scene bodies routed through `kit.solidity`: Autumn's leaf body (0.88), Winter's
   snow pads (0.8), the Korean birthday's ramie panes (0.5-0.7) and seams (0.85), the tea in
   the Russian birthday's glass (0.92), Maslenitsa's melted butter (0.6) and amber honey
   (0.92), and the water in Women's Day's vase (0.5). A unit test lists them and fails on a
@@ -146,6 +150,69 @@ stays tied to the saved brightness as above.
   `main` and a build of this change at 50%, differ in 0.007-0.055% of their pixels by a mean
   of under 0.001 of a level: the same as two captures of the same `main` build (0.010-0.050%;
   the GPU does not draw an identical frame twice). The textures' greys are the same numbers.
+
+### Solid and clear (#683, owner direction 2026-11-12)
+
+After the float was installed the owner asked: "the leafs themselves shouldn't be
+transparent to eachother (so leafs behind lefas shouldnt be see throuhg), and i thnk the
+spines of the leaves are too bright, if anything in real life they're darker. just make it
+look more realistic/nicer".
+
+- **Solid by default.** Until then every `kit.mat` surface was blended over whatever was
+  behind it, so a leaf in front of another leaf showed the back leaf and the branch through
+  its body. The background is true black, and a surface blended over black at alpha a shows a
+  times its colour. So a solid surface is drawn opaque at its colour times its alpha, applied
+  after the tone curve, the output encoding and the fog, where blending put it. On black every
+  object looks as it did, thin and dim, while what is behind it in the scene is hidden by it,
+  in any drawing order (the depth buffer decides). Every alpha a solid surface has is how dim
+  it is: the glass look, an alpha map's grey, a body's `kit.solidity`, `opacity`. The
+  Transparency setting therefore sets how thin and dim the objects look.
+- **Cut-outs stay cut out.** An outline cut by `alphaTest` (a kit maple leaf, a wind leaf, a
+  persimmon leaf, the kite, a fringe, a carved face, pierced metal) is where the surface is,
+  not how dim it is. It becomes coverage, smoothed across the samples of each pixel (alpha to
+  coverage) when the drawing buffer is multisampled, which it is with the engine's
+  antialiasing. So an outline has no dark fringe or box over what is behind it; without
+  multisampling it is a plain cut at the same threshold as before.
+- **Clear where it is really see-through.** A scene marks a surface `clear: true` and it is
+  blended over what is behind it, as before, after every solid surface:
+
+  | Scene | Clear surfaces |
+  | --- | --- |
+  | Women's Day | the vase's glass, its water and the water line (the stems show through), and the feathery fronds, whose leaflets are thinner than a pixel |
+  | Russian birthday | the tea and the tea glass |
+  | Maslenitsa | melted butter, amber honey, the cut-glass bowl |
+  | Winter | clear ice: the glaze, frozen drops and icicles |
+  | Korean birthday | the ramie wrapping cloth, a gauze |
+  | Rain overlay | drops and their trails on the glass |
+  | Snow overlay | the few hexagonal plates of clear ice among the flakes |
+
+  Everything else is solid, including silvered glass ornaments, satin, balloons and snow.
+  Winter's snow pads used to fade out over their underside; on solid snow that fade would be a
+  dark band over the needles behind, so the pad is cut where the fade reached half, with the
+  kit's smoothed coverage, and the needles show below it. The Chuseok tray's woven gaps are
+  the only other soft alpha shape on a solid surface; it lies on black, and its captures are
+  unchanged.
+  `transparency.test.ts` holds the list; a `mat()` call may not ask for blending any other way.
+- **Fading.** Something that appears or goes as a whole (the falling maple leaf, which fades
+  into the fallen ones) fades with `kit.fade`; a solid surface is blended only while it fades.
+- **Unchanged.** Weather particles and volumes, halos, bokeh and the fog bands are not
+  `kit.mat` surfaces: a solid leaf hides a flake behind it, and a flake in front of it still
+  shows. The layer's opacity, the fade to the middle and the quiet-date look are CSS and
+  unchanged. The origin offsets that ordered see-through pieces (#663) remain; they now order
+  only clear surfaces.
+- **Veins.** On photos of sugar maples and birches in October, front-lit and backlit, the
+  veins are thin and a little darker and browner than the blade, the rim is not outlined and
+  the colour varies across the blade in patches. Autumn's maple and birch leaves (on the tree,
+  fallen and falling), the kit maple leaf (Canada Day), the persimmon leaves (Chuseok), the
+  morning glory (Summer), the magnolia leaves (Spring) and the wind's slim leaves now paint
+  their veins a deeper tone of the leaf's own colour, laid on at one strength, with low relief
+  (shallow grooves rather than ridges that catch the key light), and no bright rim. Autumn's
+  leaves were 0.7 with whole veins, rim and stalk; they are now an even 0.88, which makes the
+  tree at least as bright as before, as the owner asked for brighter leaves (#671): at full
+  opacity the maple's lit pixels average 74.5 of 255 against 72.7 and their median value is 133
+  against 127; the birch's 88 and 133 against 82 and 118 (an even 0.7 measured 62, 0.8 measured
+  69). Each leaf has a margin a shade deeper and a few soft patches of deeper colour. Magnolia
+  tepals keep their faint lengthwise veins at a lower relief.
 
 ### Float (#675, owner direction 2026-11-12)
 

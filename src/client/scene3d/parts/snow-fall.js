@@ -77,11 +77,12 @@ export function snowfall(kit, { amount, share = 1, dim = 1, near = null, colours
 
 /** A few of the flakes as real geometry: flat hexagonal plates of clear ice, each a different size, slowly
  * tumbling so that a face now and then turns through the light. Clear means almost no body colour: what
- * shows is the rim and what a face reflects. Nothing on quiet dates. */
+ * shows is the rim and what a face reflects, so they are clear (#683): a solid plate would be a dark hexagon over
+ * whatever it passes in front of. Nothing on quiet dates. */
 export function snowPlates(kit, { count, colour = 0x2c3a48, salt = 0 } = {}) {
   const { T, rnd, view, tick, ctx } = kit, n = Math.round(count);
   if (ctx.quiet || n < 1) return new T.Group();
-  const mesh = new T.InstancedMesh(new T.CylinderGeometry(1, 1, .16, 6), kit.mat({ color: colour, roughness: .2, metalness: 0, reflectivity: 1, clearcoat: 1, clearcoatRoughness: .14, flatShading: true }, 2.2), n), o = new T.Object3D();
+  const mesh = new T.InstancedMesh(new T.CylinderGeometry(1, 1, .16, 6), kit.mat({ color: colour, roughness: .2, metalness: 0, reflectivity: 1, clearcoat: 1, clearcoatRoughness: .14, flatShading: true, clear: true }, 2.2), n), o = new T.Object3D();
   mesh.frustumCulled = false;
   // Everything about a plate that does not change from frame to frame is worked out once.
   const plates = Array.from({ length: n }, (_, i) => {

@@ -163,8 +163,9 @@ you add yourself; nothing is added for you except `part()`.
 | `view` | `halfW`, `halfH`, `aspect`, `depth`, `halfWAt(z)`, `halfHAt(z)`. |
 | `V(x, y, z)`, `C(colour)`, `mix(a, b, k)`, `shift(colour, hue, sat, light)`, `rnd(i, salt)` | Vector; sRGB to linear colour; blend two colours; turn a colour around the wheel; a deterministic value in [0, 1). Never use `Math.random`. |
 | `tick(fn)`, `own(resource)` | Per-frame update; register a texture or geometry you made for disposal with the scene. |
-| `mat(options, env = 1, physical = true)` | The material factory: three.js material options with sRGB colours, glass-patched (a lit body thins out, its rim and highlights stay). `env` scales the studio reflections. Use it for every lit surface. The extra option `see` (0-1) is the share of the see-through look a surface takes, for the rare one that must stay solid (a national flag). The owner's Transparency setting scales that share for you. |
-| `solidity(body)` | How solid to draw a body you make see-through yourself, under the owner's Transparency setting (#670): `body` is the solidity you chose (0-1) and the result is what to draw, `body` itself at the standard 50%, 1 at 0%, thinner toward 100% but never zero. Pass every such alpha through it: an alpha map's grey (`Math.round(kit.solidity(.7) * 255)`), a uniform, `opacity: kit.solidity(.6)`. A cut-out outline (`alphaTest`), light and particles are not bodies. |
+| `mat(options, env = 1, physical = true)` | The material factory: three.js material options with sRGB colours, glass-patched (a lit body thins out, its rim and highlights stay). `env` scales the studio reflections. Use it for every lit surface. The extra option `see` (0-1) is the share of the see-through look a surface takes, for the rare one that must stay solid (a national flag). The owner's Transparency setting scales that share for you. A surface is solid (#683): thin and dim on black, but it hides whatever is behind it. Pass `clear: true` only for something really see-through (glass, ice, water, tea, gauze); it is blended over what is behind it. Never pass `transparent: true`, and `depthWrite: false` only with `clear`. |
+| `solidity(body)` | How solid to draw a body you make see-through yourself, under the owner's Transparency setting (#670): `body` is the solidity you chose (0-1) and the result is what to draw, `body` itself at the standard 50%, 1 at 0%, thinner toward 100% but never zero. Pass every such alpha through it: an alpha map's grey (`Math.round(kit.solidity(.7) * 255)`), a uniform, `opacity: kit.solidity(.6)`. On a solid surface it is how dim the body is; on a clear one, how much shows through. A cut-out outline (`alphaTest`), light and particles are not bodies. |
+| `fade(material, amount)` | Fade a `mat()` surface as a whole (0-1) over what is behind it, for something that appears or goes. A solid surface is blended only while it fades. Do not set `material.opacity` on a solid surface: that dims it, it does not fade it. |
 | `gold()`, `satin(colour)` | Polished gold; ribbon satin. |
 | `glow(colour, size, opacity, { texture, twinkle })`, `bulb(colour, radius, halo)`, `bokeh(colour, size, opacity, twinkle)` | An additive halo; a small lit bulb with its halo; a soft out-of-focus light disc. Their strength follows the owner's glow setting. |
 | `tex.glow()`, `tex.disc()`, `tex.flame()`, `canvasTexture(w, h, draw, opts)`, `patternTex(base, accent, kind)` | Shared soft textures; a texture drawn once on a 2D canvas; a repeating pattern (`dots`, `stripes`, `grid`, `bands`, `diamonds`). Blur a whole layer once, never per stroke. |
@@ -199,6 +200,21 @@ in `mat()` and lists the parts that call `solidity`: add yours there. The curve
 (`settings.ts` `thinned`) and what does and does not follow it are in
 [Ambient themes](../../../docs/ambient-themes.md#transparency-670-owner-request-2026-11-11).
 
+**Solid and clear** (#683, owner: "leafs behind leafs shouldnt be see through"). The background is
+true black, so a surface blended over it at alpha a shows a times its colour. The kit draws every
+`mat()` surface opaque at that colour times its alpha instead: it looks the same on black, thin
+and dim, but hides what is behind it, whatever order things are drawn in. Every alpha a solid
+surface has is how dim it is. An `alphaTest` outline is a shape: it becomes coverage, smoothed
+across the pixel's samples, so outlines have no dark fringe. Mark `clear: true` only what is really
+see-through; a clear surface is blended over what is behind it and drawn after every solid one, so
+the order of two clear surfaces still follows their origins. An alpha map that is a soft shape
+(a fade at an edge) belongs on a clear surface or behind an `alphaTest`: on a solid one it is a
+dark band over what is behind. Weather particles, halos and the fog are not `mat()` surfaces and
+are unchanged (the snow overlay's ice plates are, and are clear); a solid leaf hides a far flake and a near one still
+shows. The origin offsets of #663 (Autumn, Winter, `parts/winter-order.js`) now only order clear
+surfaces. `transparency.test.ts` lists the clear surfaces: add yours there, and to
+[Ambient themes](../../../docs/ambient-themes.md#solid-and-clear-683-owner-direction-2026-11-12).
+
 ## Runtime behaviour (engine.js, Scene3D.tsx)
 
 - Nothing 3D is in the dashboard bundle. The engine with three.js (about 620 kB, 160 kB
@@ -210,7 +226,8 @@ in `mat()` and lists the parts that call `solidity`: add yours there. The curve
 - The float is a change to the camera's projection (zoom 1.043 about the centre, then the
   offset): `stage.setFloat({ interval, gentle })` follows the board's settings without a
   rebuild, `stage.holdFloat(unit)` pins a position for tools, and `stats()` reports `float`
-  (NDC), `zoom`, `floating` and `floatFrames`.
+  (NDC), `zoom`, `floating` and `floatFrames`. It also reports `surfaces`: how many of the
+  scene's `mat()` surfaces are solid and how many clear (#683).
 - The backing store is at most 2560 x 1440. Frames are drawn about 20 times a second, never
   while the document is hidden, and never before the GPU has finished the previous one.
 - One stage owns one canvas and one WebGL context and releases both on unmount.

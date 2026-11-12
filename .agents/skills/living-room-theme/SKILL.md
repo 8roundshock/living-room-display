@@ -18,7 +18,9 @@ owner's art rules and the look-at-it loop. The owner's look and the special/ever
 are constants in `settings.ts` and `tier.ts`; a scene never overrides them. The owner sets
 Transparency himself in Style (#670): a see-through body a scene draws itself (an alpha
 map's grey, a uniform, `opacity`) goes through `kit.solidity(body)`, written for the
-standard 50%. Each scene
+standard 50%. Objects are solid (#683): thin and dim on black but hiding what is behind
+them; mark `clear: true` only for real glass, ice, water or gauze. Paint leaf veins a
+little darker than the blade, never lighter. Each scene
 has a design ticket (#606 to #631): implement that plan. The flat renderer described
 below is only the fallback for scenes without a module and browsers without hardware
 WebGL; do not polish flat art. Iterate cheaply: edit, `npm run build`, capture two or three

@@ -12,11 +12,11 @@ export function glassVase(kit, { height = 1.7, radius = .42, water = .6 } = {}) 
   for (let i = 24; i >= 2; i--) { const k = i / 24; inner.push([wall(k) - .028, k * height + (i === 24 ? .004 : 0)]); }
   inner.push([wall(.08) - .06, .11], [0, .1]);
   // Clear glass shows only where it turns away from the eye or catches a light: almost no body colour, a strong sheen.
-  const glass = kit.mat({ color: 0x1c2a30, roughness: .04, metalness: 0, clearcoat: 1, clearcoatRoughness: .03, side: T.DoubleSide, depthWrite: false, emissive: 0xcfe6ef, emissiveIntensity: .05 }, 2.4);
+  const glass = kit.mat({ color: 0x1c2a30, roughness: .04, metalness: 0, clearcoat: 1, clearcoatRoughness: .03, side: T.DoubleSide, depthWrite: false, clear: true, emissive: 0xcfe6ef, emissiveIntensity: .05 }, 2.4);
   const body = new T.Mesh(turned(kit, [...outer, ...inner], 64), glass); body.renderOrder = 3; group.add(body);
-  const level = height * water, surface = new T.Mesh(new T.CircleGeometry(wall(water) - .03, 48), kit.mat({ color: 0x8fc4d8, roughness: .03, metalness: .2, clearcoat: 1, transparent: true, opacity: kit.solidity(.5), side: T.DoubleSide, depthWrite: false }, 2.2));
+  const level = height * water, surface = new T.Mesh(new T.CircleGeometry(wall(water) - .03, 48), kit.mat({ color: 0x8fc4d8, roughness: .03, metalness: .2, clearcoat: 1, clear: true, opacity: kit.solidity(.5), side: T.DoubleSide, depthWrite: false }, 2.2));
   surface.rotation.x = -Math.PI / 2; surface.position.y = level; surface.renderOrder = 2; group.add(surface);
-  const line = new T.Mesh(new T.TorusGeometry(wall(water) - .03, .008, 6, 64), kit.mat({ color: 0xcfe6ef, roughness: .05, clearcoat: 1, emissive: 0xcfe6ef, emissiveIntensity: .25, depthWrite: false }, 2)); line.rotation.x = Math.PI / 2; line.position.y = level; line.renderOrder = 2; group.add(line);
+  const line = new T.Mesh(new T.TorusGeometry(wall(water) - .03, .008, 6, 64), kit.mat({ color: 0xcfe6ef, roughness: .05, clearcoat: 1, emissive: 0xcfe6ef, emissiveIntensity: .25, depthWrite: false, clear: true }, 2)); line.rotation.x = Math.PI / 2; line.position.y = level; line.renderOrder = 2; group.add(line);
   group.userData.mouth = height; group.userData.neck = wall(1) - .05;
   return group;
 }
@@ -56,7 +56,7 @@ export function mimosaSpray(kit, { stems, panicles = 6, leaves = 14, inside = 1.
   // Painted deeper than #ffd91f: the key light and the tone curve lift it to that, instead of to cream.
   const blossom = kit.mat({ color: 0xffffff, roughness: 1, bumpMap: fuzz, bumpScale: .02, emissive: 0xe89c00, emissiveIntensity: .5 }, .1, false);
   const down = new T.MeshBasicMaterial({ color: C(0xf2b000), alphaMap: fuzz, transparent: true, opacity: .2, depthWrite: false, blending: T.AdditiveBlending });
-  const fronds = [0, 1, 2].map(variant => kit.mat({ color: [0x6f9a7c, 0x4f8a62, 0x7fa88c][variant], alphaMap: feather(kit, variant), roughness: .7, side: T.DoubleSide, depthWrite: false, emissive: 0x4f8a62, emissiveIntensity: .45 }, .3, false));
+  const fronds = [0, 1, 2].map(variant => kit.mat({ color: [0x6f9a7c, 0x4f8a62, 0x7fa88c][variant], alphaMap: feather(kit, variant), roughness: .7, side: T.DoubleSide, depthWrite: false, clear: true, emissive: 0x4f8a62, emissiveIntensity: .45 }, .3, false));
   const blade = new T.PlaneGeometry(1, .46, 12, 2), q = blade.attributes.position;
   for (let i = 0; i < q.count; i++) { const x = q.getX(i) + .5, y = q.getY(i); q.setXYZ(i, x, y, -.26 * x * x + .5 * Math.abs(y) * Math.abs(y) + .03 * Math.sin(x * 5)); }
   blade.computeVertexNormals();

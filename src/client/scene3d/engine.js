@@ -195,7 +195,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   function stats() {
     const size = renderer && !disposed ? renderer.getSize(new T.Vector2()) : { x: 0, y: 0 }, info = renderer?.info;
     return { frames, builds, running: raf !== 0, frozen, disposed, time, buildMs, frameMs, gpuMs, seeScale: look.seeScale,
-      floating: !disposed && (raf !== 0 || floatTimer !== 0), float: { ...shown }, floatSample, zoom: SCENE_FLOAT.zoom, floatFrames, backing: [size.x, size.y], triangles: info?.render.triangles ?? 0, calls: info?.render.calls ?? 0, geometries: info?.memory.geometries ?? 0, textures: info?.memory.textures ?? 0, programs: info?.programs?.length ?? 0 };
+      floating: !disposed && (raf !== 0 || floatTimer !== 0), float: { ...shown }, floatSample, zoom: SCENE_FLOAT.zoom, floatFrames, surfaces: made?.surfaces() ?? { solid: 0, clear: 0 }, backing: [size.x, size.y], triangles: info?.render.triangles ?? 0, calls: info?.render.calls ?? 0, geometries: info?.memory.geometries ?? 0, textures: info?.memory.textures ?? 0, programs: info?.programs?.length ?? 0 };
   }
   /** Developer measurement: draw `count` frames back to back. `script` is the main-thread time per
    * frame (ticks and draw submission); `finished` adds waiting for the GPU to complete the frame. */

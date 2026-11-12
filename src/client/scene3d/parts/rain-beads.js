@@ -11,7 +11,7 @@ export function paneBeads(kit, { count, reach = 3.4, side = -1, seed = 0 }) {
   // A drop on a pane: a sphere pressed to about a third of its depth.
   const lens = new T.SphereGeometry(1, 22, 14); lens.scale(1, 1, .35);
   // Clear water: almost no body of its own, so what shows is the rim and what the lens reflects.
-  const waterOf = () => kit.mat({ color: 0x121c26, roughness: .04, metalness: 0, reflectivity: 1, clearcoat: 1, clearcoatRoughness: .02 }, 2.8), water = waterOf();
+  const waterOf = () => kit.mat({ color: 0x121c26, roughness: .04, metalness: 0, reflectivity: 1, clearcoat: 1, clearcoatRoughness: .02, clear: true }, 2.8), water = waterOf();
   const smooth = k => { const u = Math.min(1, Math.max(0, k)); return u * u * (3 - 2 * u); };
 
   // Large beads first, so each finds room; nothing smaller than five pixels across, so no bead can pass for a stuck pixel.
@@ -46,7 +46,7 @@ export function paneBeads(kit, { count, reach = 3.4, side = -1, seed = 0 }) {
   const path = new T.CatmullRomCurve3(Array.from({ length: 12 }, (_, i) => V(wander(i / 11), -DROP * i / 11, 0)));
   // The wet trail is a very flat tube, so its two edges catch the light as fine lines.
   const trailGeometry = new T.TubeGeometry(path, SEGMENTS, .028 * S, 6); trailGeometry.scale(1, 1, .3);
-  const trail = new T.Mesh(trailGeometry, kit.mat({ color: 0x121c26, roughness: .05, metalness: 0, reflectivity: 1, clearcoat: 1, clearcoatRoughness: .05, opacity: 1 }, 2));
+  const trail = new T.Mesh(trailGeometry, kit.mat({ color: 0x121c26, roughness: .05, metalness: 0, reflectivity: 1, clearcoat: 1, clearcoatRoughness: .05, opacity: 1, clear: true }, 2));
   const runner = new T.Mesh(lens, waterOf()), run = new T.Group(), at = V(); run.add(trail, runner); group.add(run);
   const PERIOD = 56, SLIDE = 26, DRY = 20;
   let slide = { cycle: -1 };

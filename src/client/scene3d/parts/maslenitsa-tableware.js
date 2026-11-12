@@ -28,7 +28,7 @@ export function cutGlassBowl(kit, { radius = .42 } = {}) {
   }
   const geometry = new T.BufferGeometry(); geometry.setAttribute('position', new T.Float32BufferAttribute(position, 3)); geometry.setIndex(index); geometry.computeVertexNormals();
   // Cut glass in a dark room: facets that face a light flash, the rest keep a faint cool body instead of going black.
-  const crystal = kit.mat({ color: 0xe6f0f8, metalness: .65, roughness: .14, flatShading: true, side: T.DoubleSide, depthWrite: false, emissive: 0xbcd4e8, emissiveIntensity: .16 }, 1.9, false);
+  const crystal = kit.mat({ color: 0xe6f0f8, metalness: .65, roughness: .14, flatShading: true, side: T.DoubleSide, depthWrite: false, clear: true, emissive: 0xbcd4e8, emissiveIntensity: .16 }, 1.9, false);
   const mesh = new T.Mesh(geometry, crystal); mesh.scale.setScalar(radius); mesh.renderOrder = 2; mesh.userData.fill = .96 * radius; mesh.userData.inner = .9 * radius;
   return mesh;
 }

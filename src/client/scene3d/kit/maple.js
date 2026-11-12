@@ -34,14 +34,19 @@ export function createMaple(core) {
       const map = canvasTexture(S, S, g => {
         const gradient = g.createRadialGradient(X(0), Y(-.1), 20, X(0), Y(0), S * .6); gradient.addColorStop(0, '#f2492f'); gradient.addColorStop(.55, '#c91d23'); gradient.addColorStop(1, '#8d0e1b'); g.fillStyle = gradient; g.fillRect(0, 0, S, S);
         for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(${rnd(i, 1) < .5 ? '255,130,60' : '90,0,12'},${.03 + rnd(i, 2) * .05})`; g.beginPath(); g.arc(rnd(i, 3) * S, rnd(i, 4) * S, 6 + rnd(i, 5) * 26, 0, 7); g.fill(); }
-        veins(g, 'rgba(255,176,138,.8)', 1);
+        // The veins a deeper crimson than the blade, thin and faint, never lighter (#683: the owner found pale veins
+        // "too bright, if anything in real life they're darker"). Drawn whole on their own canvas and laid on at one
+        // strength, so that where they meet at the stem they are no darker than one vein.
+        const lines = document.createElement('canvas'); lines.width = lines.height = S; veins(lines.getContext('2d'), '#5c0812', .8);
+        g.globalAlpha = .34; g.drawImage(lines, 0, 0); g.globalAlpha = 1;
       }, { anisotropy: 8 });
       const alpha = canvasTexture(S, S, g => { g.fillStyle = '#000'; g.fillRect(0, 0, S, S); g.fillStyle = '#fff'; g.beginPath(); MAPLE_OUTLINE.forEach(([x, y], i) => i ? g.lineTo(X(x * .97), Y(y * .97)) : g.moveTo(X(x * .97), Y(y * .97))); g.closePath(); g.fill(); }, { srgb: false });
       // The veins are drawn sharp on their own canvas and blurred onto the bump map in one pass: a canvas
-      // filter per stroke takes minutes where 2D canvas is not GPU-accelerated.
+      // filter per stroke takes minutes where 2D canvas is not GPU-accelerated. They are shallow grooves, as on
+      // the upper side of a real leaf, not ridges that catch the light as bright lines (#683).
       const bump = canvasTexture(S, S, g => {
         g.fillStyle = '#707070'; g.fillRect(0, 0, S, S);
-        const sharp = document.createElement('canvas'); sharp.width = sharp.height = S; veins(sharp.getContext('2d'), '#ffffff', 1.7);
+        const sharp = document.createElement('canvas'); sharp.width = sharp.height = S; veins(sharp.getContext('2d'), '#545454', 1.7);
         try { g.filter = 'blur(3px)'; } catch { /* no canvas filter: sharp veins */ }
         g.drawImage(sharp, 0, 0); try { g.filter = 'none'; } catch { /* no canvas filter */ }
       }, { srgb: false });

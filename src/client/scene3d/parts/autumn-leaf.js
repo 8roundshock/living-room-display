@@ -4,31 +4,48 @@
 // A part: plain functions of the kit, no state at module level. See ../README.md.
 import { sheets } from './spring-blade.js';
 
-/** How solid a leaf's body is beside its veins, rim and stalk, which are solid (#664: "less
- * transparent"; the ginkgo fan of #653 was 0.55, the first 3D Autumn about 0.82). This is the
- * standard look: the Transparency setting moves it through kit.solidity (#670). */
-export const BODY = .7;
+/** How solid a leaf is (#664: "less transparent"; the ginkgo fan of #653 was 0.55, the first 3D
+ * Autumn about 0.82). A leaf is solid (#683): it hides what is behind it, and this is how dim it is
+ * on black, the same everywhere on it, veins, rim and stalk included. Until #683 the body was 0.7
+ * and the veins, rim and stalk were whole, and read as bright lines. 0.88 makes the tree at least
+ * as bright as it was then, as the owner asked for brighter leaves (#671): at full opacity the
+ * maple's lit pixels average 74.5 of 255 against 72.7, their median value is 133 against 127, and
+ * the birch's 88 and 133 against 82 and 118 (an even 0.7 measured 62, and 0.8 measured 69). This
+ * is the standard look: the Transparency setting moves it through kit.solidity (#670). */
+export const BODY = .88;
 
 /** The three textures of a kind of leaf, drawn in the blade's own coordinates: across is the
  * way round the outline (its points are evenly spaced, whatever their angles), up is the way
  * out from the stalk to the rim. `veins(g, w, h, colour, width)` strokes the veins;
- * `mottle` and `speck` are the colours ('r,g,b') of the soft patches and of the small dark spots. */
-export function leafTextures(kit, veins, { mottle = '150,90,20', speck = '96,44,8', specks = 46, salt = 0 } = {}) {
+ * `mottle` and `speck` are the colours ('r,g,b') of the soft patches and of the small dark spots;
+ * `vein` ('r,g,b') is the deeper, browner tone the veins take of the leaf's own colour, and
+ * `blush` that of the larger patches where a leaf has turned further than the rest of it.
+ *
+ * As on real leaves (#683, owner: the veins are "too bright, if anything in real life they're
+ * darker"; photos of sugar maples and birches in October, front-lit and backlit): the veins are
+ * thin and only a little darker than the blade, never lighter; on the upper side they lie in
+ * shallow grooves, so the relief is low; the rim is not outlined; and the colour varies across the
+ * blade in soft patches. The map multiplies each leaf's own colour, so the same darker vein is a
+ * deeper amber on a yellow leaf and a deeper red-orange on an orange one. */
+export function leafTextures(kit, veins, { mottle = '150,90,20', speck = '96,44,8', specks = 46, vein = '150,74,26', blush = '255,168,110', salt = 0 } = {}) {
   const { rnd } = kit, W = 512, H = 256;
-  const softened = (draw, blur) => g => { const sharp = document.createElement('canvas'); sharp.width = W; sharp.height = H; draw(sharp.getContext('2d')); try { g.filter = `blur(${blur}px)`; } catch { /* no canvas filter: sharp veins */ } g.drawImage(sharp, 0, 0); try { g.filter = 'none'; } catch { /* no canvas filter */ } };
+  // Drawn whole on a canvas of its own and laid on at `alpha`, so that where veins meet they are no darker than one vein.
+  const softened = (draw, blur, alpha = 1) => g => { const sharp = document.createElement('canvas'); sharp.width = W; sharp.height = H; draw(sharp.getContext('2d')); try { g.filter = `blur(${blur}px)`; } catch { /* no canvas filter: sharp veins */ } g.globalAlpha = alpha; g.drawImage(sharp, 0, 0); g.globalAlpha = 1; try { g.filter = 'none'; } catch { /* no canvas filter */ } };
   const map = kit.canvasTexture(W, H, g => {
     g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+    // A few large soft patches where the leaf has turned further, mostly toward the rim, then the small mottling.
+    for (let i = 0; i < 9; i++) { const x = rnd(i, salt + 11) * W, y = Math.pow(rnd(i, salt + 12), .6) * H * .9, r = 30 + rnd(i, salt + 13) * 50, patch = g.createRadialGradient(x, y, 0, x, y, r); patch.addColorStop(0, `rgba(${blush},${.16 + rnd(i, salt + 14) * .14})`); patch.addColorStop(1, `rgba(${blush},0)`); g.fillStyle = patch; g.fillRect(x - r, y - r, r * 2, r * 2); }
     for (let i = 0; i < 180; i++) { g.fillStyle = `rgba(${rnd(i, salt + 1) < .5 ? mottle : '255,244,200'},${.03 + rnd(i, salt + 2) * .05})`; g.beginPath(); g.ellipse(rnd(i, salt + 3) * W, rnd(i, salt + 4) * H, 4 + rnd(i, salt + 5) * 12, 6 + rnd(i, salt + 6) * 20, 0, 0, 7); g.fill(); }
-    veins(g, W, H, 'rgba(255,238,170,.5)', 1);
+    softened(s => veins(s, W, H, `rgb(${vein})`, .8), .6, .38)(g);
+    // The margin a shade deeper, as a leaf's edge turns first: two overlapping leaves stay apart, and the rim never glows.
+    const margin = g.createLinearGradient(0, 0, 0, H * .07); margin.addColorStop(0, `rgba(${vein},.22)`); margin.addColorStop(1, `rgba(${vein},0)`); g.fillStyle = margin; g.fillRect(0, 0, W, H * .07);
     // Small dark spots, more of them toward the rim, as on a leaf that has hung into October.
     for (let i = 0; i < specks; i++) { g.fillStyle = `rgba(${speck},${.3 + rnd(i, salt + 7) * .4})`; g.beginPath(); g.arc(rnd(i, salt + 8) * W, Math.pow(rnd(i, salt + 9), 1.7) * H * .8, .7 + rnd(i, salt + 10) * 1.5, 0, 7); g.fill(); }
-    g.fillStyle = '#fff'; g.fillRect(0, H * .97, W, H * .03);   // where the stalk joins, and the stalk itself
+    g.fillStyle = '#fff'; g.fillRect(0, H * .97, W, H * .03);   // where the stalk joins, and the stalk itself: its own colour
   }, { anisotropy: 8 });
-  const relief = kit.canvasTexture(W, H, g => { g.fillStyle = '#787878'; g.fillRect(0, 0, W, H); softened(s => veins(s, W, H, '#ffffff', 2.2), 1.5)(g); }, { srgb: false });
-  const solid = kit.canvasTexture(W, H, g => {
-    const body = Math.round(kit.solidity(BODY) * 255); g.fillStyle = `rgb(${body},${body},${body})`; g.fillRect(0, 0, W, H);
-    softened(s => { veins(s, W, H, '#ffffff', 2.6); s.fillStyle = '#fff'; s.fillRect(0, 0, W, H * .045); s.fillRect(0, H * .96, W, H * .04); }, 1.1)(g);
-  }, { srgb: false, anisotropy: 8 });
+  // Shallow grooves, not ridges that catch the light.
+  const relief = kit.canvasTexture(W, H, g => { g.fillStyle = '#787878'; g.fillRect(0, 0, W, H); softened(s => veins(s, W, H, '#5c5c5c', 2), 1.5)(g); }, { srgb: false });
+  const solid = kit.canvasTexture(4, 4, g => { const body = Math.round(kit.solidity(BODY) * 255); g.fillStyle = `rgb(${body},${body},${body})`; g.fillRect(0, 0, 4, 4); }, { srgb: false });
   return { map, relief, solid };
 }
 
@@ -36,8 +53,8 @@ export function leafTextures(kit, veins, { mottle = '150,90,20', speck = '96,44,
  * that the key light misses is dimmed. So a leaf is lit only weakly by the scene's lights (they
  * model its relief) and holds light of its own in its own colour, as a leaf does with the sun
  * behind it; `glow` is how much. It is matt. It takes only a small share of the kit's
- * see-through look, which thins a surface by how dark it is; its thinness is drawn by the
- * `solid` texture instead.
+ * see-through look, which thins a surface by how dark it is; how dim it is is the `solid`
+ * texture's BODY instead. It is solid (#683): a leaf in front hides the leaf and the wood behind it.
  *
  * Colours as painted (#671: "brighter colours"). The engine's tone curve (filmic, exposure 1.15)
  * is made for a scene of lit objects: it compresses whatever is bright, lifts it toward white
@@ -65,7 +82,9 @@ export function leafLook(kit, { map, relief, solid }, glow = 1) {
  * `stalkTint` is the stalk's colour and `girth` its thickness.
  * `about` moves the origin that far up from the foot, for a leaf that turns in the air.
  *
- * Drawing order. three.js draws see-through meshes from the farthest origin to the nearest,
+ * Drawing order (since #683 a leaf is solid and the depth buffer decides, so this no longer
+ * changes what is seen; `carry` still keeps overlapping leaves apart in depth). three.js draws
+ * see-through meshes from the farthest origin to the nearest,
  * and a nearer leaf drawn first hides the one behind it. The mesh's origin is the foot of
  * the stalk, the point a leaf sways about, and blade and stalk are placed inside the
  * geometry: sway does not move that origin. Turn or sway a leaf only about its origin. The

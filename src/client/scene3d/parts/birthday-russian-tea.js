@@ -7,7 +7,7 @@ import { through, tubes, turned } from './new-year-tree-tubes.js';
 export function teaGlass(kit, { radius = .26, height = .7, seed = 0 } = {}) {
   const { T, V, rnd } = kit, group = new T.Group(), sleeve = height * .56;
   // ---------- the tea, drawn first so it is seen through the glass ----------
-  const level = height * .84, tea = new T.Mesh(new T.CylinderGeometry(radius * .9, radius * .86, level - .06, 32), kit.mat({ color: 0xa04a0a, roughness: .12, clearcoat: 1, transparent: true, opacity: kit.solidity(.92), emissive: 0xc05a14, emissiveIntensity: .7 }, .8));
+  const level = height * .84, tea = new T.Mesh(new T.CylinderGeometry(radius * .9, radius * .86, level - .06, 32), kit.mat({ color: 0xa04a0a, roughness: .12, clearcoat: 1, clear: true, opacity: kit.solidity(.92), emissive: 0xc05a14, emissiveIntensity: .7 }, .8));
   tea.position.y = .06 + (level - .06) / 2; group.add(tea);
   const lemon = kit.canvasTexture(128, 128, g => {
     g.translate(64, 64); g.fillStyle = '#e9b820'; g.beginPath(); g.arc(0, 0, 62, 0, 7); g.fill(); g.fillStyle = '#fbf2c8'; g.beginPath(); g.arc(0, 0, 54, 0, 7); g.fill();
@@ -21,7 +21,7 @@ export function teaGlass(kit, { radius = .26, height = .7, seed = 0 } = {}) {
   for (let i = 1; i <= 10; i++) outer.push([wall(i / 10), height * i / 10]);
   for (let i = 10; i >= 1; i--) inner.push([wall(i / 10) - .018, height * i / 10 + (i === 10 ? .003 : 0)]);
   inner.push([wall(0) - .03, .05], [0, .05]);
-  const glass = new T.Mesh(turned(kit, [...outer, ...inner], 48), kit.mat({ color: 0x1c262c, roughness: .04, clearcoat: 1, clearcoatRoughness: .03, side: T.DoubleSide, depthWrite: false, emissive: 0xcfe6ef, emissiveIntensity: .05 }, 2.4)); glass.renderOrder = 2; group.add(glass);
+  const glass = new T.Mesh(turned(kit, [...outer, ...inner], 48), kit.mat({ color: 0x1c262c, roughness: .04, clearcoat: 1, clearcoatRoughness: .03, side: T.DoubleSide, depthWrite: false, clear: true, emissive: 0xcfe6ef, emissiveIntensity: .05 }, 2.4)); glass.renderOrder = 2; group.add(glass);
   // ---------- the holder: a foot, a pierced sleeve between two solid bands, a handle ----------
   const silver = () => kit.mat({ color: 0xd4d7de, metalness: 1, roughness: .32, emissive: 0xc9ccd6, emissiveIntensity: .1 }, 1.5, false);
   const arches = kit.canvasTexture(256, 64, g => {

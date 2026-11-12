@@ -36,6 +36,9 @@ export default function build(kit, ctx) {
   const at = (x, y, z = 0) => V(-W + x, y, z);   // measured from the left edge
 
   // ---------- drawing order ----------
+  // Since #683 every leaf and the wood are solid: the depth buffer decides what hides what, in any order, and nothing
+  // shows through a leaf. The order below no longer changes what is seen; it is kept because it is harmless, and the
+  // carry() that sets overlapping leaves apart in depth still keeps them from passing through each other as they sway.
   // three.js draws see-through meshes from the farthest origin to the nearest, and what is drawn first hides
   // what is drawn later behind it; an order that changes shows as a jump in brightness where two pieces
   // overlap (#653, #663). So nothing here has an origin that moves in depth: a leaf sways only about its
