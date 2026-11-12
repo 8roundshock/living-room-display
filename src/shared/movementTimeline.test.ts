@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { defaultSettings } from './defaults.ts';
 import { composeWidgetGrid, getWidgetRect, gridProblem, WIDGET_IDS } from './widgets.ts';
 import { clampFloatOffset, floatPath, stepPath, widgetTrack } from './float.ts';
-import { compositionTimeline, glideKeyframes, movementFrame, movementWindow, previewTimeLabel } from './movementTimeline.ts';
+import { compositionTimeline, glideKeyframes, movementFrame, MOVEMENT_PREVIEW_SECONDS, previewTimeLabel } from './movementTimeline.ts';
 
 const glide = { interval: 30, swaps: true, glide: true, fade: 2 };
 
@@ -13,7 +13,6 @@ test('#515 swap frames include the entire shared glide and preserve exact bounda
   assert.equal(movementFrame(31.5, glide).elapsed, 1.5);
   assert.equal(movementFrame(33, glide).phase, 'still');
   assert.equal(movementFrame(60, glide).cycle, 2);
-  assert.equal(movementWindow(4, glide), 123);
   assert.equal(movementFrame(123, glide).phase, 'still');
   assert.equal(movementFrame(-5, glide).cycle, 0);
 });
@@ -24,11 +23,9 @@ test('#515 dim swaps retain the source board until the midpoint and finish brigh
   assert.equal(movementFrame(30.59, dim).cycle, 0);
   assert.equal(movementFrame(30.6, dim).cycle, 1);
   assert.equal(movementFrame(31.2, dim).phase, 'still');
-  assert.equal(movementWindow(4, dim), 121.2);
   assert.equal(movementFrame(30, { ...dim, fade: 0 }).phase, 'still');
   assert.equal(movementFrame(30, { ...dim, fade: 0 }).cycle, 1);
   assert.equal(movementFrame(120, { ...glide, swaps: false }).cycle, 0);
-  assert.equal(movementWindow(4, { ...glide, swaps: false }), 120);
 });
 
 test('#515 forward and backward seeks replay live composition history without mutating authored settings', () => {
@@ -75,9 +72,15 @@ test('#515 sampled float tracks and shared glide keyframes are stable on repeate
   }
 });
 
-test('#515 elapsed labels expose seconds and longer windows without wrapping after an hour', () => {
-  assert.equal(previewTimeLabel(0), '0:00.0');
-  assert.equal(previewTimeLabel(30.05), '0:30.1');
-  assert.equal(previewTimeLabel(3601.2), '1:00:01.2');
-  assert.equal(previewTimeLabel(24 * 1800 + 6), '12:00:06.0');
+test('#686 the preview covers one hour, labelled in minutes and seconds up to 60:00', () => {
+  assert.equal(MOVEMENT_PREVIEW_SECONDS, 3600);
+  assert.equal(previewTimeLabel(0), '0:00');
+  assert.equal(previewTimeLabel(5), '0:05');
+  assert.equal(previewTimeLabel(750), '12:30');
+  assert.equal(previewTimeLabel(30.4), '0:30');
+  assert.equal(previewTimeLabel(3599), '59:59');
+  assert.equal(previewTimeLabel(MOVEMENT_PREVIEW_SECONDS), '60:00');
+  assert.equal(previewTimeLabel(-3), '0:00'); assert.equal(previewTimeLabel(Number.NaN), '0:00');
+  // At the end of the hour at the shortest interval (30 s), with Swap places on, the board is the 120th arrangement.
+  assert.equal(movementFrame(MOVEMENT_PREVIEW_SECONDS, glide).cycle, 120);
 });

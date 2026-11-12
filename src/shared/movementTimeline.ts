@@ -42,15 +42,13 @@ export function movementFrame(seconds: number, timing: MovementTiming): Movement
     : still(next);
 }
 
-/** The window includes the last complete swap; it is not a claim that these paths repeat. */
-export function movementWindow(intervals: number, timing: MovementTiming): number {
-  return intervals * timing.interval + (timing.swaps ? timing.glide ? glideSeconds(timing.fade) : 2 * dimSeconds(timing.fade) : 0);
-}
+/** The editor's movement preview covers one hour of the display (#686), whatever the interval. */
+export const MOVEMENT_PREVIEW_SECONDS = 3600;
 
 /**
  * Replay the same history-dependent composer as the display, in order, before seeking. Caching is
  * local to this preview's authored layout and enabled widgets; seeking backward cannot alter history.
- * The UI bounds its window to 24 intervals, so this never accumulates an unbounded playback history.
+ * The preview covers one hour (MOVEMENT_PREVIEW_SECONDS), so this holds at most 121 boards at the shortest 30 s interval.
  */
 export function compositionTimeline(authored: WidgetGrid, enabled: Partial<Record<WidgetId, boolean>>) {
   const source = structuredClone(authored), active = { ...enabled }, boards = [structuredClone(authored)];
@@ -65,8 +63,8 @@ export function compositionTimeline(authored: WidgetGrid, enabled: Partial<Recor
   };
 }
 
+/** Minutes and seconds into the preview's hour: `12:30`, `60:00` at its end (#686). */
 export function previewTimeLabel(seconds: number): string {
-  const tenths = Math.round(Math.max(0, seconds) * 10), whole = Math.floor(tenths / 10);
-  const hours = Math.floor(whole / 3600), minutes = Math.floor(whole / 60) % 60;
-  return `${hours ? `${hours}:${String(minutes).padStart(2, '0')}` : minutes}:${String(whole % 60).padStart(2, '0')}.${tenths % 10}`;
+  const whole = Math.round(Math.max(0, Number.isFinite(seconds) ? seconds : 0));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 }
