@@ -27,8 +27,10 @@ Details: [Ambient themes](docs/ambient-themes.md#solid-and-clear-683-owner-direc
 
 Verified with source builds and synthetic data only: both typechecks, the unit tests (the
 solid patch, the clear list and that no material asks for blending another way; the census,
-edge and crop checks unchanged), and before-and-after captures of every scene. Not verified:
-installation, the TV.
+edge and crop checks unchanged), the `scene3d` suite on SwiftShader and on the GPU (solid and
+clear surfaces counted in Autumn and Women's Day; Transparency still orders 0%, 50% and 100%),
+and before-and-after captures of every scene. Not verified: installation, the TV, and a
+pixel-level check that a solid surface hides what is behind it (#685).
 
 ## The 3D scenes float like the widgets — 2026-11-12 (#675)
 
