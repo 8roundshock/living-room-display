@@ -9,13 +9,22 @@ What changed:
 - The 3D scene layer now floats like the board, on its own track and clock, with the same
   motion interval and Float gently setting: up to ±2% of the display on each axis. Before,
   it only drifted ±0.9% × ±0.7%.
-- It is drawn 4.3% larger, so anything entering from an edge or standing on the bottom edge
-  stays anchored at the extremes.
+- It is drawn 4.3% larger, so anything entering from a side or top edge still crosses it at
+  the extremes. Pieces resting on the bottom sit on the visible bottom edge at the centre
+  position and rise or are cut by up to the vertical travel (2%) at the extremes, as the
+  board does (coordinator decision on #675, 2026-11-12); small flat litter may be cut further
+  at the low extreme.
 - Quiet dates float too, with their scene still frozen; the old scene-clock drift is gone.
 - A Node check builds every scene and weather overlay at 16:9 and 21:9. It fails if an edge
-  element's end would show, or if a piece that was whole in the frame would be cut. Fourteen
-  scenes had pieces moved (standing things lifted about 0.2 units, a few moved in from a
-  side edge); the moves are listed in the docs.
+  element's end would show, if a piece that was whole in the frame would be cut, or if a
+  resting piece floats above the visible bottom at the centre. Fourteen scenes had pieces
+  moved (resting things onto the visible bottom, a few moved in from a side edge); the moves
+  and their gaps are listed in the docs.
+- A content guard counts what every scene and overlay draws (everyday and quiet) and fails
+  if one loses more than 5% of its objects or triangles against its own baseline in
+  `tests/scene3d/census/`, taken at `c807ea4`. It was added after a review found three
+  scenes emptied by an edit in this change; a new scene without a baseline is skipped until
+  it writes one.
 
 Details: [Ambient themes](docs/ambient-themes.md#float-675-owner-direction-2026-11-12).
 

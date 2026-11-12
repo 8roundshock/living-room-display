@@ -157,9 +157,12 @@ elements in the scenes need to move and shift as well, so they don't burn in ove
 time, same as the other elements"). It follows the same motion interval and Float gently
 setting on its own track, independent of the board's and the widgets', up to ±2% of the
 display on each axis, and it keeps floating on a quiet date. The scene is drawn 4.3% larger
-than the screen so that whatever enters from an edge or stands on the bottom edge still
-reaches past the frame at the far end of the travel; things that must stay whole keep clear
-of the band that crops.
+than the screen so that whatever enters from a side or top edge still crosses it at the far
+end of the travel; things that must stay whole keep clear of the band that crops. Pieces
+resting on the bottom (a cake, fallen leaves) sit on the visible bottom edge at the centre
+position and, like the board, rise or are cut by up to the vertical travel at the extremes;
+small flat litter may be cut further at the low extreme (coordinator decision on #675,
+2026-11-12). Tests check every scene against these rules and against what it drew before.
 
 Floating in place smears edges across about 270 × 150 device pixels at 4K, but it
 does not even out wear between screen regions the way swapping does: a bright

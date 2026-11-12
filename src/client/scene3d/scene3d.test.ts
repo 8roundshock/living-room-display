@@ -192,5 +192,7 @@ test('Every scene and overlay still draws most of what it drew: nothing is silen
   }
   if (missing.length) t.diagnostic(`no baseline yet (skipped): ${missing.join(', ')}; write one with node tests/scene3d/census.mjs --write <id>`);
   assert.deepEqual(lost, [], 'a scene lost part of what it draws (more than 5% of its objects or of its triangles); if that was meant, take a new census');
-  assert.ok(CENSUS_NAMES.length - missing.length >= 31, `the 31 baselines taken at c807ea4 are all still there (one was removed?): ${CENSUS_NAMES.length - missing.length}`);
+  // The baselines taken at c807ea4, by name: removing one fails even after new scenes have added their own.
+  const ORIGINAL_CENSUS = ['autumn', 'birthday-korean', 'birthday-russian', 'birthday', 'canada-day', 'christmas', 'chuseok', 'easter', 'fog', 'halloween', 'lotus-lanterns', 'maslenitsa', 'mimosa', 'new-year-tree', 'new-year', 'orthodox-christmas', 'pascha', 'rain', 'seollal', 'snow', 'spring', 'storm', 'summer', 'thanksgiving', 'weather-fog', 'weather-rain', 'weather-snow', 'weather-storm', 'weather-wind', 'wind', 'winter'];
+  assert.deepEqual(ORIGINAL_CENSUS.filter(name => missing.includes(name) || !(CENSUS_NAMES as string[]).includes(name)), [], 'a baseline taken at c807ea4 was removed, or its scene is no longer counted');
 });
