@@ -614,19 +614,24 @@ motion or the Off animation level.
   Fine** and one reduction (**Make room: Reminders small** for a small widget,
   **Weather medium** for a medium one, **Clock medium** for a large one). The
   Home names its All reminders action with the pending count.
-- **Preview movement** (#515) opens a paused, local timeline below the canvas.
-  **Play/Pause**, one-second backward/forward steps, a keyboard-accessible range,
-  and interval-boundary buttons inspect content float (or steps) and whole-widget
-  swaps. The window covers 4, 12 or 24 intervals from this layout, including the
-  last complete glide/dim transition. Elapsed time includes tenths of a second.
-  Seeking pauses; playback stops at the end, and Play there restarts from zero.
-  Changing motion mode, interval, layout or visibility resets the preview history.
-  The board and widget tracks visit different waypoint sequences; these windows
-  are not a claim that motion repeats in a short cycle. The preview shares runtime
-  float targets, measured content slack, history-dependent arrangement composition,
-  and glide keyframes. It samples path targets directly; runtime additionally
+- **Preview movement** (#515, #686) shows one slider below the canvas, over an hour
+  (0:00 to 60:00 in one-second steps), with the moment beside it (`12:30 / 60:00`) and
+  one line: "Where the board, widgets and scene would be at each moment of an hour with
+  these settings. Nothing changes on the display or in saved settings." The arrow keys
+  move 5 s, Page Up and Page Down a minute, Home and End to the ends. There is no Play,
+  no one-second buttons, no window chooser and no per-interval jumps (owner, 2026-11-12:
+  "no need for the intervals, can just be a preset slider with an hour"). The slider
+  starts at 0:00 each time the preview opens and follows the draft: a change of motion
+  mode, interval, Swap places, fade, layout or visibility keeps the moment and shows it
+  with the new settings (the arrangement history is replayed for the new layout). The
+  3D scene follows the same moment, its own clock included (#678). The board and widget
+  tracks visit different waypoint sequences; the hour is not a claim that motion repeats
+  in a short cycle. Each widget's ink is measured at the moment shown, after its glyph
+  loops are sampled, so a moment looks the same however it was reached. The preview
+  shares runtime float targets, measured content slack, history-dependent arrangement
+  composition, and glide keyframes. It samples path targets directly; runtime additionally
   limits late-timer/startup catch-up to device-pixel steps. Reduced motion uses the
-  same stepped positions and dim transitions as the display. The paused movement
+  same stepped positions and dim transitions as the display. The resting movement
   clock does not freeze live information or affect polling, timers, settings,
   saved presets or an open display. Editing returns to authored placement and
   restores each still-mounted glyph loop's prior clock and running/paused state.

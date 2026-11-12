@@ -143,7 +143,10 @@ seconds. The clock runs at one eighth of real time (the owner's "motion 5%") and
 drawn about 20 times a second, so write motion as a function of `t` (`Math.sin(t * .4)`), never
 as a per-frame increment. A still editor preview and a quiet date call every tick once, at
 t = 14. A still preview draws that one frame; a quiet date's picture is redrawn only as the
-float moves it.
+float moves it. In the editor's movement preview (#678) `t` is the moment on its hour slider,
+`12 + seconds / 8`, and the slider can go to any moment in any order, backwards too: never
+keep state that assumes `t` only grows (a value cached for the current cycle of `t`, as
+`parts/rain-beads.js` does, is fine).
 
 Quiet dates: `ctx.amount` is already reduced. `kit.snow`, `kit.bokeh`, `kit.confetti` and
 `kit.fireworks` return an empty group, so `stage.add(kit.snow(40))` is always safe. Guard your
@@ -228,6 +231,14 @@ surfaces. `transparency.test.ts` lists the clear surfaces: add yours there, and 
   rebuild, `stage.holdFloat(unit)` pins a position for tools, and `stats()` reports `float`
   (NDC), `zoom`, `floating` and `floatFrames`. It also reports `surfaces`: how many of the
   scene's `mat()` surfaces are solid and how many clear (#683).
+- The editor's movement preview (#678): `stage.setPreview(seconds)` (and the `preview` option
+  for a stage made during one) makes the float read the preview's time as its track time, the
+  board's preview time, and a running scene clock `clock.start + seconds × timeScale`. A held
+  preview draws nothing new; a quiet date's frozen clock stays and its float is redrawn at once.
+  `setPreview(null)` returns the float to real time at once, and the scene clock carries on
+  from the preview's. A still stage ignores it. `stats()` reports `preview`, and `floatSample`
+  says whether its time was the preview's. `stageClock` (exported) is the clock both use, so it
+  is tested without WebGL.
 - The backing store is at most 2560 x 1440. Frames are drawn about 20 times a second, never
   while the document is hidden, and never before the GPU has finished the previous one.
 - One stage owns one canvas and one WebGL context and releases both on unmount.
