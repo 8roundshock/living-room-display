@@ -57,7 +57,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   // The float (#675): `float` is { interval, gentle } (the motion interval in seconds, and Float gently
   // on with motion allowed), or null for a still preview, which stays at the centre. `held` pins a
   // position for tools.
-  let float = still ? null : initialFloat, held = null, shown = { x: 0, y: 0 }, floatTimer = 0, floatFrames = 0;
+  let float = still ? null : initialFloat, held = null, shown = { x: 0, y: 0 }, floatTimer = 0, floatFrames = 0, floatSample = null;
   const zoomMatrix = new T.Matrix4();
   let renderer = null, gl = null, made = null, scene = null, camera = null, observer = null, pending = null, retired = null;
   let disposed = false, raf = 0, rebuildTimer = 0, retuneTimer = 0, frames = 0, builds = 0, time = frozen ? clock.still : clock.start, lastRender = 0, builtAspect = 0, buildMs = 0, frameMs = 0, gpuMs = 0, slowRun = 0;
@@ -95,7 +95,9 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   function floatTarget() {
     if (held) return floatOffset(held);
     if (!float) return { x: 0, y: 0 };
-    return floatOffset(trackPosition(floatClock() - floatOriginFor(float.interval), float.interval, float.gentle, SCENE_TRACK));
+    const real = floatClock(), seconds = real - floatOriginFor(float.interval);
+    floatSample = { real, seconds };
+    return floatOffset(trackPosition(seconds, float.interval, float.gentle, SCENE_TRACK));
   }
   /** The camera's projection, then the float: the picture is zoomed about the screen's centre and moved,
    * every pixel alike, as the board is (a projection change, so depth and parallax are untouched). */
@@ -197,7 +199,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   function stats() {
     const size = renderer && !disposed ? renderer.getSize(new T.Vector2()) : { x: 0, y: 0 }, info = renderer?.info;
     return { frames, builds, running: raf !== 0, frozen, disposed, time, buildMs, frameMs, gpuMs, seeScale: look.seeScale,
-      floating: !disposed && (raf !== 0 || floatTimer !== 0), float: { ...shown }, zoom: SCENE_FLOAT.zoom, floatFrames, backing: [size.x, size.y], triangles: info?.render.triangles ?? 0, calls: info?.render.calls ?? 0, geometries: info?.memory.geometries ?? 0, textures: info?.memory.textures ?? 0, programs: info?.programs?.length ?? 0 };
+      floating: !disposed && (raf !== 0 || floatTimer !== 0), float: { ...shown }, floatSample, zoom: SCENE_FLOAT.zoom, floatFrames, backing: [size.x, size.y], triangles: info?.render.triangles ?? 0, calls: info?.render.calls ?? 0, geometries: info?.memory.geometries ?? 0, textures: info?.memory.textures ?? 0, programs: info?.programs?.length ?? 0 };
   }
   /** Developer measurement: draw `count` frames back to back. `script` is the main-thread time per
    * frame (ticks and draw submission); `finished` adds waiting for the GPU to complete the frame. */

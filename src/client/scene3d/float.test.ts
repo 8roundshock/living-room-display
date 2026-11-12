@@ -85,7 +85,8 @@ test('The engine floats the picture in the projection and has no scene-clock dri
   const engine = readFileSync(new URL('./engine.js', import.meta.url), 'utf8');
   assert.doesNotMatch(engine, /DRIFT/);
   assert.match(engine, /camera\.projectionMatrix\.premultiply\(zoomMatrix\)/);
-  assert.match(engine, /trackPosition\(floatClock\(\) - floatOriginFor\(float\.interval\), float\.interval, float\.gentle, SCENE_TRACK\)/);
+  assert.match(engine, /seconds = real - floatOriginFor\(float\.interval\);/);
+  assert.match(engine, /floatOffset\(trackPosition\(seconds, float\.interval, float\.gentle, SCENE_TRACK\)\)/);
   assert.match(engine, /^const floatOrigin = \{ interval: 0, at: 0 \};$/m, 'the float origin is shared by every stage on the page, so a new stage does not jump');
   assert.match(engine, /let float = still \? null : initialFloat/, 'a still preview does not float');
 });

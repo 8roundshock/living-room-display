@@ -10,6 +10,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openScene, SCENE_CASES, startSceneServer, WEATHER_IDS, WEBGL_ARGS } from './lib/scene-cases.mjs';
+import { SCENE_TRACK, trackPosition } from '../../src/shared/float.ts';
+import { floatOffset } from '../../src/client/scene3d/settings.ts';
 
 const VIEWPORT = { width: 640, height: 360 }, BRIGHTNESS = .36, READY = 120_000;
 // A season or holiday scene that has no file under scenes/ yet (and borrows none), read from the folder so that
@@ -165,11 +167,21 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
           look: { glow: .65, shine: .8, seeThrough: 1, timeScale: 0 }, float: { interval, gentle: true }, limits: { maxWidth: 2560, maxHeight: 1440, framesPerSecond: 20 }, clock: { start: 12, still: 14 }, allowSoftware: true });
         return { stage, done: () => { stage.dispose(); host.remove(); } }; };
       const first = make(3); await wait(400); first.stage.setFloat({ interval: 7, gentle: true }); await wait(300); first.stage.holdFloat(null);
-      const before = first.stage.stats().float; first.done();
-      const second = make(7), after = second.stage.stats().float; second.done();
+      const sample = stage => { const stats = stage.stats(); return { float: stats.float, ...stats.floatSample }; };
+      const before = sample(first.stage); first.done();
+      const second = make(7), after = sample(second.stage); second.done();
       return { before, after };
     }, { enginePath: chunks.engine, scenePath: chunks['canada-day'] });
-    assert.ok(Math.hypot(handover.after.x - handover.before.x, handover.after.y - handover.before.y) < .004, `a new stage continues the float without a jump: ${JSON.stringify(handover)}`);
+    // Real time moves on while the new stage is built (seconds on a software rasteriser), so the picture may have moved
+    // between the two frames. Continuity is that the new stage reads the same track: its track time has advanced exactly
+    // as far as real time has, and what it drew is the track's position at that time.
+    const { before, after } = handover, elapsed = after.real - before.real;
+    assert.ok(Math.abs((after.seconds - before.seconds) - elapsed) < .002, `the new stage continues the same track clock (no jump): ${JSON.stringify(handover)}`);
+    for (const frame of [before, after]) {
+      const expected = floatOffset(trackPosition(frame.seconds, 7, true, SCENE_TRACK));
+      assert.ok(Math.abs(frame.float.x - expected.x) < 1e-9 && Math.abs(frame.float.y - expected.y) < 1e-9, `the drawn position is the track's at that time: ${JSON.stringify({ frame, expected })}`);
+    }
+    console.log(`SCENE3D_HANDOVER ${JSON.stringify({ rebuildSeconds: +elapsed.toFixed(3), moved: +Math.hypot(after.float.x - before.float.x, after.float.y - before.float.y).toFixed(4) })}`);
     record('On a quiet date the scene is frozen with nothing in the air, and the float alone moves it on a low-rate timer; a new stage after an interval change continues the float (#675)');
 
     // ---------- the editor's still preview: one frame, no loop ----------

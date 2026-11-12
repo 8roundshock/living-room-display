@@ -130,8 +130,9 @@ export interface StageOptions {
  * current one; geometries, textures and programs are what the renderer holds on the GPU. `frozen`: the scene's own clock
  * is stopped (a still preview or a quiet date); `floating`: the frame loop or the float's low-rate timer is live; `float`
  * is the last drawn offset in normalised device coordinates (the frame is -1 to 1), `zoom` the overscan, and
- * `floatFrames` how many frames the float alone has drawn on a frozen stage. */
-export interface StageStats { frames: number; builds: number; running: boolean; frozen: boolean; floating: boolean; disposed: boolean; time: number; buildMs: number; frameMs: number; gpuMs: number; seeScale: number; float: { x: number; y: number }; zoom: number; floatFrames: number; backing: [number, number]; triangles: number; calls: number; geometries: number; textures: number; programs: number }
+ * `floatFrames` how many frames the float alone has drawn on a frozen stage. `floatSample` is the real clock (seconds since
+ * the epoch) and the track's time at the last floated frame, null before one (for tests and tools). */
+export interface StageStats { frames: number; builds: number; running: boolean; frozen: boolean; floating: boolean; disposed: boolean; time: number; buildMs: number; frameMs: number; gpuMs: number; seeScale: number; float: { x: number; y: number }; floatSample: { real: number; seconds: number } | null; zoom: number; floatFrames: number; backing: [number, number]; triangles: number; calls: number; geometries: number; textures: number; programs: number }
 export interface Stage {
   dispose(): void;
   stats(): StageStats;
