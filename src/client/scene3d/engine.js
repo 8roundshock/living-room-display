@@ -86,7 +86,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
   // The scene clock and the float's track time; the editor's movement preview drives both (#678). A still stage ignores it.
   const clock = stageClock({ frozen, start: clockSettings.start, still: clockSettings.still, timeScale: look.timeScale });
   if (!still) clock.follow(initialPreview);
-  // The preview time of the last drawn frame: a held preview draws nothing new until it moves.
+  // The preview time of the last drawn frame: a held preview draws nothing new until it or the float settings change.
   let drawnPreview = null;
   const zoomMatrix = new T.Matrix4();
   let renderer = null, gl = null, made = null, scene = null, camera = null, observer = null, pending = null, retired = null;
@@ -212,7 +212,7 @@ export function createStage(host, { build, overlay = null, ctx: given, look: ini
     if (disposed || still || !next) return;
     if (float && next.interval === float.interval && next.gentle === float.gentle) return;
     if (float && next.interval !== float.interval) { const now = floatClock(); floatOrigins.set(next.interval, now - (now - originOf(float.interval)) * next.interval / float.interval); }
-    float = { interval: next.interval, gentle: next.gentle };
+    float = { interval: next.interval, gentle: next.gentle }; drawnPreview = null;
     if (frozen) { stop(); start(); }
   }
   /** The editor's movement-preview time in seconds (#678), or null to return to real time. The float and

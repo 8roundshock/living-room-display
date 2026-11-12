@@ -55,6 +55,14 @@ async function reopen(page) {
   await page.clock.runFor(100);
 }
 
+/** #686: the movement preview is one hour slider; move it the way a drag does (input, then change). */
+async function seekMovement(movement, seconds) {
+  await movement.getByRole('slider', { name: 'Movement preview time', exact: true }).evaluate((input, value) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, String(value));
+    input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, seconds);
+}
+
 /** Measured-list facts plus where the visible group sits inside the body. */
 async function inspect(widget) {
   return widget.evaluate(element => {
@@ -292,7 +300,7 @@ export async function sweep({ page, viewport, state, base, now }) {
   // because the default large Weather leaves no room for a column beside Clock and Forecast (#183).
   if (!fourK) {
     state.settings.appearance.motionEnabled = false; state.reminders = reminders(30, now);
-    state.settings.appearance.rearrange = true; // the arrangement buttons show only with Swap places on (#436)
+    state.settings.appearance.rearrange = true; // the movement preview changes arrangement only with Swap places on (#436)
     // This #183 arrangement deliberately uses the catalog geometry from before #435.
     state.settings.widgetGrid = catalogBoardDefaults().widgetGrid;
     state.settings.widgetGrid.placements.weather = { column: 8, row: 0, size: 'medium' };
@@ -307,8 +315,10 @@ export async function sweep({ page, viewport, state, base, now }) {
     const preview = page.locator('.preview-surface');
     const movement = page.getByRole('region', { name: 'Movement preview', exact: true });
     const lefts = new Set();
+    // Arrangement n begins n intervals in; two seconds later any dim swap (at most 1.2 s) has finished.
+    const interval = state.settings.appearance.motionIntervalSeconds;
     for (let composition = 0; composition < 4; composition++) {
-      await movement.getByRole('button', { name: composition ? `Jump to interval ${composition}` : 'Start', exact: true }).click();
+      await seekMovement(movement, composition ? composition * interval + 2 : 0);
       await preview.locator(`.ambient.composition-${composition}`).waitFor(); await page.clock.runFor(100);
       const label = `editor arrangement ${composition + 1}`;
       const rects = await boardGeometry(page, '.preview-surface [data-widget-id]');
