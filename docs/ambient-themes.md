@@ -113,8 +113,8 @@ stays tied to the saved brightness as above.
   | Value | Kit glass, a surface that takes the whole look | Autumn leaf body | Winter snow body |
   | --- | --- | --- | --- |
   | 0% | solid | 1 | 1 |
-  | 50% | the picker's factor f: 0.14 for a dark body facing the room, up to 1 at its rim and highlights | 0.8 (0.7 before #683) | 0.8 |
-  | 100% | f²: 0.02 for that dark body; the rim stays 1 | 0.64 | 0.64 |
+  | 50% | the picker's factor f: 0.14 for a dark body facing the room, up to 1 at its rim and highlights | 0.88 (0.7 before #683) | 0.8 |
+  | 100% | f²: 0.02 for that dark body; the rim stays 1 | 0.77 | 0.64 |
 
   Since [#683](https://github.com/8roundshock/living-room-display/issues/683) such a value is how
   dim a solid surface is on black, or how much shows through a clear one (see
@@ -122,7 +122,7 @@ stays tied to the saved brightness as above.
 
 - **What follows it.** Every surface made with `kit.mat` (with its own `see` share; a flag
   keeps a third of it), in every scene and in the weather overlays' solid pieces (the snow
-  plates). Scene bodies routed through `kit.solidity`: Autumn's leaf body (0.8), Winter's
+  plates). Scene bodies routed through `kit.solidity`: Autumn's leaf body (0.88), Winter's
   snow pads (0.8), the Korean birthday's ramie panes (0.5-0.7) and seams (0.85), the tea in
   the Russian birthday's glass (0.92), Maslenitsa's melted butter (0.6) and amber honey
   (0.92), and the water in Women's Day's vase (0.5). A unit test lists them and fails on a
@@ -201,9 +201,11 @@ look more realistic/nicer".
   morning glory (Summer), the magnolia leaves (Spring) and the wind's slim leaves now paint
   their veins a deeper tone of the leaf's own colour, laid on at one strength, with low relief
   (shallow grooves rather than ridges that catch the key light), and no bright rim. Autumn's
-  leaves were solid at 0.7 with whole veins, rim and stalk; they are now an even 0.8, which keeps
-  the tree as bright on average (lit pixels 69 against 73 of 255 before; an even 0.7 measured 62),
-  with a margin a shade deeper and a few soft patches of deeper colour on each blade. Magnolia
+  leaves were 0.7 with whole veins, rim and stalk; they are now an even 0.88, which makes the
+  tree at least as bright as before, as the owner asked for brighter leaves (#671): at full
+  opacity the maple's lit pixels average 74.5 of 255 against 72.7 and their median value is 133
+  against 127; the birch's 88 and 133 against 82 and 118 (an even 0.7 measured 62, 0.8 measured
+  69). Each leaf has a margin a shade deeper and a few soft patches of deeper colour. Magnolia
   tepals keep their faint lengthwise veins at a lower relief.
 
 ### Float (#675, owner direction 2026-11-12)

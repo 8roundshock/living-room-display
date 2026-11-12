@@ -20,8 +20,8 @@ What changed:
 - Leaf veins are a little darker and browner than the blade, thin and low in relief, with no
   glowing rim: Autumn's maple and birch leaves, Canada Day's maple leaves, Chuseok's persimmon
   leaves, Summer's morning glory, Spring's magnolia leaves and the wind's leaves. Autumn's
-  leaves are an even 0.8 instead of 0.7 with whole veins and rims, which keeps the tree as
-  bright on average, and their colour varies across each blade in soft patches.
+  leaves are an even 0.88 instead of 0.7 with whole veins and rims, which makes the tree at
+  least as bright as before (#671), and their colour varies across each blade in soft patches.
 
 Details: [Ambient themes](docs/ambient-themes.md#solid-and-clear-683-owner-direction-2026-11-12).
 

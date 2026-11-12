@@ -34,7 +34,7 @@ test('The curve: solid at 0, exactly the chosen alpha at the standard look, thin
   assert.equal(thinned(1, 2), 1, 'a solid rim stays solid at 100%');
   // The texture greys the standard look draws are unchanged, so 50% is today's look pixel for pixel.
   for (const body of [.7, .8, 216 / 255, .5, .6]) assert.equal(Math.round(thinned(body, 1) * 255), Math.round(body * 255));
-  assert.equal(+thinned(.8, 2).toFixed(2), .64, 'Autumn’s leaf body (0.8 since #683) and Winter’s snow at 100%');
+  assert.deepEqual([thinned(.88, 2), thinned(.8, 2)].map(value => +value.toFixed(2)), [.77, .64], 'Autumn’s leaf body (0.88 since #683) and Winter’s snow at 100%');
 });
 
 test('A quiet date keeps its rule; Transparency still applies to it', () => {

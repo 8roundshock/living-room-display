@@ -7,10 +7,12 @@ import { sheets } from './spring-blade.js';
 /** How solid a leaf is (#664: "less transparent"; the ginkgo fan of #653 was 0.55, the first 3D
  * Autumn about 0.82). A leaf is solid (#683): it hides what is behind it, and this is how dim it is
  * on black, the same everywhere on it, veins, rim and stalk included. Until #683 the body was 0.7
- * and the veins, rim and stalk were whole, and read as bright lines; 0.8 keeps the tree as bright
- * on average as it was then (its lit pixels measured 62 against 73 of 255 at an even 0.7). This is
- * the standard look: the Transparency setting moves it through kit.solidity (#670). */
-export const BODY = .8;
+ * and the veins, rim and stalk were whole, and read as bright lines. 0.88 makes the tree at least
+ * as bright as it was then, as the owner asked for brighter leaves (#671): at full opacity the
+ * maple's lit pixels average 74.5 of 255 against 72.7, their median value is 133 against 127, and
+ * the birch's 88 and 133 against 82 and 118 (an even 0.7 measured 62, and 0.8 measured 69). This
+ * is the standard look: the Transparency setting moves it through kit.solidity (#670). */
+export const BODY = .88;
 
 /** The three textures of a kind of leaf, drawn in the blade's own coordinates: across is the
  * way round the outline (its points are evenly spaced, whatever their angles), up is the way
