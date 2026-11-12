@@ -12,8 +12,8 @@ import { weatherOver } from '../parts/wind-underneath.js';
 export default function build(kit, ctx) {
   // The plan's sizes are on-screen sizes at the special look; K follows the owner's size setting from there.
   const { T, V, stage, view, tick } = kit, W = view.halfW, A = ctx.amount, K = ctx.size / .935, CORD = 0xcfc8d8;
-  // The weather over the scene (#646): wind leans each lantern left on its cord (its tag with it), doubles its swing and
-  // turn, and lifts the lantern line twice as far. The lanterns' own light is the scene, not a backlight: it stays.
+  // The weather over the scene (#646): wind leans each lantern left on its cord (its tag with it), widens its swing and
+  // turn, and lifts the lantern line half as far again. The lanterns' own light is the scene, not a backlight: it stays.
   const weather = weatherOver(kit, ctx);
 
   /** Hang a lantern from `from` on a cord `drop` long (to the lantern's centre), with its tag, its halo and its own slow sway. */

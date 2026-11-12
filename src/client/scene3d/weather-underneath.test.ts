@@ -20,8 +20,9 @@ const DEGREE = Math.PI / 180;
 /** A kit with only what the part uses: a deterministic rnd and a tick list run by hand. */
 function fakeKit() { const ticks: ((t: number) => void)[] = []; return { kit: { rnd: (i: number, s: number) => { const v = Math.sin(i * 127.1 + s * 311.7) * 43758.5453; return v - Math.floor(v); }, tick: (fn: (t: number) => void) => ticks.push(fn), fade() {} }, run: (t: number) => ticks.forEach(fn => fn(t)) }; }
 
-test('The rules as numbers: a lean of 2 to 4 degrees, twice the sway, half the backlight in rain, 60% in fog', () => {
-  assert.deepEqual(LEAN, { lull: 2, peak: 4 }); assert.equal(SWAY, 2); assert.equal(WET_BACKLIGHT, .5); assert.equal(FOG_KEEPS, .6);
+test('The rules as numbers: a lean of 2 to 4 degrees, half as much sway again, half the backlight in rain, 60% in fog', () => {
+  // The plan's twice the sway (#621) was too much on the display: one and a half (coordinator decision on #646).
+  assert.deepEqual(LEAN, { lull: 2, peak: 4 }); assert.equal(SWAY, 1.5); assert.equal(WET_BACKLIGHT, .5); assert.equal(FOG_KEEPS, .6);
   const calm = weatherOver(fakeKit().kit, { weather: null, seed: 1, quiet: false });
   assert.deepEqual([calm.backlight, calm.far, calm.glints, calm.falls, calm.ownSnow, calm.windy, calm.sway(.02, 1), calm.drift(30)], [1, 1, true, true, true, false, .02, 0]);
   for (const kind of ['rain', 'storm']) { const wet = weatherOver(fakeKit().kit, { weather: kind, seed: 1, quiet: false }); assert.deepEqual([wet.backlight, wet.far, wet.falls, wet.ownSnow, wet.glints], [.5, 1, false, false, true], kind); }
@@ -29,12 +30,12 @@ test('The rules as numbers: a lean of 2 to 4 degrees, twice the sway, half the b
   const snow = weatherOver(fakeKit().kit, { weather: 'snow', seed: 1, quiet: false }); assert.deepEqual([snow.ownSnow, snow.falls, snow.backlight], [false, true, 1], 'one snowfall, never two');
 });
 
-test('Wind: the lean follows the shared gust between 2 and 4 degrees toward the left, the sway doubles; a quiet date takes none', () => {
+test('Wind: the lean follows the shared gust between 2 and 4 degrees toward the left, the sway grows by half; a quiet date takes none', () => {
   const { kit, run } = fakeKit(), wind = weatherOver(kit, { weather: 'wind', seed: 7, quiet: false });
   let least = Infinity, most = -Infinity;
   for (let t = 12; t < 400; t += .37) { run(t); least = Math.min(least, wind.wind.lean); most = Math.max(most, wind.wind.lean); assert.equal(wind.sway(0, 1), wind.wind.lean); assert.equal(wind.sway(0, -1), -wind.wind.lean); assert.ok(wind.drift(1e6) < 0 && wind.drift(1e6) >= -DRIFT); }
   assert.ok(least >= 2 * DEGREE - 1e-9 && most <= 4 * DEGREE + 1e-9 && most - least > 1.5 * DEGREE, `${least / DEGREE} to ${most / DEGREE} degrees`);
-  assert.equal(wind.sway(.01, 0), .02, 'a whole bough only sways, twice as far');
+  assert.ok(Math.abs(wind.sway(.01, 0) - .015) < 1e-12, 'a whole bough only sways, half as far again');
   assert.ok(wind.carry(100) < 0 && Math.abs(wind.carry(100)) < CARRY * 200, 'an endless fall is carried left');
   const quiet = fakeKit(), still = weatherOver(quiet.kit, { weather: 'wind', seed: 7, quiet: true }); quiet.run(20);
   assert.deepEqual([still.windy, still.wind.lean, still.wind.sway, still.drift(30), still.carry(30)], [false, 0, 1, 0, 0], 'a quiet date is frozen');
@@ -110,5 +111,53 @@ test('In the wind every scene moves something to the left, and nothing leans mor
     const most = Math.max(...lean.map(Math.abs)) / DEGREE, left = Math.min(...shift);
     assert.ok(most <= LEAN.peak + 1, `${id}: a piece leans ${most.toFixed(2)} degrees on average at the gust's peak`);
     assert.ok(left < -.01 || lean.some(value => value / DEGREE > 1.5), `${id}: something moves left in the wind (least shift ${left.toFixed(3)}, most lean ${most.toFixed(2)} degrees)`);
+  }
+});
+
+test('In the wind no attached piece turns more than 7 degrees from its calm pose at any instant, at the gust’s lull or peak', async () => {
+  // The lean (at most 4 degrees) and half as much sway again (#646): a piece turns from where it would be in calm by its lean
+  // plus half its own calm swing. Falling and drifting pieces are free and not counted.
+  const q = new THREE.Quaternion(), r = new THREE.Quaternion(), p = new THREE.Vector3(), TIMES = Array.from({ length: 160 }, (_, i) => 12 + i * .731), worst: Record<string, number> = {};
+  for (const id of UNDER) for (const gust of [0, 1]) {
+    const calm = await built(id), wind = await built(id, { weather: 'wind', gust });
+    const pieces = (made: any) => { const list: any[] = []; made.kit.stage.traverse((object: any) => { if (object.isMesh || object.isLine || object.isPoints || object.isSprite) list.push(object); }); return list; };
+    const a = pieces(calm), b = pieces(wind), most = a.map(() => 0), low = a.map(() => Infinity), high = a.map(() => -Infinity);
+    for (const t of TIMES) {
+      calm.animate(t); wind.animate(t); calm.kit.stage.updateMatrixWorld(true); wind.kit.stage.updateMatrixWorld(true);
+      a.forEach((object, i) => {
+        object.getWorldPosition(p); low[i] = Math.min(low[i], p.x + p.y); high[i] = Math.max(high[i], p.x + p.y);
+        object.getWorldQuaternion(q); b[i].getWorldQuaternion(r); r.multiply(q.invert()); most[i] = Math.max(most[i], 2 * Math.acos(Math.min(1, Math.abs(r.w))) / DEGREE);
+      });
+    }
+    calm.dispose(); wind.dispose();
+    const attached = most.filter((_, i) => high[i] - low[i] < 1 && a[i].visible !== false);
+    worst[id] = Math.max(worst[id] ?? 0, ...attached);
+  }
+  for (const [id, degrees] of Object.entries(worst)) assert.ok(degrees <= 7, `${id}: a piece turns ${degrees.toFixed(2)} degrees from its calm pose`);
+  assert.ok(Object.values(worst).filter(degrees => degrees > 3).length >= 15, `the wind is seen: ${JSON.stringify(worst)}`);
+});
+
+test('A scene’s own snow wraps round only where it is out of sight, also when the wind carries it', async () => {
+  // Christmas's kit.snow spans depths -9 to 2: a far flake sees a wider and taller view than a near one (#646 review).
+  for (const weather of [null, 'wind']) {
+    const made: any = await built('christmas', { weather, gust: weather ? 1 : null }), view = made.kit.view;
+    const flakes: any[] = []; made.kit.stage.traverse((object: any) => { if (object.isPoints && object.geometry.attributes.position.count > 10) flakes.push(object); });
+    assert.equal(flakes.length, 1, 'the scene’s own snow');
+    const position = flakes[0].geometry.attributes.position, n = position.count, last = new Float32Array(n * 3);
+    let wraps = 0;
+    for (let k = 0; k <= 4400; k++) {
+      made.animate(12 + k * .1);
+      for (let i = 0; i < n; i++) {
+        const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+        if (k) {
+          const jumpX = Math.abs(x - last[i * 3]!) > view.halfWAt(z), jumpY = Math.abs(y - last[i * 3 + 1]!) > view.halfHAt(z);
+          if (jumpX) { wraps++; assert.ok(Math.abs(x) >= view.halfWAt(z) && Math.abs(last[i * 3]!) >= view.halfWAt(z), `flake ${i} at depth ${z.toFixed(2)} wraps across x from ${last[i * 3]!.toFixed(2)} to ${x.toFixed(2)}, inside the view (half-width ${view.halfWAt(z).toFixed(2)})`); }
+          if (jumpY) { wraps++; assert.ok(Math.abs(y) >= view.halfHAt(z) && Math.abs(last[i * 3 + 1]!) >= view.halfHAt(z), `flake ${i} at depth ${z.toFixed(2)} wraps across y from ${last[i * 3 + 1]!.toFixed(2)} to ${y.toFixed(2)}, inside the view (half-height ${view.halfHAt(z).toFixed(2)})`); }
+        }
+        last[i * 3] = x; last[i * 3 + 1] = y; last[i * 3 + 2] = z;
+      }
+    }
+    made.dispose();
+    assert.ok(wraps > n, `${weather ?? 'calm'}: the flakes wrapped ${wraps} times in the sampled hour`);
   }
 });

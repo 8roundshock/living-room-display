@@ -10,7 +10,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, unit = S * 1.14;
-  // The weather over the scene (#646): wind blows the ribbons to the left and doubles the swing of the pole and the turn
+  // The weather over the scene (#646): wind blows the ribbons to the left and widens the swing of the pole and the turn
   // of the star, and carries the snow left; rain, a storm or real snow leave the scene's own snow out; fog dims the first
   // star by 40% and takes the glints on the drift away.
   const weather = weatherOver(kit, ctx);

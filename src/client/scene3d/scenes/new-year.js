@@ -16,7 +16,7 @@ export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, A = ctx.amount, seed = ctx.seed, bold = ctx.tier === 'special';
   // The plan gives on-screen sizes at the everyday size (0.85); U carries the tier's size from there.
   const U = ctx.size / .85, GOLD = 0xf6cf4e, SILVER = 0xdfe6f5, BLUE = 0x5fb8f2, ROSE = 0xf070c8, IVORY = 0xf4efe2;
-  // The weather over the scene (#646): wind leans the streamers to the left and doubles their swing, and carries the
+  // The weather over the scene (#646): wind leans the streamers to the left and widens their swing, and carries the
   // sinking embers left; rain and a storm put the embers out (the blooms are the scene); fog dims the far palm by 40%.
   const weather = weatherOver(kit, ctx);
 

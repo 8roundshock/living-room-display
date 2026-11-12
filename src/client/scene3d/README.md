@@ -153,10 +153,13 @@ tick reads the gust once a frame before yours run) and use it:
 - **Wind:** turn every attached thing with `weather.sway(calm, hold)`, where `calm` is the angle
   you would set without wind and `hold` says which way its free end lies from where it is held
   (1 above, -1 below, a share between, 0 for a whole bough that only sways). It is the calm
-  angle twice over plus a steady lean of 2 to 4 degrees toward the left that follows the gust
-  the overlay's seeds ride on. Multiply any other swing by `weather.wind.sway`. Lean only the
-  outermost thing (a leaf, not also its branch), so nothing turns more than 4 degrees. A
-  falling piece adds `weather.drift(age)` to its x; an endless fall passes `weather.carry` to
+  angle one and a half times over (`SWAY`, 1.5: the plan's twice was too much on the display)
+  plus a steady lean of 2 to 4 degrees toward the left that follows the gust the overlay's seeds
+  ride on. Multiply any other swing in the plane of the screen by `weather.wind.sway`; leave a
+  slow turn about a cord or stem as it is. Lean only the outermost thing (a leaf, not also its
+  branch). The lean is at most 4 degrees, and a piece turns at most 7 degrees from its calm pose
+  at any instant: its lean plus half its own calm swing (a test checks every scene). A falling
+  piece adds `weather.drift(age)` to its x; an endless fall passes `weather.carry` to
   `kit.snow`. Give cloth and hanging parts the `weather` object when they own their motion.
 - **Rain or a storm:** hide (`visible = weather.falls`) your own falling petals, leaves and
   embers, and multiply your backlight (halos and discs behind the scene) by `weather.backlight`.

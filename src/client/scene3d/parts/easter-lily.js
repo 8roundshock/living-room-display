@@ -99,7 +99,7 @@ export function lily(kit, { salt = 0, weather = null } = {}) {
     const head = length ? trumpet(length, measure) : bud(measure * 7.2, measure, colour), pivot = new T.Group();
     pivot.position.copy(neck); head.quaternion.setFromUnitVectors(up, way); pivot.add(head); group.add(pivot); nodding.push([pivot, i * 1.7, way.y]);
   });
-  // `weather` (the scene's parts/wind-underneath.js, #646): in the wind each trumpet leans left on its stalk and nods twice as far.
+  // `weather` (the scene's parts/wind-underneath.js, #646): in the wind each trumpet leans left on its stalk and nods half as far again.
   tick(t => nodding.forEach(([pivot, phase, hold]) => { const calm = Math.sin(t * .4 + phase) * .014; pivot.rotation.z = weather ? weather.sway(calm, hold) : calm; pivot.rotation.x = Math.sin(t * .31 + phase) * .008 * (weather ? weather.wind.sway : 1); }));
   return group;
 }

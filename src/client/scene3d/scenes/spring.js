@@ -12,7 +12,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, today = ctx.seed + ctx.day;
-  // The weather over the scene (#646): wind leans each bloom and the leaf spray to the left, doubles every sway and carries
+  // The weather over the scene (#646): wind leans each bloom and the leaf spray to the left, widens every sway and carries
   // the falling petals left; rain and a storm keep the petals on the blooms and halve the glows; fog dims the glows by 40%.
   const weather = weatherOver(kit, ctx), dim = weather.backlight;
   const M = magnolia(kit), wood = bark(kit, 0x54463e);

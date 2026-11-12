@@ -16,8 +16,8 @@ export default function build(kit, ctx) {
   // The plan's sizes are on-screen sizes at the everyday look; K follows the owner's size setting from there.
   const { T, V, stage, view, tick } = kit, W = view.halfW, K = ctx.size / .85;
   const RED = 0xd8433b, JADE = 0x5fbfa0, YELLOW = 0xf5cf52, THREAD = 0xe8e0cc;
-  // The weather over the scene (#646): wind flies the kite in a figure of eight twice as wide and rolls it left, and leans
-  // the pouches left on their hook and doubles their swing; rain and a storm halve the light behind the kite, fog dims it
+  // The weather over the scene (#646): wind flies the kite in a figure of eight half as wide again and rolls it left, and leans
+  // the pouches left on their hook and widens their swing; rain and a storm halve the light behind the kite, fog dims it
   // and the far kite by 40%.
   const weather = weatherOver(kit, ctx);
 

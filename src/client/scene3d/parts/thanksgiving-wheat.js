@@ -52,7 +52,7 @@ export function sheaf(kit, { stalks = 46, salt = 0, weather = null } = {}) {
   };
   group.add(instanced(segment, strawMaterial, lower));
   const heads = upper.map(set => { const pivot = new T.Group(); pivot.position.y = WAIST; for (const mesh of [instanced(segment, strawMaterial, set.stalks), instanced(grain, grainMaterial, set.kernels), instanced(awn, awnMaterial, set.awns)]) { mesh.position.y = -WAIST; pivot.add(mesh); } group.add(pivot); return pivot; });
-  // `weather` (the scene's parts/wind-underneath.js, #646): in the wind the ears lean left above the binding and sway twice as far.
+  // `weather` (the scene's parts/wind-underneath.js, #646): in the wind the ears lean left above the binding and sway half as far again.
   tick(t => heads.forEach((pivot, k) => { const calm = Math.sin(t * .45 + k * 2.1) * .0105; pivot.rotation.z = weather ? weather.sway(calm, 1) : calm; }));
 
   // Twine wound three times round the waist, knotted in front, two loose ends.

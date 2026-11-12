@@ -60,9 +60,10 @@ function hung(kit, body, { size, drop, cord, lean, phase, mouth, tassels, weathe
   const rope = new T.Mesh(new T.TubeGeometry(new T.LineCurve3(V(0, mouth[1] + .6, 0), V(0, length, 0)), 8, .014, 6), cordMaterial(kit, ...cord.userData.pair, Math.round(length * 9)));
   body.add(join, rope); body.scale.setScalar(size); body.position.y = -drop; group.add(body);
   tick(t => {
-    // `weather` (parts/wind-underneath.js, #646): in the wind the pouch leans left on its cord and swings and turns twice as far.
+    // `weather` (parts/wind-underneath.js, #646): in the wind the pouch leans left on its cord and swings half as far again; its
+    // turn on the cord stays as it is, so it never turns more than 7 degrees from its calm pose.
     const calm = Math.sin(t * 3.6 + phase) * .026, sway = weather ? weather.wind.sway : 1;
-    group.rotation.z = lean + (weather ? weather.sway(calm, -1) : calm); body.rotation.y = Math.sin(t * 2.3 + phase) * .14 * sway;
+    group.rotation.z = lean + (weather ? weather.sway(calm, -1) : calm); body.rotation.y = Math.sin(t * 2.3 + phase) * .14;
     // The tassels follow a quarter of a swing behind.
     for (const item of tassels) item.rotation.z = item.userData.rest + Math.sin(t * 3.6 + phase - 1.57) * .06 * sway;
   });

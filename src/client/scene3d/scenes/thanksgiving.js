@@ -15,7 +15,7 @@ export default function build(kit, ctx) {
   const { V, rnd, stage, view } = kit, W = view.halfW, A = ctx.amount, seed = ctx.seed;
   // The plan gives on-screen sizes at the everyday size (0.85); U carries the tier's size from there.
   const U = ctx.size / .85;
-  // The weather over the scene (#646): wind leans the wheat's ears left and doubles their sway; rain and a storm halve the
+  // The weather over the scene (#646): wind leans the wheat's ears left and widens their sway; rain and a storm halve the
   // warm light behind the horn and the sheaf, fog dims it by 40%. Nothing here falls.
   const weather = weatherOver(kit, ctx);
   // Everything rests a little below the bottom edge at its own depth, so the stage's slow drift never lifts it off the edge.

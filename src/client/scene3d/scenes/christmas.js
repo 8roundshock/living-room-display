@@ -12,7 +12,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed;
-  // The weather over the scene (#646): wind leans the ornaments and the wreath to the left on their threads and doubles
+  // The weather over the scene (#646): wind leans the ornaments and the wreath to the left on their threads and widens
   // their swing, and carries the snow left; rain, a storm or real snow leave the scene's own snow out; rain and a storm
   // halve the far lights, fog dims them by 40% (and the kit stops every twinkle).
   const weather = weatherOver(kit, ctx);

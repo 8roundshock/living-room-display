@@ -14,7 +14,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.18;
-  // The weather over the scene (#646): wind leans the glass and the foil rain to the left on their threads and doubles
+  // The weather over the scene (#646): wind leans the glass and the foil rain to the left on their threads and widens
   // their swing; rain and a storm halve the warm light behind the tangerines, fog dims it by 40%.
   const weather = weatherOver(kit, ctx);
 

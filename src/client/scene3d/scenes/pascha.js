@@ -13,7 +13,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.18;
-  // The weather over the scene (#646): wind leans the willow twigs left in their jug and doubles their stir. Nothing here
+  // The weather over the scene (#646): wind leans the willow twigs left in their jug and widens their stir. Nothing here
   // falls or is backlit; in fog the kit stops the twinkle.
   const weather = weatherOver(kit, ctx);
 

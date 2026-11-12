@@ -10,8 +10,8 @@ import { weatherOver } from '../parts/wind-underneath.js';
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick, mix, shift } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed;
   const [first, second, third] = ctx.palette, CREAM = 0xf6ead8, GOLD = 0xf2c94c;
-  // The weather over the scene (#646): wind leans the balloons left about their tie and doubles their swing, and leans
-  // the bunting's flags left and doubles their flap. Nothing here falls or is backlit; in fog the kit stops the twinkle.
+  // The weather over the scene (#646): wind leans the balloons left about their tie and widens their swing, and widens
+  // the flap of the bunting's flags. Nothing here falls or is backlit; in fog the kit stops the twinkle.
   const weather = weatherOver(kit, ctx);
   const css = colour => `#${new T.Color(colour).getHexString()}`, deep = (colour, k = .3) => mix(colour, 0x000000, k), pale = (colour, k = .55) => mix(colour, 0xffffff, k);
   // The colourway: the scene's three registry colours and two neighbours on the colour wheel, a little deepened so they glow rather than wash out.

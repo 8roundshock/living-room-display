@@ -12,7 +12,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.07;
-  // The weather over the scene (#646): wind leans the stems left in their vase, doubles their sway and carries the
+  // The weather over the scene (#646): wind leans the stems left in their vase, widens their sway and carries the
   // drifting blossom left; rain and a storm keep the blossom on the spray. The tulips lie still; nothing is backlit.
   const weather = weatherOver(kit, ctx);
 

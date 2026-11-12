@@ -13,7 +13,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, today = ctx.seed + ctx.day;
-  // The weather over the scene (#646): wind leans each leaf and flower to the left and doubles its sway; rain and a storm
+  // The weather over the scene (#646): wind leans each leaf and flower to the left and widens its sway; rain and a storm
   // put out the fireflies and halve the glows; fog dims the glows and the fireflies by 40% and stops the twinkle.
   const weather = weatherOver(kit, ctx), G = morningGlory(kit), TURN = Math.PI * 2;
   const at = (x, y, z = 0) => V(W - x, y, z);   // measured from the right edge, so the vine keeps its edge on any screen shape

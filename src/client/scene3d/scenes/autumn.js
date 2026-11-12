@@ -31,7 +31,7 @@ const FIRST_RELEASE = 12.4;
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, today = ctx.seed + ctx.day;
-  // The weather over the scene (#646): wind leans every leaf to the left and doubles its sway, and the falling leaf
+  // The weather over the scene (#646): wind leans every leaf to the left and widens its sway, and the falling leaf
   // drifts left; rain and a storm keep the leaves on the tree and halve the glows; fog dims them by 40% and stops their twinkle.
   const weather = weatherOver(kit, ctx), dim = weather.backlight;
   const M = maple(kit), wood = bark(kit, 0x6a5648, { see: .62, salt: 7 });

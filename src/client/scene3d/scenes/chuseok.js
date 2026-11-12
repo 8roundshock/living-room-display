@@ -17,7 +17,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 export default function build(kit, ctx) {
   // The plan's sizes are on-screen sizes at the everyday look; K follows the owner's size setting from there.
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, A = ctx.amount, K = ctx.size / .85, seed = ctx.seed, lifted = ctx.tier === 'special';
-  // The weather over the scene (#646): wind leans the fruit, the leaves and the rice to the left and doubles their sway,
+  // The weather over the scene (#646): wind leans the fruit, the leaves and the rice to the left and widens their sway,
   // and carries the loose leaf and the steam left; rain and a storm keep the loose leaf on the branch and halve the lilac
   // light behind the tray, fog dims it by 40%. The moon is the hero and stays as it is.
   const weather = weatherOver(kit, ctx);

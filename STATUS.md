@@ -11,7 +11,8 @@ What changed:
   over it, through one shared part (`parts/wind-underneath.js`):
   - **Wind:** attached things (leaves, flowers, ornaments, lanterns, pouches, balloons,
     streamers, bunting, wheat, cones) lean 2 to 4 degrees to the left with the gust the
-    overlay's seeds ride on, and sway twice as far at the same slow pace. Falling petals and
+    overlay's seeds ride on, and sway one and a half times as far at the same slow pace (no
+    attached piece turns more than 7 degrees from its calm pose). Falling petals and
     leaves drift left; Canada Day's flag waves harder.
   - **Rain or a storm:** no falling petals or leaves and no decorative snow of the scene's own
     (Christmas and Orthodox Christmas now drop theirs under rain too); the backlight is
@@ -24,8 +25,11 @@ Details: [Ambient themes](docs/ambient-themes.md#combined-the-weather-is-always-
 
 Verified with source builds and synthetic data only: both typechecks, the unit tests (each
 rule per scene in the source; every scene under every weather builds what it builds in calm;
-in the wind every scene moves something left and no piece leans more than 4 degrees on
-average; the edge and crop checks with every scene in the wind at the gust's lull and peak),
+in the wind every scene moves something left, no piece leans more than 4 degrees on
+average and no attached piece turns more than 7 degrees at any instant; a scene's own snow
+wraps only out of sight; the edge and crop checks with every scene in the wind at the gust's
+lull and peak, against the scene's calm pieces and edges, with a self-test that a 20 degree
+lean fails),
 and the `scene3d` suite on SwiftShader. Not verified: installation, the TV.
 
 ## Scene objects stop showing through each other; darker leaf veins — 2026-11-12 (#683)

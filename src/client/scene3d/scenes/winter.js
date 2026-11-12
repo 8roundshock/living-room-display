@@ -51,7 +51,7 @@ const ICICLES = [[1, .965, 0, .46, .042], [1, -1, .02, .26, .032], [2, .955, 0, 
 /** @param {import('../engine').SceneKit} kit @param {import('../engine').SceneContext} ctx */
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed;
-  // The weather over the scene (#646): wind doubles each bough's breathing and leans the cones that hang under it to the
+  // The weather over the scene (#646): wind widens each bough's breathing and leans the cones that hang under it to the
   // left (the ice is stiff and keeps still); rain and a storm halve the glints and the lamps behind the ice; fog dims the
   // lamps by 40% and takes the glints away.
   const weather = weatherOver(kit, ctx), dim = weather.backlight;

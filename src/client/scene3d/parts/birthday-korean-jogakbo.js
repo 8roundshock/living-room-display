@@ -36,7 +36,7 @@ export function jogakbo(kit, { width = 2.8, height = 3.6, salt = 8, weather = nu
   const geometry = new T.PlaneGeometry(width, height, 28, 36); geometry.translate(0, -height / 2, 0);
   const p = geometry.attributes.position, rest = p.array.slice();
   const cloth = new T.Mesh(geometry, mat({ map, alphaMap: alpha, roughness: .8, side: T.DoubleSide, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: .4, see: .4, depthWrite: false, clear: true }, .3, false)); cloth.position.y = -.1;   // ramie gauze: really see-through (#683)
-  // `weather` (the scene's parts/wind-underneath.js, #646): in the wind the ripple runs twice as deep and the cloth leans left from its rod.
+  // `weather` (the scene's parts/wind-underneath.js, #646): in the wind the ripple runs half as deep again and the cloth leans left from its rod.
   tick(t => {
     const sway = weather ? weather.wind.sway : 1;
     for (let i = 0; i < p.count; i++) {

@@ -17,7 +17,7 @@ import { weatherOver } from '../parts/wind-underneath.js';
 export default function build(kit, ctx) {
   const { T, V, rnd, stage, view, tick, shift } = kit, W = view.halfW, S = ctx.size, A = ctx.amount, seed = ctx.seed, unit = S * 1.07;
   const [cranberry] = ctx.palette, GLAZE = 0xf6f2ea, GOLD = 0xd9b25a;
-  // The weather over the scene (#646): wind leans the balloons left about their tie and doubles their swing, and blows the
+  // The weather over the scene (#646): wind leans the balloons left about their tie and widens their swing, and blows the
   // tea's steam left. Nothing here falls or is backlit; in fog the kit stops the twinkle.
   const weather = weatherOver(kit, ctx);
 

@@ -17,7 +17,7 @@ export default function build(kit, ctx) {
   const { stage, view, tick } = kit, W = view.halfW, A = ctx.amount, seed = ctx.seed;
   // The plan gives on-screen sizes at the everyday size (0.85); U carries the tier's size from there.
   const U = ctx.size / .85;
-  // The weather over the scene (#646): wind leans the lily's trumpets left and doubles their nod and the branch's stir;
+  // The weather over the scene (#646): wind leans the lily's trumpets left and widens their nod and the branch's stir;
   // rain and a storm halve the pale light behind the lily, fog dims it by 40%. Nothing here falls; the nest stays still.
   const weather = weatherOver(kit, ctx);
 

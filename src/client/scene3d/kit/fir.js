@@ -105,16 +105,21 @@ export function createFir(core) {
   function snow(count, { size = .16, opacity = .8, colour = 0xdfeeff, salt = 0, drift = null } = {}) {
     if (ctx.quiet || count < 1) return new T.Group();
     const n = Math.round(count), position = new Float32Array(n * 3), geometry = new T.BufferGeometry(), half = core.view.halfW * 1.375;
+    // Each flake wraps round where it is out of sight at its own depth: a far flake sees a wider and taller view than
+    // 2 x 1.375 half-widths and 12 units, so its fall (and its drift in the wind, #646) is that much longer and it never
+    // pops in or out inside the frame. Nearer flakes keep the old spans.
+    const depth = new Float32Array(n), wide = new Float32Array(n), tall = new Float32Array(n);
+    for (let i = 0; i < n; i++) { depth[i] = -9 + rnd(i, 4 + salt) * 11; wide[i] = Math.max(2 * half, 2 * (core.view.halfWAt(depth[i]) + size + .3)); tall[i] = Math.max(12, 2 * (core.view.halfHAt(depth[i]) + size)); }
     geometry.setAttribute('position', new T.BufferAttribute(position, 3));
     const points = new T.Points(geometry, new T.PointsMaterial({ map: tex.glow(), size, transparent: true, opacity, depthWrite: false, color: C(colour), blending: T.AdditiveBlending }));
     points.frustumCulled = false;
     tick(t => {
-      const carried = drift ? drift(t) : 0, span = 2 * half;
+      const carried = drift ? drift(t) : 0;
       for (let i = 0; i < n; i++) {
-        const x = (rnd(i, 1 + salt) - .5) * span + Math.sin(t * .3 + i) * .3 + carried;
-        position[i * 3] = carried ? ((x + half) % span + span) % span - half : x;
-        position[i * 3 + 1] = ((rnd(i, 2 + salt) * 12 - t * (.12 + rnd(i, 3 + salt) * .14)) % 12 + 12) % 12 - 6;
-        position[i * 3 + 2] = -9 + rnd(i, 4 + salt) * 11;
+        const span = carried ? wide[i] : 2 * half, x = (rnd(i, 1 + salt) - .5) * span + Math.sin(t * .3 + i) * .3 + carried, rise = tall[i];
+        position[i * 3] = carried ? ((x + span / 2) % span + span) % span - span / 2 : x;
+        position[i * 3 + 1] = ((rnd(i, 2 + salt) * rise - t * (.12 + rnd(i, 3 + salt) * .14)) % rise + rise) % rise - rise / 2;
+        position[i * 3 + 2] = depth[i];
       }
       geometry.attributes.position.needsUpdate = true;
     });
