@@ -1132,6 +1132,40 @@ On narrow/short windows the expanded chooser follows document flow, so the stick
 style toolbar cannot cover its label/select. The native popup retains the app's
 explicit dark option/optgroup contrast.
 
+**Scene dates** (#697, owner request 2026-11-14: "for all scenes, please also have the dates
+they'll be active, in a way thats intuitive, and doesn't take up too much space"). Each option
+reads `<label> · <dates>`; the previewed scene's summary reads `Display unchanged · <dates>`,
+and the current-scene line under Theme gets ` · until <date>` for its season, holiday or
+birthday scene (not in Weather mode). The dates are the days the scene will actually be the
+base scene: `themeDay` in `src/shared/theme-schedule.ts` is the date-only part of
+`resolveTheme` (birthday, else a major holiday, else the season; a quiet date keeps the season
+and takes no birthday; the selected calendars; the location's hemisphere), and `resolveTheme`
+calls it, so the list and the display cannot drift (a test compares them over 400 days).
+`sceneSchedule` walks it from 120 days back to 400 days ahead, collects each scene's runs of
+days and merges runs less than 21 days apart (the days between are another scene's holiday),
+then shows the current or next merged occurrence:
+
+- `until Nov 14` for today's scene (`today` when it is only today); `Jan 7` for one day,
+  `Oct 15 – 31` within a month, `Nov 15 – Dec 26` across months, in the app's civil-date style;
+  a year only for a start more than a year away; `+ 1 more` for another occurrence that starts
+  within a year of the shown one (two birthdays with the same treatment).
+- On a day inside a holiday that interrupts a season, the season shows when it comes back
+  (`Nov 1 – 14` on Oct 20).
+- Never in the window: `not with your calendars` (a holiday not selected, or always outranked:
+  plain New Year while Russia is selected), `no birthday set` (no birthday uses that
+  treatment), `not in the next year` (anything else, such as a birthday that only falls on a
+  quiet date or on February 29 more than 400 days away).
+- Weather scenes: `when it rains`, `when it snows`, `in a storm`, `in fog`, `when windy`.
+
+The panel says "Dates follow your calendars, birthdays and location." in Seasonal & holidays
+and Combined, and "Dates apply in Seasonal & holidays and Combined." otherwise. Dates follow
+the draft (calendars, birthdays, location) and move on at midnight; a schedule is computed
+once per civil date and those settings (about 520 days, a few hundred milliseconds at most),
+not per render. On 2026-11-14 with all three calendars, in the north: Autumn until Nov 14,
+Christmas Nov 15 – Dec 26, New Year · Russia Dec 27 – Jan 8, Orthodox Christmas Jan 7 (the
+New Year tree outranks its lead days), Winter Jan 9 – Feb 28 (around Seollal), plain New Year
+not with these calendars.
+
 ## Extension authority
 
 The repository-local [theme skill](../.agents/skills/living-room-theme/SKILL.md)

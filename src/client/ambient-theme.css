@@ -33,6 +33,7 @@
 .theme-calendars label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 12px; }
 .theme-current { margin: 5px 0 0; color: #b6adbf; font-size: 12px; line-height: 1.45; }
 .theme-current small { display: block; color: #938b9b; font-size: 11px; }
+.theme-try-note { margin: 6px 0 0; color: #938b9b; font-size: 11px; line-height: 1.4; }
 /* #670: the Transparency slider sits between the current scene and Scene options. */
 .studio .theme-controls .theme-transparency { margin: 14px 0 4px; }
 .theme-transparency-hint { display: block; margin-top: 2px; color: #938b9b; font-size: 11px; line-height: 1.45; }

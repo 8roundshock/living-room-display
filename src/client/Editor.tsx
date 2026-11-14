@@ -1610,7 +1610,7 @@ export function Editor({
           </div>
           </div>
           <div className="canvas-toolbar">
-            {!layoutEditing && <ThemePreviewControls value={themePreview} onChange={setThemePreview} motionAllowed={!editorReducedMotion && draft.appearance.animation !== 'off'} />}
+            {!layoutEditing && <ThemePreviewControls value={themePreview} onChange={setThemePreview} settings={draft} motionAllowed={!editorReducedMotion && draft.appearance.animation !== 'off'} />}
             {layoutEditing ? (
               <label className="grid-density-control">
                 {/* #345: a short visible label; the select keeps its full accessible name. */}
