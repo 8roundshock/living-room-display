@@ -1,8 +1,7 @@
 import type { Settings, WeatherState } from '../shared/contracts.ts';
-import { holidayWindow, seasonForDate } from '../shared/holidays.ts';
 import { defaultTheme } from '../shared/themes.ts';
-import { birthdayTreatmentForDate } from '../shared/birthdays.ts';
-import { BIRTHDAY_SCENES, QUIET_PALETTE, QUIET_THEME, THEME_MOTIONS, THEME_SCENES, THEME_CLEARANCE_SECONDS, type ThemeSceneId, type ThemeMotionFrame } from '../shared/theme-registry.ts';
+import { QUIET_PALETTE, QUIET_THEME, THEME_MOTIONS, THEME_SCENES, THEME_CLEARANCE_SECONDS, type ThemeSceneId, type ThemeMotionFrame } from '../shared/theme-registry.ts';
+import { themeDay, themeHemisphere, type ThemeDayInput } from '../shared/theme-schedule.ts';
 import { DYNAMIC_THRESHOLDS } from './dynamic.ts';
 import { gustForecastSpells } from './weather-hazards.ts';
 
@@ -59,16 +58,18 @@ function weatherScene(weather: WeatherState, settings: Settings, now: number, di
   return candidates[0] ?? null;
 }
 
+/** The settings that decide a day's season, holiday or birthday scene (#697). */
+export function themeDayInput(settings: Settings): ThemeDayInput {
+  return { calendars: (settings.appearance.theme ?? defaultTheme()).calendars, birthdays: settings.birthdays, hemisphere: themeHemisphere(settings.location.latitude) };
+}
+
 /** Resolve once a minute. This is decoration, never an alert or a claim of certainty. */
 export function resolveTheme(settings: Settings, weather: WeatherState, now: Date, disconnected = false, civilDate = themeLocalDate(now)): ThemeScene | null {
   const theme = settings.appearance.theme ?? defaultTheme();
   if (theme.mode === 'off') return null;
   const seasonal = theme.mode === 'seasonal' || theme.mode === 'combined';
-  const holiday = seasonal ? holidayWindow(civilDate, theme.calendars) : null;
-  const season = seasonForDate(civilDate, settings.location.latitude < 0 ? 'south' : 'north');
-  const quiet = holiday?.policy.role === 'quiet';
-  const birthday = seasonal && !quiet ? birthdayTreatmentForDate(settings.birthdays, civilDate) : null;
-  const motif = birthday ? BIRTHDAY_SCENES[birthday] : holiday?.policy.role === 'major' ? holiday.policy.scene : season;
+  // #697: the date-only part is shared with the editor's scene list, so the dates it shows are the display's.
+  const { scene: motif, season, holiday, birthday, quiet } = themeDay(themeDayInput(settings), civilDate, seasonal);
   const palette = quiet ? QUIET_PALETTE : THEME_SCENES[motif].palette;
   const baseline: ThemeScene = { motif, tint: palette[0], companion: palette[1], accent: palette[2],
     label: birthday ? THEME_SCENES[motif].label : holiday ? `${holiday.observance.shortName}${quiet ? ' · quiet season' : holiday.phase === 'approaching' ? ' season' : ''}` : THEME_SCENES[season].label,

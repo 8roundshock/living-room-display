@@ -99,7 +99,9 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
     assert.ok(!closed.includes('Scene preview'), 'the closed disclosure select is not exposed');
     await summary.click(); await page.getByLabel('Scene preview', { exact: true }).selectOption('autumn');
     const opened = await alertClear(viewport, `${label}, open scene chooser`);
-    assert.ok(opened.includes('Preview: AutumnDisplay unchanged'), 'the open summary is checked');
+    // #697: the summary ends with the scene's dates, which depend on the suite's date.
+    const previewSummary = text => text.startsWith('Preview: AutumnDisplay unchanged · ');
+    assert.ok(opened.some(previewSummary), 'the open summary is checked');
     assert.ok(opened.includes('Scene preview'), 'the open select is checked');
     assert.ok(opened.includes('Return to Automatic'), 'the open return action is checked');
     if (negativeControl) {
@@ -109,13 +111,13 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
         Object.assign(overlay.style, { position: 'absolute', inset: '0 auto auto 0', width: `${element.offsetWidth}px`, height: `${element.offsetHeight}px`, background: '#16141e', zIndex: '9999' });
         element.parentElement.append(overlay);
       });
-      await assert.rejects(alertClear(viewport, `${label}, deliberate visible occlusion`), /Preview: AutumnDisplay unchanged must be the topmost element at its centre/);
+      await assert.rejects(alertClear(viewport, `${label}, deliberate visible occlusion`), /Preview: AutumnDisplay unchanged · .* must be the topmost element at its centre/);
       await page.locator('[data-alert-occlusion-probe]').evaluate(element => element.remove());
       await alertClear(viewport, `${label}, occlusion removed`);
     }
     await summary.click();
     const collapsed = await alertClear(viewport, `${label}, selected scene collapsed`);
-    assert.ok(collapsed.includes('Preview: AutumnDisplay unchanged'), 'the selected collapsed summary remains checked');
+    assert.ok(collapsed.some(previewSummary), 'the selected collapsed summary remains checked');
     assert.ok(!collapsed.includes('Scene preview') && !collapsed.includes('Return to Automatic'), 'only closed descendants are excluded');
     await summary.click(); await button('Return to Automatic').click(); await summary.click();
   }

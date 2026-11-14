@@ -1,10 +1,31 @@
-import { useEffect, useId, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useMemo, useState, type CSSProperties } from 'react';
 import type { Settings, WeatherState } from '../shared/contracts';
 import { THEME_LABELS, THEME_MODES, TRANSPARENCY, themeTransparency, withTransparency, type ThemeSettings } from '../shared/themes';
-import { resolveTheme } from './ambient-theme';
+import { resolveTheme, themeDayInput, themeLocalDate } from './ambient-theme';
 import { usePrefersReducedMotion } from './useMotion';
 import { HolidayCalendars } from './HolidayCalendars';
 import { THEME_SCENES, THEME_SCENE_IDS, THEME_GROUPS, type ThemeSceneId } from '../shared/theme-registry';
+import { sceneSchedule, sceneWhenLabel, type SceneWhen } from '../shared/theme-schedule';
+
+/** Today's civil date, checked once a minute, so the scene dates move on at midnight. */
+function useCivilDate(): string {
+  const [today, setToday] = useState(() => themeLocalDate(new Date()));
+  useEffect(() => { const timer = window.setInterval(() => setToday(themeLocalDate(new Date())), 60_000); return () => window.clearInterval(timer); }, []);
+  return today;
+}
+// The last few schedules, by date and the settings that decide them (calendars, birthday dates and treatments,
+// hemisphere): about 520 days are resolved once per date and settings, not per render or per opened panel.
+const schedules = new Map<string, Record<ThemeSceneId, SceneWhen>>();
+/** Every scene's current or next dates under these settings (#697), as the display will resolve them. */
+function useSceneSchedule(settings: Settings, today: string): Record<ThemeSceneId, SceneWhen> {
+  const input = themeDayInput(settings);
+  const key = JSON.stringify([today, input.calendars, input.birthdays.map(entry => [entry.date, entry.treatment]), input.hemisphere]);
+  return useMemo(() => {
+    let schedule = schedules.get(key);
+    if (!schedule) { schedule = sceneSchedule(input, today); schedules.set(key, schedule); if (schedules.size > 4) schedules.delete(schedules.keys().next().value!); }
+    return schedule;
+  }, [key]);
+}
 
 /** `onChange(value, keepPreview)`: keepPreview is true for a change that leaves the scene itself alone
  * (Transparency, #670), so a "Try a scene" demonstration stays up while the slider moves. */
@@ -13,13 +34,17 @@ export function ThemeControls({ settings, weather, disconnected, onChange, savin
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 60_000); return () => window.clearInterval(timer); }, []);
   const reduced = usePrefersReducedMotion(), scene = resolveTheme(settings, weather, now, disconnected);
+  const today = useCivilDate(), schedule = useSceneSchedule(settings, today);
+  // #697: the season, holiday or birthday scene under any weather says how long it stays.
+  // A quiet date names its observance, not the season it shows, so it is not dated.
+  const base = scene && theme.mode !== 'weather' && !scene.quiet ? scene.habitat ?? (scene.source === 'weather' ? null : scene.motif) : null, until = base ? schedule[base] : null;
   const showCalendars = theme.mode === 'seasonal' || theme.mode === 'combined' || settings.widgetData.dynamic.holidays;
   return <div className="theme-controls">
     <label className="theme-mode"><span className="field-label">Theme</span><select className="select-input" aria-label="Theme" disabled={saving} value={theme.mode} onChange={event => onChange({ ...theme, mode: event.target.value as ThemeSettings['mode'] })}>
       {THEME_MODES.map(mode => <option key={mode} value={mode}>{THEME_LABELS[mode]}</option>)}
     </select></label>
     {showCalendars && <HolidayCalendars value={theme.calendars} disabled={saving} onChange={calendars => onChange({ ...theme, calendars })} />}
-    {theme.mode !== 'off' && <p className="theme-current">{scene?.label ?? 'No weather effect right now'}
+    {theme.mode !== 'off' && <p className="theme-current">{scene?.label ?? 'No weather effect right now'}{base && until?.kind === 'current' ? <span className="theme-until"> · {sceneWhenLabel(base, until, today)}</span> : null}
       <small>{reduced ? 'Atmosphere hidden by your system’s reduced-motion setting.' : settings.appearance.animation === 'off' ? 'Turn on Animation to show the atmosphere.' : theme.mode === 'combined' ? 'The season or holiday scene, with current or approaching weather drawn over it.' : theme.mode === 'weather' ? 'Current weather and the next few hours.' : 'Changes with the season and selected holidays.'}</small>
     </p>}
     {/* #670: shown whenever a theme is on, and under Off while it holds a saved value, so it can be put back. */}
@@ -44,19 +69,23 @@ export function ThemeControls({ settings, weather, disconnected, onChange, savin
 }
 
 /** Canvas-local illustration control, deliberately outside the saved appearance form. */
-export function ThemePreviewControls({ value, onChange, motionAllowed }: { value: ThemeSceneId | null; onChange: (scene: ThemeSceneId | null) => void; motionAllowed: boolean }) {
+export function ThemePreviewControls({ value, onChange, motionAllowed, settings }: { value: ThemeSceneId | null; onChange: (scene: ThemeSceneId | null) => void; motionAllowed: boolean; settings: Settings }) {
+  // #697: each scene with the days it will be on screen, under the draft's calendars, birthdays and location.
+  const today = useCivilDate(), schedule = useSceneSchedule(settings, today), when = (id: ThemeSceneId) => sceneWhenLabel(id, schedule[id], today);
+  const mode = settings.appearance.theme?.mode ?? 'off';
   return <details className="theme-try" onKeyDown={event => {
     if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); }
   }}>
-    <summary>{value ? <strong>Preview: {THEME_SCENES[value].label}<small>Display unchanged</small></strong> : 'Try a scene'}</summary>
+    <summary>{value ? <strong>Preview: {THEME_SCENES[value].label}<small>Display unchanged · {when(value)}</small></strong> : 'Try a scene'}</summary>
     <div className="theme-try-panel">
       <label className="field-label" htmlFor="theme-scene-preview">Scene preview</label>
       <select id="theme-scene-preview" className="select-input" value={value ?? 'automatic'} onChange={event => onChange(event.target.value === 'automatic' ? null : event.target.value as ThemeSceneId)}>
         <option value="automatic">Automatic · current date and weather</option>
         {THEME_GROUPS.map(group => <optgroup key={group} label={group}>
-          {THEME_SCENE_IDS.filter(id => THEME_SCENES[id].group === group).map(id => <option key={id} value={id}>{THEME_SCENES[id].label}</option>)}
+          {THEME_SCENE_IDS.filter(id => THEME_SCENES[id].group === group).map(id => <option key={id} value={id}>{THEME_SCENES[id].label} · {when(id)}</option>)}
         </optgroup>)}
       </select>
+      <p className="theme-try-note">{mode === 'seasonal' || mode === 'combined' ? 'Dates follow your calendars, birthdays and location.' : 'Dates apply in Seasonal & holidays and Combined.'}</p>
       {!motionAllowed && <p className="theme-current">Atmosphere is hidden while Animation is Off or your system reduces motion.</p>}
       {value && <button type="button" className="text-button theme-demo-return" onClick={() => onChange(null)}>Return to Automatic</button>}
     </div>
