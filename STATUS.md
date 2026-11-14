@@ -1,5 +1,30 @@
 # Project status
 
+## Scene list: the dates each scene will be on screen — 2026-11-14 (#697)
+
+Source candidate, not installed. Owner request: "for all scenes, please also have the dates
+they'll be active, in a way thats intuitive, and doesn't take up too much space".
+
+What changed:
+- **Try a scene** lists every scene with when it will next be on screen, after its name:
+  "Autumn · until Nov 14", "Christmas · Nov 15 – Dec 26", "Orthodox Christmas · Jan 7". A
+  holiday that is not selected or always outranked says "not with your calendars", a birthday
+  scene nobody uses "no birthday set", and weather scenes say when they appear ("when it
+  rains"). The previewed scene's summary carries its dates, and the scene on screen under Theme
+  says until when it stays. One short line says the dates follow the calendars, birthdays and
+  location (or that they apply in Seasonal & holidays and Combined).
+- The dates are the display's own: the part of the theme that picks a day's season, holiday or
+  birthday scene is now one shared function, used by the display and walked day by day for the
+  list, so they cannot disagree.
+
+Details: [Ambient themes](docs/ambient-themes.md), [user guide](docs/user-guide.md#looks).
+
+Verified with source builds and synthetic data only: both typechecks and the build, the unit
+tests (every scene's dates on 2026-11-14, a calendar switched off, fictional birthdays, the
+southern hemisphere, a scene that never shows, the formats, and the display and the list
+agreeing over 400 days), and the `themes` and `workspace` suites (the list at 1920×1080 and
+1366×768). Not verified: installation and the TV.
+
 ## Movement preview: one hour slider, and the 3D scene moves with it — 2026-11-12 (#686, #678)
 
 Source candidate, not installed. Owner report: "does preview movement work for the scenes?
