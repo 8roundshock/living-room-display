@@ -131,7 +131,9 @@ test('minor civic cards retain the season; selected exact quiet days constrain w
   const {settings,weather}=fixture(); settings.appearance.theme.mode='seasonal';
   assert.equal(resolveTheme(settings,weather,now,false,'2026-11-04')?.motif,'autumn');
   assert.equal(resolveTheme(settings,weather,now,false,'2026-11-14')?.motif,'autumn');
-  assert.equal(resolveTheme(settings,weather,now,false,'2026-11-15')?.motif,'christmas');
+  // #702: the second half of November is Winter; Christmas from December 1.
+  assert.equal(resolveTheme(settings,weather,now,false,'2026-11-15')?.motif,'winter'); assert.equal(resolveTheme(settings,weather,now,false,'2026-11-30')?.motif,'winter');
+  assert.equal(resolveTheme(settings,weather,now,false,'2026-12-01')?.motif,'christmas');
   settings.appearance.theme.mode='combined'; weather.current!.weatherCode=95;
   const scene=resolveTheme(settings,weather,now,false,'2026-11-11')!;
   assert.equal(scene.motif,'storm'); assert.equal(scene.habitat,'autumn','the quiet season stays under the storm (#655)'); assert.equal(scene.quiet,true); assert.equal(scene.tint,QUIET_PALETTE[0]);

@@ -76,7 +76,7 @@ test('The civil day number changes at local midnight and at no other time', () =
 
 test('The eligibility window comes from the holiday policy and the calendar', () => {
   for (const year of [2026, 2027, 2028, 2032]) {
-    assert.equal(sceneWindowDays('christmas', year), 42, 'forty lead days, Christmas Day and Boxing Day');
+    assert.equal(sceneWindowDays('christmas', year), 26, 'twenty-four lead days (#702), Christmas Day and Boxing Day');
     assert.equal(sceneWindowDays('canada-day', year), 3, 'two lead days and the day');
     assert.equal(sceneWindowDays('halloween', year), 17);
   }

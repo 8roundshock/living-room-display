@@ -40,21 +40,37 @@ computed, not copied from a short table that eventually expires.
 
 ## Timing and priorities
 
-Seasons are meteorological: March/June/September/December boundaries in the
-northern hemisphere, reversed in the southern hemisphere. The theme uses the
-weather location's latitude; missing/invalid latitude falls back to north.
-Seasonal scenery supplies the year-round base, including when no holiday is near.
+Seasons are meteorological (March/June/September/December boundaries in the
+northern hemisphere, reversed in the southern hemisphere), except that Winter
+begins on November 15 in the north and May 15 in the south (#702, owner direction
+2026-11-15: "it is alreayd in christmas time, even though its too early, i think it
+can be just winter for now"). Autumn is therefore September 1 to November 14 in the
+north and March 1 to May 14 in the south; Spring and Summer are unchanged. The
+theme uses the weather location's latitude; missing/invalid latitude falls back to
+north. Seasonal scenery supplies the year-round base, including when no holiday is
+near: ordinary days between holidays show the season ("some days should also have
+no holiday, it's okay to have that sometimes as well, whenever it makes sense").
 
-Christmas begins November 15 and runs through Christmas; Canada's Boxing Day keeps
-that mood on December 26. Halloween begins October 15 and ends after October 31.
-New Year begins December 27 and runs through January 1, or January 8 for Russia.
-Orthodox Christmas takes priority on January 7. Easter, Thanksgiving, Seollal and
-Chuseok have a seven-day approach; Canada Day has two days. Seollal and Chuseok
-include the ordinary day before and after their central dates. Buddha's Birthday
-has a three-day approach and Women's Day two days. These are authored display
-windows, not official celebration seasons. November 15 is a balanced product
-default; Canadian museum Christmas programs have varied starts and ends.
-No theme lingers indefinitely after its window.
+Display windows are design choices, not official celebration seasons. They aim to
+start a scene when people actually celebrate (#702, owner direction 2026-11-15: "make
+the timing of the holidays make sense to what people would actually want"). Reviewed
+2026-11-15:
+
+| Scene | Window (lead before the central day) | Why |
+| --- | --- | --- |
+| Christmas (Canada, Korea) | December 1 (24 days) to December 25; Canada's Boxing Day keeps it on December 26 | A survey of 1,000 Canadians (Time2Play, reported 2022) found people decorate 3 to 4.3 weeks before December 25, Ontario latest at 3 weeks, and 64% think stores decorate too early ([Daily Hive](https://dailyhive.com/edmonton/when-each-province-christmas-decorations), [Narcity](https://www.narcity.com/when-canadians-decorate-for-christmas-controversial-as-heck)). Was November 15 (40 days) until #702. |
+| New Year · Russia | December 18 (14 days) to January 8, where nothing outranks it | The New Year tree is usually decorated in the first half of December or later and kept to mid-January ([Wikipedia: New Year tree](https://en.wikipedia.org/wiki/New_Year%27s_tree), [TASS](https://tass.com/society/1382191)). With the Canadian or Korean calendar on, Christmas still holds December to the 26th, so the tree shows from December 27. Was 5 days until #702. |
+| Buddha's Birthday (Korea) | 6 days | Streets and temples carry lotus lanterns for weeks before the day ([culture ministry](https://www.mcst.go.kr/english/policy/kocis/newsView.jsp?pSeq=95), [Korea JoongAng Daily](https://www.koreajoongangdaily.com/korea/an-ocean-of-light-honors-buddha/10587685)), so a week of lanterns (six days and the day itself). Six rather than seven keeps the window within seven days, so its 3D scene keeps the bolder special look: the owner's preference is that short occasions are bolder and long-running ones low-key (coordinator decision on #702, 2026-11-15). It still leaves Spring days after Orthodox Easter. Was 3 days until #702. |
+| Halloween | October 15 (16 days) to October 31 | Most households start in early to mid October; 43% at the start of October and 32% mid-October ([Angi 2022](https://angi.com/articles/halloween-decoration-trends-2022-state-by-state-survey.htm), [HalloweenCostumes.com 2022](https://halloweencostumes.com/blog/p-1085-2022-halloween-in-america-survey-results.aspx)). Mid-October keeps Autumn days after Thanksgiving. Unchanged. |
+| New Year (Canada, Korea) | December 27 (5 days) to January 1 | Unchanged. |
+| Easter, Thanksgiving, Seollal, Chuseok, Orthodox Easter | 7 days; Seollal and Chuseok include the ordinary day before and after | Unchanged. |
+| Canada Day, Women's Day | 2 days | Unchanged. |
+| Maslenitsa | its week only | Unchanged. |
+
+Orthodox Christmas takes priority on January 7. Christmas into New Year is the one
+long stretch of holiday scenes (39 days with all three calendars), because people
+celebrate them back to back; elsewhere the season comes back between holidays. No
+theme lingers indefinitely after its window.
 
 Orthodox Easter uses the Julian ecclesiastical calculation converted to the
 Gregorian civil date, including the changing century offset (14 days from 2100,
@@ -87,7 +103,7 @@ by the separate theme resolver, using fresh, relevant forecast data.
 
 ## Sources and reuse
 
-Reviewed November 4, 2026. Bundled names and date rules are factual calendar data;
+Reviewed November 4, 2026 (display windows above reviewed November 15, 2026, #702). Bundled names and date rules are factual calendar data;
 no source prose, images, live scraping or remote asset dependency is bundled.
 
 - [Canada Revenue Agency public holidays](https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html)
