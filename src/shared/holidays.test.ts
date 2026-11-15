@@ -113,27 +113,32 @@ test('Christmas starts December 1 by product policy (#702) and BoxingDay belongs
   assert.equal(holidayWindow('2026-12-26', ['CA', 'KR'])?.observance.id, 'ca:boxing-day');
 });
 
-test('NewYear crosses the year boundary and ends on the selected ordinary holiday end', () => {
+test('NewYear crosses the year boundary: New Year’s Eve and Day (#705); the Russian scene ends on 1 January though its holidays run to 8 January', () => {
   for (const region of ['CA', 'KR'] as const) {
-    assert.equal(holidayWindow('2026-12-27', [region])?.observance.date, '2027-01-01');
+    assert.equal(holidayWindow('2026-12-30', [region])?.observance.id?.endsWith(':new-year') ?? false, false, 'not before New Year’s Eve');
+    assert.equal(holidayWindow('2026-12-31', [region])?.observance.date, '2027-01-01');
+    assert.equal(holidayWindow('2026-12-31', [region])?.phase, 'approaching');
     assert.equal(holidayWindow('2027-01-01', [region])?.phase, 'today');
     assert.equal(holidayWindow('2027-01-02', [region]), null);
   }
   assert.equal(holidayWindow('2026-12-27', ['RU'])?.observance.id, 'ru:new-year');
   assert.equal(holidayWindow('2027-01-01', ['RU'])?.observance.id, 'ru:new-year');
-  assert.equal(holidayWindow('2027-01-06', ['RU'])?.observance.id, 'ru:new-year', 'ongoing holiday beats Orthodox Christmas anticipation');
+  assert.equal(holidayWindow('2027-01-02', ['RU']), null, 'the tree is down after 1 January (#705)');
+  assert.equal(holidayWindow('2027-01-05', ['RU']), null);
+  assert.equal(holidayWindow('2027-01-06', ['RU'])?.observance.id, 'ru:christmas', 'Sochelnik, Orthodox Christmas Eve (#705: lead 1)');
   assert.equal(holidayWindow('2027-01-07', ['RU'])?.observance.id, 'ru:christmas', 'central Orthodox Christmas wins');
-  assert.equal(holidayWindow('2027-01-08', ['RU'])?.observance.id, 'ru:new-year');
-  assert.equal(holidayWindow('2027-01-09', ['RU']), null);
+  assert.equal(holidayWindow('2027-01-08', ['RU']), null);
+  assert.equal(observancesForYear(2027, ['RU']).find(value => value.id === 'ru:new-year')?.endDate, '2027-01-08', 'the factual holidays still run to 8 January for cards and the calendar');
   assert.equal(holidayWindow('2027-01-14', ['RU']), null, 'Old New Year card does not restart the background');
 });
 
-test('selected Russian NewYear art wins the shared scene independently of calendar checkbox order', () => {
-  for (const date of ['2026-12-27','2027-01-01']) {
-    assert.equal(holidayWindow(date,['CA','KR','RU'])?.observance.id,'ru:new-year');
+test('the Russian tree before New Year’s Eve, the regular New Year on Eve and Day, independently of calendar checkbox order (#705)', () => {
+  for (const [date, id] of [['2026-12-27','ru:new-year'],['2026-12-30','ru:new-year'],['2026-12-31','ca:new-year'],['2027-01-01','ca:new-year']] as const) {
+    assert.equal(holidayWindow(date,['CA','KR','RU'])?.observance.id,id,date);
     assert.deepEqual(holidayWindow(date,['CA','KR','RU']),holidayWindow(date,['RU','KR','CA']));
-    assert.equal(holidayWindow(date,['CA','KR'])?.observance.id,'ca:new-year');
   }
+  assert.equal(holidayWindow('2027-01-01',['CA','KR'])?.observance.id,'ca:new-year');
+  assert.equal(holidayWindow('2027-01-01',['KR','RU'])?.observance.id,'kr:new-year');
   assert.equal(holidayWindow('2027-01-07',['CA','KR','RU'])?.observance.id,'ru:christmas');
 });
 
@@ -217,10 +222,10 @@ test('year-round meteorological seasons respect the selected weather hemisphere'
   assert.deepEqual(dates.map(date => seasonForDate(date, 'south')), ['summer', 'autumn', 'winter', 'spring', 'summer']);
 });
 
-test('#702 the Russian New Year tree from 18 December, to 8 January; Christmas still holds December with Canada or Korea', () => {
+test('#702 the Russian New Year tree from 18 December, to 1 January since #705; Christmas still holds December with Canada or Korea', () => {
   assert.notEqual(holidayWindow('2026-12-17', ['RU'])?.observance.id, 'ru:new-year');
   assert.equal(holidayWindow('2026-12-18', ['RU'])?.observance.id, 'ru:new-year'); assert.equal(holidayWindow('2026-12-18', ['RU'])?.phase, 'approaching');
-  assert.equal(holidayWindow('2027-01-08', ['RU'])?.observance.id, 'ru:new-year'); assert.notEqual(holidayWindow('2027-01-09', ['RU'])?.observance.id, 'ru:new-year');
+  assert.equal(holidayWindow('2027-01-01', ['RU'])?.observance.id, 'ru:new-year'); assert.notEqual(holidayWindow('2027-01-02', ['RU'])?.observance.id, 'ru:new-year');
   for (const calendars of [['CA', 'RU'], ['KR', 'RU'], ['CA', 'KR', 'RU']] as const) {
     assert.equal(holidayWindow('2026-12-18', [...calendars])?.policy.role === 'major' && holidayWindow('2026-12-18', [...calendars])?.observance.id.endsWith(':christmas'), true, calendars.join('+'));
     assert.equal(holidayWindow('2026-12-27', [...calendars])?.observance.id, 'ru:new-year', calendars.join('+'));

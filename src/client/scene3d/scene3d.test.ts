@@ -88,7 +88,9 @@ test('Tier: birthdays and short celebrations are special; seasons, weather and l
   for (const id of ['spring', 'summer', 'autumn', 'winter', 'rain', 'snow', 'storm', 'fog', 'wind', 'christmas', 'halloween', 'easter'] as const) assert.equal(tier(id), 'everyday', id);
   // The boundary is one week on screen.
   assert.equal(SPECIAL_MAX_WINDOW_DAYS, 7);
-  assert.equal(sceneWindowDays('orthodox-christmas', 2026), 7); assert.equal(tier('orthodox-christmas'), 'special');
+  // #705: Orthodox Christmas is Sochelnik and the day, the regular New Year Eve and Day, the Russian tree up to 1 January.
+  assert.equal(sceneWindowDays('orthodox-christmas', 2026), 2); assert.equal(tier('orthodox-christmas'), 'special');
+  assert.equal(sceneWindowDays('new-year', 2026), 2); assert.equal(sceneWindowDays('new-year-tree', 2026), 15); assert.equal(tier('new-year-tree'), 'everyday');
   assert.equal(sceneWindowDays('thanksgiving', 2026), 8); assert.equal(tier('thanksgiving'), 'everyday');
   // Weather over a scene (Combined) keeps that scene's tier.
   assert.equal(tier('snow', 'christmas'), 'everyday'); assert.equal(tier('rain', 'birthday'), 'special'); assert.equal(tier('wind', 'canada-day'), 'special');

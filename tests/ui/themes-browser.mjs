@@ -193,24 +193,24 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
       await sample.waitFor();
       const listed=await options(); assert.equal(listed.length,27,`Automatic and the 26 scenes: ${JSON.stringify(listed)}`);
       assert.ok(listed.slice(1).every(text=>/ · \S/.test(text)),`every scene has its dates: ${JSON.stringify(listed)}`);
-      for(const expected of ['Winter · until Nov 30, Jan 9 – Feb 28','Autumn · Sep 1 – Nov 14','Christmas · Dec 1 – 26','New Year · Russia · Dec 27 – Jan 8','New Year · not with your calendars','Orthodox Christmas · Jan 7','Halloween · Oct 15 – 31','Birthday · Classic · no birthday set','Rain · when it rains','Wind · when windy'])
+      for(const expected of ['Winter · until Nov 30, Jan 2 – Feb 28','Autumn · Sep 1 – Nov 14','Christmas · Dec 1 – 26','New Year · Russia · Dec 27 – 30','New Year · Dec 31 – Jan 1','Orthodox Christmas · Jan 6 – 7','Halloween · Oct 15 – 31','Birthday · Classic · no birthday set','Rain · when it rains','Wind · when windy'])
         assert.ok(listed.includes(expected),`${expected} in ${JSON.stringify(listed)}`);
       assert.equal(await page.locator('.theme-try-note').innerText(),'Dates follow your calendars, birthdays and location.');
       await sample.selectOption('christmas'); assert.match(await page.locator('.theme-try summary').innerText(),/Preview: Christmas\s+Display unchanged · Dec 1 – 26/);
       const fit=await sample.evaluate(element=>{const r=element.getBoundingClientRect(),panel=element.closest('.theme-try-panel').getBoundingClientRect();return {inside:r.left>=panel.left-1&&r.right<=panel.right+1,height:r.height,page:document.documentElement.scrollWidth<=innerWidth};});
       assert.ok(fit.inside&&fit.height>=44&&fit.page,`the select stays one native control inside its panel: ${JSON.stringify(fit)}`);
       await photo(`theme-dates-${viewport.width}x${viewport.height}`);
-      // The draft's calendars decide the dates: without Russia the plain New Year and an earlier Winter.
+      // The draft's calendars decide the dates: without Russia no tree, and Winter back from Dec 27 around New Year's Eve and Day (#705).
       await page.getByRole('checkbox',{name:'Russia',exact:true}).uncheck();
-      await page.waitForFunction(()=>[...document.querySelectorAll('#theme-scene-preview option')].some(option=>option.textContent==='New Year · Dec 27 – Jan 1'));
-      const without=await options(); assert.ok(without.includes('New Year · Russia · not with your calendars')&&without.includes('Winter · until Nov 30, Jan 2 – Feb 28'),JSON.stringify(without));
+      await page.waitForFunction(()=>[...document.querySelectorAll('#theme-scene-preview option')].some(option=>option.textContent==='New Year · Russia · not with your calendars'));
+      const without=await options(); assert.ok(without.includes('New Year · Russia · not with your calendars')&&without.includes('Winter · until Nov 30, Dec 27 – Feb 28'),JSON.stringify(without));
       await button('Cancel').click();
     }
     await open({date:'2026-11-15T17:00:00Z',mode:'weather'}); await page.locator('.theme-try summary').scrollIntoViewIfNeeded(); await page.locator('.theme-try summary').click();
     await page.getByRole('combobox',{name:'Scene preview',exact:true}).waitFor();
     assert.equal(await page.locator('.theme-try-note').innerText(),'Dates apply in Seasonal & holidays and Combined.');
     assert.ok((await page.locator('.theme-current').innerText()).indexOf('until')<0,'Weather mode has no season line to date');
-    record('Try a scene lists each scene with its dates as the display will resolve them (on 2026-11-15: Winter until Nov 30, Jan 9 – Feb 28; Christmas Dec 1 – 26; New Year · Russia Dec 27 – Jan 8, Orthodox Christmas Jan 7, plain New Year not with these calendars, weather scenes by weather), follows the draft calendars, dates the preview summary and the current scene, and fits at TV and laptop widths');
+    record('Try a scene lists each scene with its dates as the display will resolve them (on 2026-11-15: Winter until Nov 30, Jan 2 – Feb 28; Christmas Dec 1 – 26; New Year · Russia Dec 27 – 30; New Year Dec 31 – Jan 1 (#705); Orthodox Christmas Jan 6 – 7, weather scenes by weather), follows the draft calendars, dates the preview summary and the current scene, and fits at TV and laptop widths');
     await open({mode:'combined'}); await page.locator('.theme-scene-options summary').click();
     const passageOption=page.locator('.theme-passage-option input'); assert.equal(await passageOption.isChecked(),false,'foreground moments default off');
     await passageOption.check(); await button('Save changes').waitFor(); assert.equal(saved().appearance.theme.foreground,undefined);

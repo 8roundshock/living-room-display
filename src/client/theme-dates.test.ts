@@ -17,22 +17,22 @@ const birthday = (date: string, treatment: BirthdayEntry['treatment'], id = date
 test('2026-11-14 with all three calendars and no birthdays: every scene’s dates', () => {
   assert.deepEqual(labels(ALL, '2026-11-14'), {
     birthday: 'no birthday set', 'birthday-russian': 'no birthday set', 'birthday-korean': 'no birthday set',
-    spring: 'Mar 1 – May 31', summer: 'Jun 1 – Aug 31', autumn: 'until Nov 14', winter: 'Nov 15 – 30, Jan 9 – Feb 28',
-    christmas: 'Dec 1 – 26', 'new-year': 'not with your calendars', 'new-year-tree': 'Dec 27 – Jan 8', 'orthodox-christmas': 'Jan 7',
+    spring: 'Mar 1 – May 31', summer: 'Jun 1 – Aug 31', autumn: 'until Nov 14', winter: 'Nov 15 – 30, Jan 2 – Feb 28',
+    christmas: 'Dec 1 – 26', 'new-year': 'Dec 31 – Jan 1', 'new-year-tree': 'Dec 27 – 30', 'orthodox-christmas': 'Jan 6 – 7',
     halloween: 'Oct 15 – 31', thanksgiving: 'Oct 4 – 11', 'canada-day': 'Jun 29 – Jul 1', easter: 'Mar 21 – 29',
     seollal: 'Jan 31 – Feb 8', chuseok: 'Sep 8 – 16', 'lotus-lanterns': 'May 7 – 13', maslenitsa: 'Mar 9 – 14', pascha: 'Apr 25 – May 2', mimosa: 'Mar 6 – 8',
     rain: 'when it rains', snow: 'when it snows', storm: 'in a storm', fog: 'in fog', wind: 'when windy',
   });
   const schedule = sceneSchedule(ALL, '2026-11-14');
   assert.deepEqual(schedule.autumn, { kind: 'current', start: '2026-09-01', end: '2026-11-14', more: 0 }, 'Autumn began Sep 1; Thanksgiving and Halloween only interrupt it');
-  assert.deepEqual(schedule['orthodox-christmas'], { kind: 'next', start: '2027-01-07', end: '2027-01-07', more: 0 }, 'the New Year tree outranks it from Jan 1 to 6');
+  assert.deepEqual(schedule['orthodox-christmas'], { kind: 'next', start: '2027-01-06', end: '2027-01-07', more: 0 }, 'Sochelnik and the day (#705)');
 });
 
 test('A calendar switched off changes the dates: plain New Year takes over without Russia, no holidays leave the seasons whole', () => {
   const noRussia = labels({ ...ALL, calendars: ['CA', 'KR'] }, '2026-11-14');
-  assert.equal(noRussia['new-year'], 'Dec 27 – Jan 1'); assert.equal(noRussia['new-year-tree'], 'not with your calendars');
+  assert.equal(noRussia['new-year'], 'Dec 31 – Jan 1'); assert.equal(noRussia['new-year-tree'], 'not with your calendars');
   for (const id of ['orthodox-christmas', 'maslenitsa', 'pascha', 'mimosa'] as const) assert.equal(noRussia[id], 'not with your calendars', id);
-  assert.equal(noRussia.winter, 'Nov 15 – 30, Jan 2 – Feb 28', 'Winter comes back after the plain New Year');
+  assert.equal(noRussia.winter, 'Nov 15 – 30, Dec 27 – Feb 28', 'Winter comes back after Christmas, around New Year’s Eve and Day');
   const none = labels({ ...ALL, calendars: [] }, '2026-11-14');
   assert.equal(none.autumn, 'until Nov 14'); assert.equal(none.winter, 'Nov 15 – Feb 28', 'with no holidays Winter is one stretch from 15 November (#702)'); assert.equal(none.christmas, 'not with your calendars');
   assert.ok(THEME_SCENE_IDS.filter(id => THEME_SCENES[id].group === 'Celebrations').every(id => none[id] === 'not with your calendars'));
@@ -53,14 +53,14 @@ test('Birthdays: the next one of each treatment, another within the year, today,
 
 test('The southern hemisphere has its own seasons around the same holidays', () => {
   const south = labels({ ...ALL, hemisphere: 'south' }, '2026-11-14');
-  assert.equal(south.spring, 'until Nov 30'); assert.equal(south.summer, 'Jan 9 – Feb 28'); assert.equal(south.autumn, 'Mar 1 – May 14'); assert.equal(south.winter, 'May 15 – Aug 31');
+  assert.equal(south.spring, 'until Nov 30'); assert.equal(south.summer, 'Jan 2 – Feb 28'); assert.equal(south.autumn, 'Mar 1 – May 14'); assert.equal(south.winter, 'May 15 – Aug 31');
   assert.equal(south.christmas, 'Dec 1 – 26');
   assert.deepEqual([labels({ ...ALL, hemisphere: 'south' }, '2027-05-14').autumn, labels({ ...ALL, hemisphere: 'south' }, '2027-05-15').winter], ['until May 14', 'until Aug 31'], 'the southern Winter begins on 15 May (#702)');
 });
 
 test('A day inside a holiday that interrupts a season shows when the season comes back', () => {
   const shown = labels(ALL, '2026-10-20');
-  assert.equal(shown.halloween, 'until Oct 31'); assert.equal(shown.autumn, 'Nov 1 – 14'); assert.equal(shown.winter, 'Nov 15 – 30, Jan 9 – Feb 28');
+  assert.equal(shown.halloween, 'until Oct 31'); assert.equal(shown.autumn, 'Nov 1 – 14'); assert.equal(shown.winter, 'Nov 15 – 30, Jan 2 – Feb 28');
 });
 
 test('The dates: one day, the same month, two months, a year only beyond a year, more occurrences, the reasons', () => {
@@ -96,9 +96,10 @@ test('The display and the list cannot drift: resolveTheme’s scene is themeDay�
 test('2026-11-15: Winter now, with all three calendars and with each one alone; Christmas Dec 1 – 26; the New Year tree from Dec 18 with Russia alone', () => {
   const all = labels(ALL, '2026-11-15');
   assert.deepEqual([all.autumn, all.winter, all.christmas, all['new-year-tree'], all['orthodox-christmas'], all['lotus-lanterns']],
-    ['Sep 1 – Nov 14', 'until Nov 30, Jan 9 – Feb 28', 'Dec 1 – 26', 'Dec 27 – Jan 8', 'Jan 7', 'May 7 – 13']);
-  const expected = { CA: ['until Nov 30, Jan 2 – Feb 28', 'Dec 1 – 26', 'Dec 27 – Jan 1', 'not with your calendars'], KR: ['until Nov 30, Dec 26 – Feb 28', 'Dec 1 – 25', 'Dec 27 – Jan 1', 'not with your calendars'],
-    RU: ['until Dec 17, Jan 9 – Feb 28', 'not with your calendars', 'not with your calendars', 'Dec 18 – Jan 8'] } as const;
+    ['Sep 1 – Nov 14', 'until Nov 30, Jan 2 – Feb 28', 'Dec 1 – 26', 'Dec 27 – 30', 'Jan 6 – 7', 'May 7 – 13']);
+  // #705: with Russia alone the tree's 15 days are under the 21-day merge, so Winter reads as one stretch.
+  const expected = { CA: ['until Nov 30, Dec 27 – Feb 28', 'Dec 1 – 26', 'Dec 31 – Jan 1', 'not with your calendars'], KR: ['until Nov 30, Dec 26 – Feb 28', 'Dec 1 – 25', 'Dec 31 – Jan 1', 'not with your calendars'],
+    RU: ['until Feb 28', 'not with your calendars', 'not with your calendars', 'Dec 18 – Jan 1'] } as const;
   for (const calendar of ['CA', 'KR', 'RU'] as const) {
     const shown = labels({ ...ALL, calendars: [calendar] }, '2026-11-15');
     assert.equal(themeDay({ ...ALL, calendars: [calendar] }, '2026-11-15').scene, 'winter', calendar);
@@ -118,4 +119,25 @@ test('#702 ordinary days show the season: in the next year most days have no hol
     assert.ok(longest <= 39, `${calendars.join('+')}: the longest holiday chain is ${longest} days`);
     assert.ok(longestEnd <= '2027-01-08' && longestEnd >= '2026-12-25', `${calendars.join('+')}: the longest chain is the Christmas and New Year stretch, ending ${longestEnd}`);
   }
+});
+
+// #705 (owner, 2026-11-15: "why is russian new year for so many days, i want regular new year too, just really think about the dates").
+test('#705 New Year and Orthodox Christmas, day by day from Dec 24 to Jan 10, for each calendar combination, two years', () => {
+  const C = 'christmas', T = 'new-year-tree', N = 'new-year', O = 'orthodox-christmas', W = 'winter';
+  // Dec 24 … Dec 31, Jan 1 … Jan 10.
+  const table: Record<string, string[]> = {
+    'CA+KR+RU': [C, C, C, T, T, T, T, N, N, W, W, W, W, O, O, W, W, W],
+    CA: [C, C, C, W, W, W, W, N, N, W, W, W, W, W, W, W, W, W],
+    KR: [C, C, W, W, W, W, W, N, N, W, W, W, W, W, W, W, W, W],
+    RU: [T, T, T, T, T, T, T, T, T, W, W, W, W, O, O, W, W, W],
+    'CA+RU': [C, C, C, T, T, T, T, N, N, W, W, W, W, O, O, W, W, W],
+    'KR+RU': [C, C, T, T, T, T, T, N, N, W, W, W, W, O, O, W, W, W],
+  };
+  for (const year of [2026, 2027]) for (const [combo, expected] of Object.entries(table)) {
+    const calendars = combo.split('+') as ThemeDayInput['calendars'][number][], shown: string[] = [];
+    for (let date = `${year}-12-24`; date <= `${year + 1}-01-10`; date = shiftHolidayDate(date, 1)) shown.push(themeDay({ ...ALL, calendars }, date).scene);
+    assert.deepEqual(shown, expected, `${combo} ${year}–${year + 1}`);
+  }
+  // Russia alone: the tree from 18 December.
+  assert.equal(themeDay({ ...ALL, calendars: ['RU'] }, '2026-12-17').scene, 'winter'); assert.equal(themeDay({ ...ALL, calendars: ['RU'] }, '2026-12-18').scene, 'new-year-tree');
 });
