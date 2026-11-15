@@ -1,5 +1,29 @@
 # Project status
 
+## New Year timing: regular New Year on Dec 31 – Jan 1, a shorter Russian New Year — 2026-11-15 (#705)
+
+Source candidate, not installed. Owner question: "why is russian new year for so many days, i want
+regular new year too, just really think about the dates".
+
+What changed (with all three calendars): Christmas Dec 1 – 26, New Year · Russia Dec 27 – 30 (the
+pre-New Year week, when the yolka is up), New Year Dec 31 – Jan 1 (New Year's Eve and Day), Winter
+Jan 2 – 5, Orthodox Christmas Jan 6 – 7 (Sochelnik and the day), Winter from Jan 8.
+- The regular New Year (Canada, Korea) starts on New Year's Eve and wins over the Russian tree on Eve
+  and Day (priority 82 over 81). Canada alone: Winter Dec 27 – 30; Korea alone: Winter Dec 26 – 30.
+- The Russian tree's scene ends on January 1; the factual New Year holidays (to January 8) are
+  unchanged for cards and the calendar. With Russia alone it shows Dec 18 – Jan 1.
+- Orthodox Christmas starts the evening before (lead 1): Jan 6 – 7.
+- Tiers: the regular New Year (2 days) and Orthodox Christmas (2 days) keep the special look; the
+  tree (15 days) stays everyday. With all three calendars 254 of the next 365 days show the season;
+  the longest holiday stretch is Dec 1 – Jan 1 (32 days).
+
+Details: [Holiday calendar](docs/holiday-calendar.md#timing-and-priorities).
+
+Verified with source builds and synthetic data only: both typechecks and the build, the unit tests
+(every day from Dec 24 to Jan 10 for all three calendars, each alone, Canada and Russia, and Korea
+and Russia, in 2026–27 and 2027–28; the tiers), and the `themes` and `scene3d` browser suites. Not
+verified: installation and the TV.
+
 ## Holiday and season timing: scenes start when people actually celebrate — 2026-11-15 (#702)
 
 Source candidate, not installed. Owner direction: "it is alreayd in christmas time, even though

@@ -205,12 +205,14 @@ The **Style** tab sets how everything looks:
   now says until when it stays (for example "Winter · until Nov 30"). **Try a scene**,
   below the canvas, shows any scene without changing the display, and lists each one
   with when it will next be on screen with your calendars, birthdays and location:
-  "Christmas · Dec 1 – 26", "Orthodox Christmas · Jan 7", and both stretches of a season
-  that comes back after the holidays: "Winter · until Nov 30, Jan 9 – Feb 28". A holiday that another
+  "Christmas · Dec 1 – 26", "New Year · Dec 31 – Jan 1", "Orthodox Christmas · Jan 6 – 7",
+  and both stretches of a season that comes back after the holidays: "Winter · until Nov 30,
+  Jan 2 – Feb 28". A holiday that another
   one always covers says "not with your calendars"; a birthday scene says "no birthday
   set" until a birthday uses it; weather scenes say when they appear ("when it
   rains"). The dates apply in **Seasonal & holidays** and **Combined**. Holidays start
-  when people usually celebrate (Christmas from December 1), Winter starts on November 15
+  when people usually celebrate (Christmas from December 1; New Year on New Year's Eve and
+  Day, with the Russian New Year tree the week before it), Winter starts on November 15
   (May 15 south of the equator), and ordinary days between holidays show the season.
 - **Saved styles**: keep a combination you like and switch back to it later.
 

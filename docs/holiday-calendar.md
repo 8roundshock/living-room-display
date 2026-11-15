@@ -59,18 +59,21 @@ the timing of the holidays make sense to what people would actually want"). Revi
 | Scene | Window (lead before the central day) | Why |
 | --- | --- | --- |
 | Christmas (Canada, Korea) | December 1 (24 days) to December 25; Canada's Boxing Day keeps it on December 26 | A survey of 1,000 Canadians (Time2Play, reported 2022) found people decorate 3 to 4.3 weeks before December 25, Ontario latest at 3 weeks, and 64% think stores decorate too early ([Daily Hive](https://dailyhive.com/edmonton/when-each-province-christmas-decorations), [Narcity](https://www.narcity.com/when-canadians-decorate-for-christmas-controversial-as-heck)). Was November 15 (40 days) until #702. |
-| New Year · Russia | December 18 (14 days) to January 8, where nothing outranks it | The New Year tree is usually decorated in the first half of December or later and kept to mid-January ([Wikipedia: New Year tree](https://en.wikipedia.org/wiki/New_Year%27s_tree), [TASS](https://tass.com/society/1382191)). With the Canadian or Korean calendar on, Christmas still holds December to the 26th, so the tree shows from December 27. Was 5 days until #702. |
+| New Year · Russia | December 18 (14 days) to December 30 with Canada or Korea on (December 27 to 30 after Christmas); to January 1 with Russia alone | The Russian pre-New Year week, when the yolka is up: the tree is usually decorated in the first half of December or later ([Wikipedia: New Year tree](https://en.wikipedia.org/wiki/New_Year%27s_tree), [TASS](https://tass.com/society/1382191)). Its scene ends on January 1 (#705, owner 2026-11-15: "why is russian new year for so many days, i want regular new year too, just really think about the dates"); the factual New Year holidays still run to January 8 for cards and the calendar. Was to January 8, which with Russia selected took every day from December 27 to January 8 and left the regular New Year no day. |
 | Buddha's Birthday (Korea) | 6 days | Streets and temples carry lotus lanterns for weeks before the day ([culture ministry](https://www.mcst.go.kr/english/policy/kocis/newsView.jsp?pSeq=95), [Korea JoongAng Daily](https://www.koreajoongangdaily.com/korea/an-ocean-of-light-honors-buddha/10587685)), so a week of lanterns (six days and the day itself). Six rather than seven keeps the window within seven days, so its 3D scene keeps the bolder special look: the owner's preference is that short occasions are bolder and long-running ones low-key (coordinator decision on #702, 2026-11-15). It still leaves Spring days after Orthodox Easter. Was 3 days until #702. |
 | Halloween | October 15 (16 days) to October 31 | Most households start in early to mid October; 43% at the start of October and 32% mid-October ([Angi 2022](https://angi.com/articles/halloween-decoration-trends-2022-state-by-state-survey.htm), [HalloweenCostumes.com 2022](https://halloweencostumes.com/blog/p-1085-2022-halloween-in-america-survey-results.aspx)). Mid-October keeps Autumn days after Thanksgiving. Unchanged. |
-| New Year (Canada, Korea) | December 27 (5 days) to January 1 | Unchanged. |
+| New Year (Canada, Korea) | December 31 (1 day) to January 1, priority 82 | New Year's Eve and Day, the shared celebration: with the Canadian or Korean calendar on it holds both days, also over the Russian tree (#705). Was December 27 (5 days), priority 80. |
+| Orthodox Christmas (Russia) | January 6 (1 day) to January 7 | Sochelnik, Orthodox Christmas Eve, and the day (#705). Was 6 days, which the Russian tree outranked until it ended. |
 | Easter, Thanksgiving, Seollal, Chuseok, Orthodox Easter | 7 days; Seollal and Chuseok include the ordinary day before and after | Unchanged. |
 | Canada Day, Women's Day | 2 days | Unchanged. |
 | Maslenitsa | its week only | Unchanged. |
 
-Orthodox Christmas takes priority on January 7. Christmas into New Year is the one
-long stretch of holiday scenes (39 days with all three calendars), because people
-celebrate them back to back; elsewhere the season comes back between holidays. No
-theme lingers indefinitely after its window.
+With all three calendars, December and early January read (#705, reviewed 2026-11-15): Christmas
+December 1 – 26, New Year · Russia December 27 – 30, New Year December 31 – January 1, Winter
+January 2 – 5, Orthodox Christmas January 6 – 7, Winter from January 8. Christmas into New Year
+is the one long stretch of holiday scenes (32 days with all three calendars), because people
+celebrate them back to back; elsewhere the season comes back between holidays. No theme
+lingers indefinitely after its window.
 
 Orthodox Easter uses the Julian ecclesiastical calculation converted to the
 Gregorian civil date, including the changing century offset (14 days from 2100,
@@ -95,9 +98,9 @@ Quiet comes first; a major holiday on its central date then beats an ongoing
 major window, followed by anticipation. Explicit priority, distance and stable
 id resolve remaining ties independent of checkbox ordering. Shared Christmas
 and New Year choices produce one scene. When Russia is selected, its evergreen
-New Year scene has a one-point product priority over the CA/KR arc scene; this
-is a visual choice, not a ranking of cultures. Orthodox Christmas still wins on
-January 7. Dynamic says Today/Tomorrow with a country label and never calls these
+New Year scene shows the pre-New Year week, and the regular New Year scene holds New
+Year's Eve and Day with a one-point product priority over it (82 over 81, #705); this
+is a visual choice, not a ranking of cultures. Orthodox Christmas holds January 6 and 7. Dynamic says Today/Tomorrow with a country label and never calls these
 official alerts or promises a long weekend. Weather theme precedence is decided
 by the separate theme resolver, using fresh, relevant forecast data.
 
