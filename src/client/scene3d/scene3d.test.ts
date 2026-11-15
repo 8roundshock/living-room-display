@@ -84,9 +84,7 @@ test('The eligibility window comes from the holiday policy and the calendar', ()
 });
 test('Tier: birthdays and short celebrations are special; seasons, weather and long windows are everyday', () => {
   const tier = (motif: ThemeSceneId, habitat?: ThemeSceneId) => sceneTier({ motif, ...(habitat ? { habitat } : {}) }, 2026);
-  for (const id of ['birthday', 'birthday-russian', 'birthday-korean', 'canada-day', 'mimosa', 'new-year'] as const) assert.equal(tier(id), 'special', id);
-  // #702: Buddha's Birthday's lanterns lead by 7 days, so its window is 8 days: everyday, by the one-week rule below.
-  assert.equal(sceneWindowDays('lotus-lanterns', 2026), 8); assert.equal(tier('lotus-lanterns'), 'everyday');
+  for (const id of ['birthday', 'birthday-russian', 'birthday-korean', 'canada-day', 'mimosa', 'lotus-lanterns', 'new-year'] as const) assert.equal(tier(id), 'special', id);
   for (const id of ['spring', 'summer', 'autumn', 'winter', 'rain', 'snow', 'storm', 'fog', 'wind', 'christmas', 'halloween', 'easter'] as const) assert.equal(tier(id), 'everyday', id);
   // The boundary is one week on screen.
   assert.equal(SPECIAL_MAX_WINDOW_DAYS, 7);

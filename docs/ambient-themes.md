@@ -391,11 +391,11 @@ eligibility window (lead days, the holiday's own span, adjoining observances of 
 scene). It keeps no list of scenes.
 
 - **special**: birthdays, and celebrations that can be on screen for at most seven
-  consecutive days (Canada Day 3, Women's Day 3, New Year 6, Orthodox
+  consecutive days (Canada Day 3, Women's Day 3, New Year 6, Buddha's Birthday 7 since #702, Orthodox
   Christmas 7, Maslenitsa 7). Opacity ×1.15, which with the 0.95 share is clamped to the
   saved brightness itself; size ×1.1.
 - **everyday**: seasons, weather, and celebrations with a longer window (Thanksgiving 8,
-  Pascha 8, Easter 9, Seollal 9, Chuseok 9, Buddha's Birthday 8 and New Year · Russia 22 since
+  Pascha 8, Easter 9, Seollal 9, Chuseok 9, New Year · Russia 22 since
   #702, Halloween 17, Christmas 26 since #702, 42 before). Opacity ×0.9 (0.855 of the saved brightness), amount ×0.8.
 
 Weather over a scene (Combined) keeps that scene's tier. The one-week boundary is one

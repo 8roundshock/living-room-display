@@ -180,7 +180,7 @@ test('Korean flagship scene windows preserve regular lunar dates and close after
   for (const [id, day, start, end] of [
     ['kr:seollal', '2027-02-07', '2027-01-31', '2027-02-08'],
     ['kr:chuseok', '2027-09-15', '2027-09-08', '2027-09-16'],
-    ['kr:buddha', '2027-05-13', '2027-05-06', '2027-05-13'], // lead 7 (#702): lanterns line the streets for weeks
+    ['kr:buddha', '2027-05-13', '2027-05-07', '2027-05-13'], // lead 6 (#702): a week of lanterns, still a short occasion
   ] as const) {
     assert.notEqual(holidayWindow(shiftHolidayDate(start, -1), ['KR'])?.observance.id, id);
     assert.equal(holidayWindow(start, ['KR'])?.observance.id, id);

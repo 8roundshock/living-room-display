@@ -20,7 +20,7 @@ test('2026-11-14 with all three calendars and no birthdays: every scene’s date
     spring: 'Mar 1 – May 31', summer: 'Jun 1 – Aug 31', autumn: 'until Nov 14', winter: 'Nov 15 – 30, Jan 9 – Feb 28',
     christmas: 'Dec 1 – 26', 'new-year': 'not with your calendars', 'new-year-tree': 'Dec 27 – Jan 8', 'orthodox-christmas': 'Jan 7',
     halloween: 'Oct 15 – 31', thanksgiving: 'Oct 4 – 11', 'canada-day': 'Jun 29 – Jul 1', easter: 'Mar 21 – 29',
-    seollal: 'Jan 31 – Feb 8', chuseok: 'Sep 8 – 16', 'lotus-lanterns': 'May 6 – 13', maslenitsa: 'Mar 9 – 14', pascha: 'Apr 25 – May 2', mimosa: 'Mar 6 – 8',
+    seollal: 'Jan 31 – Feb 8', chuseok: 'Sep 8 – 16', 'lotus-lanterns': 'May 7 – 13', maslenitsa: 'Mar 9 – 14', pascha: 'Apr 25 – May 2', mimosa: 'Mar 6 – 8',
     rain: 'when it rains', snow: 'when it snows', storm: 'in a storm', fog: 'in fog', wind: 'when windy',
   });
   const schedule = sceneSchedule(ALL, '2026-11-14');
@@ -96,7 +96,7 @@ test('The display and the list cannot drift: resolveTheme’s scene is themeDay�
 test('2026-11-15: Winter now, with all three calendars and with each one alone; Christmas Dec 1 – 26; the New Year tree from Dec 18 with Russia alone', () => {
   const all = labels(ALL, '2026-11-15');
   assert.deepEqual([all.autumn, all.winter, all.christmas, all['new-year-tree'], all['orthodox-christmas'], all['lotus-lanterns']],
-    ['Sep 1 – Nov 14', 'until Nov 30, Jan 9 – Feb 28', 'Dec 1 – 26', 'Dec 27 – Jan 8', 'Jan 7', 'May 6 – 13']);
+    ['Sep 1 – Nov 14', 'until Nov 30, Jan 9 – Feb 28', 'Dec 1 – 26', 'Dec 27 – Jan 8', 'Jan 7', 'May 7 – 13']);
   const expected = { CA: ['until Nov 30, Jan 2 – Feb 28', 'Dec 1 – 26', 'Dec 27 – Jan 1', 'not with your calendars'], KR: ['until Nov 30, Dec 26 – Feb 28', 'Dec 1 – 25', 'Dec 27 – Jan 1', 'not with your calendars'],
     RU: ['until Dec 17, Jan 9 – Feb 28', 'not with your calendars', 'not with your calendars', 'Dec 18 – Jan 8'] } as const;
   for (const calendar of ['CA', 'KR', 'RU'] as const) {

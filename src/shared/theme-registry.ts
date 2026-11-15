@@ -139,7 +139,7 @@ export const HOLIDAY_SCENE_POLICY: Readonly<Record<string, HolidayScenePolicy>> 
   'kr:children': card, 'kr:memorial': quiet, 'kr:constitution': card, 'kr:liberation': card,
   'kr:foundation': card, 'kr:hangeul': card, 'kr:christmas': major('christmas', 90, 24),
   'kr:seollal': major('seollal', 90, 7), 'kr:daeboreum': card,
-  'kr:buddha': major('lotus-lanterns', 65, 7), 'kr:dano': card, 'kr:chilseok': card,
+  'kr:buddha': major('lotus-lanterns', 65, 6), 'kr:dano': card, 'kr:chilseok': card,
   'kr:chuseok': major('chuseok', 85, 7),
   // A selected Russian calendar supplies the shared New Year tree; still only one scene.
   'ru:new-year': major('new-year-tree', 81, 14), 'ru:christmas': major('orthodox-christmas', 95, 6),

@@ -15,9 +15,9 @@ What changed:
   Combined follows it).
 - The Russian New Year tree starts 14 days before January 1 (December 18 with Russia alone; with
   Canada or Korea on, Christmas still holds December to the 26th), still to January 8.
-- Buddha's Birthday lanterns start 7 days ahead instead of 3. Its window is now 8 days, so its 3D
-  scene takes the calmer everyday intensity (the one-week rule).
-- Halloween and the other windows are unchanged. With all three calendars, 248 of the next 365
+- Buddha's Birthday lanterns start 6 days ahead instead of 3: a week of lanterns, still within the
+  seven days that keep its 3D scene's bolder special look (short occasions bolder, long ones low-key).
+- Halloween and the other windows are unchanged. With all three calendars, 249 of the next 365
   days show the season; the only long holiday stretch is Christmas into New Year (39 days).
 - The scene list shows a season that comes back after the holidays as two stretches ("Winter ·
   until Nov 30, Jan 9 – Feb 28") and two birthdays as "Jul 15, Aug 20"; "+ N more" only beyond two.
