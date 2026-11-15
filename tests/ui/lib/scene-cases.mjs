@@ -15,7 +15,7 @@ import { mockScreenWakeLock } from './windows-fixture.mjs';
 export const SCENE_CASES = [
   ['birthday', '2026-01-10', 0, [], 'classic'], ['birthday-russian', '2026-01-10', 0, [], 'russian'], ['birthday-korean', '2026-06-12', 0, [], 'korean'],
   ['spring', '2026-04-25', 0], ['summer', '2026-07-20', 0], ['autumn', '2026-11-04', 0], ['winter', '2026-02-01', 0],
-  ['christmas', '2026-12-20', 0], ['new-year', '2026-12-29', 0, ['CA', 'KR']], ['new-year-tree', '2026-12-29', 0], ['orthodox-christmas', '2027-01-07', 0],
+  ['christmas', '2026-12-20', 0], ['new-year', '2026-12-31', 0, ['CA', 'KR']], ['new-year-tree', '2026-12-29', 0], ['orthodox-christmas', '2027-01-07', 0],
   ['halloween', '2026-10-25', 0], ['thanksgiving', '2026-10-12', 0], ['canada-day', '2026-07-01', 0], ['easter', '2026-04-05', 0, ['CA']],
   ['seollal', '2027-02-07', 0], ['chuseok', '2027-09-15', 0], ['lotus-lanterns', '2027-05-13', 0], ['maslenitsa', '2026-02-16', 0, ['RU']], ['pascha', '2026-04-12', 0, ['RU']], ['mimosa', '2026-03-08', 0],
   ['rain', '2026-12-20', 63], ['snow', '2026-12-20', 73], ['storm', '2026-12-20', 95], ['fog', '2026-12-20', 45], ['wind', '2026-12-20', 0],

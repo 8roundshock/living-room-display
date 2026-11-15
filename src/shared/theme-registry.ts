@@ -129,20 +129,24 @@ const major = (scene: ThemeSceneId, priority: number, leadDays = 0, endOffset?: 
  * Sources/review dates and the distinction between date facts and design choices:
  * docs/holiday-calendar.md. New/unlisted observances deliberately remain card-only. */
 export const HOLIDAY_SCENE_POLICY: Readonly<Record<string, HolidayScenePolicy>> = {
-  'ca:new-year': major('new-year', 80, 5), 'ca:valentines': card, 'ca:flag-day': card,
+  'ca:new-year': major('new-year', 82, 1), 'ca:valentines': card, 'ca:flag-day': card,
   'ca:good-friday': quiet, 'ca:easter': major('easter', 75, 7), 'ca:easter-monday': major('easter', 75),
   'ca:victoria': card, 'ca:indigenous': card, 'ca:canada-day': major('canada-day', 65, 2),
   'ca:labour': card, 'ca:reconciliation': quiet, 'ca:thanksgiving': major('thanksgiving', 70, 7),
   'ca:halloween': major('halloween', 80, 16), 'ca:remembrance': quiet,
   'ca:christmas': major('christmas', 90, 24), 'ca:boxing-day': major('christmas', 90),
-  'kr:new-year': major('new-year', 80, 5), 'kr:independence-movement': card, 'kr:labour': card,
+  'kr:new-year': major('new-year', 82, 1), 'kr:independence-movement': card, 'kr:labour': card,
   'kr:children': card, 'kr:memorial': quiet, 'kr:constitution': card, 'kr:liberation': card,
   'kr:foundation': card, 'kr:hangeul': card, 'kr:christmas': major('christmas', 90, 24),
   'kr:seollal': major('seollal', 90, 7), 'kr:daeboreum': card,
   'kr:buddha': major('lotus-lanterns', 65, 6), 'kr:dano': card, 'kr:chilseok': card,
   'kr:chuseok': major('chuseok', 85, 7),
-  // A selected Russian calendar supplies the shared New Year tree; still only one scene.
-  'ru:new-year': major('new-year-tree', 81, 14), 'ru:christmas': major('orthodox-christmas', 95, 6),
+  // New Year (#705, owner 2026-11-15: "i want regular new year too, just really think about the dates"): the regular
+  // New Year (Canada, Korea) holds New Year's Eve and Day with priority 82; the Russian tree is the pre-New Year week
+  // (from 14 days before, after Christmas when a Christmas calendar is on) and its scene ends on 1 January (endOffset 0),
+  // though the factual holidays run to 8 January for cards; Orthodox Christmas holds Sochelnik and the day (lead 1).
+  // With only Russia selected the tree is the New Year scene to 1 January. Still only one scene a day.
+  'ru:new-year': major('new-year-tree', 81, 14, 0), 'ru:christmas': major('orthodox-christmas', 95, 1),
   'ru:old-new-year': card, 'ru:easter': major('pascha', 75, 7), 'ru:maslenitsa': major('maslenitsa', 70),
   'ru:defender': card, 'ru:women': major('mimosa', 65, 2), 'ru:spring-labour': card,
   'ru:victory': quiet, 'ru:russia': card, 'ru:unity': card,

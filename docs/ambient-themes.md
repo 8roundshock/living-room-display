@@ -391,12 +391,12 @@ eligibility window (lead days, the holiday's own span, adjoining observances of 
 scene). It keeps no list of scenes.
 
 - **special**: birthdays, and celebrations that can be on screen for at most seven
-  consecutive days (Canada Day 3, Women's Day 3, New Year 6, Buddha's Birthday 7 since #702, Orthodox
-  Christmas 7, Maslenitsa 7). Opacity ×1.15, which with the 0.95 share is clamped to the
+  consecutive days (Canada Day 3, Women's Day 3, New Year 2 since #705 (6 before), Buddha's Birthday 7
+  since #702, Orthodox Christmas 2 since #705 (7 before), Maslenitsa 7). Opacity ×1.15, which with the 0.95 share is clamped to the
   saved brightness itself; size ×1.1.
 - **everyday**: seasons, weather, and celebrations with a longer window (Thanksgiving 8,
-  Pascha 8, Easter 9, Seollal 9, Chuseok 9, New Year · Russia 22 since
-  #702, Halloween 17, Christmas 26 since #702, 42 before). Opacity ×0.9 (0.855 of the saved brightness), amount ×0.8.
+  Pascha 8, Easter 9, Seollal 9, Chuseok 9, New Year · Russia 15 since #705
+  (22 after #702), Halloween 17, Christmas 26 since #702, 42 before). Opacity ×0.9 (0.855 of the saved brightness), amount ×0.8.
 
 Weather over a scene (Combined) keeps that scene's tier. The one-week boundary is one
 constant, `SPECIAL_MAX_WINDOW_DAYS`. Stepping a long-window holiday up to special on its
@@ -1146,16 +1146,16 @@ days and merges runs less than 21 days apart (the days between are another scene
 then shows the current or next merged occurrence:
 
 - `until Nov 30` for today's scene (`today` when it is only today); `Jan 7` for one day,
-  `Oct 15 – 31` within a month, `Dec 27 – Jan 8` across months, in the app's civil-date style;
+  `Oct 15 – 31` within a month, `Dec 31 – Jan 1` across months, in the app's civil-date style;
   a year only for a start more than a year away.
 - A second occurrence that starts within a year of the shown one follows after a comma (#702):
-  a season that comes back after a long holiday stretch (`Winter · until Nov 30, Jan 9 – Feb 28`)
+  a season that comes back after a long holiday stretch (`Winter · until Nov 30, Jan 2 – Feb 28`)
   or two birthdays with the same treatment (`Jul 15, Aug 20`); `+ 1 more` only beyond two. The
   current-scene line under Theme shows only the current stretch (`Winter · until Nov 30`).
 - On a day inside a holiday that interrupts a season, the season shows when it comes back
   (`Nov 1 – 14` on Oct 20).
 - Never in the window: `not with your calendars` (a holiday not selected, or always outranked:
-  plain New Year while Russia is selected), `no birthday set` (no birthday uses that
+  a Russian scene without the Russia calendar), `no birthday set` (no birthday uses that
   treatment), `not in the next year` (anything else, such as a birthday that only falls on a
   quiet date or on February 29 more than 400 days away).
 - Weather scenes: `when it rains`, `when it snows`, `in a storm`, `in fog`, `when windy`.
@@ -1165,9 +1165,10 @@ and Combined, and "Dates apply in Seasonal & holidays and Combined." otherwise. 
 the draft (calendars, birthdays, location) and move on at midnight; a schedule is computed
 once per civil date and those settings (about 520 days, a few hundred milliseconds at most),
 not per render. On 2026-11-15 with all three calendars, in the north, after #702: Winter until
-Nov 30, Jan 9 – Feb 28 (around Seollal); Autumn Sep 1 – Nov 14; Christmas Dec 1 – 26; New Year ·
-Russia Dec 27 – Jan 8; Orthodox Christmas Jan 7 (the New Year tree outranks its lead days);
-plain New Year not with these calendars. The windows and the early Winter are in
+Nov 30, Jan 2 – Feb 28 (around Orthodox Christmas and Seollal); Autumn Sep 1 – Nov 14; Christmas
+Dec 1 – 26; New Year · Russia Dec 27 – 30; New Year Dec 31 – Jan 1; Orthodox Christmas Jan 6 – 7
+(#705). With Russia alone the tree is Dec 18 – Jan 1, and Winter reads "until Feb 28": the
+tree's 15 days are under the 21-day merge. The windows and the early Winter are in
 [Holiday calendar](holiday-calendar.md#timing-and-priorities).
 
 ## Extension authority
