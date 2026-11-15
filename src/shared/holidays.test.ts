@@ -98,18 +98,18 @@ test('Canadian major windows start and expire without minor dates evicting the s
   assert.equal(holidayWindow('2026-07-02', ['CA']), null);
 });
 
-test('Christmas starts November15 by product policy and BoxingDay belongs only to the Canadian selection', () => {
+test('Christmas starts December 1 by product policy (#702) and BoxingDay belongs only to the Canadian selection', () => {
   for (const region of ['CA', 'KR'] as const) {
-    assert.equal(holidayWindow('2026-11-14', [region]), null);
-    assert.equal(holidayWindow('2026-11-15', [region])?.phase, 'approaching');
-    assert.equal(holidayWindow('2026-11-15', [region])?.observance.id, `${region.toLowerCase()}:christmas`);
+    assert.equal(holidayWindow('2026-11-30', [region]), null, 'the second half of November is Winter, not Christmas (#702)');
+    assert.equal(holidayWindow('2026-12-01', [region])?.phase, 'approaching');
+    assert.equal(holidayWindow('2026-12-01', [region])?.observance.id, `${region.toLowerCase()}:christmas`);
     assert.equal(holidayWindow('2026-12-24', [region])?.phase, 'approaching');
     assert.equal(holidayWindow('2026-12-25', [region])?.phase, 'today');
     assert.equal(observancesForYear(2026, [region]).find(value => value.id.endsWith(':christmas'))?.startDate, '2026-12-25', 'anticipation never changes factual calendar cards');
   }
   assert.equal(holidayWindow('2026-12-26', ['CA'])?.observance.id, 'ca:boxing-day');
   assert.equal(holidayWindow('2026-12-26', ['KR']), null);
-  assert.equal(holidayWindow('2026-12-26', ['RU']), null);
+  assert.equal(holidayWindow('2026-12-26', ['RU'])?.observance.id, 'ru:new-year', 'with Russia alone the New Year tree is up from 18 December (#702)');
   assert.equal(holidayWindow('2026-12-26', ['CA', 'KR'])?.observance.id, 'ca:boxing-day');
 });
 
@@ -180,7 +180,7 @@ test('Korean flagship scene windows preserve regular lunar dates and close after
   for (const [id, day, start, end] of [
     ['kr:seollal', '2027-02-07', '2027-01-31', '2027-02-08'],
     ['kr:chuseok', '2027-09-15', '2027-09-08', '2027-09-16'],
-    ['kr:buddha', '2027-05-13', '2027-05-10', '2027-05-13'],
+    ['kr:buddha', '2027-05-13', '2027-05-06', '2027-05-13'], // lead 7 (#702): lanterns line the streets for weeks
   ] as const) {
     assert.notEqual(holidayWindow(shiftHolidayDate(start, -1), ['KR'])?.observance.id, id);
     assert.equal(holidayWindow(start, ['KR'])?.observance.id, id);
@@ -215,4 +215,26 @@ test('year-round meteorological seasons respect the selected weather hemisphere'
   const dates = ['2026-01-01', '2026-03-01', '2026-06-01', '2026-09-01', '2026-12-01'];
   assert.deepEqual(dates.map(date => seasonForDate(date)), ['winter', 'spring', 'summer', 'autumn', 'winter']);
   assert.deepEqual(dates.map(date => seasonForDate(date, 'south')), ['summer', 'autumn', 'winter', 'spring', 'summer']);
+});
+
+test('#702 the Russian New Year tree from 18 December, to 8 January; Christmas still holds December with Canada or Korea', () => {
+  assert.notEqual(holidayWindow('2026-12-17', ['RU'])?.observance.id, 'ru:new-year');
+  assert.equal(holidayWindow('2026-12-18', ['RU'])?.observance.id, 'ru:new-year'); assert.equal(holidayWindow('2026-12-18', ['RU'])?.phase, 'approaching');
+  assert.equal(holidayWindow('2027-01-08', ['RU'])?.observance.id, 'ru:new-year'); assert.notEqual(holidayWindow('2027-01-09', ['RU'])?.observance.id, 'ru:new-year');
+  for (const calendars of [['CA', 'RU'], ['KR', 'RU'], ['CA', 'KR', 'RU']] as const) {
+    assert.equal(holidayWindow('2026-12-18', [...calendars])?.policy.role === 'major' && holidayWindow('2026-12-18', [...calendars])?.observance.id.endsWith(':christmas'), true, calendars.join('+'));
+    assert.equal(holidayWindow('2026-12-27', [...calendars])?.observance.id, 'ru:new-year', calendars.join('+'));
+  }
+});
+
+test('#702 Winter begins on 15 November in the north and 15 May in the south; Spring and Summer are unchanged', () => {
+  for (const year of [2026, 2027, 2028]) {
+    assert.equal(seasonForDate(`${year}-08-31`), 'summer'); assert.equal(seasonForDate(`${year}-09-01`), 'autumn');
+    assert.equal(seasonForDate(`${year}-11-14`), 'autumn'); assert.equal(seasonForDate(`${year}-11-15`), 'winter'); assert.equal(seasonForDate(`${year}-11-30`), 'winter');
+    assert.equal(seasonForDate(`${year}-02-28`), 'winter'); assert.equal(seasonForDate(`${year}-03-01`), 'spring'); assert.equal(seasonForDate(`${year}-05-31`), 'spring'); assert.equal(seasonForDate(`${year}-06-01`), 'summer');
+    assert.equal(seasonForDate(`${year}-03-01`, 'south'), 'autumn'); assert.equal(seasonForDate(`${year}-05-14`, 'south'), 'autumn');
+    assert.equal(seasonForDate(`${year}-05-15`, 'south'), 'winter'); assert.equal(seasonForDate(`${year}-08-31`, 'south'), 'winter');
+    assert.equal(seasonForDate(`${year}-09-01`, 'south'), 'spring'); assert.equal(seasonForDate(`${year}-11-15`, 'south'), 'spring', 'no early season in the southern spring');
+    assert.equal(seasonForDate(`${year}-12-01`, 'south'), 'summer'); assert.equal(seasonForDate(`${year}-05-15`), 'spring', 'no early season in the northern spring');
+  }
 });

@@ -33,12 +33,13 @@ export const SCENE_SCHEDULE = { back: 120, ahead: 400, mergeGap: 21 } as const;
 /** When a scene is on screen, from `today`:
  * - `current`: it is today's scene, in the occurrence from `start` to `end`;
  * - `next`: its next days, `start` to `end` (today may fall inside a holiday that interrupts the occurrence);
- * - `more`: how many other occurrences start within a year of this one's start;
+ * - `then`: its following occurrence, when one starts within a year of this one's start (#702: a season that comes back
+ *   after a long holiday stretch, two birthdays with the same treatment); `more`: how many more start within that year;
  * - `weather`: a weather scene, which follows the weather, not the date;
  * - `never`: not in the window: `calendars` (a holiday outranked or not selected), `birthday` (no birthday has this
  *   treatment), `window` (anything else). */
 export type SceneWhen =
-  | { kind: 'current' | 'next'; start: string; end: string; more: number }
+  | { kind: 'current' | 'next'; start: string; end: string; then?: { start: string; end: string }; more: number }
   | { kind: 'weather' }
   | { kind: 'never'; reason: 'calendars' | 'birthday' | 'window' };
 
@@ -69,11 +70,12 @@ export function sceneSchedule(input: ThemeDayInput, today: string): Record<Theme
       continue;
     }
     const anniversary = `${Number(days[shown.start]!.slice(0, 4)) + 1}${days[shown.start]!.slice(4)}`;
-    const more = list.filter(run => run.start > shown.end && days[run.start]! < anniversary).length;
-    if (shown.start <= now && scenes[now] === id) result[id] = { kind: 'current', start: days[shown.start]!, end: days[shown.end]!, more };
+    const later = list.filter(run => run.start > shown.end && days[run.start]! < anniversary), next = later[0];
+    const following = { ...(next ? { then: { start: days[next.start]!, end: days[next.end]! } } : {}), more: Math.max(0, later.length - 1) };
+    if (shown.start <= now && scenes[now] === id) result[id] = { kind: 'current', start: days[shown.start]!, end: days[shown.end]!, ...following };
     else {
       const resume = shown.parts.find(([start]) => start > now)![0];
-      result[id] = { kind: 'next', start: days[Math.max(shown.start, resume)]!, end: days[shown.end]!, more };
+      result[id] = { kind: 'next', start: days[Math.max(shown.start, resume)]!, end: days[shown.end]!, ...following };
     }
   }
   return result;
@@ -94,17 +96,22 @@ export const NEVER_WHEN = { calendars: 'not with your calendars', birthday: 'no 
 
 /**
  * A short phrase for a scene's dates (#697), in the app's civil-date style (`en`, the day at noon UTC):
- * `until Nov 14` (today's scene; `today` when it is today only), `Jan 7`, `Oct 15 – 31`, `Nov 15 – Dec 26`, with
- * `+ 1 more` for another occurrence within the year and a year only for a start more than a year away.
+ * `until Nov 14` (today's scene; `today` when it is today only), `Jan 7`, `Oct 15 – 31`, `Nov 15 – Dec 26`; a following
+ * occurrence within the year after a comma (`until Nov 30, Jan 9 – Feb 28`, `Jul 15, Aug 20`, #702), `+ 1 more` beyond
+ * two, and a year only for a start more than a year away.
  */
 export function sceneWhenLabel(id: ThemeSceneId, when: SceneWhen, today: string): string {
   if (when.kind === 'weather') return WEATHER_WHEN[id] ?? 'with the weather';
   if (when.kind === 'never') return NEVER_WHEN[when.reason];
-  const more = when.more ? ` + ${when.more} more` : '';
-  if (when.kind === 'current') return `${when.start === when.end ? 'today' : `until ${civilFormat(when.end, { month: 'short', day: 'numeric' })}`}${more}`;
-  const year = daysBetween(today, when.start) > 365 ? { year: 'numeric' as const } : {};
-  const start = civilFormat(when.start, { month: 'short', day: 'numeric', ...year });
-  if (when.start === when.end) return `${start}${more}`;
-  const sameMonth = when.start.slice(0, 7) === when.end.slice(0, 7) && !('year' in year);
-  return `${start} – ${civilFormat(when.end, sameMonth ? { day: 'numeric' } : { month: 'short', day: 'numeric', ...year })}${more}`;
+  const tail = `${when.then ? `, ${dateRange(when.then, today)}` : ''}${when.more ? ` + ${when.more} more` : ''}`;
+  if (when.kind === 'current') return `${when.start === when.end ? 'today' : `until ${civilFormat(when.end, { month: 'short', day: 'numeric' })}`}${tail}`;
+  return `${dateRange(when, today)}${tail}`;
+}
+/** `Jan 7`, `Oct 15 – 31`, `Nov 15 – Dec 26`, with the year only for a start more than a year after `today`. */
+function dateRange({ start, end }: { start: string; end: string }, today: string): string {
+  const year = daysBetween(today, start) > 365 ? { year: 'numeric' as const } : {};
+  const first = civilFormat(start, { month: 'short', day: 'numeric', ...year });
+  if (start === end) return first;
+  const sameMonth = start.slice(0, 7) === end.slice(0, 7) && !('year' in year);
+  return `${first} – ${civilFormat(end, sameMonth ? { day: 'numeric' } : { month: 'short', day: 'numeric', ...year })}`;
 }

@@ -35,7 +35,7 @@ export function ThemeControls({ settings, weather, disconnected, onChange, savin
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 60_000); return () => window.clearInterval(timer); }, []);
   const reduced = usePrefersReducedMotion(), scene = resolveTheme(settings, weather, now, disconnected);
   const today = useCivilDate(), schedule = useSceneSchedule(settings, today);
-  // #697: the season, holiday or birthday scene under any weather says how long it stays.
+  // #697: the season, holiday or birthday scene under any weather says how long it stays (this stretch only, #702).
   // A quiet date names its observance, not the season it shows, so it is not dated.
   const base = scene && theme.mode !== 'weather' && !scene.quiet ? scene.habitat ?? (scene.source === 'weather' ? null : scene.motif) : null, until = base ? schedule[base] : null;
   const showCalendars = theme.mode === 'seasonal' || theme.mode === 'combined' || settings.widgetData.dynamic.holidays;
@@ -44,7 +44,7 @@ export function ThemeControls({ settings, weather, disconnected, onChange, savin
       {THEME_MODES.map(mode => <option key={mode} value={mode}>{THEME_LABELS[mode]}</option>)}
     </select></label>
     {showCalendars && <HolidayCalendars value={theme.calendars} disabled={saving} onChange={calendars => onChange({ ...theme, calendars })} />}
-    {theme.mode !== 'off' && <p className="theme-current">{scene?.label ?? 'No weather effect right now'}{base && until?.kind === 'current' ? <span className="theme-until"> · {sceneWhenLabel(base, until, today)}</span> : null}
+    {theme.mode !== 'off' && <p className="theme-current">{scene?.label ?? 'No weather effect right now'}{base && until?.kind === 'current' ? <span className="theme-until"> · {sceneWhenLabel(base, { kind: 'current', start: until.start, end: until.end, more: 0 }, today)}</span> : null}
       <small>{reduced ? 'Atmosphere hidden by your system’s reduced-motion setting.' : settings.appearance.animation === 'off' ? 'Turn on Animation to show the atmosphere.' : theme.mode === 'combined' ? 'The season or holiday scene, with current or approaching weather drawn over it.' : theme.mode === 'weather' ? 'Current weather and the next few hours.' : 'Changes with the season and selected holidays.'}</small>
     </p>}
     {/* #670: shown whenever a theme is on, and under Off while it holds a saved value, so it can be put back. */}

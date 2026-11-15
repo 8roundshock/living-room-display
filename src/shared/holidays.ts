@@ -198,9 +198,15 @@ export function holidayWindow(date: string, regions: readonly HolidayRegion[] = 
   return candidates[0] ?? null;
 }
 
-/** Meteorological seasons: use the weather location hemisphere; north is the documented missing-location fallback. */
+/** The day winter begins in the month before the meteorological winter (#702, owner direction 2026-11-15: "it can be
+ * just winter for now"): 15 November in the north, 15 May in the south. Autumn ends the day before. */
+export const EARLY_WINTER = { north: { month: 11, day: 15 }, south: { month: 5, day: 15 } } as const;
+
+/** Meteorological seasons, except that winter begins on EARLY_WINTER: use the weather location hemisphere; north is
+ * the documented missing-location fallback. */
 export function seasonForDate(date: string, hemisphere: 'north' | 'south' = 'north'): Season {
-  const month = validDate(date) ? Number(date.slice(5, 7)) : 1;
-  const index = Math.floor(month % 12 / 3);
+  const valid = validDate(date), month = valid ? Number(date.slice(5, 7)) : 1, day = valid ? Number(date.slice(8, 10)) : 1;
+  const early = EARLY_WINTER[hemisphere], winterly = month === early.month && day >= early.day;
+  const index = Math.floor((winterly ? month + 1 : month) % 12 / 3);
   return (hemisphere === 'south' ? ['summer', 'autumn', 'winter', 'spring'] : ['winter', 'spring', 'summer', 'autumn'])[index] as Season;
 }
