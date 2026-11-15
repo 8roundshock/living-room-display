@@ -1,5 +1,36 @@
 # Project status
 
+## Holiday and season timing: scenes start when people actually celebrate — 2026-11-15 (#702)
+
+Source candidate, not installed. Owner direction: "it is alreayd in christmas time, even though
+its too early, i think it can be just winter for now, make the timing of the holidays make sense
+to what people would actually want" and "some days should also have no holiday, it's okay to
+have that sometimes as well, whenever it makes sense."
+
+What changed:
+- Christmas (Canada and Korea) starts on December 1 instead of November 15, still to December 26.
+- Winter starts on November 15 in the north (Autumn September 1 to November 14) and on May 15 in
+  the south (Autumn March 1 to May 14). Spring and Summer are unchanged. Only the theme's scene
+  choice uses the season, so nothing else moves (the season name after a weather label in
+  Combined follows it).
+- The Russian New Year tree starts 14 days before January 1 (December 18 with Russia alone; with
+  Canada or Korea on, Christmas still holds December to the 26th), still to January 8.
+- Buddha's Birthday lanterns start 7 days ahead instead of 3. Its window is now 8 days, so its 3D
+  scene takes the calmer everyday intensity (the one-week rule).
+- Halloween and the other windows are unchanged. With all three calendars, 248 of the next 365
+  days show the season; the only long holiday stretch is Christmas into New Year (39 days).
+- The scene list shows a season that comes back after the holidays as two stretches ("Winter ·
+  until Nov 30, Jan 9 – Feb 28") and two birthdays as "Jul 15, Aug 20"; "+ N more" only beyond two.
+
+Details: [Holiday calendar](docs/holiday-calendar.md#timing-and-priorities) (windows, sources,
+reviewed 2026-11-15), [Ambient themes](docs/ambient-themes.md), [user guide](docs/user-guide.md#looks).
+
+Verified with source builds and synthetic data only: both typechecks and the build, the unit
+tests (2026-11-15 is Winter with all calendars and each alone; Christmas Dec 1 – 26; the tree
+from Dec 18 with Russia alone and Dec 27 with all; both hemispheres' boundaries; the
+two-occurrence format; season days and the longest holiday chain), and the `themes`, `scene3d`
+and `workspace` browser suites. Not verified: installation and the TV.
+
 ## Scene list: the dates each scene will be on screen — 2026-11-14 (#697)
 
 Source candidate, not installed. Owner request: "for all scenes, please also have the dates

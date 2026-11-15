@@ -202,13 +202,16 @@ The **Style** tab sets how everything looks:
   and the Fixed level, and keeps Follow daylight on.
 - **Theme** draws a living scene behind the widgets: the weather, the season and the
   holidays of the calendars you tick, and birthdays. Under Theme, the scene on screen
-  now says until when it stays (for example "Autumn · until Nov 14"). **Try a scene**,
+  now says until when it stays (for example "Winter · until Nov 30"). **Try a scene**,
   below the canvas, shows any scene without changing the display, and lists each one
   with when it will next be on screen with your calendars, birthdays and location:
-  "Christmas · Nov 15 – Dec 26", "Orthodox Christmas · Jan 7". A holiday that another
+  "Christmas · Dec 1 – 26", "Orthodox Christmas · Jan 7", and both stretches of a season
+  that comes back after the holidays: "Winter · until Nov 30, Jan 9 – Feb 28". A holiday that another
   one always covers says "not with your calendars"; a birthday scene says "no birthday
   set" until a birthday uses it; weather scenes say when they appear ("when it
-  rains"). The dates apply in **Seasonal & holidays** and **Combined**.
+  rains"). The dates apply in **Seasonal & holidays** and **Combined**. Holidays start
+  when people usually celebrate (Christmas from December 1), Winter starts on November 15
+  (May 15 south of the equator), and ordinary days between holidays show the season.
 - **Saved styles**: keep a combination you like and switch back to it later.
 
 ## Why things move
