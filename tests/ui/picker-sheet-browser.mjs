@@ -15,6 +15,7 @@ import { pickerGroups } from '../../src/client/picker-catalog.ts';
 import { WIDGET_CATALOG } from '../../src/shared/widgets.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 export async function runPickerSheetQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -23,7 +24,7 @@ export async function runPickerSheetQa({ playwright, edge, capture = false } = {
   const app = await createApplication({ dataDirectory: directory, clientDirectory: join(root, 'dist/client'), fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [];
   let context, page;
   const button = name => page.getByRole('button', { name, exact: true });

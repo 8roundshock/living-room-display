@@ -29,6 +29,7 @@ const ACCENT_SELECTOR = '.ambient-label, .weather-context, .metric-label, .count
 const TEXT_ONLY = new Set(['note']);
 /** Two bounded Balanced boards together cover every active widget. */
 import { FULL_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
+import { launchEdge } from './lib/edge.mjs';
 const PALETTE_RGB = new Set(Object.values(NATIVE_PALETTE).map((tone) => rgb(tone.hex)));
 
 /** Typed color properties may serialize as rgb() even when authored in hex; compare their color. */
@@ -108,7 +109,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
   const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), now: () => now, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [];
   const keep = async (name, bytes) => { images.push({ name, bytes }); if (capture) await writeFile(join(capture, `${name}.png`), bytes); };
   try {

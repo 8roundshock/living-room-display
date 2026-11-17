@@ -18,6 +18,7 @@ import { checkHomeNoteSync } from './lib/home-note-sync.mjs';
 import { checkHomeDisplayCard } from './lib/home-display-card.mjs';
 import { checkHomeSheetKeyboard } from './lib/home-sheet-keyboard.mjs';
 import { checkHomeListEditing } from './lib/home-list-editing.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 /** 6:42 PM on Tuesday, October 20, 2026 in Toronto. */
 const NOW = Date.parse('2026-10-20T22:42:00.000Z');
@@ -60,7 +61,7 @@ export async function runHomeQa({ playwright, edge, capture = false } = {}) {
   };
   let app = await start();
   const port = app.server.address().port, base = `http://127.0.0.1:${port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [], contexts = [];
   const watch = page => {
     page.on('pageerror', error => errors.push(error.message));

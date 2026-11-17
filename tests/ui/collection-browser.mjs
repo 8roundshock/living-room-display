@@ -16,13 +16,14 @@ import { prepareCollection } from './lib/collection-fixture.mjs';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
 import { waitForWidgetFit } from './lib/fit-readiness.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 export async function runCollectionQa({ playwright, edge, capture = false, captureOnly = false } = {}) {
   const require = createRequire(import.meta.url), { chromium } = require(resolve(playwright));
   const now = Date.parse('2026-10-19T13:00:00Z'), directory = await mkdtemp(join(tmpdir(), 'lrd-collection-'));
   const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), fetcher: async () => Response.json(forecastFixture()), now: () => now });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
-  const base = `http://127.0.0.1:${app.server.address().port}`, browser = await chromium.launch({ executablePath: edge, headless: true });
+  const base = `http://127.0.0.1:${app.server.address().port}`, browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [], fitFailures = [];
   try {
     const source = await (await fetch(`${base}/api/state`)).json(); prepareCollection(source, { now });

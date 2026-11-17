@@ -13,6 +13,7 @@ import { createApplication } from '../../src/server/app.ts';
 import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { resizeWidgetSpan } from '../../src/shared/widgets.ts';
+import { launchEdge } from './lib/edge.mjs';
 
 // The fixtures below start from the catalog board (the default before #435), which has free cells;
 // the #435 default board, which fills the grid, has its own steps.
@@ -61,7 +62,7 @@ export async function runFreeSizeQa({ playwright, edge } = {}) {
   const app = await createApplication({ dataDirectory: directory, clientDirectory: join(root, 'dist/client'), now: () => now, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const errors = [], checks = [];
   let context, page;
   async function open(settings, options = {}, items = reminders()) {

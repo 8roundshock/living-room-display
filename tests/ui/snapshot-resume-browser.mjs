@@ -11,6 +11,7 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 export async function runSnapshotResumeQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -29,7 +30,7 @@ export async function runSnapshotResumeQa({ playwright, edge, capture = false } 
     assert.ok(response.ok); await response.arrayBuffer();
   };
   const paused = async () => (await (await fetch(base + '/api/preview')).json()).pipeline.display.paused;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [];
   let context, page, sent = [];
   const details = () => page.locator('details.home-card-waiting');

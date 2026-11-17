@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
 import { defaultSettings } from '../../src/shared/defaults.ts';
+import { launchEdge } from '../../tests/ui/lib/edge.mjs';
 
 const { values } = parseArgs({ options: {
   'base-url': { type: 'string' }, playwright: { type: 'string' }, edge: { type: 'string' },
@@ -11,7 +12,7 @@ const { values } = parseArgs({ options: {
 const base = new URL(values['base-url'] ?? 'http://127.0.0.1:4318');
 assert.ok(['127.0.0.1', 'localhost'].includes(base.hostname), 'Use a loopback test server.');
 const { chromium } = createRequire(import.meta.url)(values.playwright ?? 'playwright');
-const browser = await chromium.launch({ executablePath: values.edge, headless: true });
+const browser = await launchEdge(chromium, { edge: values.edge });
 try {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, permissions: [] });
   context.setDefaultTimeout(10_000);

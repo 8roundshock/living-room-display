@@ -13,6 +13,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../dist/server/app.js';
 import { defaultSettings } from '../../dist/shared/defaults.js';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, widgetSizes } from '../../dist/shared/widgets.js';
+import { launchEdge } from './lib/edge.mjs';
 
 export async function runWorkspaceQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -26,7 +27,7 @@ export async function runWorkspaceQa({ playwright, edge, capture = false } = {})
   } });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [];
   let context, page;
   const button = name => page.getByRole('button', { name, exact: true });

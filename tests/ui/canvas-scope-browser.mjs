@@ -22,6 +22,7 @@ import { ACTIVE_WIDGET_IDS, WIDGET_IDS, widgetSizes } from '../../src/shared/wid
 import { WIDGET_CHECKS } from './widget-checks/index.mjs';
 import { FULL_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
 import { keepPagesLocal } from './lib/local-only.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 /**
  * Whole rules (selector lists, whitespace-normalised, `*::before` written `::before` as the build does)
@@ -111,7 +112,7 @@ export async function runCanvasScopeQa({ playwright, edge } = {}) {
   const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), now: () => now, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], errors = [], outside = new Set();
   try {
     const fresh = await (await fetch(`${base}/api/state`)).json();

@@ -17,6 +17,7 @@ import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 const NOW = Date.parse('2026-10-18T13:00:00Z'); // Sunday 9 AM in Toronto
 const MINUTE = 60_000, HOUR = 60 * MINUTE;
@@ -54,7 +55,7 @@ const synthetic = (id, text, dueAt) => ({ id, text, completed: false, dueAt, cre
 
 export async function runDynamicQa({ playwright, edge, capture } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], errors = [], images = [], outside = new Set();
   if (capture) await mkdir(capture, { recursive: true });
   const keep = async (name, bytes) => { images.push({ name, bytes }); if (capture) await writeFile(join(capture, `${name}.png`), bytes); };

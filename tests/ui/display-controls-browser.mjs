@@ -11,6 +11,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { NATIVE_READY_TITLE, NATIVE_STARTING_TITLE } from '../../src/client/nativeReadiness.ts';
+import { launchEdge } from './lib/edge.mjs';
 
 // This suite checks presentation, not real power requests. Screen's CI-only
 // real-API subcase remains in its own suite; local readiness QA uses this stub.
@@ -33,7 +34,7 @@ export async function runDisplayControlsQa({ playwright, edge, capture = false, 
   const app = await createApplication({ dataDirectory: directory, clientDirectory: clientDirectory ?? fileURLToPath(new URL('../../dist/client', import.meta.url)), fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [];
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' }); await mockDisplayDeviceApis(context);
