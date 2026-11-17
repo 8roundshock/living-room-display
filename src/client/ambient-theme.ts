@@ -1,5 +1,6 @@
 import type { Settings, WeatherState } from '../shared/contracts.ts';
 import { defaultTheme } from '../shared/themes.ts';
+import { shiftHolidayDate, type HolidayWindow } from '../shared/holidays.ts';
 import { QUIET_PALETTE, QUIET_THEME, THEME_MOTIONS, THEME_SCENES, THEME_CLEARANCE_SECONDS, type ThemeSceneId, type ThemeMotionFrame } from '../shared/theme-registry.ts';
 import { themeDay, themeHemisphere, type ThemeDayInput } from '../shared/theme-schedule.ts';
 import { DYNAMIC_THRESHOLDS } from './dynamic.ts';
@@ -58,6 +59,42 @@ function weatherScene(weather: WeatherState, settings: Settings, now: number, di
   return candidates[0] ?? null;
 }
 
+/**
+ * How people name a holiday scene's days (#707, owner 2026-11-17: "fix the new year labels too"): `today` for the
+ * holiday's own days, `eve` for the day before its central day where people name it, `before` for the other days of
+ * its approach. "Season" only where people say it (Christmas, Halloween); Holy Week before Easter; "soon" otherwise.
+ * Names follow the Try a scene list where they can (New Year · Russia, Women's Day).
+ */
+const HOLIDAY_NAMES: Readonly<Record<string, { today: string; eve?: string; before: string }>> = {
+  'ca:christmas': { today: 'Christmas', eve: 'Christmas Eve', before: 'Christmas season' },
+  'kr:christmas': { today: 'Christmas', eve: 'Christmas Eve', before: 'Christmas season' },
+  'ca:boxing-day': { today: 'Boxing Day', before: 'Boxing Day' },
+  'ca:new-year': { today: 'New Year’s Day', eve: 'New Year’s Eve', before: 'New Year’s Eve' },
+  'kr:new-year': { today: 'New Year’s Day', eve: 'New Year’s Eve', before: 'New Year’s Eve' },
+  // The Russian pre-New Year week (#705) is named like its scene; with Russia alone the tree also holds Eve and Day.
+  'ru:new-year': { today: 'New Year’s Day', eve: 'New Year’s Eve', before: 'New Year · Russia' },
+  'ru:christmas': { today: 'Orthodox Christmas', eve: 'Orthodox Christmas Eve', before: 'Orthodox Christmas Eve' },
+  'ca:halloween': { today: 'Halloween', before: 'Halloween season' },
+  'ca:thanksgiving': { today: 'Thanksgiving', before: 'Thanksgiving soon' },
+  // Easter's week of approach is Palm Sunday to Holy Saturday.
+  'ca:easter': { today: 'Easter', before: 'Holy Week' },
+  'ca:easter-monday': { today: 'Easter Monday', before: 'Easter Monday' },
+  'ru:easter': { today: 'Orthodox Easter', before: 'Orthodox Holy Week' },
+  'ca:canada-day': { today: 'Canada Day', before: 'Canada Day soon' },
+  'kr:seollal': { today: 'Seollal', before: 'Seollal soon' },
+  'kr:chuseok': { today: 'Chuseok', before: 'Chuseok soon' },
+  'kr:buddha': { today: 'Buddha’s Birthday', before: 'Buddha’s Birthday soon' },
+  'ru:women': { today: 'Women’s Day', before: 'Women’s Day soon' },
+  'ru:maslenitsa': { today: 'Maslenitsa', before: 'Maslenitsa' },
+};
+/** The name of a holiday scene's day (#707). A holiday with no entry: its short name, or "<name> soon" before it. */
+export function holidayLabel(window: Pick<HolidayWindow, 'observance' | 'phase'>, civilDate: string): string {
+  const names = HOLIDAY_NAMES[window.observance.id];
+  if (window.phase === 'today') return names?.today ?? window.observance.shortName;
+  if (names?.eve && shiftHolidayDate(window.observance.date, -1) === civilDate) return names.eve;
+  return names?.before ?? `${window.observance.shortName} soon`;
+}
+
 /** The settings that decide a day's season, holiday or birthday scene (#697). */
 export function themeDayInput(settings: Settings): ThemeDayInput {
   return { calendars: (settings.appearance.theme ?? defaultTheme()).calendars, birthdays: settings.birthdays, hemisphere: themeHemisphere(settings.location.latitude) };
@@ -72,7 +109,7 @@ export function resolveTheme(settings: Settings, weather: WeatherState, now: Dat
   const { scene: motif, season, holiday, birthday, quiet } = themeDay(themeDayInput(settings), civilDate, seasonal);
   const palette = quiet ? QUIET_PALETTE : THEME_SCENES[motif].palette;
   const baseline: ThemeScene = { motif, tint: palette[0], companion: palette[1], accent: palette[2],
-    label: birthday ? THEME_SCENES[motif].label : holiday ? `${holiday.observance.shortName}${quiet ? ' · quiet season' : holiday.phase === 'approaching' ? ' season' : ''}` : THEME_SCENES[season].label,
+    label: birthday ? THEME_SCENES[motif].label : holiday ? quiet ? `${holiday.observance.shortName} · quiet season` : holidayLabel(holiday, civilDate) : THEME_SCENES[season].label,
     source: birthday ? 'birthday' : holiday ? 'holiday' : 'season', holiday: birthday ? null : holiday?.observance.name ?? null, forecast: false, quiet };
   const weatherEffect = theme.mode === 'weather' || theme.mode === 'combined' ? weatherScene(weather, settings, now.getTime(), disconnected) : null;
   if (!weatherEffect) return seasonal ? baseline : null;
@@ -83,7 +120,7 @@ export function resolveTheme(settings: Settings, weather: WeatherState, now: Dat
   // birthday scene always stays and every weather kind is drawn over it. A weather scene on its own is Weather mode only.
   const habitat = seasonal ? motif : undefined;
   return { motif: weatherEffect.motif, ...(habitat ? { habitat } : {}), tint: weatherPalette[0], companion: weatherPalette[1], accent: weatherPalette[2], quiet,
-    label: `${WEATHER_LABEL[weatherEffect.motif]}${weatherEffect.forecast ? ' expected soon' : ' now'}${birthday ? ' · Birthday' : holiday ? ` · ${holiday.observance.shortName}` : seasonal ? ` · ${THEME_SCENES[season].label}` : ''}`,
+    label: `${WEATHER_LABEL[weatherEffect.motif]}${weatherEffect.forecast ? ' expected soon' : ' now'}${birthday ? ' · Birthday' : holiday ? ` · ${quiet ? holiday.observance.shortName : holidayLabel(holiday, civilDate)}` : seasonal ? ` · ${THEME_SCENES[season].label}` : ''}`,
     source: 'weather', holiday: birthday ? null : holiday?.observance.name ?? null, forecast: weatherEffect.forecast };
 }
 
