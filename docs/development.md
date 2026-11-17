@@ -90,27 +90,6 @@ new build, only when the server's `index.html` names a different entry bundle, a
 minute per tab, and the page's own unsaved-changes prompt still applies. Meanwhile the 3D layer
 shows the flat scene.
 
-### Dependency advisories (#710)
-
-CI (`checks.yml`) runs `npm audit --omit=dev --audit-level=high`: the installed app ships only the
-runtime dependencies (the installer and the updater run `npm ci --omit=dev` on this
-`package-lock.json`), and they must have no high or critical advisory. A full `npm audit` may
-report build-only advisories; each one is recorded here with its assessment and recheck
-trigger, never hidden, and never "fixed" with `npm audit fix --force` or an override to an
-unvetted fork.
-
-- GHSA-fc5q-39xc-vjpf, a ReDoS in `picomatch` <= 4.0.7 through single-branch repeated extglobs
-  such as `+(*)`, first reported 2026-11-17: `vite` -> `picomatch`, and `vite` -> `tinyglobby`
-  -> `fdir` -> `picomatch` (npm also lists `@vitejs/plugin-react`, `tinyglobby` and `fdir`). Build
-  and dev server only: the installed app never runs Vite, and the build matches only this
-  repository's own patterns. No fixed `picomatch` exists (latest 4.0.7, checked 2026-11-17), and
-  Vite 8.3.8, the newest patch, still requires `^4.0.7`. The Vite patches 8.3.5 to 8.3.8 were
-  read and not taken in #712: none fixes this advisory, their fixes are for the dev server (here
-  loopback-only) and build cases this app does not use, and they update Rolldown, which would
-  change every shipped bundle in a hygiene change. **Recheck** when `picomatch` publishes a
-  version above 4.0.7 or a Vite or `tinyglobby` release depends on one, and at every Vite update:
-  update the lockfile in a reviewed pull request and confirm a full `npm audit` is clean (#710
-  stays open until then).
 For development use `npm run dev:server` and `npm run dev` in separate terminals.
 Vite listens on loopback port 5173 and proxies `/api` to 4318. The development
 server explicitly accepts that origin; production does not expose CORS access.
@@ -156,6 +135,41 @@ through loading/error, widgets, editor navigation/embedded preview and a new
 display tab. It saves no images or app data. This requires Node 24; Playwright
 is a verification tool, not an app runtime dependency. Native cursor visibility
 and restoration remain separate Windows acceptance checks.
+
+### Dependency advisories (#710)
+
+Two audits run in CI (`checks.yml`):
+
+- **The runtime set**, with no exceptions: `npm audit --omit=dev --audit-level=high`. These are the
+  packages in the installed release folder: the installer build and the updater both run
+  `npm ci --omit=dev` there.
+- **Every dependency, dev dependencies included**: `npm audit --json`, checked by
+  `scripts/check-audit.mjs`, which fails on any high or critical advisory that is not in its
+  allowlist (`AUDIT_ALLOWLIST`, each entry naming its ticket). The build uses all of them, and the
+  build does not run only on a developer's machine: the updater (`Build-InstallCandidate` in
+  `windows/LivingRoomDisplay.ps1`) runs `npm ci` and `npm run build` on the display PC for every
+  update before it installs the release folder, and `windows/installer/Build-Installer.ps1` runs
+  the same full install on the machine that builds the installer. Vite and its dependencies
+  therefore run on the display PC during an update.
+
+An allowlisted advisory is recorded here with its assessment and recheck trigger. It is never
+hidden, and never "fixed" with `npm audit fix --force` or an override to an unvetted fork.
+
+- **GHSA-fc5q-39xc-vjpf** (allowlisted, #710): a ReDoS in `picomatch` <= 4.0.7 through single-branch
+  repeated extglobs such as `+(*)`, first reported 2026-11-17: `vite` -> `picomatch`, and `vite` ->
+  `tinyglobby` -> `fdir` -> `picomatch` (npm also lists `@vitejs/plugin-react`, `tinyglobby` and
+  `fdir`). It runs at build time: in development and CI, and on the display PC during every update.
+  The running app (the server and the display pages) does not use it. Judged low risk because the
+  build matches only this repository's own glob patterns, never external input, so no
+  attacker-supplied pattern reaches `picomatch`. No fixed `picomatch` exists (latest 4.0.7, checked
+  2026-11-17), and Vite 8.3.8, the newest patch, still requires `^4.0.7`. The Vite patches 8.3.5 to
+  8.3.8 were read and not taken in #712: none fixes this advisory, their fixes are for the dev server
+  (here loopback-only) and build cases this app does not use, and they update Rolldown, which would
+  change every shipped bundle in a hygiene change. **Recheck** when `picomatch` publishes a version
+  above 4.0.7 or a Vite or `tinyglobby` release depends on one, at every Vite update, and at once if
+  the build ever takes glob patterns from outside the repository: update the lockfile in a reviewed
+  pull request, confirm a full `npm audit` is clean and remove the allowlist entry. #710 stays open
+  until then.
 
 ## Rollback compatibility check
 

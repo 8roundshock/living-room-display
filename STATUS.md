@@ -12,8 +12,11 @@ What changed:
   files (an install had collected 209 files, about 40 MB). `npm run build` and the installer's payload test check
   for exactly one entry bundle. A page open across an update reloads once into the new build when it misses an
   old chunk, and never loops.
-- #710: CI fails on a high or critical advisory in the runtime dependencies the app ships (none today). The
-  build-only `picomatch` advisory (GHSA-fc5q-39xc-vjpf) has no fix yet; it is recorded with its recheck trigger in
+- #710: CI fails on a high or critical advisory in the runtime dependencies the app ships (none today), and on any
+  new high or critical advisory in the dependencies the build uses. The build runs on the display PC during every
+  update (the updater runs `npm ci` and `npm run build` there), so these matter too. The `picomatch` advisory
+  (GHSA-fc5q-39xc-vjpf), which runs at build time, has no fix yet; it is the one allowlisted exception, judged low
+  risk because the build only uses the repository's own patterns, with its recheck trigger in
   [development](docs/development.md#dependency-advisories-710). #710 stays open.
 
 Verified with source builds and synthetic data only: see the pull request. On this PC the "Alt+Tab shows: Open

@@ -18,12 +18,19 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      # #710: the dependencies the installed app ships must have no high or critical advisory. The installer and the
-      # updater install exactly these (`npm ci --omit=dev` on this package-lock.json). Build-only advisories are
-      # recorded with their recheck trigger in docs/development.md (Dependency advisories).
+      # #710: the runtime set the release folder ships (`npm ci --omit=dev` on this package-lock.json, by the installer
+      # build and by the updater) must have no high or critical advisory, with no exceptions.
       - name: Audit the shipped runtime dependencies
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: npm audit --omit=dev --audit-level=high
+      # #710: the build uses every dependency, dev dependencies included, and the updater runs that build on the display
+      # PC itself (npm ci, then npm run build), as does the installer build. A high or critical advisory among them fails
+      # unless scripts/check-audit.mjs allowlists it with its ticket (docs/development.md, Dependency advisories).
+      - name: Audit every dependency the build uses
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
+          node scripts/check-audit.mjs "$RUNNER_TEMP/npm-audit.json"
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:server
