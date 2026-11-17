@@ -1,5 +1,26 @@
 # Project status
 
+## Build and test hygiene: Alt+Tab ghosts, build advisory, stale client bundles — 2026-11-17 (#712, #708, #711, #710)
+
+Source candidate, not installed. The owner: "fix all of them in one pr".
+
+What changed:
+- #708: every browser suite and tool launches headless Edge through one helper (`tests/ui/lib/edge.mjs`) that
+  disables `msWindowTabManagerPublic` without dropping Playwright's own disabled features, and checks Edge's real
+  command line after each launch. Headless test pages no longer leave permanent Alt+Tab entries on Windows.
+- #711: each build starts from an empty `dist/client`, so an installed app holds only the current build's client
+  files (an install had collected 209 files, about 40 MB). `npm run build` and the installer's payload test check
+  for exactly one entry bundle. A page open across an update reloads once into the new build when it misses an
+  old chunk, and never loops.
+- #710: CI fails on a high or critical advisory in the runtime dependencies the app ships (none today). The
+  build-only `picomatch` advisory (GHSA-fc5q-39xc-vjpf) has no fix yet; it is recorded with its recheck trigger in
+  [development](docs/development.md#dependency-advisories-710). #710 stays open.
+
+Verified with source builds and synthetic data only: see the pull request. On this PC the "Alt+Tab shows: Open
+windows only" setting is on and itself stops Edge registering tabs, so the flag's effect on Alt+Tab was not
+observed here; what was verified is Edge's real command line (Playwright's list kept, the feature added). Not
+verified: installation, the TV.
+
 ## Editor current-scene line: natural names for approaching holidays — 2026-11-17 (#707)
 
 Source candidate, not installed. Owner: "fix the new year labels too". The line under Theme read

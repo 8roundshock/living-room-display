@@ -76,6 +76,41 @@ another unprivileged local port. Ctrl+C stops it.
 
 Build before `npm start` on a fresh clone: `npm run build` typechecks and builds
 both server and browser assets. `build:server` alone does not produce the UI.
+
+The browser build starts from an empty `dist/client` (#711; `tsc` writes `dist/server` and
+`dist/shared`, which it never touches), so `dist`, which the installer and the updater copy
+whole, holds only the current build. `npm run build` ends with `scripts/check-client-build.mjs`,
+which fails unless `dist/client/assets` has exactly one `index-*.js`, `index.html` names it
+and `dist/server/index.js` is still there; the installer's payload test checks the same. Until
+#711 the client output was never emptied (`emptyOutDir: false` since the first build setup, with
+no recorded reason), and an installed app had collected about 40 old entry bundles. A page that
+was open across an update and then asks for a chunk of the previous build (the 3D engine or a
+scene) gets Vite's `vite:preloadError`; `src/client/stale-build.ts` then reloads it once into the
+new build, only when the server's `index.html` names a different entry bundle, at most once a
+minute per tab, and the page's own unsaved-changes prompt still applies. Meanwhile the 3D layer
+shows the flat scene.
+
+### Dependency advisories (#710)
+
+CI (`checks.yml`) runs `npm audit --omit=dev --audit-level=high`: the installed app ships only the
+runtime dependencies (the installer and the updater run `npm ci --omit=dev` on this
+`package-lock.json`), and they must have no high or critical advisory. A full `npm audit` may
+report build-only advisories; each one is recorded here with its assessment and recheck
+trigger, never hidden, and never "fixed" with `npm audit fix --force` or an override to an
+unvetted fork.
+
+- GHSA-fc5q-39xc-vjpf, a ReDoS in `picomatch` <= 4.0.7 through single-branch repeated extglobs
+  such as `+(*)`, first reported 2026-11-17: `vite` -> `picomatch`, and `vite` -> `tinyglobby`
+  -> `fdir` -> `picomatch` (npm also lists `@vitejs/plugin-react`, `tinyglobby` and `fdir`). Build
+  and dev server only: the installed app never runs Vite, and the build matches only this
+  repository's own patterns. No fixed `picomatch` exists (latest 4.0.7, checked 2026-11-17), and
+  Vite 8.3.8, the newest patch, still requires `^4.0.7`. The Vite patches 8.3.5 to 8.3.8 were
+  read and not taken in #712: none fixes this advisory, their fixes are for the dev server (here
+  loopback-only) and build cases this app does not use, and they update Rolldown, which would
+  change every shipped bundle in a hygiene change. **Recheck** when `picomatch` publishes a
+  version above 4.0.7 or a Vite or `tinyglobby` release depends on one, and at every Vite update:
+  update the lockfile in a reviewed pull request and confirm a full `npm audit` is clean (#710
+  stays open until then).
 For development use `npm run dev:server` and `npm run dev` in separate terminals.
 Vite listens on loopback port 5173 and proxies `/api` to 4318. The development
 server explicitly accepts that origin; production does not expose CORS access.
@@ -176,6 +211,26 @@ frozen clocks, for the native range and the rendered frame to show the same mome
 the new mode (`motionPreviewModeReady`, after unchecking Float gently) before its exact
 value/frame assertions; do not replace this with a delay, time advancement or a weaker
 tolerance. The separate Clock entrance barrier (#530) covers CSS reveal timing.
+
+**Headless Edge and Windows Alt+Tab (#708).** Every suite and tool (`tests/ui/*-browser.mjs`,
+`tests/ui/tools/scene-sheet.mjs`, `windows/tests/Test-CursorBrowser.mjs`) launches Edge through
+`launchEdge` in `tests/ui/lib/edge.mjs`, never `chromium.launch` directly (a unit test checks
+the sources). Symptom it prevents: on Windows, each headless page left a permanent Alt+Tab entry
+titled with the page title ("Still · Display"), which could not be selected or closed; one
+development PC had more than 1,300. Cause: Edge registers each tab with the Windows shell, and
+headless Edge never unregisters the proxy window Explorer makes for it. Fix: the Edge feature
+`msWindowTabManagerPublic` is disabled. Edge keeps only the last `--disable-features` switch and
+Playwright passes its own list first, so the helper passes one merged list (Playwright's
+`PLAYWRIGHT_DISABLED_FEATURES` for the pinned version, ours, and any the caller adds), keeps every
+other per-suite switch (`WEBGL_ARGS`), and after each launch reads Edge's real command line on
+`edge://version`: the launch fails, naming the features, if the last `--disable-features`
+lacks one that Playwright disabled earlier or lacks `msWindowTabManagerPublic`. When you update
+the pinned Playwright, update `PLAYWRIGHT_VERSION` and `PLAYWRIGHT_DISABLED_FEATURES` there
+(from `playwright-core`'s `chromiumSwitches`). The Windows setting Settings > System >
+Multitasking > "Pressing Alt + Tab shows" = "Open windows only" (`MultiTaskingAltTabFilter` = 3)
+also stops Edge registering tabs. Entries already left behind go when Windows Explorer restarts
+(or on signing out and in). An ad hoc Playwright check should use `launchEdge` too. The native
+display's windowed Edge registers no proxy and is unchanged.
 
 The `tests/ui/*-browser.mjs` suites drive the built app in headless Microsoft Edge
 through Playwright. Each starts its own loopback server on an ephemeral port with
