@@ -210,7 +210,12 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
     await page.getByRole('combobox',{name:'Scene preview',exact:true}).waitFor();
     assert.equal(await page.locator('.theme-try-note').innerText(),'Dates apply in Seasonal & holidays and Combined.');
     assert.ok((await page.locator('.theme-current').innerText()).indexOf('until')<0,'Weather mode has no season line to date');
-    record('Try a scene lists each scene with its dates as the display will resolve them (on 2026-11-15: Winter until Nov 30, Jan 2 – Feb 28; Christmas Dec 1 – 26; New Year · Russia Dec 27 – 30; New Year Dec 31 – Jan 1 (#705); Orthodox Christmas Jan 6 – 7, weather scenes by weather), follows the draft calendars, dates the preview summary and the current scene, and fits at TV and laptop widths');
+    // #707: on a holiday the line names the day the way people say it, not "<observance> season".
+    for(const [date,expected] of [['2026-12-31','New Year’s Eve · until Jan 1'],['2027-01-06','Orthodox Christmas Eve · until Jan 7'],['2026-12-28','New Year · Russia · until Dec 30']]) {
+      await open({date:`${date}T17:00:00Z`,mode:'seasonal'});
+      const line=await page.locator('.theme-current').innerText(); assert.ok(line.startsWith(expected),`${date}: ${line}`); assert.ok(!/ season · until/.test(line),`${date}: ${line}`);
+    }
+    record('Try a scene lists each scene with its dates as the display will resolve them (on 2026-11-15: Winter until Nov 30, Jan 2 – Feb 28; Christmas Dec 1 – 26; New Year · Russia Dec 27 – 30; New Year Dec 31 – Jan 1 (#705); Orthodox Christmas Jan 6 – 7, weather scenes by weather), follows the draft calendars, dates the preview summary and the current scene (named naturally on holidays: New Year’s Eve, Orthodox Christmas Eve, New Year · Russia, #707), and fits at TV and laptop widths');
     await open({mode:'combined'}); await page.locator('.theme-scene-options summary').click();
     const passageOption=page.locator('.theme-passage-option input'); assert.equal(await passageOption.isChecked(),false,'foreground moments default off');
     await passageOption.check(); await button('Save changes').waitFor(); assert.equal(saved().appearance.theme.foreground,undefined);

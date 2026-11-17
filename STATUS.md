@@ -1,5 +1,25 @@
 # Project status
 
+## Editor current-scene line: natural names for approaching holidays — 2026-11-17 (#707)
+
+Source candidate, not installed. Owner: "fix the new year labels too". The line under Theme read
+"New Year’s Day season" on December 31, "New Year holidays season" before New Year and "Orthodox
+Christmas season" on January 6, because every approaching holiday got " season".
+
+What changed: the line names each holiday day the way people say it: Christmas season, Christmas
+Eve, Christmas, Boxing Day; New Year · Russia (Dec 27 – 30), New Year’s Eve, New Year’s Day;
+Orthodox Christmas Eve, Orthodox Christmas; Holy Week before Easter and Orthodox Easter; Halloween
+season; "Seollal soon", "Chuseok soon", "Canada Day soon", "Thanksgiving soon", "Buddha’s Birthday
+soon", "Women’s Day soon". Weather in Combined uses the same names ("Rain now · New Year’s Eve");
+quiet dates are unchanged. Only the editor line shows this label; the display does not.
+
+Details: [Ambient themes](docs/ambient-themes.md).
+
+Verified with source builds and synthetic data only: both typechecks and the build, the unit tests
+(every day from Nov 30 to Jan 9 in two years with all three calendars and each alone, every other
+holiday’s days, every major holiday of each calendar over three years, weather and quiet labels),
+and the `themes` browser suite. Not verified: installation and the TV.
+
 ## New Year timing: regular New Year on Dec 31 – Jan 1, a shorter Russian New Year — 2026-11-15 (#705)
 
 Source candidate, not installed. Owner question: "why is russian new year for so many days, i want

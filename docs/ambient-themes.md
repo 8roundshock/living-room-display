@@ -610,7 +610,22 @@ replaced everything but Summer).
 - **The scene underneath** ([#646](https://github.com/8roundshock/living-room-display/issues/646)):
   each scene now responds to the weather over it; see the next section.
 - **The current-scene line** in Style names both: "Snow now · Autumn", "Rain now ·
-  Christmas", "Storms expected soon · Birthday".
+  Christmas season", "Storms expected soon · Birthday".
+
+**Holiday names on the current-scene line** (#707, owner 2026-11-17: "fix the new year labels too").
+The line names a holiday scene's day the way people say it, short, and like the Try a scene list
+where it can (`holidayLabel` and its table in `src/client/ambient-theme.ts`): the holiday's own
+days by name ("Christmas", "Boxing Day", "New Year’s Day", "Seollal", "Maslenitsa", "Women’s Day");
+the day before, where people name it, as an eve ("Christmas Eve", "New Year’s Eve", "Orthodox
+Christmas Eve"); the other days before it as "Christmas season" or "Halloween season" (where people
+say "season"), "Holy Week" and "Orthodox Holy Week" (Palm Sunday to Holy Saturday), "New Year ·
+Russia" for the Russian pre-New Year week, and "<holiday> soon" otherwise ("Seollal soon", "Canada
+Day soon"). It used to add " season" to every approach, which read "New Year’s Day season" on
+December 31. A holiday the table does not know yet takes its short name, or "<name> soon". A
+selected quiet date keeps "<observance> · quiet season"; weather over it keeps the observance's
+name ("Rain now · Remembrance Day"). With all three calendars, December and early January read:
+Christmas season (Dec 1 – 23), Christmas Eve, Christmas, Boxing Day, New Year · Russia (Dec 27 –
+30), New Year’s Eve, New Year’s Day, Winter, Orthodox Christmas Eve (Jan 6), Orthodox Christmas.
 
 **The scene underneath responds** ([#646](https://github.com/8roundshock/living-room-display/issues/646),
 owner 2026-11-12: "can you work on 646", after asking whether scene elements sway; on
