@@ -16,6 +16,7 @@ import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { BACKUP_REJECTED, RESTORE_UNREACHABLE } from '../../src/client/backup.ts';
 import { NETWORK_ERROR_MESSAGE as NETWORK } from '../../src/client/api.ts';
+import { launchEdge } from './lib/edge.mjs';
 
 export async function runStudioQa({ playwright, edge } = {}) {
   const { chromium } = createRequire(import.meta.url)(
@@ -88,10 +89,7 @@ export async function runStudioQa({ playwright, edge } = {}) {
   app.server.listen(0, '127.0.0.1');
   await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({
-    executablePath: edge,
-    headless: true,
-  });
+  const browser = await launchEdge(chromium, { edge });
   const errors = [],
     images = [],
     checks = [];

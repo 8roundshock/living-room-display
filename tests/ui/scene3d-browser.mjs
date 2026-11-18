@@ -12,6 +12,7 @@ import { parseArgs } from 'node:util';
 import { openScene, SCENE_CASES, startSceneServer, WEATHER_IDS, WEBGL_ARGS } from './lib/scene-cases.mjs';
 import { FLOAT_TRAVEL, SCENE_TRACK, stepPath, trackPosition } from '../../src/shared/float.ts';
 import { floatOffset, SCENE_CLOCK, sceneLook } from '../../src/client/scene3d/settings.ts';
+import { launchEdge } from './lib/edge.mjs';
 
 const VIEWPORT = { width: 640, height: 360 }, BRIGHTNESS = .36, READY = 120_000;
 // A season or holiday scene that has no file under scenes/ yet (and borrows none), read from the folder so that
@@ -26,7 +27,7 @@ const CHUNK = /\/assets\/(engine|christmas|canada-day|birthday|snow)-/;
 export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
   const started = Date.now(), { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
   const server = await startSceneServer(), args = WEBGL_ARGS[gpu ? 'gpu' : 'software'];
-  const browser = await chromium.launch({ executablePath: edge, headless: true, args });
+  const browser = await launchEdge(chromium, { edge, args });
   const checks = [], errors = []; let context, page;
   const record = text => { checks.push(text); console.log(`PASS: ${text}`); };
   async function open(options) { await context?.close(); ({ context, page } = await openScene(browser, server, { viewport: VIEWPORT, brightness: BRIGHTNESS, allowSoftware: !gpu, pageErrors: errors, ...options })); }
@@ -128,6 +129,24 @@ export async function runScene3dQa({ playwright, edge, gpu = false } = {}) {
       HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /webgl/.test(kind) && asked++ > 0 ? null : real.call(this, kind, ...rest); }; }) });
     await flat('canada-day'); assert.equal(await canvas().count(), 0); assert.deepEqual(await stages(), []);
     record('A lost context, or WebGL that fails when the renderer is created, leaves the flat scene on screen and throws nothing to the page');
+
+    // ---------- a page that outlived an update (#711): the old engine chunk is gone after a new build ----------
+    // The engine chunk answers 404, as after an update that emptied dist/client. When the server names a newer entry bundle
+    // the page reloads into it once; within a minute it does not reload again, and the flat scene stays. When it names the
+    // same bundle the chunk is missing for another reason, and the page does not reload at all.
+    for (const newer of [true, false]) {
+      let navigations = 0;
+      await open({ scene: 'canada-day', prepare: async target => {
+        await target.route(/\/assets\/engine-[\w-]+\.js$/, route => route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"Client file not found."}' }));
+        if (newer) await target.route(url => url.origin === new URL(server.base).origin && url.pathname === '/', async route => { const response = await route.fetch(); route.fulfill({ response, body: (await response.text()).replace(/index-[\w-]+\.js/, 'index-NEWERBUILD.js') }); });
+      }, onPage: target => target.on('framenavigated', frame => { if (frame === target.mainFrame()) navigations++; }) });
+      await flat('canada-day'); await page.waitForTimeout(1500); await flat('canada-day');
+      const reloadedAt = await page.evaluate(key => sessionStorage.getItem(key), 'lrd-stale-build-reload');
+      assert.equal(navigations, newer ? 2 : 1, `${newer ? 'a newer build: one reload' : 'the same build: no reload'} (${navigations} page loads)`);
+      assert.equal(reloadedAt !== null, newer, 'the reload is recorded for the one-a-minute guard');
+      assert.equal(await canvas().count(), 0); assert.deepEqual(await stages(), []);
+    }
+    record('A page that outlived an update (#711) reloads once into the newer build when a scene chunk is gone, never loops, and does not reload when the same build is served; the flat scene stays meanwhile');
 
     // ---------- solid and clear (#683): every lit surface hides what is behind it unless its scene marks it clear ----------
     const surfaces = {};

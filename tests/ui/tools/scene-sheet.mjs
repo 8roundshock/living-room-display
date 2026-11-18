@@ -23,6 +23,7 @@ import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openScene, startSceneServer, WEBGL_ARGS } from '../lib/scene-cases.mjs';
+import { launchEdge } from '../lib/edge.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   playwright: { type: 'string' }, edge: { type: 'string' }, out: { type: 'string' }, size: { type: 'string', default: '1920x1080' }, brightness: { type: 'string', default: '0.36' }, transparency: { type: 'string' }, float: { type: 'string' },
@@ -44,7 +45,7 @@ await mkdir(out, { recursive: true });
 
 const { chromium } = createRequire(import.meta.url)(values.playwright ?? 'playwright');
 const server = await startSceneServer();
-const browser = await chromium.launch({ executablePath: values.edge, headless: true, args: WEBGL_ARGS[values.webgl] });
+const browser = await launchEdge(chromium, { edge: values.edge, args: WEBGL_ARGS[values.webgl] });
 try {
   for (const spec of positionals) {
     const [scene, weather = null] = spec.split('+'), errors = [];

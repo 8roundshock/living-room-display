@@ -14,6 +14,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../dist/server/app.js';
 import { defaultSettings } from '../../dist/shared/defaults.js';
 import { defaultWidgetGrid, defaultWidgetVisibility } from '../../dist/shared/widgets.js';
+import { launchEdge } from './lib/edge.mjs';
 
 const NETWORK = "Can't reach the display server on this computer. Your changes are kept — try again.";
 
@@ -25,7 +26,7 @@ export async function runEditorSyncQa({ playwright, edge, capture = false } = {}
   const app = await createApplication({ dataDirectory: directory, clientDirectory: join(root, 'dist/client'), now: () => now, fetcher: async () => { throw new Error('Synthetic unavailable provider'); } });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [], contexts = [];
   async function open(viewport = { width: 1280, height: 720 }, { wait = true } = {}) {
     const context = await browser.newContext({ viewport, reducedMotion: 'reduce', timezoneId: 'America/Toronto', locale: 'en-US' }); await mockWindowsStatus(context);

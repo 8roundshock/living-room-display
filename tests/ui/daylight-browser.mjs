@@ -14,6 +14,7 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 const TORONTO = { name: 'Toronto', latitude: 43.6532, longitude: -79.3832, timezone: 'America/Toronto' };
 const TROMSO = { name: 'Tromsø', latitude: 69.6492, longitude: 18.9553, timezone: 'Europe/Oslo' };
@@ -33,7 +34,7 @@ export async function runDaylightQa({ playwright, edge } = {}) {
   });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [], answeredLists = [];
   let context, page;
   async function reset(update = () => {}) {

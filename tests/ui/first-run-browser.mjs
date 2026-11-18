@@ -14,6 +14,7 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { defaultWidgetGrid, defaultWidgetVisibility } from '../../src/shared/widgets.ts';
+import { launchEdge } from './lib/edge.mjs';
 
 const CITIES = { results: [{ id: 201, name: 'London', latitude: 51.5, longitude: -0.1, timezone: 'Europe/London', admin1: 'England', country: 'United Kingdom' }] };
 
@@ -28,7 +29,7 @@ export async function runFirstRunQa({ playwright, edge } = {}) {
   });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [];
   let context, page;
   const button = name => page.getByRole('button', { name, exact: true });

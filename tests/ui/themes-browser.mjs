@@ -19,6 +19,7 @@ import { keepPagesLocal } from './lib/local-only.mjs';
 import { SCENE_CASES, WEBGL_ARGS } from './lib/scene-cases.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
 import { waitForNativeRender } from './lib/native-render.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 export async function runThemesQa({ playwright, edge, capture = false } = {}) {
   const started = Date.now(), { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -26,7 +27,7 @@ export async function runThemesQa({ playwright, edge, capture = false } = {}) {
   const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0,'127.0.0.1'); await once(app.server,'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true, args: WEBGL_ARGS.off });
+  const browser = await launchEdge(chromium, { edge, args: WEBGL_ARGS.off });
   const images=[],checks=[],errors=[],writes=[]; let context,page,source,clock;
   const record = text => { checks.push(text); console.log(`PASS: ${text}`); };
   const saved = () => app.store.snapshot().settings;

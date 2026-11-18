@@ -13,6 +13,7 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 /** A fake Screen Wake Lock API that records every request and release (installed before any page script). */
 function stubWakeLock() {
@@ -48,7 +49,7 @@ export async function runScreenQa({ playwright, edge } = {}) {
   const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), now: () => now, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], errors = [], contexts = new Set(), outside = new Set(), info = [];
   const step = () => checks.length ? `after check ${checks.length}` : 'before the first check';
   function watch(page) {

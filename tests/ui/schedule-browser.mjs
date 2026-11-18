@@ -13,6 +13,7 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 export async function runScheduleQa({ playwright, edge, capture = false } = {}) {
   const { chromium } = createRequire(import.meta.url)(playwright ?? 'playwright');
@@ -25,7 +26,7 @@ export async function runScheduleQa({ playwright, edge, capture = false } = {}) 
     started.server.listen(port, '127.0.0.1'); await once(started.server, 'listening'); return started;
   };
   app = await start(); const port = app.server.address().port, base = `http://127.0.0.1:${port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US', reducedMotion: 'reduce' }); await mockWindowsStatus(context);
   const outside = await keepPagesLocal(context, base), errors = [], images = [], checks = [];
   context.on('page', page => page.on('pageerror', error => errors.push(error.message)));

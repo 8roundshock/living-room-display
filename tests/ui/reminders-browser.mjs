@@ -16,6 +16,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
+import { launchEdge } from './lib/edge.mjs';
 
 const now = Date.parse('2026-10-18T13:00:00Z'); // Sunday 9:00 AM in Toronto
 const id = index => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
@@ -63,7 +64,7 @@ export async function runRemindersQa({ playwright, edge, capture = false } = {})
   const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), now: () => now, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [];
   const stored = text => app.store.snapshot().reminders.find(item => item.text === text);
   /** Pages whose clock is the fake one (all but the real-time typing-cost page). */

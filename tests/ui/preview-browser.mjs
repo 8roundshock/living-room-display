@@ -13,6 +13,7 @@ import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture } from '../../src/server/fixtures.ts';
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { repackGrid } from '../../src/shared/widgets.ts';
+import { launchEdge } from './lib/edge.mjs';
 
 export async function runPreviewQa({ playwright, edge, sharp } = {}) {
   const require = createRequire(import.meta.url),
@@ -30,10 +31,7 @@ export async function runPreviewQa({ playwright, edge, sharp } = {}) {
   app.server.listen(0, '127.0.0.1');
   await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({
-    executablePath: edge,
-    headless: true,
-  });
+  const browser = await launchEdge(chromium, { edge });
   const context = await browser.newContext({
     viewport: { width: 1920, height: 1080 },
     reducedMotion: 'reduce',

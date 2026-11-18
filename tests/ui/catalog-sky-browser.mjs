@@ -14,6 +14,7 @@ import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures
 import { ACTIVE_WIDGET_IDS, GRID_DENSITIES, WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { CITIES } from './widget-checks/worldClocks.mjs';
 import { COLLECTION_BOARD } from './lib/boards.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 const GEOCODER = {
   lon: { id: 201, name: 'London', latitude: 51.51, longitude: -0.13, timezone: 'Europe/London', admin1: 'England', country: 'United Kingdom' },
@@ -46,7 +47,7 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
   });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const errors = [], images = [], checks = [];
   // The catalog board (the default before #435) has room to add these widgets; the #435 default board is full.
   async function reset(update = () => {}) {

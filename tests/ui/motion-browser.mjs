@@ -20,6 +20,7 @@ const LEVELS = ['off', 'subtle', 'lively'];
 const HOUR = 3_600_000;
 /** Every active widget on one Balanced 12 x 8 board (as in palette-browser.mjs); a newly activated widget must be added here. */
 import { FULL_BOARD, COLLECTION_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
+import { launchEdge } from './lib/edge.mjs';
 /** One widget alone at the board's top-left corner. */
 const only = (id, placement) => state => {
   state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === id]));
@@ -45,7 +46,7 @@ export async function runMotionQa({ playwright, edge, performance = true, gpu = 
   const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), now: () => now, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], errors = [], metrics = {};
   const contexts = new Set();
   // #315: each page or console error names its resource URL, page and step, and every failed request

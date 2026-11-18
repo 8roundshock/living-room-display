@@ -68,6 +68,11 @@ try {
     }
     $checks++
 
+    # One build's client only (#711): an earlier build's chunks would ship with every update.
+    $entryBundles = @(Get-ChildItem -LiteralPath (Join-Path $PayloadDirectory 'app\dist\client\assets') -Filter 'index-*.js' -File)
+    Assert-True ($entryBundles.Count -eq 1) "app\dist\client\assets has $($entryBundles.Count) index-*.js bundles; expected exactly 1"
+    $checks++
+
     # Nothing from development, source control or user data.
     $appDirectory = Join-Path $PayloadDirectory 'app'
     foreach ($forbidden in @('.git','.local','src','tests','data','edge-profile','run','backups','.github','windows\installer','windows\tests')) {

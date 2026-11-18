@@ -16,6 +16,7 @@ import { defaultSettings as previousDefaults } from '../../src/server/compat/bed
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { GRID_DENSITIES, WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { airQualityFixture } from './widget-checks/airQuality.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 const HOUR = 3_600_000;
 const NOW = Date.parse('2026-10-18T13:00:00Z'); // 9 AM in Toronto
@@ -139,7 +140,7 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
   const app = await createApplication({ dataDirectory: directory, clientDirectory, now: () => NOW, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], errors = [], shots = [];
   let migration;
   try {

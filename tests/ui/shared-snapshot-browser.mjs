@@ -10,6 +10,7 @@ import { parseArgs } from 'node:util';
 import { createApplication } from '../../src/server/app.ts';
 import { forecastFixture, photoFixture } from '../../src/server/fixtures.ts';
 import { mockWindowsStatus } from './lib/windows-fixture.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 /** Real source browser/network flow, synthetic file only; all device/wake APIs are mocked. */
 export async function runSharedSnapshotQa({ playwright, edge, capture = false } = {}) {
@@ -27,7 +28,7 @@ export async function runSharedSnapshotQa({ playwright, edge, capture = false } 
       response.on('end', () => done({ status: response.statusCode, body: Buffer.concat(chunks) }));
     }); req.on('error', reject); req.end(body);
   });
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const images = [], checks = [];
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });

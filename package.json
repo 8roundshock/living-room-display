@@ -8,9 +8,9 @@
     "dev": "vite --host 127.0.0.1",
     "dev:server": "node --watch src/server/index.ts --dev",
     "build:server": "tsc -p tsconfig.server.json",
-    "build": "npm run typecheck && npm run build:server && vite build",
+    "build": "npm run typecheck && npm run build:server && vite build && node scripts/check-client-build.mjs",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit",
-    "test": "node --test \"src/**/*.test.ts\"",
+    "test": "node --test \"src/**/*.test.ts\" \"tests/**/*.test.mjs\"",
     "start": "node dist/server/index.js"
   },
   "dependencies": { "react": "19.3.1", "react-dom": "19.3.1", "three": "0.128.0", "zod": "4.6.7" },

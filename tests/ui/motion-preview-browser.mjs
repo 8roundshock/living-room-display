@@ -14,6 +14,7 @@ import { WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { floatPath, FLOAT_TRAVEL, stepPath } from '../../src/shared/float.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 // #530: enabling Preview starts this real-time entrance independently of the local movement
 // clock. Compare sought frames after it ends, rather than caching ink from two reveal phases.
@@ -43,7 +44,7 @@ export async function runMotionPreviewQa({ playwright, edge, capture = false } =
   await app.store.update(data => { data.settings = settings; data.reminders = []; });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [], writes = [], contexts = [], crossings = [];
   const saved = JSON.stringify(app.store.snapshot().settings);
   const savedRevision = app.store.view().settingsRevision;

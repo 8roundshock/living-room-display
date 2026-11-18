@@ -31,6 +31,7 @@ const FLOOR_FIT_ALLOWANCES = { 'note/small': '#291' };
 const INTL_TICK_ALLOWANCES = {};
 /** Two Balanced boards cover the active catalog without changing production geometry. */
 import { FULL_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
+import { launchEdge } from './lib/edge.mjs';
 
 /** Counts ResizeObserver and Intl constructions and style changes on .widget-content (an init script). */
 function instrumentFit() {
@@ -69,7 +70,7 @@ export async function runWidgetQa({ playwright, edge, capture = false, statusOnl
   const app = await createApplication({ dataDirectory: directory, clientDirectory: fileURLToPath(new URL('../../dist/client', import.meta.url)), now: () => now, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [];
   try {
     const contextOptions = { viewport: { width: 1920, height: 1080 }, timezoneId: 'America/Toronto', reducedMotion: 'reduce' };

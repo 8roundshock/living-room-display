@@ -14,6 +14,7 @@ import { catalogBoardDefaults, forecastFixture } from '../../src/server/fixtures
 import { defaultSettings } from '../../src/shared/defaults.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, fitWidgetFamily, widgetSizes, widgetSpan } from '../../src/shared/widgets.ts';
 import { addToGrid } from '../../src/client/make-room.ts';
+import { launchEdge } from './lib/edge.mjs';
 
 /** The picker's grouped order (#154): WIDGET_CATEGORIES order, catalog order inside each group. */
 const GROUPED = Object.keys(WIDGET_CATEGORIES).flatMap(category => ACTIVE_WIDGET_IDS.filter(id => WIDGET_CATALOG[id].category === category));
@@ -35,7 +36,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
   const app = await createApplication({ dataDirectory: directory, clientDirectory: join(root, 'dist/client'), now: () => now, fetcher: async () => Response.json(forecastFixture()) });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const browser = await chromium.launch({ executablePath: edge, headless: true });
+  const browser = await launchEdge(chromium, { edge });
   const checks = [], images = [], errors = [];
   let context, page;
   const button = name => page.getByRole('button', { name, exact: true });
