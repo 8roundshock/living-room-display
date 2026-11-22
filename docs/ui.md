@@ -699,7 +699,18 @@ board under it shows the family's footprint (“4 × 2 cells of 12 × 8”).
   and rolls over at midnight. **Week starts on** offers Automatic (labelled with the
   resolved day, for example “Automatic · Sunday”, from the browser locale with a Monday
   fallback), Sunday or Monday. It has no data dependency, so it is always shown when
-  enabled.
+  enabled. Since #716 it also shows what is coming up
+  ([contract](widgets.md#calendar-upcoming-dates-716)): large lists up to three upcoming
+  dates under the month ("Dec 25  Christmas", "Today  Christmas" on the day), medium the
+  next one on one line under the date where the box has room (always on Spacious and
+  Balanced; on Fine only in a four-week month), and both put a small accent dot under the
+  days of the month that carry a date. The dates come from the holiday calendars ticked for
+  themes, the saved Birthdays ("Mina's birthday") and the Countdown dates, up to 90 days
+  ahead; reminders are not included. The panel has the same **Holiday calendars** boxes
+  (Canada, Korea, Russia) as Style › Theme and Dynamic, bound to the one selection
+  `appearance.theme.calendars`, and a hint naming the sources; the canvas follows the
+  draft, and unticking every calendar with no birthday or countdown date leaves the widget
+  as it was before #716. There is no new saved setting.
 - **Countdown** (Personal, default small) holds up to 12 rows: a title (1–60
   characters), a date, an **Every year** toggle and Remove. **Add date** adds a row
   dated one week ahead and focuses its title. An empty title shows an inline error and
@@ -723,7 +734,8 @@ board under it shows the family's footprint (“4 × 2 cells of 12 × 8”).
 All three panels join the shared settings draft: Save/Cancel appear only for effective
 changes (trailing spaces trimmed on blur do not count), Cancel restores the saved values,
 and built-in or saved styles never change the week start, countdowns or note (styles
-do reset which widgets are shown). Countdowns and the note are private content stored
+do reset which widgets are shown). The Calendar panel's Holiday calendars are the theme's
+selection, which is part of a style like the theme itself. Countdowns and the note are private content stored
 on this device and included in exports. `tests/ui/catalog-time-browser.mjs` checks the
 picker groups and keyboard (Weather listed, no Rain; the free-size caption only for
 Reminders, qualified on the default board), the initial selection, item and Add names,
