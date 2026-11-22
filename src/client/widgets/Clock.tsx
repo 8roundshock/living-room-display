@@ -1,9 +1,10 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { advanceClockHands, type HandAngles } from '../../shared/motion.ts';
 import type { Settings } from '../../shared/contracts.ts';
 import type { WidgetSize } from '../../shared/widgets.ts';
 import { TransitionText } from './TransitionText.tsx';
 import { clockTimer, type ClockTimer } from '../timer.ts';
+import { clockInk, clockReserve, type ClockInk } from '../clock-spacing.ts';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
 
 /**
@@ -38,13 +39,20 @@ export function clockLabels(at: Date, clockFormat: Settings['clockFormat'], size
   };
 }
 
-/** One span per character keyed by its position from the right, so only changed characters remount. */
-function ClockCharacters({ text }: { text: string }) {
+/**
+ * One span per character keyed by its position from the right, so only changed characters remount. #717: each
+ * character carries its glyph's side bearings (`--ink-left`, `--ink-right`), and widgets.css turns them into
+ * margins that leave the same gap between every pair of neighbours. Without `ink` (a typeface not measured yet,
+ * or one that cannot be) the run has no `clock-ink` class and keeps tabular figures at their natural spacing;
+ * the class change lets the shared fit rerun (#314).
+ */
+function ClockCharacters({ text, ink, run }: { text: string; ink: ClockInk | null; run: RefObject<HTMLSpanElement | null> }) {
   const characters = Array.from(text);
-  return <span className="clock-digits" aria-hidden="true">
+  return <span ref={run} className={ink ? 'clock-digits clock-ink' : 'clock-digits'} aria-hidden="true">
     {characters.map((character, index) => {
-      const fromEnd = characters.length - 1 - index;
-      return <span key={`${fromEnd}:${character}`} className="clock-char" style={{ '--char-from-end': fromEnd } as CSSProperties}>{character}</span>;
+      const fromEnd = characters.length - 1 - index, glyph = ink?.[character];
+      const style = { '--char-from-end': fromEnd, ...(glyph && { '--ink-left': glyph.left, '--ink-right': glyph.right }) } as CSSProperties;
+      return <span key={`${fromEnd}:${character}`} className="clock-char" style={style}>{character}</span>;
     })}
   </span>;
 }
@@ -90,11 +98,20 @@ function Clock({ state, settings, now, size, disconnected }: WidgetContentProps)
   const hands = useHands(now.getHours(), now.getMinutes());
   const style = settings.appearance.clockStyle;
   const timer = clockTimer(state.timers, now.getTime(), settings.clockFormat, size, disconnected);
-  return <div className={`clock-face clock-family-${size} clock-style-${style}`}>
+  // #717: the digits' typeface is measured once per typeface (clock-spacing.ts), when the run is first on the page
+  // and again when the typeface, the style or the family changes. Analog has no run and no table.
+  const run = useRef<HTMLSpanElement>(null);
+  const [ink, setInk] = useState<ClockInk | null>(null);
+  const typeface = `${settings.appearance.fontFamily}:${style}:${size}`;
+  useLayoutEffect(() => { setInk(run.current ? clockInk(run.current) : null); }, [typeface]);
+  // How much narrower this minute's time is than the widest one; widgets.css reserves that room for the shared fit.
+  const reserve = useMemo(() => ink ? clockReserve(ink, labels.clock, settings.clockFormat) : null, [ink, labels.clock, settings.clockFormat]);
+  const spare = reserve ? { '--clock-spare': reserve.spare, '--clock-spare-gaps': reserve.gaps } as CSSProperties : undefined;
+  return <div className={`clock-face clock-family-${size} clock-style-${style}`} style={spare}>
     <div className={timer ? 'clock-calendar clock-timer' : 'clock-calendar'}>{timer ? <ClockTimerSlot timer={timer} /> : <><div className="ambient-label"><TransitionText value={labels.weekday} /></div><div className="clock-date"><TransitionText value={labels.date} /></div></>}</div>
     {style === 'analog'
       ? <AnalogClock hour={hands.hour} minute={hands.minute} snap={!hands.animate} label={labels.spoken} />
-      : <div className={`clock-time clock-${style}`}><ClockCharacters text={labels.clock} />{labels.period && <span className="clock-period" aria-hidden="true"><TransitionText value={labels.period} /></span>}<span className="sr-only">{labels.spoken}</span></div>}
+      : <div className={`clock-time clock-${style}`}><ClockCharacters text={labels.clock} ink={ink} run={run} />{labels.period && <span className="clock-period" aria-hidden="true"><TransitionText value={labels.period} /></span>}<span className="sr-only">{labels.spoken}</span></div>}
   </div>;
 }
 

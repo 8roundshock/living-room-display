@@ -323,7 +323,6 @@ a.button {
 .clock-time {
   font-size: calc(11.5cqw * var(--font-scale));
   font-weight: 320;
-  letter-spacing: -0.055em;
   line-height: 0.95;
   font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
@@ -560,6 +559,18 @@ a.button {
 .font-serif {
   font-family: Georgia, 'Times New Roman', serif;
   font-variant-numeric: lining-nums tabular-nums;
+}
+/* #717: the clock measures its digits on a canvas, and canvas text cannot set font-variant-numeric. This alias of
+   Georgia turns its lining figures on in the font face itself, for the digits and the colon only, so the Classic
+   clock's canvas measurement and its page text are the same glyphs. */
+@font-face {
+  font-family: 'LRD Classic Figures';
+  src: local('Georgia');
+  font-feature-settings: 'lnum';
+  unicode-range: U+30-3A;
+}
+.font-serif .clock-digits {
+  font-family: 'LRD Classic Figures', Georgia, 'Times New Roman', serif;
 }
 .font-mono {
   font-family: Consolas, 'Courier New', monospace;
