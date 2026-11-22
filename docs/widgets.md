@@ -159,7 +159,8 @@ can change the content's overflow must switch a class (or change text or structu
 The fit itself writes only the content's `style`, so a refit never triggers another.
 With the Classic typeface (Georgia) every number uses lining, tabular figures, so digits
 share one baseline and height; a rule that sets `font-variant-numeric` itself spells out
-`lining-nums tabular-nums` so it does not bring the old-style figures back (#363).
+`lining-nums tabular-nums` so it does not bring the old-style figures back (#363). The
+Clock's own digits are lining figures spaced by their ink ([digit spacing](#clock-digit-spacing)).
 
 The renderer families have deliberate visual roles:
 
@@ -403,6 +404,55 @@ HTML bar on a full-square wrapper that turns with `rotate` around the centre, so
 minute ease runs on the compositor (#161), and the square clips so a turned wrapper
 never adds overflow to the widget fit. At rest the geometry is the same at every
 Animation level. The owner's couch check remains the acceptance gate for #222.
+
+### Clock digit spacing
+
+The clock's digits are spaced by what they paint, not by their advance boxes (#717). A
+typeface spaces figures by their boxes, and tabular figures all share the widest box: a 1
+sits in a hole and a 4 fills its box edge to edge. The clock used to pull every box
+together with a fixed negative `letter-spacing` (-0.065em), and the Outline stroke
+extends past the glyph, so 44, 04 and 54 overlapped (48 too at 4K) and 00, 34, 40 and 48
+touched while 11 stood a fifth of the digit height apart: on the large 1080p clock the
+painted gaps ran from -12 px to 65 px. They now run from 19 to 21 px.
+
+- [`src/client/clock-spacing.ts`](../src/client/clock-spacing.ts) measures, once per
+  typeface, how far each glyph's ink starts and ends inside its advance box (canvas
+  `measureText`, averaged over six sizes under 256 px, where the canvas reports whole
+  pixels; above that it is far coarser). `Clock.tsx` gives each character those bearings
+  as `--ink-left` and `--ink-right`, and `widgets.css` turns them into margins that
+  leave one gap, `--clock-gap`, between the painted edges of every pair of neighbours:
+  digits and colon alike, outline stroke included.
+- The gap is 6% of the digit size and never under 40% of the shared text floor (4 px at
+  720p), so the smallest clock keeps whole pixels between digits. The run's painted
+  edges sit on its box edges, so the time is centred or left-aligned by its ink.
+- Never put a negative `letter-spacing` on the clock's digits or on any other tabular
+  numeral. World clocks, Countdown and Sun & moon keep their typeface's own spacing for
+  the same reason; the remaining numerals are tracked in
+  [#726](https://github.com/8roundshock/living-room-display/issues/726).
+- A time is now as wide as its digits (11:11 is much narrower than 04:44). When a digit
+  changes, the other characters take their new places at once and the new one fades in
+  place. Nothing glides sideways: a character easing from its old place would cross the
+  incoming digit ([#727](https://github.com/8roundshock/living-room-display/issues/727)).
+- The shared fit must not follow the width from minute to minute, so the clock reserves,
+  invisibly, the room its widest time would take (`clockReserve`: 04:44 in 24-hour and
+  10:44 in 12-hour with Segoe UI). A clock that zooms out at a larger Text size keeps
+  one scale all day; only AM against PM still differs, by under 1%.
+- Canvas text cannot set `font-variant-numeric`, so a glyph is trusted only when the page
+  lays it out with the advance the canvas measured. The Classic clock therefore draws
+  its digits from `LRD Classic Figures`, an alias of Georgia with lining figures turned
+  on in the font face (`styles.css`). When a typeface cannot be measured the digit run
+  has no `clock-ink` class and keeps tabular figures at their natural advance plus the
+  stroke, which never touch but are not even.
+- [`tests/ui/widget-checks/clock-spacing.mjs`](../tests/ui/widget-checks/clock-spacing.mjs)
+  measures the painted pixels (each character paints one colour channel, so one RAM
+  screenshot tells neighbours apart) and fails on any overlap, on a gap under the
+  rule's, on gaps that differ by more than a few pixels, and on a character whose box
+  moves while a digit changes.
+
+Not verified: Segoe UI Variable (Windows 11's `system-ui`) is not installed on the
+development PC. It is measured the same way; a clock under 48 px there uses a smaller
+optical size than the one measured, so its gaps may differ by a pixel
+([#728](https://github.com/8roundshock/living-room-display/issues/728)).
 
 The display never goes dark to move (#436, owner decision 2026-10-20; it replaces the
 black rest of #357 and #395). By default the arrangement stays as placed and floats:

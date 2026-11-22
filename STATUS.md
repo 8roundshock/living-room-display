@@ -1,5 +1,38 @@
 # Project status
 
+## Clock: digits spaced by their ink, never overlapping — 2026-11-22 (#717)
+
+Source candidate, not installed. The owner: "the clock seems to be overlapping the digits sometimes,
+overall kerning has an issue, so look into that".
+
+Cause: the clock used tabular figures (every digit in the widest digit's box) pulled together by a
+fixed negative letter-spacing of -0.065em, and the Outline stroke extends past each glyph. On the
+owner's large Outline clock, 44, 04 and 54 overlapped (48 too at 4K) and 00, 34, 40 and 48 touched
+(20:44, 04:48 and every hh:04, hh:44 and hh:54), while 11 stood a fifth of the digit height apart. Painted gaps ran
+from -12 px to 65 px at 1080p and from -23 px to 131 px at 4K, at rest, at every scale factor;
+smaller clocks were worse. The digit transition was not involved.
+
+What changed:
+- The clock measures each glyph's ink once per typeface and spaces its digits and colon by one gap
+  between painted edges, 6% of the digit size (never under 4 px at 720p), outline stroke included.
+  The same clock's gaps now run 19 to 21 px at 1080p and 38 to 42 px at 4K (18 to 21 px at 1080p
+  in every typeface and both digit styles).
+- A time is as wide as its digits. When a digit changes, the others take their new places at once;
+  the clock reserves its widest time's room invisibly, so its fit and zoom never change with the
+  minute. Fit stays 1 at Text 100% in every family, density and typeface at 720p, 1080p and 4K.
+- World clocks, Countdown and Sun & moon lost the negative letter-spacing that made their 44
+  overlap. The editor's Clock style examples no longer touch.
+- A new painted-pixel check (`tests/ui/widget-checks/clock-spacing.mjs`, in the `widgets` suite)
+  fails on any overlap, on uneven gaps and on a character that moves while a digit changes.
+
+Details: [Clock digit spacing](docs/widgets.md#clock-digit-spacing). Follow-ups: the Weather
+temperature, Air quality, detail-widget, Dynamic and Timers numerals have the same defect (#726);
+whether to ease the sideways step at a minute change (#727); Windows 11's typeface is unverified
+(#728).
+
+Verified with source builds and synthetic data only: see the pull request. Not verified:
+installation, the TV, Windows 11 (Segoe UI Variable).
+
 ## Build and test hygiene: Alt+Tab ghosts, build advisory, stale client bundles — 2026-11-17 (#712, #708, #711, #710)
 
 Source candidate, not installed. The owner: "fix all of them in one pr".
