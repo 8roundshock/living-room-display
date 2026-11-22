@@ -71,6 +71,11 @@ function upcomingFacts(widget) {
       floors: { text: parseFloat(style.getPropertyValue('--min-text')), data: parseFloat(style.getPropertyValue('--min-data')) },
       weeks: section.querySelectorAll('.calendar-grid tbody tr').length,
       day: parseFloat(getComputedStyle(section.querySelector('td .calendar-day')).fontSize) * scale,
+      // A week row in units of its own font size: the day's line and its padding, and the gap under the weekday labels.
+      rows: (() => {
+        const day = getComputedStyle(section.querySelector('td .calendar-day')), head = getComputedStyle(section.querySelector('.calendar-grid th'));
+        return { line: parseFloat(day.lineHeight) / parseFloat(day.fontSize), pad: parseFloat(day.paddingTop) / parseFloat(day.fontSize), gap: parseFloat(head.paddingBottom) / parseFloat(head.fontSize) };
+      })(),
       classes: [...face.classList].filter(name => /^calendar-with-/.test(name)),
       list: [...section.querySelectorAll('.calendar-upcoming > .calendar-upcoming-row')].map(line),
       listLabel: section.querySelector('.calendar-upcoming')?.getAttribute('aria-label') ?? null,
@@ -208,6 +213,8 @@ export async function sweep({ page, viewport, state, base }) {
   Object.assign(state.settings.appearance, { motionEnabled: false, fontScale: 1, fontFamily: 'sans' });
   state.settings.widgetData.calendar.weekStart = 'monday';
   let cases = 0;
+  // Large day-number sizes per density and viewport, to show that the list costs spare height rather than type size.
+  const numbers = { five: {}, six: {} };
   try {
     // The owner's 1280×720 TV is covered from the 1080p pass, like the other sweeps.
     for (const view of viewport.width === 1920 ? [{ width: 1280, height: 720 }, viewport] : [viewport]) {
@@ -229,6 +236,7 @@ export async function sweep({ page, viewport, state, base }) {
           }
           assertUpcoming(facts, expected, { size, nextShown: density !== 'fine' || month.fineNext, label });
           if (size === 'large') assert.deepEqual(facts.list.map(line => [line.when, line.name]), month.lines, `${label}: the three lines`);
+          if (size === 'large' && month.weeks !== 4) numbers[month.weeks === 6 ? 'six' : 'five'][`${density}/${view.width}`] = facts.day;
           // Today's own date: the ring and the dot share the day.
           if (size !== 'small' && month.lines[0][0] === 'Today') {
             const ringed = facts.marks.find(mark => mark.day === String(month.today.day));
@@ -245,6 +253,14 @@ export async function sweep({ page, viewport, state, base }) {
         const facts = await show(size, density), label = `nothing upcoming ${size}/${density}/${view.width}`;
         assertFits(facts, label);
         assert.deepEqual([facts.weeks, facts.list.length, facts.next, facts.marks.length, facts.classes], [6, 0, null, 0, []], `${label}: the Calendar looks as it does without upcoming dates`);
+        const key = `${density}/${view.width}`;
+        if (size === 'large') {
+          // With the list a five-week month keeps the numbers of a month with no list; only six weeks take slightly smaller ones.
+          assert.ok(Math.abs(facts.day - numbers.five[key]) < 0.01, `${label}: a five-week month with the list keeps full-size numbers ${JSON.stringify({ none: facts.day, five: numbers.five[key] })}`);
+          assert.ok(numbers.six[key] <= facts.day + 0.01 && numbers.six[key] >= facts.day * 0.93, `${label}: six weeks with the list take at most slightly smaller numbers ${JSON.stringify({ none: facts.day, six: numbers.six[key] })}`);
+        // Six weeks with room to spare keep the rows of every other month, as before #716; on Fine they close up to fit.
+        } else if (density !== 'fine') assert.ok(Math.abs(facts.rows.line - 1.1) < 0.005 && Math.abs(facts.rows.pad - 0.12) < 0.005 && Math.abs(facts.rows.gap - 0.35) < 0.01, `${label}: six medium weeks keep the usual rows where there is room ${JSON.stringify(facts.rows)}`);
+        else assert.ok(facts.rows.pad < 0.115 && facts.rows.pad >= 0.029 && facts.rows.line >= 1.039 && facts.rows.gap >= 0.199, `${label}: six medium weeks close up on Fine without going under the digits' line ${JSON.stringify(facts.rows)}`);
         cases++;
       }
     }
@@ -252,5 +268,5 @@ export async function sweep({ page, viewport, state, base }) {
     await page.clock.setSystemTime(before + 1000);
     await page.setViewportSize(viewport);
   }
-  return `Calendar upcoming dates (#716): ${cases} family × density cases at ${viewport.width === 1920 ? '720p and 1080p' : '4K'} in four-, five- and six-week months and across the year turn render at fit 1 at Text 100% with day numbers and lines at their floors; large lists three one-line dates (a 60-character title cut after a whole word), medium adds the next date where it fits (not beside five or six weeks on Fine), marked days match the list and dim with their day, today's holiday keeps ring and dot, and nothing upcoming adds nothing.`;
+  return `Calendar upcoming dates (#716): ${cases} family × density cases at ${viewport.width === 1920 ? '720p and 1080p' : '4K'} in four-, five- and six-week months and across the year turn render at fit 1 at Text 100% with day numbers and lines at their floors; large lists three one-line dates (a 60-character title cut after a whole word), medium adds the next date where it fits (not beside five or six weeks on Fine), marked days match the list and dim with their day, today's holiday keeps ring and dot, the list costs spare height and at most 7% of a six-week month's number size, and nothing upcoming adds nothing (a six-week medium month keeps its usual rows where there is room).`;
 }
