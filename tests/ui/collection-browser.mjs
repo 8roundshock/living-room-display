@@ -41,7 +41,7 @@ export async function runCollectionQa({ playwright, edge, capture = false, captu
       await waitForWidgetFit(page, `[data-widget-id="${id}"]`, { label });
       const result = await page.locator(`[data-widget-id="${id}"]`).evaluate(section => {
         const content = section.querySelector('.widget-content'), box = section.getBoundingClientRect(), scale = new DOMMatrix(getComputedStyle(content).transform).a;
-        const escaping = [...content.querySelectorAll('.collection-label,.collection-value,.collection-title,.collection-footer,.collection-hour-value,.collection-detail')].filter(element => { const rect = element.getBoundingClientRect(); return rect.left < box.left - 1 || rect.right > box.right + 1 || rect.top < box.top - 1 || rect.bottom > box.bottom + 1; }).map(element => element.className);
+        const escaping = [...content.querySelectorAll('.collection-label,.collection-value,.collection-title,.collection-footer,.collection-hour-value,.collection-detail,.hourly-heading,.hourly-hour')].filter(element => { const rect = element.getBoundingClientRect(); return rect.left < box.left - 1 || rect.right > box.right + 1 || rect.top < box.top - 1 || rect.bottom > box.bottom + 1; }).map(element => element.className);
         return { scale, escaping, text: section.innerText };
       });
       if (result.scale < 0.995 || result.escaping.length) fitFailures.push({ label, ...result }); return result;
