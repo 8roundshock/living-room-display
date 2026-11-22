@@ -447,7 +447,8 @@ painted gaps ran from -12 px to 65 px. They now run from 19 to 21 px.
   measures the painted pixels (each character paints one colour channel, so one RAM
   screenshot tells neighbours apart) and fails on any overlap, on a gap under the
   rule's, on gaps that differ by more than a few pixels, and on a character whose box
-  moves while a digit changes.
+  moves while a digit changes. It also makes a typeface unmeasurable and checks that the
+  fallback keeps digits apart at fit 1.
 
 Not verified: Segoe UI Variable (Windows 11's `system-ui`) is not installed on the
 development PC. It is measured the same way; a clock under 48 px there uses a smaller
