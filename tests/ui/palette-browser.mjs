@@ -288,6 +288,17 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       assert.equal(await colorOf('.calendar-grid th'), expected(mode, 'time'), `${mode} weekday heads`);
       assert.equal(await colorOf('.calendar-date-number'), text);
       assert.equal(await colorOf('.calendar-today', 'borderTopColor'), expected(mode, 'time'), `${mode} today ring`);
+      // Upcoming dates (#716): the medium next date and the large list paint the date in the tone and the name as primary
+      // text; a marked day's dot is a real element in the tone, so the paint audit above covers it too.
+      assert.equal(await colorOf('.calendar-next .calendar-upcoming-when'), expected(mode, 'time'), `${mode} next date`);
+      assert.equal(await colorOf('.calendar-next .calendar-upcoming-name'), text, `${mode} next date name`);
+      assert.ok(await page.locator('.calendar-mark').count() > 0, 'the fixture month has marked days');
+      for (const dot of await page.locator('.calendar-mark').evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor))) assert.equal(dot, expected(mode, 'time'), `${mode} marked day dot`);
+      current = state({ mode, only: 'calendar', size: 'large' }); await open();
+      assert.equal(await page.locator('.calendar-upcoming-row').count(), 3, 'large lists three upcoming dates');
+      for (const when of await page.locator('.calendar-upcoming .calendar-upcoming-when').evaluateAll((els) => els.map((el) => getComputedStyle(el).color))) assert.equal(when, expected(mode, 'time'), `${mode} upcoming date`);
+      for (const name of await page.locator('.calendar-upcoming .calendar-upcoming-name').evaluateAll((els) => els.map((el) => getComputedStyle(el).color))) assert.equal(name, text, `${mode} upcoming name`);
+      for (const dot of await page.locator('.calendar-mark').evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor))) assert.equal(dot, expected(mode, 'time'), `${mode} large marked day dot`);
       // Countdown and Note (#78, personal); Note is text only, its section still resolves Rose (checked above).
       current = state({ mode, only: 'countdown', size: 'small' }); await open();
       assert.equal(await colorOf('.ambient-countdown .countdown-unit'), expected(mode, 'personal'), `${mode} countdown unit`);
@@ -320,7 +331,7 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       }
     }
     checks.push("#438 Clock timer slot in both modes: running, paused and done (small and large) audit clean; the name and \"+1\" use the Clock's accent, the time the text colour, the paused mark the text colour and Done the amber status tone");
-    checks.push("Merged renderers in both modes: Weather's --weather-rain hook, rain bars, unknown hours, detail, hours and hints in Sea glass with primary timing, and only there (#213: a rain-hook mutation on Weather's unit and metric labels fails the audit); Sun & moon Gold with a Lilac moon subtree; World clocks day/night icons Gold/Lilac; Air quality Mist bars with no category colour; Calendar weekday label, heads and today ring Lilac with a primary date; Countdown unit Rose and a primary Today word; Note text primary; Reminders dots and dates Rose with an amber Overdue");
+    checks.push("Merged renderers in both modes: Weather's --weather-rain hook, rain bars, unknown hours, detail, hours and hints in Sea glass with primary timing, and only there (#213: a rain-hook mutation on Weather's unit and metric labels fails the audit); Sun & moon Gold with a Lilac moon subtree; World clocks day/night icons Gold/Lilac; Air quality Mist bars with no category colour; Calendar weekday label, heads, today ring, upcoming dates and marked-day dots Lilac with a primary date and primary names (#716); Countdown unit Rose and a primary Today word; Note text primary; Reminders dots and dates Rose with an amber Overdue");
 
     await page.setViewportSize({ width: 1920, height: 1080 });
     for (const mode of ['native', 'color']) {
