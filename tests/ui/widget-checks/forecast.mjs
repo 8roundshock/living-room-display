@@ -33,7 +33,7 @@ async function inspect(page) {
     return {
       scale: new DOMMatrix(getComputedStyle(section.querySelector('.widget-content')).transform).a,
       caution, line: line && { ...cue(line), shared: line.classList.contains('status-caution') }, status: cue(status), age: age && { ...cue(age), lines: lines(age) },
-      text: section.innerText, withStatus: section.querySelector('.forecast-body').classList.contains('forecast-with-status'),
+      text: section.innerText, withStatus: section.querySelector('.forecast-body').classList.contains('forecast-with-status'), pageNow: Date.now(),
       // How tall the strip and one day's glyph are, as a share of the widget's content height.
       stripShare: strip.height / content.height, glyphShare: section.querySelector('.forecast-day > .weather-glyph').getBoundingClientRect().height / content.height,
       past: [...section.querySelectorAll('.forecast-day-label')].map(node => node.getAttribute('aria-label').slice(-10)), heading: section.querySelector('.ambient-label').textContent,
@@ -79,7 +79,13 @@ export async function sweep({ page, viewport, state, base, now }) {
       // The whole line is the shared status cue: the caution tone at full opacity (#223), label and age alike (#715).
       assert.equal(m.withStatus, true, label);
       assert.equal(m.line.shared, true, `${label}: the line carries the shared status class`);
-      assert.match(m.line.text.replace(/\s+/g, ' '), status === 'stale' ? /^Saved forecast · Updated 5 hr ago$/ : /^Offline · Updated (just now|\d+ min ago)$/, `${label}: the label, then the age`);
+      // The page clock advances across the suite (by more than an hour before the 4K pass), so the saved age is
+      // read against it; the one-second tick may lag it by up to a second. The saved forecast is five hours older
+      // than the fixture's now.
+      const line = m.line.text.replace(/\s+/g, ' ');
+      const savedHours = [m.pageNow, m.pageNow - 1000].map(at => Math.floor((at - (now - 5 * 3600_000)) / 3600_000));
+      if (status === 'stale') assert.ok(savedHours.some(hours => line === `Saved forecast · Updated ${hours} hr ago`), `${label}: the label, then the age (${savedHours.join(' or ')} hr): ${line}`);
+      else assert.match(line, /^Offline · Updated (just now|\d+ (min|hr) ago)$/, `${label}: the label, then the age`);
       assert.equal(m.status.text, status === 'stale' ? 'Saved forecast' : 'Offline', label);
       for (const [name, part] of [['line', m.line], ['label', m.status], ['age', m.age]]) {
         assert.equal(part.color, m.caution, `${label}: ${name} in the caution tone`);
