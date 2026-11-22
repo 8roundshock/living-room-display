@@ -1,5 +1,47 @@
 # Project status
 
+## Widgets: no data source and no update time while fresh — 2026-11-22 (#715)
+
+Source candidate, not installed. Owner request: "all of them say the source for the data, but i
+dont want to see that" and, of when it was updated, "also dont care".
+
+What changed, on the display, the editor canvas and the picker samples:
+- **Fresh data shows neither a provider name nor an update age.** "Open-Meteo", "Forecast by
+  Open-Meteo", "CAMS · Open-Meteo", the alert issuer line and "Updated 5 min ago" are gone from
+  Weather, Forecast, Dynamic, Air quality, Weather alerts and the collection weather widgets
+  (Wind, Humidity, Pressure, Visibility, Cloud cover, Precipitation and today's Hourly).
+- **Data that is not fresh keeps its honest state**, with the age only there and in the status
+  tone: "Saved forecast · Updated 5 hr ago", "Saved reading · 2 hr ago", "Saved alerts · 2 hr
+  ago", "Offline · Updated 5 hr ago", "Last known · Thu 2 AM", "Weather unavailable · retrying".
+  No provider name there either.
+- **The credit stays in the app, off the display:** the "Forecast estimates by Open-Meteo" link in
+  Settings, and the provider names in the widget settings hints (Air quality, Dynamic's official
+  alerts and now Weather alerts) and the docs. The one-credit-per-board rule is removed.
+- **What is neither a source nor an age stays:** the rain "Forecast estimate" confidence, Air
+  quality's "Model est.", category words, units and place names. The collection weather widgets
+  keep their place as the last line.
+- **Freed room goes to the content.** A fresh Forecast is its heading and strip; in medium and
+  large the strip is taller (glyphs, day labels, chances; temperatures in large). A saved or
+  offline forecast gets its status line back under the former, shorter strip, so every state
+  stays at fit 1. Weather keeps a footer only for the rain confidence and the status line; Air
+  quality's footer is one short row; Weather alerts has none while fresh.
+- `AGENTS.md` and [product requirements](docs/product.md) now state this decision in place of
+  "show weather age".
+
+Other widgets were checked and needed no change: Sun & moon, World clocks, Calendar, Countdown,
+Note, Photo, Reminders, Agenda, Week ahead, Timers and the progress widgets show no provider and
+no data age (their "Saved … · offline" labels stay), and Last screen has had no caption since
+#563 (the widget contract's table rows for it are corrected).
+
+Details: [widget contract](docs/widgets.md#data-and-image-boundaries), [design](docs/design.md),
+[UI contracts](docs/ui.md), [API](docs/api.md#dynamic-signals).
+
+Verified with source builds and synthetic data only: see the pull request for the commands and
+results. Not verified: installation and the TV. Open for the owner: "Model est." under a fresh
+Air quality reading and the place line under the collection weather widgets are kept as wording
+that is neither a source nor an age; say so if they should go too. Provider terms and where the
+credit must appear are part of the public-release decision (#114).
+
 ## Build and test hygiene: Alt+Tab ghosts, build advisory, stale client bundles — 2026-11-17 (#712, #708, #711, #710)
 
 Source candidate, not installed. The owner: "fix all of them in one pr".

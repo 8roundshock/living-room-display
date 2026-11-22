@@ -49,7 +49,7 @@ busy dashboards. The application must produce no audio.
 | Settings | `/settings` owns weather city/device-area lookup, units/time format, screen-awake preference, scheduled styles and data recovery. Saves are field-scoped and revision-guarded; failed/conflicting requests retain drafts. Dirty navigation warns before leaving. |
 | Timers | Silent countdown timers started from Home (presets or a custom time, an optional name): pause, add a minute, cancel with Undo, restart and dismiss. While one runs, the display Clock's date line shows it ("Pasta 8 min"); a finished one reads Done in the status colour for 10 minutes. No sound, no flashing (#438). |
 | Time and date | Optional clock with outline numerals by default, solid digital or minimal analog hands, and 12/24-hour format. |
-| Weather | Conditions with a clear place label, units, and update age; when rain is near it adds the chance and estimated timing of upcoming rain inside the same widget, with uncertainty visible (#74). |
+| Weather | Conditions with a clear place label and units; when rain is near it adds the chance and estimated timing of upcoming rain inside the same widget, with uncertainty visible (#74). A saved or offline forecast says so, with its age (#715). |
 | Forecast | Readable seven-day outlook. |
 | Reminders | Home owns adding, editing, deleting and checking off one-time/undated reminders, with Undo and local history (restore, delete, clear; the latest 500 kept locally). Its calendar turns a chosen day into a dated reminder. The editor retains widget size and hide-empty appearance options. The display fits pending reminders soonest first with honest “+N more”. The widget supports whole-cell sizes from 2 × 2 to full grid height and two-thirds width (#73, #203, #517). |
 | Appearance | User-editable layout, colors, typography, motion, brightness (one fixed level, or following daylight between a chosen dimmest and brightest level: brightest while it is light outside, an evening level until a chosen dim time, 11 PM by default, then dimmest until dawn, #439 and #591), and saved presets. The accent is one colour or Native, where each widget uses its own tone from one harmonious dim palette (default for new installs and built-in styles). |
@@ -67,7 +67,25 @@ busy dashboards. The application must produce no audio.
 
 Distinguish forecast probability, expected precipitation amount, and estimated
 rain windows. Label times and intervals correctly. Show stale or unavailable
-weather instead of silently retaining an apparently fresh forecast. Version one
+weather instead of silently retaining an apparently fresh forecast.
+
+Owner decision, 2026-11-22 (#715): "all of them say the source for the data, but i
+dont want to see that" and, of when it was updated, "also dont care". On the
+display, the editor canvas and the picker samples:
+
+- **Fresh data shows neither a provider name nor an update age**, in any widget.
+- **Data that is not fresh keeps its honest state.** The status-tone labels stay
+  (Saved forecast, Saved reading, Saved alerts, Offline, Last known, unavailable ·
+  retrying), with the age only there, because that is when it tells the viewer
+  something. No provider name there either.
+- **The provider credit stays in the app, off the display:** Settings keeps its
+  "Forecast estimates by Open-Meteo" link, and the widget settings hints and these
+  docs name the providers. Provider terms are part of the public-release decision
+  (#114, which absorbed the terms review #168).
+- Wording that is neither a source nor an age stays: the rain "Forecast estimate"
+  confidence, Air quality's "Model est.", category words, units and place names.
+
+This replaces the earlier rule to show weather age at all times. Version one
 uses Open-Meteo and an editable Toronto city default selected by the coordinator;
 the default is not a claim about the user's location. Probability covers all
 precipitation; rain amount is separate so snow does not become a false rain warning.

@@ -534,8 +534,10 @@ intervals use the forecast's monotonic-and-wall timing, and a future `updatedAt`
 refreshed at once (#244). Both routes wait for a due refresh at most about one second
 and say `refreshing` meanwhile, as the forecast does (#351).
 
-The widget labels every value as a model estimate with its age, and credits
-"CAMS · Open-Meteo" (the inspector hint names Copernicus CAMS in full). It is not a
+The widget labels a fresh value "Model est." and nothing more: no update age and no
+provider name on the display (#715; the inspector hint names Copernicus CAMS via
+Open-Meteo in full). A value that is not fresh carries its status and age in the status
+tone ("Saved reading · 2 hr ago", "Offline · Model est. · 12 min ago"). It is not a
 local sensor reading or an official index such as Canada's AQHI. Saved current values
 stand for 3 hours after `updatedAt` (#188, the same rule as Weather's temperature in
 #243); older ones are replaced by the saved hourly estimate for the current hour
@@ -672,7 +674,7 @@ card at all Dynamic is `unavailable` when a source is degraded (shown, saying wh
 | Display offline | "Offline · …"; reminder and countdown cards say "Saved reminders · offline" (or "Saved dates"); alerts are kept until their own end; glyphs are still |
 | Forecast unavailable | No weather cards; "Weather unavailable" in the status tone |
 | Alerts off / unsupported | Nothing from alerts; never "no alerts" (the editor explains coverage) |
-| Alerts fresh, none in effect | Small and medium say nothing; large: "No alerts · checked 9:41 PM" |
+| Alerts fresh, none in effect | Small and medium say nothing; large: "No alerts" (fresh, so no check time, #715) |
 | Alerts stale | Retained alerts until their end, and "Saved alerts · checked 9:10 PM" in the status tone; no "No alerts" claim |
 | Alerts unavailable | "Weather alerts unavailable" in the status tone |
 | Air on, not loaded / unavailable / saved | No air cards and "Air quality not loaded yet" (medium and large) / "Air quality unavailable" / an air card aged "Saved reading · …", "Saved estimate" over 3 hours, or no air card and "Saved air reading" when only the last-known value is left |
@@ -687,10 +689,13 @@ alert list may still hide, and usable cards from other sources continue to rende
 Status phrases sit in the footer and leave out the lead card's own source; the small family
 shows one, in this order: Offline, Weather alerts unavailable, Weather unavailable, Saved
 forecast, Air quality unavailable, Reminders unavailable. Forecast cards say "Forecast
-estimate" (rain cards their confidence) with the forecast's age; air cards their age and
-"CAMS · Open-Meteo"; sun and moon cards the place; official cards the provider's name in
-full (the small family may say "Environment Canada") and when they were checked. Dynamic
-carries the "Forecast by Open-Meteo" credit only while Forecast and Weather are both off.
+estimate" (rain cards their confidence); air cards "Model est."; sun and moon cards the
+place; holiday cards the country. No card names a data provider, and a fresh card shows no
+update age or check time (owner decision, 2026-11-22, #715): an official card is marked by
+its alert icon and level word, and its issuer is named in the widget's settings. A card
+whose data is not fresh carries its status and age in the status tone instead ("Saved
+forecast · Updated 2 hr ago", "Saved reading · 2 hr ago", "Saved alerts · checked 9:10 PM",
+"Offline · …").
 
 ## Home (#438)
 
