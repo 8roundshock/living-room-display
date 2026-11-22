@@ -527,7 +527,9 @@ previews do not establish physical-TV brightness or long-term panel behavior.
 ## Data and image boundaries
 
 Render content according to available space without changing its meaning. Keep
-forecast estimates, stale/unknown states, place and units honest.
+forecast estimates, stale/unknown states, place and units honest. For a
+hide-when-empty option, distinguish confirmed empty from unavailable or failed.
+Keep management available in the editor when the ambient widget is hidden.
 
 **No source, no fresh age (#715).** Owner decision, 2026-11-22: on the display, the editor
 canvas and the picker samples, a widget shows neither the name of a data provider nor,
@@ -537,7 +539,7 @@ while its data is fresh, when that data was updated or checked.
 | --- | --- |
 | Fresh | Nothing about source or age. Wording that is neither stays: the rain “Forecast estimate” confidence, Air quality's “Model est.”, category words, units and the place. A footer that held only the credit and age is not rendered, and its room goes to the content. |
 | Saved (stale) | Its status label with the age, in the status tone: “Saved forecast · Updated 5 hr ago” (compact rows: “Saved forecast · 5 hr ago”), “Saved reading · 2 hr ago”, “Saved alerts · 2 hr ago”; Dynamic: “Saved alerts · checked 9 AM”. |
-| Offline display | “Offline” first, then the age with its “Updated” (“Offline · Updated 5 hr ago”), because a bare age could read as the outage's. |
+| Offline display | “Offline” first: “Offline · Updated 5 hr ago” (the age keeps its “Updated”, because a bare age could read as the outage's); Air quality “Offline · Model est. · 12 min ago”; Dynamic's alerts “Offline · checked 9 AM”. |
 | Hours old | “Last known · Thu 2 AM” (Weather, the collection weather widgets) or “Saved estimate” (Air quality), as before. |
 | Unavailable | The widget's own status line (“Weather unavailable · retrying”), with the age only when an update time is known. |
 
@@ -548,9 +550,7 @@ quality's and Dynamic's air cards'; `DynamicCard.age` is null while fresh. The p
 credit lives in Settings (“Forecast estimates by Open-Meteo”, a link) and in the widget
 settings hints (Air quality, Dynamic's Official weather alerts, Weather alerts), which may
 name providers; a renderer may not (`src/client/model.test.ts` checks the sources).
-Provider terms are part of the public-release decision (#114, which absorbed #168). For a
-hide-when-empty option, distinguish confirmed empty from unavailable or failed.
-Keep management available in the editor when the ambient widget is hidden.
+Provider terms are part of the public-release decision (#114, which absorbed #168).
 
 One widget's failure stays inside that widget (#318). The registry wraps every renderer
 in its own error boundary ([`WidgetBoundary.tsx`](../src/client/widgets/WidgetBoundary.tsx)),
