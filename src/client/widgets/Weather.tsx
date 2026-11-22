@@ -1,29 +1,28 @@
 import { Fragment, useMemo, type CSSProperties, type ReactNode } from 'react';
 import type { AppState, RainInterval } from '../../shared/contracts.ts';
-import { ageLabel, chartAxisLabels, compactWeatherTime, lastKnownTime, NBSP, temperature, todayForecast, weatherTimeZone } from '../format.ts';
-import { weatherAttributionWidget } from '../model.ts';
+import { ageLabel, chartAxisLabels, compactWeatherTime, lastKnownTime, NBSP, shortAge, temperature, todayForecast, weatherStatus, weatherTimeZone } from '../format.ts';
 import { rainChartLabel, rainOutlook, rainOutlookCopy } from '../weather-outlook.ts';
-import { conditionLabel, SourceCredit, WeatherAge } from './common.tsx';
+import { conditionLabel, WeatherAge } from './common.tsx';
 import { TransitionText } from './TransitionText.tsx';
 import { WeatherGlyph } from './WeatherGlyph.tsx';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
 
 /**
  * The small family's footer (#283): one row of short phrases that wraps only between them, like Air
- * quality's (“Partial forecast · Saved forecast · 5 hr ago · Open-Meteo”). The status words keep the
- * age in the status tone; “Updated” goes only after “Saved forecast” (as Air quality's “Saved
- * reading · 2 hr ago”), never after “Offline”, where a bare age could read as the outage's. The
- * credit is the short “Open-Meteo” that Forecast's footer uses. Medium and large keep the full lines.
+ * quality's (“Partial forecast · Saved forecast · 5 hr ago”). Fresh weather has no age and no provider
+ * name (#715), so the row holds only the rain confidence when there is one, and nothing renders when
+ * there is none. A saved or offline forecast keeps its status words and age in the status tone;
+ * “Updated” goes only after “Saved forecast” (as Air quality's “Saved reading · 2 hr ago”), never after
+ * “Offline”, where a bare age could read as the outage's. Medium and large keep the full lines.
  */
-function CompactFooter({ weather, disconnected, now, confidence, credit }: { weather: AppState['weather']; disconnected: boolean; now: Date; confidence: string | null; credit: boolean }) {
-  const age = ageLabel(weather.updatedAt, now.getTime());
-  const status = disconnected ? 'Offline' : weather.status === 'stale' ? 'Saved forecast' : null;
+function CompactFooter({ weather, disconnected, now, confidence }: { weather: AppState['weather']; disconnected: boolean; now: Date; confidence: string | null }) {
+  const status = weatherStatus(weather, disconnected, now.getTime());
   const phrase = (text: string) => <span className="weather-phrase">{text}</span>;
   const parts: ReactNode[] = [
     ...(confidence ? [<span className="rain-confidence">{confidence.split(' · ').map((text, index) => <Fragment key={index}>{index > 0 && `${NBSP}· `}{phrase(text)}</Fragment>)}</span>] : []),
-    <span className={`weather-age ${weather.status !== 'fresh' || disconnected ? 'stale' : ''}`}>{status && <>{phrase(status)}{NBSP}· </>}<span className="weather-age-value">{status === 'Saved forecast' && age.startsWith('Updated ') ? age.slice('Updated '.length) : age}</span></span>,
-    ...(credit ? [<span className="weather-credit">{phrase('Open-Meteo')}</span>] : []),
+    ...(status ? [<span className="weather-age stale status-caution">{status.label && <>{phrase(status.label)}{NBSP}· </>}<span className="weather-age-value">{status.label === 'Saved forecast' ? shortAge(status.age) : status.age}</span></span>] : []),
   ];
+  if (!parts.length) return null;
   return <div className="weather-footer weather-footer-compact">{parts.map((part, index) => <Fragment key={index}>{index > 0 && <span className="weather-footer-separator">{NBSP}· </span>}{part}</Fragment>)}</div>;
 }
 
@@ -62,8 +61,7 @@ function Weather({ state: { weather }, settings, now, size, disconnected }: Widg
     // Unavailable (#362): no louder than the weather it replaces. A dim, still cloud (the widget's own
     // icon, not a condition) and a dim placeholder keep the footprint; one status-tone line at the
     // label size says so (“· retrying” while the computer keeps trying, “· offline” while the display
-    // cannot reach it); the age shows only when an update time is known, and no credit while no
-    // forecast is shown.
+    // cannot reach it); the age shows only when an update time is known, in the status tone too (#715).
     const reason = disconnected ? 'offline' : weather.status === 'fresh' ? null : 'retrying';
     return <div className="widget-body weather-body" data-weather-mode="unavailable">
       <div className="ambient-label weather-place">{weather.location.name}<span className="weather-unit"> · {weather.units.temperature}</span></div>
@@ -71,7 +69,7 @@ function Weather({ state: { weather }, settings, now, size, disconnected }: Widg
         <div className="current-weather-main"><span className="current-temperature weather-placeholder" aria-hidden="true"><span className="weather-placeholder-dash">—</span>°</span><WeatherGlyph code={3} still size={null} className="weather-symbol weather-symbol-unavailable" /></div>
         <div className="weather-summary"><div className="weather-unavailable status-caution">{reason ? `Weather unavailable${NBSP}·${NBSP}${reason}` : 'Weather unavailable'}</div></div>
       </div>
-      {weather.updatedAt && <div className="weather-footer"><div className="weather-age"><span className="weather-age-value">{ageLabel(weather.updatedAt, now.getTime())}</span></div></div>}
+      {weather.updatedAt && <div className="weather-footer"><div className="weather-age stale status-caution"><span className="weather-age-value">{ageLabel(weather.updatedAt, now.getTime())}</span></div></div>}
     </div>;
   }
   const mode = outlook.emphasis;
@@ -117,9 +115,10 @@ function Weather({ state: { weather }, settings, now, size, disconnected }: Widg
       />)}</div>
       <div className="rain-hours"><TransitionText value={chart.from} /><TransitionText value={chart.to} /></div>
     </div>}
+    {/* Fresh weather has no footer unless rain adds its confidence wording (#715); a saved or offline forecast keeps its status line. */}
     {size === 'small'
-      ? <CompactFooter weather={weather} disconnected={disconnected} now={now} confidence={showConfidence ? copy.confidence : null} credit={weatherAttributionWidget(settings) === 'weather'} />
-      : <div className="weather-footer">{showConfidence && <div className="rain-confidence">{copy.confidence}</div>}<WeatherAge weather={weather} disconnected={disconnected} now={now} /><SourceCredit id="weather" settings={settings} /></div>}
+      ? <CompactFooter weather={weather} disconnected={disconnected} now={now} confidence={showConfidence ? copy.confidence : null} />
+      : (showConfidence || weatherStatus(weather, disconnected, now.getTime())) && <div className="weather-footer">{showConfidence && <div className="rain-confidence">{copy.confidence}</div>}<WeatherAge weather={weather} disconnected={disconnected} now={now} /></div>}
   </div>;
 }
 

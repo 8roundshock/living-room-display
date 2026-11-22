@@ -61,6 +61,37 @@ export function ageLabel(
 }
 
 /**
+ * The age without its “Updated” (“5 hr ago”), for after a label that already says the data is saved
+ * (“Saved forecast · 5 hr ago”, “Saved reading · 2 hr ago”). Never after “Offline”, where a bare age
+ * could read as the outage's; labels with no elapsed time (“Not updated yet”) stay whole.
+ */
+export function shortAge(age: string): string {
+  return age.startsWith('Updated ') ? age.slice('Updated '.length) : age;
+}
+
+/**
+ * What a weather widget says about data that is not fresh, or null while it is fresh.
+ *
+ * Owner decision, 2026-11-22 (#715): on the display, fresh data shows neither a provider name nor an
+ * update age. The age appears only with a status label, in the status tone, because that is when it
+ * tells the viewer something: “Offline” while the display cannot reach the computer, “Saved forecast”
+ * for a forecast the computer could not refresh, and no label for an unavailable forecast, whose
+ * renderer says so itself. `age` is `ageLabel`'s text; with no label and no known update time (an
+ * unavailable forecast that was never loaded) there is nothing to say and the result is null. The
+ * provider credit lives in Settings and the docs.
+ */
+export function weatherStatus(
+  weather: Pick<WeatherState, 'status' | 'updatedAt'>,
+  disconnected: boolean,
+  now = Date.now(),
+): { label: 'Offline' | 'Saved forecast' | null; age: string } | null {
+  if (!disconnected && weather.status === 'fresh') return null;
+  const label = disconnected ? 'Offline' : weather.status === 'stale' ? 'Saved forecast' : null;
+  if (!label && !weather.updatedAt) return null;
+  return { label, age: ageLabel(weather.updatedAt, now) };
+}
+
+/**
  * The zone weather dates and times are formatted in: the weather city's IANA zone once the provider
  * resolved it, otherwise this computer's. A saved device location stores `auto` until its first
  * forecast arrives, and the server reports that `auto` while the forecast is unavailable (PC offline

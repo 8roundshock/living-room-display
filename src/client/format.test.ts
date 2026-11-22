@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { WeatherState } from '../shared/contracts.ts';
-import { ageLabel, chartAxisLabels, civilDate, compactWeatherRange, compactWeatherTime, dateTimeFormat, forecastDay, LAST_KNOWN_AFTER_MS, lastKnownLabel, lastKnownTime, MINUS, temperature, todayForecast, upcomingDays, weatherTime, weatherTimeZone } from './format.ts';
+import { ageLabel, chartAxisLabels, civilDate, compactWeatherRange, compactWeatherTime, dateTimeFormat, forecastDay, LAST_KNOWN_AFTER_MS, lastKnownLabel, lastKnownTime, MINUS, shortAge, temperature, todayForecast, upcomingDays, weatherStatus, weatherTime, weatherTimeZone } from './format.ts';
 import { rainChartLabel, rainOutlook, rainOutlookCopy } from './weather-outlook.ts';
 
 const TORONTO = 'America/Toronto';
@@ -32,6 +32,29 @@ test('ageLabel never calls a future update time “just now” (#244)', () => {
   assert.equal(ageLabel(new Date(NOW - 26 * HOUR).toISOString(), NOW), 'Updated 1 day ago', 'one day is singular (#280)');
   assert.equal(ageLabel(new Date(NOW - 50 * HOUR).toISOString(), NOW), 'Updated 2 days ago');
   assert.equal(ageLabel(null, NOW), 'Not updated yet');
+});
+
+test('fresh weather has no status and so no age; a saved, offline or unavailable forecast keeps its label and age (#715)', () => {
+  const at = (ms: number | null, status: WeatherState['status']) => ({ status, updatedAt: ms === null ? null : new Date(ms).toISOString() });
+  // Fresh on a connected display: nothing to say, however old or odd the update time is.
+  for (const updated of [NOW - 5 * 60_000, NOW, NOW - 26 * HOUR, NOW + 4 * HOUR, null]) assert.equal(weatherStatus(at(updated, 'fresh'), false, NOW), null);
+  // Not fresh: the status label, with the age only there.
+  assert.deepEqual(weatherStatus(at(NOW - 5 * HOUR, 'stale'), false, NOW), { label: 'Saved forecast', age: 'Updated 5 hr ago' });
+  assert.deepEqual(weatherStatus(at(NOW - 26 * HOUR, 'stale'), false, NOW), { label: 'Saved forecast', age: 'Updated 1 day ago' });
+  assert.deepEqual(weatherStatus(at(NOW - 5 * 60_000, 'fresh'), true, NOW), { label: 'Offline', age: 'Updated 5 min ago' }, 'a display that cannot reach the computer is never fresh');
+  assert.deepEqual(weatherStatus(at(NOW - 5 * HOUR, 'stale'), true, NOW), { label: 'Offline', age: 'Updated 5 hr ago' }, 'offline comes first');
+  assert.deepEqual(weatherStatus(at(null, 'stale'), false, NOW), { label: 'Saved forecast', age: 'Not updated yet' });
+  assert.deepEqual(weatherStatus(at(NOW + 4 * HOUR, 'stale'), false, NOW), { label: 'Saved forecast', age: 'Update time unknown' });
+  // Unavailable: the renderer's own line says so; the age shows only when an update time is known (#362).
+  assert.deepEqual(weatherStatus(at(NOW - 2 * HOUR, 'unavailable'), false, NOW), { label: null, age: 'Updated 2 hr ago' });
+  assert.equal(weatherStatus(at(null, 'unavailable'), false, NOW), null, 'no empty age while nothing was ever loaded');
+  // "Saved …" labels take the short age; other texts stay whole.
+  assert.equal(shortAge('Updated 5 hr ago'), '5 hr ago');
+  assert.equal(shortAge('Updated just now'), 'just now');
+  assert.equal(shortAge('Not updated yet'), 'Not updated yet');
+  assert.equal(shortAge('Update time unknown'), 'Update time unknown');
+  // No status ever names a provider.
+  for (const status of [weatherStatus(at(NOW - 5 * HOUR, 'stale'), false, NOW), weatherStatus(at(NOW, 'fresh'), true, NOW), weatherStatus(at(NOW - HOUR, 'unavailable'), false, NOW)]) assert.doesNotMatch(JSON.stringify(status), /Open-Meteo/);
 });
 
 test('compact forecast labels name tomorrow by its weekday; the full label keeps Tomorrow (#256)', () => {

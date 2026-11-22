@@ -6,6 +6,7 @@ import {
   compactWeatherTime,
   lastKnownLabel,
   LAST_KNOWN_AFTER_MS,
+  shortAge,
   weatherTimeZone,
 } from '../format.ts';
 import { currentDetail, upcomingDetails } from '../collection.ts';
@@ -56,6 +57,13 @@ export function useWeatherDetails(props: WidgetContentProps) {
     [weather, minute, props.size, zone],
   );
 }
+/**
+ * The place a collection weather widget describes, under whatever its data needs said first (#715). Fresh
+ * data shows the place alone: no provider name and no update age (owner decision, 2026-11-22; the credit
+ * lives in Settings). Data that is not fresh keeps its status-tone lines above the place, with the age
+ * only there: “Last known · Thu 2 AM” for a reading over three hours old, then “Saved forecast · 5 hr
+ * ago”, “Offline · Updated 5 hr ago” or “Unavailable”. The age never wraps inside.
+ */
 export function WeatherFooter({ props, readingTime }: { props: WidgetContentProps; readingTime?: string }) {
   const weather = props.state.weather;
   const zone = useMemo(() => weatherTimeZone(weather.location.timezone), [weather.location.timezone]);
@@ -67,6 +75,8 @@ export function WeatherFooter({ props, readingTime }: { props: WidgetContentProp
       : weather.status === 'unavailable'
         ? 'Unavailable'
         : null;
+  // "Not updated yet" would only repeat "Unavailable": the age shows when an update time is known.
+  const age = status && weather.updatedAt ? ageLabel(weather.updatedAt, props.now.getTime()) : null;
   return (
     <div className="collection-footer">
       {old && (
@@ -75,10 +85,19 @@ export function WeatherFooter({ props, readingTime }: { props: WidgetContentProp
           <br />
         </span>
       )}
-      {status && <span className="status-caution">{status} · </span>}
+      {status && (
+        <span className="status-caution collection-status">
+          {status}
+          {age && (
+            <>
+              {' · '}
+              <span className="collection-age">{status === 'Saved forecast' ? shortAge(age) : age}</span>
+            </>
+          )}
+          <br />
+        </span>
+      )}
       {weather.location.name}
-      <br />
-      Open-Meteo · {ageLabel(weather.updatedAt, props.now.getTime())}
     </div>
   );
 }

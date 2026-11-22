@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ageLabel, weatherTimeZone } from '../format.ts';
+import { ageLabel, shortAge, weatherTimeZone } from '../format.ts';
 import { alertStartLabel, unexpiredAlerts } from '../collection.ts';
 import { CollectionEmpty, CollectionFace } from './CollectionParts.tsx';
 import { collectionSample } from './collection-samples.ts';
@@ -23,6 +23,7 @@ function WeatherAlerts({ state, settings, now, size, disconnected }: WidgetConte
         : quiet
           ? 'No current alerts'
           : 'Current alerts unknown';
+  const status = disconnected ? 'Offline' : alerts?.status === 'stale' ? 'Saved alerts' : null;
   return (
     <CollectionFace name="Weather alerts" size={size} className="weather-alerts-face">
       {!rows.length ? (
@@ -44,18 +45,26 @@ function WeatherAlerts({ state, settings, now, size, disconnected }: WidgetConte
         </ul>
       )}
       {rows.length > count && <p className="collection-detail">+{rows.length - count} more</p>}
-      <div className="collection-footer">
-        {(disconnected || alerts?.status === 'stale') && (
-          <span className="status-caution">{disconnected ? 'Offline' : 'Saved alerts'} · </span>
-        )}
-        {alerts?.source ?? 'Canada and US coverage'}
-        {alerts?.checkedAt && (
-          <>
-            <br />
-            {ageLabel(alerts.checkedAt, now.getTime())}
-          </>
-        )}
-      </div>
+      {/* Fresh alerts need no footer (#715): no issuer line and no update age on the display; the providers are
+          named in this widget's settings. Saved alerts and an offline display keep their status-tone line, with
+          the age only there. */}
+      {status && (
+        <div className="collection-footer">
+          <span className="status-caution collection-status">
+            {status}
+            {alerts?.checkedAt && (
+              <>
+                {' · '}
+                <span className="collection-age">
+                  {status === 'Saved alerts'
+                    ? shortAge(ageLabel(alerts.checkedAt, now.getTime()))
+                    : ageLabel(alerts.checkedAt, now.getTime())}
+                </span>
+              </>
+            )}
+          </span>
+        </div>
+      )}
     </CollectionFace>
   );
 }
@@ -64,8 +73,9 @@ export const WeatherAlertsWidget: WidgetModule = {
   sample: collectionSample,
   Settings: () => (
     <p className="hint">
-      Uses the same official Canadian and US providers as Dynamic, for the saved weather city. Other areas
-      show unavailable coverage. Provider notices are information, not an emergency notification service.
+      Official notices from Environment Canada or the US National Weather Service, for the saved weather
+      city. Data Source: Environment and Climate Change Canada. Other areas show unavailable coverage.
+      Provider notices are information, not an emergency notification service.
     </p>
   ),
 };

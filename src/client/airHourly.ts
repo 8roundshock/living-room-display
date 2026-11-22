@@ -1,6 +1,6 @@
 import type { AirQualityReading, AirQualityState, Settings } from '../shared/contracts.ts';
 import { civilDateKey, zoneFormatter } from './astronomy.ts';
-import { chartAxisLabels, compactWeatherTime, LAST_KNOWN_AFTER_MS, lastKnownLabel } from './format.ts';
+import { chartAxisLabels, compactWeatherTime, LAST_KNOWN_AFTER_MS, lastKnownLabel, shortAge } from './format.ts';
 
 const HOUR = 3600_000;
 /** With fewer upcoming hours than this the large family says the hourly estimate is unavailable. */
@@ -117,8 +117,7 @@ export function currentHourReading(hourly: readonly AirQualityReading[], now: nu
  * saved hourly estimate for this hour replaces the AQI and UV ("Saved estimate"), or, without one,
  * the old AQI reads "Last known · <time>" (the shared `lastKnownLabel`) and UV is hidden; the time
  * is the hour the AQI describes ("9 AM", or "Sat 9 AM" when not today).
- * Nothing is invented; an age that cannot be read keeps the fetched values (the footer then says
- * the update time is unknown).
+ * Nothing is invented; an age that cannot be read keeps the fetched values.
  */
 export function airReadingView(air: Pick<AirQualityState, 'updatedAt' | 'hourly'>, current: AirCurrent, now: number, timeZone: string, clockFormat: Settings['clockFormat']): AirReadingView {
   const updated = instant(air.updatedAt) ?? instant(current.time);
@@ -131,12 +130,26 @@ export function airReadingView(air: Pick<AirQualityState, 'updatedAt' | 'hourly'
 }
 
 /**
- * The footer's age as short phrases that never break inside (#221): "Model est." with a reading,
- * "Saved reading" when stale, "Offline" first while the display cannot reach the computer, then the
- * age without "Updated" ("12 min ago"). Without a reading only the age shows ("Not updated yet").
+ * The footer's status as short phrases that never break inside (#221).
+ *
+ * Owner decision, 2026-11-22 (#715): fresh data shows no update age (and no provider name) on the
+ * display, so a fresh reading says only "Model est.", which keeps a model estimate from reading as a
+ * measurement. The age follows a status label only: "Saved reading · 2 hr ago" when stale, "Offline"
+ * first while the display cannot reach the computer ("Offline · Model est. · 12 min ago"), and a
+ * reading over three hours old (`old`, whose values a qualifier already replaces) keeps its age too.
+ * The age drops its "Updated" after these labels. Without a reading there is no estimate label: an
+ * unavailable or stale state shows the whole age ("Updated 2 hr ago", "Not updated yet"), and a state
+ * that never asked (`off`) says nothing here.
  */
-export function airAgeSegments({ age, stale, reading, disconnected }: { age: string; stale: boolean; reading: boolean; disconnected: boolean }): string[] {
-  const kind = stale && reading ? 'Saved reading' : reading ? 'Model est.' : null;
-  const when = kind && age.startsWith('Updated ') ? age.slice('Updated '.length) : age;
-  return [...(disconnected ? ['Offline'] : []), ...(kind ? [kind] : []), when];
+export function airAgeSegments({ age, status, reading, disconnected, old = false }: { age: string; status: AirQualityState['status']; reading: boolean; disconnected: boolean; old?: boolean }): string[] {
+  const offline = disconnected ? ['Offline'] : [];
+  if (!reading) return [...offline, ...(status === 'stale' || status === 'unavailable' ? [age] : [])];
+  const kind = status === 'stale' ? 'Saved reading' : 'Model est.';
+  if (status === 'fresh' && !disconnected && !old) return [kind];
+  return [...offline, kind, shortAge(age)];
+}
+
+/** Whether `airAgeSegments` is a status cue (the status tone) rather than the quiet "Model est." of a fresh reading. */
+export function airAgeIsStatus({ status, disconnected, old = false }: { status: AirQualityState['status']; disconnected: boolean; old?: boolean }): boolean {
+  return disconnected || status === 'stale' || status === 'unavailable' || old;
 }

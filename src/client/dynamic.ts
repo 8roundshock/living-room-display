@@ -1,7 +1,7 @@
 import type { AirQualityState, AlertsState, CountdownEvent, DynamicSources, Reminder, Settings, WeatherAlert, WeatherState, WidgetId } from '../shared/contracts.ts';
 import { HOLIDAY_REGIONS, HOLIDAY_REGION_NAMES, koreanCalendarAvailable, observancesForYear, shiftHolidayDate, type HolidayRegion } from '../shared/holidays.ts';
-import { AIR_CREDIT, SCALE_LABELS, aqiCategory, uvCategory } from './air-categories.ts';
-import { airAgeSegments, airReadingView, upcomingAirHours } from './airHourly.ts';
+import { SCALE_LABELS, aqiCategory, uvCategory } from './air-categories.ts';
+import { airAgeIsStatus, airAgeSegments, airReadingView, upcomingAirHours } from './airHourly.ts';
 import { addDays, civilDateKey, formatDuration, localTimeZone, moonPhase, nextMoonEvent, sunDay, zoneFormatter, type MoonPhase } from './astronomy.ts';
 import { countdownRows } from './calendar.ts';
 import { ageLabel, civilDate, compactWeatherTime, lastKnownTime, NBSP, temperature, todayForecast, weatherTimeZone } from './format.ts';
@@ -85,11 +85,17 @@ export interface DynamicCard {
   detailFlag: string | null;
   glyph: DynamicGlyph | null;
   tone: DynamicTone;
-  /** Where it comes from ("Forecast estimate", a provider, a place). */
+  /**
+   * What kind of information it is ("Forecast estimate", "Model est."), or the place or country it is for.
+   * Never a provider name (owner decision, 2026-11-22, #715): the credit lives in Settings and the docs.
+   */
   provenance: string | null;
   /** The small family's shorter provenance, when it has one. */
   provenanceShort: string | null;
-  /** The data's age or freshness ("Saved forecast · Updated 2 hr ago" in the status tone). */
+  /**
+   * The status of data that is not fresh, with its age ("Saved forecast · Updated 2 hr ago", in the status
+   * tone). Null while the data is fresh: a fresh card shows no update age (#715).
+   */
   age: DynamicPhrase | null;
   /** The large family's right-aligned row time. */
   time: string | null;
@@ -174,12 +180,13 @@ const LEVEL_WORDS: Record<WeatherAlert['level'], string> = { warning: 'Warning',
 function alertEnded(alert: WeatherAlert, now: number): boolean {
   return [alert.endsAt, alert.expiresAt].some(value => value !== null && Date.parse(value) <= now);
 }
+/** When saved alerts were last checked, only while they are not fresh (#715): fresh alerts show no check time. */
 function alertsAge(alerts: AlertsState, ctx: Context): DynamicPhrase | null {
   if (!alerts.checkedAt) return null;
   const at = ctx.time(Date.parse(alerts.checkedAt));
   if (ctx.input.disconnected) return { text: `Offline${NBSP}·${NBSP}checked ${at}`, caution: true };
   if (alerts.status === 'stale') return { text: `Saved alerts${NBSP}·${NBSP}checked ${at}`, caution: true };
-  return { text: `Checked ${at}`, caution: false };
+  return null;
 }
 function alertCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   const { alerts, sources } = ctx.input;
@@ -191,10 +198,10 @@ function alertCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   const alive = alerts.alerts.filter(alert => !alertEnded(alert, ctx.now));
   const checked = alerts.checkedAt ? ctx.time(Date.parse(alerts.checkedAt)) : null;
   if (alerts.status === 'stale' && checked) statuses.push({ source: 'alerts', text: `Saved alerts${NBSP}·${NBSP}checked ${checked}`, caution: true, smallRank: null, degraded: true });
-  // A confirmed empty list is said only where there is room, and never while the list is saved.
-  if (alerts.status === 'fresh' && !alive.length && checked) statuses.push({ source: 'alerts', text: `No alerts${NBSP}·${NBSP}checked ${checked}`, caution: false, smallRank: null, largeOnly: true, degraded: false });
+  // A confirmed empty list is said only where there is room, and never while the list is saved. It is fresh,
+  // so it carries no check time (#715).
+  if (alerts.status === 'fresh' && !alive.length && checked) statuses.push({ source: 'alerts', text: 'No alerts', caution: false, smallRank: null, largeOnly: true, degraded: false });
   const age = alertsAge(alerts, ctx);
-  const source = alerts.source ?? 'Official weather alerts';
   return alive.map(alert => {
     const start = alert.startsAt ? Date.parse(alert.startsAt) : Date.parse(alert.issuedAt);
     const end = alert.endsAt ? Date.parse(alert.endsAt) : null;
@@ -204,9 +211,9 @@ function alertCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
       id: `alert:${alert.id}`, source: 'alerts', kind: `official-${alert.level}`, tier, score: DYNAMIC_SCORES[alert.level], start,
       kicker: LEVEL_WORDS[alert.level], kickerCaution: alert.level === 'warning',
       headline: alert.name, compact: alert.name, detail: parts.join(` · `) || null, detailCompact: parts.slice(0, 2).filter(part => part !== alert.area).join(' · ') || null,
-      // The alert icon sits in the kicker beside the level word; the headline takes the whole width.
-      glyph: null, tone: 'sky',
-      provenance: source, provenanceShort: alerts.provider === 'eccc' ? 'Environment Canada' : source, age,
+      // The alert icon sits in the kicker beside the level word; the headline takes the whole width. The icon
+      // and the level word mark the card as official; the issuer is named in the settings, not here (#715).
+      glyph: null, tone: 'sky', age,
       time: start > ctx.now ? ctx.time(start) : end !== null ? `Until ${ctx.time(end)}` : null, label: alert.name, official: true,
     });
   });
@@ -259,10 +266,11 @@ function weatherCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   }
   if (weather.status === 'stale') statuses.push({ source: 'weather', text: 'Saved forecast', caution: true, smallRank: 3, degraded: true });
   const { now, tz } = ctx, thresholds = ctx.metric ? DYNAMIC_THRESHOLDS.metric : DYNAMIC_THRESHOLDS.imperial;
-  const age: DynamicPhrase = {
+  // A fresh forecast shows no update age (#715); a saved or offline one keeps its status words and age.
+  const age: DynamicPhrase | null = disconnected || weather.status !== 'fresh' ? {
     text: `${disconnected ? `Offline${NBSP}·${NBSP}` : weather.status === 'stale' ? `Saved forecast${NBSP}·${NBSP}` : ''}${ageText(weather.updatedAt, now)}`,
-    caution: disconnected || weather.status !== 'fresh',
-  };
+    caution: true,
+  } : null;
   const estimate = { provenance: 'Forecast estimate', age } as const;
   const cards: DynamicCard[] = [];
   // Current conditions stand only while the shared last-known rule does not apply (#243, #411), and say
@@ -448,14 +456,18 @@ function airCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
     statuses.push({ source: 'air', text: 'Saved air reading', caution: true, smallRank: null, degraded: true });
     return [];
   }
-  const segments = airAgeSegments({ age: ageText(air.updatedAt, now), stale: air.status === 'stale', reading: true, disconnected });
-  if (view.kind === 'estimate') segments.splice(disconnected ? 1 : 0, 1, 'Saved estimate');
-  const age: DynamicPhrase = { text: segments.join(`${NBSP}·${NBSP}`), caution: disconnected || air.status === 'stale' || view.kind === 'estimate' };
+  // A fresh reading says only "Model est." (it is a model estimate, not a measurement); its age shows with a
+  // status label only (#715): saved, offline, or this hour's saved estimate standing in for old values.
+  const old = view.kind === 'estimate';
+  const segments = airAgeSegments({ age: ageText(air.updatedAt, now), status: air.status, reading: true, disconnected, old });
+  if (old) segments.splice(disconnected ? 1 : 0, 1, 'Saved estimate');
+  const status = airAgeIsStatus({ status: air.status, disconnected, old });
+  const estimate = status ? { provenance: null, age: { text: segments.join(`${NBSP}·${NBSP}`), caution: true } } : { provenance: segments[0]!, age: null };
   const cards: DynamicCard[] = [];
   if (view.aqi !== null) {
     const aqi = Math.round(view.aqi), limits = DYNAMIC_THRESHOLDS.AQI[scale];
     const category = aqiCategory(aqi, scale)!, detail = `${SCALE_LABELS[scale]} ${aqi}`;
-    const base = { id: 'air:aqi', source: 'air' as const, kicker: 'Air quality', value: String(aqi), detail, glyph: { kind: 'icon', name: 'air' } as DynamicGlyph, tone: 'sky' as const, provenance: AIR_CREDIT, age, start: null };
+    const base = { id: 'air:aqi', source: 'air' as const, kicker: 'Air quality', value: String(aqi), detail, glyph: { kind: 'icon', name: 'air' } as DynamicGlyph, tone: 'sky' as const, ...estimate, start: null };
     if (aqi >= limits.focus) cards.push(card({ ...base, kind: 'air-unhealthy', tier: 'focus', score: DYNAMIC_SCORES.airUnhealthy, headline: `${category} air`, compact: `${category} air`, label: `${category} air` }));
     else if (aqi >= limits.notable) {
       const [headline, short] = scale === 'us' ? ['Unhealthy for sensitive groups', 'Sensitive groups'] : [`${category} air`, `${category} air`];
@@ -472,7 +484,7 @@ function airCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
       id: 'air:uv', source: 'air', kind: 'uv-high', tier: 'notable', score: DYNAMIC_SCORES.uvHigh, start: at,
       kicker: 'UV index', headline: `${word} UV today`, compact: `${word} UV`, value: String(value),
       detail: at <= now ? `UV ${value} this hour` : `Peaks ${value} at ${ctx.time(at, zone)}`, glyph: { kind: 'icon', name: 'sun', glyph: 'sun' }, tone: 'sun',
-      provenance: AIR_CREDIT, age, time: ctx.time(at, zone), label: `${word} UV`,
+      ...estimate, time: ctx.time(at, zone), label: `${word} UV`,
     }));
   }
   return cards;
