@@ -1,5 +1,43 @@
 # Project status
 
+## Hourly forecast: Forecast's long strip with conditions, a temperature trend, precipitation and sun events — 2026-11-22 (#714)
+
+Source candidate, not installed. The owner: the hourly widget should "feel like the daily weather one, but
+with more good information about the hourly", be "long like the forecast one (so i will have them one over
+the other)", "i just dont want it to look too cluttered, but i want it to look good"; and "i want to see when
+sunrise/sunset are as well, basically how the weather app on iphone does it".
+
+What changed:
+- The widget formerly named Hourly temperature is **Hourly forecast**, "The hours ahead". Its stored id stays
+  `hourlyTemperature`. Families are Forecast's: medium 4 × 2 (6 columns) and large 8 × 2 (12 columns). The
+  4 × 4 family is gone.
+- One column per hour: the time ("Now" first, from the current reading, so it agrees with Weather), a glyph
+  that is a sun or a moon according to the hour at the weather location, the temperature, and the
+  precipitation chance with the droplet only from 10%.
+- A sunrise or sunset is a column of its own between the hours it falls between: its exact time, a sun
+  symbol and the word. It takes one of the 6 or 12 columns, so the strip never reflows; the heading
+  therefore reads "Hourly" and promises no hour count. The owner picked this "entry between hours" layout
+  from a mockup (2026-11-22). On the 24-hour clock hours are bare ("17"), so only a sun column shows minutes.
+- The temperatures ride a thin accent trend line. It breaks at an unknown value, never joins across one, and
+  passes through a sun column. The row's height never changes with the values.
+- The heading's right side holds at most two facts: the next sunrise or sunset when the strip does not show
+  it, and "Gusts 55 km/h" from 40 km/h or 25 mph. No place, provider or update time. While the forecast is
+  not fresh it shows "Saved forecast · 5 hr ago" or "Offline · Updated 12 min ago" there instead, in the
+  status tone, and an hours-old reading is not called Now.
+- Saved data: a large placement from before this change that no longer fits as 8 × 2 becomes medium at the
+  same origin, in settings, saved styles and imports. No new rollback exception for the frozen d66832b
+  reader; a downgrade to a build between #565 and #714 has a documented step
+  ([install](docs/install.md#fifteen-widget-collection-rollback-565)).
+- In Native colours the widget's tone is now sky, like Forecast (it was sun).
+
+Details: [Hourly forecast](docs/widgets.md#hourly-forecast-714) and [its UI](docs/ui.md#hourly-forecast).
+
+Verified with source builds and synthetic data only: see the pull request. Both families render at fit 1 at
+Text 100% on every grid at 720p, 1080p and 4K, fresh, stale and offline, with sun columns. Not verified:
+installation, the TV, and the owner's own look at it on the display. Follow-ups: hourly feels-like (#718), a
+small family (#719), one definition of the strip sizes shared with Forecast (#720), and a 500 instead of a
+400 for an unsupported family found on the way (#721).
+
 ## Build and test hygiene: Alt+Tab ghosts, build advisory, stale client bundles — 2026-11-17 (#712, #708, #711, #710)
 
 Source candidate, not installed. The owner: "fix all of them in one pr".

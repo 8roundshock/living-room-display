@@ -21,6 +21,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/client/dynamic.ts`](../src/client/dynamic.ts) and [`src/server/alerts.ts`](../src/server/alerts.ts) | Dynamic (#437): the pure engine (every Dynamic threshold, score, card, the calm rotation, `rotationSlot` and `chooseDynamic`, exported for Home, #438), and the server-only official alerts from ECCC and the NWS ([API](api.md#official-weather-alerts)). |
 | [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
+| [`src/client/hourly-forecast.ts`](../src/client/hourly-forecast.ts) | Hourly forecast (#714): the pure shaping of its columns (hours, and a sunrise or sunset in time order), the temperature trend and the heading facts, rebuilt once a minute ([Hourly forecast](#hourly-forecast-714)). |
 | [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
 | [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), and `Dynamic` (#437), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157). |
 | [`src/client/Display.tsx`](../src/client/Display.tsx) | Ambient state and the shared movement/composition boundary. |
@@ -50,6 +51,10 @@ lines. Besides its families and defaults, an entry declares:
   and a PATCH enabling one returns 400. No entry is planned now: #157 and #171
   activated all six #78 ids. Rain is retired and merged into Weather
   (#74, `absorbRetiredWidgets`); removing its id is tracked in #103.
+- `reshaped` (optional, #714): a family whose span changed after data was saved with
+  it, and the family a saved placement falls back to when the new span no longer fits
+  (`fitReshapedFamilies`, which validation runs before the grid check). Hourly forecast
+  declares `large: 'medium'`; see [its migration](#hourly-forecast-714).
 
 `WIDGET_IDS` keeps every id, because schemas and geometry need them all.
 `ACTIVE_WIDGET_IDS` is the load-time list of shipped ids for UI lists and test
@@ -168,6 +173,7 @@ The renderer families have deliberate visual roles:
 | Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date. While a timer is visible, the date line shows it ("8 min", "Done") | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height; a timer shows as in small, Done adds "· 2 min ago" | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition; a timer reads "8 min left · ends 6:51 PM" ([timer slot](#clock-timer-slot)) |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”, “Rain possible now, likely later”); confidence only when partial. One footer row of short phrases, wrapping only between them: “Saved forecast · 5 hr ago · Open-Meteo” (#283) | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and an hourly chance bar for each hour overlapping the next 12 (12 on the hour, 13 otherwise; spell hours brighter, unknown hours a dotted baseline) over “Now” and the window's end (#261). Unavailable in every family: a dim, still cloud, a dim “—°” and one status-tone line at the label size, “Weather unavailable · retrying” (“· offline” while the display cannot reach the computer), with the age only when known and no credit (#362) |
 | Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362) |
+| Hourly forecast (#714) | — | Six columns: “Now” from the current reading, then the hours ahead, each with its time, a day- or night-aware glyph, the temperature on a thin trend line and the precipitation chance from 10%. A sunrise or sunset inside the window is a column of its own (exact time, sun symbol, the word) | Twelve columns in Forecast's 8 × 2 strip, so the two sit one above the other. The heading reads “Hourly”, with at most two facts on the right: the next sunrise or sunset when the strip does not show it, and “Gusts 55 km/h” from 40 km/h or 25 mph. Not fresh: “Saved forecast · 5 hr ago” or “Offline · Updated 12 min ago” there instead, in the status tone; with no hour to show, “Hourly forecast unavailable · retrying” as Forecast shows it |
 | Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row. When not every reminder fits, more rows win over bigger titles: rows after the first may take one line with an ellipsis and titles step down to about small's width-based size, so medium shows at least as many as small and a wider box never fewer (#359) | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete, faint captured desktop with its "Last screen · 8:40 AM" caption on the image's left edge just below it (every family), on one line even under a narrow portrait image, which it may run past within the cell; the time never breaks from its AM/PM (#308) | Wider complete desktop | Larger complete desktop; no crop hides screen context |
@@ -341,6 +347,75 @@ in [Dynamic signals](api.md#dynamic-signals).
   AQHI (#453), a "Change every" setting (#454), an alerts preview before Save (#455), the
   official line inside Weather (#456), the NWS key risk (#457), public holidays (#458) and
   "Hide when quiet" (#459). Home (#438) reuses the exported engine.
+
+### Hourly forecast (#714)
+
+Owner request, 2026-11-22: the hourly widget should "feel like the daily weather one, but
+with more good information about the hourly", be "long like the forecast one (so i will
+have them one over the other)" and not look cluttered; and "i want to see when
+sunrise/sunset are as well, basically how the weather app on iphone does it". The widget
+formerly named Hourly temperature keeps its stored id, `hourlyTemperature`, and is now
+**Hourly forecast**, "The hours ahead", in Forecast's medium (4 × 2) and large (8 × 2)
+families. Its tone is sky, like Forecast, so the two strips read as a pair.
+
+- **Columns.** Medium has 6 and large 12, always (`hourlyForecastSlots`). The first reads
+  "Now" and shows the current reading (temperature, condition and its own day flag), so it
+  agrees with Weather; the rest are the hourly model instants after now, labelled with the
+  hour in the weather city's zone: "5 PM", or the bare "17" on the 24-hour clock, so only a
+  sun column shows minutes. Each hour has a `WeatherGlyph`
+  that is day- or night-aware from the sun at the weather location (`sunIsUp`), the
+  temperature, and the precipitation chance of the hour that starts there (the saved
+  interval whose `intervalStart` is that instant), with the droplet, only from 10%. A dry
+  stretch shows nothing in that row, which still keeps its line so nothing moves when a
+  chance appears.
+- **Sunrise and sunset.** An event after now and up to the last hour is a column of its own,
+  in time order between the hours it falls between: its exact time as the label ("16:47",
+  "4:47 PM"), the `sunrise` or `sunset` icon in the sun's sub-tone (`data-glyph="sun"`),
+  and the word where a temperature would be. It has no temperature and no chance. An event
+  exactly on an hour follows that hour's column. A sun column takes one of the family's
+  columns, so the last hour gives way and the strip never reflows when an event enters or
+  leaves; that is why the heading reads "Hourly" and promises no hour count. Owner decision,
+  2026-11-22: he picked this "entry between hours" layout from a mockup. The other option,
+  always 12 hours plus up to two sun columns, would change every column's width whenever
+  an event enters or leaves, or leave two columns empty most of the day. No sun column is
+  drawn on a polar day or night or without a real place.
+- **Trend.** The temperatures ride a thin accent line: each value sits just above its
+  point at its column's centre, placed by the model's own value (not the rounded label)
+  within a band that stands for at least 5 °C (9 °F), so a steady evening is a nearly flat
+  line. The line is a monotone curve that never rises above or dips below the values it
+  joins. An unknown temperature is a dash at mid height and ends the line there; the next
+  known value starts a new one, so nothing is drawn across an unknown value. A sun column
+  is not a missing value: the line runs straight through it between its neighbours. The
+  row's height depends only on the box and Text size, never on the values: the line's
+  travel is whatever height the other rows leave, between 10% and 18% of the box.
+- **Heading.** "Hourly" on the left. On the right at most two calm facts that the board
+  does not already show: the next sunrise or sunset, only when the strip does not show it
+  ("Sunrise 07:21" on a winter evening), and peak gusts over the shown hours from 40 km/h
+  or 25 mph ("Gusts 55 km/h"). No place, provider or update time for fresh data (#715).
+- **States.** While the forecast is stale or the display offline, the heading's right side
+  shows the status in the shared status tone instead of the facts: "Saved forecast · 5 hr
+  ago", "Offline · Updated 12 min ago" (as Weather words them). A saved current reading
+  older than three hours is never called Now (`lastKnownTime`, the rule Weather uses): the
+  strip then starts at the next hour. An hour the saved forecast lacks keeps its column
+  with dashes; the hours end where the forecast ends; with no upcoming hour the widget
+  shows Forecast's unavailable treatment with "Hourly forecast unavailable · retrying"
+  ("· offline").
+- **Migration.** The 4 × 4 large family is gone. A `large` placement saved before #714
+  that the 8 × 2 span puts outside the grid, or over another shown widget, becomes
+  `medium` at the same origin, which lies inside the cells it had; one that fits stays
+  large and reads as 8 × 2. A hidden placement only has to stay inside the grid. The rule
+  (`fitReshapedFamilies`) runs before the grid check for current settings, saved styles
+  and imports (`src/server/hourly-forecast-migration.test.ts`). The frozen `d66832b`
+  reader does not know this id, so the change adds no rollback exception
+  ([install](install.md#fifteen-widget-collection-rollback-565)).
+- **Rendering.** The markup reuses Forecast's heading, strip, column, label, glyph and
+  droplet classes, with Forecast's sizes for the same family written out in
+  [`hourly-forecast.css`](../src/client/widgets/hourly-forecast.css). Both families render
+  at fit 1 at Text 100% in every density at 720p, 1080p and 4K: fresh, stale, offline and
+  with sun columns. The view is rebuilt once a minute (#99) and values change through
+  `TransitionText`; the widget has no timer or animation of its own.
+- **Follow-ups:** hourly feels-like (#718), a small 2 × 2 family (#719) and keeping the
+  two strips' type in step if Forecast's families are refitted (#720).
 
 ## Ambient appearance and recurring exposure
 
@@ -634,7 +709,7 @@ module starts an animation timer, adds an account or creates private content.
 | Year progress | Small, medium | Day of year and days after today; medium adds month progression. Leap years use 366 days. |
 | Time overlap | Medium, large | Earliest common weekday 09:00–17:00 reference window in the next 48 hours across this computer and saved World clocks cities; large lists the same instants in each city. Never claims actual availability. |
 | Weather alerts | Medium, large | Existing official Canadian/US notices. Unsupported, unavailable, stale and confirmed quiet states stay distinct. |
-| Hourly temperature | Medium, large | Four or eight model instants, with a sparse temperature line and unknown gaps. |
+| Hourly forecast (#714; formerly Hourly temperature, the id stays `hourlyTemperature`) | Medium, large (8 × 2) | Six or twelve columns in Forecast's strip: conditions, the temperature on a trend line, the precipitation chance, and sunrise or sunset in place ([Hourly forecast](#hourly-forecast-714)). |
 | Wind | Small, medium | Model 10 m wind speed, origin direction and preceding-hour maximum gust; medium adds hourly speeds. |
 | Humidity | Small, medium | Outdoor relative humidity and dew point; medium adds hourly percentages. It is not an indoor sensor. |
 | Pressure | Small, medium | Model surface pressure in hPa; medium adds a numeric outlook, without inferred warnings. |

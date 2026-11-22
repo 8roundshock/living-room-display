@@ -847,6 +847,18 @@ ID. Disable it in settings and every saved style before a rollback requiring tha
 reader. No new private widgetData section is added. Hourly weather details remain
 API-only, and timer contents stay in the existing sidecar outside exports.
 
+Hourly forecast (#714) keeps the id `hourlyTemperature`; its large family changed from
+4 × 4 to 8 × 2. That adds no exception for the frozen d66832b reader, which does not know
+the id at all: its data is readable by that reader exactly when the widget is off in
+settings and in every saved style, as before (`src/server/rollback.test.ts`). Updating
+needs no step: a large placement saved earlier that no longer fits becomes medium at the
+same origin when this build reads it. A downgrade to a build from after #565 and before
+#714, which still draws large as 4 × 4, is different: that build can find a large
+placement saved by this build outside its grid or over a neighbour and refuse the file.
+Before such a downgrade set Hourly forecast to medium, or turn it off, in settings and in
+every saved style, save, and save one more change to rotate the backup; or restore the
+complete pre-update data copy.
+
 ### Birthday content rollback (#584)
 
 An empty birthday list writes no key and remains compatible with the frozen

@@ -5,9 +5,10 @@
 The ambient display stays passive. Home already provides quick reminder capture,
 completion and Undo, so the separate browser-display reminder overlay proposed
 in #92 is declined rather than described as implemented. The optional Hourly
-temperature widget from #568 satisfies the information need behind #107; a second
-temperature strip inside Weather is not planned. The dated #447 rollout umbrella
-is retired; unfinished acceptance in #7, #532, #156 and #446 remains open.
+forecast widget (Hourly temperature from #568, rebuilt in #714) satisfies the
+information need behind #107; a second temperature strip inside Weather is not
+planned. The dated #447 rollout umbrella is retired; unfinished acceptance in #7,
+#532, #156 and #446 remains open.
 
 Whole-screen weather, seasonal/holiday and combined atmosphere is tracked in #575,
 with accurate hourly forecast timing (#452) and optional holiday cards (#458).

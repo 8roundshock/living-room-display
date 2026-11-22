@@ -985,6 +985,59 @@ per minute (no `Intl` formatter is built while the minute holds, #185); values c
 the shared one-second tick without their own animation.
 Browser suite: `tests/ui/catalog-sky-browser.mjs`.
 
+## Hourly forecast
+
+Hourly forecast (#714; the stored id is `hourlyTemperature`, formerly Hourly temperature)
+starts disabled and is added from the picker (Weather & sky, "The hours ahead", medium
+4 × 2 and large 8 × 2: Forecast's families, so the two sit one above the other). Its picker
+sample is synthetic: a mild spell clouding over, with showers later, from this computer's
+real hour, so the sample's sun column and its day and night glyphs follow the real clock at
+the sample place. Its panel under the Size control is one hint, with nothing to configure:
+"One column per hour in the weather city’s time: conditions, temperature and the chance of
+rain or snow when it is 10% or more. The line follows the temperature. A sunrise or sunset
+gets its own column at its exact time. Medium has 6 columns and large 12. Hourly estimates
+by Open-Meteo; sun times are calculated on this computer."
+
+On the display it is Forecast's strip with one column per hour:
+
+- **Heading row:** "Hourly" at the label size. On the right, at the context size, at most
+  two facts joined by " · ": the next sunrise or sunset when the strip does not show it
+  ("Sunrise 07:21"), and "Gusts 55 km/h" when the peak over the shown hours reaches 40 km/h
+  or 25 mph. While the forecast is not fresh that place shows the status instead, in the
+  status tone at full opacity: "Saved forecast · 5 hr ago" or "Offline · Updated 12 min
+  ago". Fresh data shows no place, provider or update time (#715).
+- **Hour columns:** the time ("Now", then "5 PM", or the bare hour "17" on the 24-hour
+  clock, in the weather city's zone), a
+  weather glyph that is a sun or a moon according to the hour, the temperature, and the
+  droplet with the chance only from 10%. An unknown condition or temperature is a dash, an
+  unknown chance a dim dash; a chance under 10% leaves its cell empty.
+- **Sun columns:** a sunrise or sunset inside the strip stands between the hours it falls
+  between: its exact time, the sunrise or sunset symbol, and "Sunrise" or "Sunset" at the
+  hour label's size where a temperature would be. It takes one of the 6 or 12 columns, so
+  the columns never change width.
+- **Trend line:** a thin line in the accent tone at 80% opacity behind the values, from
+  the first column's centre to the last one's, with each value just above its point. It
+  breaks at an unknown temperature and passes through a sun column. The row's height is
+  the same whatever the values.
+- **Colour:** temperatures use the text colour; the heading, hour labels, the sun word and
+  the line use the accent (Mist in Native, the widget's sky tone); a chance is Sea glass in
+  Native, as in Forecast; glyphs keep their own sub-tones and the sun column's symbol is
+  Gold.
+- **Unavailable:** with no upcoming hour, Forecast's unavailable treatment: a dim, still
+  cloud, a dim "—°" and "Hourly forecast unavailable · retrying" ("· offline") in the
+  status tone.
+
+Sizes are Forecast's for the same family. Measured at 1280 × 720 on the Balanced grid:
+the large box is 759 × 140 px with twelve 56 px columns; hour labels 12.6 px, glyphs
+22 px, temperatures 18.2 px, chances 11.9 px, the heading 11.2 px and its facts 10.1 px;
+the line's travel is 25 px (16 px on the Fine grid, where the floors leave less room).
+Both families render at fit 1 at Text 100% in every density at 720p, 1080p and 4K: fresh,
+stale and offline, with one or two sun columns, three-character temperatures, "100%" in
+every hour and a 12-hour "10:07 PM" sun label. The view is rebuilt once a minute and
+constructs no `Intl` formatter on the one-second tick (#99).
+Browser checks: `tests/ui/widget-checks/hourlyTemperature.mjs` in the widgets suite, the
+palette harness for its tones, and the collection and catalog-sky suites.
+
 ## Dynamic
 
 Dynamic (#437) starts disabled and is added from the picker (Weather & sky, "What matters

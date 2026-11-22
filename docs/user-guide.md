@@ -163,6 +163,15 @@ show: Weather, Official weather alerts, Air & UV, Sun & moon, and Reminders & co
 (their titles appear on the display). It uses your weather location; forecasts and model
 estimates are never shown as official warnings. Official alerts are checked after you save.
 
+**Hourly forecast** shows the hours ahead the way Forecast shows the days: one column
+per hour with the conditions (a sun or a moon, depending on the hour), the temperature and,
+when it is 10% or more, the chance of rain or snow. A thin line follows the temperature, so
+you can see at a glance whether it is getting warmer or colder. Sunrise and sunset stand in
+their place between the hours, with their exact time. The large size is as long as the
+large Forecast, so the two sit neatly one above the other; medium has six columns. It uses
+your weather location. If the forecast could not be updated, the widget says so ("Saved
+forecast · 5 hr ago").
+
 ## Reminders
 
 Add and tick off reminders on Home. **All reminders** opens the full list:
