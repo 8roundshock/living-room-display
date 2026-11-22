@@ -17,6 +17,7 @@ import { keepPagesLocal } from './lib/local-only.mjs';
 import { mockScreenWakeLock } from './lib/windows-fixture.mjs';
 import { waitForWidgetFit } from './lib/fit-readiness.mjs';
 import { launchEdge } from './lib/edge.mjs';
+import { assertNoSourceOrFreshAge } from './lib/source-age.mjs';
 
 export async function runCollectionQa({ playwright, edge, capture = false, captureOnly = false } = {}) {
   const require = createRequire(import.meta.url), { chromium } = require(resolve(playwright));
@@ -51,10 +52,12 @@ export async function runCollectionQa({ playwright, edge, capture = false, captu
       await page.setViewportSize(viewport);
       for (const density of captureOnly ? ['balanced'] : ['spacious', 'balanced', 'fine']) for (const id of COLLECTION_WIDGET_IDS) for (const size of widgetSizes(id)) {
         single(id, size, density); await open('/display'); await fit(id, `${id}/${size}/${density}/${viewport.width}`); families++;
+        // #715: fresh data names no provider and shows no update age.
+        await assertNoSourceOrFreshAge(page.locator(`[data-widget-id="${id}"]`), `${id}/${size}/${density}/${viewport.width}`, { id });
         if (capture && viewport.width === 1280 && density === 'balanced') images.push({ name: `${id}-${size}`, bytes: await page.locator(`[data-widget-id="${id}"]`).screenshot() });
       }
     }
-    checks.push(`${families} supported-family/grid/viewport renders fit at 1 with contained content`);
+    checks.push(`${families} supported-family/grid/viewport renders fit at 1 with contained content, no data provider named and no update age for fresh data (#715)`);
     await page.setViewportSize({ width: 1280, height: 720 });
     for (const id of COLLECTION_WIDGET_IDS) {
       single(id, widgetSizes(id)[0], 'balanced'); current.weather.status = 'unavailable'; current.weather.details = []; current.weather.hourly = []; current.reminders = []; current.timers = []; current.alerts = { ...current.alerts, status: 'unavailable', alerts: [] }; current.settings.widgetData.worldClocks = [];
@@ -62,14 +65,16 @@ export async function runCollectionQa({ playwright, edge, capture = false, captu
       if (capture) images.push({ name: `${id}-empty`, bytes: await page.locator(`[data-widget-id="${id}"]`).screenshot() });
     }
     checks.push('All fifteen honest no-data states fit, with no render exceptions');
-    // Data-heavy cases complement the complete geometry matrix: labels, explicit provider status,
-    // and old readings must stay readable without hiding their provenance or shrinking the card.
+    // Data-heavy cases complement the complete geometry matrix: labels, saved and offline status lines and old
+    // readings must stay readable without shrinking the card. No case names a data provider, and an update age
+    // appears only in the status tone (#715).
     let scenarioCount = 0;
     const scenario = async (id, size, name, update, expected) => {
       for (const density of ['balanced', 'fine']) {
         single(id, size, density); update(current); await open('/display');
         const result = await fit(id, `${id}/${size}/${name}/${density}`);
         if (expected) assert.match(result.text, expected, `${id}/${name} honest content`);
+        await assertNoSourceOrFreshAge(page.locator(`[data-widget-id="${id}"]`), `${id}/${size}/${name}/${density}`, { fresh: false, id });
         if (id === 'timers' && name === 'mixed') {
           const paint = await page.locator('.timers-digits.status-caution').evaluate(element => ({ color: getComputedStyle(element).color, caution: getComputedStyle(element.closest('.ambient')).getPropertyValue('--ambient-caution').trim(), stroke: getComputedStyle(element).webkitTextStrokeWidth }));
           const caution = Number.parseInt(paint.caution.slice(1), 16);
@@ -84,13 +89,13 @@ export async function runCollectionQa({ playwright, edge, capture = false, captu
       await scenario(id, size, 'saved', state => {
         state.weather.status = 'stale'; state.weather.updatedAt = new Date(now - 86400_000).toISOString();
         state.weather.details = state.weather.details.map(reading => ({ ...reading, time: new Date(Date.parse(reading.time) - 2 * 86400_000).toISOString() }));
-      }, /Last known[\s\S]*Saved forecast/);
+      }, /Last known · [A-Z][a-z]{2}[\s\S]*Saved forecast · 1 day ago\s+Toronto\s*$/);
     }
     const provider = state => { state.alerts = { status: 'fresh', provider: 'eccc', source: 'Environment and Climate Change Canada', sourceUrl: 'https://weather.gc.ca/', area: 'Sample area', checkedAt: new Date(now).toISOString(), error: null, alerts: [] }; };
     for (const size of widgetSizes('weatherAlerts')) {
-      await scenario('weatherAlerts', size, 'quiet', provider, /No current alerts/);
+      await scenario('weatherAlerts', size, 'quiet', provider, /^Weather alerts\s+No current alerts\s*$/);
       await scenario('weatherAlerts', size, 'unsupported', state => { provider(state); state.alerts.status = 'unsupported'; }, /No provider for this area/);
-      await scenario('weatherAlerts', size, 'saved-empty', state => { provider(state); state.alerts.status = 'stale'; }, /Current alerts unknown/);
+      await scenario('weatherAlerts', size, 'saved-empty', state => { provider(state); state.alerts.status = 'stale'; state.alerts.checkedAt = new Date(now - 2 * 3600_000).toISOString(); }, /Current alerts unknown\s+Saved alerts · 2 hr ago\s*$/);
       await scenario('weatherAlerts', size, 'active', state => {
         provider(state); state.settings.clockFormat = '24h'; state.weather.location.timezone = 'Europe/London';
         state.alerts.alerts = Array.from({ length: 5 }, (_, index) => ({ id: `alert-${index}`, level: 'warning', name: 'Heavy rainfall and strong coastal winds warning', area: 'Example coast and surrounding inland areas', issuedAt: new Date(now).toISOString(), startsAt: new Date(now + 3600_000).toISOString(), endsAt: null, expiresAt: new Date(now + 86400_000).toISOString() }));

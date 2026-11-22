@@ -32,6 +32,7 @@ const INTL_TICK_ALLOWANCES = {};
 /** Two Balanced boards cover the active catalog without changing production geometry. */
 import { FULL_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
 import { launchEdge } from './lib/edge.mjs';
+import { assertNoSourceOrFreshAge } from './lib/source-age.mjs';
 
 /** Counts ResizeObserver and Intl constructions and style changes on .widget-content (an init script). */
 function instrumentFit() {
@@ -198,9 +199,11 @@ export async function runWidgetQa({ playwright, edge, capture = false, statusOnl
         for (let attempt = 0; !/offline/i.test(await widget.innerText()); attempt++) { assert.ok(attempt < 100, `${id}/${size} shows its offline state`); await statusPage.waitForTimeout(20); }
         statusOffline = false;
       } else assert.match(await widget.innerText(), /Saved/, `${id}/${size} shows its stale state`);
+      // #715: a saved or offline widget still names no provider, and its age sits only in the status tone.
+      await assertNoSourceOrFreshAge(widget, statusCase, { fresh: false, id }); sourceAgeCases++;
       return floorReport(widget);
     }
-    const floorFailures = [], allowancesUsed = new Set(), allowedCases = []; let floorCases = 0, flooredCases = 0;
+    const floorFailures = [], allowancesUsed = new Set(), allowedCases = []; let floorCases = 0, flooredCases = 0, sourceAgeCases = 0;
     /**
      * Fit within half a percent of 1 is the fit search resolving a sub-pixel overflow, not a zoom-out. Every
      * zoom-out at Text 100% counts, whether or not an element sits exactly on a floor (#283): a family whose
@@ -237,6 +240,8 @@ export async function runWidgetQa({ playwright, edge, capture = false, statusOnl
           if (capture) images.push({ name: `${id}-${size}`, bytes: await widget.screenshot() });
         }
         floorCheck(id, size, density, viewport, 'fresh', await floorReport(widget));
+        // #715: fresh data shows neither a provider name nor an update age, in any family.
+        await assertNoSourceOrFreshAge(widget, `${id}/${size}/${density}/${viewport.width} fresh`, { id }); sourceAgeCases++;
         await WIDGET_CHECKS[id].family?.({ page, widget, size, density, viewport, state: current });
         for (const status of STATUS_WIDGETS[id] ?? []) floorCheck(id, size, density, viewport, status, await statusReport(id, size, density, viewport, status));
       }
@@ -257,6 +262,7 @@ export async function runWidgetQa({ playwright, edge, capture = false, statusOnl
     await statusContext.close();
     assert.deepEqual(floorFailures, [], '#221, #283: every family renders at fit 1 at Text 100% (a tracked exception needs its own ticket and an allowance)');
     assert.deepEqual(Object.entries(FLOOR_FIT_ALLOWANCES).filter(([key]) => !allowancesUsed.has(key)).map(([key, ticket]) => `${key} (${ticket})`), [], 'these families now render at fit 1 at Text 100%: remove their allowances');
+    checks.push(`#715 no data provider named and no update age for fresh data; saved and offline widgets keep their status label with the age only in the status tone: ${sourceAgeCases} family × density × 720p/1080p/4K × fresh/stale/offline cases`);
     checks.push(`#221/#283 fit at Text 100%: ${floorCases} family × density × 720p/1080p/4K × fresh/stale/offline cases (${flooredCases} with an element on a floor) render at fit 1, except ${allowedCases.length} tracked cases: ${allowedCases.join('; ')}`);
     // Every #78 id has shipped (#157, #171), so the inactive ids are retired ones (Rain, #74) plus any
     // future planned entry; the catalog contract says neither is ever rendered.

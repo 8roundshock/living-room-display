@@ -18,6 +18,7 @@ import { defaultSettings } from '../../src/shared/defaults.ts';
 import { WIDGET_IDS } from '../../src/shared/widgets.ts';
 import { keepPagesLocal } from './lib/local-only.mjs';
 import { launchEdge } from './lib/edge.mjs';
+import { PROVIDER_NAME, UPDATE_AGE } from './lib/source-age.mjs';
 
 const NOW = Date.parse('2026-10-18T13:00:00Z'); // Sunday 9 AM in Toronto
 const MINUTE = 60_000, HOUR = 60 * MINUTE;
@@ -107,8 +108,15 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
   const widgetOf = page => page.locator('[data-widget-id="dynamic"]');
   const attr = (page, name) => widgetOf(page).locator('.dynamic-body, .dynamic-placeholder').getAttribute(name);
   /** Fit scale, headline clipping, bounds, the number of cards, running animations and colours. */
-  const facts = page => widgetOf(page).evaluate(section => {
+  const facts = page => widgetOf(page).evaluate((section, agePattern) => {
     const outer = section.getBoundingClientRect(), headline = section.querySelector('.dynamic-headline');
+    // #715: update ages and check times, split by whether they sit in a status-tone element.
+    const age = new RegExp(agePattern), ages = { inStatus: [], outside: [] };
+    const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent.replace(/[\u00a0\u202f]/g, ' ');
+      if (age.test(text) && node.parentElement.checkVisibility()) (node.parentElement.closest('.status-caution') ? ages.inStatus : ages.outside).push(text.trim());
+    }
     const probe = document.createElement('span'); probe.style.color = 'var(--ambient-caution)'; section.append(probe);
     const caution = getComputedStyle(probe).color; probe.remove();
     return {
@@ -121,18 +129,22 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
       cardTransition: (() => { const card = section.querySelector('.dynamic-card'); return card ? { swapped: card.hasAttribute('data-swapped'), property: getComputedStyle(card).transitionProperty, duration: getComputedStyle(card).transitionDuration } : null; })(),
       kickerCaution: (() => { const kicker = section.querySelector('.dynamic-kicker'); return kicker ? getComputedStyle(kicker).color === caution : null; })(),
       cautions: [...section.querySelectorAll('.status-caution')].map(element => [element.textContent, getComputedStyle(element).color === caution]),
-      text: section.innerText.replace(/ /g, ' '),
+      text: section.innerText.replace(/ /g, ' '), ages,
     };
-  });
+  }, UPDATE_AGE.source);
   const withinBox = (result, label) => {
     assert.ok(result.fit >= 0.995, `${label}: fit 1 (${result.fit})`);
     assert.equal(result.headlineClipped, false, `${label}: the headline is not cut`);
     assert.deepEqual(result.outside, [], `${label}: nothing leaves the widget`);
     assert.equal(result.cards, 1, `${label}: exactly one card`);
+    // #715: the card names no data provider, and an update age or check time appears only in the status tone.
+    assert.doesNotMatch(result.text, PROVIDER_NAME, `${label}: no provider name: ${result.text}`);
+    assert.deepEqual(result.ages.outside, [], `${label}: an age only with a status label, in the status tone`);
   };
 
   try {
-    // ---- A. Official warnings lead, with the caution "Warning", the provider's words and their source; two take turns.
+    // ---- A. Official warnings lead, with the caution "Warning" and the provider's words; the issuer is not named on
+    // the display (#715: it is in the widget's settings); two take turns.
     {
       const world = await scenario({ forecast: forecast(), air: airPayload(), zones: ZONES, eccc: { type: 'FeatureCollection', features: [ecccAlert('1001', 'winter storm warning')] } });
       try {
@@ -144,7 +156,9 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
           assert.equal(await widgetOf(view.page).locator('.dynamic-kicker').innerText(), 'Warning'); assert.equal(result.kickerCaution, true, 'only "Warning" uses the caution tone');
           assert.equal(await widgetOf(view.page).locator('.dynamic-headline').innerText(), 'Winter storm warning', 'the provider\'s name, only its first letter capitalised');
           assert.match(result.text, /Until 5 PM/);
-          assert.match(result.text, size === 'small' ? /Environment Canada/ : /Environment and Climate Change Canada/, `${size}: the source`);
+          // #715: fresh alerts show neither their issuer nor when they were checked; the icon and "Warning" mark the card official.
+          assert.doesNotMatch(result.text, /Environment|Canada|[Cc]hecked/, `${size}: no issuer and no check time: ${result.text}`);
+          assert.deepEqual(result.ages.inStatus, [], `${size}: no age while the alerts are fresh`);
           assert.equal(await widgetOf(view.page).locator('.dynamic-source svg').count(), 1, 'the alert icon beside the level word');
           withinBox(result, `A ${size} ${viewport.width}`);
           await keep(`A-warning-${size}-${viewport.width}`, await widgetOf(view.page).screenshot());
@@ -161,7 +175,7 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
         assert.notEqual(second, first, 'the next wall-clock slot shows the other warning');
         assert.deepEqual([first, second].sort(), ['alert:1001', 'alert:2002']);
         await view.close();
-        checks.push('A. An official ECCC warning leads in every family at 720p and 4K: "Warning" in the caution tone with the alert icon, the verbatim name, "Until 5 PM", the source named in full (small: "Environment Canada"), fit 1; two warnings show "1 of 2" and take turns on the next slot');
+        checks.push('A. An official ECCC warning leads in every family at 720p and 4K: "Warning" in the caution tone with the alert icon, the verbatim name, "Until 5 PM", no issuer and no check time (#715), fit 1; two warnings show "1 of 2" and take turns on the next slot');
       } finally { await world.close(); }
     }
 
