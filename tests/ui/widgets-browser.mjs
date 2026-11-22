@@ -412,7 +412,8 @@ export async function runWidgetQa({ playwright, edge, capture = false, statusOnl
       });
       const rest = await fitState();
       assert.ok(rest.fit === 1 && rest.inside, `#314: the large clock fits at rest ${JSON.stringify(rest)}`);
-      await page.addStyleTag({ content: '.grid-ambient .clock-time.refit-probe { letter-spacing: 0.6em; }' });
+      // #717: the digits are spaced by their own gap (letter-spacing only in the unmeasured fallback), so the probe widens both.
+      await page.addStyleTag({ content: '.grid-ambient .clock-time.refit-probe { --clock-gap: 0.6em; letter-spacing: 0.6em; }' });
       await widget.locator('.clock-time').evaluate(element => element.classList.add('refit-probe'));
       const wide = await until(fitState, value => value.fit < 0.95, 'a refit after a class-only change');
       assert.ok(wide.inside && Math.abs(wide.timeHeight - rest.timeHeight) < 0.5, `#314: the wider time fits again, with no box or line change ${JSON.stringify({ rest, wide })}`);
