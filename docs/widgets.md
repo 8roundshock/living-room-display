@@ -202,7 +202,8 @@ is pure and unit-tested:
   civil date like the grid, soonest first; on one day your own dates come before holidays. Within 90
   days a month and day name one date, so no year is shown, also across the turn of the year. The same
   name on the same day from two sources (a countdown called "Christmas") is one line. With nothing in
-  range the widget looks as it did before: no list, no marks and no room made for them.
+  range the widget looks as it did before: no list, no marks and no room made for them (a capture of
+  the large and of the medium family with nothing in range is identical to one from before #716).
 - **Lines** read "Dec 25  Christmas": the date in the accent tone, the name in the text colour, and
   "Today" for today's own dates. A line never wraps. A name longer than 32 characters
   (`UPCOMING_NAME_LENGTH`) is cut after the last whole word that fits and ends in an ellipsis
@@ -217,7 +218,9 @@ is pure and unit-tested:
   month, and on Fine only in a four-week month, where the box is too short beside five or six weeks.
   A line that does not fit takes no layout and changes nothing else. The big date gives the line its
   room (48cqh instead of 54cqh). A six-week medium month shares the height that is left between its
-  rows, so it renders at fit 1 at the data floor on Fine instead of zooming out (before, to 0.88 at 720p).
+  rows: with room to spare they are exactly as before, with less the gap under the weekday labels and
+  then the rows close up, down to the digits' own line. So it makes room for the next date on Balanced
+  and renders at fit 1 at the data floor on Fine instead of zooming out (before, to 0.88 at 720p).
 - **Small** is unchanged: the week strip has no list and no marks.
 - **Marks:** a day of the shown month that carries one of these dates, past days included, gets one
   small dot in the accent tone (`.calendar-mark`, a real element so the palette harness audits it),

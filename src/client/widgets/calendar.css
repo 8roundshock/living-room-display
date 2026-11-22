@@ -21,7 +21,7 @@
 
 /* Medium: weekday, a large date and the month on the left; a compact month grid on the right; the next
    date on one line under them where there is room (#716). */
-.grid-ambient .ambient-calendar .calendar-family-medium { --calendar-head: calc(max(var(--min-text), min(2.9cqw, 7.4cqh)) * var(--font-scale)); --calendar-next: calc(max(var(--min-text), min(3.1cqw, 7.6cqh)) * var(--font-scale)); --calendar-below: 0px; }
+.grid-ambient .ambient-calendar .calendar-family-medium { --calendar-head: calc(max(var(--min-text), min(2.9cqw, 7.4cqh)) * var(--font-scale)); --calendar-day: calc(max(var(--min-data), min(3.6cqw, 9.3cqh)) * var(--font-scale)); --calendar-next: calc(max(var(--min-text), min(3.1cqw, 7.6cqh)) * var(--font-scale)); --calendar-below: 0px; }
 .grid-ambient .ambient-calendar .calendar-main { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 5cqw; min-width: 0; }
 .grid-ambient .ambient-calendar .calendar-main > .calendar-hero { flex: 0 1 34%; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
 .grid-ambient .ambient-calendar .calendar-weekday { margin: 0; font-size: calc(max(var(--min-text), min(5.2cqw, 12cqh)) * var(--font-scale)); }
@@ -29,13 +29,21 @@
 .grid-ambient .ambient-calendar .calendar-month-name { font-size: calc(max(var(--min-text), min(5.2cqw, 12cqh)) * var(--font-scale)); line-height: 1.2; opacity: 0.8; overflow-wrap: anywhere; }
 .grid-ambient .ambient-calendar .calendar-main > .calendar-grid { flex: 0 1 60%; width: 60%; }
 .grid-ambient .ambient-calendar .calendar-family-medium th { font-size: var(--calendar-head); padding-bottom: 0.35em; }
-.grid-ambient .ambient-calendar .calendar-family-medium td { font-size: calc(max(var(--min-data), min(3.6cqw, 9.3cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-calendar .calendar-family-medium td { font-size: var(--calendar-day); }
 .grid-ambient .ambient-calendar .calendar-family-medium .calendar-day { padding-block: 0.12em; min-width: 1.7em; }
-/* Six weeks share the height the weekday row (and the next date, when shown) leaves: the rows never get
-   looser than other months' and never tighter than the digits need, so the family keeps fit 1 at the
-   data floor on the Fine grid instead of zooming out. The 2px absorbs sub-pixel rounding. */
-.grid-ambient .ambient-calendar .calendar-family-medium [data-weeks="6"] th { padding-bottom: 0.2em; }
-.grid-ambient .ambient-calendar .calendar-family-medium [data-weeks="6"] .calendar-day { line-height: 1.04; padding-block: clamp(0.03em, (100cqh - 2px - var(--calendar-head) * 1.2 - var(--calendar-below)) / 12 - 0.52em - max(1px, 0.07em), 0.12em); }
+/* Six weeks share the height that is left (#716). --calendar-room is the box less the weekday labels, the next
+   date when it is shown, and 2px for sub-pixel rounding. With room to spare the gap under the labels and the
+   rows are exactly the other months' (0.35em; a 1.1 line with 0.12em above and below); with less, the gap
+   closes to 0.2em, then the rows' padding to 0.03em, then their line to 1.04. So the family keeps fit 1 at the
+   data floor on the Fine grid instead of zooming out, and makes room for the next date on Balanced. */
+.grid-ambient .ambient-calendar .calendar-family-medium [data-weeks="6"] {
+  --calendar-ring: max(1px, var(--calendar-day) * 0.07);
+  --calendar-room: calc(100cqh - 2px - var(--calendar-below) - var(--calendar-head));
+  --calendar-gap: clamp(var(--calendar-head) * 0.2, var(--calendar-room) - 6 * (var(--calendar-day) * 1.34 + 2 * var(--calendar-ring)), var(--calendar-head) * 0.35);
+  --calendar-row: calc((var(--calendar-room) - var(--calendar-gap)) / 6 - 2 * var(--calendar-ring));
+}
+.grid-ambient .ambient-calendar .calendar-family-medium [data-weeks="6"] th { padding-bottom: var(--calendar-gap); }
+.grid-ambient .ambient-calendar .calendar-family-medium [data-weeks="6"] .calendar-day { line-height: clamp(1.04em, var(--calendar-row) - 0.06em, 1.1em); padding-block: clamp(0.03em, (var(--calendar-row) - 1.1em) / 2, 0.12em); }
 .grid-ambient .ambient-calendar .calendar-family-medium:is(.calendar-with-next, [data-measuring]) { --calendar-below: calc(var(--calendar-next) * 1.25 + 3.2cqh); }
 /* The line takes its room from the big date (48cqh instead of 54cqh), so the hero keeps air above and below. */
 .grid-ambient .ambient-calendar .calendar-family-medium:is(.calendar-with-next, [data-measuring]) .calendar-date-number { font-size: calc(min(19cqw, 48cqh) * var(--font-scale)); }
