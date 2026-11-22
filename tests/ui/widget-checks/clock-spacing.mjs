@@ -12,10 +12,11 @@ export const id = 'clockSpacing';
 const CLOCK = '[data-widget-id="clock"]';
 const CHANNELS = ['#f00', '#0f0', '#00f'];
 /**
- * The measuring colours at full brightness (the display dims its content with a filter); the digit transition is
- * stretched so a frame of it can be held (its geometry is unchanged).
+ * The measuring colours at full brightness. The display dims its content with a filter; the filter stays (at 1), so
+ * the text is rasterised as the display rasterises it. The digit transition is stretched so a frame of it can be
+ * held (its geometry is unchanged).
  */
-const MEASURING_STYLE = `.ambient-content{filter:none!important}.clock-calendar{visibility:hidden!important}.grid-ambient[data-animation]{--motion-digit:600s!important}${CHANNELS.map((color, index) => `.clock-char:nth-child(3n+${index + 1}){color:${color}!important}`).join('')}`;
+const MEASURING_STYLE = `.ambient-content{filter:brightness(1)!important}.clock-calendar{visibility:hidden!important}.grid-ambient[data-animation]{--motion-digit:600s!important}${CHANNELS.map((color, index) => `.clock-char:nth-child(3n+${index + 1}){color:${color}!important}`).join('')}`;
 /** A channel value above this is ink (about a fifth of full coverage; anti-aliased edges below it are not). */
 const INK = 48;
 /** The rule in widgets.css: the gap is 6% of the digit size and never under 40% of the shared text floor. */
@@ -126,8 +127,23 @@ function assertApart(sample, label) {
     assert.equal(pair.both, 0, `${where}: "${pair.pair}" overlap (${pair.both} px painted by both)`);
     assert.ok(pair.gap >= Math.max(2, 0.7 * sample.wanted - 1), `${where}: "${pair.pair}" are ${pair.gap} px apart, wanted about ${sample.wanted.toFixed(1)} px`);
   }
-  // On the suite's own machine the typeface is always measurable; the stylesheet's fallback is for others.
+  // On the suite's own machine the typeface is always measurable; the stylesheet's fallback is checked on its own.
   assert.ok(sample.spaced, `${where}: the digits are spaced by their measured ink (clock-ink)`);
+}
+
+/**
+ * The stylesheet's fallback, for a typeface the clock cannot measure: tabular figures at their natural advance plus
+ * the stroke. The gaps are the typeface's own (uneven), but nothing touches and the clock still fits at 1.
+ */
+function assertUnmeasured(samples, label) {
+  for (const sample of samples) {
+    assert.equal(sample.spaced, false, `${label} ${sample.text}: no ink table, so no clock-ink class`);
+    assert.equal(sample.fit, 1, `${label} ${sample.text}: fits at 1 at Text 100%`);
+    for (const pair of sample.pairs) {
+      assert.equal(pair.both, 0, `${label} ${sample.text}: "${pair.pair}" overlap (${pair.both} px painted by both)`);
+      assert.ok(pair.gap >= 2, `${label} ${sample.text}: "${pair.pair}" are ${pair.gap} px apart`);
+    }
+  }
 }
 
 /** A clock at rest over several times: apart, fit 1, even gaps (digits and colon alike) and painted edges on the run's box. */
@@ -223,21 +239,32 @@ export async function sweep({ page, viewport, state, base }) {
       delete state.timers;
     }
 
-    // Scale factors: the owner's 4K TV shows 1280×720 CSS px at 300%; 150% and 200% of a 4K panel too.
+    // Pages of their own. Scale factors: the owner's 4K TV shows 1280×720 CSS px at 300%; 150% and 200% of a 4K
+    // panel too. And a page whose canvas reports another advance than its text, so the clock cannot trust its ink
+    // table and keeps the stylesheet's fallback.
     const browser = page.context().browser();
-    for (const [view, deviceScaleFactor] of [[{ width: 1280, height: 720 }, 3], [{ width: 2560, height: 1440 }, 1.5], [{ width: 1920, height: 1080 }, 2]]) {
+    let unmeasuredFrames = 0;
+    for (const { view, deviceScaleFactor = 1, unmeasured = false } of [{ view: { width: 1280, height: 720 }, deviceScaleFactor: 3 }, { view: { width: 2560, height: 1440 }, deviceScaleFactor: 1.5 }, { view: { width: 1920, height: 1080 }, deviceScaleFactor: 2 }, { view: { width: 1920, height: 1080 }, unmeasured: true }]) {
       const context = await browser.newContext({ viewport: view, deviceScaleFactor, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
       try {
         await mockWindowsStatus(context); await mockScreenWakeLock(context);
-        const scaled = structuredClone(state); clockOnly(scaled, { size: 'large', density: 'balanced', style: 'outline' });
-        await context.route('**/api/state', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(scaled) }));
-        const scaledPage = await context.newPage();
-        await scaledPage.clock.install({ time: new Date(started) }); await scaledPage.goto(`${base}/display`);
-        await scaledPage.locator('.display-page').waitFor(); await scaledPage.clock.runFor(100);
-        await scaledPage.addStyleTag({ content: MEASURING_STYLE }); await waitForWidgetFit(scaledPage, CLOCK);
-        const samples = [];
-        for (const time of SHORT_TIMES) { await showTime(scaledPage, time, time); await waitForWidgetFit(scaledPage, CLOCK); samples.push(await painted(scaledPage)); }
-        record(samples, `outline sans large/balanced ${view.width}×${view.height} ×${deviceScaleFactor}`);
+        if (unmeasured) await context.addInitScript(() => {
+          const measure = CanvasRenderingContext2D.prototype.measureText;
+          CanvasRenderingContext2D.prototype.measureText = function (text) { const metrics = measure.call(this, text); return { width: metrics.width * 1.5, actualBoundingBoxLeft: metrics.actualBoundingBoxLeft, actualBoundingBoxRight: metrics.actualBoundingBoxRight }; };
+        });
+        const other = structuredClone(state);
+        await context.route('**/api/state', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(other) }));
+        const otherPage = await context.newPage();
+        await otherPage.clock.install({ time: new Date(started) });
+        for (const options of unmeasured ? [{ size: 'large', density: 'balanced', style: 'outline' }, { size: 'small', density: 'fine', style: 'outline' }, { size: 'medium', density: 'balanced', style: 'digital', typeface: 'serif' }] : [{ size: 'large', density: 'balanced', style: 'outline' }]) {
+          clockOnly(other, options);
+          await otherPage.goto(`${base}/display`); await otherPage.locator('.display-page').waitFor(); await otherPage.clock.runFor(100);
+          await otherPage.addStyleTag({ content: MEASURING_STYLE }); await waitForWidgetFit(otherPage, CLOCK);
+          const samples = [];
+          for (const time of SHORT_TIMES) { await showTime(otherPage, time, time); await waitForWidgetFit(otherPage, CLOCK); samples.push(await painted(otherPage)); }
+          if (unmeasured) { assertUnmeasured(samples, `unmeasured ${options.style} ${options.typeface ?? 'sans'} ${options.size}/${options.density}`); unmeasuredFrames += samples.length; }
+          else record(samples, `outline sans large/balanced ${view.width}×${view.height} ×${deviceScaleFactor}`);
+        }
       } finally { await context.close(); }
     }
     await page.bringToFront();
@@ -252,7 +279,7 @@ export async function sweep({ page, viewport, state, base }) {
         held += await minuteChange(page, change, `${animation} outline sans large`);
       }
     } finally { await page.emulateMedia({ reducedMotion: 'reduce' }); }
-    return `#717 Clock digit spacing, measured from painted pixels: ${cases} configurations and ${frames} painted times (Outline × System/Classic/Monospace on the large Balanced clock over ${TIMES.length} times, Digital over the ${SHORT_TIMES.length} that overlapped; every family × density; 12-hour with AM/PM; a timer in the date line; 720p, 1080p and scale factors 1.5, 2 and 3) have no overlap, fit 1 and gaps even within ${spreadAllowed(302).toFixed(1)} px at a 302 px digit size (the 1080p outline clock's gaps run ${range.tightest}–${range.widest} px; before #717 they ran from -12 to 65 px); ${held} held frames of minute changes at Subtle and Lively keep every character's box and never overlap`;
+    return `#717 Clock digit spacing, measured from painted pixels: ${cases} configurations and ${frames} painted times (Outline × System/Classic/Monospace on the large Balanced clock over ${TIMES.length} times, Digital over the ${SHORT_TIMES.length} that overlapped; every family × density; 12-hour with AM/PM; a timer in the date line; 720p, 1080p and scale factors 1.5, 2 and 3) have no overlap, fit 1 and gaps even within ${spreadAllowed(302).toFixed(1)} px at a 302 px digit size (the 1080p outline clock's gaps run ${range.tightest}–${range.widest} px; before #717 they ran from -12 to 65 px); ${held} held frames of minute changes at Subtle and Lively keep every character's box and never overlap; with an unmeasurable typeface (${unmeasuredFrames} painted times) the fallback keeps tabular figures apart at fit 1`;
   } finally {
     // Later sweeps read the fixture's own moment.
     await page.clock.setSystemTime(started);
