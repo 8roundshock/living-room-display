@@ -179,12 +179,20 @@ test('the store opens files saved with the old family, and the API accepts an ol
     const settings = store.snapshot().settings;
     assert.deepEqual(hourly(settings), { column: 8, row: 4, size: 'medium' }); assert.equal(settings.widgets[ID], true);
     assert.deepEqual(hourly(settings.savedPresets[0]!.visual), { column: 0, row: 4, size: 'medium' });
+    // Reading refits in memory only: both files keep their bytes, so a rollback straight after an update needs no step.
+    const untouched = async (label: string) => { for (const name of ['state.json', 'state.backup.json']) assert.equal(await readFile(join(directory, name), 'utf8'), file, `${name} is byte-identical ${label}`); };
+    await untouched('after the store opens');
 
     const app = await createApplication({ dataDirectory: directory, fetcher: async () => Response.json(forecastFixture()) });
     app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
     const address = app.server.address(); assert.ok(address && typeof address === 'object');
     const send = (method: string, path: string, value?: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, value === undefined ? { method } : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
     try {
+      // Starting the application and reading through the API write nothing either.
+      const state = await (await send('GET', '/api/state')).json() as { settings: Settings };
+      assert.deepEqual(hourly(state.settings), { column: 8, row: 4, size: 'medium' }, 'the API serves the fitted family');
+      assert.equal((await send('GET', '/api/export')).status, 200);
+      await untouched('after the application starts and is read');
       // The next save writes the fitted family.
       assert.equal((await send('PATCH', '/api/settings', { units: 'imperial' })).status, 200);
       assert.equal(JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')).settings.widgetGrid.placements[ID].size, 'medium');

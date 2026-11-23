@@ -79,4 +79,12 @@
   color: var(--ambient-accent);
   opacity: 0.8;
 }
+/* Lively entrance (#76): the columns slide in one after another (motion-widgets.css: 50 ms apart up to the
+   seventh, so the last start 300 ms after the widget's own delay). The line fades in with those last columns,
+   never ahead of its values: opacity only, from 0 to its resting 0.8. Off, Subtle and reduced motion have no
+   column stagger, and there the line simply appears with the widget. */
+.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .ambient-hourlyTemperature .hourly-trend {
+  animation: lrd-fade-in 600ms var(--motion-ease) backwards;
+  animation-delay: calc(var(--reveal-delay) + 300ms);
+}
 .grid-ambient .ambient-hourlyTemperature .hourly-trend path { fill: none; stroke: currentColor; stroke-width: max(1px, var(--min-text, 0px) * 0.11); vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }

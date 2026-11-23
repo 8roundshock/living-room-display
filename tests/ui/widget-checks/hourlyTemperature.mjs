@@ -87,8 +87,9 @@ export async function family({ widget, size, state }) {
     assert.deepEqual(suns.map(column => column.kind), ['sunset']);
     const index = m.columns.indexOf(suns[0]);
     assert.equal(m.columns[index - 1].label, '6 PM'); assert.equal(m.columns[index + 1].label, '7 PM'); assert.match(suns[0].label, /^6:\d\d PM$/);
-    assert.equal(m.columns[index - 1].glyph?.startsWith('moon'), false, 'the hour before sunset is a day glyph');
-    assert.match(m.columns[index + 1].glyph, /^(moon|mooncloud|cloud)$/, 'the hour after sunset is a night glyph');
+    // The fixture's 6 PM is clear and its 7 PM partly cloudy, so each glyph names the sky: the sun before the sunset, the moon after it.
+    assert.equal(m.columns[index - 1].glyph, 'sun', 'the hour before sunset draws the day glyph');
+    assert.equal(m.columns[index + 1].glyph, 'mooncloud', 'the hour after sunset draws the night glyph');
     assert.deepEqual(m.facts, [], 'the heading does not repeat the sunset the strip shows');
   } else {
     assert.deepEqual(suns, []); assert.equal(m.facts.length, 1); assert.match(m.facts[0], /^Sunset 6:\d\d PM$/);
