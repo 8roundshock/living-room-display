@@ -702,15 +702,23 @@ board under it shows the family's footprint (“4 × 2 cells of 12 × 8”).
   enabled. Since #716 it also shows what is coming up
   ([contract](widgets.md#calendar-upcoming-dates-716)): large lists up to three upcoming
   dates under the month ("Dec 25  Christmas", "Today  Christmas" on the day), medium the
-  next one on one line under the date where the box has room (always on Spacious and
-  Balanced; on Fine only in a four-week month), and both put a small accent dot under the
-  days of the month that carry a date. The dates come from the holiday calendars ticked for
+  next one on one line under the date where the box has room (at Text 100% always on
+  Spacious and Balanced; on Fine only in a four-week month), and both put a small accent dot
+  under the days of the month that carry a date. The dates give way before the month does:
+  at a larger Text size fewer lines fit, then none, and the month is never zoomed out to
+  make room for them (on Balanced at 1080p a five-week large month shows one line at Text
+  110% and none from 125%; medium shows none from 110%); the dots stay. A name longer than
+  its line is cut after a whole word with an ellipsis, and a birthday that does not fit as
+  "Name's birthday" shows the name alone. The dates come from the holiday calendars ticked for
   themes, the saved Birthdays ("Mina's birthday") and the Countdown dates, up to 90 days
   ahead; reminders are not included. The panel has the same **Holiday calendars** boxes
   (Canada, Korea, Russia) as Style › Theme and Dynamic, bound to the one selection
   `appearance.theme.calendars`, and a hint naming the sources; the canvas follows the
   draft, and unticking every calendar with no birthday or countdown date leaves the widget
-  as it was before #716. There is no new saved setting.
+  as it was before #716. There is no new saved setting; a selection other than all three is
+  the existing #575 rollback exception, and with Theme Off and Dynamic's Holidays off this
+  panel is the only place that shows the boxes
+  ([install](install.md#additive-data-and-rollback-compatibility-84)).
 - **Countdown** (Personal, default small) holds up to 12 rows: a title (1–60
   characters), a date, an **Every year** toggle and Remove. **Add date** adds a row
   dated one week ahead and focuses its title. An empty title shows an inline error and

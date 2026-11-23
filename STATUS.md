@@ -17,7 +17,11 @@ What changed:
 - The Calendar's options carry the same Holiday calendars boxes as Theme and Dynamic (one selection).
 - With nothing in range the widget looks as it did before.
 - With the list, the large month gives up spare height, not type size; only a six-week month takes
-  slightly smaller numbers (28 px instead of 30 px on the Balanced grid at 1080p).
+  slightly smaller numbers (28 px instead of 30 px on the Balanced grid at 1080p). At a larger Text size
+  the dates give way first (fewer lines, then none), so the Calendar never zooms out more than it did
+  before.
+- A name longer than its line (32 letters; a Hangul syllable counts as two) is cut after a whole word
+  with an ellipsis; a birthday that does not fit as "Name's birthday" shows the name alone.
 - Also fixed: a six-week medium month renders at fit 1 on the Fine grid (it zoomed out to 0.88 at 720p).
 
 On 22 November 2026 with all three calendars and no birthday or countdown date the list reads

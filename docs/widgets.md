@@ -200,27 +200,57 @@ is pure and unit-tested:
 
 - **Upcoming** means today through the next 90 days (`UPCOMING_HORIZON_DAYS`), on this computer's
   civil date like the grid, soonest first; on one day your own dates come before holidays. Within 90
-  days a month and day name one date, so no year is shown, also across the turn of the year. The same
-  name on the same day from two sources (a countdown called "Christmas") is one line. With nothing in
-  range the widget looks as it did before: no list, no marks and no room made for them (a capture of
-  the large and of the medium family with nothing in range is identical to one from before #716).
+  days a month and day name one date, so no year is shown, also across the turn of the year.
+- **Each occasion once.** Items of one day that share a name or an occasion, directly or through
+  another item, are one line, and the first in order stands for the others. So a countdown called
+  "Christmas" is the one Christmas line, and a countdown called "New Year's Day" also stands for
+  Russia's "New Year holidays", which is the same occasion as the Canadian day of that name. Names
+  match whatever their case, spacing or kind of apostrophe.
+- **Nothing in range:** the widget looks as it did before, with no list, no marks and no room made
+  for them. Captures of the small, large and medium families with nothing in range are identical to
+  captures from before #716, with one intended exception: a six-week medium month on the Fine grid,
+  which zoomed out before and now closes its rows up to fit (see Medium).
 - **Lines** read "Dec 25  Christmas": the date in the accent tone, the name in the text colour, and
-  "Today" for today's own dates. A line never wraps. A name longer than 32 characters
-  (`UPCOMING_NAME_LENGTH`) is cut after the last whole word that fits and ends in an ellipsis
-  ("A deliberately long synthetic…"), never inside a word; every bundled holiday short name is shorter
-  and shows whole. If a box were still too narrow, the words that do not fit drop off whole.
+  "Today" for today's own dates. A line never wraps. A name has room for 32 letters
+  (`UPCOMING_NAME_LENGTH`), where a wide character (Hangul, kana, CJK ideographs, full-width forms,
+  emoji) counts as two because it is about twice as wide. A longer name is cut by `cleanCut` and ends
+  in an ellipsis:
+  - after the last whole word that fits, when that keeps at least half the line ("A deliberately long
+    synthetic…", "할머니 생신 잔치 준비하고 선물…");
+  - otherwise inside the word, so a line is never reduced to a stub: one long word, or "A
+    Supercalifragilisticexpialido…" rather than "A…";
+  - with no space, full stop, comma or dash left before the ellipsis, and never between a letter and
+    its combining mark or inside a joined emoji (grapheme segmentation).
+
+  A birthday reads "Mina's birthday" when that fits (names of up to 21 letters). When it does not,
+  the line is the name alone, cut like any other name ("Grandmother Alexandra…"), so a possessive is
+  never left without its word. Every bundled holiday short name fits and shows whole. The day's
+  accessible name always carries the whole names.
+- **Last resort in the browser:** the count cannot know the typeface, so a name that is still wider
+  than its line (capital W or M throughout, for example) stays on one line and ends in the browser's
+  own ellipsis where it runs out (`text-overflow: ellipsis`), which can fall inside a word. A Korean
+  and a Russian title show exactly as the model cut them on every grid at 720p, 1080p and 4K, and 31
+  capital W end in that ellipsis (the widget check).
 - **Large** shows up to three lines under the month (`.calendar-upcoming`). The month gives up spare
   height, not type size: the heading and weekday rows sit closer and the week rows fill what is left.
   Four- and five-week months keep their numbers; only a six-week month takes slightly smaller ones
   (6.2cqh instead of 6.6cqh, 28 px instead of 30 px on the Balanced grid at 1080p).
-- **Medium** shows the next date on one line under the date and the month (`.calendar-next`), measured
-  from layout boxes like the Countdown list: it is shown on the Spacious and Balanced grids in every
-  month, and on Fine only in a four-week month, where the box is too short beside five or six weeks.
-  A line that does not fit takes no layout and changes nothing else. The big date gives the line its
-  room (48cqh instead of 54cqh). A six-week medium month shares the height that is left between its
-  rows: with room to spare they are exactly as before, with less the gap under the weekday labels and
-  then the rows close up, down to the digits' own line. So it makes room for the next date on Balanced
-  and renders at fit 1 at the data floor on Fine instead of zooming out (before, to 0.88 at 720p).
+- **Medium** shows the next date on one line under the date and the month (`.calendar-next`). At Text
+  100% it is shown on the Spacious and Balanced grids in every month, and on Fine only in a four-week
+  month, where the box is too short beside five or six weeks. The big date gives the line its room
+  (48cqh instead of 54cqh). A six-week medium month shares the height that is left between its rows:
+  with room to spare they are exactly as before, with less the gap under the weekday labels and then
+  the rows' padding close up, down to the digits' own line. So it makes room for the next date on
+  Balanced and renders at fit 1 at the data floor on Fine instead of zooming out (before, to 0.88 at
+  720p).
+- **The dates give way before the month does.** The lines of both families are measured from layout
+  boxes like the Countdown list (`fittingLines` in `Calendar.tsx`): a line that does not fit takes no
+  layout, and with no line left the family has exactly the layout it has with nothing upcoming. So the
+  dates never make the shared fit zoom the month out, at any Text size, and the Calendar's fit is
+  never below what it was before #716. At Text 100% all three lines fit everywhere. Above it fewer
+  fit: on the Balanced grid at 1080p a five-week large month shows two lines at Text 105%, one at 110%
+  and 115% and none from 125%; a four-week month still shows one at 125%; medium shows its next date up
+  to Text 105% and none from 110%. The dots stay at every Text size.
 - **Small** is unchanged: the week strip has no list and no marks.
 - **Marks:** a day of the shown month that carries one of these dates, past days included, gets one
   small dot in the accent tone (`.calendar-mark`, a real element so the palette harness audits it),
@@ -232,11 +262,14 @@ is pure and unit-tested:
   (`sourcesSignature`), so a one-second tick formats nothing (#193) and the list changes only at
   local midnight or when a source changes. No timer or animation of its own.
 - **Settings:** the Calendar panel carries the same **Holiday calendars** boxes as Style and Dynamic
-  (one shared selection, part of the style) and says where the dates come from. Birthday names and
-  countdown titles are private content: tests and fixtures use synthetic entries only.
+  (one shared selection, part of the style) and says where the dates come from. With Theme Off and
+  Dynamic's Holidays off it is the only place that shows them; a selection other than all three is the
+  #575 rollback exception ([install](install.md#additive-data-and-rollback-compatibility-84)).
+  Birthday names and countdown titles are private content: tests and fixtures use synthetic entries
+  only.
 
 Every family renders at fit 1 at Text 100% on every grid density at 720p, 1080p and 4K in four-, five-
-and six-week months (the widgets suite's Calendar sweep).
+and six-week months (the widgets suite's Calendar sweep, which also checks Text 110%, 125% and 150%).
 
 ### Clock timer slot
 

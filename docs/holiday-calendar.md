@@ -58,10 +58,14 @@ multi-day holiday that has started is no longer "upcoming" once its central date
 (Russia's New Year holidays leave the list after January 1). The same occasion in several
 calendars is one line under the first calendar's name in the order Canada, Korea, Russia, so
 January 1 reads "New Year’s Day" unless Russia is the only calendar ("New Year holidays"),
-and Korea's Labour Day and Russia's Spring and Labour Day on May 1 read "Labour Day". When the
+and Korea's Labour Day and Russia's Spring and Labour Day on May 1 read "Labour Day". A
+Countdown date or a birthday with a holiday's name on its day stands for that occasion in
+every calendar, so a countdown called "New Year’s Day" does not bring "New Year holidays"
+back beside it. When the
 runtime has no verified Dangi calendar the lunar dates are simply absent, as for cards. Adding
 an observance to `holidays.ts` adds it to the Calendar with no further change; keep its
-`shortName` within 32 characters so the Calendar shows it whole. The widget's rules are in the
+`shortName` within 32 letters (a wide character such as a Hangul syllable counts as two) so
+the Calendar shows it whole; a unit test checks every bundled name. The widget's rules are in the
 [widget contract](widgets.md#calendar-upcoming-dates-716). This is still a decorative
 observance list, not a statutory closure schedule, and the Calendar does not say which dates
 are days off.
