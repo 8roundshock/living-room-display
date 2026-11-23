@@ -1,20 +1,17 @@
 import { useMemo, useRef } from 'react';
 import type { Settings } from '../../shared/contracts.ts';
-import { defaultTheme } from '../../shared/themes.ts';
 import type { WidgetSize } from '../../shared/widgets.ts';
-import { calendarView, compareCivil, weekStartDay, weekdayName, todayCivil, type CalendarView, type CivilDate, type WeekStartSetting } from '../calendar.ts';
+import { calendarView, compareCivil, todayCivil, weekStartDay, weekdayName, type CalendarView, type CivilDate, type WeekStartSetting } from '../calendar.ts';
 import { calendarDates, sourcesSignature, type CalendarDates, type DateSources, type UpcomingRow } from '../calendar-dates.ts';
-import { HolidayCalendars } from '../HolidayCalendars';
+import { HolidayCalendars } from '../HolidayCalendars.tsx';
 import { atNaturalWidth, fittingCount, useMeasured } from './measure.ts';
 import { TransitionText } from './TransitionText.tsx';
 import type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
 import './calendar.css';
 
-/** Lines of upcoming dates under the large month (#716). */
+/** Lines of upcoming dates under the large month (#716); medium shows one. */
 const UPCOMING_LINES = 3;
 const NO_DATES: CalendarDates = { upcoming: [], marks: new Map() };
-/** Stable fallbacks, so a missing section never looks like new data on every tick. */
-const ALL_CALENDARS = defaultTheme().calendars, NO_BIRTHDAYS: DateSources['birthdays'] = [];
 
 function dayState(day: CivilDate, today: CivilDate): 'past' | 'today' | 'future' {
   const order = compareCivil(day, today);
@@ -41,24 +38,33 @@ function UpcomingLine({ row }: { row: UpcomingRow }) {
   return <><span className="calendar-upcoming-when">{row.when}</span><span className="calendar-upcoming-name">{row.name}</span></>;
 }
 
-/** Whether the next date's line fits under the medium date and month, measured from layout boxes at the natural width. */
-function nextFits(face: HTMLElement): boolean | null {
-  const line = face.querySelector<HTMLElement>('.calendar-next');
-  if (!line) return null;
+/**
+ * How many of the face's upcoming lines fit its box, from layout boxes at the natural width. While measuring, the
+ * face is fixed to the box, anchored to the top and laid out as it is with its lines (`data-measuring` in
+ * calendar.css), and every line takes layout. 0 means not even one fits: the family then shows none and keeps
+ * the layout it has with nothing upcoming.
+ */
+function fittingLines(face: HTMLElement): number | null {
+  const lines = [...face.querySelectorAll<HTMLElement>('.calendar-line')];
+  if (!lines.length) return null;
   face.setAttribute('data-measuring', '');
-  try { return atNaturalWidth(face, () => fittingCount(face, [line], () => 0) === 1); } finally { face.removeAttribute('data-measuring'); }
+  try { return atNaturalWidth(face, () => fittingCount(face, lines, () => 0)); } finally { face.removeAttribute('data-measuring'); }
+}
+
+/** The measured number of `rows` to show. The dates give way before the month does: a line that does not fit is left out (#716). */
+function useFittingLines(rows: readonly UpcomingRow[], weeks: number, fitKey: string) {
+  const face = useRef<HTMLDivElement>(null);
+  const fit = useMeasured(face, JSON.stringify([rows.map(row => [row.when, row.name]), weeks, fitKey]), fittingLines, rows.length);
+  return { face, shown: Math.min(fit, rows.length) };
 }
 
 /**
  * Medium: the date hero beside the month, and the next date on one line under them where the box has room
- * (#716). The line is measured like the Countdown list: when it does not fit it takes no layout and the
- * family looks as it does with nothing upcoming.
+ * (#716). A line that does not fit takes no layout and the family looks as it does with nothing upcoming.
  */
 function MediumCalendar({ view, dates, fitKey }: { view: CalendarView; dates: CalendarDates; fitKey: string }) {
-  const face = useRef<HTMLDivElement>(null);
-  const next = dates.upcoming[0];
-  const fits = useMeasured(face, JSON.stringify([next?.when, next?.name, view.weeks.length, fitKey]), nextFits, false);
-  const shown = Boolean(next) && fits;
+  const next = dates.upcoming.slice(0, 1);
+  const { face, shown } = useFittingLines(next, view.weeks.length, fitKey);
   return <div ref={face} className={`calendar-face calendar-family-medium${shown ? ' calendar-with-next' : ''}`}>
     <div className="calendar-main">
       <div className="calendar-hero">
@@ -68,7 +74,24 @@ function MediumCalendar({ view, dates, fitKey }: { view: CalendarView; dates: Ca
       </div>
       <MonthGrid view={view} size="medium" marks={dates.marks} />
     </div>
-    {next && <p className={`calendar-next${shown ? '' : ' calendar-next-hidden'}`}><UpcomingLine row={next} /></p>}
+    {next.map(row => <p key={row.key} className={`calendar-line calendar-next${shown ? '' : ' calendar-line-hidden'}`}><UpcomingLine row={row} /></p>)}
+  </div>;
+}
+
+/**
+ * Large: the month, then as many of the next three dates as fit under it (#716). With the list the month gives up
+ * spare height; when a line does not fit (a larger Text size) the list gives way first, down to no list and the
+ * layout the family has with nothing upcoming, so the list never makes the shared fit zoom the month out.
+ */
+function LargeCalendar({ view, dates, fitKey }: { view: CalendarView; dates: CalendarDates; fitKey: string }) {
+  const upcoming = dates.upcoming.slice(0, UPCOMING_LINES);
+  const { face, shown } = useFittingLines(upcoming, view.weeks.length, fitKey);
+  return <div ref={face} className={`calendar-face calendar-family-large${shown ? ' calendar-with-upcoming' : ''}`}>
+    <div className="calendar-heading"><span className="ambient-label calendar-month">{view.month}</span><span className="calendar-year">{view.today.year}</span></div>
+    <MonthGrid view={view} size="large" marks={dates.marks} />
+    {upcoming.length > 0 && <ul className={`calendar-upcoming${shown ? '' : ' calendar-line-hidden'}`} aria-label="Upcoming dates">
+      {upcoming.map((row, index) => <li key={row.key} className={`calendar-line calendar-upcoming-row${index < shown ? '' : ' calendar-line-hidden'}`}><UpcomingLine row={row} /></li>)}
+    </ul>}
   </div>;
 }
 
@@ -84,20 +107,12 @@ function face(view: CalendarView, size: WidgetSize, dates: CalendarDates, fitKey
       })}</tr></tbody>
     </table>
   </div>;
-  if (size === 'medium') return <MediumCalendar view={view} dates={dates} fitKey={fitKey} />;
-  const upcoming = dates.upcoming.slice(0, UPCOMING_LINES);
-  return <div className={`calendar-face calendar-family-large${upcoming.length ? ' calendar-with-upcoming' : ''}`}>
-    <div className="calendar-heading"><span className="ambient-label calendar-month">{view.month}</span><span className="calendar-year">{view.today.year}</span></div>
-    <MonthGrid view={view} size={size} marks={dates.marks} />
-    {upcoming.length > 0 && <ul className="calendar-upcoming" aria-label="Upcoming dates">
-      {upcoming.map(row => <li key={row.key} className="calendar-upcoming-row"><UpcomingLine row={row} /></li>)}
-    </ul>}
-  </div>;
+  return size === 'medium' ? <MediumCalendar view={view} dates={dates} fitKey={fitKey} /> : <LargeCalendar view={view} dates={dates} fitKey={fitKey} />;
 }
 
-/** The sources of the Calendar's dates (#716): the theme's holiday calendars (absent means all, as for themes), birthdays and Countdown dates. */
+/** The sources of the Calendar's dates (#716): the theme's holiday calendars, the birthdays and the Countdown dates. */
 function dateSources(settings: Settings): DateSources {
-  return { calendars: settings.appearance.theme?.calendars ?? ALL_CALENDARS, birthdays: settings.birthdays ?? NO_BIRTHDAYS, countdowns: settings.widgetData.countdowns };
+  return { calendars: settings.appearance.theme.calendars, birthdays: settings.birthdays, countdowns: settings.widgetData.countdowns };
 }
 
 function Calendar({ settings, now, size }: WidgetContentProps) {
@@ -128,8 +143,8 @@ function CalendarSettings({ settings, onChange, saving }: WidgetSettingsProps) {
         <option value="monday">Monday</option>
       </select>
     </label>
-    <HolidayCalendars value={settings.appearance.theme?.calendars ?? ALL_CALENDARS} disabled={saving} onChange={calendars => onChange((previous: Settings) => ({ ...previous, appearance: { ...previous.appearance, theme: { ...(previous.appearance.theme ?? defaultTheme()), calendars } } }))} />
-    <p className="hint">Large lists the next three holidays and important dates, medium the next one where it fits, and both mark those days in the month. They come from these holiday calendars (shared with themes and Dynamic), Birthdays in Settings and your Countdown dates, up to 90 days ahead.</p>
+    <HolidayCalendars value={settings.appearance.theme.calendars} disabled={saving} onChange={calendars => onChange((previous: Settings) => ({ ...previous, appearance: { ...previous.appearance, theme: { ...previous.appearance.theme, calendars } } }))} />
+    <p className="hint">Large lists the next three holidays and important dates, medium the next one, where they fit, and both mark those days in the month. They come from these holiday calendars (shared with themes and Dynamic), Birthdays in Settings and your Countdown dates, up to 90 days ahead.</p>
   </div>;
 }
 

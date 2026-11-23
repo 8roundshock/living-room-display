@@ -33,26 +33,23 @@
 .grid-ambient .ambient-calendar .calendar-family-medium .calendar-day { padding-block: 0.12em; min-width: 1.7em; }
 /* Six weeks share the height that is left (#716). --calendar-room is the box less the weekday labels, the next
    date when it is shown, and 2px for sub-pixel rounding. With room to spare the gap under the labels and the
-   rows are exactly the other months' (0.35em; a 1.1 line with 0.12em above and below); with less, the gap
-   closes to 0.2em, then the rows' padding to 0.03em, then their line to 1.04. So the family keeps fit 1 at the
-   data floor on the Fine grid instead of zooming out, and makes room for the next date on Balanced. */
+   rows are exactly the other months' (0.35em under the labels, 0.12em above and below each day's 1.1 line);
+   with less, the gap closes to 0.2em, then the rows' padding to nothing. So the family keeps fit 1 at the data
+   floor on the Fine grid instead of zooming out, and makes room for the next date on Balanced. The upper bounds
+   are the other months' own em values and the line is left alone, so a month with room computes exactly as
+   before. */
 .grid-ambient .ambient-calendar .calendar-family-medium [data-weeks="6"] {
   --calendar-ring: max(1px, var(--calendar-day) * 0.07);
   --calendar-room: calc(100cqh - 2px - var(--calendar-below) - var(--calendar-head));
   --calendar-gap: clamp(var(--calendar-head) * 0.2, var(--calendar-room) - 6 * (var(--calendar-day) * 1.34 + 2 * var(--calendar-ring)), var(--calendar-head) * 0.35);
   --calendar-row: calc((var(--calendar-room) - var(--calendar-gap)) / 6 - 2 * var(--calendar-ring));
 }
-.grid-ambient .ambient-calendar .calendar-family-medium [data-weeks="6"] th { padding-bottom: var(--calendar-gap); }
-.grid-ambient .ambient-calendar .calendar-family-medium [data-weeks="6"] .calendar-day { line-height: clamp(1.04em, var(--calendar-row) - 0.06em, 1.1em); padding-block: clamp(0.03em, (var(--calendar-row) - 1.1em) / 2, 0.12em); }
+.grid-ambient .ambient-calendar .calendar-family-medium [data-weeks="6"] th { padding-bottom: clamp(0.2em, var(--calendar-room) - 6 * (var(--calendar-day) * 1.34 + 2 * var(--calendar-ring)), 0.35em); }
+.grid-ambient .ambient-calendar .calendar-family-medium [data-weeks="6"] .calendar-day { padding-block: clamp(0em, (var(--calendar-row) - 1.1em) / 2, 0.12em); }
 .grid-ambient .ambient-calendar .calendar-family-medium:is(.calendar-with-next, [data-measuring]) { --calendar-below: calc(var(--calendar-next) * 1.25 + 3.2cqh); }
 /* The line takes its room from the big date (48cqh instead of 54cqh), so the hero keeps air above and below. */
 .grid-ambient .ambient-calendar .calendar-family-medium:is(.calendar-with-next, [data-measuring]) .calendar-date-number { font-size: calc(min(19cqw, 48cqh) * var(--font-scale)); }
 .grid-ambient .ambient-calendar .calendar-next { flex: none; display: flex; gap: 0.9em; min-width: 0; margin: 3.2cqh 0 0; font-size: var(--calendar-next); line-height: 1.25; }
-/* The next date is measured from layout boxes with the face fixed to the box and anchored to the top;
-   a line that does not fit takes no layout outside measuring. */
-.grid-ambient .ambient-calendar .calendar-next-hidden { display: none; }
-.grid-ambient .ambient-calendar .calendar-family-medium[data-measuring] { height: 100cqh; min-height: 0; justify-content: flex-start; }
-.grid-ambient .ambient-calendar .calendar-family-medium[data-measuring] .calendar-next-hidden { display: flex; }
 
 /* Large: month and year, a weekday header row and a generous grid. */
 .grid-ambient .ambient-calendar .calendar-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 3cqw; margin: 0 0 4cqh; }
@@ -62,16 +59,24 @@
 .grid-ambient .ambient-calendar .calendar-family-large td { font-size: calc(max(var(--min-data), min(5.5cqw, 6.6cqh)) * var(--font-scale)); padding-block: 0.16em; }
 
 /* Upcoming dates (#716): up to three lines under the large month, the date in the accent tone and the name in
-   the text colour, in two aligned columns. A name stays on one line: the model cuts a long one after a whole
-   word, and a word that still does not fit drops off whole instead of ending mid-letter. */
+   the text colour, in two aligned columns. A name stays on one line. The model cuts a long one to the line's
+   length (calendar-dates.ts); a name that is still wider than its line, such as one in very wide letters, ends
+   in the browser's ellipsis where it runs out, so the cut always shows. */
 .grid-ambient .ambient-calendar .calendar-upcoming { list-style: none; margin: 2.6cqh 0 0; padding: 0; min-width: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 1em; font-size: calc(max(var(--min-text), min(3.7cqw, 4.4cqh)) * var(--font-scale)); line-height: 1.34; }
 .grid-ambient .ambient-calendar .calendar-upcoming-row { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; }
 .grid-ambient .ambient-calendar .calendar-upcoming-when { color: var(--ambient-accent); white-space: nowrap; font-variant-numeric: lining-nums tabular-nums; }
-.grid-ambient .ambient-calendar .calendar-upcoming-name { min-width: 0; max-height: 1lh; overflow: hidden; overflow-wrap: anywhere; }
+.grid-ambient .ambient-calendar .calendar-upcoming-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The lines are measured from layout boxes (Calendar.tsx): the face is fixed to the box and anchored to the top,
+   laid out as it is with its lines, and every line takes layout. Outside measuring, a line that does not fit
+   takes none: the dates give way before the shared fit would shrink the month, at any Text size. */
+.grid-ambient .ambient-calendar .calendar-face[data-measuring] { height: 100cqh; min-height: 0; justify-content: flex-start; }
+.grid-ambient .ambient-calendar .calendar-face:not([data-measuring]) .calendar-line-hidden { display: none; }
 /* With the list the month gives up spare height, not type size: closer heading and weekday rows, and week rows
-   that fill what is left. Only a six-week month takes slightly smaller numbers. Each total stays under 100cqh. */
-.grid-ambient .ambient-calendar .calendar-family-large.calendar-with-upcoming .calendar-heading { margin-bottom: 2.6cqh; }
-.grid-ambient .ambient-calendar .calendar-family-large.calendar-with-upcoming th { padding-bottom: 0.45em; }
-.grid-ambient .ambient-calendar .calendar-family-large.calendar-with-upcoming td { padding-block: 0.1em; }
-.grid-ambient .ambient-calendar .calendar-family-large.calendar-with-upcoming [data-weeks="4"] td { padding-block: 0.16em; }
-.grid-ambient .ambient-calendar .calendar-family-large.calendar-with-upcoming [data-weeks="6"] td { padding-block: 0; font-size: calc(max(var(--min-data), min(5.5cqw, 6.2cqh)) * var(--font-scale)); }
+   that fill what is left. Only a six-week month takes slightly smaller numbers. At Text 100% each total with
+   three lines stays under 100cqh; at a larger Text size fewer lines fit, and with none the month keeps the
+   rules above. */
+.grid-ambient .ambient-calendar .calendar-family-large:is(.calendar-with-upcoming, [data-measuring]) .calendar-heading { margin-bottom: 2.6cqh; }
+.grid-ambient .ambient-calendar .calendar-family-large:is(.calendar-with-upcoming, [data-measuring]) th { padding-bottom: 0.45em; }
+.grid-ambient .ambient-calendar .calendar-family-large:is(.calendar-with-upcoming, [data-measuring]) td { padding-block: 0.1em; }
+.grid-ambient .ambient-calendar .calendar-family-large:is(.calendar-with-upcoming, [data-measuring]) [data-weeks="4"] td { padding-block: 0.16em; }
+.grid-ambient .ambient-calendar .calendar-family-large:is(.calendar-with-upcoming, [data-measuring]) [data-weeks="6"] td { padding-block: 0; font-size: calc(max(var(--min-data), min(5.5cqw, 6.2cqh)) * var(--font-scale)); }
