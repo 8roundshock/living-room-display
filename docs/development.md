@@ -187,7 +187,7 @@ Browser widget checks live in `tests/ui/widget-checks/`, one module per widget
 (`id`, optional `prepare`, `selectors`, `family` and a once-per-viewport `sweep`).
 The widget harness loads every module in that folder and requires one for each
 active catalog id; extra modules such as `reminders-span.mjs` and `clock-spacing.mjs`
-(#717, the Clock's painted digit gaps; about a minute) add only a sweep.
+(#717, the Clock's painted digit gaps and where it stands through every minute of a day; about two minutes) add only a sweep.
 A newly active widget also joins `FULL_BOARD` in `tests/ui/palette-browser.mjs`,
 plus `ACCENT_SELECTOR` (a new kind of accent element) or `TEXT_ONLY` (no accent
 element), so the palette harness checks its colours (#214), and the shared
