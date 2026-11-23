@@ -36,11 +36,24 @@ no data age (their "Saved … · offline" labels stay), and Last screen has had 
 Details: [widget contract](docs/widgets.md#data-and-image-boundaries), [design](docs/design.md),
 [UI contracts](docs/ui.md), [API](docs/api.md#dynamic-signals).
 
-Verified with source builds and synthetic data only: see the pull request for the commands and
-results. Not verified: installation and the TV. Open for the owner: "Model est." under a fresh
-Air quality reading and the place line under the collection weather widgets are kept as wording
-that is neither a source nor an age; say so if they should go too. Provider terms and where the
-credit must appear are part of the public-release decision (#114).
+Verified with source builds and synthetic data only: both typechecks and the build; the unit
+tests (no provider name and no fresh age from the Dynamic engine, the air footer phrases and the
+weather status helper; no renderer source names a provider outside a settings hint; no ambient
+style left for a credit); and the browser suites `widgets` (every family in every density at
+720p, 1080p and 4K, fresh, saved and offline: no provider named, no fresh age, an age only in
+the status tone, fit 1), `weather`, `dynamic`, `collection`, `catalog-sky`, `catalog-time` (every
+picker sample), `grid`, `studio` (Settings keeps the credit link), `palette`, `canvas-scope` and
+`home`. `widgets` passed on Edge 157; on Edge 158 it stops at an unrelated Reminders check
+(#729). `motion` did not complete in five runs, one of them on `main`'s build: its mid-reveal
+step fails while other suites load the PC (#165); the step that concerns this change (a stale
+label appears in the status tone without a transition) was checked with a one-off probe. Not
+verified: installation and the TV.
+
+Open for the owner: "Model est." under a fresh Air quality reading and the place line under the
+collection weather widgets are kept as wording that is neither a source nor an age; say so if
+they should go too. Provider terms and where the credit must appear are part of the
+public-release decision (#114). Found on the way: two double-digit sub-zero temperatures crowd
+the medium Forecast (#731, also on `main`).
 
 ## Build and test hygiene: Alt+Tab ghosts, build advisory, stale client bundles — 2026-11-17 (#712, #708, #711, #710)
 
