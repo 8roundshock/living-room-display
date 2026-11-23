@@ -37,6 +37,8 @@ export interface WidgetDefinition {
    * falls back to when it no longer fits. See fitReshapedFamilies.
    */
   reshaped?: Partial<Record<WidgetSize, WidgetSize>>;
+  /** Extra words the picker's search matches besides the name, description and category; never shown. */
+  keywords?: string;
 }
 const standard = { small: { columns: 2, rows: 2 }, medium: { columns: 4, rows: 2 }, large: { columns: 4, rows: 4 } };
 
@@ -65,7 +67,7 @@ export const WIDGET_CATALOG = {
   yearProgress: { name: 'Year progress', description: 'The year in days and months', icon: 'yearProgress', category: 'time', tone: 'time', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
   timeOverlap: { name: 'Time overlap', description: 'Find shared daytime across your saved cities', icon: 'overlap', category: 'time', tone: 'time', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
   weatherAlerts: { name: 'Weather alerts', description: 'Official Canadian and US weather notices', icon: 'alert', category: 'weather', tone: 'sky', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
-  hourlyTemperature: { name: 'Hourly forecast', description: 'The hours ahead', icon: 'thermometer', category: 'weather', tone: 'sky', sizes: { medium: standard.medium, large: { columns: 8, rows: 2 } }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 }, reshaped: { large: 'medium' } },
+  hourlyTemperature: { name: 'Hourly forecast', description: 'The hours ahead', icon: 'thermometer', category: 'weather', tone: 'sky', sizes: { medium: standard.medium, large: { columns: 8, rows: 2 } }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 }, reshaped: { large: 'medium' }, keywords: 'hourly hours temperature rain snow sunrise sunset' },
   wind: { name: 'Wind', description: 'Direction, speed and hourly gusts', icon: 'wind', category: 'weather', tone: 'sky', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
   humidity: { name: 'Humidity', description: 'Outdoor moisture and dew point', icon: 'droplet', category: 'weather', tone: 'water', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
   pressure: { name: 'Pressure', description: 'Surface pressure and its forecast trend', icon: 'gauge', category: 'weather', tone: 'sky', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
