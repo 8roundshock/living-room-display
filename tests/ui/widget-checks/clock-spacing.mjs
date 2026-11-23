@@ -1,7 +1,8 @@
 // #717: the Clock's digits never touch or overlap and the gaps between them are even, at rest and while a digit
-// changes. This module measures what is painted, not layout boxes: each clock character paints one colour channel
-// (red, green, blue in turn), so one RAM screenshot tells neighbours apart; the ink of a character is every pixel
-// lit in its channel, outline stroke included. Nothing is written to disk.
+// changes; and nothing but the changing digits moves when a minute changes. The spacing is measured from what is
+// painted, not from layout boxes: each clock character paints one colour channel (red, green, blue in turn), so one
+// RAM screenshot tells neighbours apart; the ink of a character is every pixel lit in its channel, outline stroke
+// included. Where things stand is read from layout boxes over every minute of a day. Nothing is written to disk.
 import assert from 'node:assert/strict';
 import { GRID_DENSITIES, WIDGET_IDS, widgetSizes } from '../../../src/shared/widgets.ts';
 import { waitForWidgetFit } from '../lib/fit-readiness.mjs';
@@ -19,14 +20,15 @@ const CHANNELS = ['#f00', '#0f0', '#00f'];
 const MEASURING_STYLE = `.ambient-content{filter:brightness(1)!important}.clock-calendar{visibility:hidden!important}.grid-ambient[data-animation]{--motion-digit:600s!important}${CHANNELS.map((color, index) => `.clock-char:nth-child(3n+${index + 1}){color:${color}!important}`).join('')}`;
 /** A channel value above this is ink (about a fifth of full coverage; anti-aliased edges below it are not). */
 const INK = 48;
-/** The rule in widgets.css: the gap is 6% of the digit size and never under 40% of the shared text floor. */
-const GAP_OF_SIZE = 0.06, GAP_OF_FLOOR = 0.4;
+/** The rule in widgets.css: the gap is 6% of the digit size and never under 42% of the shared text floor. */
+const GAP_OF_SIZE = 0.06, GAP_OF_FLOOR = 0.42;
 /**
  * Device px. Glyph positions snap to whole pixels and the bearings are measured to about a thousandth of an em,
- * so painted gaps differ by a few pixels at most (3 measured at 4K, 2 at the smallest clock). Before #717 the
- * large 1080p clock's gaps ran from -12 px (44 overlapping) to 65 px (11).
+ * so painted gaps differ by a few pixels at most (3 measured at 4K, 2 at the smallest clock). The allowance leaves
+ * more than a pixel for another rasteriser. Before #717 the large 1080p clock's gaps ran from -12 px (44
+ * overlapping) to 65 px (11), and the smallest 720p clock's from -1 to 8 px.
  */
-const spreadAllowed = em => 2.5 + 0.005 * em;
+const spreadAllowed = em => 3.5 + 0.005 * em;
 
 /** Representative times: wide and narrow digits, the pairs that used to overlap (44, 04, 48), and every digit. */
 const TIMES = ['00:00', '01:11', '10:08', '11:11', '12:34', '20:00', '23:59', '04:48', '20:44', '17:47', '15:36', '09:29'];
@@ -118,32 +120,155 @@ async function painted(page) {
 
 /**
  * One painted frame: nothing overlaps and no gap is far under the stylesheet's. Whole-pixel snapping and hinting move
- * an edge by up to a pixel, so the smallest clock (a 4 px gap at 720p) may show 2 px, never less.
+ * an edge by up to a pixel: the smallest clock (a 4.2 px gap at 720p) measures 3 px here, and 2 px is required, so
+ * a rasteriser that differs by a pixel still passes while the unfixed clock (0 px and less) fails.
  */
 function assertApart(sample, label) {
   const where = `${label} ${sample.text}${sample.period ? ` ${sample.period}` : ''}`;
   for (const pair of sample.pairs) {
     assert.ok(pair.gap !== null, `${where}: "${pair.pair}" is painted`);
     assert.equal(pair.both, 0, `${where}: "${pair.pair}" overlap (${pair.both} px painted by both)`);
-    assert.ok(pair.gap >= Math.max(2, 0.7 * sample.wanted - 1), `${where}: "${pair.pair}" are ${pair.gap} px apart, wanted about ${sample.wanted.toFixed(1)} px`);
+    assert.ok(pair.gap >= Math.max(2, 0.7 * sample.wanted - 2), `${where}: "${pair.pair}" are ${pair.gap} px apart, wanted about ${sample.wanted.toFixed(1)} px`);
   }
   // On the suite's own machine the typeface is always measurable; the stylesheet's fallback is checked on its own.
   assert.ok(sample.spaced, `${where}: the digits are spaced by their measured ink (clock-ink)`);
 }
 
 /**
- * The stylesheet's fallback, for a typeface the clock cannot measure: tabular figures at their natural advance plus
- * the stroke. The gaps are the typeface's own (uneven), but nothing touches and the clock still fits at 1.
+ * The stylesheet's fallback, for a typeface the clock cannot measure: tabular figures tracked apart by the stroke and
+ * a floor, drawn smaller so they stay inside the measured clock's room. The gaps are the typeface's own (uneven),
+ * but nothing touches (3 px and more measured on the smallest 720p clock; 2 required) and the clock fits at 1 at
+ * every time, a one-digit hour included.
  */
 function assertUnmeasured(samples, label) {
   for (const sample of samples) {
-    assert.equal(sample.spaced, false, `${label} ${sample.text}: no ink table, so no clock-ink class`);
-    assert.equal(sample.fit, 1, `${label} ${sample.text}: fits at 1 at Text 100%`);
+    const where = `${label} ${sample.text}${sample.period ? ` ${sample.period}` : ''}`;
+    assert.equal(sample.spaced, false, `${where}: no ink table, so no clock-ink class`);
+    assert.equal(sample.fit, 1, `${where}: fits at 1 at Text 100%`);
     for (const pair of sample.pairs) {
-      assert.equal(pair.both, 0, `${label} ${sample.text}: "${pair.pair}" overlap (${pair.both} px painted by both)`);
-      assert.ok(pair.gap >= 2, `${label} ${sample.text}: "${pair.pair}" are ${pair.gap} px apart`);
+      assert.equal(pair.both, 0, `${where}: "${pair.pair}" overlap (${pair.both} px painted by both)`);
+      assert.ok(pair.gap >= 2, `${where}: "${pair.pair}" are ${pair.gap} px apart`);
     }
   }
+}
+
+/**
+ * Where the clock stands now, in CSS px from the left edge of the widget's content box, so the board's and the
+ * widget's own float cancel out: where each character's ink starts (its box and its left bearing; and whether it is
+ * the same node as before), the time's painted
+ * start and end, the AM/PM period, the date line, the fit, and the box the float measures. `floatBox` walks the
+ * content as `inkSlack` in Display.tsx does: text, and elements with nothing in them.
+ */
+function placed(page) {
+  return page.locator(CLOCK).evaluate(async section => {
+    // The page clock is faked; React commits on a real task after the faked tick.
+    for (let turn = 0; turn < 3; turn++) await new Promise(resolve => { const channel = new MessageChannel(); channel.port1.onmessage = resolve; channel.port2.postMessage(null); });
+    const content = section.querySelector('.widget-content'), origin = content.getBoundingClientRect(), time = section.querySelector('.clock-time'), digits = time.querySelector('.clock-digits');
+    const characters = [...digits.querySelectorAll('.clock-char')], period = time.querySelector('.clock-period'), date = section.querySelector('.clock-calendar');
+    for (const character of characters) character.__node ??= (window.__clockNodes = (window.__clockNodes ?? 0) + 1);
+    const left = element => element.getBoundingClientRect().left - origin.left, right = element => element.getBoundingClientRect().right - origin.left;
+    const size = parseFloat(getComputedStyle(time).fontSize), inkStart = character => left(character) + (parseFloat(character.style.getPropertyValue('--ink-left')) || 0) * size;
+    const box = { left: Infinity, right: -Infinity }, range = document.createRange();
+    const add = rect => { if (rect.width <= 0 && rect.height <= 0) return; box.left = Math.min(box.left, rect.left - origin.left); box.right = Math.max(box.right, rect.right - origin.left); };
+    const walk = node => {
+      for (const child of node.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) { if (child.textContent.trim()) { range.selectNodeContents(child); for (const rect of range.getClientRects()) add(rect); } }
+        else if (child instanceof Element && !child.classList.contains('sr-only')) { if (child.matches('svg, img, canvas, picture, video, [role="img"]') || !child.firstElementChild && !child.textContent.trim()) add(child.getBoundingClientRect()); else walk(child); }
+      }
+    };
+    walk(content);
+    return {
+      text: characters.map(character => character.textContent).join(''), nodes: characters.map(character => character.__node), lefts: characters.map(inkStart),
+      start: left(digits), end: period ? right(period) : right(digits), period: period ? { text: period.textContent, left: left(period) } : null, date: { text: date.textContent, left: left(date) },
+      centre: origin.width / 2, size, fit: new DOMMatrix(getComputedStyle(content).transform).a, scroll: content.scrollWidth, floatBox: box,
+    };
+  });
+}
+
+const middle = numbers => [...numbers].sort((a, b) => a - b)[Math.floor(numbers.length / 2)];
+/**
+ * Every minute of a day in one configuration, from layout boxes. A minute change may move only the characters that
+ * change: an unchanged character (the same node) moves only when the hour changes, so at most 24 times a day, and
+ * within an hour the hour, the colon and the left edge of the minutes stay where they are. The AM/PM period and the
+ * date line beside a medium clock do not move with the minute either, and neither does anything the fit or the float
+ * measures: the fit is 1 at every minute and the measured boxes keep their edges. A large clock that re-centred
+ * every minute (1,295 of 1,440 changes before this rule) fails the first assertion.
+ */
+async function throughTheDay(page, state, options, label) {
+  clockOnly(state, options); await open(page);
+  await showTime(page, '00:00', spoken('00:00', options.format ?? '24h'));
+  await waitForWidgetFit(page, CLOCK);
+  let before = await placed(page); const moves = [], off = [], hourOf = text => text.split(':')[0];
+  const note = sample => off.push((sample.start + sample.end) / 2 - sample.centre);
+  note(before);
+  for (let minute = 1; minute <= 1440; minute++) {
+    await page.clock.fastForward(60_000);
+    let now = await placed(page);
+    for (let attempt = 0; now.text === before.text; attempt++) { assert.ok(attempt < 250, `${label}: the clock moves on from ${before.text}`); await page.waitForTimeout(10); now = await placed(page); }
+    const change = `${label} ${before.text} → ${now.text}`, sameHour = hourOf(now.text) === hourOf(before.text), samePeriod = now.period?.text === before.period?.text;
+    let furthest = 0;
+    now.nodes.forEach((node, index) => { const was = before.nodes.indexOf(node); if (was >= 0) furthest = Math.max(furthest, Math.abs(now.lefts[index] - before.lefts[was])); });
+    if (furthest >= 1) { moves.push(furthest); assert.ok(!sameHour, `${change}: an unchanged character moved ${furthest.toFixed(1)} px within the hour`); }
+    assert.equal(now.fit, 1, `${change}: fits at 1`);
+    if (sameHour) {
+      // The hour's digits, the colon and the first minute digit start where they did.
+      for (let place = 0; place < hourOf(now.text).length + 2; place++) assert.ok(Math.abs(now.lefts[place] - before.lefts[place]) <= 0.5, `${change}: character ${place} moved from ${before.lefts[place]} to ${now.lefts[place]}`);
+      assert.ok(Math.abs(now.floatBox.left - before.floatBox.left) <= 0.5, `${change}: the box the float measures starts at ${now.floatBox.left}, was ${before.floatBox.left}`);
+      if (now.period) assert.ok(Math.abs(now.period.left - before.period.left) <= 0.5, `${change}: ${now.period.text} moved from ${before.period.left} to ${now.period.left}`);
+    }
+    if (samePeriod) {
+      // AM and PM differ in width, so a 12-hour clock's edges are compared within each.
+      assert.ok(Math.abs(now.floatBox.right - before.floatBox.right) <= 0.5, `${change}: the box the float measures ends at ${now.floatBox.right}, was ${before.floatBox.right}`);
+      assert.equal(now.scroll, before.scroll, `${change}: the width the fit measures`);
+      if (options.size === 'medium' && now.date.text === before.date.text) assert.ok(Math.abs(now.date.left - before.date.left) <= 0.5, `${change}: the date line moved from ${before.date.left} to ${now.date.left}`);
+    }
+    note(now); before = now;
+  }
+  assert.ok(moves.length <= 24, `${label}: ${moves.length} changes a day move an unchanged character`);
+  const size = before.size, result = { moves: moves.length, furthest: Math.max(0, ...moves), offMedian: middle(off.map(Math.abs)), offMost: Math.max(...off.map(Math.abs)), offRange: Math.max(...off) - Math.min(...off) };
+  if (options.size === 'large') {
+    // Centred by its middle minute each hour, so the painted time is never further off centre than a quarter of the
+    // minutes' range (0.13 of the digit size in Segoe UI). With AM/PM the digits stand the same way and the period
+    // after the widest minute, so the painted time, digits to period, is off by that quarter all day and never
+    // shifts (AM and PM differ by a pixel or two).
+    assert.ok(result.offMost <= 0.15 * size + 1, `${label}: the time is up to ${result.offMost.toFixed(1)} px off centre (allowed ${(0.15 * size + 1).toFixed(1)})`);
+    if (options.format === '12h') assert.ok(result.offRange <= 3, `${label}: the painted time's centre moves over ${result.offRange.toFixed(1)} px through the day`);
+    else assert.ok(result.offMedian <= 0.08 * size + 1, `${label}: the time is ${result.offMedian.toFixed(1)} px off centre at the median minute (allowed ${(0.08 * size + 1).toFixed(1)})`);
+  }
+  return result;
+}
+
+/**
+ * Float gently on: the widget's content floats inside the room its drawn content leaves. That room must not follow
+ * the minute, or the whole clock shifts when a minute changes. One-second steps through three minute changes
+ * (9:58 to 10:01 AM, 12-hour, where 10:00 adds a character): the float offset moves no further in a second with a minute
+ * change than in any other second, and the room it floats in keeps its edges.
+ */
+async function floatThroughMinutes(page, state, options, label) {
+  clockOnly(state, { ...options, format: '12h' }); state.settings.appearance.motionEnabled = true; state.settings.appearance.motionIntervalSeconds = 30;
+  await open(page);
+  assert.equal(await page.locator('.ambient').getAttribute('data-float'), 'float', `${label}: the display floats`);
+  await showTime(page, '09:57', '9:57');
+  const read = () => page.locator(CLOCK).evaluate(section => ({ x: parseFloat(getComputedStyle(section).getPropertyValue('--float-x')) || 0, y: parseFloat(getComputedStyle(section).getPropertyValue('--float-y')) || 0, text: [...section.querySelectorAll('.clock-char')].map(character => character.textContent).join('') }));
+  // Let the float leave its starting place first.
+  for (let second = 0; second < 40; second++) await page.clock.runFor(1_000);
+  let before = await read(), box = (await placed(page)).floatBox; const steps = { change: 0, other: 0, changes: 0 };
+  for (let second = 0; second < 200; second++) {
+    await page.clock.runFor(1_000);
+    let now = await read(); const moved = Math.max(Math.abs(now.x - before.x), Math.abs(now.y - before.y));
+    if (now.text !== before.text) {
+      steps.changes++; steps.change = Math.max(steps.change, moved);
+      const after = (await placed(page)).floatBox, sameHour = now.text.split(':')[0] === before.text.split(':')[0];
+      assert.ok(Math.abs(after.right - box.right) <= 0.5 && (!sameHour || Math.abs(after.left - box.left) <= 0.5), `${label} ${before.text} → ${now.text}: the box the float measures went from ${JSON.stringify(box)} to ${JSON.stringify(after)}`);
+      box = after;
+    } else steps.other = Math.max(steps.other, moved);
+    before = now;
+  }
+  assert.ok(steps.changes >= 3, `${label}: ${steps.changes} minute changes seen`);
+  assert.ok(steps.other > 0, `${label}: the content floats`);
+  assert.ok(steps.change <= steps.other + 0.5, `${label}: the float moved ${steps.change} px in the second of a minute change, ${steps.other} px in any other second`);
+  state.settings.appearance.motionEnabled = false;
+  return steps;
 }
 
 /** A clock at rest over several times: apart, fit 1, even gaps (digits and colon alike) and painted edges on the run's box. */
@@ -200,7 +325,7 @@ export async function sweep({ page, viewport, state, base }) {
   const started = await page.evaluate(() => Date.now()), densities = Object.keys(GRID_DENSITIES), families = widgetSizes('clock');
   // 720p rides on the 1080p pass, as in the Clock sweep.
   const views = viewport.width === 1920 ? [{ width: 1280, height: 720 }, viewport] : [viewport];
-  let cases = 0, frames = 0; const range = { tightest: Infinity, widest: -Infinity };
+  let cases = 0, frames = 0; const range = { tightest: Infinity, widest: -Infinity }, days = {};
   const record = (samples, label) => { const result = assertEven(samples, label); cases++; frames += samples.length; return result; };
   try {
     for (const view of views) {
@@ -239,12 +364,25 @@ export async function sweep({ page, viewport, state, base }) {
       delete state.timers;
     }
 
+    // Every minute of a day: the large clock in both formats (placed once an hour), the medium clock (the date line
+    // never moves) and the small one.
+    days.day = await throughTheDay(page, state, { size: 'large', density: 'balanced', style: 'outline' }, 'large 24-hour');
+    days.half = await throughTheDay(page, state, { size: 'large', density: 'balanced', style: 'outline', format: '12h' }, 'large 12-hour');
+    await throughTheDay(page, state, { size: 'medium', density: 'balanced', style: 'outline', format: '12h' }, 'medium 12-hour');
+    await throughTheDay(page, state, { size: 'small', density: 'balanced', style: 'digital' }, 'small 24-hour');
+
     // Pages of their own. Scale factors: the owner's 4K TV shows 1280×720 CSS px at 300%; 150% and 200% of a 4K
-    // panel too. And a page whose canvas reports another advance than its text, so the clock cannot trust its ink
-    // table and keeps the stylesheet's fallback.
+    // panel too. And pages whose canvas reports another advance than its text, at 720p and 1080p, so the clock
+    // cannot trust its ink table and keeps the stylesheet's fallback.
     const browser = page.context().browser();
     let unmeasuredFrames = 0;
-    for (const { view, deviceScaleFactor = 1, unmeasured = false } of [{ view: { width: 1280, height: 720 }, deviceScaleFactor: 3 }, { view: { width: 2560, height: 1440 }, deviceScaleFactor: 1.5 }, { view: { width: 1920, height: 1080 }, deviceScaleFactor: 2 }, { view: { width: 1920, height: 1080 }, unmeasured: true }]) {
+    const UNMEASURED = [
+      { size: 'large', density: 'balanced', style: 'outline' }, { size: 'small', density: 'fine', style: 'outline' }, { size: 'medium', density: 'balanced', style: 'digital', typeface: 'serif' },
+      // 12-hour, where a one-digit hour must take the room of two: the smallest clocks in every typeface.
+      { size: 'small', density: 'fine', style: 'outline', format: '12h' }, { size: 'small', density: 'fine', style: 'outline', typeface: 'serif', format: '12h' }, { size: 'small', density: 'fine', style: 'outline', typeface: 'mono', format: '12h' },
+      { size: 'small', density: 'balanced', style: 'digital', typeface: 'mono', format: '12h' }, { size: 'medium', density: 'fine', style: 'outline', typeface: 'mono', format: '12h' },
+    ];
+    for (const { view, deviceScaleFactor = 1, unmeasured = false } of [{ view: { width: 1280, height: 720 }, deviceScaleFactor: 3 }, { view: { width: 2560, height: 1440 }, deviceScaleFactor: 1.5 }, { view: { width: 1920, height: 1080 }, deviceScaleFactor: 2 }, { view: { width: 1280, height: 720 }, unmeasured: true }, { view: { width: 1920, height: 1080 }, unmeasured: true }]) {
       const context = await browser.newContext({ viewport: view, deviceScaleFactor, timezoneId: 'America/Toronto', reducedMotion: 'reduce' });
       try {
         await mockWindowsStatus(context); await mockScreenWakeLock(context);
@@ -256,30 +394,33 @@ export async function sweep({ page, viewport, state, base }) {
         await context.route('**/api/state', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(other) }));
         const otherPage = await context.newPage();
         await otherPage.clock.install({ time: new Date(started) });
-        for (const options of unmeasured ? [{ size: 'large', density: 'balanced', style: 'outline' }, { size: 'small', density: 'fine', style: 'outline' }, { size: 'medium', density: 'balanced', style: 'digital', typeface: 'serif' }] : [{ size: 'large', density: 'balanced', style: 'outline' }]) {
+        for (const options of unmeasured ? UNMEASURED : [{ size: 'large', density: 'balanced', style: 'outline' }]) {
           clockOnly(other, options);
           await otherPage.goto(`${base}/display`); await otherPage.locator('.display-page').waitFor(); await otherPage.clock.runFor(100);
           await otherPage.addStyleTag({ content: MEASURING_STYLE }); await waitForWidgetFit(otherPage, CLOCK);
-          const samples = [];
-          for (const time of SHORT_TIMES) { await showTime(otherPage, time, time); await waitForWidgetFit(otherPage, CLOCK); samples.push(await painted(otherPage)); }
-          if (unmeasured) { assertUnmeasured(samples, `unmeasured ${options.style} ${options.typeface ?? 'sans'} ${options.size}/${options.density}`); unmeasuredFrames += samples.length; }
+          const samples = [], format = options.format ?? '24h';
+          // 12-hour: 9:59 and 10:00 (one character more) must have the same fit, with 12:00 AM and 4:44 PM.
+          for (const time of format === '12h' ? ['09:59', '10:00', '00:00', '16:44'] : SHORT_TIMES) { await showTime(otherPage, time, spoken(time, format)); await waitForWidgetFit(otherPage, CLOCK); samples.push(await painted(otherPage)); }
+          if (unmeasured) { assertUnmeasured(samples, `unmeasured ${options.style} ${options.typeface ?? 'sans'} ${options.size}/${options.density} ${format} ${view.width}×${view.height}`); unmeasuredFrames += samples.length; }
           else record(samples, `outline sans large/balanced ${view.width}×${view.height} ×${deviceScaleFactor}`);
         }
       } finally { await context.close(); }
     }
     await page.bringToFront();
 
-    // While a digit changes (Subtle and Lively need motion allowed).
-    let held = 0;
+    // While a digit changes (Subtle and Lively need motion allowed), and while the display floats.
+    let held = 0, floated;
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     try {
+      floated = await floatThroughMinutes(page, state, { size: 'small', density: 'balanced', style: 'outline' }, 'float, small Balanced');
+      await floatThroughMinutes(page, state, { size: 'medium', density: 'fine', style: 'outline' }, 'float, medium Fine');
       for (const animation of ['subtle', 'lively']) for (const change of CHANGES) {
         clockOnly(state, { size: 'large', density: 'balanced', style: 'outline', format: change.format, animation }); await open(page);
         assert.equal(await page.locator('.ambient').getAttribute('data-animation'), animation);
         held += await minuteChange(page, change, `${animation} outline sans large`);
       }
     } finally { await page.emulateMedia({ reducedMotion: 'reduce' }); }
-    return `#717 Clock digit spacing, measured from painted pixels: ${cases} configurations and ${frames} painted times (Outline × System/Classic/Monospace on the large Balanced clock over ${TIMES.length} times, Digital over the ${SHORT_TIMES.length} that overlapped; every family × density; 12-hour with AM/PM; a timer in the date line; 720p, 1080p and scale factors 1.5, 2 and 3) have no overlap, fit 1 and gaps even within ${spreadAllowed(302).toFixed(1)} px at a 302 px digit size (the 1080p outline clock's gaps run ${range.tightest}–${range.widest} px; before #717 they ran from -12 to 65 px); ${held} held frames of minute changes at Subtle and Lively keep every character's box and never overlap; with an unmeasurable typeface (${unmeasuredFrames} painted times) the fallback keeps tabular figures apart at fit 1`;
+    return `#717 Clock digit spacing, measured from painted pixels: ${cases} configurations and ${frames} painted times (Outline × System/Classic/Monospace on the large Balanced clock over ${TIMES.length} times, Digital over the ${SHORT_TIMES.length} that overlapped; every family × density; 12-hour with AM/PM; a timer in the date line; 720p, 1080p and scale factors 1.5, 2 and 3) have no overlap, fit 1 and gaps even within ${spreadAllowed(302).toFixed(1)} px at a 302 px digit size (the 1080p outline clock's gaps run ${range.tightest}–${range.widest} px; before #717 they ran from -12 to 65 px); ${held} held frames of minute changes at Subtle and Lively keep every character's box and never overlap; with an unmeasurable typeface (${unmeasuredFrames} painted times at 720p and 1080p, 12-hour included) the fallback keeps tabular figures apart at fit 1. Every minute of a day (large 24- and 12-hour, medium, small): an unchanged character moves at ${days.day.moves} changes in 24-hour (all at the hour, up to ${days.day.furthest.toFixed(1)} px) and ${days.half.moves} in 12-hour (up to ${days.half.furthest.toFixed(1)} px); the large 24-hour time is off centre by ${days.day.offMedian.toFixed(1)} px at the median minute and ${days.day.offMost.toFixed(1)} px at most, and the 12-hour one, digits to AM/PM, by a steady ${days.half.offMost.toFixed(1)} px; AM/PM, the medium date line, the fit (1) and the box the float measures do not move within the hour. Floating, the offset moves ${floated.change} px in the second of a minute change and ${floated.other} px in any other second`;
   } finally {
     // Later sweeps read the fixture's own moment.
     await page.clock.setSystemTime(started);

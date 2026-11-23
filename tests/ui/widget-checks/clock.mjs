@@ -94,7 +94,9 @@ function assertAnalog(geometry, { size, density, viewport }) {
 /**
  * #332: the medium Clock keeps its date beside its own time. Nothing frames widgets, so the date's gap to its
  * own time (visible text, screen-reader text excluded) must be smaller than its gap to the cell's right edge,
- * beyond which the next widget begins.
+ * beyond which the next widget begins. Since #717 the date stands after the room of the widest time, so it does
+ * not move with the minute: this holds at the suite's 9:00, and beside a narrow time (11:11) on the Fine grid the
+ * date is further from the digits than from the edge (docs/widgets.md, Clock digit spacing; #727).
  */
 async function assertDateGrouped(widget, label) {
   const result = await widget.evaluate(section => {
@@ -273,11 +275,14 @@ export async function sweep({ page, viewport, state }) {
   await page.setViewportSize(viewport);
   if (viewport.width !== 1920) return `Analog clock: every family and density at 720p/1080p/4K fits at 1, hands ≥ 3/2 px at 720p (scaled), 30%/45% reach, text-colour HTML hands with an accent pivot, small/medium sized to the cell height with the date beside; Outline stroke ≥ 1.2 px at 720p (scaled) in every family; medium Outline and Digital keep the date nearer their time than the cell edge (#332). ${timerSummary}`;
 
-  // #363: Classic (Georgia) numerals are lining and tabular: every digit shares one baseline and height. Georgia's
-  // default old-style 9 would descend about a fifth of the size below the 0s.
+  // #363: Classic (Georgia) numerals are lining figures: every digit shares one baseline and height. Georgia's
+  // default old-style 9 would descend about a fifth of the size below the 0s. Since #717 the digits are spaced by
+  // their ink, so they are lining figures at their own widths; the rest of the time (AM/PM, and the digits of a
+  // typeface that cannot be measured) stays lining and tabular.
   {
     only(state, { size: 'large', density: 'balanced', style: 'digital' }); state.settings.appearance.fontFamily = 'serif'; await reload(page);
-    assert.equal(await page.locator('.clock-time').evaluate(element => getComputedStyle(element).fontVariantNumeric), 'lining-nums tabular-nums', 'Classic clock numerals');
+    assert.equal(await page.locator('.clock-digits').evaluate(element => getComputedStyle(element).fontVariantNumeric), 'lining-nums', 'Classic clock digits');
+    assert.equal(await page.locator('.clock-time').evaluate(element => getComputedStyle(element).fontVariantNumeric), 'lining-nums tabular-nums', 'Classic clock time');
     const digits = [];
     for (const character of await page.locator('.clock-char').all()) {
       const text = await character.textContent(); if (!/\d/.test(text)) continue;
