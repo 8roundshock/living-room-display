@@ -93,7 +93,9 @@ async function inspect(widget) {
       displayHeight: element.closest('.ambient').getBoundingClientRect().height,
       top: shown[0].getBoundingClientRect().top - box.top,
       bottom: box.bottom - Math.max(...shown.map(child => child.getBoundingClientRect().bottom)),
-      justify: getComputedStyle(body).justifyContent,
+      // Edge 158 serializes the computed `flex-start`/`flex-end` as `flow-start`/`flow-end` (#729);
+      // the check compares the anchor's meaning, so both spellings read as `flex-`.
+      justify: getComputedStyle(body).justifyContent.replace(/\bflow-(start|end)\b/g, 'flex-$1'),
       scale: new DOMMatrix(getComputedStyle(element.querySelector('.widget-content')).transform).a,
       composition: element.closest('.ambient').getAttribute('data-composition'),
     };
