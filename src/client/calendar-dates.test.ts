@@ -7,7 +7,7 @@ import type { CountdownEvent } from '../shared/contracts.ts';
 import { HOLIDAY_REGIONS, koreanCalendarAvailable, observancesForYear, type HolidayRegion } from '../shared/holidays.ts';
 import { nextOccurrence, parseCivil, todayCivil, type CivilDate } from './calendar.ts';
 import {
-  UPCOMING_HORIZON_DAYS, UPCOMING_NAME_LENGTH, birthdayName, calendarDates, cleanCut, datedItems, markedDays, sourcesSignature, upcomingDates, type DateSources,
+  UPCOMING_HORIZON_DAYS, UPCOMING_NAME_LENGTH, birthdayLine, birthdayName, calendarDates, cleanCut, datedItems, lineWidth, markedDays, sourcesSignature, upcomingDates, type DateSources,
 } from './calendar-dates.ts';
 
 // Synthetic people and dates only: nothing here is anyone's real birthday or plan.
@@ -105,6 +105,38 @@ test('the three sources merge: soonest first, your own dates before holidays on 
   ], 'a countdown named like the holiday or the birthday of the same day replaces nothing and adds nothing');
 });
 
+test('your own date with a holiday’s name stands for that occasion in every calendar', () => {
+  const day = (from: DateSources, today: string, iso: string) => upcomingDates(from, civil(today)).filter(item => item.iso === iso).map(item => `${item.name} (${item.kind})`);
+  // A yearly countdown called New Year’s Day, with all three calendars: one line, not also Russia's New Year holidays.
+  const newYear = sources(HOLIDAY_REGIONS, [], [countdown('New Year’s Day', '2020-01-01', true)]);
+  assert.deepEqual(upcoming(newYear, '2026-12-27').slice(0, 2), ['2027-01-01 New Year’s Day', '2027-01-07 Orthodox Christmas']);
+  assert.deepEqual(day(newYear, '2026-12-27', '2027-01-01'), ['New Year’s Day (countdown)']);
+  assert.deepEqual(markedDays(newYear, 2027, 1).get(1), ['New Year’s Day'], 'the day’s accessible name carries it once');
+  // Named like the Russian calendar's line instead: still one line, in the user's words.
+  const holidaysName = sources(HOLIDAY_REGIONS, [], [countdown('new year holidays', '2020-01-01', true)]);
+  assert.deepEqual(day(holidaysName, '2026-12-27', '2027-01-01'), ['new year holidays (countdown)']);
+  // Labour Day on May 1 with Korea and Russia: Spring and Labour Day does not come back.
+  const labour = sources(['KR', 'RU'], [], [countdown('Labour Day', '2027-05-01')]);
+  assert.deepEqual(day(labour, '2027-04-28', '2027-05-01'), ['Labour Day (countdown)']);
+  assert.deepEqual(day(sources(['KR', 'RU'], [], [countdown('Spring and Labour Day', '2027-05-01')]), '2027-04-28', '2027-05-01'), ['Spring and Labour Day (countdown)']);
+  // Easter 2028, one Sunday for Canada and Russia: Orthodox Easter does not come back.
+  const easter = sources(['CA', 'RU'], [], [countdown('Easter', '2028-04-16')]);
+  assert.deepEqual(day(easter, '2028-04-15', '2028-04-16'), ['Easter (countdown)']);
+  assert.deepEqual(day(sources(['CA', 'RU'], [], [countdown('Orthodox Easter', '2028-04-16')]), '2028-04-15', '2028-04-16'), ['Orthodox Easter (countdown)']);
+  // A birthday entry named like the holiday behaves the same way.
+  assert.deepEqual(day(sources(HOLIDAY_REGIONS, [birthday('Christmas birthday', '12-25')], [countdown('Christmas', '2026-12-25')]), '2026-12-20', '2026-12-25'),
+    ['Christmas birthday (birthday)', 'Christmas (countdown)'], 'a different name stays its own line; the countdown stands for the holiday');
+  // A different occasion on the same day is untouched.
+  assert.deepEqual(day(sources(['KR'], [], [countdown('Children’s Day', '2025-05-05')]), '2025-05-04', '2025-05-05'), ['Children’s Day (countdown)', 'Buddha’s Birthday (holiday)']);
+  // Every day of a year with the three calendars and countdowns named after shared occasions: no occasion twice.
+  const shared = sources(HOLIDAY_REGIONS, [], [countdown('New Year’s Day', '2020-01-01', true), countdown('Christmas', '2020-12-25', true), countdown('Labour Day', '2020-05-01', true)]);
+  for (let index = 0; index < 366; index++) {
+    const at = new Date(Date.UTC(2027, 0, 1 + index, 12)), names = upcomingDates(shared, { year: at.getUTCFullYear(), month: at.getUTCMonth() + 1, day: at.getUTCDate() }).map(item => `${item.iso} ${item.name}`);
+    for (const twin of ['New Year holidays', 'Spring and Labour Day']) assert.ok(!names.some(name => name.endsWith(` ${twin}`)), `${at.toISOString().slice(0, 10)}: ${twin} is not listed beside its own occasion`);
+    assert.equal(new Set(names).size, names.length);
+  }
+});
+
 test('upcoming means today through the horizon', () => {
   assert.equal(UPCOMING_HORIZON_DAYS, 90);
   const at = (date: string) => sources([], [], [countdown('Edge', date)]);
@@ -143,7 +175,7 @@ test('the month’s marked days agree with the list and include the days already
   assert.deepEqual(markedDays(sources(['KR']), 2025, 5).get(5), ['Buddha’s Birthday', 'Children’s Day']);
 });
 
-test('a long name is cut after a whole word, never inside one', () => {
+test('a long name is cut after a whole word when that keeps at least half the line, else inside the word', () => {
   assert.equal(UPCOMING_NAME_LENGTH, 32);
   assert.equal(cleanCut('Christmas'), 'Christmas');
   assert.equal(cleanCut('Truth and Reconciliation'), 'Truth and Reconciliation', 'the longest holiday short names fit');
@@ -152,18 +184,63 @@ test('a long name is cut after a whole word, never inside one', () => {
   assert.equal(cleanCut('Exactly thirty-two characters okk'), 'Exactly thirty-two characters…');
   assert.equal(cleanCut('Dinner with the neighbours, then the late film'), 'Dinner with the neighbours…', 'no dangling comma before the ellipsis');
   assert.equal(cleanCut('Thirty-one characters then a word'), 'Thirty-one characters then a…', 'the cut falls on a space: the word before it is whole');
-  assert.equal(cleanCut('Supercalifragilisticexpialidociousandmorelettershere'), 'Supercalifragilisticexpialidoci…', 'only a single word longer than the limit is cut inside');
   assert.equal(cleanCut('  padded  '), 'padded');
-  assert.equal(cleanCut('Twelve chars and more', 12), 'Twelve…');
-  for (const name of ['A deliberately long synthetic countdown title that goes on', 'Supercalifragilisticexpialidociousandmorelettershere', '가'.repeat(40), '🎂'.repeat(40)]) {
-    assert.ok([...cleanCut(name)].length <= UPCOMING_NAME_LENGTH, `${name} stays within the limit`);
+  assert.equal(cleanCut('Twelve chars and more', 12), 'Twelve…', 'six of twelve is half the line: whole words');
+  // One long word, or a short word before a long one, is cut inside the word: the line is never reduced to a stub.
+  assert.equal(cleanCut('Supercalifragilisticexpialidociousandmorelettershere'), 'Supercalifragilisticexpialidoci…');
+  assert.equal(cleanCut('A Supercalifragilisticexpialidociousandmore'), 'A Supercalifragilisticexpialido…', 'not “A…”');
+  assert.equal(cleanCut('Dinner with Supercalifragilisticexpialidocious'), 'Dinner with Supercalifragilisti…', 'eleven letters of whole words are under half the line');
+  assert.equal(cleanCut('Exactly 16 chars Supercalifragilisticexpialidocious'), 'Exactly 16 chars…', 'sixteen is half the line: whole words');
+  assert.equal(cleanCut('Dinner at the usual place. Supercalifragilistic'), 'Dinner at the usual place…', 'no full stop is left before the ellipsis');
+  assert.equal(cleanCut('Go to Supercalifragilisticexpi-alidocious land'), 'Go to Supercalifragilisticexpi…', 'a dash left at the cut is dropped');
+  for (const name of ['A deliberately long synthetic countdown title that goes on', 'Supercalifragilisticexpialidociousandmorelettershere', 'A Supercalifragilisticexpialidociousandmore', '가'.repeat(40), '🎂'.repeat(40), 'Ж'.repeat(40)]) {
+    assert.ok(lineWidth(cleanCut(name)) <= UPCOMING_NAME_LENGTH, `${name} stays within the line`);
+    assert.ok(cleanCut(name).endsWith('…'));
   }
-  assert.equal(cleanCut('🎂'.repeat(40)), `${'🎂'.repeat(31)}…`, 'counted by character, so an emoji is never halved');
+});
+
+test('the line counts what a reader sees: wide characters take two places and nothing is split', () => {
+  assert.deepEqual([lineWidth('Christmas'), lineWidth('Рождество'), lineWidth('설날'), lineWidth('クリスマス'), lineWidth('圣诞节'), lineWidth('🎂')], [9, 9, 4, 10, 6, 2]);
+  // Hangul is about twice as wide as a Latin letter, so sixteen syllables fill the line that holds 32 letters.
+  assert.equal(cleanCut('가'.repeat(16)), '가'.repeat(16));
+  assert.equal(cleanCut('가'.repeat(17)), `${'가'.repeat(15)}…`);
+  assert.equal(cleanCut('할머니 생신 잔치 준비하고 선물 사러 가기'), '할머니 생신 잔치 준비하고 선물…', 'a Korean title is cut after a whole word: 30 places and the ellipsis');
+  assert.equal(cleanCut('День рождения бабушки и семейный ужин'), 'День рождения бабушки и…', 'Cyrillic letters count as one each');
+  assert.equal(cleanCut('Ж'.repeat(40)), `${'Ж'.repeat(31)}…`);
+  assert.equal(cleanCut('🎂'.repeat(40)), `${'🎂'.repeat(15)}…`, 'an emoji takes two places and is never halved');
+  // A decomposed accent stays on its letter, and a joined family emoji stays one character.
+  const accented = 'é'.repeat(40), family = '\u{1F468}‍\u{1F469}‍\u{1F467}';
+  assert.equal(cleanCut(accented), `${'é'.repeat(31)}…`);
+  assert.equal(cleanCut(family.repeat(20)), `${family.repeat(15)}…`);
+  assert.equal(lineWidth(family), 2);
+});
+
+test('a birthday reads “Name’s birthday” when that fits, else the name alone, cut like any name', () => {
+  assert.equal(birthdayLine('Mina'), 'Mina’s birthday');
+  assert.equal(birthdayLine('Grandmother Alexandra'), 'Grandmother Alexandra’s birthday', '21 letters and the 11 of “’s birthday” fill the line exactly');
+  // One letter more: the name alone and whole, never “Grandmother Alexandraa’s…”.
+  assert.equal(birthdayLine('Grandmother Alexandraa'), 'Grandmother Alexandraa');
+  assert.equal(birthdayLine('Grandmother Alexandra Maria'), 'Grandmother Alexandra Maria');
+  assert.equal(birthdayLine('Grandmother Alexandra Konstantinovna of the long name'), 'Grandmother Alexandra…');
+  assert.equal(birthdayLine('A Supercalifragilisticexpialidociousandmore'), 'A Supercalifragilisticexpialido…');
+  assert.equal(birthdayLine('할머니'), '할머니’s birthday');
+  assert.equal(birthdayLine('Бабушка Александра'), 'Бабушка Александра’s birthday');
+  assert.equal(birthdayLine('Grandmother’s 80th birthday dinner at home'), 'Grandmother’s 80th birthday…', 'a name that already says birthday is cut as written');
+  for (const name of ['Mina', 'Grandmother Alexandraa', 'Grandmother Alexandra Konstantinovna of the long name', '가'.repeat(30)]) {
+    const line = birthdayLine(name);
+    assert.ok(lineWidth(line) <= UPCOMING_NAME_LENGTH && !/’s…$/.test(line) && !/’s$/.test(line), `${line}: no possessive without its word`);
+  }
+  // The whole name stays the item's name (for the day's accessible name and for matching a countdown of the same name).
+  const long = sources([], [birthday('Grandmother Alexandra Konstantinovna of the long name', '12-02')], [countdown('grandmother alexandra konstantinovna of the long name\'s birthday', '2026-12-02')]);
+  const [item, ...more] = upcomingDates(long, civil('2026-11-22'));
+  assert.deepEqual([item!.name, item!.line, more.length], ['Grandmother Alexandra Konstantinovna of the long name’s birthday', 'Grandmother Alexandra…', 0]);
+  assert.deepEqual(calendarDates(long, civil('2026-11-22')).upcoming.map(row => row.name), ['Grandmother Alexandra…']);
+  assert.deepEqual(markedDays(long, 2026, 12).get(2), ['Grandmother Alexandra Konstantinovna of the long name’s birthday']);
 });
 
 test('every bundled holiday short name shows whole', () => {
   for (const year of [2026, 2027, 2028]) for (const observance of observancesForYear(year)) {
-    assert.ok([...observance.shortName].length <= UPCOMING_NAME_LENGTH, `${observance.id} “${observance.shortName}” fits the Calendar’s line`);
+    assert.ok(lineWidth(observance.shortName) <= UPCOMING_NAME_LENGTH, `${observance.id} “${observance.shortName}” fits the Calendar’s line`);
     assert.equal(cleanCut(observance.shortName), observance.shortName);
   }
 });
@@ -174,6 +251,9 @@ test('the Calendar’s rows: Today, short dates with no year, cut names, and mar
     ['Today', 'Christmas', 0], ['Dec 26', 'Boxing Day', 1], ['Dec 28', 'Mina’s birthday', 3], ['Dec 30', 'A deliberately long synthetic…', 5], ['Jan 1', 'New Year’s Day', 7],
   ]);
   assert.equal(new Set(dates.upcoming.map(row => row.key)).size, dates.upcoming.length, 'row keys are unique');
+  // A row keeps its key from one day to the next, so the list moves up without remounting its lines.
+  const next = calendarDates(sources(HOLIDAY_REGIONS, [birthday('Mina', '12-28')], [countdown('A deliberately long synthetic countdown title that goes on', '2026-12-30')]), civil('2026-12-26'));
+  assert.deepEqual(next.upcoming.slice(0, 3).map(row => row.key), dates.upcoming.slice(1, 4).map(row => row.key));
   assert.deepEqual([...dates.marks.keys()], [25, 26, 28, 30], 'December only: January 1 is in the list, not on this month’s grid');
   assert.deepEqual(calendarDates(sources(), civil('2026-12-25')), { upcoming: [], marks: new Map() }, 'nothing in range: no list and no marks');
 });
