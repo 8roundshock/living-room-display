@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import type { CountdownEvent } from '../shared/contracts.ts';
 import {
   calendarView, countdownDate, countdownLabel, countdownPassed, countdownRows, daysBetween, daysInMonth, daysUntil, localeFirstDay, localeWeekStart,
-  monthMatrix, monthName, nextOccurrence, parseCivil, todayCivil, upcomingCountdowns, weekStartDay, weekStrip, weekdayLabels, weekdayName, type CivilDate,
+  monthDay, monthMatrix, monthName, nextOccurrence, parseCivil, todayCivil, upcomingCountdowns, weekStartDay, weekStrip, weekdayLabels, weekdayName, type CivilDate,
 } from './calendar.ts';
 
 type IntlName = 'DateTimeFormat' | 'NumberFormat' | 'Locale' | 'PluralRules' | 'RelativeTimeFormat';
@@ -134,6 +134,7 @@ test('Today and Tomorrow labels, numbers with units and short dates', () => {
   assert.equal(countdownLabel(1200).text, '1,200 days');
   assert.equal(countdownDate(civil('2026-10-31'), civil('2026-10-18')), 'Sat, Oct 31');
   assert.equal(countdownDate(civil('2027-01-02'), civil('2026-10-18')), 'Sat, Jan 2, 2027');
+  assert.deepEqual([monthDay(civil('2026-12-25')), monthDay(civil('2027-01-01')), monthDay(civil('2028-02-29'))], ['Dec 25', 'Jan 1', 'Feb 29'], 'the Calendar’s upcoming dates: no weekday or year');
 });
 
 test('upcoming countdowns exclude past one-time events and sort soonest first', () => {

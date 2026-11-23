@@ -154,6 +154,15 @@ Photo (a dim picture from your PC) and Last screen (a dim picture of what was on
 your screen just before the display started, with its time; it is kept in memory
 only and never saved).
 
+**Calendar** also shows what is coming up. The large size lists the next three holidays and
+important dates under the month ("Dec 25  Christmas"), the medium size shows the next one where
+it fits, and both put a small dot under those days in the month. The dates come from the holiday
+calendars you tick (Canada, Korea, Russia: the same boxes as under Theme, also in the Calendar's
+own options), your Birthdays in Settings and your Countdown dates, up to 90 days ahead. A
+February 29 birthday shows in leap years only. Untick every calendar to see only your own dates.
+A long name is shortened with "…". At a larger Text size the month keeps its size and fewer of
+these lines show, or none; the dots stay.
+
 **Dynamic** stays on what matters most: an official weather warning (from Environment
 and Climate Change Canada or the US National Weather Service, for Canada and the US
 only), a storm or rain starting soon, a reminder due within the hour. Otherwise it shows
