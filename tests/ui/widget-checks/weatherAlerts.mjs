@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { GRID_DENSITIES, WIDGET_IDS } from '../../../src/shared/widgets.ts';
 import { prepareCollection } from '../lib/collection-fixture.mjs';
+import { withOwnClock } from '../lib/own-clock.mjs';
 import { assertNoSourceOrFreshAge } from '../lib/source-age.mjs';
 export const id = 'weatherAlerts';
 export const selectors = ['.collection-label', '.collection-value', '.collection-title', '.collection-footer', '.collection-hour-value'];
@@ -12,7 +13,7 @@ export async function family({ widget }) {
 }
 
 const HOUR = 3600_000, MINUTE = 60_000;
-/** A synthetic provider answer; `checked` is how long before the page's clock the last successful check was. */
+/** A synthetic provider answer; `checked` is how long before the clock the last successful check was. */
 const alertsState = (status, clock, checked, alerts = []) => ({
   status, provider: 'eccc', source: 'Environment and Climate Change Canada', sourceUrl: 'https://weather.gc.ca/', area: 'Sample area',
   checkedAt: checked === null ? null : new Date(clock - checked).toISOString(), error: null, alerts,
@@ -43,24 +44,26 @@ function read(widget) {
  * issuer, no age). Saved, unavailable and offline alerts keep one status-tone line with the age of the last successful
  * check: "Saved alerts · 2 hr ago", "Updated 2 hr ago" under "Alerts unavailable", "Offline · Updated 7 min ago".
  * Both families, every density, at this viewport and (once) at 1280×720, at fit 1.
+ * The renders are on a page with a paused clock of its own (tests/ui/lib/own-clock.mjs): each offline case runs the
+ * 30 s state poll, which must not move the suite's shared page clock, and each render starts at `now`.
  */
-export async function sweep({ page, viewport, state, base }) {
+export async function sweep({ page, viewport, state, base, now }) {
   const pristine = structuredClone(state);
   const reset = () => { for (const key of Object.keys(state)) delete state[key]; Object.assign(state, structuredClone(pristine)); };
-  const widget = page.locator('[data-widget-id="weatherAlerts"]');
-  async function render({ size, density, alerts, offline = false }) {
-    reset();
-    const clock = await page.evaluate(() => Date.now()).catch(() => Date.parse(pristine.weather.updatedAt));
+  /** One render on the sweep's own page: `clock` is the page's clock at that render (`now`), which the ages count from. */
+  async function render(own, clock, { size, density, alerts, offline = false }) {
+    reset(); await clock.restart();
+    const widget = own.locator('[data-widget-id="weatherAlerts"]');
     state.settings.appearance.motionEnabled = false; state.settings.appearance.fontScale = 1;
     state.settings.widgetGrid.density = density;
     state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'weatherAlerts']));
     state.settings.widgetGrid.placements.weatherAlerts = { column: 0, row: 0, size };
-    state.alerts = alerts(clock);
-    await page.goto(base + '/display'); await widget.locator('.collection-face').waitFor(); await page.clock.runFor(100);
+    state.alerts = alerts(now);
+    await own.goto(base + '/display'); await widget.locator('.collection-face').waitFor(); await own.clock.runFor(100);
     if (offline) {
-      await page.route('**/api/state', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Synthetic offline"}' }));
-      try { await page.clock.runFor(31_000); await widget.locator('.collection-status', { hasText: 'Offline' }).waitFor(); }
-      finally { await page.unroute('**/api/state'); }
+      clock.setOffline(true);
+      try { await own.clock.runFor(31_000); await widget.locator('.collection-status', { hasText: 'Offline' }).waitFor(); }
+      finally { clock.setOffline(false); }
     }
     return read(widget);
   }
@@ -82,27 +85,30 @@ export async function sweep({ page, viewport, state, base }) {
   ];
   const views = viewport.width === 1920 ? [{ width: 1280, height: 720 }, viewport] : [viewport];
   let renders = 0;
-  for (const view of views) {
-    await page.setViewportSize(view);
-    for (const density of Object.keys(GRID_DENSITIES)) for (const size of ['medium', 'large']) for (const item of CASES) {
-      // The exact words are the same in every grid; the two smaller grids repeat only the states that have a line.
-      if (density !== 'balanced' && item.status === null) continue;
-      const label = `weatherAlerts ${size}/${density}/${view.width} ${item.name}`;
-      const m = await render({ size, density, alerts: item.alerts, offline: item.offline });
-      renders++;
-      assert.deepEqual(m.lines, typeof item.lines === 'function' ? item.lines(size) : item.lines, `${label}: exactly these lines`);
-      if (item.status === null) {
-        assert.deepEqual([m.footers, m.status], [0, null], `${label}: no footer and no status line`);
-      } else {
-        assert.equal(m.status.text, item.status, `${label}: the exact status wording`);
-        assert.deepEqual([m.status.shared, m.status.tone, m.status.opacity, m.status.inside], [true, true, 1, true], `${label}: one status-tone line at full opacity, inside the widget`);
-        assert.ok(m.ageLines <= 1, `${label}: the age never breaks inside`);
+  try {
+    await withOwnClock(page, { viewport, state, now }, async (own, clock) => {
+      const widget = own.locator('[data-widget-id="weatherAlerts"]');
+      for (const view of views) {
+        await own.setViewportSize(view);
+        for (const density of Object.keys(GRID_DENSITIES)) for (const size of ['medium', 'large']) for (const item of CASES) {
+          // The exact words are the same in every grid; the two smaller grids repeat only the states that have a line.
+          if (density !== 'balanced' && item.status === null) continue;
+          const label = `weatherAlerts ${size}/${density}/${view.width} ${item.name}`;
+          const m = await render(own, clock, { size, density, alerts: item.alerts, offline: item.offline });
+          renders++;
+          assert.deepEqual(m.lines, typeof item.lines === 'function' ? item.lines(size) : item.lines, `${label}: exactly these lines`);
+          if (item.status === null) {
+            assert.deepEqual([m.footers, m.status], [0, null], `${label}: no footer and no status line`);
+          } else {
+            assert.equal(m.status.text, item.status, `${label}: the exact status wording`);
+            assert.deepEqual([m.status.shared, m.status.tone, m.status.opacity, m.status.inside], [true, true, 1, true], `${label}: one status-tone line at full opacity, inside the widget`);
+            assert.ok(m.ageLines <= 1, `${label}: the age never breaks inside`);
+          }
+          assert.ok(m.fit >= 0.995, `${label}: fit 1 (${m.fit})`);
+          await assertNoSourceOrFreshAge(widget, label, { fresh: item.status === null, id: 'weatherAlerts' });
+        }
       }
-      assert.ok(m.fit >= 0.995, `${label}: fit 1 (${m.fit})`);
-      await assertNoSourceOrFreshAge(widget, label, { fresh: item.status === null, id: 'weatherAlerts' });
-    }
-  }
-  await page.setViewportSize(viewport);
-  reset();
+    });
+  } finally { reset(); }
   return `Weather alerts status line (#715): no footer while fresh or unsupported; "Saved alerts · 2 hr ago", "Updated 2 hr ago"/"Updated 1 day ago" under "Alerts unavailable", and "Offline · Updated 2 hr ago" as exact words in the status tone at full opacity, with and without an alert in effect, medium and large in every density at fit 1 (${renders} renders at ${viewport.width}${viewport.width === 1920 ? ' and 1280' : ''})`;
 }

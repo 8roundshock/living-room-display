@@ -27,6 +27,32 @@ export function airQualityFixture(now, location) {
 export function prepare(state, { now }) { state.airQuality = airQualityFixture(now, state.weather.location); }
 
 /**
+ * The fixture's hours that are still ahead at the page's own clock, and what the large family says of them.
+ * The suite's page clock is shared by every check and moves on as they run, so nothing may assume it is still in
+ * the hour the suite started in (#741): a past hour is not drawn, and the UV peak is the highest hour left. The
+ * widget's one-second tick may lag the clock by a second, so the facts are given for both instants.
+ */
+async function upcomingHours(page, air) {
+  const pageNow = await page.evaluate(() => Date.now()), timeZone = air.location.timezone;
+  return [pageNow, pageNow - 1000].map(at => {
+    const upcoming = air.hourly.filter(reading => Date.parse(reading.time) > at - HOUR);
+    const known = upcoming.filter(reading => reading.aqi !== null).map(reading => Math.round(reading.aqi)), unknown = upcoming.length - known.length;
+    const low = Math.min(...known), high = Math.max(...known);
+    // The fixture's daylight hours all fall on the day the suite starts on; the first of the highest hours left is the peak.
+    const peak = upcoming.reduce((best, reading) => !best || reading.uvIndex > best.uvIndex ? reading : best, null);
+    const peakAt = clockFormat => clockFormat === '24h'
+      ? new Intl.DateTimeFormat('en', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(peak.time))
+      : label(peak.time, timeZone, { hour: 'numeric' });
+    return {
+      count: upcoming.length, unknown,
+      summary: `US AQI estimate for the next ${upcoming.length} hours: ${low === high ? low : `${low} to ${high}`}${unknown ? `, ${unknown} unknown` : ''}`,
+      /** "UV peaks 5 at 11 AM" ("11:00" with the 24-hour setting); null once the fixture has no daylight hour left. */
+      uvPeak: clockFormat => peak && Math.round(peak.uvIndex) >= 1 ? `UV peaks ${Math.round(peak.uvIndex)} at ${peakAt(clockFormat)}` : null,
+    };
+  });
+}
+
+/**
  * #306: a display load normally takes well under a second, but under a machine shared with other suites one
  * reload once waited more than the default 30 s for `.display-page`. Wait instead for this widget's own place
  * line, which renders with every reading, the unavailable and the off states, with a timeout matched to that
@@ -96,11 +122,16 @@ export async function family({ page, widget, size, density, viewport, state }) {
   if (size === 'small') assert.doesNotMatch(text, /Mostly/);
   else { assert.match(text, /Mostly PM2\.5 · 12 µg\/m³/); assert.match(text, /UV 3 · Moderate/); }
   assertLayout(await layout(widget), { size, label: `air ${size}/${density} ${viewport.width} fresh` });
+  // In the suite's first hour: 24 bars, one unknown, "UV peaks 5 at 11 AM" and "US AQI estimate for the next 24
+  // hours: 40 to 45, 1 unknown". Later the past hours are gone, so the expectation follows the page's own clock.
+  const bars = await widget.locator('.air-bar').count(), candidates = await upcomingHours(page, state.airQuality);
+  const hours = candidates.find(candidate => candidate.count === bars) ?? candidates[0];
   if (size === 'large') {
-    assert.equal(await widget.locator('.air-bar').count(), 24); assert.equal(await widget.locator('.air-bar-unknown').count(), 1, 'unknown hour is dotted');
-    assert.match(text, /UV peaks 5 at 11 AM/);
-    assert.equal(await page.getByRole('img', { name: 'US AQI estimate for the next 24 hours: 40 to 45, 1 unknown', exact: true }).count(), 1, 'the bar chart exposes its name');
-  } else assert.equal(await widget.locator('.air-bar').count(), 0);
+    assert.equal(bars, hours.count, 'one bar for each hour still ahead'); assert.equal(await widget.locator('.air-bar-unknown').count(), hours.unknown, 'unknown hour is dotted');
+    assert.ok(hours.count >= 2, 'the fixture still has hours ahead (the suite\'s page clock has not run past it)');
+    if (hours.uvPeak('12h')) assert.ok(text.includes(hours.uvPeak('12h')), `${hours.uvPeak('12h')}: ${text}`);
+    assert.equal(await page.getByRole('img', { name: hours.summary, exact: true }).count(), 1, `the bar chart exposes its name: ${hours.summary}`);
+  } else assert.equal(bars, 0);
   // No category colours: the reading uses the ordinary text colour.
   assert.equal(await widget.locator('.air-category').evaluate(element => getComputedStyle(element).color), await widget.locator('.air-aqi').evaluate(element => getComputedStyle(element.closest('.ambient')).color));
   if (density !== 'balanced' || viewport.width !== 1920) return;
@@ -108,9 +139,10 @@ export async function family({ page, widget, size, density, viewport, state }) {
   state.settings.clockFormat = '24h'; state.airQuality.current.aqi = 120; await reload(page);
   const unhealthy = await page.locator('.ambient-airQuality').innerText();
   assert.match(unhealthy, size === 'small' ? /Sensitive groups/ : /Unhealthy for sensitive groups/);
-  if (size === 'large') assert.match(unhealthy, /UV peaks 5 at 11:00/);
+  if (size === 'large' && hours.uvPeak('24h')) assert.ok(unhealthy.includes(hours.uvPeak('24h')), `${hours.uvPeak('24h')}: ${unhealthy}`);
   state.settings.clockFormat = '12h';
-  state.airQuality = { ...structuredClone(fresh), status: 'stale', updatedAt: new Date(Date.parse(fresh.updatedAt) - 2 * HOUR + 12 * 60_000).toISOString() }; await reload(page);
+  // Saved two hours before the page's own clock (which moves on across the suite): its values are under 3 hours old.
+  state.airQuality = { ...structuredClone(fresh), status: 'stale', updatedAt: new Date(await page.evaluate(() => Date.now()) - 2 * HOUR).toISOString() }; await reload(page);
   const stale = page.locator('.ambient-airQuality .air-age');
   assert.match(await stale.innerText(), /^Saved reading · 2 hr ago$/);
   const [color, caution] = await cautionColor(stale);
