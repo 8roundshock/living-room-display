@@ -278,8 +278,8 @@ strip, and in medium and large the strip grows into the room the old footer held
 glyphs, day labels and chances; temperatures only in large, capped by a day column's
 width), in every state. A saved or offline forecast says “Saved forecast · 5 hr ago” or
 “Offline · Updated 5 hr ago” in the heading's right slot, in the status tone and in place
-of the place and unit, as Hourly forecast does, so the two strips read alike when
-stacked. The slot keeps the place's typography: the heading keeps its height, and the
+of the place and unit (which return when the forecast is fresh again), as Hourly forecast
+does, so the two strips read alike when stacked. The slot keeps the place's typography: the heading keeps its height, and the
 strip its size and position. A status never resizes a widget. A refresh that is merely
 slow is not a status at all (the [refresh-in-flight rule](widgets.md#data-and-image-boundaries)). Weather
 keeps a footer only for the rain confidence wording (“Forecast estimate”, “Partial

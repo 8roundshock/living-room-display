@@ -787,7 +787,8 @@ its data provider, on the display, the canvas and the picker samples. Retained s
 is marked throughout, with the age only there: Weather's “Saved forecast · Updated 5 hr
 ago” under its content, and Forecast's “Saved forecast · 5 hr ago” or “Offline · Updated
 5 hr ago” in its heading's right slot in place of the place and unit, each whole line
-in the amber status tone (#223). Forecast's strip keeps one size and position in every
+in the amber status tone (#223). The place and unit return when the forecast is fresh
+again; in small, a status with no update time to tell is the label alone (“Saved forecast”). Forecast's strip keeps one size and position in every
 state. A forecast whose refresh is still running is not marked: only a failed refresh, an
 offline display or data over 45 minutes old is (see the
 [widget contract](widgets.md#data-and-image-boundaries)). Missing values
@@ -816,7 +817,10 @@ upgrade of a pre-#74 data folder, and a device location whose zone is still `aut
 while the provider is down (editor and display render, then recover).
 Each weather module keeps its actual place and relevant units visible when used
 alone; weather and forecast show the unit beside the place (“Toronto · °C”), and
-elevated Weather keeps the rain amount unit (“0.16 in rain”). Forecast labels read
+elevated Weather keeps the rain amount unit (“0.16 in rain”). One exception (#715):
+while its forecast is not fresh, Forecast shows the status in that slot instead (“Saved
+forecast · 5 hr ago”, “Offline · Updated 5 hr ago”), so a Forecast used without Weather
+then names neither its place nor its unit; both return when the forecast is fresh again. Forecast labels read
 Today and then weekdays, tomorrow included (#256), while assistive text and hover
 details keep the full relative label and civil date (“Tomorrow, 2026-10-19”). Ambient labels, status lines, units and secondary values
 have a readability floor of 1.4% of the display height (1.65% for forecast

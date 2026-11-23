@@ -187,6 +187,11 @@ Browser widget checks live in `tests/ui/widget-checks/`, one module per widget
 (`id`, optional `prepare`, `selectors`, `family` and a once-per-viewport `sweep`).
 The widget harness loads every module in that folder and requires one for each
 active catalog id; extra modules such as `reminders-span.mjs` add only a sweep.
+The suite's main page clock is shared and moves only when a check runs it: the harness
+puts it back to its start before each viewport's family pass and each sweep, time-dependent
+expectations come from the page's own clock, and a sweep that runs time for many cases
+uses `withOwnClock` (`tests/ui/lib/own-clock.mjs`); see the
+[widget contract](widgets.md#catalog-contract) (#741).
 A newly active widget also joins `FULL_BOARD` in `tests/ui/palette-browser.mjs`,
 plus `ACCENT_SELECTOR` (a new kind of accent element) or `TEXT_ONLY` (no accent
 element), so the palette harness checks its colours (#214), and the shared

@@ -20,17 +20,20 @@ What changed, on the display, the editor canvas and the picker samples:
   alerts and now Weather alerts) and the docs. The one-credit-per-board rule is removed.
 - **What is neither a source nor an age stays:** the rain "Forecast estimate" confidence, Air
   quality's "Model est.", category words, units and place names. The collection weather widgets
-  keep their place as the last line.
+  keep their place as the last line. One exception: while a forecast is not fresh,
+  Forecast's heading shows the status in place of its place and unit; they return when it is
+  fresh again.
 - **Freed room goes to the content.** Forecast is its heading and strip; in medium and large the
   strip is taller (glyphs, day labels, chances; temperatures in large), in every state. A saved
   or offline forecast says so in the heading's right slot, in place of the place and unit
   ("Saved forecast · 5 hr ago"), as Hourly forecast does, so the strip never changes size or
-  position. Weather keeps a footer only for the rain confidence and the status line; Air
+  position; in small, a status with no update time to tell is the label alone. Weather keeps a footer only for the rain confidence and the status line; Air
   quality's footer is one short row; Weather alerts has none while fresh.
 - **A refresh in flight is not a saved forecast.** When a refresh takes over a second the server
   answers `stale` and `refreshing`; the widgets keep showing the data as fresh until the refresh
   fails or the data is over 45 minutes old. One helper (`presentedStatus`) decides this for
-  Weather, Forecast, Dynamic, Air quality and the collection weather widgets.
+  Weather, Forecast, Dynamic, Air quality and the collection weather widgets, and for the
+  whole-screen weather scene, which used to drop out for those seconds (#740).
 - **No claim from data that is not fresh.** Dynamic says "No alerts" only from a connected
   display with a fresh list; offline or from a saved list it does not. Weather alerts keeps
   the age of its last successful check when unavailable ("Updated 2 hr ago").
@@ -64,6 +67,18 @@ Weather, Weather alerts and Dynamic widget checks run through a driver (every fa
 density at 720p, 1080p and 4K, fresh, saved and offline, and their sweeps), and the `weather`,
 `dynamic`, `collection`, `catalog-sky` and `palette` suites again. The full `widgets` and
 `motion` suites were not rerun for those fixes.
+
+After the recheck: the full `widgets` suite had failed, because the sweeps this change added
+spent the suite's shared page clock and the World clocks check assumed its first hour (#741).
+The harness now puts that clock back to its start before each viewport's family pass and each
+sweep, sweeps that run time use a page with a clock of its own, and the World clocks, Air
+quality and Sun & moon checks work their time-dependent expectations out from the page clock;
+the Clock sweep's "9:xx" assumption is left for #742. Every family check and sweep was run with
+the clock started 100 to 300 minutes late to find them. Run again on Edge 158: the build, the
+unit tests (842), the full `widgets` suite (pass in 1881 s; no pass or sweep
+spends more than 22 minutes of the shared clock), and the `weather`, `dynamic`,
+`collection`, `catalog-sky`, `catalog-time`, `palette` and `themes` suites
+(`themes` passed when run alone; beside `widgets` it missed its 150 ms bound once, #651). `motion` was not rerun (#165).
 
 Open for the owner: "Model est." under a fresh Air quality reading and the place line under the
 collection weather widgets are kept as wording that is neither a source nor an age; say so if

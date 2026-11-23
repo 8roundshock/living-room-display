@@ -71,7 +71,16 @@ change. Browser QA loads one check module per widget from
 An optional `sweep({ page, viewport, state, base, now })` runs once per viewport
 after the family sweep for checks beyond the families; a module whose `id` is not
 a widget id (such as `reminders-span`, the free-size span check) contributes only
-its sweep.
+its sweep. The suite's main page clock is shared by every module and moves only when a
+check runs it; the harness puts it back to its start before each viewport's family pass
+and before each sweep, so no check runs on time another one spent. Within a pass it
+still moves: work out an expectation that depends on the time (an hour, a day or night
+glyph, an age) from the page's own clock, never from the suite's first hour, and give a
+sweep that runs time for many cases (each offline case needs the 30 s poll) a page with
+a clock of its own through `withOwnClock` in
+[`tests/ui/lib/own-clock.mjs`](../tests/ui/lib/own-clock.mjs). The suite fails when one
+pass or sweep spends 150 minutes of that clock, where the synthetic fixtures start to
+age out (#741).
 
 Start with `WIDGET_CATALOG`, `GRID_DENSITIES` and `widgetSpan`; use
 `reflowWidget`/`fitGridDensity` rather than implementing a second collision or
@@ -140,7 +149,14 @@ together (#221). No Forecast family has a line under its strip (#715, see
 room, in every state. A forecast that is not fresh says so in the heading's right slot,
 in place of the place and unit (small: the heading's second line), with the place's own
 typography, so the heading keeps its height and the strip its size and position:
-nothing resizes when a status comes or goes. An earlier version of #715 gave the saved
+nothing resizes when a status comes or goes. The place and unit return when the forecast
+is fresh again; until then a Forecast used without Weather names neither. The slot stays
+one line in every family and density at Text 100%, up to the longest wording (“Offline ·
+Updated 364 days ago”). Small has no room for “Saved forecast · Update time unknown”,
+so there a status with no update time to tell is the label alone (“Saved forecast”,
+“Offline”). Above Text 100% a status can cost a little fit, because it is longer than the
+place: at Text 150% the small family on the Fine grid renders at fit 0.96 saved and 0.91
+offline (1 fresh), as it already does fresh on the two larger grids (0.96 to 0.97). An earlier version of #715 gave the saved
 strip a smaller size through a class; review found that every slow refresh then resized
 the strip for two seconds, so a status must never change a widget's sizes. Put it where
 the layout already has a line for it.
@@ -175,7 +191,7 @@ The renderer families have deliberate visual roles:
 | --- | --- | --- | --- |
 | Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date. While a timer is visible, the date line shows it ("8 min", "Done") | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height; a timer shows as in small, Done adds "· 2 min ago" | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition; a timer reads "8 min left · ends 6:51 PM" ([timer slot](#clock-timer-slot)) |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”, “Rain possible now, likely later”); confidence only when partial. No footer while fresh unless that confidence shows; a saved or offline forecast adds one row of short phrases, wrapping only between them: “Saved forecast · 5 hr ago” (#283, #715) | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” under it; calm fresh weather has no footer, and a saved or offline forecast adds “Saved forecast · Updated 5 hr ago” in the status tone (#715) | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and an hourly chance bar for each hour overlapping the next 12 (12 on the hour, 13 otherwise; spell hours brighter, unknown hours a dotted baseline) over “Now” and the window's end (#261). Unavailable in every family: a dim, still cloud, a dim “—°” and one status-tone line at the label size, “Weather unavailable · retrying” (“· offline” while the display cannot reach the computer), with the age only when known, in the status tone (#362, #715) |
-| Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362). A forecast is the heading and the strip, with nothing under it; medium and large use that room for a taller strip. A saved or offline one says “Saved forecast · 5 hr ago” or “Offline · Updated 5 hr ago” in the status tone in the heading's right slot, in place of the place and unit (small: the heading's second line), as Hourly forecast does; the strip keeps its size and position in every state (#715) |
+| Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362). A forecast is the heading and the strip, with nothing under it; medium and large use that room for a taller strip. A saved or offline one says “Saved forecast · 5 hr ago” or “Offline · Updated 5 hr ago” in the status tone in the heading's right slot, in place of the place and unit (small: the heading's second line), as Hourly forecast does; the strip keeps its size and position in every state (#715); the place and unit return when it is fresh again |
 | Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row. When not every reminder fits, more rows win over bigger titles: rows after the first may take one line with an ellipsis and titles step down to about small's width-based size, so medium shows at least as many as small and a wider box never fewer (#359) | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete faint desktop, picture-only with responsive rounded and softly feathered edges; no caption and no visible timestamp (#563) | Wider complete desktop | Larger complete desktop; retains its aspect without zoom/cropping |

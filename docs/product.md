@@ -83,7 +83,9 @@ display, the editor canvas and the picker samples:
   docs name the providers. Provider terms are part of the public-release decision
   (#114, which absorbed the terms review #168).
 - Wording that is neither a source nor an age stays: the rain "Forecast estimate"
-  confidence, Air quality's "Model est.", category words, units and place names.
+  confidence, Air quality's "Model est.", category words, units and place names. One exception: while a forecast is
+  not fresh, Forecast's heading shows the status in place of its place and unit; they
+  return when the forecast is fresh again.
 
 This replaces the earlier rule to show weather age at all times. Version one
 uses Open-Meteo and an editable Toronto city default selected by the coordinator;

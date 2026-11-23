@@ -105,6 +105,9 @@ code and tests for actual symbols and commands; the documentation is not a schem
   `mergedInto` so its keys stay readable for rollback.
 - Add a `tests/ui/widget-checks/<id>.mjs` module, and prove new persisted data
   with rollback scenarios using the helpers in `src/server/compat/previous-reader.ts`.
+  In that module, read any time-dependent expectation from the page's own clock (the
+  suite's clock is shared and moves), and give a sweep that runs time for many cases its
+  own clock with `withOwnClock` (`tests/ui/lib/own-clock.mjs`).
 
 Configuration edits join the existing settings draft: Save/Cancel, dirty-only
 save bar, async cancellation and concurrent-draft preservation. Do not add an

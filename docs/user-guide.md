@@ -278,7 +278,8 @@ The weather comes from Open-Meteo, a free forecast service; **Settings** has the
 link. The widgets themselves do not name the service or say when the weather was
 last updated while it is up to date. If the PC can't reach the service, you see the
 last saved forecast, labelled as saved with how old it is, or a plain "unavailable"
-message, never made-up weather. When rain is near, Weather adds its chance and
+message, never made-up weather. On the Forecast widget that label takes the place of
+the city and unit in its heading until the forecast is up to date again. When rain is near, Weather adds its chance and
 rough timing: that is a forecast estimate, not a promise.
 
 ## Backups
