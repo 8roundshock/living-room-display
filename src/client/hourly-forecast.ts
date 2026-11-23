@@ -1,6 +1,6 @@
 import type { WeatherDetailReading, WeatherState } from '../shared/contracts.ts';
 import type { WidgetSize } from '../shared/widgets.ts';
-import { addDays, civilDateKey, sunDay, sunIsUp } from './astronomy.ts';
+import { sunIsUp } from './astronomy.ts';
 import { ageLabel, compactWeatherTime, dateTimeFormat, lastKnownTime, NBSP, weatherTime } from './format.ts';
 
 /**
@@ -119,26 +119,45 @@ export function trendPaths(levels: readonly (number | null)[]): string[] {
   });
 }
 
+/** How finely the sun is sampled between `from` and `to`; the hour columns' instants are always samples. */
+const SUN_SCAN = 5 * 60_000;
 /**
- * Every sunrise and sunset after `from` and no later than `to` at a place, in time order. None on a
- * polar day or night, and none without a real place: nothing is invented. The civil days around the
- * range are included because near the polar circles a sunset can fall after local midnight.
+ * Every sunrise and sunset after `from` and up to `to` at a place, in time order: the instants at which
+ * `sunIsUp` changes. The hour columns' day and night glyphs ask the same `sunIsUp`, so a sun column and
+ * the glyphs around it cannot disagree, also at the ends of the polar day, where the per-day sunrise and
+ * sunset of `sunDay` and the sun's altitude part ways for a night or two. Elsewhere the two agree to well
+ * under a second, so the time shown is the one Sun & moon shows.
+ *
+ * The sun is sampled every five minutes on a grid through `anchor` (pass an hour column's instant, so
+ * every hour column is a sample) and each change is bisected to the millisecond; `at` is the first
+ * millisecond of the new state. A sun that dips or peeks for less than five minutes between two samples
+ * is not reported, and the glyphs do not show it either. None on a polar day or night, and none without
+ * a real place: nothing is invented.
  */
-export function sunEvents(from: number, to: number, latitude: number, longitude: number, timeZone: string): SunEvent[] {
-  if (!finite(latitude) || !finite(longitude) || !(to >= from)) return [];
+export function sunEvents(from: number, to: number, latitude: number, longitude: number, anchor = from): SunEvent[] {
+  if (!finite(latitude) || !finite(longitude) || !finite(from) || !finite(to) || !finite(anchor)) return [];
+  const start = Math.round(from), end = Math.round(to), grid = Math.round(anchor);
+  if (!(end > start)) return [];
+  const up = (at: number) => sunIsUp(new Date(at), latitude, longitude);
   const events: SunEvent[] = [];
-  const last = addDays(civilDateKey(new Date(to), timeZone), 1);
-  for (let date = addDays(civilDateKey(new Date(from), timeZone), -1); date <= last; date = addDays(date, 1)) {
-    const day = sunDay(date, latitude, longitude, timeZone);
-    if (day.sunrise) events.push({ kind: 'sunrise', at: day.sunrise.getTime() });
-    if (day.sunset) events.push({ kind: 'sunset', at: day.sunset.getTime() });
+  let before = start, state = up(start);
+  for (let sample = grid + (Math.floor((start - grid) / SUN_SCAN) + 1) * SUN_SCAN; before < end; sample += SUN_SCAN) {
+    const at = Math.min(sample, end), next = up(at);
+    if (next !== state) {
+      // `low` keeps the old state and `high` the new one; they close in to neighbouring milliseconds.
+      let low = before, high = at;
+      while (high - low > 1) { const middle = Math.floor((low + high) / 2); if (up(middle) === state) low = middle; else high = middle; }
+      events.push({ kind: next ? 'sunrise' : 'sunset', at: high });
+      state = next;
+    }
+    before = at;
   }
-  return events.filter(event => event.at > from && event.at <= to).sort((a, b) => a.at - b.at);
+  return events;
 }
 
-/** The next sunrise or sunset strictly after `now` within two days, or null (polar day or night, or no place). */
-export function nextSunEvent(now: number, latitude: number, longitude: number, timeZone: string): SunEvent | null {
-  return sunEvents(now, now + 48 * HOUR, latitude, longitude, timeZone)[0] ?? null;
+/** The next sunrise or sunset after `now` within a day, or null (polar day or night, or no place). */
+export function nextSunEvent(now: number, latitude: number, longitude: number): SunEvent | null {
+  return sunEvents(now, now + 24 * HOUR, latitude, longitude)[0] ?? null;
 }
 
 /** The highest known gust among the readings when it is notable (NOTABLE_GUST), rounded; null otherwise. */
@@ -173,13 +192,17 @@ const sunTime = (at: number, timeZone: string, clockFormat: '12h' | '24h') => we
  *   forecast lacks is a column of unknown values, never a guess, and the hours end at the last instant
  *   the forecast has.
  * - A sunrise or sunset after `now` and up to the last of those hours is a column of its own, in time
- *   order; one exactly on an hour follows that hour's column, which shows the sky just before it. A sun
- *   column takes a slot, so the last hour gives way to it and the strip's width never changes.
+ *   order. It comes from the same `sunIsUp` as the hours' day and night glyphs (`sunEvents`), so a sun
+ *   column always stands between the last hour of one sky and the first of the other: the hours before a
+ *   sunset are day and those after it night. One exactly on an hour precedes that hour's column, whose
+ *   glyph already shows the new sky. A sun column takes a slot, so the last hour gives way to it and the
+ *   strip's width never changes. (Now keeps the current reading's own flag, as Weather shows it.)
  * A sun column between two known temperatures sits on the straight course between them and the trend
  * runs through it (`onTrend`); next to an unknown, or at either end of the strip, it takes its one
- * neighbour's level and the trend does not reach it.
+ * neighbour's level and the trend does not reach it. `nextSun` is the first sunrise or sunset within a
+ * day of `now`, whether or not the strip reaches it.
  */
-export function hourlyColumns(weather: WeatherState, { now, slots, clockFormat, timeZone, disconnected }: HourlyForecastOptions): { columns: HourlyColumn[]; onTrend: boolean[] } {
+export function hourlyColumns(weather: WeatherState, { now, slots, clockFormat, timeZone, disconnected }: HourlyForecastOptions): { columns: HourlyColumn[]; onTrend: boolean[]; nextSun: SunEvent | null } {
   const { latitude, longitude } = weather.location;
   const located = finite(latitude) && finite(longitude);
   const details = new Map((weather.details ?? []).map(reading => [Date.parse(reading.time), reading] as const));
@@ -194,6 +217,7 @@ export function hourlyColumns(weather: WeatherState, { now, slots, clockFormat, 
     columns.push({ kind: 'hour', time: new Date(now).toISOString(), now: true, label: 'Now', temperature: current.temperature, weatherCode: current.weatherCode, isDay: current.isDay, chance: containing?.precipitationProbability ?? null, level: null });
   }
   const first = upcoming[0], last = upcoming.at(-1);
+  let nextSun: SunEvent | null = null;
   if (first !== undefined && last !== undefined) {
     const ahead: HourlyColumn[] = [];
     for (let time = first; time <= last && ahead.length < slots; time += HOUR) {
@@ -205,12 +229,13 @@ export function hourlyColumns(weather: WeatherState, { now, slots, clockFormat, 
         isDay: located ? sunIsUp(new Date(time), latitude, longitude) : true, chance: chanceFrom(time), level: null,
       });
     }
-    for (const event of sunEvents(now, Date.parse(ahead.at(-1)!.time), latitude, longitude, timeZone)) {
-      ahead.push({ kind: event.kind, time: new Date(event.at).toISOString(), label: sunTime(event.at, timeZone, clockFormat), level: null });
-    }
-    // Time order; an event exactly on an hour comes after that hour (Array#sort is stable, hours were added first).
-    ahead.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
-    columns.push(...ahead.slice(0, Math.max(0, slots - columns.length)));
+    // One scan, on the hours' own grid, serves the strip and the heading.
+    const events = sunEvents(now, now + 24 * HOUR, latitude, longitude, first), end = Date.parse(ahead.at(-1)!.time);
+    nextSun = events[0] ?? null;
+    const suns: HourlyColumn[] = events.filter(event => event.at <= end).map(event => ({ kind: event.kind, time: new Date(event.at).toISOString(), label: sunTime(event.at, timeZone, clockFormat), level: null }));
+    // Time order; a sun column exactly on an hour comes before that hour (Array#sort is stable, the sun columns are first).
+    const ordered = [...suns, ...ahead].sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+    columns.push(...ordered.slice(0, Math.max(0, slots - columns.length)));
   }
   const hours = columns.filter((column): column is HourColumn => column.kind === 'hour');
   const levels = trendLevels(hours.map(column => column.temperature), weather.units.temperature);
@@ -228,7 +253,7 @@ export function hourlyColumns(weather: WeatherState, { now, slots, clockFormat, 
     }
     index = end;
   }
-  return { columns, onTrend };
+  return { columns, onTrend, nextSun };
 }
 
 /** The whole view for one family at one minute. Without an upcoming hour there is nothing to show: `columns` is empty. */
@@ -241,7 +266,7 @@ export function hourlyForecastView(weather: WeatherState, options: HourlyForecas
   const facts: string[] = [];
   if (shown) {
     // The strip already shows a sun event inside its window; the heading names the next one only when it lies beyond.
-    const sun = nextSunEvent(now, weather.location.latitude, weather.location.longitude, timeZone);
+    const sun = shaped.nextSun;
     if (sun && !columns.some(column => column.kind !== 'hour' && Date.parse(column.time) === sun.at)) facts.push(`${SUN_WORD[sun.kind]}${NBSP}${sunTime(sun.at, timeZone, clockFormat)}`);
     // Each reading's gust is the maximum of the hour ending at its instant, so the shown hours' readings
     // cover now to the last hour column.

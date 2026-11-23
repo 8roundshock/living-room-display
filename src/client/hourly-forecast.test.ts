@@ -2,11 +2,11 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { LocationSettings, WeatherState } from '../shared/contracts.ts';
-import { sunDay } from './astronomy.ts';
+import { sunDay, sunIsUp } from './astronomy.ts';
 import { weatherTime } from './format.ts';
 import {
   HOURLY_CHANCE_MIN, NOTABLE_GUST, TREND_MIN_SPAN, hourlyColumns, hourlyForecastSlots, hourlyForecastView, nextSunEvent, peakGust,
-  sunEvents, trendLevels, trendPaths, type HourlyForecastOptions,
+  sunEvents, trendLevels, trendPaths, type HourlyColumn, type HourlyForecastOptions,
 } from './hourly-forecast.ts';
 
 const HOUR = 3_600_000, MINUTE = 60_000;
@@ -31,6 +31,14 @@ const options = (now: number, overrides: Partial<HourlyForecastOptions> = {}): H
 const kinds = (state: WeatherState, settings: HourlyForecastOptions) => hourlyColumns(state, settings).columns.map(column => column.kind === 'hour' ? (column.now ? 'now' : 'hour') : column.kind);
 const labels = (state: WeatherState, settings: HourlyForecastOptions) => hourlyColumns(state, settings).columns.map(column => readable(column.label));
 const clock = (at: Date | number, timeZone = 'America/Toronto', format: '12h' | '24h' = '24h') => readable(weatherTime(new Date(at).toISOString(), timeZone, format));
+/** The sky a column needs before it and the sky it leaves: an hour's own flag; day before a sunset and night after it. */
+const skyBefore = (column: HourlyColumn) => column.kind === 'hour' ? column.isDay : column.kind === 'sunset';
+const skyAfter = (column: HourlyColumn) => column.kind === 'hour' ? column.isDay : column.kind === 'sunrise';
+/** Sun columns and the hours' glyphs tell one story: each column starts with the sky the one before it left. Now keeps the reading's own flag. */
+function assertOneSky(columns: HourlyColumn[], label: string) {
+  const first = columns[0]?.kind === 'hour' && columns[0].now ? 1 : 0;
+  for (let index = first + 1; index < columns.length; index++) assert.equal(skyAfter(columns[index - 1]!), skyBefore(columns[index]!), `${label}: ${readable(columns[index - 1]!.label)} then ${readable(columns[index]!.label)}`);
+}
 
 // Sunday 22 November 2026 in Toronto (EST, UTC−5): sunset about 16:46, next sunrise about 07:21.
 const NOV_SUNSET = sunDay('2026-11-22', TORONTO.latitude, TORONTO.longitude, TORONTO.timezone).sunset!.getTime();
@@ -85,7 +93,8 @@ test('a sunset is its own column between the hours it falls between, and takes a
   assert.equal(readable(hourlyColumns(state, options(AFTERNOON, { clockFormat: '12h' })).columns[4]!.label), clock(NOV_SUNSET, 'America/Toronto', '12h'));
   assert.match(clock(NOV_SUNSET, 'America/Toronto', '12h'), /^4:4\d PM$/);
   const sun = hourlyColumns(state, options(AFTERNOON)).columns[4]!;
-  assert.equal(sun.time, new Date(NOV_SUNSET).toISOString());
+  assert.ok(Math.abs(Date.parse(sun.time) - NOV_SUNSET) < 1000, 'the instant Sun & moon shows, to the second');
+  assertOneSky(hourlyColumns(state, options(AFTERNOON)).columns, 'afternoon');
   assert.equal('temperature' in sun || 'chance' in sun, false, 'a sun column has no temperature and no chance');
   // Medium: six columns, the same event when it is inside them.
   const late = Date.parse('2026-11-22T20:10:00Z'); // 15:10
@@ -101,16 +110,23 @@ test('the trend runs straight through a sun column, which sits on the course bet
   assert.equal(hourlyForecastView(state, options(AFTERNOON)).trend.length, 1, 'one unbroken line: a sun column is not a missing value');
 });
 
-test('a sun event exactly on an hour follows that hour’s column', () => {
-  // Hourly instants need not be whole UTC hours: put one exactly on the sunset.
-  const state = weather(AFTERNOON, { start: NOV_SUNSET - 4 * HOUR });
-  const { columns } = hourlyColumns(state, options(AFTERNOON));
+test('a sun event exactly on an hour comes before that hour, whose glyph already shows the new sky', () => {
+  const sunset = nextSunEvent(AFTERNOON, TORONTO.latitude, TORONTO.longitude)!;
+  assert.equal(sunset.kind, 'sunset');
+  // Hourly instants need not be whole UTC hours: put one exactly on the first millisecond of night.
+  const { columns } = hourlyColumns(weather(AFTERNOON, { start: sunset.at - 4 * HOUR }), options(AFTERNOON));
   const index = columns.findIndex(column => column.kind === 'sunset');
   assert.ok(index > 0);
-  assert.equal(columns[index - 1]!.kind, 'hour'); assert.equal(columns[index - 1]!.time, new Date(NOV_SUNSET).toISOString(), 'the hour on the event comes first');
-  assert.equal(columns[index]!.time, columns[index - 1]!.time);
-  assert.equal(columns.filter(column => column.kind !== 'hour').length, 1);
-  assert.equal(columns.length, 12);
+  assert.equal(columns[index]!.time, new Date(sunset.at).toISOString());
+  const before = columns[index - 1]!, after = columns[index + 1]!;
+  assert.ok(before.kind === 'hour' && before.isDay, 'the hour before it is day');
+  assert.ok(after.kind === 'hour' && after.time === columns[index]!.time && !after.isDay, 'the hour on the event follows it and is night');
+  assert.equal(columns.filter(column => column.kind !== 'hour').length, 1); assert.equal(columns.length, 12);
+  // One millisecond earlier that hour is still day, and the sunset follows it.
+  const earlier = hourlyColumns(weather(AFTERNOON, { start: sunset.at - 1 - 4 * HOUR }), options(AFTERNOON)).columns, at = earlier.findIndex(column => column.kind === 'sunset');
+  const last = earlier[at - 1]!;
+  assert.ok(last.kind === 'hour' && last.isDay && Date.parse(last.time) === sunset.at - 1);
+  assertOneSky(columns, 'on the hour'); assertOneSky(earlier, 'a millisecond before');
 });
 
 test('two events in one window: a summer night shows the sunset and the sunrise', () => {
@@ -120,6 +136,7 @@ test('two events in one window: a summer night shows the sunset and the sunrise'
   assert.deepEqual(kinds(state, options(evening)), ['now', 'hour', 'sunset', 'hour', 'hour', 'hour', 'hour', 'hour', 'hour', 'hour', 'hour', 'sunrise']);
   assert.deepEqual(labels(state, options(evening)), ['Now', '21', clock(sun.sunset!), '22', '23', '00', '01', '02', '03', '04', '05', clock(next.sunrise!)]);
   const shaped = hourlyColumns(state, options(evening));
+  assertOneSky(shaped.columns, 'summer night');
   // The sunrise in the last column has no hour after it: it takes the 05:00 level and the line ends at 05:00.
   assert.equal(shaped.columns[11]!.level, shaped.columns[10]!.level); assert.equal(shaped.onTrend[11], false); assert.equal(shaped.onTrend[2], true);
   const view = hourlyForecastView(state, options(evening));
@@ -140,13 +157,14 @@ test('no sun column on a polar day or night or without a real place: nothing is 
     assert.ok(view.columns.every(column => column.kind === 'hour'), 'hours only');
     assert.ok(view.columns.slice(1).every(column => column.kind === 'hour' && column.isDay === isDay), isDay ? 'the sun stays up' : 'the sun stays down');
     assert.deepEqual(view.facts, [], 'no sun fact either');
-    assert.deepEqual(sunEvents(now, now + 12 * HOUR, TROMSO.latitude, TROMSO.longitude, 'Europe/Oslo'), []);
-    assert.equal(nextSunEvent(now, TROMSO.latitude, TROMSO.longitude, 'Europe/Oslo'), null);
+    assert.deepEqual(sunEvents(now, now + 48 * HOUR, TROMSO.latitude, TROMSO.longitude), []);
+    assert.equal(nextSunEvent(now, TROMSO.latitude, TROMSO.longitude), null);
   }
   const nowhere = weather(AFTERNOON, { location: { ...TORONTO, latitude: Number.NaN } });
   const view = hourlyForecastView(nowhere, options(AFTERNOON));
   assert.equal(view.columns.length, 12); assert.ok(view.columns.every(column => column.kind === 'hour')); assert.deepEqual(view.facts, []);
-  assert.deepEqual(sunEvents(AFTERNOON, AFTERNOON + 12 * HOUR, Number.NaN, TORONTO.longitude, 'America/Toronto'), []);
+  assert.deepEqual(sunEvents(AFTERNOON, AFTERNOON + 12 * HOUR, Number.NaN, TORONTO.longitude), []);
+  assert.equal(sunEvents(AFTERNOON, AFTERNOON + 12 * HOUR, TORONTO.latitude, TORONTO.longitude).length, 1, 'the same range with a real place has the sunset');
 });
 
 test('daylight saving changes: hours stay one real hour apart and the sunrise keeps its place', () => {
@@ -291,13 +309,59 @@ test('the trend line passes through every point, breaks at unknown values and ne
   }
 });
 
-test('sun events are strictly after the start, up to the end, in order', () => {
+test('sun events are the instants the sun test changes: after the start, up to the end, in order', () => {
+  const { latitude, longitude } = TORONTO;
   const day = Date.parse('2026-11-22T05:00:00Z'); // midnight in Toronto
-  const events = sunEvents(day, day + 48 * HOUR, TORONTO.latitude, TORONTO.longitude, 'America/Toronto');
+  const events = sunEvents(day, day + 48 * HOUR, latitude, longitude);
   assert.deepEqual(events.map(event => event.kind), ['sunrise', 'sunset', 'sunrise', 'sunset']);
   assert.ok(events.every((event, index) => index === 0 || event.at > events[index - 1]!.at));
-  assert.deepEqual(sunEvents(NOV_SUNSET, NOV_SUNSET + HOUR, TORONTO.latitude, TORONTO.longitude, 'America/Toronto'), [], 'an event at the start is not after it');
-  assert.deepEqual(sunEvents(NOV_SUNSET - HOUR, NOV_SUNSET, TORONTO.latitude, TORONTO.longitude, 'America/Toronto'), [{ kind: 'sunset', at: NOV_SUNSET }], 'an event at the end counts');
-  assert.deepEqual(nextSunEvent(AFTERNOON, TORONTO.latitude, TORONTO.longitude, 'America/Toronto'), { kind: 'sunset', at: NOV_SUNSET });
-  assert.deepEqual(nextSunEvent(NOV_SUNSET, TORONTO.latitude, TORONTO.longitude, 'America/Toronto'), { kind: 'sunrise', at: NOV_NEXT_SUNRISE });
+  // The per-day sunrise and sunset that Sun & moon shows, to well under a second.
+  const sun = sunDay('2026-11-22', latitude, longitude, TORONTO.timezone);
+  assert.ok(Math.abs(events[0]!.at - sun.sunrise!.getTime()) < 1000 && Math.abs(events[1]!.at - NOV_SUNSET) < 1000 && Math.abs(events[2]!.at - NOV_NEXT_SUNRISE) < 1000);
+  // `at` is the first millisecond of the new sky, by the test the hour glyphs use.
+  for (const event of events) {
+    assert.equal(sunIsUp(new Date(event.at), latitude, longitude), event.kind === 'sunrise');
+    assert.equal(sunIsUp(new Date(event.at - 1), latitude, longitude), event.kind !== 'sunrise');
+  }
+  const sunset = events[1]!;
+  assert.deepEqual(sunEvents(sunset.at, sunset.at + HOUR, latitude, longitude), [], 'an event at the start is not after it');
+  assert.deepEqual(sunEvents(sunset.at - HOUR, sunset.at, latitude, longitude), [sunset], 'an event at the end counts');
+  assert.deepEqual(sunEvents(day, day + 48 * HOUR, latitude, longitude, day + 17 * MINUTE + 123), events, 'the sampling grid does not move an event');
+  assert.deepEqual(sunEvents(day + HOUR, day, latitude, longitude), [], 'an empty range');
+  assert.deepEqual(nextSunEvent(AFTERNOON, latitude, longitude), sunset);
+  assert.deepEqual(nextSunEvent(sunset.at, latitude, longitude), events[2]);
+});
+
+test('sun columns and the hours’ glyphs come from one sun, also at the ends of the polar day', () => {
+  const show = (columns: HourlyColumn[]) => columns.map(column => column.kind === 'hour' ? `${readable(column.label)} ${column.isDay ? 'day' : 'night'}` : `${column.kind} ${readable(column.label)}`);
+  const at = (location: LocationSettings, when: string, slots: number) => { const now = Date.parse(when); return hourlyColumns(weather(now, { location, count: 30 }), options(now, { timeZone: location.timezone, slots })).columns; };
+  // Tromsø on 17 May 2026, the last night before the polar day. The per-day sunset (00:29) has no sunrise after
+  // it, because the next day counts as polar day, while the sun is back up at every hour. One source shows what
+  // the glyphs show: it dips for about twenty minutes, so the sunset is followed by its sunrise.
+  const tromso = at(TROMSO, '2026-05-17T13:10:00Z', 16);
+  assert.deepEqual(show(tromso).slice(8, 14), ['23 day', '00 day', 'sunset 00:29', 'sunrise 00:51', '01 day', '02 day']);
+  assertOneSky(tromso, 'Tromsø');
+  // The twelve-column strip ends with that pair; the sunset is never left between two day hours with nothing after it.
+  assert.deepEqual(show(at(TROMSO, '2026-05-17T13:10:00Z', 12)).slice(-3), ['00 day', 'sunset 00:29', 'sunrise 00:51']);
+  // McMurdo on 19 February 2026, the first night after the polar day: the glyphs turn to night between 01 and 02,
+  // and the sunset the per-day estimate lacks now stands there.
+  const mcmurdo = at({ name: 'Synthetic south', latitude: -77.85, longitude: 166.67, timezone: 'Antarctica/McMurdo' }, '2026-02-19T02:10:00Z', 16);
+  assert.deepEqual(show(mcmurdo).slice(10, 15), ['01 day', 'sunset 01:30', '02 night', 'sunrise 02:46', '03 day']);
+  assertOneSky(mcmurdo, 'McMurdo');
+  // Across the weeks around both ends of the polar day and night at several latitudes, and an ordinary year in Toronto.
+  let windows = 0, suns = 0;
+  const sweep = (location: LocationSettings, from: string, days: number, stepHours: number) => {
+    for (let now = Date.parse(from) + 10 * MINUTE; now < Date.parse(from) + days * 24 * HOUR; now += stepHours * HOUR) for (const slots of [6, 12]) {
+      const columns = hourlyColumns(weather(now, { location, count: 14 }), options(now, { timeZone: location.timezone, slots })).columns;
+      assertOneSky(columns, `${location.latitude} ${new Date(now).toISOString()} ${slots}`);
+      for (const column of columns) if (column.kind === 'hour' && !column.now) assert.equal(column.isDay, sunIsUp(new Date(column.time), location.latitude, location.longitude));
+      windows++; suns += columns.filter(column => column.kind !== 'hour').length;
+    }
+  };
+  for (const [latitude, longitude, timezone] of [[69.65, 18.96, 'Europe/Oslo'], [78.22, 15.65, 'Arctic/Longyearbyen'], [65.9, 18.96, 'Europe/Oslo'], [-77.85, 166.67, 'Antarctica/McMurdo']] as const) {
+    const location = { name: 'Synthetic edge', latitude, longitude, timezone };
+    for (const from of ['2026-02-10T00:00:00Z', '2026-04-10T00:00:00Z', '2026-05-08T00:00:00Z', '2026-07-18T00:00:00Z', '2026-08-18T00:00:00Z', '2026-10-18T00:00:00Z', '2026-11-18T00:00:00Z']) sweep(location, from, 16, 5);
+  }
+  sweep(TORONTO, '2026-01-01T00:00:00Z', 365, 7);
+  assert.ok(windows > 5000 && suns > 1500, `${windows} windows with ${suns} sun columns`);
 });
