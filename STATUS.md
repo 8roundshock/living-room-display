@@ -58,6 +58,13 @@ step fails while other suites load the PC (#165); the step that concerns this ch
 label appears in the status tone without a transition) was checked with a one-off probe. Not
 verified: installation and the TV.
 
+After the independent review (the Forecast status slot, the refresh-in-flight rule, Dynamic's
+"No alerts" and Weather alerts' unavailable age): the build, the unit tests, the Forecast,
+Weather, Weather alerts and Dynamic widget checks run through a driver (every family in every
+density at 720p, 1080p and 4K, fresh, saved and offline, and their sweeps), and the `weather`,
+`dynamic`, `collection`, `catalog-sky` and `palette` suites again. The full `widgets` and
+`motion` suites were not rerun for those fixes.
+
 Open for the owner: "Model est." under a fresh Air quality reading and the place line under the
 collection weather widgets are kept as wording that is neither a source nor an age; say so if
 they should go too. Provider terms and where the credit must appear are part of the
