@@ -133,14 +133,17 @@ rows before letting the fit scale shrink a family. Only a family that truly cann
 fit caps the floors by its own content height: small forecast uses 7.25% (text)
 and 8.5% (data), which binds only when that height is under about 19.4% of the
 display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold). Its high
-and low share a row when they fit, and its “Saved forecast”/“Offline” prefix takes its
-own short line, so fresh, stale and offline small forecasts render at fit 1 at Text
-100% in every density at 720p, 1080p and 4K, with “5 hr ago” kept together (#221). A
-fresh forecast has no line under its strip at all (#715, see
+and low share a row when they fit, so fresh, stale and offline small forecasts render at
+fit 1 at Text 100% in every density at 720p, 1080p and 4K, with “5 hr ago” kept
+together (#221). No Forecast family has a line under its strip (#715, see
 [data boundaries](#data-and-image-boundaries)): in medium and large the strip takes that
-room, and the body's `forecast-with-status` class gives a saved or offline forecast the
-former, shorter strip so its status line fits. The class changes together with the
-structure, so the shared fit reruns.
+room, in every state. A forecast that is not fresh says so in the heading's right slot,
+in place of the place and unit (small: the heading's second line), with the place's own
+typography, so the heading keeps its height and the strip its size and position:
+nothing resizes when a status comes or goes. An earlier version of #715 gave the saved
+strip a smaller size through a class; review found that every slow refresh then resized
+the strip for two seconds, so a status must never change a widget's sizes. Put it where
+the layout already has a line for it.
 Small Weather caps its floors the same way at 8.5% (text) and 10% (data) of its content
 height, which binds only below about 16.5% of the display (the Fine grid: about 9 px
 instead of 10.1 px at 720p), and keeps its footer to one row of short phrases (#283).
@@ -172,7 +175,7 @@ The renderer families have deliberate visual roles:
 | --- | --- | --- | --- |
 | Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date. While a timer is visible, the date line shows it ("8 min", "Done") | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height; a timer shows as in small, Done adds "· 2 min ago" | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition; a timer reads "8 min left · ends 6:51 PM" ([timer slot](#clock-timer-slot)) |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”, “Rain possible now, likely later”); confidence only when partial. No footer while fresh unless that confidence shows; a saved or offline forecast adds one row of short phrases, wrapping only between them: “Saved forecast · 5 hr ago” (#283, #715) | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” under it; calm fresh weather has no footer, and a saved or offline forecast adds “Saved forecast · Updated 5 hr ago” in the status tone (#715) | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and an hourly chance bar for each hour overlapping the next 12 (12 on the hour, 13 otherwise; spell hours brighter, unknown hours a dotted baseline) over “Now” and the window's end (#261). Unavailable in every family: a dim, still cloud, a dim “—°” and one status-tone line at the label size, “Weather unavailable · retrying” (“· offline” while the display cannot reach the computer), with the age only when known, in the status tone (#362, #715) |
-| Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362). A fresh forecast is the heading and the strip, with nothing under it; a saved or offline one adds “Saved forecast · Updated 5 hr ago” or “Offline · …” in the status tone under a shorter strip (small: the label on its own line) (#715) |
+| Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362). A forecast is the heading and the strip, with nothing under it; medium and large use that room for a taller strip. A saved or offline one says “Saved forecast · 5 hr ago” or “Offline · Updated 5 hr ago” in the status tone in the heading's right slot, in place of the place and unit (small: the heading's second line), as Hourly forecast does; the strip keeps its size and position in every state (#715) |
 | Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row. When not every reminder fits, more rows win over bigger titles: rows after the first may take one line with an ellipsis and titles step down to about small's width-based size, so medium shows at least as many as small and a wider box never fewer (#359) | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete faint desktop, picture-only with responsive rounded and softly feathered edges; no caption and no visible timestamp (#563) | Wider complete desktop | Larger complete desktop; retains its aspect without zoom/cropping |
@@ -538,15 +541,22 @@ while its data is fresh, when that data was updated or checked.
 | State | What the widget says |
 | --- | --- |
 | Fresh | Nothing about source or age. Wording that is neither stays: the rain “Forecast estimate” confidence, Air quality's “Model est.”, category words, units and the place. A footer that held only the credit and age is not rendered, and its room goes to the content. |
-| Saved (stale) | Its status label with the age, in the status tone: “Saved forecast · Updated 5 hr ago” (compact rows: “Saved forecast · 5 hr ago”), “Saved reading · 2 hr ago”, “Saved alerts · 2 hr ago”; Dynamic: “Saved alerts · checked 9 AM”. |
+| Saved (stale) | Its status label with the age, in the status tone: “Saved forecast · Updated 5 hr ago” (Weather medium and large; compact rows and Forecast's heading slot: “Saved forecast · 5 hr ago”), “Saved reading · 2 hr ago”, “Saved alerts · 2 hr ago”; Dynamic: “Saved alerts · checked 9 AM”. |
+| Refresh in flight | Nothing: still fresh. The server calls a forecast `stale` the moment its 15-minute interval ends (air quality: 30) and answers after about a second with `refreshing: true` while the provider is slow (#351). That is not a saved forecast, so no status shows while the first refresh since the last good one is running and the data is at most 45 minutes old. Once a refresh has failed (`error` is set, and stays through the retries) it is saved, and a retry in flight does not blink it fresh. |
 | Offline display | “Offline” first: “Offline · Updated 5 hr ago” (the age keeps its “Updated”, because a bare age could read as the outage's); Air quality “Offline · Model est. · 12 min ago”; Dynamic's alerts “Offline · checked 9 AM”. |
 | Hours old | “Last known · Thu 2 AM” (Weather, the collection weather widgets) or “Saved estimate” (Air quality), as before. |
-| Unavailable | The widget's own status line (“Weather unavailable · retrying”), with the age only when an update time is known. |
+| Unavailable | The widget's own status line (“Weather unavailable · retrying”), with the age only when an update time is known; Weather alerts: “Updated 2 hr ago” under “Alerts unavailable”. |
+| A claim that needs fresh data | Made only while it is confirmed. Dynamic's “No alerts” is said by a connected display with a fresh list, without a check time; an offline display (whose last status stays `fresh` for as long as the outage lasts) and a saved list never say it. What they do say about alerts carries its check time in the status tone (“Saved alerts · checked 9 AM”, an alert card's “Offline · checked 9 AM”). Weather alerts reads “Current alerts unknown” then. |
 
-No state names a provider. `weatherStatus` and `shortAge` in
-[`format.ts`](../src/client/format.ts) are the shared rule for Weather, Forecast and the
-collection footer; `airAgeSegments` in [`airHourly.ts`](../src/client/airHourly.ts) is Air
-quality's and Dynamic's air cards'; `DynamicCard.age` is null while fresh. The provider
+No state names a provider. `presentedStatus` in [`format.ts`](../src/client/format.ts) is
+the one place that decides whether forecast or air data is presented as fresh (the
+refresh-in-flight rule); Weather, Forecast, the collection footer, Air quality and
+Dynamic's weather and air cards all read the status through it, so they change together.
+`weatherStatus`, `weatherIsFresh` and `shortAge` build the weather wording on it,
+`airAgeSegments` in [`airHourly.ts`](../src/client/airHourly.ts) Air quality's and Dynamic's
+air cards', `alertsWidgetStatus` in [`collection.ts`](../src/client/collection.ts) Weather
+alerts'; `DynamicCard.age` is null while fresh. A new weather widget must use
+`presentedStatus` (or `weatherStatus`) rather than compare `weather.status` itself. The provider
 credit lives in Settings (“Forecast estimates by Open-Meteo”, a link) and in the widget
 settings hints (Air quality, Dynamic's Official weather alerts, Weather alerts), which may
 name providers; a renderer may not (`src/client/model.test.ts` checks the sources).

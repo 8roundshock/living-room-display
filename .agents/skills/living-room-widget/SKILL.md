@@ -46,7 +46,12 @@ code and tests for actual symbols and commands; the documentation is not a schem
   `.status-caution` line. Name the provider in the widget's `Settings` hint and the
   docs; the forecast credit is a link in Settings. A footer that would hold only a
   credit or a fresh age is not rendered; let the content use its room and keep every
-  state at fit 1 (switch sizes with a class when a status line needs the room back).
+  state at fit 1. A status must never resize the widget: put it where the layout
+  already has a line (Forecast's heading slot replaces the place), not on a line that
+  takes room back from the content. Read weather or air freshness through
+  `presentedStatus`/`weatherStatus` in `src/client/format.ts`, never by comparing
+  `status` yourself: a refresh in flight is not saved data. A claim that needs fresh
+  data ("No alerts") is made only while connected and fresh.
   Assert it with `assertNoSourceOrFreshAge` from `tests/ui/lib/source-age.mjs`.
   Ambient widgets are silent and passive; configuration/actions belong in the editor.
 - For image widgets, read the contract's photo boundary. User-selected photo

@@ -273,11 +273,15 @@ reach the computer. The age shows only when an update time is known, in the stat
 too. Nothing is invented; there is no option to hide the widget when unavailable.
 
 Fresh weather data carries no footer of its own (#715, owner decision 2026-11-22): no
-provider credit and no update age, on any widget. Forecast is then only its heading and
+provider credit and no update age, on any widget. Forecast is only its heading and
 strip, and in medium and large the strip grows into the room the old footer held (taller
 glyphs, day labels and chances; temperatures only in large, capped by a day column's
-width). A saved or offline forecast adds one status-tone line, “Saved forecast · Updated
-5 hr ago”, and the strip returns to its former size so every state stays at fit 1. Weather
+width), in every state. A saved or offline forecast says “Saved forecast · 5 hr ago” or
+“Offline · Updated 5 hr ago” in the heading's right slot, in the status tone and in place
+of the place and unit, as Hourly forecast does, so the two strips read alike when
+stacked. The slot keeps the place's typography: the heading keeps its height, and the
+strip its size and position. A status never resizes a widget. A refresh that is merely
+slow is not a status at all (the [refresh-in-flight rule](widgets.md#data-and-image-boundaries)). Weather
 keeps a footer only for the rain confidence wording (“Forecast estimate”, “Partial
 forecast”) and for that status line. Air quality keeps one short footer row: “Model est.”
 when fresh, the status and age when not. The collection weather widgets keep the place

@@ -480,6 +480,11 @@ While a refresh is in flight the state carries the API-only `refreshing: true`, 
 never stored or exported; during the first fetch for a location there is no data and no
 error text yet, rather than a failure. The browser asks again 2 seconds later while
 anything is refreshing, at most five times in a row, then keeps its 30-second poll.
+A forecast whose interval has just ended is answered as `stale` with `refreshing: true`
+and no `error`. The widgets do not present that as a saved forecast (#715,
+`presentedStatus` in `src/client/format.ts`): it stays fresh on the display until the
+refresh fails (which sets `error`, kept through the retries) or the data is over 45
+minutes old. Air quality follows the same rule.
 
 Successful forecasts are cached for 15 minutes in memory. Failed refreshes retain
 the last successful timestamp/data and mark them stale; without prior data the
@@ -671,10 +676,11 @@ card at all Dynamic is `unavailable` when a source is degraded (shown, saying wh
 | Situation | What Dynamic shows |
 | --- | --- |
 | Forecast stale | Weather cards with "Saved forecast · Updated 2 hr ago" in the status tone; current-based cards only while the reading is up to 3 hours old (the shared last-known rule), with "As of 9 AM", never "Now"; no Dry card |
-| Display offline | "Offline · …"; reminder and countdown cards say "Saved reminders · offline" (or "Saved dates"); alerts are kept until their own end; glyphs are still |
+| Forecast or air refresh in flight | As fresh: no "Saved …" phrase, "Now" and the Dry card stay (#715, the shared `presentedStatus` rule) |
+| Display offline | "Offline · …"; reminder and countdown cards say "Saved reminders · offline" (or "Saved dates"); alerts are kept until their own end, their cards aged "Offline · checked 9 AM"; no "No alerts" claim, whatever the last status was (#715); glyphs are still |
 | Forecast unavailable | No weather cards; "Weather unavailable" in the status tone |
 | Alerts off / unsupported | Nothing from alerts; never "no alerts" (the editor explains coverage) |
-| Alerts fresh, none in effect | Small and medium say nothing; large: "No alerts" (fresh, so no check time, #715) |
+| Alerts fresh, none in effect, display connected | Small and medium say nothing; large: "No alerts" (fresh, so no check time, #715). Never while the display is offline: the status it last received stays `fresh` for as long as the outage lasts |
 | Alerts stale | Retained alerts until their end, and "Saved alerts · checked 9:10 PM" in the status tone; no "No alerts" claim |
 | Alerts unavailable | "Weather alerts unavailable" in the status tone |
 | Air on, not loaded / unavailable / saved | No air cards and "Air quality not loaded yet" (medium and large) / "Air quality unavailable" / an air card aged "Saved reading · …", "Saved estimate" over 3 hours, or no air card and "Saved air reading" when only the last-known value is left |

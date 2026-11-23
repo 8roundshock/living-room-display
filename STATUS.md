@@ -11,8 +11,9 @@ What changed, on the display, the editor canvas and the picker samples:
   Weather, Forecast, Dynamic, Air quality, Weather alerts and the collection weather widgets
   (Wind, Humidity, Pressure, Visibility, Cloud cover, Precipitation and today's Hourly).
 - **Data that is not fresh keeps its honest state**, with the age only there and in the status
-  tone: "Saved forecast · Updated 5 hr ago", "Saved reading · 2 hr ago", "Saved alerts · 2 hr
-  ago", "Offline · Updated 5 hr ago", "Last known · Thu 2 AM", "Weather unavailable · retrying".
+  tone: "Saved forecast · Updated 5 hr ago" (Forecast: "Saved forecast · 5 hr ago"), "Saved
+  reading · 2 hr ago", "Saved alerts · 2 hr ago", "Offline · Updated 5 hr ago", "Last known ·
+  Thu 2 AM", "Weather unavailable · retrying".
   No provider name there either.
 - **The credit stays in the app, off the display:** the "Forecast estimates by Open-Meteo" link in
   Settings, and the provider names in the widget settings hints (Air quality, Dynamic's official
@@ -20,11 +21,19 @@ What changed, on the display, the editor canvas and the picker samples:
 - **What is neither a source nor an age stays:** the rain "Forecast estimate" confidence, Air
   quality's "Model est.", category words, units and place names. The collection weather widgets
   keep their place as the last line.
-- **Freed room goes to the content.** A fresh Forecast is its heading and strip; in medium and
-  large the strip is taller (glyphs, day labels, chances; temperatures in large). A saved or
-  offline forecast gets its status line back under the former, shorter strip, so every state
-  stays at fit 1. Weather keeps a footer only for the rain confidence and the status line; Air
+- **Freed room goes to the content.** Forecast is its heading and strip; in medium and large the
+  strip is taller (glyphs, day labels, chances; temperatures in large), in every state. A saved
+  or offline forecast says so in the heading's right slot, in place of the place and unit
+  ("Saved forecast · 5 hr ago"), as Hourly forecast does, so the strip never changes size or
+  position. Weather keeps a footer only for the rain confidence and the status line; Air
   quality's footer is one short row; Weather alerts has none while fresh.
+- **A refresh in flight is not a saved forecast.** When a refresh takes over a second the server
+  answers `stale` and `refreshing`; the widgets keep showing the data as fresh until the refresh
+  fails or the data is over 45 minutes old. One helper (`presentedStatus`) decides this for
+  Weather, Forecast, Dynamic, Air quality and the collection weather widgets.
+- **No claim from data that is not fresh.** Dynamic says "No alerts" only from a connected
+  display with a fresh list; offline or from a saved list it does not. Weather alerts keeps
+  the age of its last successful check when unavailable ("Updated 2 hr ago").
 - `AGENTS.md` and [product requirements](docs/product.md) now state this decision in place of
   "show weather age".
 

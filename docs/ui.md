@@ -765,8 +765,12 @@ Forecast then read unavailable); the clock and reminder input use the computer t
 Owner decision, 2026-11-22 (#715): fresh conditions show no update age and no widget names
 its data provider, on the display, the canvas and the picker samples. Retained stale data
 is marked throughout, with the age only there: Weather's “Saved forecast · Updated 5 hr
-ago” and Forecast's “Saved forecast · Updated 5 hr ago” or “Offline · …”, each whole line
-in the amber status tone (#223). Missing values
+ago” under its content, and Forecast's “Saved forecast · 5 hr ago” or “Offline · Updated
+5 hr ago” in its heading's right slot in place of the place and unit, each whole line
+in the amber status tone (#223). Forecast's strip keeps one size and position in every
+state. A forecast whose refresh is still running is not marked: only a failed refresh, an
+offline display or data over 45 minutes old is (see the
+[widget contract](widgets.md#data-and-image-boundaries)). Missing values
 stay unavailable. A retained forecast never shows past days, and a reading more than
 3 hours old reads “Last known · 9 AM” (#243, [rule](widgets.md#data-and-image-boundaries)).
 While the forecast is saved or offline, an update time in the future reads “Update time
@@ -1208,7 +1212,8 @@ coverage. Provider notices are information, not an emergency notification servic
 the display the weather modules end with their place; a saved or offline forecast puts
 "Saved forecast · 5 hr ago" or "Offline · Updated 5 hr ago" above it in the status tone
 (and "Last known · Thu 2 AM" above that for a reading over three hours old), and Weather
-alerts shows "Saved alerts · 2 hr ago" or "Offline · …" only then. The ambient
+alerts shows "Saved alerts · 2 hr ago", "Offline · Updated 2 hr ago" or, under "Alerts
+unavailable", "Updated 2 hr ago" (the last successful check) only then. The ambient
 modules expose no controls. Every catalog entry declares only useful families;
 widgets without a useful small family begin at medium. Saved layouts, the default
 board and the Save/Cancel draft behavior remain unchanged.
