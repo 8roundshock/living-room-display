@@ -95,6 +95,9 @@ export async function runCollectionQa({ playwright, edge, capture = false, captu
     for (const size of widgetSizes('weatherAlerts')) {
       await scenario('weatherAlerts', size, 'quiet', provider, /^Weather alerts\s+No current alerts\s*$/);
       await scenario('weatherAlerts', size, 'unsupported', state => { provider(state); state.alerts.status = 'unsupported'; }, /No provider for this area/);
+      // #715: an unavailable list keeps the age of its last successful check, in the status tone; never checked, no line.
+      await scenario('weatherAlerts', size, 'unavailable-age', state => { provider(state); state.alerts.status = 'unavailable'; state.alerts.checkedAt = new Date(now - 2 * 3600_000).toISOString(); }, /^Weather alerts\s+Alerts unavailable\s+Updated 2 hr ago\s*$/);
+      await scenario('weatherAlerts', size, 'unavailable', state => { provider(state); state.alerts.status = 'unavailable'; state.alerts.checkedAt = null; }, /^Weather alerts\s+Alerts unavailable\s*$/);
       await scenario('weatherAlerts', size, 'saved-empty', state => { provider(state); state.alerts.status = 'stale'; state.alerts.checkedAt = new Date(now - 2 * 3600_000).toISOString(); }, /Current alerts unknown\s+Saved alerts · 2 hr ago\s*$/);
       await scenario('weatherAlerts', size, 'active', state => {
         provider(state); state.settings.clockFormat = '24h'; state.weather.location.timezone = 'Europe/London';

@@ -44,8 +44,8 @@ export const MODES = {
 };
 const SIZES = ['small', 'medium', 'large'];
 const VIEWPORTS = [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }];
-/** #715: a medium or large Forecast day's glyph height as a share of the content height: taller while fresh (no line under the strip), the former size when saved or offline. */
-const FRESH_FORECAST_GLYPH = 0.20, SAVED_FORECAST_GLYPH = 0.16;
+/** #715: a medium or large Forecast day's glyph height as a share of the content height. Nothing sits under the strip, so it is 20cqh (16cqh before), fresh or saved alike. */
+const FORECAST_GLYPH = 0.20;
 /** #283: fit within half a percent of 1 is the fit search resolving a sub-pixel overflow, not a zoom-out (as in widgets-browser.mjs). */
 const FIT_1 = 0.995;
 /** Synthetic states beyond the outlook modes (#283, #335, #362). */
@@ -395,7 +395,8 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
         assert.ok(labels.every(label => label.full.slice(-10) >= '2026-10-18'), `${days} days/${size} shows no past day: ${JSON.stringify(labels)}`);
         assert.equal(labels[1].full, 'Tomorrow, 2026-10-19');
         assert.equal(await page.locator('[data-widget-id="forecast"] .ambient-label').textContent(), want === 7 ? 'The week' : `Next ${want} days`, 'the heading counts the days shown');
-        assert.match(await page.locator('[data-widget-id="forecast"] .forecast-status-line').innerText(), new RegExp(`^Saved forecast\\s*(· )?Updated ${days} ${days === 1 ? 'day' : 'days'} ago$`), 'the saved forecast keeps its label and age, without a provider name (#715)');
+        // #715: the saved forecast keeps its label and age, in the heading's right slot, without a provider name.
+        assert.equal((await page.locator('[data-widget-id="forecast"] .forecast-heading .forecast-status-line').innerText()).replace(/\s+/g, ' '), `Saved forecast · ${days} ${days === 1 ? 'day' : 'days'} ago`);
       }
       for (const size of ['medium', 'large']) {
         only(size, 'calm', 'balanced', state => savedEarlier(state, days)); await open();
@@ -459,8 +460,8 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
       }));
       assert.equal(glyphs.length, 2);
       for (const glyph of glyphs) {
-        // #715: the default board's large Forecast is fresh, so its strip takes the old footer's room: 20cqh glyphs, not 16.
-        const [cw, ch] = glyph.id === 'forecast' ? [0.10, FRESH_FORECAST_GLYPH] : glyphFractions(glyph.size, glyph.mode);
+        // #715: the default board's large Forecast has nothing under its strip, which takes that room: 20cqh glyphs, not 16.
+        const [cw, ch] = glyph.id === 'forecast' ? [0.10, FORECAST_GLYPH] : glyphFractions(glyph.size, glyph.mode);
         const want = Math.min(cw * glyph.box.width, ch * glyph.box.height) * glyph.scale;
         assert.ok(Math.abs(glyph.width - want) <= 1.5, `editor ${viewport.width} ${glyph.id} glyph ${glyph.width} matches CSS ${want}`);
         assert.doesNotMatch(glyph.inline, /width/);
@@ -475,14 +476,14 @@ export async function runWeatherQa({ playwright, edge, capture } = {}) {
         return { box, scale, width: r.width };
       });
       const want = share => Math.min(0.10 * forecast.box.width, share * forecast.box.height) * forecast.scale;
-      assert.ok(Math.abs(forecast.width - want(FRESH_FORECAST_GLYPH)) <= 1.5, `display ${viewport.width} fresh forecast glyph ${forecast.width} matches ${want(FRESH_FORECAST_GLYPH)}`);
-      // A saved forecast gives the room back to its status line: the former 16cqh glyphs (#715).
+      assert.ok(Math.abs(forecast.width - want(FORECAST_GLYPH)) <= 1.5, `display ${viewport.width} fresh forecast glyph ${forecast.width} matches ${want(FORECAST_GLYPH)}`);
+      // A saved forecast says so in the heading's right slot and keeps the same strip: no size switch (#715).
       current.weather.status = 'stale'; current.weather.updatedAt = new Date(NOW - 5 * HOUR).toISOString(); await open();
-      const saved = await page.locator('[data-widget-id="forecast"]').evaluate(el => ({ width: el.querySelector('.forecast-day > .weather-glyph').getBoundingClientRect().width, line: el.querySelector('.forecast-status-line')?.textContent ?? null }));
-      assert.equal(saved.line, 'Saved forecast · Updated 5 hr ago');
-      assert.ok(Math.abs(saved.width - want(SAVED_FORECAST_GLYPH)) <= 1.5, `display ${viewport.width} saved forecast glyph ${saved.width} matches ${want(SAVED_FORECAST_GLYPH)}`);
+      const saved = await page.locator('[data-widget-id="forecast"]').evaluate(el => ({ width: el.querySelector('.forecast-day > .weather-glyph').getBoundingClientRect().width, line: el.querySelector('.forecast-heading .forecast-status-line')?.textContent.replace(/\s+/g, ' ') ?? null, place: el.innerText.includes('Toronto') }));
+      assert.deepEqual([saved.line, saved.place], ['Saved forecast · 5 hr ago', false], 'the status replaces the place in the heading');
+      assert.ok(Math.abs(saved.width - forecast.width) <= 0.1, `display ${viewport.width} saved forecast glyph ${saved.width} equals the fresh one ${forecast.width}`);
     }
-    checks.push('Glyph boxes match the widget CSS on the display (1280/1920/3840) and in the editor canvas (1280/1920) for Weather and Forecast, the large Forecast at 20cqh while fresh and 16cqh when saved (#715); no inline 20 px size (#128)');
+    checks.push('Glyph boxes match the widget CSS on the display (1280/1920/3840) and in the editor canvas (1280/1920) for Weather and Forecast, the large Forecast at 20cqh fresh and saved alike with its status in the heading (#715); no inline 20 px size (#128)');
 
     // #251: every WMO code draws a symbol that agrees with its condition text (partly cloudy by day or night, fog,
     // drizzle); a two-tone symbol's sun or moon part carries its own data-glyph for its sub-tone; every symbol keeps

@@ -75,5 +75,44 @@ export async function sweep({ page, viewport, state, now }) {
   state.weather = fresh;
   await page.setViewportSize(viewport);
   assert.deepEqual(failures, [], 'Dynamic renders at fit 1 at Text 100%');
-  return `Dynamic small/medium/large fit 1 at Text 100% in every density, fresh/stale/offline, at 1280×720 (${cases} cases)`;
+  // #715: "No alerts" is a claim about now. The large family makes it only while the display is connected and the
+  // list is fresh, and then without a check time. Offline, `fresh` is merely the last status the display received
+  // (for 4 minutes or 26 hours), so nothing is claimed; a saved list says "Saved alerts · checked …" in the status tone.
+  const widget = page.locator('[data-widget-id="dynamic"]');
+  const footer = async () => (await widget.locator('.dynamic-footer').innerText()).replace(/[\u00a0\u202f]/g, ' ');
+  const savedAlerts = state.alerts;
+  let claims = 0;
+  for (const checked of [4 * 60_000, 26 * HOUR]) {
+    const clock = await page.evaluate(() => Date.now());
+    state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'dynamic']));
+    state.settings.widgetGrid.density = 'balanced'; state.settings.widgetGrid.placements.dynamic = { column: 0, row: 0, size: 'large' };
+    state.alerts = { status: 'fresh', provider: 'eccc', source: 'Environment and Climate Change Canada', sourceUrl: 'https://weather.gc.ca/', area: 'Sample area', checkedAt: new Date(clock - checked).toISOString(), error: null, alerts: [] };
+    await reload(page);
+    const connected = await footer();
+    assert.match(connected, /(^| · )No alerts( · |$)/, `connected, fresh and empty: the large family says so: ${connected}`);
+    assert.doesNotMatch(connected, /checked|Environment|Canada/, `fresh: no check time and no issuer: ${connected}`);
+    await page.route('**/api/state', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Synthetic offline"}' }));
+    try {
+      await page.clock.runFor(30_000);
+      for (let attempt = 0; attempt < 100 && !/Offline/.test(await footer()); attempt++) await page.waitForTimeout(40);
+    } finally { await page.unroute('**/api/state'); }
+    const offline = await footer();
+    assert.match(offline, /Offline/, `offline says so: ${offline}`);
+    assert.doesNotMatch(offline, /No alerts/, `offline (last check ${Math.round(checked / 60_000)} min before): no "No alerts" claim: ${offline}`);
+    assert.equal(await widget.locator('.dynamic-footer .status-caution', { hasText: 'Offline' }).count(), 1, 'Offline is in the status tone');
+    assert.ok(await fitOf(widget) >= 0.995, 'offline large Dynamic stays at fit 1');
+    claims++;
+  }
+  // A saved, empty list: its check time in the status tone, and no "No alerts".
+  {
+    const clock = await page.evaluate(() => Date.now());
+    state.alerts = { ...state.alerts, status: 'stale', checkedAt: new Date(clock - 2 * HOUR).toISOString() };
+    await reload(page);
+    const saved = await footer();
+    assert.match(saved, /Saved alerts · checked \d/, `a saved list carries its check time: ${saved}`);
+    assert.doesNotMatch(saved, /No alerts/, `a saved list is never "No alerts": ${saved}`);
+    assert.equal(await widget.locator('.dynamic-footer .status-caution', { hasText: 'Saved alerts' }).count(), 1, 'the saved-alerts phrase is in the status tone');
+  }
+  state.alerts = savedAlerts;
+  return `Dynamic small/medium/large fit 1 at Text 100% in every density, fresh/stale/offline, at 1280×720 (${cases} cases); "No alerts" only from a connected display with a fresh list, never offline (last check 4 min or 26 h before) or from a saved list (#715, ${claims} offline cases)`;
 }

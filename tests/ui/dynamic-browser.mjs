@@ -290,11 +290,13 @@ export async function runDynamicQa({ playwright, edge, capture } = {}) {
         }
         // Offline: /api/state aborted after a good load.
         for (const size of SIZES) {
-          const { view } = await statusIn(world, size, /Offline/i, 'offline', async ({ page }) => {
+          const { view, result } = await statusIn(world, size, /Offline/i, 'offline', async ({ page }) => {
             await page.route('**/api/state', route => route.abort());
             await page.clock.runFor(30_000);
             for (let attempt = 0; attempt < 60 && !/Offline/i.test(await widgetOf(page).innerText()); attempt++) await page.waitForTimeout(40);
           });
+          // #715: the alerts list was fresh and empty at the last good poll; an offline display makes no claim from it.
+          assert.doesNotMatch(result.text, /No alerts/, `offline ${size}: no "No alerts" claim: ${result.text}`);
           await view.close();
         }
       } finally { await world.close(); }
