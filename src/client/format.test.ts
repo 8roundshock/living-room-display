@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { WeatherState } from '../shared/contracts.ts';
-import { ageLabel, chartAxisLabels, civilDate, compactWeatherRange, compactWeatherTime, dateTimeFormat, forecastDay, LAST_KNOWN_AFTER_MS, lastKnownLabel, lastKnownTime, MINUS, shortAge, temperature, todayForecast, upcomingDays, weatherStatus, weatherTime, weatherTimeZone } from './format.ts';
+import { ageLabel, chartAxisLabels, civilDate, compactWeatherRange, compactWeatherTime, dateTimeFormat, forecastDay, LAST_KNOWN_AFTER_MS, lastKnownLabel, lastKnownTime, MINUS, presentedStatus, REFRESH_GRACE_MS, shortAge, temperature, todayForecast, upcomingDays, weatherIsFresh, weatherStatus, weatherTime, weatherTimeZone } from './format.ts';
 import { rainChartLabel, rainOutlook, rainOutlookCopy } from './weather-outlook.ts';
 
 const TORONTO = 'America/Toronto';
@@ -55,6 +55,49 @@ test('fresh weather has no status and so no age; a saved, offline or unavailable
   assert.equal(shortAge('Update time unknown'), 'Update time unknown');
   // No status ever names a provider.
   for (const status of [weatherStatus(at(NOW - 5 * HOUR, 'stale'), false, NOW), weatherStatus(at(NOW, 'fresh'), true, NOW), weatherStatus(at(NOW - HOUR, 'unavailable'), false, NOW)]) assert.doesNotMatch(JSON.stringify(status), /Open-Meteo/);
+});
+
+test('a refresh in flight is not a saved forecast: stale data still reads as fresh while its first refresh runs (#715)', () => {
+  const at = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString();
+  // What the server answers when the 15-minute interval has just ended and the provider takes over a second (#351).
+  const refreshing = { status: 'stale' as const, updatedAt: at(16), error: null, refreshing: true };
+  assert.equal(presentedStatus(refreshing, NOW), 'fresh');
+  assert.equal(weatherStatus(refreshing, false, NOW), null, 'no "Saved forecast" line while the refresh runs');
+  assert.equal(weatherIsFresh(refreshing, false, NOW), true);
+  assert.equal(presentedStatus({ ...refreshing, updatedAt: at(31) }, NOW), 'fresh', 'air quality refreshes every 30 minutes');
+  // Not refreshing: saved, as before.
+  const saved = { status: 'stale' as const, updatedAt: at(16), error: null };
+  assert.equal(presentedStatus(saved, NOW), 'stale');
+  assert.equal(presentedStatus({ ...saved, refreshing: false }, NOW), 'stale');
+  assert.deepEqual(weatherStatus(saved, false, NOW), { label: 'Saved forecast', age: 'Updated 16 min ago' });
+  // A refresh has failed since the last good one: `error` stays through the retries, so a retry in flight never blinks fresh.
+  const retrying = { ...refreshing, updatedAt: at(5 * 60), error: 'Weather update failed. Showing the last successful forecast.' };
+  assert.equal(presentedStatus(retrying, NOW), 'stale');
+  assert.equal(presentedStatus({ ...retrying, updatedAt: at(16) }, NOW), 'stale', 'even when it is only just stale');
+  assert.deepEqual(weatherStatus(retrying, false, NOW), { label: 'Saved forecast', age: 'Updated 5 hr ago' });
+  assert.equal(weatherIsFresh(retrying, false, NOW), false);
+  // Too old to pass as current (a PC waking from sleep): saved until the refresh lands.
+  assert.equal(REFRESH_GRACE_MS, 45 * 60_000);
+  assert.equal(presentedStatus({ ...refreshing, updatedAt: new Date(NOW - REFRESH_GRACE_MS).toISOString() }, NOW), 'fresh', 'the grace is inclusive');
+  assert.equal(presentedStatus({ ...refreshing, updatedAt: new Date(NOW - REFRESH_GRACE_MS - 1).toISOString() }, NOW), 'stale');
+  assert.equal(presentedStatus({ ...refreshing, updatedAt: at(8 * 60) }, NOW), 'stale');
+  assert.ok(REFRESH_GRACE_MS < LAST_KNOWN_AFTER_MS, 'never long enough to hide a last-known reading');
+  // An update time that cannot be aged is never excused; a small clock skew is.
+  assert.equal(presentedStatus({ ...refreshing, updatedAt: null }, NOW), 'stale');
+  assert.equal(presentedStatus({ ...refreshing, updatedAt: 'not a time' }, NOW), 'stale');
+  assert.equal(presentedStatus({ ...refreshing, updatedAt: new Date(NOW + 4 * HOUR).toISOString() }, NOW), 'stale');
+  assert.equal(presentedStatus({ ...refreshing, updatedAt: new Date(NOW + 60_000).toISOString() }, NOW), 'fresh');
+  // Only `stale` is ever reread; every other status is the server's own, refreshing or not.
+  for (const status of ['fresh', 'unavailable', 'off', 'unsupported'] as const) assert.equal(presentedStatus({ status, updatedAt: at(16), error: null, refreshing: true }, NOW), status);
+  // Offline is the caller's question and stays as it is: a display that cannot reach the computer says so.
+  assert.deepEqual(weatherStatus(refreshing, true, NOW), { label: 'Offline', age: 'Updated 16 min ago' });
+  assert.equal(weatherIsFresh(refreshing, true, NOW), false);
+  assert.equal(weatherIsFresh({ status: 'fresh', updatedAt: at(1) }, true, NOW), false);
+  assert.equal(weatherIsFresh({ status: 'fresh', updatedAt: at(1) }, false, NOW), true);
+  // The last-known rule reads the same status: a refreshing forecast within the grace is never "Last known".
+  const current = { time: at(16), temperature: 14, feelsLike: 13, weatherCode: 3, isDay: true, windSpeed: 8 };
+  assert.equal(lastKnownTime({ ...refreshing, current }, false, TORONTO, '12h', NOW), null);
+  assert.equal(readable(lastKnownTime({ ...refreshing, updatedAt: at(5 * 60), current }, false, TORONTO, '12h', NOW)), '4 AM', 'a five-hour-old forecast is last known, refreshing or not');
 });
 
 test('compact forecast labels name tomorrow by its weekday; the full label keeps Tomorrow (#256)', () => {

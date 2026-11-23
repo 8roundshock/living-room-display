@@ -203,35 +203,35 @@
 .grid-ambient .forecast-temperatures { font-size: calc(max(var(--min-data), min(8cqw, 12cqh)) * var(--font-scale)); line-height: 1.15; gap: 1.4cqw; }
 .grid-ambient .forecast-rain { font-size: calc(max(var(--min-data), min(5cqw, 7cqh)) * var(--font-scale)); gap: 1cqw; }
 .grid-ambient .forecast-rain svg { width: 0.8em; height: 0.8em; }
-/* Only a forecast that is not fresh has this line (#715): "Saved forecast · Updated 5 hr ago" or "Offline · …",
-   all of it the full-opacity status cue (#223). A fresh forecast shows no provider name and no age. */
-.grid-ambient .forecast-status-line { font-size: calc(max(var(--min-text), min(4cqw, 5.5cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 4cqh; text-align: left; }
-.grid-ambient :is(.forecast-age, .weather-age-value) { white-space: nowrap; }
+/* Forecast names no provider and shows no age while fresh, and nothing sits under its strip (#715). A forecast that
+   is not fresh says so in the heading's right slot, in place of the place and unit: "Saved forecast · 5 hr ago" or
+   "Offline · Updated 5 hr ago", all of it the full-opacity status cue (#223), as the Hourly forecast does (#714).
+   The slot keeps the place's typography, so the heading keeps its height and the strip its size and position in
+   every state: nothing resizes when the status comes or goes. The label keeps its line; the phrases never break
+   inside, so a narrow slot wraps between them (#221). Small's heading is two lines, and its second line is the slot. */
+.grid-ambient .ambient-forecast .forecast-heading .ambient-label { flex: none; white-space: nowrap; }
+.grid-ambient .ambient-forecast .forecast-heading .weather-context { min-width: 0; text-align: right; }
+.grid-ambient :is(.forecast-status, .forecast-age, .weather-age-value) { white-space: nowrap; }
 .grid-ambient .ambient-forecast.widget-size-small .forecast-heading { display: block; }
-.grid-ambient .ambient-forecast.widget-size-small .weather-context { margin-top: 2cqh; }
-/* High and low share a row when they fit and wrap otherwise, and the status prefix takes its own short line,
-   so fresh, stale and offline small forecasts fit without zooming out (#221). */
+.grid-ambient .ambient-forecast.widget-size-small .forecast-heading .weather-context { margin-top: 2cqh; text-align: left; }
+/* High and low share a row when they fit and wrap otherwise, so fresh, stale and offline small forecasts fit
+   without zooming out (#221). */
 .grid-ambient .ambient-forecast.widget-size-small .forecast-temperatures { flex-wrap: wrap; justify-content: center; gap: 1cqh 1.4cqw; }
-.grid-ambient .ambient-forecast.widget-size-small .forecast-status-line { margin-top: 2.5cqh; }
-.grid-ambient .ambient-forecast.widget-size-small .forecast-status { display: block; }
-.grid-ambient .ambient-forecast.widget-size-small .forecast-separator { display: none; }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-day-label { font-size: calc(max(var(--min-text), min(4cqw, 9cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-temperatures { font-size: calc(max(var(--min-data), min(5cqw, 13cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-rain { font-size: calc(max(var(--min-data), min(3cqw, 7cqh)) * var(--font-scale)); }
-/* A fresh forecast has no line under the strip (#715), so in medium and large the strip takes that room: taller
-   glyphs, day labels and chances, and more air between them. Temperatures grow only in large, capped by the width a
-   day's column leaves for two double-digit sub-zero values. A saved or offline forecast (.forecast-with-status)
-   keeps the sizes above, so its status line fits and every state stays at fit 1. Small keeps one size: its
-   temperatures wrap onto two rows when cold, which already uses the room. */
-.grid-ambient .ambient-forecast:is(.widget-size-medium, .widget-size-large) .forecast-body:not(.forecast-with-status) .forecast-day { gap: 3.6cqh; }
-.grid-ambient .ambient-forecast:is(.widget-size-medium, .widget-size-large) .forecast-body:not(.forecast-with-status) .forecast-day > .weather-glyph, .grid-ambient .ambient-forecast:is(.widget-size-medium, .widget-size-large) .forecast-body:not(.forecast-with-status) .forecast-unknown { width: min(10cqw, 20cqh); height: min(10cqw, 20cqh); font-size: min(10cqw, 20cqh); }
-.grid-ambient .ambient-forecast.widget-size-medium .forecast-body:not(.forecast-with-status) .forecast-day-label { font-size: calc(max(var(--min-text), min(7cqw, 10.5cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-medium .forecast-body:not(.forecast-with-status) .forecast-rain { font-size: calc(max(var(--min-data), min(5cqw, 8cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-body:not(.forecast-with-status) .forecast-day-label { font-size: calc(max(var(--min-text), min(4cqw, 10.5cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-body:not(.forecast-with-status) .forecast-temperatures { font-size: calc(max(var(--min-data), min(2.5cqw, 15cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-body:not(.forecast-with-status) .forecast-rain { font-size: calc(max(var(--min-data), min(3cqw, 8cqh)) * var(--font-scale)); }
+/* With no line under the strip (#715), the medium and large strips take that room, in every state: taller glyphs,
+   day labels and chances, and more air between them. Temperatures grow only in large, capped by the width a day's
+   column leaves for two double-digit sub-zero values. Small keeps the base sizes: its temperatures wrap onto two
+   rows when cold, which already uses the room. */
+.grid-ambient .ambient-forecast:is(.widget-size-medium, .widget-size-large) .forecast-day { gap: 3.6cqh; }
+.grid-ambient .ambient-forecast:is(.widget-size-medium, .widget-size-large) :is(.forecast-day > .weather-glyph, .forecast-unknown) { width: min(10cqw, 20cqh); height: min(10cqw, 20cqh); font-size: min(10cqw, 20cqh); }
+.grid-ambient .ambient-forecast.widget-size-medium .forecast-day-label { font-size: calc(max(var(--min-text), min(7cqw, 10.5cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-forecast.widget-size-medium .forecast-rain { font-size: calc(max(var(--min-data), min(5cqw, 8cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-forecast.widget-size-large .forecast-day-label { font-size: calc(max(var(--min-text), min(4cqw, 10.5cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-forecast.widget-size-large .forecast-temperatures { font-size: calc(max(var(--min-data), min(2.5cqw, 15cqh)) * var(--font-scale)); }
+.grid-ambient .ambient-forecast.widget-size-large .forecast-rain { font-size: calc(max(var(--min-data), min(3cqw, 8cqh)) * var(--font-scale)); }
 /* Unavailable (#362), as in Weather: a dim placeholder and still cloud at a day's size, then one status-tone
-   line at the label size; the age only when an update time is known, in the status tone too. */
+   line at the label size; the age only when an update time is known, in the status tone too, under it. */
+.grid-ambient .forecast-unavailable-age { font-size: calc(max(var(--min-text), min(4cqw, 5.5cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 4cqh; }
+.grid-ambient .ambient-forecast.widget-size-small .forecast-unavailable-age { margin-top: 2.5cqh; }
 .grid-ambient .forecast-unavailable { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5cqh 4cqw; }
 .grid-ambient .forecast-placeholder { display: flex; align-items: center; gap: 2cqw; opacity: 0.35; }
 .grid-ambient .forecast-placeholder > .forecast-unavailable-glyph { width: min(10cqw, 16cqh); height: min(10cqw, 16cqh); }

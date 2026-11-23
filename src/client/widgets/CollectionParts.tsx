@@ -6,6 +6,7 @@ import {
   compactWeatherTime,
   lastKnownLabel,
   LAST_KNOWN_AFTER_MS,
+  presentedStatus,
   shortAge,
   weatherTimeZone,
 } from '../format.ts';
@@ -68,11 +69,13 @@ export function WeatherFooter({ props, readingTime }: { props: WidgetContentProp
   const weather = props.state.weather;
   const zone = useMemo(() => weatherTimeZone(weather.location.timezone), [weather.location.timezone]);
   const old = readingTime && props.now.getTime() - Date.parse(readingTime) > LAST_KNOWN_AFTER_MS;
+  // A forecast whose refresh is still running is not a saved one (presentedStatus, shared by every weather widget).
+  const presented = presentedStatus(weather, props.now.getTime());
   const status = props.disconnected
     ? 'Offline'
-    : weather.status === 'stale'
+    : presented === 'stale'
       ? 'Saved forecast'
-      : weather.status === 'unavailable'
+      : presented === 'unavailable'
         ? 'Unavailable'
         : null;
   // "Not updated yet" would only repeat "Unavailable": the age shows when an update time is known.

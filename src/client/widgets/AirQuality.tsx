@@ -1,7 +1,7 @@
 import { useMemo, type CSSProperties } from 'react';
 import type { AirPollutant, AirQualityReading, AirQualityState, AppState } from '../../shared/contracts.ts';
 import { airAgeIsStatus, airAgeSegments, airHourly, airReadingView } from '../airHourly.ts';
-import { ageLabel, weatherTimeZone } from '../format.ts';
+import { ageLabel, presentedStatus, weatherTimeZone } from '../format.ts';
 import { Icon } from '../icons.tsx';
 import { SCALE_LABELS, aqiCategory, uvCategory } from '../air-categories.ts';
 import { TransitionText } from './TransitionText.tsx';
@@ -47,8 +47,10 @@ function AirQuality({ state, settings, size, now, disconnected }: WidgetContentP
   // One footer row (#221, #715): a fresh reading says only "Model est."; the age follows a status label only
   // (saved, offline, or values over 3 hours old), in the status tone. No provider name: that is in the settings hint.
   const old = Boolean(view && view.kind !== 'current');
-  const age = airAgeSegments({ age: ageLabel(air.updatedAt, now.getTime()), status: air.status, reading: Boolean(current), disconnected, old });
-  const caution = airAgeIsStatus({ status: air.status, disconnected, old });
+  // A reading whose refresh is still running is not a saved one (presentedStatus, the rule every weather widget shares).
+  const status = presentedStatus(air, now.getTime());
+  const age = airAgeSegments({ age: ageLabel(air.updatedAt, now.getTime()), status, reading: Boolean(current), disconnected, old });
+  const caution = airAgeIsStatus({ status, disconnected, old });
   const pollutant = current && view?.showPollutant ? pollutantLine(current) : null;
   const uv = view?.showUv ? view.uvIndex === null ? ['UV unavailable'] : [`UV ${Math.round(view.uvIndex)}`, uvCategory(view.uvIndex)] : null;
   return <div className="widget-body air-body">

@@ -6,7 +6,7 @@ import {
   DYNAMIC_ROWS_MAX, chooseDynamic, dynamicSignals, dynamicSummary, memoizeDynamicSignals, rotationSlot,
   type DynamicCard, type DynamicChoice, type DynamicGlyph, type DynamicInput, type DynamicPhrase, type DynamicPrevious, type DynamicSignals,
 } from '../dynamic.ts';
-import { ageLabel } from '../format.ts';
+import { ageLabel, weatherIsFresh } from '../format.ts';
 import { Icon } from '../icons.tsx';
 import { atNaturalWidth, fittingCount, layoutExtent, useMeasured } from './measure.ts';
 import { MoonGlyph } from './SunMoon.tsx';
@@ -169,7 +169,7 @@ function Dynamic({ state, settings, size, now, embedded, disconnected }: WidgetC
     </div>;
   }
   // Retained or unavailable forecasts never animate their glyph (#76).
-  const still = disconnected || state.weather.status !== 'fresh';
+  const still = !weatherIsFresh(state.weather, disconnected, now.getTime());
   return <div className={`widget-body dynamic-body dynamic-mode-${choice.mode}`} {...attributes}>
     <CardView key={lead.id} card={lead} choice={choice} signals={signals} size={size} still={still} swapped={swapped.current} settings={settings} />
   </div>;

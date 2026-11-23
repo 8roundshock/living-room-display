@@ -4,7 +4,7 @@ import { SCALE_LABELS, aqiCategory, uvCategory } from './air-categories.ts';
 import { airAgeIsStatus, airAgeSegments, airReadingView, upcomingAirHours } from './airHourly.ts';
 import { addDays, civilDateKey, formatDuration, localTimeZone, moonPhase, nextMoonEvent, sunDay, zoneFormatter, type MoonPhase } from './astronomy.ts';
 import { countdownRows } from './calendar.ts';
-import { ageLabel, civilDate, compactWeatherTime, lastKnownTime, NBSP, temperature, todayForecast, weatherTimeZone } from './format.ts';
+import { ageLabel, civilDate, compactWeatherTime, lastKnownTime, NBSP, presentedStatus, temperature, todayForecast, weatherIsFresh, weatherTimeZone } from './format.ts';
 import { conditionLabel } from './weather-conditions.ts';
 import { rainOutlook, rainOutlookCopy, rainThreshold } from './weather-outlook.ts';
 import { gustForecastSpells, hazardFamily as familyOf, weatherHazardSpells, type WeatherHazardFamily as Family } from './weather-hazards.ts';
@@ -198,9 +198,12 @@ function alertCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   const alive = alerts.alerts.filter(alert => !alertEnded(alert, ctx.now));
   const checked = alerts.checkedAt ? ctx.time(Date.parse(alerts.checkedAt)) : null;
   if (alerts.status === 'stale' && checked) statuses.push({ source: 'alerts', text: `Saved alerts${NBSP}·${NBSP}checked ${checked}`, caution: true, smallRank: null, degraded: true });
-  // A confirmed empty list is said only where there is room, and never while the list is saved. It is fresh,
-  // so it carries no check time (#715).
-  if (alerts.status === 'fresh' && !alive.length && checked) statuses.push({ source: 'alerts', text: 'No alerts', caution: false, smallRank: null, largeOnly: true, degraded: false });
+  // A confirmed empty list is said only where there is room, and only while it is confirmed: never while the
+  // list is saved, and never while the display is offline, where `fresh` is only the last status it received
+  // and stays so for as long as the outage lasts. Said fresh, it carries no check time (#715); a claim about
+  // alerts that is not fresh carries its check time in the status tone ("Saved alerts · checked 9 AM", an
+  // alert card's "Offline · checked 9 AM") or is not made.
+  if (alerts.status === 'fresh' && !ctx.input.disconnected && !alive.length && checked) statuses.push({ source: 'alerts', text: 'No alerts', caution: false, smallRank: null, largeOnly: true, degraded: false });
   const age = alertsAge(alerts, ctx);
   return alive.map(alert => {
     const start = alert.startsAt ? Date.parse(alert.startsAt) : Date.parse(alert.issuedAt);
@@ -264,11 +267,13 @@ function weatherCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
     statuses.push({ source: 'weather', text: 'Weather unavailable', caution: true, smallRank: 2, degraded: true });
     return [];
   }
-  if (weather.status === 'stale') statuses.push({ source: 'weather', text: 'Saved forecast', caution: true, smallRank: 3, degraded: true });
   const { now, tz } = ctx, thresholds = ctx.metric ? DYNAMIC_THRESHOLDS.metric : DYNAMIC_THRESHOLDS.imperial;
+  // The status every weather widget presents: a forecast whose refresh is still running is not a saved one.
+  const presented = presentedStatus(weather, now);
+  if (presented === 'stale') statuses.push({ source: 'weather', text: 'Saved forecast', caution: true, smallRank: 3, degraded: true });
   // A fresh forecast shows no update age (#715); a saved or offline one keeps its status words and age.
-  const age: DynamicPhrase | null = disconnected || weather.status !== 'fresh' ? {
-    text: `${disconnected ? `Offline${NBSP}·${NBSP}` : weather.status === 'stale' ? `Saved forecast${NBSP}·${NBSP}` : ''}${ageText(weather.updatedAt, now)}`,
+  const age: DynamicPhrase | null = disconnected || presented !== 'fresh' ? {
+    text: `${disconnected ? `Offline${NBSP}·${NBSP}` : presented === 'stale' ? `Saved forecast${NBSP}·${NBSP}` : ''}${ageText(weather.updatedAt, now)}`,
     caution: true,
   } : null;
   const estimate = { provenance: 'Forecast estimate', age } as const;
@@ -459,9 +464,11 @@ function airCards(ctx: Context, statuses: DynamicStatus[]): DynamicCard[] {
   // A fresh reading says only "Model est." (it is a model estimate, not a measurement); its age shows with a
   // status label only (#715): saved, offline, or this hour's saved estimate standing in for old values.
   const old = view.kind === 'estimate';
-  const segments = airAgeSegments({ age: ageText(air.updatedAt, now), status: air.status, reading: true, disconnected, old });
+  // As for the forecast: a reading whose refresh is still running is not a saved one.
+  const presented = presentedStatus(air, now);
+  const segments = airAgeSegments({ age: ageText(air.updatedAt, now), status: presented, reading: true, disconnected, old });
   if (old) segments.splice(disconnected ? 1 : 0, 1, 'Saved estimate');
-  const status = airAgeIsStatus({ status: air.status, disconnected, old });
+  const status = airAgeIsStatus({ status: presented, disconnected, old });
   const estimate = status ? { provenance: null, age: { text: segments.join(`${NBSP}·${NBSP}`), caution: true } } : { provenance: segments[0]!, age: null };
   const cards: DynamicCard[] = [];
   if (view.aqi !== null) {
@@ -647,7 +654,7 @@ export function dynamicSignals(input: DynamicInput): DynamicSignals {
   const local = input.localTimeZone ?? localTimeZone();
   const time = (ms: number, zone = tz) => compactWeatherTime(new Date(ms).toISOString(), zone, input.clockFormat);
   const ctx: Context = {
-    input, now, tz, local, metric: input.weather.units.temperature !== '°F', fresh: input.weather.status === 'fresh' && !input.disconnected,
+    input, now, tz, local, metric: input.weather.units.temperature !== '°F', fresh: weatherIsFresh(input.weather, input.disconnected, now),
     place: input.weather.location.name, time,
     when: (ms, zone = tz) => civilDate(ms, zone) === civilDate(now, zone) ? time(ms, zone) : `${zoneFormatter(zone, { weekday: 'short' }).format(new Date(ms))}${NBSP}${time(ms, zone)}`,
   };

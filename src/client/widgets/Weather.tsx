@@ -1,6 +1,6 @@
 import { Fragment, useMemo, type CSSProperties, type ReactNode } from 'react';
 import type { AppState, RainInterval } from '../../shared/contracts.ts';
-import { ageLabel, chartAxisLabels, compactWeatherTime, lastKnownTime, NBSP, shortAge, temperature, todayForecast, weatherStatus, weatherTimeZone } from '../format.ts';
+import { ageLabel, chartAxisLabels, compactWeatherTime, lastKnownTime, NBSP, shortAge, temperature, todayForecast, weatherIsFresh, weatherStatus, weatherTimeZone } from '../format.ts';
 import { rainChartLabel, rainOutlook, rainOutlookCopy } from '../weather-outlook.ts';
 import { conditionLabel, WeatherAge } from './common.tsx';
 import { TransitionText } from './TransitionText.tsx';
@@ -74,8 +74,8 @@ function Weather({ state: { weather }, settings, now, size, disconnected }: Widg
   }
   const mode = outlook.emphasis;
   const condition = conditionLabel(current.weatherCode);
-  // Retained forecasts never animate their glyph (#76).
-  const still = disconnected || weather.status !== 'fresh';
+  // Retained forecasts never animate their glyph (#76); one whose refresh is still running is not retained (#715).
+  const still = !weatherIsFresh(weather, disconnected, now.getTime());
   const showConfidence = mode !== 'calm' && copy.confidence !== '' && (size !== 'small' || copy.confidence !== 'Forecast estimate');
   const highLow = today ? <><TransitionText value={temperature(today.temperatureMax)} /> / <TransitionText value={temperature(today.temperatureMin)} /></> : 'Unavailable';
   const hidden = <span className="sr-only">{condition}</span>;

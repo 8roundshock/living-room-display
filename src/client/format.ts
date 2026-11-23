@@ -69,6 +69,39 @@ export function shortAge(age: string): string {
   return age.startsWith('Updated ') ? age.slice('Updated '.length) : age;
 }
 
+/** How old data may be and still count as fresh while its refresh runs; see `presentedStatus`. */
+export const REFRESH_GRACE_MS = 45 * 60_000;
+
+/**
+ * The status a widget presents for a forecast or an air reading (#715): the server's, except that a
+ * refresh in flight is not saved data.
+ *
+ * The server calls a forecast `stale` the moment its refresh interval ends (15 minutes; air quality
+ * 30) and answers after waiting about a second for the provider (#351), with `refreshing: true`; the
+ * display asks again two seconds later. Presented as received, every refresh that takes over a second
+ * would flash "Saved forecast" for two seconds. So data still reads as `fresh` while all of this holds:
+ * it is `stale`, a refresh is `refreshing`, no refresh has failed since the last good one (a failed
+ * one sets `error`, which stays through the retries, so a forecast the provider keeps refusing never
+ * blinks fresh), and it is at most `REFRESH_GRACE_MS` old (longer than either interval plus a poll,
+ * far shorter than the three-hour last-known rule; a PC waking from sleep with older data says so).
+ * Every other state is the server's own. An offline display is a separate question, answered by the
+ * caller: this function never looks at the connection.
+ *
+ * Weather, Forecast, Dynamic's weather and air cards, Air quality and the collection weather footer
+ * all read the status through this function, so they change together.
+ */
+export function presentedStatus<Status extends string>(
+  data: { status: Status; updatedAt: string | null; error?: string | null; refreshing?: boolean },
+  now = Date.now(),
+): Status | 'fresh' {
+  if (data.status !== 'stale' || !data.refreshing || data.error) return data.status;
+  const age = now - Date.parse(data.updatedAt ?? '');
+  return Number.isFinite(age) && age >= -FUTURE_TIMESTAMP_TOLERANCE_MS && age <= REFRESH_GRACE_MS ? 'fresh' : data.status;
+}
+
+/** What `presentedStatus` and `weatherStatus` read from a forecast. */
+export type WeatherFreshness = Pick<WeatherState, 'status' | 'updatedAt'> & Partial<Pick<WeatherState, 'error' | 'refreshing'>>;
+
 /**
  * What a weather widget says about data that is not fresh, or null while it is fresh.
  *
@@ -77,18 +110,25 @@ export function shortAge(age: string): string {
  * tells the viewer something: “Offline” while the display cannot reach the computer, “Saved forecast”
  * for a forecast the computer could not refresh, and no label for an unavailable forecast, whose
  * renderer says so itself. `age` is `ageLabel`'s text; with no label and no known update time (an
- * unavailable forecast that was never loaded) there is nothing to say and the result is null. The
- * provider credit lives in Settings and the docs.
+ * unavailable forecast that was never loaded) there is nothing to say and the result is null. A
+ * forecast whose refresh is still running is fresh (`presentedStatus`). The provider credit lives in
+ * Settings and the docs.
  */
 export function weatherStatus(
-  weather: Pick<WeatherState, 'status' | 'updatedAt'>,
+  weather: WeatherFreshness,
   disconnected: boolean,
   now = Date.now(),
 ): { label: 'Offline' | 'Saved forecast' | null; age: string } | null {
-  if (!disconnected && weather.status === 'fresh') return null;
-  const label = disconnected ? 'Offline' : weather.status === 'stale' ? 'Saved forecast' : null;
+  const status = presentedStatus(weather, now);
+  if (!disconnected && status === 'fresh') return null;
+  const label = disconnected ? 'Offline' : status === 'stale' ? 'Saved forecast' : null;
   if (!label && !weather.updatedAt) return null;
   return { label, age: ageLabel(weather.updatedAt, now) };
+}
+
+/** Whether the forecast is shown as current: fresh (or refreshing, see `presentedStatus`) on a connected display. */
+export function weatherIsFresh(weather: WeatherFreshness, disconnected: boolean, now = Date.now()): boolean {
+  return !disconnected && presentedStatus(weather, now) === 'fresh';
 }
 
 /**
@@ -186,14 +226,14 @@ export function lastKnownLabel(at: number, now: Date | number, timeZone: string,
  * the server refreshes it on its own schedule (Air quality differs, see `airReadingView`).
  */
 export function lastKnownTime(
-  weather: Pick<WeatherState, 'current' | 'status' | 'updatedAt'>,
+  weather: Pick<WeatherState, 'current'> & WeatherFreshness,
   disconnected: boolean,
   timeZone: string,
   clockFormat: '12h' | '24h',
   now: Date | number,
 ): string | null {
-  if (!weather.current || (!disconnected && weather.status === 'fresh')) return null;
   const time = typeof now === 'number' ? now : now.getTime();
+  if (!weather.current || weatherIsFresh(weather, disconnected, time)) return null;
   const reading = Date.parse(weather.updatedAt ?? '');
   if (!Number.isFinite(reading) || time - reading <= LAST_KNOWN_AFTER_MS) return null;
   return lastKnownLabel(reading, time, timeZone, clockFormat);

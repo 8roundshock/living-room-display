@@ -378,6 +378,64 @@ test('fresh cards show no provider name and no update age; only data that is not
   }
 });
 
+test('"No alerts" is said only while it is confirmed: never from an offline display or a saved list, where a claim about alerts carries its check time in the status tone (#715)', () => {
+  const plain = (text: string) => text.replace(/\u00a0/g, ' ');
+  const about = (signals: DynamicSignals) => signals.statuses.filter(status => status.source === 'alerts').map(status => ({ text: plain(status.text), caution: status.caution }));
+  const warning = alert('w1', 'warning', 'Winter storm warning');
+  // Connected and fresh: the plain claim, with no check time, for the large family only.
+  assert.deepEqual(about(signal()), [{ text: 'No alerts', caution: false }]);
+  // Offline: the list was fresh and empty at the last good poll, and `fresh` stays the status for as long as the
+  // outage lasts. No claim is made, whether the last check was four minutes or 26 hours ago.
+  for (const checkedAt of [iso(NOW - 4 * MINUTE), iso(NOW - 26 * HOUR)]) {
+    const offline = signal({ disconnected: true, alerts: { ...alerts([]), checkedAt } });
+    assert.deepEqual(about(offline), [], `offline, checked ${checkedAt}: nothing is claimed about alerts`);
+    assert.equal(offline.statuses.some(status => /No alerts/.test(status.text)), false);
+    assert.deepEqual(offline.statuses.filter(status => status.source === 'connection').map(status => [status.text, status.caution]), [['Offline', true]], 'the display still says it is offline');
+    // What the large family's footer would hold: no phrase about alerts at all.
+    assert.equal(offline.statuses.filter(status => !status.caution).some(status => /alert/i.test(status.text)), false);
+  }
+  // Offline with an alert still in effect: the card stays, with its check time in the status tone.
+  const offlineAlert = signal({ disconnected: true, alerts: alerts([warning]) });
+  assert.deepEqual([plain(find(offlineAlert, 'alert:w1')!.age!.text), find(offlineAlert, 'alert:w1')!.age!.caution], ['Offline · checked 9:26 AM', true]);
+  assert.deepEqual(about(offlineAlert), []);
+  // A saved list, empty or not: "Saved alerts · checked …" in the status tone, never "No alerts".
+  for (const list of [[], [warning]]) assert.deepEqual(about(signal({ alerts: alerts(list, 'stale') })), [{ text: 'Saved alerts · checked 9:26 AM', caution: true }]);
+  // Every phrase about alerts that is not the fresh, connected one carries a check time and the status tone.
+  for (const signals of [signal({ disconnected: true, alerts: alerts([]) }), signal({ disconnected: true, alerts: alerts([warning]) }), signal({ alerts: alerts([], 'stale') }), signal({ alerts: alerts([warning], 'stale') }), signal({ disconnected: true, alerts: alerts([warning], 'stale') })]) {
+    const phrases = [...about(signals), ...all(signals).filter(card => card.source === 'alerts').map(card => ({ text: plain(card.age?.text ?? ''), caution: card.age?.caution ?? false }))];
+    for (const phrase of phrases) { assert.match(phrase.text, /checked \d/, phrase.text); assert.equal(phrase.caution, true, phrase.text); }
+  }
+});
+
+test('a forecast or air reading whose refresh is still running is not presented as saved (#715)', () => {
+  const plain = (text: string) => text.replace(/\u00a0/g, ' ');
+  // What /api/state answers when the interval has just ended and the provider takes over a second (#351).
+  const refreshing = { ...weather({ status: 'stale', updatedAt: NOW - 16 * MINUTE }), refreshing: true };
+  const during = signal({ weather: refreshing });
+  assert.equal(during.statuses.some(status => status.source === 'weather'), false, 'no "Saved forecast" status');
+  for (const card of all(during).filter(item => item.source === 'weather')) assert.equal(card.age, null, `${card.id}: no age while the refresh runs`);
+  assert.ok(find(during, 'weather:dry'), 'the dry-spell card of a fresh forecast stays');
+  assert.match(plain(find(signal({ weather: { ...weather({ status: 'stale', updatedAt: NOW - 16 * MINUTE, current: { windSpeed: 55 } }), refreshing: true } }), 'weather:wind')!.detail ?? ''), /· Now$/, 'current conditions still read "Now"');
+  // The same forecast, not refreshing: saved, as before.
+  const saved = signal({ weather: weather({ status: 'stale', updatedAt: NOW - 16 * MINUTE, current: { windSpeed: 55 } }) });
+  assert.ok(saved.statuses.some(status => status.source === 'weather' && status.text === 'Saved forecast' && status.caution));
+  assert.equal(plain(find(saved, 'weather:wind')!.age!.text), 'Saved forecast · Updated 16 min ago');
+  assert.equal(find(saved, 'weather:dry'), undefined);
+  // A retry after a failed refresh keeps the saved presentation (no blink to fresh).
+  const retrying = signal({ weather: { ...weather({ status: 'stale', updatedAt: NOW - 2 * HOUR, current: { windSpeed: 55 } }), refreshing: true, error: 'Weather update failed. Showing the last successful forecast.' } });
+  assert.ok(retrying.statuses.some(status => status.text === 'Saved forecast'));
+  assert.equal(plain(find(retrying, 'weather:wind')!.age!.text), 'Saved forecast · Updated 2 hr ago');
+  // Offline stays as it is, refreshing or not.
+  const offline = signal({ weather: { ...weather({ status: 'stale', updatedAt: NOW - 16 * MINUTE, current: { windSpeed: 55 } }), refreshing: true }, disconnected: true });
+  assert.equal(plain(find(offline, 'weather:wind')!.age!.text), 'Offline · Updated 16 min ago');
+  // Air quality follows the same rule (its interval is 30 minutes).
+  const air31 = { ...air({ aqi: 160, status: 'stale', updatedAt: NOW - 31 * MINUTE }), refreshing: true };
+  const airDuring = find(signal({ airQuality: air31 }), 'air:aqi')!;
+  assert.deepEqual([airDuring.provenance, airDuring.age], ['Model est.', null]);
+  assert.equal(plain(find(signal({ airQuality: { ...air31, refreshing: false } }), 'air:aqi')!.age!.text), 'Saved reading · 31 min ago');
+  assert.equal(plain(find(signal({ airQuality: { ...air31, error: 'Air quality update failed. Showing the last successful reading.' } }), 'air:aqi')!.age!.text), 'Saved reading · 31 min ago');
+});
+
 test('chooseDynamic: tie-break, modulo, the latch, a new focus card breaking it, empty and unavailable, rows and the more count', () => {
   // Tie-break: score, then the earlier start, then the id.
   const ties = signal({ reminders: [reminder(NOW + 40 * MINUTE, 'B'), reminder(NOW + 20 * MINUTE, 'A'), reminder(NOW + 20 * MINUTE, 'C')] });

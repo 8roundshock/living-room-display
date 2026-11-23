@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { ageLabel, shortAge, weatherTimeZone } from '../format.ts';
-import { alertStartLabel, unexpiredAlerts } from '../collection.ts';
+import { weatherTimeZone } from '../format.ts';
+import { alertStartLabel, alertsWidgetStatus, unexpiredAlerts } from '../collection.ts';
 import { CollectionEmpty, CollectionFace } from './CollectionParts.tsx';
 import { collectionSample } from './collection-samples.ts';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
@@ -23,7 +23,7 @@ function WeatherAlerts({ state, settings, now, size, disconnected }: WidgetConte
         : quiet
           ? 'No current alerts'
           : 'Current alerts unknown';
-  const status = disconnected ? 'Offline' : alerts?.status === 'stale' ? 'Saved alerts' : null;
+  const status = alertsWidgetStatus(alerts, disconnected, now.getTime());
   return (
     <CollectionFace name="Weather alerts" size={size} className="weather-alerts-face">
       {!rows.length ? (
@@ -46,22 +46,14 @@ function WeatherAlerts({ state, settings, now, size, disconnected }: WidgetConte
       )}
       {rows.length > count && <p className="collection-detail">+{rows.length - count} more</p>}
       {/* Fresh alerts need no footer (#715): no issuer line and no update age on the display; the providers are
-          named in this widget's settings. Saved alerts and an offline display keep their status-tone line, with
-          the age only there. */}
+          named in this widget's settings. Saved and unavailable alerts and an offline display keep their
+          status-tone line, with the age only there. */}
       {status && (
         <div className="collection-footer">
           <span className="status-caution collection-status">
-            {status}
-            {alerts?.checkedAt && (
-              <>
-                {' · '}
-                <span className="collection-age">
-                  {status === 'Saved alerts'
-                    ? shortAge(ageLabel(alerts.checkedAt, now.getTime()))
-                    : ageLabel(alerts.checkedAt, now.getTime())}
-                </span>
-              </>
-            )}
+            {status.label}
+            {status.label && status.age && ' · '}
+            {status.age && <span className="collection-age">{status.age}</span>}
           </span>
         </div>
       )}

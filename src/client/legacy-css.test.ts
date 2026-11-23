@@ -36,6 +36,8 @@ test('no ambient style remains for a provider credit or a forecast attribution l
   for (const { name, text } of stylesheets()) {
     const rules = text.replace(/\/\*[\s\S]*?\*\//g, '');
     assert.doesNotMatch(rules, /\.forecast-attribution|\.forecast-source|\.air-credit|\.dynamic-credit/, `${name}: a retired credit or attribution class`);
+    // The Forecast strip has one size in every state: no class resizes it when a status comes or goes.
+    assert.doesNotMatch(rules, /forecast-with-status/, `${name}: the retired Forecast size switch`);
     for (const [, selector] of rules.matchAll(/([^{}]+)\{[^{}]*\}/g)) {
       if (!/\.weather-credit/.test(selector!)) continue;
       assert.doesNotMatch(selector!, /grid-ambient|\.ambient-/, `${name}: ${selector!.trim()} styles a credit on the display`);
