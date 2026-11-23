@@ -55,6 +55,10 @@ lines. Besides its families and defaults, an entry declares:
   it, and the family a saved placement falls back to when the new span no longer fits
   (`fitReshapedFamilies`, which validation runs before the grid check). Hourly forecast
   declares `large: 'medium'`; see [its migration](#hourly-forecast-714).
+- `keywords` (optional, #714): extra words the picker's search matches besides the name,
+  description and category; they are never displayed. Hourly forecast lists what it shows
+  (hourly, hours, temperature, rain, snow, sunrise, sunset), because its name and
+  description do not say "temperature".
 
 `WIDGET_IDS` keeps every id, because schemas and geometry need them all.
 `ACTIVE_WIDGET_IDS` is the load-time list of shipped ids for UI lists and test
@@ -371,10 +375,17 @@ families. Its tone is sky, like Forecast, so the two strips read as a pair.
 - **Sunrise and sunset.** An event after now and up to the last hour is a column of its own,
   in time order between the hours it falls between: its exact time as the label ("16:47",
   "4:47 PM"), the `sunrise` or `sunset` icon in the sun's sub-tone (`data-glyph="sun"`),
-  and the word where a temperature would be. It has no temperature and no chance. An event
-  exactly on an hour follows that hour's column. A sun column takes one of the family's
-  columns, so the last hour gives way and the strip never reflows when an event enters or
-  leaves; that is why the heading reads "Hourly" and promises no hour count. Owner decision,
+  and the word where a temperature would be. It has no temperature and no chance. The
+  events are the instants at which `sunIsUp` changes (`sunEvents`), the same test the hours'
+  day and night glyphs ask, so the two cannot disagree: the hours before a sunset draw day
+  glyphs and the hours after it night glyphs, also on the nights at either end of the polar
+  day, where the per-day sunrise and sunset of `sunDay` and the sun's altitude part ways.
+  Elsewhere the two agree to well under a second, so the time is the one Sun & moon shows.
+  An event exactly on an hour precedes that hour's column, whose glyph already shows the
+  new sky. Now keeps the current reading's own day flag, as Weather shows it. A sun column
+  takes one of the family's columns, so the last hour gives way and the strip never
+  reflows when an event enters or leaves; that is why the heading reads "Hourly" and
+  promises no hour count. Owner decision,
   2026-11-22: he picked this "entry between hours" layout from a mockup. The other option,
   always 12 hours plus up to two sun columns, would change every column's width whenever
   an event enters or leaves, or leave two columns empty most of the day. No sun column is
@@ -389,9 +400,10 @@ families. Its tone is sky, like Forecast, so the two strips read as a pair.
   row's height depends only on the box and Text size, never on the values: the line's
   travel is whatever height the other rows leave, between 10% and 18% of the box.
 - **Heading.** "Hourly" on the left. On the right at most two calm facts that the board
-  does not already show: the next sunrise or sunset, only when the strip does not show it
-  ("Sunrise 07:21" on a winter evening), and peak gusts over the shown hours from 40 km/h
-  or 25 mph ("Gusts 55 km/h"). No place, provider or update time for fresh data (#715).
+  does not already show: the next sunrise or sunset within a day, only when the strip does
+  not show it ("Sunrise 07:21" on a winter evening), and peak gusts over the shown hours
+  from 40 km/h or 25 mph ("Gusts 55 km/h"). No place, provider or update time for fresh
+  data (#715).
 - **States.** While the forecast is stale or the display offline, the heading's right side
   shows the status in the shared status tone instead of the facts: "Saved forecast · 5 hr
   ago", "Offline · Updated 12 min ago" (as Weather words them). A saved current reading
@@ -405,15 +417,19 @@ families. Its tone is sky, like Forecast, so the two strips read as a pair.
   `medium` at the same origin, which lies inside the cells it had; one that fits stays
   large and reads as 8 × 2. A hidden placement only has to stay inside the grid. The rule
   (`fitReshapedFamilies`) runs before the grid check for current settings, saved styles
-  and imports (`src/server/hourly-forecast-migration.test.ts`). The frozen `d66832b`
-  reader does not know this id, so the change adds no rollback exception
-  ([install](install.md#fifteen-widget-collection-rollback-565)).
+  and imports (`src/server/hourly-forecast-migration.test.ts`). Reading rewrites nothing.
+  The frozen `d66832b` reader does not know this id, so nothing changes for it. The
+  release installed now (`712ce80`) draws Large as 4 × 4 and rejects a Large placement
+  saved by this build where that does not fit, so a rollback needs the step in the #714
+  row of the [compatibility table](install.md#additive-data-and-rollback-compatibility-84).
 - **Rendering.** The markup reuses Forecast's heading, strip, column, label, glyph and
   droplet classes, with Forecast's sizes for the same family written out in
   [`hourly-forecast.css`](../src/client/widgets/hourly-forecast.css). Both families render
   at fit 1 at Text 100% in every density at 720p, 1080p and 4K: fresh, stale, offline and
   with sun columns. The view is rebuilt once a minute (#99) and values change through
-  `TransitionText`; the widget has no timer or animation of its own.
+  `TransitionText`; the widget has no timer or animation loop of its own. At Lively the
+  columns slide in one after another like Forecast's, and the trend line fades in with the
+  last of them, never ahead of its values (opacity only, to its resting 0.8).
 - **Follow-ups:** hourly feels-like (#718), a small 2 × 2 family (#719) and keeping the
   two strips' type in step if Forecast's families are refitted (#720).
 

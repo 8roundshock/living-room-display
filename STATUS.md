@@ -25,9 +25,14 @@ What changed:
   not fresh it shows "Saved forecast · 5 hr ago" or "Offline · Updated 12 min ago" there instead, in the
   status tone, and an hours-old reading is not called Now.
 - Saved data: a large placement from before this change that no longer fits as 8 × 2 becomes medium at the
-  same origin, in settings, saved styles and imports. No new rollback exception for the frozen d66832b
-  reader; a downgrade to a build between #565 and #714 has a documented step
-  ([install](docs/install.md#fifteen-widget-collection-rollback-565)).
+  same origin, in settings, saved styles and imports. Opening old data rewrites nothing.
+- Rollback: the release installed now, `712ce80`, draws this widget's Large as 4 × 4. Once this build has
+  saved Hourly forecast in the Large size where 4 × 4 does not fit (for example at column 4, row 6 on
+  Balanced, under a large Forecast, the layout this ticket is for), `712ce80` rejects `state.json` and its
+  backup and does not start. Before rolling back, set the widget to Medium or remove it, in the current
+  settings and in every saved style, save, and make and save one more change; or restore the complete
+  pre-update data copy ([compatibility table](docs/install.md#additive-data-and-rollback-compatibility-84),
+  the #714 row). The frozen d66832b reader the tests use does not know the widget, so nothing changes for it.
 - In Native colours the widget's tone is now sky, like Forecast (it was sun).
 
 Details: [Hourly forecast](docs/widgets.md#hourly-forecast-714) and [its UI](docs/ui.md#hourly-forecast).

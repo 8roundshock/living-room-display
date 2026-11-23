@@ -989,7 +989,9 @@ Browser suite: `tests/ui/catalog-sky-browser.mjs`.
 
 Hourly forecast (#714; the stored id is `hourlyTemperature`, formerly Hourly temperature)
 starts disabled and is added from the picker (Weather & sky, "The hours ahead", medium
-4 × 2 and large 8 × 2: Forecast's families, so the two sit one above the other). Its picker
+4 × 2 and large 8 × 2: Forecast's families, so the two sit one above the other). The
+picker's search also finds it by what it shows: "temperature", "hourly", "hours", "rain",
+"snow", "sunrise" and "sunset" (catalog `keywords`, never displayed). Its picker
 sample is synthetic: a mild spell clouding over, with showers later, from this computer's
 real hour, so the sample's sun column and its day and night glyphs follow the real clock at
 the sample place. Its panel under the Size control is one hint, with nothing to configure:
@@ -1014,11 +1016,13 @@ On the display it is Forecast's strip with one column per hour:
 - **Sun columns:** a sunrise or sunset inside the strip stands between the hours it falls
   between: its exact time, the sunrise or sunset symbol, and "Sunrise" or "Sunset" at the
   hour label's size where a temperature would be. It takes one of the 6 or 12 columns, so
-  the columns never change width.
+  the columns never change width. The hours before a sunset draw day glyphs and the hours
+  after it night glyphs: both come from the same sun test.
 - **Trend line:** a thin line in the accent tone at 80% opacity behind the values, from
   the first column's centre to the last one's, with each value just above its point. It
   breaks at an unknown temperature and passes through a sun column. The row's height is
-  the same whatever the values.
+  the same whatever the values. At Lively the line fades in with the last columns of the
+  entrance, never before its values.
 - **Colour:** temperatures use the text colour; the heading, hour labels, the sun word and
   the line use the accent (Mist in Native, the widget's sky tone); a chance is Sea glass in
   Native, as in Forecast; glyphs keep their own sub-tones and the sun column's symbol is
