@@ -172,6 +172,11 @@ export function monthName(date: CivilDate, style: 'long' | 'short' = 'long'): st
   return dateFormat({ month: style }).format(new Date(utcNoon(date)));
 }
 
+/** “Dec 25”: the short month and the day, with no weekday or year (the Calendar's upcoming dates, #716). */
+export function monthDay(date: CivilDate): string {
+  return dateFormat({ month: 'short', day: 'numeric' }).format(new Date(utcNoon(date)));
+}
+
 /** An upcoming countdown with the strings the display shows for it. */
 export interface CountdownRow extends UpcomingCountdown { label: ReturnType<typeof countdownLabel>; dateText: string }
 
