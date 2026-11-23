@@ -202,6 +202,13 @@ machine. Air-quality reloads and the status page's navigation/shell wait allow u
 to 90 s (#306); other widget loads still use their existing timeouts. Unifying
 those readiness waits remains part of #431.
 
+A computed keyword's spelling can change between Edge versions (#729). Edge 158 reports a
+computed `justify-content: flex-start` as `flow-start` and `safe flex-end` as `safe flow-end`;
+the layout is the same. `reminders-span.mjs`, the only check that reads a computed
+`justify-content`, therefore reads both spellings as `flex-`, next to its measured-position
+assertion. A check that compares a computed keyword compares what it means (a measured
+position, or a normalised keyword), not one browser version's spelling.
+
 The stale/offline status page uses its own browser context, fake clock and routed
 state (#431/#415). It must neither advance the main family's clock nor compete
 with that page through the real single-display BroadcastChannel. The suite checks
