@@ -290,14 +290,16 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
       assert.equal(await colorOf('.calendar-today', 'borderTopColor'), expected(mode, 'time'), `${mode} today ring`);
       // Upcoming dates (#716): the medium next date and the large list paint the date in the tone and the name as primary
       // text; a marked day's dot is a real element in the tone, so the paint audit above covers it too.
-      assert.equal(await colorOf('.calendar-next .calendar-upcoming-when'), expected(mode, 'time'), `${mode} next date`);
-      assert.equal(await colorOf('.calendar-next .calendar-upcoming-name'), text, `${mode} next date name`);
+      // Only a line that is shown: one that does not fit stays in the document, takes no layout and has the same computed colours.
+      assert.equal(await page.locator('.calendar-next:not(.calendar-line-hidden)').count(), 1, 'the medium next date is shown');
+      assert.equal(await colorOf('.calendar-next:not(.calendar-line-hidden) .calendar-upcoming-when'), expected(mode, 'time'), `${mode} next date`);
+      assert.equal(await colorOf('.calendar-next:not(.calendar-line-hidden) .calendar-upcoming-name'), text, `${mode} next date name`);
       assert.ok(await page.locator('.calendar-mark').count() > 0, 'the fixture month has marked days');
       for (const dot of await page.locator('.calendar-mark').evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor))) assert.equal(dot, expected(mode, 'time'), `${mode} marked day dot`);
       current = state({ mode, only: 'calendar', size: 'large' }); await open();
-      assert.equal(await page.locator('.calendar-upcoming-row').count(), 3, 'large lists three upcoming dates');
-      for (const when of await page.locator('.calendar-upcoming .calendar-upcoming-when').evaluateAll((els) => els.map((el) => getComputedStyle(el).color))) assert.equal(when, expected(mode, 'time'), `${mode} upcoming date`);
-      for (const name of await page.locator('.calendar-upcoming .calendar-upcoming-name').evaluateAll((els) => els.map((el) => getComputedStyle(el).color))) assert.equal(name, text, `${mode} upcoming name`);
+      assert.equal(await page.locator('.calendar-upcoming-row:not(.calendar-line-hidden)').count(), 3, 'large lists three upcoming dates');
+      for (const when of await page.locator('.calendar-upcoming-row:not(.calendar-line-hidden) .calendar-upcoming-when').evaluateAll((els) => els.map((el) => getComputedStyle(el).color))) assert.equal(when, expected(mode, 'time'), `${mode} upcoming date`);
+      for (const name of await page.locator('.calendar-upcoming-row:not(.calendar-line-hidden) .calendar-upcoming-name').evaluateAll((els) => els.map((el) => getComputedStyle(el).color))) assert.equal(name, text, `${mode} upcoming name`);
       for (const dot of await page.locator('.calendar-mark').evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor))) assert.equal(dot, expected(mode, 'time'), `${mode} large marked day dot`);
       // Countdown and Note (#78, personal); Note is text only, its section still resolves Rose (checked above).
       current = state({ mode, only: 'countdown', size: 'small' }); await open();

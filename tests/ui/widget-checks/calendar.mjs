@@ -7,8 +7,8 @@ import { intlPerTick } from './countdown.mjs';
 // The suites run at 2026-10-18 09:00 in Toronto, a Sunday. A Monday week start puts today in the
 // last column; October 2026 needs five rows either way.
 export const id = 'calendar';
-// A next date that does not fit takes no layout (#716), so only a shown line counts for clipping.
-export const selectors = ['.calendar-grid', '.calendar-day', '.calendar-date-number', '.calendar-mark', '.calendar-upcoming-row', '.calendar-next:not(.calendar-next-hidden)'];
+// An upcoming line that does not fit takes no layout (#716), so only shown lines count for clipping.
+export const selectors = ['.calendar-grid', '.calendar-day', '.calendar-date-number', '.calendar-mark', '.calendar-line:not(.calendar-line-hidden)'];
 const uuid = index => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
 // Synthetic people only: one birthday inside the suites' October, one across the turn of the year.
 const BIRTHDAYS = [{ id: uuid(7161), name: 'Mina', date: '10-24', treatment: 'classic' }, { id: uuid(7162), name: 'Sam', date: '01-03', treatment: 'classic' }];
@@ -41,12 +41,11 @@ function upcomingFacts(widget) {
     const accent = resolve('var(--ambient-accent)'), text = resolve('var(--ambient-text)');
     probe.remove();
     const line = row => {
-      const when = row.querySelector('.calendar-upcoming-when'), name = row.querySelector('.calendar-upcoming-name'), range = document.createRange();
-      range.selectNodeContents(name);
-      // Every line box of the name, also one the one-line clip would hide: a fixture name must not need the clip.
-      const nameBox = name.getBoundingClientRect(), nameLines = new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size;
+      const when = row.querySelector('.calendar-upcoming-when'), name = row.querySelector('.calendar-upcoming-name'), nameBox = name.getBoundingClientRect();
       return {
-        when: when.textContent, name: name.textContent, inside: inside(row) && inside(name), lines: nameLines,
+        when: when.textContent, name: name.textContent, inside: inside(row) && inside(name),
+        // The browser's last-resort ellipsis is in use when the name is wider than its line; the model's cut should make that rare.
+        clipped: name.scrollWidth > name.clientWidth + 0.5, overflow: getComputedStyle(name).textOverflow,
         // One line: the row is as tall as one line of its own text.
         oneLine: row.getBoundingClientRect().height <= parseFloat(getComputedStyle(name).lineHeight) * scale + 1,
         whenColor: getComputedStyle(when).color, nameColor: getComputedStyle(name).color, size: parseFloat(getComputedStyle(name).fontSize) * scale,
@@ -77,9 +76,11 @@ function upcomingFacts(widget) {
         return { line: parseFloat(day.lineHeight) / parseFloat(day.fontSize), pad: parseFloat(day.paddingTop) / parseFloat(day.fontSize), gap: parseFloat(head.paddingBottom) / parseFloat(head.fontSize) };
       })(),
       classes: [...face.classList].filter(name => /^calendar-with-/.test(name)),
-      list: [...section.querySelectorAll('.calendar-upcoming > .calendar-upcoming-row')].map(line),
-      listLabel: section.querySelector('.calendar-upcoming')?.getAttribute('aria-label') ?? null,
-      next: next ? { ...line(next), shown: !next.classList.contains('calendar-next-hidden') && next.getBoundingClientRect().height > 0 } : null,
+      // Lines that do not fit stay in the document for measuring and take no layout.
+      list: [...section.querySelectorAll('.calendar-upcoming > .calendar-upcoming-row:not(.calendar-line-hidden)')].map(line),
+      left: [...section.querySelectorAll('.calendar-line.calendar-line-hidden')].filter(element => element.getBoundingClientRect().height > 0).length,
+      listLabel: section.querySelector('.calendar-upcoming:not(.calendar-line-hidden)')?.getAttribute('aria-label') ?? null,
+      next: next ? { ...line(next), shown: !next.classList.contains('calendar-line-hidden') && next.getBoundingClientRect().height > 0 } : null,
       marks,
     };
   });
@@ -88,7 +89,8 @@ function upcomingFacts(widget) {
 /** One upcoming line as shown: on one line, inside the widget, the date in the accent tone and the name in the text colour, at the text floor or above. */
 function assertLine(line, expected, facts, label) {
   assert.deepEqual([line.when, line.name], [expected.when, expected.name], `${label}: the line`);
-  assert.ok(line.oneLine && line.lines === 1, `${label}: “${line.name}” stays on one line ${JSON.stringify(line)}`);
+  assert.ok(line.oneLine && !line.clipped, `${label}: “${line.name}” shows whole on one line ${JSON.stringify(line)}`);
+  assert.equal(line.overflow, 'ellipsis', `${label}: a name wider than its line would end in an ellipsis`);
   assert.ok(line.inside, `${label}: “${line.name}” stays inside the widget`);
   assert.equal(line.whenColor, facts.accent, `${label}: the date uses the accent tone`);
   assert.equal(line.nameColor, facts.text, `${label}: the name uses the text colour`);
@@ -116,16 +118,20 @@ function assertFits(facts, label) {
   assert.ok(facts.day >= facts.floors.data * 0.99, `${label}: day numbers keep the data floor ${JSON.stringify({ day: facts.day, floors: facts.floors })}`);
 }
 
-/** Large: up to three lines under the month. Medium: the next date where it fits, else nothing of it. Small: unchanged. */
-function assertUpcoming(facts, expected, { size, nextShown, label }) {
+/**
+ * Large: up to three lines under the month (`lines`: how many fit, three at Text 100%). Medium: the next date where
+ * it fits, else nothing of it. Small: unchanged. A line that does not fit takes no layout.
+ */
+function assertUpcoming(facts, expected, { size, nextShown, label, lines: fitting = 3 }) {
   if (size === 'small') {
     assert.deepEqual([facts.list.length, facts.next, facts.marks.length, facts.classes], [0, null, 0, []], `${label}: the week strip has no list, next date or marks`);
     return;
   }
   assertMarks(facts, expected, label);
+  assert.equal(facts.left, 0, `${label}: a line that does not fit takes no layout`);
   if (size === 'large') {
-    const lines = expected.upcoming.slice(0, 3);
-    assert.equal(facts.list.length, lines.length, `${label}: up to three upcoming lines`);
+    const lines = expected.upcoming.slice(0, fitting);
+    assert.equal(facts.list.length, lines.length, `${label}: the upcoming lines that fit, up to three`);
     assert.deepEqual(facts.classes, lines.length ? ['calendar-with-upcoming'] : [], `${label}: the month makes room only when there is a list`);
     assert.equal(facts.listLabel, lines.length ? 'Upcoming dates' : null);
     lines.forEach((line, index) => assertLine(facts.list[index], line, facts, `${label} line ${index + 1}`));
@@ -199,6 +205,15 @@ const MONTHS = [
     lines: [['Today', 'Christmas'], ['Dec 26', 'Boxing Day'], ['Jan 1', 'New Year’s Day']], marks: ['5', '25', '26'] },
 ];
 
+/** Synthetic titles in wide scripts and wide letters, each dated a few days after 22 November 2026, and the lines the model makes of them. */
+const WIDE_TITLES = [
+  ['할머니 생신 잔치 준비하고 선물 사러 가기', '2026-11-25'], ['День рождения бабушки и семейный ужин', '2026-11-26'], ['WWWWWWWW WWWWWWWW WWWWWWWW WWWW', '2026-11-27'],
+];
+const WIDE_LINES = ['할머니 생신 잔치 준비하고 선물…', 'День рождения бабушки и…', 'WWWWWWWW WWWWWWWW WWWWWWWW WWWW'];
+/** Text sizes above 100%, and the lines a large Calendar still shows at each on the Balanced grid at 1080p, by the month's weeks. */
+const TEXT_SIZES = [1.1, 1.25, 1.5];
+const TEXT_LINES = { 1.1: { 4: 3, 5: 1, 6: 1 }, 1.25: { 4: 1, 5: 0, 6: 0 }, 1.5: { 4: 0, 5: 0, 6: 0 } };
+
 export async function sweep({ page, viewport, state, base }) {
   const widget = page.locator('[data-widget-id="calendar"]');
   const before = await page.evaluate(() => Date.now());
@@ -260,13 +275,56 @@ export async function sweep({ page, viewport, state, base }) {
           assert.ok(numbers.six[key] <= facts.day + 0.01 && numbers.six[key] >= facts.day * 0.93, `${label}: six weeks with the list take at most slightly smaller numbers ${JSON.stringify({ none: facts.day, six: numbers.six[key] })}`);
         // Six weeks with room to spare keep the rows of every other month, as before #716; on Fine they close up to fit.
         } else if (density !== 'fine') assert.ok(Math.abs(facts.rows.line - 1.1) < 0.005 && Math.abs(facts.rows.pad - 0.12) < 0.005 && Math.abs(facts.rows.gap - 0.35) < 0.01, `${label}: six medium weeks keep the usual rows where there is room ${JSON.stringify(facts.rows)}`);
-        else assert.ok(facts.rows.pad < 0.115 && facts.rows.pad >= 0.029 && facts.rows.line >= 1.039 && facts.rows.gap >= 0.199, `${label}: six medium weeks close up on Fine without going under the digits' line ${JSON.stringify(facts.rows)}`);
+        else assert.ok(facts.rows.pad < 0.115 && facts.rows.pad >= 0 && Math.abs(facts.rows.line - 1.1) < 0.005 && facts.rows.gap >= 0.199, `${label}: six medium weeks close up on Fine and keep the digits' own line ${JSON.stringify(facts.rows)}`);
         cases++;
       }
+      // Wide scripts: the model counts a Hangul syllable as two places, so a Korean or a Russian title is cut after a
+      // whole word and shows exactly as cut. Only a name still wider than its line takes the browser's ellipsis.
+      state.settings.widgetData.countdowns = WIDE_TITLES.map(([title, date], index) => ({ id: uuid(7170 + index), title, date, repeatsYearly: false }));
+      const wide = expectedDates(state, { year: 2026, month: 11, day: 22 });
+      assert.deepEqual(wide.upcoming.map(row => row.name), WIDE_LINES, 'the model cuts each script by its width');
+      for (const density of Object.keys(GRID_DENSITIES)) {
+        const facts = await show('large', density), label = `wide scripts large/${density}/${view.width}`;
+        assertFits(facts, label);
+        assertLine(facts.list[0], wide.upcoming[0], facts, `${label} Korean`);
+        assertLine(facts.list[1], wide.upcoming[1], facts, `${label} Russian`);
+        const capitals = facts.list[2];
+        assert.ok(capitals.oneLine && capitals.inside && capitals.overflow === 'ellipsis', `${label}: a name wider than its line stays on one line inside the widget and ends in the browser's ellipsis ${JSON.stringify(capitals)}`);
+        if (density === 'fine') assert.equal(capitals.clipped, true, `${label}: 31 capital W are wider than the line, so the last-resort ellipsis is what shows`);
+        cases++;
+      }
+      // Larger Text sizes: the dates give way before the month does. With dates the family never zooms out more than
+      // with nothing to list (the layout before #716), its numbers stay within 7% of that, a line that shows is at
+      // fit 1, and with no line left the layout is the one with nothing upcoming. The dots stay.
+      const fixture = dated => {
+        state.settings.appearance.theme = { ...state.settings.appearance.theme, calendars: dated ? ['CA', 'KR', 'RU'] : [] };
+        state.settings.birthdays = dated ? [{ id: uuid(7163), name: 'Mina', date: '11-28', treatment: 'classic' }, { id: uuid(7164), name: 'Sam', date: '01-03', treatment: 'classic' }] : [];
+        state.settings.widgetData.countdowns = dated ? [{ id: uuid(7165), title: 'A deliberately long synthetic countdown title that goes on', date: '2026-12-05', repeatsYearly: false }] : [];
+      };
+      for (const text of TEXT_SIZES) for (const month of MONTHS.slice(0, 3)) {
+        await page.clock.setSystemTime(new Date(month.at));
+        state.settings.appearance.fontScale = text;
+        // Every density at 1080p; the Balanced grid at 720p and 4K.
+        for (const density of view.width === 1920 ? Object.keys(GRID_DENSITIES) : ['balanced']) for (const size of ['medium', 'large']) {
+          fixture(false); const bare = await show(size, density);
+          fixture(true); const facts = await show(size, density);
+          const label = `Text ${Math.round(text * 100)}% ${month.at.slice(0, 10)} ${size}/${density}/${view.width}`, shown = size === 'large' ? facts.list.length : Number(facts.next.shown);
+          assert.ok(facts.fit >= bare.fit - 0.002, `${label}: the dates never zoom the month out (fit ${facts.fit} with ${shown} lines, ${bare.fit} with nothing to list)`);
+          assert.ok(facts.day >= bare.day * 0.93, `${label}: day numbers stay within 7% of a month with nothing to list ${JSON.stringify({ dates: facts.day, none: bare.day })}`);
+          assert.equal(facts.left, 0, `${label}: a line that does not fit takes no layout`);
+          assert.deepEqual(facts.marks.map(mark => mark.day), month.marks, `${label}: the marked days stay`);
+          if (shown) assert.ok(facts.fit >= 0.995 && facts.overflow <= 1, `${label}: ${shown} lines show at fit 1 (fit ${facts.fit})`);
+          else assert.ok(facts.classes.length === 0 && Math.abs(facts.fit - bare.fit) <= 0.002 && Math.abs(facts.day - bare.day) < 0.05, `${label}: with no line left the layout is the one with nothing upcoming ${JSON.stringify({ classes: facts.classes, fit: [facts.fit, bare.fit], day: [facts.day, bare.day] })}`);
+          if (view.width === 1920 && density === 'balanced') assert.equal(shown, size === 'large' ? TEXT_LINES[text][month.weeks] : 0, `${label}: the lines that fit`);
+          cases++;
+        }
+      }
+      state.settings.appearance.fontScale = 1;
     }
   } finally {
+    state.settings.appearance.fontScale = 1;
     await page.clock.setSystemTime(before + 1000);
     await page.setViewportSize(viewport);
   }
-  return `Calendar upcoming dates (#716): ${cases} family × density cases at ${viewport.width === 1920 ? '720p and 1080p' : '4K'} in four-, five- and six-week months and across the year turn render at fit 1 at Text 100% with day numbers and lines at their floors; large lists three one-line dates (a 60-character title cut after a whole word), medium adds the next date where it fits (not beside five or six weeks on Fine), marked days match the list and dim with their day, today's holiday keeps ring and dot, the list costs spare height and at most 7% of a six-week month's number size, and nothing upcoming adds nothing (a six-week medium month keeps its usual rows where there is room).`;
+  return `Calendar upcoming dates (#716): ${cases} family × density cases at ${viewport.width === 1920 ? '720p and 1080p' : '4K'}. At Text 100%, four-, five- and six-week months and the year turn render at fit 1 with day numbers and lines at their floors; large lists three one-line dates (a 60-character title cut after a whole word), medium adds the next date where it fits (not beside five or six weeks on Fine), marked days match the list and dim with their day, today's holiday keeps ring and dot, the list costs spare height and at most 7% of a six-week month's number size, and nothing upcoming adds nothing (a six-week medium month keeps its usual rows where there is room). Korean and Russian titles show as the model cuts them, and a name wider than its line ends in an ellipsis. At Text 110%, 125% and 150% the dates give way first: fewer lines, then none, never a smaller fit than with nothing to list.`;
 }
