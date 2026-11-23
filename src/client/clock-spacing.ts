@@ -13,9 +13,11 @@
  * canvas measured; when any glyph disagrees (another figure set, an unsupported font) the whole table is
  * dropped and the clock keeps the stylesheet's safe fallback, tabular figures at their natural spacing.
  *
- * Spaced this way a time is as wide as its digits: 11:11 is much narrower than 04:44. The shared fit must not
- * follow that from minute to minute, so the clock also reserves, invisibly, the room its widest time would take
- * (`clockReserve`), and a clock that has to zoom out keeps one scale all day.
+ * Spaced this way a time is as wide as its digits: 11:11 is much narrower than 04:44. Nothing but the changing
+ * digits may follow that from minute to minute, so `clockPlacement` says where a time sits inside the room of the
+ * widest time of its format: the clock holds that room (the shared fit and the float measure it, so neither changes
+ * with the minute), and a centred clock is placed once an hour, so the hour, the colon and the left edge of the
+ * minutes stay where they are until the hour changes.
  */
 
 /**
@@ -93,7 +95,7 @@ function widest(ink: ClockInk, texts: string[], reach: (run: ClockRun) => number
 
 /**
  * The time that takes the most room in this format, as a run: the widest hour, the colon and the minute that
- * reaches furthest (its ink and its last glyph's bearing).
+ * reaches furthest (its ink and its last glyph's bearing). `clockPlacement` measures every time against it.
  */
 export function widestClockRun(ink: ClockInk, clockFormat: '12h' | '24h'): ClockRun | null {
   const hours = clockFormat === '12h' ? Array.from({ length: 12 }, (_, hour) => String(hour + 1)) : Array.from({ length: 24 }, (_, hour) => two(hour));
@@ -102,20 +104,50 @@ export function widestClockRun(ink: ClockInk, clockFormat: '12h' | '24h'): Clock
 }
 
 /**
- * The room `text` leaves free of what the widest time of its format takes: `spare` in em, measured from the end
- * of the run's ink (so never less than the run's own tail), and `gaps` for the characters, each with its gap, the
- * widest time has more. Null when the table cannot say.
+ * Where a time sits in the room of the widest time of its format, in em of the digit size.
+ * - `lead` and `leadGaps`: what this hour is short of the widest hour, as ink and as characters (each with its
+ *   gap). A 12-hour 9 is one character and some ink short of 10.
+ * - `slack`: from the end of this minute's ink to the end of the widest minute's ink. What follows the minutes
+ *   (the AM/PM period) stands after it, so it does not move when a minute changes.
+ * - `trail`: from the end of this minute's ink to the edge the furthest-reaching minute takes, never less than
+ *   the run's own tail: the room a time without a period holds after its last digit.
+ * - `hold`: the middle of the narrowest and the widest minute, less this minute. A centred clock adds it after
+ *   the time, so the time is centred as if every minute had that middle width: the hour is placed once, its
+ *   minutes grow and shrink to the right, and the time is never further off centre than a quarter of the
+ *   difference between the widest and the narrowest minute.
  */
-export function clockReserve(ink: ClockInk, text: string, clockFormat: '12h' | '24h'): { spare: number; gaps: number } | null {
-  const run = clockRun(ink, text), most = widestClockRun(ink, clockFormat);
-  if (!run || !most) return null;
-  // A run with more characters than the format's widest time is not a time of that format: reserve only its tail.
-  if (run.count > most.count) return { spare: run.tail, gaps: 0 };
-  return { spare: Math.max(run.tail, round(most.ink + most.tail - run.ink)), gaps: most.count - run.count };
+export interface ClockPlacement { lead: number; leadGaps: number; slack: number; trail: number; hold: number }
+
+/** The placement of `text` ("9:41", "09:41"), or null when it is not an hour, a colon and a minute the table knows. */
+export function clockPlacement(ink: ClockInk, text: string, clockFormat: '12h' | '24h'): ClockPlacement | null {
+  const [hourText, minuteText, ...rest] = text.split(':');
+  if (!hourText || !minuteText || rest.length) return null;
+  const hour = clockRun(ink, hourText), minute = clockRun(ink, minuteText);
+  const hours = clockFormat === '12h' ? Array.from({ length: 12 }, (_, value) => String(value + 1)) : Array.from({ length: 24 }, (_, value) => two(value));
+  const minutes = Array.from({ length: 60 }, (_, value) => two(value));
+  const widestHour = widest(ink, hours, run => run.ink), reach = widest(ink, minutes, run => run.ink + run.tail);
+  const widestMinute = widest(ink, minutes, run => run.ink), narrowestMinute = widest(ink, minutes, run => -run.ink);
+  if (!hour || !minute || !widestHour || !reach || !widestMinute || !narrowestMinute) return null;
+  // An hour with more characters than the format's widest is not a time of that format: nothing to make up.
+  const short = widestHour.count - hour.count;
+  return {
+    lead: short < 0 ? 0 : Math.max(0, round(widestHour.ink - hour.ink)), leadGaps: Math.max(0, short),
+    slack: Math.max(0, round(widestMinute.ink - minute.ink)),
+    trail: Math.max(minute.tail, round(reach.ink + reach.tail - minute.ink)),
+    hold: round((narrowestMinute.ink + widestMinute.ink) / 2 - minute.ink),
+  };
 }
 
-/** One table per typeface for the life of the page; null records a typeface that could not be measured. */
-const tables = new Map<string, ClockInk | null>();
+/** How long a typeface that could not be measured is left alone before another clock may try again. */
+export const RETRY_AFTER_MS = 60_000;
+/** What is known about a typeface: its table, or null with the time (ms) measuring it last failed. */
+export interface Measured { ink: ClockInk | null; at: number }
+/** Whether a typeface is measured now: never tried, or its last try failed at least RETRY_AFTER_MS ago. */
+export function dueForMeasuring(known: Measured | undefined, now: number): boolean {
+  return !known || known.ink === null && now - known.at >= RETRY_AFTER_MS;
+}
+/** One entry per typeface for the life of the page. A table is kept for good; a failure only for a while. */
+const tables = new Map<string, Measured>();
 
 /** `typeface` is a CSS font shorthand without its size: style, weight and family list. */
 function measure(document: Document, typeface: { style: string; weight: string; family: string }): ClockInk | null {
@@ -138,11 +170,15 @@ function measure(document: Document, typeface: { style: string; weight: string; 
   } catch { return null; } finally { probe.remove(); }
 }
 
-/** The ink table for the typeface `digits` (the clock's digit run) is drawn in, measured on first use. */
-export function clockInk(digits: Element): ClockInk | null {
+/**
+ * The ink table for the typeface `digits` (the clock's digit run) is drawn in, measured on first use. A typeface
+ * that could not be measured is tried again on a later call, at most once a minute (`now` in ms), so one failed
+ * measurement on an always-on display does not keep the fallback until a reload.
+ */
+export function clockInk(digits: Element, now: number = performance.now()): ClockInk | null {
   const style = getComputedStyle(digits), typeface = { style: style.fontStyle, weight: style.fontWeight, family: style.fontFamily };
   const key = `${typeface.style} ${typeface.weight} ${typeface.family}`;
-  let table = tables.get(key);
-  if (table === undefined) { table = measure(digits.ownerDocument, typeface); tables.set(key, table); }
-  return table;
+  let known = tables.get(key);
+  if (dueForMeasuring(known, now)) { known = { ink: measure(digits.ownerDocument, typeface), at: now }; tables.set(key, known); }
+  return known!.ink;
 }

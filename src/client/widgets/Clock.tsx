@@ -4,7 +4,7 @@ import type { Settings } from '../../shared/contracts.ts';
 import type { WidgetSize } from '../../shared/widgets.ts';
 import { TransitionText } from './TransitionText.tsx';
 import { clockTimer, type ClockTimer } from '../timer.ts';
-import { clockInk, clockReserve, type ClockInk } from '../clock-spacing.ts';
+import { clockInk, clockPlacement, type ClockInk } from '../clock-spacing.ts';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
 
 /**
@@ -99,19 +99,32 @@ function Clock({ state, settings, now, size, disconnected }: WidgetContentProps)
   const style = settings.appearance.clockStyle;
   const timer = clockTimer(state.timers, now.getTime(), settings.clockFormat, size, disconnected);
   // #717: the digits' typeface is measured once per typeface (clock-spacing.ts), when the run is first on the page
-  // and again when the typeface, the style or the family changes. Analog has no run and no table.
+  // and again when the typeface, the style or the family changes. Analog has no run and no table. A typeface that
+  // could not be measured is tried again when the hour changes.
   const run = useRef<HTMLSpanElement>(null);
   const [ink, setInk] = useState<ClockInk | null>(null);
-  const typeface = `${settings.appearance.fontFamily}:${style}:${size}`;
-  useLayoutEffect(() => { setInk(run.current ? clockInk(run.current) : null); }, [typeface]);
-  // How much narrower this minute's time is than the widest one; widgets.css reserves that room for the shared fit.
-  const reserve = useMemo(() => ink ? clockReserve(ink, labels.clock, settings.clockFormat) : null, [ink, labels.clock, settings.clockFormat]);
-  const spare = reserve ? { '--clock-spare': reserve.spare, '--clock-spare-gaps': reserve.gaps } as CSSProperties : undefined;
-  return <div className={`clock-face clock-family-${size} clock-style-${style}`} style={spare}>
+  const typeface = `${settings.appearance.fontFamily}:${style}:${size}`, retry = ink ? 0 : Math.floor(minute / 60);
+  useLayoutEffect(() => { setInk(run.current ? clockInk(run.current) : null); }, [typeface, retry]);
+  // Where this minute's time sits in the room of the widest time; widgets.css holds that room and places the time.
+  // A centred clock is held by the middle minute: the hold is what this minute's box is short of it. With AM/PM
+  // the period stands after the widest minute's room and ends the box, so the box is already the widest minute's
+  // and the hold is the same all hour; without it the room trails the last digit. Without a table, tabular
+  // figures are all one width: the room is only the character a one-digit hour lacks.
+  const placement = useMemo(() => ink ? clockPlacement(ink, labels.clock, settings.clockFormat) : null, [ink, labels.clock, settings.clockFormat]);
+  const room: Record<string, number> = { '--clock-short': Math.max(0, 5 - labels.clock.length) };
+  if (placement) Object.assign(room, { '--clock-lead': placement.lead, '--clock-lead-gaps': placement.leadGaps }, labels.period ? { '--clock-slack': placement.slack, '--clock-hold': Math.round((placement.hold - placement.slack) * 10_000) / 10_000 } : { '--clock-trail': placement.trail, '--clock-hold': placement.hold });
+  return <div className={`clock-face clock-family-${size} clock-style-${style}`} style={room as CSSProperties}>
     <div className={timer ? 'clock-calendar clock-timer' : 'clock-calendar'}>{timer ? <ClockTimerSlot timer={timer} /> : <><div className="ambient-label"><TransitionText value={labels.weekday} /></div><div className="clock-date"><TransitionText value={labels.date} /></div></>}</div>
     {style === 'analog'
       ? <AnalogClock hour={hands.hour} minute={hands.minute} snap={!hands.animate} label={labels.spoken} />
-      : <div className={`clock-time clock-${style}`}><ClockCharacters text={labels.clock} ink={ink} run={run} />{labels.period && <span className="clock-period" aria-hidden="true"><TransitionText value={labels.period} /></span>}<span className="sr-only">{labels.spoken}</span></div>}
+      : <div className={`clock-time clock-${style}${ink ? '' : ' clock-unmeasured'}`}>
+        {/* Empty boxes that hold the widest time's room on each side: the shared fit and the float measure them. */}
+        <span className="clock-room clock-room-start" aria-hidden="true" />
+        <ClockCharacters text={labels.clock} ink={ink} run={run} />
+        {labels.period && <span className="clock-period" aria-hidden="true"><TransitionText value={labels.period} /></span>}
+        <span className="clock-room clock-room-end" aria-hidden="true" />
+        <span className="sr-only">{labels.spoken}</span>
+      </div>}
   </div>;
 }
 

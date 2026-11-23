@@ -43,38 +43,58 @@
 .grid-ambient .clock-calendar { order: 2; }
 .grid-ambient .clock-calendar .ambient-label { margin: 0; font-size: calc(max(var(--min-text), min(7cqw, 10cqh)) * var(--font-scale)); }
 .grid-ambient .clock-date { font-size: calc(max(var(--min-text), min(7cqw, 10cqh)) * var(--font-scale)); margin: 1cqh 0 0; line-height: 1.2; }
-/* --clock-size is the digits' font size: the family rules set it on the face, so the digit gap and the room reserved
-   for the widest time (#717, below) can be written outside the digits too. */
+/* --clock-size is the digits' font size: the family rules set it on the face, so the digit gap and the room held for
+   the widest time (#717, below) can be written outside the digits too. */
 .grid-ambient .clock-face { --clock-size: calc(min(31cqw, 48cqh) * var(--font-scale)); }
 .grid-ambient .clock-time { display: flex; align-items: baseline; position: relative; font-size: var(--clock-size); font-weight: 400; line-height: 1; letter-spacing: 0; }
 /* #717: digits are spaced by what they paint, not by their advance boxes. Clock.tsx gives each character its glyph's
    side bearings in em (--ink-left, --ink-right, measured once per typeface in clock-spacing.ts); the margins below
    cancel them and leave --clock-gap between the painted edges of every pair of neighbours, outline stroke included,
    so a 1 no longer floats in a tabular box and a 4 never reaches its neighbour. The gap is 6% of the digit size and
-   never under 40% of the shared text floor (4 px at 720p), so the smallest clock keeps whole pixels between digits.
-   The run's own edges sit on its box edges, so the time is centred and left-aligned by its ink. A fixed negative
-   letter-spacing (the earlier -0.065em) must not come back: it made 44, 04 and 48 overlap. Without the clock-ink
-   class (a typeface not measured yet, or one that cannot be) the run keeps tabular figures at their natural advance
-   plus the stroke, which never touch. */
-.grid-ambient .clock-face { --clock-gap: max(0.06 * var(--clock-size), var(--min-text, 0px) * 0.4); }
-.grid-ambient .clock-digits { letter-spacing: calc(var(--clock-stroke, 0px) + 0.02em); }
+   never under 42% of the shared text floor (4.2 px at 720p), so the smallest clock keeps whole pixels between
+   digits. The run's own edges sit on its box edges, so the time is placed by its ink. A fixed negative
+   letter-spacing (the earlier -0.065em) must not come back: it made 44, 04 and 48 overlap. */
+.grid-ambient .clock-face { --clock-gap: max(0.06 * var(--clock-size), var(--min-text, 0px) * 0.42); }
 .grid-ambient .clock-digits.clock-ink { letter-spacing: 0; font-variant-numeric: lining-nums; }
 .grid-ambient .clock-ink > .clock-char { margin-inline: calc((var(--clock-gap) + var(--clock-stroke, 0px)) / 2 - var(--ink-left, 0) * 1em) calc((var(--clock-gap) + var(--clock-stroke, 0px)) / 2 - var(--ink-right, 0) * 1em); }
 .grid-ambient .clock-ink > .clock-char:first-child { margin-inline-start: calc(var(--clock-stroke, 0px) / 2 - var(--ink-left, 0) * 1em); }
 .grid-ambient .clock-ink > .clock-char:last-child { margin-inline-end: calc(var(--clock-stroke, 0px) / 2 - var(--ink-right, 0) * 1em); }
-/* Spaced by ink, 11:11 is much narrower than 04:44. The shared fit must not follow that every minute (a clock that
-   zooms out would change size with the time), so an invisible box at the end of the time's row holds the room the
-   widest time of the format would take: Clock.tsx gives the ink this minute's time is short of it (--clock-spare, in
-   digit sizes) and the characters it has fewer (--clock-spare-gaps). It paints nothing and moves nothing that fits.
-   Small and large hang it past the time (a centred large clock grows half of it on each side). Medium's row ends
-   with its date, so there it is a last item of the row, where it squeezes the date exactly as the widest time would. */
-.grid-ambient .clock-face { --clock-reserve: calc(var(--clock-spare, 0) * var(--clock-size) + var(--clock-spare-gaps, 0) * (var(--clock-gap) + var(--clock-stroke, 0px))); }
-.grid-ambient .clock-time::after, .grid-ambient .clock-family-medium:not(.clock-style-analog)::after { content: ''; width: var(--clock-reserve); height: 1px; visibility: hidden; pointer-events: none; }
-.grid-ambient .clock-time::after { position: absolute; left: 100%; top: 0; }
-.grid-ambient .clock-family-medium .clock-time::after { content: none; }
-.grid-ambient .clock-family-medium:not(.clock-style-analog)::after { flex: none; order: 3; margin-left: -5cqw; }
-.grid-ambient .clock-family-large .clock-time::after { width: calc(var(--clock-reserve) / 2); }
-.grid-ambient .clock-period { font-size: max(var(--min-text) * var(--font-scale), 0.2em); margin-left: 0.45em; letter-spacing: 0.01em; }
+/* Spaced by ink, 11:11 is much narrower than 04:44, and only the digits that change may show it. The time therefore
+   sits in the room of the widest time of its format, held by two empty boxes (.clock-room-start, .clock-room-end)
+   that the shared fit and the float both measure, so neither the zoom nor the float's range changes with the
+   minute. Clock.tsx gives the placement in digit sizes: what this hour is short of the widest hour (--clock-lead,
+   and --clock-lead-gaps for the character a one-digit hour lacks), and from the end of this minute to the edge the
+   furthest minute reaches (--clock-trail). In 12-hour time the AM/PM period ends the time instead: it stands after
+   the widest minute's room (--clock-slack), so it does not move with the minute either.
+   - Small is left-aligned: the room hangs past the time.
+   - Medium ends its row with the date, so the room is part of the time's own box and the date sits after it,
+     where the widest time would put it: the date never moves with the minute.
+   - Large is centred, and must not re-centre every minute. --clock-hold (the middle of the narrowest and the widest
+     minute, less this minute) is added after the time, so the time is centred as if its minutes had that middle
+     width: the hour, the colon and the left edge of the minutes are placed once an hour and the minutes grow and
+     shrink to the right. With AM/PM the time's box ends at the period, after the widest minute, and the hold
+     takes that back to the middle minute, so the digits stand as they would without the period beside them. Its
+     room is half of the hour's lead on each side, and the minute's trail on the right. */
+.grid-ambient .clock-face { --clock-lead-room: calc(var(--clock-lead, 0) * var(--clock-size) + var(--clock-lead-gaps, 0) * (var(--clock-gap) + var(--clock-stroke, 0px))); --clock-trail-room: calc(var(--clock-trail, 0) * var(--clock-size)); }
+.grid-ambient .clock-room { flex: none; align-self: stretch; visibility: hidden; pointer-events: none; }
+.grid-ambient .clock-room-start { display: none; }
+.grid-ambient .clock-room-end { width: calc(var(--clock-lead-room) + var(--clock-trail-room)); }
+.grid-ambient .clock-family-small .clock-room-end, .grid-ambient .clock-family-large .clock-room { position: absolute; top: 0; bottom: 0; }
+.grid-ambient .clock-family-small .clock-room-end, .grid-ambient .clock-family-large .clock-room-end { left: 100%; }
+.grid-ambient .clock-family-large .clock-time { margin-inline-end: calc(var(--clock-hold, 0) * var(--clock-size)); }
+.grid-ambient .clock-family-large .clock-room-start { display: block; right: 100%; width: calc(var(--clock-lead-room) / 2); }
+.grid-ambient .clock-family-large .clock-room-end { width: calc(var(--clock-lead-room) / 2 + var(--clock-trail-room)); }
+/* A typeface the clock cannot measure (no clock-ink class, clock-unmeasured on the time) keeps tabular figures: every
+   digit in one box, tracked apart by the stroke and at least 30% of the text floor (3 px at 720p) on top of the
+   glyphs' own bearings, so nothing touches whatever those bearings are. Tabular boxes are wider than ink, so the digits are drawn at 78% of
+   the size to stay inside the room the measured clock fits in, and a one-digit hour holds the room of the
+   character it lacks (--clock-short, one digit box and its tracking): the fit is 1 and the same at every time. */
+.grid-ambient .clock-face { --clock-tracking: calc(var(--clock-stroke, 0px) + max(0.02em, var(--min-text, 0px) * 0.3)); }
+.grid-ambient .clock-digits { letter-spacing: var(--clock-tracking); }
+.grid-ambient .clock-time.clock-unmeasured { font-size: calc(var(--clock-size) * 0.78); }
+.grid-ambient .clock-unmeasured .clock-room-end { width: calc(var(--clock-short, 0) * (1ch + var(--clock-tracking))); }
+.grid-ambient .clock-family-large .clock-unmeasured .clock-room { width: calc(var(--clock-short, 0) * (1ch + var(--clock-tracking)) / 2); }
+.grid-ambient .clock-period { font-size: max(var(--min-text) * var(--font-scale), 0.2em); margin-left: calc(0.45em + var(--clock-slack, 0) * var(--clock-size)); letter-spacing: 0.01em; }
 /* The outline never thins below 1.2 px at 720p (12% of the shared 1.4% text floor, so it scales with the display, #222). */
 .grid-ambient .clock-style-outline { --clock-stroke: max(var(--min-text, 0px) * 0.12, 0.35cqw); }
 .grid-ambient .clock-outline .clock-digits { -webkit-text-fill-color: transparent; -webkit-text-stroke: var(--clock-stroke) currentColor; }
