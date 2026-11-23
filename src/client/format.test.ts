@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { WeatherState } from '../shared/contracts.ts';
-import { ageLabel, chartAxisLabels, civilDate, compactWeatherRange, compactWeatherTime, dateTimeFormat, forecastDay, LAST_KNOWN_AFTER_MS, lastKnownLabel, lastKnownTime, MINUS, presentedStatus, REFRESH_GRACE_MS, shortAge, temperature, todayForecast, upcomingDays, weatherIsFresh, weatherStatus, weatherTime, weatherTimeZone } from './format.ts';
+import { ageIsKnown, ageLabel, chartAxisLabels, civilDate, compactWeatherRange, compactWeatherTime, dateTimeFormat, forecastDay, LAST_KNOWN_AFTER_MS, lastKnownLabel, lastKnownTime, MINUS, presentedStatus, REFRESH_GRACE_MS, shortAge, temperature, todayForecast, upcomingDays, weatherIsFresh, weatherStatus, weatherTime, weatherTimeZone } from './format.ts';
 import { rainChartLabel, rainOutlook, rainOutlookCopy } from './weather-outlook.ts';
 
 const TORONTO = 'America/Toronto';
@@ -53,6 +53,11 @@ test('fresh weather has no status and so no age; a saved, offline or unavailable
   assert.equal(shortAge('Updated just now'), 'just now');
   assert.equal(shortAge('Not updated yet'), 'Not updated yet');
   assert.equal(shortAge('Update time unknown'), 'Update time unknown');
+  // Only an elapsed time counts as a known age; Forecast's small family drops the two phrases that tell none.
+  assert.deepEqual(['Updated just now', 'Updated 5 hr ago', 'Updated 364 days ago'].map(ageIsKnown), [true, true, true]);
+  assert.deepEqual(['Update time unknown', 'Not updated yet'].map(ageIsKnown), [false, false]);
+  assert.equal(ageIsKnown(ageLabel(new Date(NOW + 10 * 60_000).toISOString(), NOW)), false, 'a forecast dated ahead of the clock has no age to tell (#244)');
+  assert.equal(ageIsKnown(ageLabel(null, NOW)), false);
   // No status ever names a provider.
   for (const status of [weatherStatus(at(NOW - 5 * HOUR, 'stale'), false, NOW), weatherStatus(at(NOW, 'fresh'), true, NOW), weatherStatus(at(NOW - HOUR, 'unavailable'), false, NOW)]) assert.doesNotMatch(JSON.stringify(status), /Open-Meteo/);
 });

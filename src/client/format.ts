@@ -66,7 +66,12 @@ export function ageLabel(
  * could read as the outage's; labels with no elapsed time (“Not updated yet”) stay whole.
  */
 export function shortAge(age: string): string {
-  return age.startsWith('Updated ') ? age.slice('Updated '.length) : age;
+  return ageIsKnown(age) ? age.slice('Updated '.length) : age;
+}
+
+/** Whether an `ageLabel` tells an elapsed time (“Updated 5 hr ago”) rather than that there is none to tell (“Update time unknown”, “Not updated yet”). */
+export function ageIsKnown(age: string): boolean {
+  return age.startsWith('Updated ');
 }
 
 /** How old data may be and still count as fresh while its refresh runs; see `presentedStatus`. */

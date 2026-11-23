@@ -1,6 +1,6 @@
 import { useMemo, type CSSProperties } from 'react';
 import { widgetContentLimits } from '../../shared/widgets.ts';
-import { ageLabel, civilDate, forecastDay, NBSP, shortAge, temperature, upcomingDays, weatherStatus, weatherTimeZone } from '../format.ts';
+import { ageIsKnown, ageLabel, civilDate, forecastDay, NBSP, shortAge, temperature, upcomingDays, weatherStatus, weatherTimeZone } from '../format.ts';
 import { Icon } from '../icons.tsx';
 import { TransitionText } from './TransitionText.tsx';
 import { WeatherGlyph } from './WeatherGlyph.tsx';
@@ -14,11 +14,13 @@ import type { WidgetContentProps, WidgetModule } from './types.ts';
  * A forecast is the heading and the strip, nothing else: no provider name and no update age while it
  * is fresh (owner decision, 2026-11-22, #715), so nothing sits under the strip and the strip takes the
  * room the old footer held. A saved or offline forecast says so in the heading's right slot, in place
- * of the place and unit and in the status tone: “Saved forecast · 5 hr ago”, “Offline · Updated 5 hr
- * ago”, as the Hourly forecast does (#714). The slot keeps its typography, so the strip has one size
- * and one position in every state and nothing resizes when the status comes or goes; small uses the
- * same slot (its heading's second line). A forecast whose refresh is still running is fresh
- * (`presentedStatus`).
+ * of the place and unit, which return when the forecast is fresh again, and in the status tone: “Saved
+ * forecast · 5 hr ago”, “Offline · Updated 5 hr ago”, as the Hourly forecast does (#714). The slot
+ * keeps its typography and stays one line, so the heading has one height and the strip one size and
+ * one position in every state, and nothing resizes when the status comes or goes; small uses the same
+ * slot (its heading's second line), where a status with no update time to tell is the label alone
+ * (“Saved forecast”, not “Saved forecast · Update time unknown”, which would take a second line there).
+ * A forecast whose refresh is still running is fresh (`presentedStatus`).
  */
 function Forecast({ state: { weather }, size, now, disconnected }: WidgetContentProps) {
   const count = widgetContentLimits(size).forecastDays;
@@ -35,6 +37,8 @@ function Forecast({ state: { weather }, size, now, disconnected }: WidgetContent
   const shown = days.length || count;
   const heading = shown === 7 ? 'The week' : shown === 1 ? 'Today' : `Next ${shown} days`;
   const status = weatherStatus(weather, disconnected, now.getTime());
+  // Small's slot is one short line: there the label stands alone when there is no elapsed time to tell.
+  const statusAge = status && !(size === 'small' && status.label && !ageIsKnown(status.age)) ? status.label === 'Saved forecast' ? shortAge(status.age) : status.age : null;
   const place = <div className="weather-context">{weather.location.name} · {weather.units.temperature}</div>;
   if (!days.length) {
     // Unavailable (#362), as in Weather: a dim, still cloud and placeholder, one status-tone line at the
@@ -57,7 +61,7 @@ function Forecast({ state: { weather }, size, now, disconnected }: WidgetContent
     <div className="forecast-heading">
       <div className="ambient-label">{heading}</div>
       {status
-        ? <div className="weather-context forecast-status-line status-caution">{status.label && <><span className="forecast-status">{status.label}</span><span className="forecast-separator">{NBSP}· </span></>}<span className="forecast-age">{status.label === 'Saved forecast' ? shortAge(status.age) : status.age}</span></div>
+        ? <div className="weather-context forecast-status-line status-caution">{status.label && <span className="forecast-status">{status.label}</span>}{status.label && statusAge && <span className="forecast-separator">{NBSP}· </span>}{statusAge && <span className="forecast-age">{statusAge}</span>}</div>
         : place}
     </div>
     <div className="forecast-strip" style={{ '--forecast-days': days.length } as CSSProperties}>{days.map(({ day, label, full }) => <div className="forecast-day" key={day.date}>
