@@ -1,9 +1,12 @@
 # Display calendar
 
-The calendar behind Dynamic holiday cards and whole-screen themes is offline and
-curated. Choose Canada, Korea and/or Russia independently; no city coordinates or
+The calendar behind Dynamic holiday cards, whole-screen themes and the Calendar widget's
+upcoming dates is offline and curated. Choose Canada, Korea and/or Russia independently; no city coordinates or
 calendar preferences go to a holiday service. Holiday cards are separately opted
 in under Dynamic and share the theme calendar selections even with themes off.
+The Calendar widget (#716) uses the same selection with themes off too: it lists the
+next observances of the ticked calendars and marks their days in the month, with no
+opt-in of its own (see [Uses of the observance list](#uses-of-the-observance-list)).
 Dates follow the display computer's civil date. This is a decorative observance
 calendar, **not a statutory employment, school, tax or bank-closure schedule**.
 Canadian provincial/territorial coverage is tracked separately in #578.
@@ -37,6 +40,35 @@ If the runtime lacks verified Dangi support, lunar events are omitted and Dynami
 reports that limitation; fixed Korean dates remain available. Node and actual
 browser tests cover the independently published 2026/2027 dates. Later years are
 computed, not copied from a short table that eventually expires.
+
+## Uses of the observance list
+
+`observancesForYear` feeds three things, each with its own rule for a day:
+
+| Use | Which observances | Which days |
+| --- | --- | --- |
+| Themes (`holidayWindow`) | Those with a scene or a quiet role (`HOLIDAY_SCENE_POLICY`) | The display windows under [Timing and priorities](#timing-and-priorities): lead days, the holiday's own span, priorities |
+| Dynamic holiday cards | All of the ticked calendars | Today and tomorrow, across a multi-day holiday |
+| Calendar widget, upcoming dates and marks (#716) | All of the ticked calendars: public, cultural and commemorative alike | The observance's own central `date` only, from today through the next 90 days for the list and across the shown month for the marks |
+
+The Calendar uses the factual date and the `shortName`, never a scene window: Christmas is
+December 25 in its list although the Christmas scene starts on December 1, Seollal is its own
+day although its holiday starts the day before, and Maslenitsa is its closing Sunday. A
+multi-day holiday that has started is no longer "upcoming" once its central date has passed
+(Russia's New Year holidays leave the list after January 1). The same occasion in several
+calendars is one line under the first calendar's name in the order Canada, Korea, Russia, so
+January 1 reads "New Year’s Day" unless Russia is the only calendar ("New Year holidays"),
+and Korea's Labour Day and Russia's Spring and Labour Day on May 1 read "Labour Day". A
+Countdown date or a birthday with a holiday's name on its day stands for that occasion in
+every calendar, so a countdown called "New Year’s Day" does not bring "New Year holidays"
+back beside it. When the
+runtime has no verified Dangi calendar the lunar dates are simply absent, as for cards. Adding
+an observance to `holidays.ts` adds it to the Calendar with no further change; keep its
+`shortName` within 32 letters (a wide character such as a Hangul syllable counts as two) so
+the Calendar shows it whole; a unit test checks every bundled name. The widget's rules are in the
+[widget contract](widgets.md#calendar-upcoming-dates-716). This is still a decorative
+observance list, not a statutory closure schedule, and the Calendar does not say which dates
+are days off.
 
 ## Timing and priorities
 

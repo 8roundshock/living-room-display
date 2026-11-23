@@ -58,7 +58,7 @@ busy dashboards. The application must produce no audio.
 | Screen preview | Small, dim, nearly transparent last-desktop snapshot captured before activation; visibility is toggleable. |
 | Photo | Optional user-selected local image, dimmed and relocated with other widgets; excluded from exports. |
 | World clocks | Time in up to four other cities. |
-| Calendar | This month at a glance; on the default board (#435). |
+| Calendar | This month at a glance, with the next holidays and important dates and their days marked (#716); on the default board (#435). |
 | Countdown | Days until dates you choose. |
 | Note | A short message on screen. |
 | Air quality | Air quality and UV index. |

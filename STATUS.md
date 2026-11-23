@@ -71,6 +71,39 @@ they should go too. Provider terms and where the credit must appear are part of 
 public-release decision (#114). Found on the way: two double-digit sub-zero temperatures crowd
 the medium Forecast (#731, also on `main`).
 
+## Calendar: upcoming holidays and important dates — 2026-11-22 (#716)
+
+Source candidate, not installed. The owner: "calendar should say like upcoming holidays or important
+dates, or something, just make it a bit more useful".
+
+What changed:
+- The large Calendar lists the next three dates under the month, one line each ("Dec 25  Christmas",
+  "Today  Christmas" on the day). Medium shows the next one under the date where it fits: always on the
+  Spacious and Balanced grids, on Fine only in a four-week month. Small is unchanged.
+- The dates come from data the app already has, up to 90 days ahead, soonest first, each occasion once:
+  the holiday calendars ticked for themes (Canada, Korea, Russia), Birthdays ("Mina's birthday") and
+  Countdown dates. Reminders stay with Reminders, Agenda and Week ahead. There is no new saved setting.
+- Days of the shown month that carry one of these dates get a small accent dot under the number; a past
+  day's dot dims with its day, and today's sits on its ring.
+- The Calendar's options carry the same Holiday calendars boxes as Theme and Dynamic (one selection).
+- With nothing in range the widget looks as it did before.
+- With the list, the large month gives up spare height, not type size; only a six-week month takes
+  slightly smaller numbers (28 px instead of 30 px on the Balanced grid at 1080p). At a larger Text size
+  the dates give way first (fewer lines, then none), so the Calendar never zooms out more than it did
+  before.
+- A name longer than its line (32 letters; a Hangul syllable counts as two) is cut after a whole word
+  with an ellipsis; a birthday that does not fit as "Name's birthday" shows the name alone.
+- Also fixed: a six-week medium month renders at fit 1 on the Fine grid (it zoomed out to 0.88 at 720p).
+
+On 22 November 2026 with all three calendars and no birthday or countdown date the list reads
+Dec 25 Christmas, Dec 26 Boxing Day, Jan 1 New Year’s Day.
+
+Details: [Widget contract](docs/widgets.md#calendar-upcoming-dates-716) and
+[Holiday calendar](docs/holiday-calendar.md#uses-of-the-observance-list).
+
+Verified with source builds and synthetic data only: see the pull request. Not verified: installation,
+and the TV (whether the list and the dots read well from the couch is the owner's check).
+
 ## Build and test hygiene: Alt+Tab ghosts, build advisory, stale client bundles — 2026-11-17 (#712, #708, #711, #710)
 
 Source candidate, not installed. The owner: "fix all of them in one pr".

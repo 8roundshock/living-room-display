@@ -22,7 +22,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/client/widgets/types.ts`](../src/client/widgets/types.ts) | `WidgetContentProps`, `WidgetSettingsProps` and the `WidgetModule` interface. |
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
 | [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
-| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), and `Dynamic` (#437), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157). |
+| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), and `Dynamic` (#437), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157), and [`src/client/calendar-dates.ts`](../src/client/calendar-dates.ts) the Calendar's upcoming dates and grid marks (#716). |
 | [`src/client/Display.tsx`](../src/client/Display.tsx) | Ambient state and the shared movement/composition boundary. |
 | [`src/client/Editor.tsx`](../src/client/Editor.tsx) | Picker, grid interactions and settings draft integration. |
 
@@ -180,7 +180,7 @@ The renderer families have deliberate visual roles:
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete faint desktop, picture-only with responsive rounded and softly feathered edges; no caption and no visible timestamp (#563) | Wider complete desktop | Larger complete desktop; retains its aspect without zoom/cropping |
 | World clocks | First city's label, time in regular-weight numerals, relation ("Tomorrow · +13 h"), day/night icon and a dim "+N" | Two cities side by side | Up to four rows, label and relation left, time right; hidden on the display with no cities |
-| Calendar | Month name over this week's strip (weekday initials and dates) | Weekday, large date and month beside a compact month grid | Month and year, a weekday header row and a generous month grid; every grid has only the 4–6 weeks the month needs |
+| Calendar | Month name over this week's strip (weekday initials and dates) | Weekday, large date and month beside a compact month grid, and the next upcoming date on one line under them where the box has room | Month and year, a weekday header row and a generous month grid, then up to three upcoming dates ("Dec 25  Christmas"); every grid has only the 4–6 weeks the month needs, and a day with a holiday or an important date carries a small dot ([upcoming dates](#calendar-upcoming-dates-716)) |
 | Countdown | The next date as a large count (“12” over “days”, or Today/Tomorrow), its title and a short date | The next date on the left; the following two as compact rows | As many rows as fit the box (title, date, days right-aligned), measured like Reminders, then an exact “+N more” (#221) |
 | Note | The text at the largest size that fits the box (measured from its lines and wrapping, #194), up to a family cap | The same, wider | The same, generous; only a note that cannot fit at the text floor zooms out through the shared fit |
 | Air quality | AQI and category word with place and scale; one short footer row: "Model est." for a fresh reading, with no age and no provider name, or the status and age of one that is not fresh in the status tone ("Saved reading · 2 hr ago", "Offline · Model est. · 12 min ago") (#715); values over 3 hours old read "Saved estimate" or "Last known · 9 AM" on their own line under the reading (#309) | Adds the main pollutant and UV with its WHO category (both hidden once the values are over 3 hours old, UV then from the saved estimate); one footer row | Adds AQI bars for the current and up to 23 following hours (unknown hours a dotted baseline) over "Now" and the last hour's end, as Weather's chart (#261), and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
@@ -189,6 +189,95 @@ The renderer families have deliberate visual roles:
 
 The large clock requires actual vertical room in the central catalog; do not
 recreate a giant option by scaling within the previous short large family.
+
+### Calendar upcoming dates (#716)
+
+Owner request, 2026-11-22: "calendar should say like upcoming holidays or important dates, or
+something, just make it a bit more useful". The Calendar lists what is coming up from data the app
+already has, so nothing new is entered or saved (no new persisted key):
+
+| Source | What it gives | Rule |
+| --- | --- | --- |
+| Holiday calendars | The observances of the calendars ticked for themes (`appearance.theme.calendars`, shared with Dynamic; absent means all three, an empty list none), from [`holidays.ts`](../src/shared/holidays.ts) | Each observance on its own date under its short name. One occasion in several calendars shows once under the first calendar's name (Christmas; New Year's Day rather than Russia's "New Year holidays"; Labour Day for Korea's and Russia's May 1; Easter when both Easters share a Sunday). Different occasions on one day each get a line. |
+| Birthdays | `settings.birthdays` | "Mina's birthday" on the exact day every year, like the birthday scene: a February 29 birthday appears in leap years only. A name that already says "birthday" is kept as written. |
+| Countdown dates | `widgetData.countdowns` | `nextOccurrence`, as Countdown counts: a yearly date rolls to its next anniversary (February 29 falls on February 28 in a common year), a passed one-time date is gone. They show whether or not the Countdown widget is on the board. |
+
+Reminders are not listed: Reminders, Agenda and Week ahead show those (#98 stays the ticket for
+reminder dots on the grid). `calendarDates` in [`calendar-dates.ts`](../src/client/calendar-dates.ts)
+is pure and unit-tested:
+
+- **Upcoming** means today through the next 90 days (`UPCOMING_HORIZON_DAYS`), on this computer's
+  civil date like the grid, soonest first; on one day your own dates come before holidays. Within 90
+  days a month and day name one date, so no year is shown, also across the turn of the year.
+- **Each occasion once.** Items of one day that share a name or an occasion, directly or through
+  another item, are one line, and the first in order stands for the others. So a countdown called
+  "Christmas" is the one Christmas line, and a countdown called "New Year's Day" also stands for
+  Russia's "New Year holidays", which is the same occasion as the Canadian day of that name. Names
+  match whatever their case, spacing or kind of apostrophe.
+- **Nothing in range:** the widget looks as it did before, with no list, no marks and no room made
+  for them. Captures of the small, large and medium families with nothing in range are identical to
+  captures from before #716, with one intended exception: a six-week medium month on the Fine grid,
+  which zoomed out before and now closes its rows up to fit (see Medium).
+- **Lines** read "Dec 25  Christmas": the date in the accent tone, the name in the text colour, and
+  "Today" for today's own dates. A line never wraps. A name has room for 32 letters
+  (`UPCOMING_NAME_LENGTH`), where a wide character (Hangul, kana, CJK ideographs, full-width forms,
+  emoji) counts as two because it is about twice as wide. A longer name is cut by `cleanCut` and ends
+  in an ellipsis:
+  - after the last whole word that fits, when that keeps at least half the line ("A deliberately long
+    synthetic…", "할머니 생신 잔치 준비하고 선물…");
+  - otherwise inside the word, so a line is never reduced to a stub: one long word, or "A
+    Supercalifragilisticexpialido…" rather than "A…";
+  - with no space, full stop, comma or dash left before the ellipsis, and never between a letter and
+    its combining mark or inside a joined emoji (grapheme segmentation).
+
+  A birthday reads "Mina's birthday" when that fits (names of up to 21 letters). When it does not,
+  the line is the name alone, cut like any other name ("Grandmother Alexandra…"), so a possessive is
+  never left without its word. Every bundled holiday short name fits and shows whole. The day's
+  accessible name always carries the whole names.
+- **Last resort in the browser:** the count cannot know the typeface, so a name that is still wider
+  than its line (capital W or M throughout, for example) stays on one line and ends in the browser's
+  own ellipsis where it runs out (`text-overflow: ellipsis`), which can fall inside a word. A Korean
+  and a Russian title show exactly as the model cut them on every grid at 720p, 1080p and 4K, and 31
+  capital W end in that ellipsis (the widget check).
+- **Large** shows up to three lines under the month (`.calendar-upcoming`). The month gives up spare
+  height, not type size: the heading and weekday rows sit closer and the week rows fill what is left.
+  Four- and five-week months keep their numbers; only a six-week month takes slightly smaller ones
+  (6.2cqh instead of 6.6cqh, 28 px instead of 30 px on the Balanced grid at 1080p).
+- **Medium** shows the next date on one line under the date and the month (`.calendar-next`). At Text
+  100% it is shown on the Spacious and Balanced grids in every month, and on Fine only in a four-week
+  month, where the box is too short beside five or six weeks. The big date gives the line its room
+  (48cqh instead of 54cqh). A six-week medium month shares the height that is left between its rows:
+  with room to spare they are exactly as before, with less the gap under the weekday labels and then
+  the rows' padding close up, down to the digits' own line. So it makes room for the next date on
+  Balanced and renders at fit 1 at the data floor on Fine instead of zooming out (before, to 0.88 at
+  720p).
+- **The dates give way before the month does.** The lines of both families are measured from layout
+  boxes like the Countdown list (`fittingLines` in `Calendar.tsx`): a line that does not fit takes no
+  layout, and with no line left the family has exactly the layout it has with nothing upcoming. So the
+  dates never make the shared fit zoom the month out, at any Text size, and the Calendar's fit is
+  never below what it was before #716. At Text 100% all three lines fit everywhere. Above it fewer
+  fit: on the Balanced grid at 1080p a five-week large month shows two lines at Text 105%, one at 110%
+  and 115% and none from 125%; a four-week month still shows one at 125%; medium shows its next date up
+  to Text 105% and none from 110%. The dots stay at every Text size.
+- **Small** is unchanged: the week strip has no list and no marks.
+- **Marks:** a day of the shown month that carries one of these dates, past days included, gets one
+  small dot in the accent tone (`.calendar-mark`, a real element so the palette harness audits it),
+  centred on the bottom of the day's pill, which is today's ring. It takes no room, adds no fill or
+  frame, and dims with its day (0.45 past, 0.7 ahead, 1 today). The cell's accessible name carries
+  the names ("25, Christmas").
+- **Once per day:** the rows, their strings and the marks are built once per civil day and set of
+  sources. A state refresh that hands over new arrays with the same content keeps them
+  (`sourcesSignature`), so a one-second tick formats nothing (#193) and the list changes only at
+  local midnight or when a source changes. No timer or animation of its own.
+- **Settings:** the Calendar panel carries the same **Holiday calendars** boxes as Style and Dynamic
+  (one shared selection, part of the style) and says where the dates come from. With Theme Off and
+  Dynamic's Holidays off it is the only place that shows them; a selection other than all three is the
+  #575 rollback exception ([install](install.md#additive-data-and-rollback-compatibility-84)).
+  Birthday names and countdown titles are private content: tests and fixtures use synthetic entries
+  only.
+
+Every family renders at fit 1 at Text 100% on every grid density at 720p, 1080p and 4K in four-, five-
+and six-week months (the widgets suite's Calendar sweep, which also checks Text 110%, 125% and 150%).
 
 ### Clock timer slot
 
