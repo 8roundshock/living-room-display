@@ -46,3 +46,27 @@ test('Classic numerals stay lining wherever a rule sets its own figures (#363)',
   }
   assert.ok(checked >= 8, `${checked} ambient rules set their own figures`);
 });
+
+test('no numeral is tracked tighter than its typeface (#717)', () => {
+  // The Clock's defect: tabular figures pulled together by a negative letter-spacing made 44 overlap and 04, 48
+  // and 64 touch. These numerals were fixed with it and must keep their typeface's own spacing (or the Clock's
+  // measured gap).
+  const fixed = ['.clock-time', '.clock-digits', '.clock-char', '.clock-period', '.clock-style-example', '.wc-time', '.countdown-number .countdown-value', '.sun-hero'];
+  // Numerals that still have negative tracking, each in #726. An entry that no longer applies fails, so it leaves
+  // this list with its fix; a new tabular numeral with negative tracking fails until it is fixed or filed.
+  const tracked = ['.air-aqi', '.calendar-date-number', '.collection-value', '.dynamic-value', '.current-temperature', '.forecast-temperatures'];
+  const used = new Set<string>(); let seen = 0;
+  for (const { name, text } of stylesheets()) {
+    for (const [, selector, body] of text.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const spacing = body!.match(/letter-spacing:\s*([^;]+)/)?.[1]?.trim();
+      const numeral = fixed.find(part => selector!.includes(part));
+      if (numeral) { seen++; assert.ok(!spacing?.startsWith('-'), `${name}: ${selector!.trim()} { letter-spacing: ${spacing} }`); }
+      if (!spacing?.startsWith('-')) continue;
+      const known = tracked.find(part => selector!.includes(part));
+      if (known) used.add(known);
+      else assert.doesNotMatch(body!, /tabular-nums/, `${name}: ${selector!.trim()} tracks tabular figures tighter than the typeface (letter-spacing: ${spacing}); see #726`);
+    }
+  }
+  assert.ok(seen >= 8, `${seen} clock and numeral rules checked`);
+  assert.deepEqual(tracked.filter(part => !used.has(part)), [], 'fixed: remove from the #726 list');
+});
