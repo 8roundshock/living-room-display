@@ -488,16 +488,18 @@ families. Its tone is sky, like Forecast, so the two strips read as a pair.
   agrees with Weather; the rest are the hourly model instants after now, labelled with the
   hour in the weather city's zone: "5PM" on the 12-hour clock, with the day period as a
   smaller suffix and no space before it, as a phone's hourly row writes it (`labelParts`;
-  like the Clock's period it never goes below the display's text floor), or the bare "17"
-  on the 24-hour clock, so only a sun column shows minutes. Each hour has a `WeatherGlyph`
+  like the Clock's period it never goes below the display's text floor, so it is never
+  larger than the hour it follows), or the bare "17" on the 24-hour clock, so only a sun
+  column shows minutes. Each hour has a `WeatherGlyph`
   that is day- or night-aware from the sun at the weather location (`sunIsUp`), the
   temperature, and the precipitation chance of the hour that starts there (the saved
   interval whose `intervalStart` is that instant), with the droplet, only from 10%. A dry
   stretch shows nothing in that row, which still keeps its line so nothing moves when a
   chance appears.
 - **Sunrise and sunset.** An event after now and up to the last hour is a column of its own,
-  in time order between the hours it falls between: its exact time as the label ("16:47",
-  "4:47PM" with the small period), the `sunrise` or `sunset` icon in the sun's sub-tone (`data-glyph="sun"`),
+  in time order between the hours it falls between: its exact time as the label ("16:47";
+  on the 12-hour clock with no day period, "4:47", because the word under it and the hour
+  labels on either side, "4PM" and "5PM", already say which half of the day it is), the `sunrise` or `sunset` icon in the sun's sub-tone (`data-glyph="sun"`),
   and the word where a temperature would be. It has no temperature and no chance. The
   events are the instants at which `sunIsUp` changes (`sunEvents`), the same test the hours'
   day and night glyphs ask, so the two cannot disagree: the hours before a sunset draw day
@@ -525,10 +527,11 @@ families. Its tone is sky, like Forecast, so the two strips read as a pair.
   is at least 7% (since the strips share Forecast's larger sizes, #720, about 12% on the
   Balanced grid and 7% on the Fine grid, where the text floors leave the least room). A
   larger Text size takes the travel first and then the air between the values and the
-  line, down to a flat line, before the strip zooms out, so Hourly forecast zooms out no
-  further than the Forecast above it: at Text 110% both stay at fit 1 on every grid at
-  720p, 1080p and 4K; at 125% and 150% Forecast zooms out for its own reasons (two values
-  a day) as much as or more than Hourly forecast.
+  line, down to a flat line, before the strip zooms out, so at Text 110% both strips stay
+  at fit 1 on every grid at 720p, 1080p and 4K with every shared size equal. Above that,
+  twelve columns can be too narrow for the larger text ("Sunset" at Text 150% is about
+  100 px in an 84 px column at 1080p on the Balanced grid), and the strip zooms out further
+  than the Forecast above it: up to about 8% on Balanced at 150% (#749).
 - **Heading.** "Hourly" on the left. On the right at most two calm facts that the board
   does not already show: the next sunrise or sunset within a day, only when the strip does
   not show it ("Sunrise 07:21" on a winter evening), and peak gusts over the shown hours
@@ -568,24 +571,31 @@ families. Its tone is sky, like Forecast, so the two strips read as a pair.
   the rows. Changing one changes both; only the column widths differ (6 or 12 hours against
   5 or 7 days, with a narrower column gap here).
   [`hourly-forecast.css`](../src/client/widgets/hourly-forecast.css) adds only what an hour
-  strip needs: the subgrid rows, the trend's travel worked out from those sizes, and caps
-  that keep everything a column draws inside it. Twelve hours are narrower than seven
-  days, so the time label, the sun word and the chance each take their shared size, or the
-  column's width over the width of the widest such text in ems (per typeface and, for a
-  sun time, per clock format and hour digits; with the small period at its floor), when
-  that is smaller. At Text 100% the caps bind only on the Fine grid for a 12-hour sun time
-  with a two-digit hour ("12:29AM": 3% to 6% smaller in System, 11% to 14% in Classic) and
-  for Classic's chances (1%), and for Monospace's sun word (1% on Balanced, up to 4% on
-  Fine); everything else keeps Forecast's sizes. The widgets suite puts a Forecast of the
-  same family above it in every state, family and density at 720p, 1080p and 4K and
-  compares the two: the same sizes, heading height and rhythm from label to glyph to
-  value, and the same status words; and at Text 110%, 125% and 150%. On the 12-hour clock
-  it renders every density at 720p, 1080p and 4K in every typeface with a sunrise as the
-  last column and with two sun columns side by side ("12:29AM", "12:51AM" at the edge of
-  the polar day), and at Text 125% with a 10 PM sunset: no label, value or chance leaves
-  its column and no two labels touch. Both families render at fit 1 at Text 100% in every
-  density at 720p, 1080p and 4K: fresh, saved, offline, while a refresh runs and with sun
-  columns, on both clocks and in every typeface. The view is rebuilt once a minute (#99) and values change through
+  strip needs: the subgrid rows and the trend's travel worked out from those sizes. No size
+  is ever computed below its floor: every label, sun word, temperature and chance takes its
+  shared size, which holds the shared floors and grows with Text size (final recheck 2 of
+  PR #730 removed earlier per-column caps that did not). Twelve hours are narrower than
+  seven days, so a column holds less: the column gap is narrower, and on the 12-hour clock
+  a sun column's time has no day period. Nothing a column draws may leave it, so the strip
+  is as wide as the widget or as its columns' content, whichever is wider (`width:
+  max-content; min-width: 100%`): sized to its content, the grid makes its equal columns
+  each as wide as the widest column's content, and where that is wider than the widget
+  the shared fit lays the widget out wider and zooms it out a little, as it does for any
+  widget, rather than one text shrinking alone. At Text 100% that happens only for
+  Monospace's "Sunrise" on the Fine grid: large at fit 0.973 to 0.976 and medium at 0.989
+  to 0.990, at 720p, 1080p and 4K. Everywhere else, the owner's 24-hour System board on
+  Balanced included, the strip is at fit 1. The widgets suite puts a Forecast of the same
+  family above it in every state, family and density at 720p, 1080p and 4K and compares
+  the two: the same sizes, heading height and rhythm from label to glyph to value, and the
+  same status words, at Text 100% and 110%. On the 12-hour clock it renders every density
+  at 720p, 1080p and 4K in every typeface with a sunrise as the last column and with two
+  sun columns side by side ("12:29", "12:51" at the edge of the polar day), and at Text
+  100%, 110%, 125% and 150% with those and "100%" in every hour: no label, value or
+  chance leaves its column, no two labels touch, none is under its floor, no day period is
+  larger than its hour, and none is smaller on screen at a larger Text size than at 100%.
+  Both families render at fit 1 at Text 100% in every density at 720p, 1080p and 4K:
+  fresh, saved, offline, while a refresh runs and with sun columns, on both clocks and in
+  every typeface, but for Monospace's "Sunrise" on the Fine grid. The view is rebuilt once a minute (#99) and values change through
   `TransitionText`; the widget has no timer or animation loop of its own. At Lively the
   columns slide in one after another like Forecast's, and the trend line fades in with the
   last of them, never ahead of its values (opacity only, to its resting 0.8).

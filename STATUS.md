@@ -18,10 +18,11 @@ What changed:
   symbol and the word. It takes one of the 6 or 12 columns, so the strip never reflows; the heading
   therefore reads "Hourly" and promises no hour count. The owner picked this "entry between hours" layout
   from a mockup (2026-11-22). On the 24-hour clock hours are bare ("17"), so only a sun column shows minutes;
-  on the 12-hour clock the day period is a smaller suffix with no space ("5PM", "5:36AM"), as on a phone.
-  Nothing a column draws leaves it: the time, the sun word and the chance are capped to the column where
-  they would not fit (at Text 100% only on the Fine grid for a two-digit-hour sun time such as "12:29AM",
-  Classic's chances and Monospace's sun word), so two sun columns side by side never touch.
+  on the 12-hour clock an hour's day period is a smaller suffix with no space ("5PM"), as on a phone, and a
+  sun column's time has none ("5:36": the word and the hours either side say which half of the day it is).
+  No text is drawn under the display's floors or smaller at a larger Text size. Nothing a column draws
+  leaves it: where a column cannot hold its text, the whole strip zooms out a little, which at Text 100%
+  happens only for Monospace's "Sunrise" on the Fine grid (fit 0.973 to 0.990).
 - The temperatures ride a thin accent trend line. It breaks at an unknown value, never joins across one, and
   passes through a sun column. The row's height never changes with the values.
 - The heading's right side holds at most two facts: the next sunrise or sunset when the strip does not show
@@ -38,8 +39,9 @@ What changed:
   temperatures 27.2 → 28.5 px; chances 17.8 px and the heading 16.8 px as before); the trend line's travel
   is smaller for it (about 12% of the box on Balanced, 7% on Fine). Forecast's droplet now sits 0.2 em from
   its chance, as Hourly's does, instead of 1% of the widget's width (11 px in large at 1080p). A larger Text
-  size flattens the trend before Hourly forecast zooms out, so it never zooms out further than the Forecast
-  above it (at Text 110% both stay at fit 1 everywhere).
+  size flattens the trend before Hourly forecast zooms out, so at Text 110% both strips stay at fit 1 with
+  equal sizes everywhere; at 125% and 150% Hourly forecast's twelve columns can make it zoom out further
+  than Forecast (#749).
 - Saved data: a large placement from before this change that no longer fits as 8 × 2 becomes medium at the
   same origin, in settings, saved styles and imports. Opening old data rewrites nothing.
 - Rollback: the release installed now, `712ce80`, draws this widget's Large as 4 × 4. Once this build has
@@ -57,7 +59,8 @@ Verified with source builds and synthetic data only: see the pull request. Both 
 Text 100% on every grid at 720p, 1080p and 4K, fresh, saved, offline and while a refresh runs, with sun
 columns, under a Forecast of the same family with the same sizes and status words. Not verified:
 installation, the TV, and the owner's own look at it on the display. Follow-ups: hourly feels-like (#718), a
-small family (#719), and a 500 instead of a 400 for an unsupported family found on the way (#721).
+small family (#719), a 500 instead of a 400 for an unsupported family found on the way (#721), and the
+stacked strips above Text 110% (#749).
 
 ## Clock: digits spaced by their ink, never overlapping, placed once an hour — 2026-11-22 (#717)
 

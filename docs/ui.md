@@ -1054,11 +1054,13 @@ On the display it is Forecast's strip with one column per hour:
   droplet with the chance only from 10%. An unknown condition or temperature is a dash, an
   unknown chance a dim dash; a chance under 10% leaves its cell empty.
 - **Sun columns:** a sunrise or sunset inside the strip stands between the hours it falls
-  between: its exact time ("5:36AM", "16:47"), the sunrise or sunset symbol, and
-  "Sunrise" or "Sunset" at the hour label's size where a temperature would be. The time
-  and the word never leave their column: each is a little smaller only where it would not
-  fit (a 12-hour time with a two-digit hour such as "12:29AM" on the Fine grid, the
-  Monospace word). Two sun columns side by side never touch. It takes one of the 6 or 12 columns, so
+  between: its exact time ("5:36" on the 12-hour clock, with no day period: the word and
+  the hour labels either side, "5AM" and "6AM", say which half of the day it is; "16:47" on
+  the 24-hour clock), the sunrise or sunset symbol, and "Sunrise" or "Sunset" at the hour
+  label's size where a temperature would be. Nothing leaves its column and nothing is
+  drawn under the display's text floor: where a column cannot hold its text (Monospace's
+  "Sunrise" on the Fine grid), the whole strip zooms out a little instead. Two sun columns
+  side by side never touch. It takes one of the 6 or 12 columns, so
   the columns never change width. The hours before a sunset draw day glyphs and the hours
   after it night glyphs: both come from the same sun test.
 - **Trend line:** a thin line in the accent tone at 80% opacity behind the values, from
@@ -1083,9 +1085,12 @@ travel is 17 px (8 px on the Fine grid, where the floors leave less room). Both 
 render at fit 1 at Text 100% in every density at 720p, 1080p and 4K: fresh, saved,
 offline and while a refresh runs, with one or two sun columns (also side by side and as
 the last column), three-character temperatures and "100%" in every hour, on both clocks
-and in every typeface, with nothing outside its column. A larger Text size flattens the
-trend line before the strip zooms out, so it never zooms out further than the Forecast
-above it. The view is rebuilt once a minute and
+and in every typeface, with nothing outside its column and nothing under its floor; the
+one exception is Monospace's "Sunrise" on the Fine grid, where the strip zooms out to
+0.973 to 0.976 (large) or 0.989 to 0.990 (medium). A larger Text size flattens the trend
+line before the strip zooms out, so at Text 110% it keeps Forecast's sizes; above that,
+twelve columns can be too narrow and the strip zooms out further than Forecast (#749),
+but nothing in it is ever smaller on screen than at Text 100%. The view is rebuilt once a minute and
 constructs no `Intl` formatter on the one-second tick (#99).
 Browser checks: `tests/ui/widget-checks/hourlyTemperature.mjs` in the widgets suite, the
 palette harness for its tones, and the collection and catalog-sky suites.

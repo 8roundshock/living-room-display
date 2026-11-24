@@ -16,7 +16,7 @@
      a sun column's 12-hour time has no day period ("5:36", hourly-forecast.ts), and the columns are never
      narrower than their widest content (below): where one cannot hold its text, the strip is laid out wider and
      the shared fit zooms the whole widget out a little, as it does for any widget, rather than one text shrinking
-     alone. At Text 100% that happens only for Monospace's "Sunrise" in large on the Fine grid. */
+     alone. At Text 100% that happens only for Monospace's "Sunrise" on the Fine grid (fit 0.973 to 0.990). */
 .grid-ambient .ambient-hourlyTemperature .hourly-body {
   --hourly-gap: 1cqw;
   /* The height of everything Forecast's strip also has: the heading, hour, glyph, value and chance rows and their
