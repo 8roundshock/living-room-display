@@ -258,6 +258,18 @@ export async function runPaletteQa({ playwright, edge, capture } = {}) {
         await mutation.evaluate((element) => element.remove());
         assert.deepEqual((await paints(page.locator('[data-widget-id="weather"]'))).bad, [], 'removing the mutation restores a clean audit');
       }
+      // Hourly forecast (#714): hour labels, the sun word and the trend line are its sky tone; a chance is Sea glass
+      // like Forecast's; a sun column's symbol is Gold; temperatures stay primary text.
+      current = state({ mode, only: 'hourlyTemperature', size: 'large' }); await open();
+      assert.equal(await page.locator('[data-widget-id="hourlyTemperature"] [data-hourly-column="sunset"]').count(), 1, 'the fixture afternoon reaches the sunset');
+      assert.equal(await colorOf('.hourly-heading .ambient-label'), expected(mode, 'sky'), `${mode} hourly heading`);
+      assert.equal(await colorOf('.hourly-hour .forecast-day-label'), expected(mode, 'sky'), `${mode} hour label`);
+      assert.equal(await colorOf('.hourly-trend path', 'stroke'), expected(mode, 'sky'), `${mode} trend line`);
+      assert.equal(await colorOf('.hourly-sun-word'), expected(mode, 'sky'), `${mode} sun word`);
+      assert.equal(await colorOf('.hourly-sun-glyph', 'stroke'), expected(mode, 'sun'), `${mode} sun column symbol`);
+      assert.equal(await colorOf('.hourly-rain svg', 'stroke'), expected(mode, 'water'), `${mode} hourly droplet`);
+      assert.equal(await colorOf('.hourly-rain'), expected(mode, 'water'), `${mode} hourly chance`);
+      assert.equal(await colorOf('.hourly-temperature:not(.hourly-sun-word)'), text, `${mode} hourly temperature is primary text`);
       // Sun & moon (#78): Gold label, arc and sun dot; the moon subtree is Lilac; the moon name is primary text.
       current = state({ mode, only: 'sunMoon', size: 'large' }); await open();
       assert.equal(await colorOf('.ambient-sunMoon .ambient-label'), expected(mode, 'sun'));

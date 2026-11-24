@@ -25,6 +25,20 @@ test('picker searches names, descriptions and categories, using every trimmed wo
   assert.deepEqual(ids(filteredPickerGroups(widgets, ' \t ', 'all')), ids(pickerGroups()));
 });
 
+test('search keywords find a widget by what it shows: Hourly forecast by temperature, hourly and hours (#714)', () => {
+  const widgets = defaultSettings().widgets;
+  // The name and description say neither "temperature" nor "sunset"; the catalog's keywords do, and they are never displayed.
+  assert.doesNotMatch(`${WIDGET_CATALOG.hourlyTemperature.name} ${WIDGET_CATALOG.hourlyTemperature.description}`, /temperature|sunset/i);
+  assert.deepEqual(ids(filteredPickerGroups(widgets, 'temperature', 'all')), ['hourlyTemperature']);
+  assert.deepEqual(ids(filteredPickerGroups(widgets, 'Temperature  HOURLY', 'all')), ['hourlyTemperature'], 'keywords combine with the name, in any case');
+  for (const word of ['hourly', 'hours', 'hour', 'forecast', 'sunrise', 'sunset', 'snow', 'rain']) assert.ok(ids(filteredPickerGroups(widgets, word, 'all')).includes('hourlyTemperature'), word);
+  assert.deepEqual(ids(filteredPickerGroups(widgets, 'temperature', 'all', 'weather')), ['hourlyTemperature']);
+  assert.deepEqual(ids(filteredPickerGroups(widgets, 'temperature', 'all', 'time')), []);
+  assert.deepEqual(ids(filteredPickerGroups(widgets, 'temperature', 'on-display')), [], 'the availability filter still applies');
+  // The existing searches keep their results: a keyword only adds its own widget.
+  assert.deepEqual(ids(filteredPickerGroups(widgets, 'moon sky', 'all')), ['sunMoon']);
+});
+
 test('picker filters the current draft without changing it and combines query with availability', () => {
   const widgets = defaultSettings().widgets, before = structuredClone(widgets);
   for (const filter of ['not-added', 'on-display'] as const) {

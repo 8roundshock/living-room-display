@@ -102,11 +102,18 @@ export async function runCatalogSkyQa({ playwright, edge } = {}) {
     await page.getByRole('button', { name: 'Add widget', exact: true }).click();
     const groupItems = name => page.getByRole('group', { name, exact: true }).locator('.catalog-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label').replace(/^Preview /, '').replace(/, on your display$/, '')));
     assert.deepEqual(await groupItems('Time'), ['Clock', 'World clocks', 'Calendar', 'Timers', 'Day progress', 'Year progress', 'Time overlap']);
-    assert.deepEqual(await groupItems('Weather & sky'), ['Weather', 'Forecast', 'Air quality', 'Sun & moon', 'Dynamic', 'Weather alerts', 'Hourly temperature', 'Wind', 'Humidity', 'Pressure', 'Visibility', 'Cloud cover', 'Precipitation']);
+    assert.deepEqual(await groupItems('Weather & sky'), ['Weather', 'Forecast', 'Air quality', 'Sun & moon', 'Dynamic', 'Weather alerts', 'Hourly forecast', 'Wind', 'Humidity', 'Pressure', 'Visibility', 'Cloud cover', 'Precipitation']);
     assert.deepEqual(await groupItems('Personal'), ['Reminders', 'Countdown', 'Note', 'Agenda', 'Week ahead']);
     assert.deepEqual(await groupItems('Pictures'), ['Last screen', 'Photo', 'Quiet scene']);
+    // #714: Hourly forecast is found by what it shows; its name and description do not say "temperature".
+    const pickerSearch = page.getByRole('searchbox', { name: 'Search widgets' });
+    const found = async query => { await pickerSearch.fill(query); await page.clock.runFor(100); return page.locator('.catalog-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label').replace(/^Preview /, '').replace(/, on your display$/, ''))); };
+    assert.deepEqual(await found('temperature'), ['Hourly forecast'], 'searching "temperature" finds Hourly forecast');
+    for (const query of ['hourly', 'hours', 'sunset']) assert.ok((await found(query)).includes('Hourly forecast'), `searching "${query}" finds Hourly forecast`);
+    await pickerSearch.fill(''); await page.clock.runFor(100);
+    assert.equal((await groupItems('Weather & sky')).length, 13, 'clearing the search restores the group');
     await page.getByRole('button', { name: 'Close widget picker', exact: true }).click(); await page.clock.runFor(200);
-    checks.push('Grouped picker (#157): World clocks under Time; Air quality and Sun & moon under Weather & sky');
+    checks.push('Grouped picker (#157): World clocks under Time; Air quality and Sun & moon under Weather & sky; Hourly forecast is found by "temperature", "hourly", "hours" and "sunset" (#714)');
     await addWidget(page, 'World clocks');
     assert.match(await canvas(page, 'worldClocks').innerText(), /Add a city/, 'editor placeholder without cities');
     assert.match(await page.locator('.world-clock-editor').innerText(), /Times follow each city's time zone and daylight saving\./);

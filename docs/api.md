@@ -209,6 +209,12 @@ move keeps it. The editor sends a changed placement whole, with `span: null` whe
 it has none. The previous installed release (`d66832b`) and the earlier releases back
 to `3fee844` read a saved span; `bedca44` does not, so a downgrade that far needs the
 [strip procedure](install.md#removing-custom-reminders-sizes-before-a-downgrade).
+A family whose span changed after data was saved with it is refitted before these rules
+apply (#714, the catalog `reshaped` rule; currently Hourly forecast, whose large family
+went from 4×4 to 8×2). A `large` placement that the new span puts outside the grid, or
+over another shown widget, becomes `medium` at the same origin in stored settings, saved
+styles, imports and a PATCH; one that fits is kept and reads as 8×2. A hidden placement
+only has to stay inside the grid. Every other invalid placement still returns 400.
 Legacy version-one settings acquire the safe catalog default grid while preserving old
 widget visibility and manual location. That backfill never uses the default board
 that new installs and Reset layout start with ([#435](widgets.md#default-board-435)),

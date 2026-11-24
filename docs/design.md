@@ -205,9 +205,9 @@ so Native adds hue, not light. Status cues keep their own tones in both modes.
 | Role | Tone | Hex | OKLCH (L C h) | Meaning |
 | --- | --- | --- | --- | --- |
 | time | Lilac | `#aaa0ca` | 0.729 0.061 296 | Time and night (Clock, World clocks, Calendar, moon, partly cloudy night's moon) |
-| sky | Mist | `#8aa8c2` | 0.718 0.050 245 | Sky and conditions (Weather, Forecast, Air quality, snow) |
+| sky | Mist | `#8aa8c2` | 0.718 0.050 245 | Sky and conditions (Weather, Forecast, Hourly forecast, Air quality, snow) |
 | water | Sea glass | `#73b1ab` | 0.717 0.065 188 | Precipitation (rain chance and its droplet, drizzle, rain and storm glyphs) |
-| sun | Gold | `#b3a774` | 0.726 0.070 96 | Clear daytime (Sun & moon, clear-day glyph, partly cloudy day's sun) |
+| sun | Gold | `#b3a774` | 0.726 0.070 96 | Clear daytime (Sun & moon, clear-day glyph, partly cloudy day's sun, Hourly forecast's sunrise and sunset symbols) |
 | personal | Rose | `#c99695` | 0.721 0.062 20 | Your own items (Reminders, Countdown, Note) |
 | stone | Stone | `#a9a49c` | 0.721 0.013 80 | Images, clouds and neutral (Last screen, Photo, cloud, partly cloudy and fog glyphs) |
 

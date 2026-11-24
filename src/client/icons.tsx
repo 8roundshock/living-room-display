@@ -30,6 +30,7 @@ export type IconName =
   | 'note'
   | 'air'
   | 'sunrise'
+  | 'sunset'
   | 'forecast'
   | 'undo'
   | 'home'
@@ -241,6 +242,13 @@ const paths: Record<IconName, React.ReactNode> = {
     <>
       <path d="M2.5 19h19M7 19a5 5 0 0 1 10 0" />
       <path d="M12 3.5v5M9.8 5.7 12 3.5l2.2 2.2M5.6 12.6 7 14m11.4-1.4L17 14" />
+    </>
+  ),
+  // Sunrise with its arrow turned down (#714).
+  sunset: (
+    <>
+      <path d="M2.5 19h19M7 19a5 5 0 0 1 10 0" />
+      <path d="M12 3.5v5M9.8 6.3 12 8.5l2.2-2.2M5.6 12.6 7 14m11.4-1.4L17 14" />
     </>
   ),
   forecast: (

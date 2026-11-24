@@ -266,17 +266,40 @@
 /* High and low share a row when they fit and wrap otherwise, so fresh, stale and offline small forecasts fit
    without zooming out (#221). */
 .grid-ambient .ambient-forecast.widget-size-small .forecast-temperatures { flex-wrap: wrap; justify-content: center; gap: 1cqh 1.4cqw; }
-/* With no line under the strip (#715), the medium and large strips take that room, in every state: taller glyphs,
-   day labels and chances, and more air between them. Temperatures grow only in large, capped by the width a day's
-   column leaves for two double-digit sub-zero values. Small keeps the base sizes: its temperatures wrap onto two
-   rows when cold, which already uses the room. */
-.grid-ambient .ambient-forecast:is(.widget-size-medium, .widget-size-large) .forecast-day { gap: 3.6cqh; }
-.grid-ambient .ambient-forecast:is(.widget-size-medium, .widget-size-large) :is(.forecast-day > .weather-glyph, .forecast-unknown) { width: min(10cqw, 20cqh); height: min(10cqw, 20cqh); font-size: min(10cqw, 20cqh); }
-.grid-ambient .ambient-forecast.widget-size-medium .forecast-day-label { font-size: calc(max(var(--min-text), min(7cqw, 10.5cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-medium .forecast-rain { font-size: calc(max(var(--min-data), min(5cqw, 8cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-day-label { font-size: calc(max(var(--min-text), min(4cqw, 10.5cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-temperatures { font-size: calc(max(var(--min-data), min(2.5cqw, 15cqh)) * var(--font-scale)); }
-.grid-ambient .ambient-forecast.widget-size-large .forecast-rain { font-size: calc(max(var(--min-data), min(3cqw, 8cqh)) * var(--font-scale)); }
+/* The long strip, defined once (#720): Forecast and Hourly forecast (`hourlyTemperature`, #714) share their medium
+   and large strips, because the owner stacks the two one above the other and they must read as one family. Every
+   size is a custom property on the widget body that both widgets' parts read; Hourly forecast also reads them to
+   work out the height its trend line may use (widgets/hourly-forecast.css). So a change here changes both, and the
+   widgets suite compares the two side by side. Only the column widths differ (5 or 7 days against 6 or 12 hours);
+   the heading, its gap, the type, the glyphs, the chance's line and droplet spacing and the gaps between the rows
+   do not.
+   With no line under the strip (#715), the strip takes that room, in every state: taller glyphs, labels and
+   chances than small, and more air between them. Temperatures grow only in large, capped by the width a day's
+   column leaves for two double-digit sub-zero values. Small Forecast keeps the base sizes: its temperatures wrap
+   onto two rows when cold, which already uses the room. */
+.grid-ambient :is(.ambient-forecast, .ambient-hourlyTemperature):is(.widget-size-medium, .widget-size-large) .forecast-body {
+  --strip-heading: calc(max(var(--min-text), min(6.4cqw, 8cqh)) * var(--font-scale));
+  --strip-context: calc(max(var(--min-text), min(5cqw, 6cqh)) * var(--font-scale));
+  --strip-heading-gap: 4cqh;
+  --strip-label: calc(max(var(--min-text), min(7cqw, 10.5cqh)) * var(--font-scale));
+  --strip-glyph: min(10cqw, 20cqh);
+  --strip-value: calc(max(var(--min-data), min(8cqw, 12cqh)) * var(--font-scale));
+  --strip-chance: calc(max(var(--min-data), min(5cqw, 8cqh)) * var(--font-scale));
+  --strip-row-gap: 3.6cqh;
+}
+.grid-ambient :is(.ambient-forecast, .ambient-hourlyTemperature).widget-size-large .forecast-body {
+  --strip-label: calc(max(var(--min-text), min(4cqw, 10.5cqh)) * var(--font-scale));
+  --strip-value: calc(max(var(--min-data), min(2.5cqw, 15cqh)) * var(--font-scale));
+  --strip-chance: calc(max(var(--min-data), min(3cqw, 8cqh)) * var(--font-scale));
+}
+.grid-ambient :is(.ambient-forecast, .ambient-hourlyTemperature):is(.widget-size-medium, .widget-size-large) .forecast-heading { margin-bottom: var(--strip-heading-gap); }
+.grid-ambient :is(.ambient-forecast, .ambient-hourlyTemperature):is(.widget-size-medium, .widget-size-large) .forecast-heading .ambient-label { font-size: var(--strip-heading); line-height: 1.2; }
+.grid-ambient :is(.ambient-forecast, .ambient-hourlyTemperature):is(.widget-size-medium, .widget-size-large) .forecast-heading .weather-context { font-size: var(--strip-context); line-height: 1.3; }
+.grid-ambient :is(.ambient-forecast, .ambient-hourlyTemperature):is(.widget-size-medium, .widget-size-large) .forecast-day { row-gap: var(--strip-row-gap); }
+.grid-ambient :is(.ambient-forecast, .ambient-hourlyTemperature):is(.widget-size-medium, .widget-size-large) .forecast-day-label { font-size: var(--strip-label); line-height: 1.2; }
+.grid-ambient :is(.ambient-forecast, .ambient-hourlyTemperature):is(.widget-size-medium, .widget-size-large) .forecast-day > :is(.weather-glyph, .forecast-unknown) { width: var(--strip-glyph); height: var(--strip-glyph); font-size: var(--strip-glyph); }
+.grid-ambient :is(.ambient-forecast, .ambient-hourlyTemperature):is(.widget-size-medium, .widget-size-large) .forecast-temperatures { font-size: var(--strip-value); line-height: 1.15; }
+.grid-ambient :is(.ambient-forecast, .ambient-hourlyTemperature):is(.widget-size-medium, .widget-size-large) .forecast-rain { font-size: var(--strip-chance); line-height: 1.2; gap: 0.2em; }
 /* Unavailable (#362), as in Weather: a dim placeholder and still cloud at a day's size, then one status-tone
    line at the label size; the age only when an update time is known, in the status tone too, under it. */
 .grid-ambient .forecast-unavailable-age { font-size: calc(max(var(--min-text), min(4cqw, 5.5cqh)) * var(--font-scale)); line-height: 1.3; margin-top: 4cqh; }

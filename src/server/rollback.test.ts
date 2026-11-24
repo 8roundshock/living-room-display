@@ -614,6 +614,48 @@ test('#438 the shapes Home avoided are still rejected by the previous release; a
   assertPreviousReaderAccepts('data', countdown, 'a countdown enabled through existing keys');
 });
 
+test('#714 Hourly forecast adds no rollback exception: off is readable, on is the #565 exception in either family, and an old 4 × 4 placement is refitted', async () => {
+  // The previous release does not know the id at all, so the family a placement names makes no difference to it.
+  assert.equal((PREVIOUS_RELEASE.widgetIds as readonly string[]).includes('hourlyTemperature'), false);
+  assert.equal('hourlyTemperature' in PREVIOUS_CATALOG, false);
+  const directory = await temporary('lrd-rollback-714-');
+  // A data folder as a build before #714 wrote it: the widget on and large (then 4 × 4) at 8,4, in the settings and in a saved style.
+  const old = colorAccentDefaults();
+  old.widgets = Object.fromEntries(WIDGET_IDS.map(id => [id, id === 'clock' || id === 'hourlyTemperature'])) as Settings['widgets'];
+  old.widgetGrid.placements.clock = { column: 0, row: 0, size: 'large' };
+  old.widgetGrid.placements.hourlyTemperature = { column: 8, row: 4, size: 'large' };
+  old.savedPresets = [{ id: 'old-style', name: 'Old style', visual: getVisual(old) }];
+  const file = JSON.stringify(persistableData({ version: 1 as const, settings: old, reminders: [], photoAsset: null }), null, 2);
+  await writeFile(join(directory, 'state.json'), file); await writeFile(join(directory, 'state.backup.json'), file);
+  // Already an exception before #714: the older reader rejects the enabled unknown id (#565).
+  assertPreviousReaderRejects('data', JSON.parse(file), 'the pre-#714 file with the widget on');
+  const app = await application(directory);
+  try {
+    const read = app.store.snapshot().settings;
+    assert.deepEqual(read.widgetGrid.placements.hourlyTemperature, { column: 8, row: 4, size: 'medium' }, 'read and refitted, not rejected');
+    assert.deepEqual(read.savedPresets[0]!.visual.widgetGrid.placements.hourlyTemperature, { column: 8, row: 4, size: 'medium' });
+    // Off in the settings and with the style removed: nothing of the widget is written, and the older reader accepts the files and the export.
+    await app.send('PATCH', '/api/settings', { widgets: { hourlyTemperature: false }, savedPresets: [] });
+    await app.send('PATCH', '/api/settings', { units: 'imperial' });
+    const off = await readJson(directory, 'state.json');
+    assert.equal('hourlyTemperature' in off.settings.widgets, false); assert.equal('hourlyTemperature' in off.settings.widgetGrid.placements, false);
+    await assertFilesAccepted(directory, 'Hourly forecast off');
+    assertPreviousReaderAccepts('import', await app.send('GET', '/api/export'), 'the export with Hourly forecast off');
+    // On again, large as 8 × 2 and then medium: the same documented exception as before, and no key the #565 note does not name.
+    for (const size of ['large', 'medium'] as const) {
+      await app.send('PATCH', '/api/settings', { widgets: { hourlyTemperature: true }, widgetGrid: { placements: { hourlyTemperature: { column: 4, row: 6, size } } } });
+      const on = await readJson(directory, 'state.json');
+      assert.deepEqual(on.settings.widgetGrid.placements.hourlyTemperature, { column: 4, row: 6, size });
+      assertPreviousReaderRejects('data', on, `Hourly forecast on, ${size}`);
+      const stripped = structuredClone(on); delete stripped.settings.widgets.hourlyTemperature; delete stripped.settings.widgetGrid.placements.hourlyTemperature;
+      assertPreviousReaderAccepts('data', stripped, `only the widget's visibility and placement keep the older reader out (${size})`);
+      await app.send('PATCH', '/api/settings', { widgets: { hourlyTemperature: false } });
+    }
+    await app.send('PATCH', '/api/settings', { units: 'metric' });
+    await assertFilesAccepted(directory, 'Hourly forecast off again');
+  } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
 test('#716 the Calendar’s upcoming dates add no saved key; its Holiday calendars are the #575 selection, also with Theme Off', () => {
   // The default board shows the Calendar, with Theme Off and all three calendars: nothing of #716 is written.
   const settings = defaultSettings();

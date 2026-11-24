@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Settings, SettingsPatch, WidgetId } from '../shared/contracts.ts';
 import { defaultSettings } from '../shared/defaults.ts';
-import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, absorbRetiredWidgets, absorbableGridProblem, defaultWidgetGrid, firstPlacement, fitGridDensity, isPlannedWidget, normalizePlacement, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
+import { WIDGET_CATALOG, WIDGET_IDS, GRID_DENSITIES, absorbRetiredWidgets, absorbableGridProblem, defaultWidgetGrid, firstPlacement, fitGridDensity, fitReshapedFamilies, isPlannedWidget, normalizePlacement, placementFits, type WidgetDefinition } from '../shared/widgets.ts';
 import { ACCENT_MODES } from '../shared/palette.ts';
 import { ANIMATION_LEVELS } from '../shared/motion.ts';
 import { KEEP_DONE_MS, TIMER_ADD_MAX_MS, TIMER_LABEL_MAX, TIMER_LIMIT, TIMER_MAX_MS, TIMER_MESSAGES, TIMER_MIN_MS } from '../shared/timers.ts';
@@ -169,7 +169,9 @@ function migrateGrid<T extends Pick<Settings, 'widgetGrid' | 'widgets'>>(value: 
   if (!fit) throw new Error('This legacy widget layout cannot fit. Preserve the original settings and choose fewer widgets.');
   return { ...value, widgetGrid: fit.grid };
 }
-const visual = z.object(visualShape).strict().superRefine(checkGrid).transform(migrateGrid).transform(absorbRetiredWidgets);
+// A family whose span changed since the data was saved is refitted first (#714), so the strict grid check
+// below judges the board the current catalog draws.
+const visual = z.object(visualShape).strict().transform(fitReshapedFamilies).superRefine(checkGrid).transform(migrateGrid).transform(absorbRetiredWidgets);
 const savedPresets = z.array(z.object({ id: z.string().min(1).max(80), name: z.string().trim().min(1).max(60), visual }).strict()).max(12)
   .refine(items => new Set(items.map(item => item.id)).size === items.length, 'Preset IDs must be unique');
 export const settingsSchema = z.object({ ...visualShape, version: z.literal(1), location,
@@ -177,7 +179,7 @@ export const settingsSchema = z.object({ ...visualShape, version: z.literal(1), 
   locationSource: z.enum(['device', 'manual', 'fallback']).default('manual'),
   units: z.enum(['metric', 'imperial']), clockFormat: z.enum(['12h', '24h']), idle, savedPresets, widgetData, screen,
   birthdays: birthdays.default([]),
-}).strict().superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(absorbRetiredWidgets).transform(value => {
+}).strict().transform(fitReshapedFamilies).superRefine(checkGrid).refine(value => value.locationSource !== 'manual' || value.location.timezone !== 'auto', 'A manual city needs an IANA timezone').transform(migrateGrid).transform(absorbRetiredWidgets).transform(value => {
   if (value.locationSource === 'fallback') return { ...value, location: defaultSettings().location };
   if (value.locationSource === 'device') return { ...value, location: {
     name: 'Device area', latitude: Math.round(value.location.latitude * 10) / 10,

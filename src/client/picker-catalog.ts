@@ -1,5 +1,5 @@
 import type { Settings, WidgetId } from '../shared/contracts.ts';
-import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, type WidgetCategory } from '../shared/widgets.ts';
+import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, type WidgetCategory, type WidgetDefinition } from '../shared/widgets.ts';
 
 export type PickerFilter = 'all' | 'not-added' | 'on-display';
 export type PickerCategory = 'all' | WidgetCategory;
@@ -17,13 +17,13 @@ export function firstPickerSelection(widgets: Settings['widgets']): WidgetId {
   return order.find(id => !widgets[id]) ?? order[0]!;
 }
 
-/** Search the shared catalog, never widget content or user data. All words must match. */
+/** Search the shared catalog (name, description, category and the entry's search keywords), never widget content or user data. All words must match. */
 export function filteredPickerGroups(widgets: Settings['widgets'], query: string, filter: PickerFilter, category: PickerCategory = 'all'): PickerGroup[] {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return pickerGroups().filter(group => category === 'all' || group.category === category).map(group => ({ ...group, ids: group.ids.filter(id => {
     if (filter === 'not-added' && widgets[id] || filter === 'on-display' && !widgets[id]) return false;
-    const widget = WIDGET_CATALOG[id];
-    const text = `${widget.name} ${widget.description} ${WIDGET_CATEGORIES[widget.category]}`.toLowerCase();
+    const widget: WidgetDefinition = WIDGET_CATALOG[id];
+    const text = `${widget.name} ${widget.description} ${WIDGET_CATEGORIES[widget.category]} ${widget.keywords ?? ''}`.toLowerCase();
     return words.every(word => text.includes(word));
   }) })).filter(group => group.ids.length > 0);
 }

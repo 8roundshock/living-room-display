@@ -1,0 +1,96 @@
+/* Hourly forecast (#714): Forecast's strip with one column per hour, so the two can sit one above the other.
+   The markup reuses Forecast's heading, strip, column, label, glyph, temperature and droplet classes, and its
+   sizes are Forecast's own: one definition of the heading, the type, the glyphs and the row gaps for both
+   widgets' medium and large families, the `--strip-*` properties in widgets.css (#720). Every one of them holds
+   the shared text and data floors and grows with Text size, and nothing here makes any of them smaller. This
+   file only adds what an hour strip needs on top of them. The temperatures ride a trend line, and the line's
+   vertical travel is whatever height the rows leave, up to 18% of the box. So the temperature row's height
+   depends only on the box and Text size, never on the values, and both families render at fit 1 at Text 100% on
+   every grid at 720p, 1080p and 4K (but for Monospace's "Sunrise" on the Fine grid, below), where the travel is
+   at least 7% of the box. A larger Text size first flattens the travel, down to a flat line, and only then zooms
+   the strip out like any widget, so the strip keeps Forecast's sizes as long as it can. Beyond Forecast's strip:
+   - every column shares the strip's four rows (subgrid), so the trend can span the temperature row;
+   - the precipitation row keeps its line when an hour shows no chance, so nothing moves when one appears;
+   - a sunrise or sunset is a column of its own, and the strip always has the family's number of columns;
+   - nothing a column draws may leave it. Twelve hours are narrower than seven days, so the column gap is narrower,
+     a sun column's 12-hour time has no day period ("5:36", hourly-forecast.ts), and the columns are never
+     narrower than their widest content (below): where one cannot hold its text, the strip is laid out wider and
+     the shared fit zooms the whole widget out a little, as it does for any widget, rather than one text shrinking
+     alone. At Text 100% that happens only for Monospace's "Sunrise" on the Fine grid (fit 0.973 to 0.990). */
+.grid-ambient .ambient-hourlyTemperature .hourly-body {
+  --hourly-gap: 1cqw;
+  /* The height of everything Forecast's strip also has: the heading, hour, glyph, value and chance rows and their
+     gaps, at the line heights widgets.css gives them (the heading's two parts share a baseline, so its height is a
+     little over the larger line's; 1.3 covers it). What the box has left over is the trend's room. */
+  --hourly-rows: calc(max(var(--strip-heading), var(--strip-context)) * 1.3 + var(--strip-heading-gap) + var(--strip-label) * 1.2 + var(--strip-glyph) + var(--strip-value) * 1.15 + var(--strip-chance) * 1.2 + 3 * var(--strip-row-gap));
+  --hourly-room: calc(100cqh - var(--hourly-rows) - 2px);
+  /* Air between a value and its point on the line, then the line's travel. When a larger Text size leaves less
+     room, the travel goes first and then the air, so the strip zooms out only where Forecast's would too. */
+  --hourly-clear: clamp(0px, var(--hourly-room), var(--strip-value) * 0.2);
+  --hourly-travel: clamp(0px, var(--hourly-room) - var(--hourly-clear), 18cqh);
+}
+/* The right slot is always there, holding a no-break space when it has nothing to say, so the heading has
+   Forecast's height in every state: the strip never moves when a fact or a status comes or goes. */
+.grid-ambient .ambient-hourlyTemperature .hourly-heading .ambient-label { flex: none; white-space: nowrap; }
+.grid-ambient .ambient-hourlyTemperature .hourly-heading .weather-context { min-width: 0; text-align: right; }
+.grid-ambient .ambient-hourlyTemperature .hourly-fact { white-space: nowrap; }
+/* The chance row is reserved by its track, not by its cells: an hour with no chance to show has an empty,
+   zero-height cell, so the float measures only what is drawn (Display.tsx inkSlack).
+   The strip is as wide as its widget, or as wide as its columns' content where that is wider: sized to its
+   content, a grid makes its flexible columns all as wide as the widest column's content, and the minimum width
+   brings it back to the widget's width whenever that is more. So the columns stay equal and fill the strip as
+   before, and a column that cannot hold its text makes the strip wider than the widget, which the shared fit
+   (Display.tsx) measures and answers by laying the widget out wider and zooming it out. */
+.grid-ambient .ambient-hourlyTemperature .hourly-strip { position: relative; width: max-content; min-width: 100%; box-sizing: border-box; grid-template-rows: repeat(3, auto) minmax(calc(var(--strip-chance) * 1.2), auto); gap: var(--strip-row-gap) var(--hourly-gap); }
+.grid-ambient .ambient-hourlyTemperature .hourly-hour { grid-row: 1 / -1; display: grid; grid-template-rows: subgrid; justify-items: center; }
+/* On the 12-hour clock an hour's day period is a smaller suffix with no space before it ("5PM", "11PM"), as a
+   phone's hourly row draws it. Like the Clock's period it never goes below the display's text floor; the hour
+   label holds that floor too, so the period is never larger than the hour it follows. */
+.grid-ambient .ambient-hourlyTemperature .hourly-period { font-size: max(var(--min-text, 0px) * var(--font-scale, 1), 0.7em); margin-left: 0.04em; }
+.grid-ambient .ambient-hourlyTemperature .hourly-sun-glyph { width: var(--strip-glyph); height: var(--strip-glyph); }
+.grid-ambient .ambient-hourlyTemperature .hourly-hour > .forecast-unknown { line-height: 1; }
+/* The value's top edge moves with its level (1 warmest, 0 coolest); the row's height stays the same. */
+.grid-ambient .ambient-hourlyTemperature .hourly-temperature {
+  box-sizing: border-box;
+  height: calc(var(--strip-value) * 1.15 + var(--hourly-clear) + var(--hourly-travel));
+  padding-top: calc((1 - var(--hourly-level, 0.5)) * var(--hourly-travel));
+  line-height: 1.15;
+  white-space: nowrap;
+}
+/* A sunrise or sunset column (as a phone's weather app shows it): the word takes the value's place at the
+   hour label's size, with its bottom where a value's would be. */
+.grid-ambient .ambient-hourlyTemperature .hourly-sun-word {
+  padding-top: calc((1 - var(--hourly-level, 0.5)) * var(--hourly-travel) + (var(--strip-value) - var(--strip-label)) * 1.15);
+  font-size: var(--strip-label);
+  font-weight: 500;
+  color: var(--ambient-accent);
+}
+.grid-ambient .ambient-hourlyTemperature .hourly-rain { align-self: center; white-space: nowrap; }
+.grid-ambient .ambient-hourlyTemperature .hourly-unknown { opacity: 0.65; }
+/* The line spans the temperature row from the first column's centre to the last one's, so equal steps of
+   its 0–100 box are column centres, and fills the travel at the row's bottom: a point lies --hourly-clear
+   below its value. It is accent content at reduced opacity, drawn behind the text, with a stroke that
+   follows the display's text floor (about 1.7 px at 1080p, never under 1 px). */
+.grid-ambient .ambient-hourlyTemperature .hourly-trend {
+  --hourly-half: calc((100% - (var(--forecast-days, 12) - 1) * var(--hourly-gap)) / var(--forecast-days, 12) / 2);
+  position: absolute;
+  z-index: -1;
+  grid-area: 3 / 1 / 4 / -1;
+  left: var(--hourly-half);
+  bottom: 0;
+  width: calc(100% - 2 * var(--hourly-half));
+  height: var(--hourly-travel);
+  overflow: visible;
+  pointer-events: none;
+  color: var(--ambient-accent);
+  opacity: 0.8;
+}
+/* Lively entrance (#76): the columns slide in one after another (motion-widgets.css: 50 ms apart up to the
+   seventh, so the last start 300 ms after the widget's own delay). The line fades in with those last columns,
+   never ahead of its values: opacity only, from 0 to its resting 0.8. Off, Subtle and reduced motion have no
+   column stagger, and there the line simply appears with the widget. */
+.grid-ambient[data-animation='lively'] > .widget-grid-plane.revealing .ambient-hourlyTemperature .hourly-trend {
+  animation: lrd-fade-in 600ms var(--motion-ease) backwards;
+  animation-delay: calc(var(--reveal-delay) + 300ms);
+}
+.grid-ambient .ambient-hourlyTemperature .hourly-trend path { fill: none; stroke: currentColor; stroke-width: max(1px, var(--min-text, 0px) * 0.11); vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }

@@ -786,8 +786,8 @@ Owner decision, 2026-11-22 (#715): fresh conditions show no update age and no wi
 its data provider, on the display, the canvas and the picker samples. Retained stale data
 is marked throughout, with the age only there: Weather's “Saved forecast · Updated 5 hr
 ago” under its content, and Forecast's “Saved forecast · 5 hr ago” or “Offline · Updated
-5 hr ago” in its heading's right slot in place of the place and unit, each whole line
-in the amber status tone (#223). The place and unit return when the forecast is fresh
+5 hr ago” in its heading's right slot in place of the place and unit (Hourly forecast
+shows the same line in the same slot), each whole line in the amber status tone (#223). The place and unit return when the forecast is fresh
 again; in small, a status with no update time to tell is the label alone (“Saved forecast”). Forecast's strip keeps one size and position in every
 state. A forecast whose refresh is still running is not marked: only a failed refresh, an
 offline display or data over 45 minutes old is (see the
@@ -1020,6 +1020,82 @@ it reads "Air quality not loaded yet" with no footer. Calculations are cached
 per minute (no `Intl` formatter is built while the minute holds, #185); values change on
 the shared one-second tick without their own animation.
 Browser suite: `tests/ui/catalog-sky-browser.mjs`.
+
+## Hourly forecast
+
+Hourly forecast (#714; the stored id is `hourlyTemperature`, formerly Hourly temperature)
+starts disabled and is added from the picker (Weather & sky, "The hours ahead", medium
+4 × 2 and large 8 × 2: Forecast's families, so the two sit one above the other). The
+picker's search also finds it by what it shows: "temperature", "hourly", "hours", "rain",
+"snow", "sunrise" and "sunset" (catalog `keywords`, never displayed). Its picker
+sample is synthetic: a mild spell clouding over, with showers later, from this computer's
+real hour, so the sample's sun column and its day and night glyphs follow the real clock at
+the sample place. Its panel under the Size control is one hint, with nothing to configure:
+"One column per hour in the weather city’s time: conditions, temperature and the chance of
+rain or snow when it is 10% or more. The line follows the temperature. A sunrise or sunset
+gets its own column at its exact time. Medium has 6 columns and large 12. Hourly estimates
+by Open-Meteo; sun times are calculated on this computer."
+
+On the display it is Forecast's strip with one column per hour:
+
+- **Heading row:** "Hourly" at the label size. On the right, at the context size, at most
+  two facts joined by " · ": the next sunrise or sunset when the strip does not show it
+  ("Sunrise 07:21"), and "Gusts 55 km/h" when the peak over the shown hours reaches 40 km/h
+  or 25 mph. While the forecast is not fresh that place shows Forecast's own status line
+  instead, word for word and in the status tone at full opacity: "Saved forecast · 5 hr
+  ago", "Offline · Updated 12 min ago" or "Saved forecast · Update time unknown". A
+  refresh that is merely slow shows nothing on either strip. Fresh data shows no place,
+  provider or update time (#715). The right side keeps its line when it is empty, so the
+  heading has one height in every state and the strip never moves.
+- **Hour columns:** the time ("Now", then "5PM" with the day period as a smaller suffix,
+  as a phone's hourly row writes it and never below the text floor, or the bare hour "17"
+  on the 24-hour clock, in the weather city's zone), a
+  weather glyph that is a sun or a moon according to the hour, the temperature, and the
+  droplet with the chance only from 10%. An unknown condition or temperature is a dash, an
+  unknown chance a dim dash; a chance under 10% leaves its cell empty.
+- **Sun columns:** a sunrise or sunset inside the strip stands between the hours it falls
+  between: its exact time ("5:36" on the 12-hour clock, with no day period: the word and
+  the hour labels either side, "5AM" and "6AM", say which half of the day it is; "16:47" on
+  the 24-hour clock), the sunrise or sunset symbol, and "Sunrise" or "Sunset" at the hour
+  label's size where a temperature would be. Nothing leaves its column and nothing is
+  drawn under the display's text floor: where a column cannot hold its text (Monospace's
+  "Sunrise" on the Fine grid), the whole strip zooms out a little instead. Two sun columns
+  side by side never touch. It takes one of the 6 or 12 columns, so
+  the columns never change width. The hours before a sunset draw day glyphs and the hours
+  after it night glyphs: both come from the same sun test.
+- **Trend line:** a thin line in the accent tone at 80% opacity behind the values, from
+  the first column's centre to the last one's, with each value just above its point. It
+  breaks at an unknown temperature and passes through a sun column. The row's height is
+  the same whatever the values. At Lively the line fades in with the last columns of the
+  entrance, never before its values.
+- **Colour:** temperatures use the text colour; the heading, hour labels, the sun word and
+  the line use the accent (Mist in Native, the widget's sky tone); a chance is Sea glass in
+  Native, as in Forecast; glyphs keep their own sub-tones and the sun column's symbol is
+  Gold.
+- **Unavailable:** with no upcoming hour, Forecast's unavailable treatment: a dim, still
+  cloud, a dim "—°" and "Hourly forecast unavailable · retrying" ("· offline") in the
+  status tone, and under it the age of a saved forecast whose hours have all passed.
+
+Sizes are Forecast's for the same family, from one definition shared by the two strips
+(#720). Measured at 1280 × 720 on the Balanced grid: the large box is 759 × 140 px with
+twelve 56 px columns (Forecast's seven are 95 px); hour labels 14.7 px, glyphs 27.9 px,
+temperatures 19.0 px, chances 11.9 px, the heading 11.2 px and its facts 10.1 px, all
+equal to Forecast's day labels, glyphs, temperatures, chances and heading; the line's
+travel is 17 px (8 px on the Fine grid, where the floors leave less room). Both families
+render at fit 1 at Text 100% in every density at 720p, 1080p and 4K: fresh, saved,
+offline and while a refresh runs, with one or two sun columns (also side by side and as
+the last column), three-character temperatures and "100%" in every hour, on both clocks
+and in every typeface, with nothing outside its column and nothing under its floor; the
+one exception is Monospace's "Sunrise" on the Fine grid, where the strip zooms out to
+0.973 to 0.976 (large) or 0.989 to 0.990 (medium). A larger Text size flattens the trend
+line before the strip zooms out, so at Text 110% it keeps Forecast's sizes in System and
+Classic (in Monospace, with a sun column, it zooms out to 0.893 to 0.988); above that,
+twelve columns can be too narrow and the strip zooms out further than Forecast (#749),
+and a sun column entering or leaving can change its zoom where a column is that tight,
+but nothing in it is ever smaller on screen than at Text 100%. The view is rebuilt once a minute and
+constructs no `Intl` formatter on the one-second tick (#99).
+Browser checks: `tests/ui/widget-checks/hourlyTemperature.mjs` in the widgets suite, the
+palette harness for its tones, and the collection and catalog-sky suites.
 
 ## Dynamic
 

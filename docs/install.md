@@ -293,8 +293,10 @@ If E20 repeats, follow the manual steps below, then delete
    `"runtimePreviousOwner": "package"`.
 4. Restore the matching `backups\data-before-...` copy only if the newer
    version wrote data the older one can't read (see the
-   [compatibility table](#additive-data-and-rollback-compatibility-84)). Keep
-   the newer `data` folder separately.
+   [compatibility table](#additive-data-and-rollback-compatibility-84); one such
+   case is Hourly forecast saved in the Large size, #714, which stops the
+   release installed before it from starting). Keep the newer `data` folder
+   separately.
 5. Run `Start`.
 
 `app.previous` carries its own `release.json`. Never run Setup on a PC that has
@@ -557,6 +559,8 @@ after using one, either switch it back and save (then save once more, so
 `state.backup.json` holds the switched-back settings too), or follow the
 [revision 2 procedure](#widget-geometry-revision-2-update-and-rollback): keep the
 newer data directory and restore the matching pre-upgrade data copy.
+The #714 row is about the release installed now (`712ce80`, see
+[STATUS.md](../STATUS.md)), which is newer than `d66832b`; the reader bump is #130.
 
 | Feature | Data the previous release (`d66832b`) cannot read |
 | --- | --- |
@@ -570,6 +574,7 @@ newer data directory and restore the matching pre-upgrade data copy.
 | #436 **Swap places** on (`appearance.rearrange: true`, also inside a saved style) | The settings, the backup after the next save, and exports. Switch **Swap places** off (and re-save or delete a saved style that has it on), Save, then roll back; or restore the pre-update copy. |
 | #436 **Keep the screen on** off (`screen: { keepAwake: false }`) | The settings, the backup after the next save, and exports. Switch **Keep the screen on** back on, Save, then roll back; or restore the pre-update copy. |
 | #436 float (the default: no swap, keep the screen on) | None: both keys are omitted at rest. |
+| #714 **Hourly forecast** in the Large size | This row is about the release installed now, `712ce80`, and every build from #565 up to #714. They draw this widget's Large as 4 × 4 where this build draws 8 × 2, so they read a Large placement saved by this build as 4 × 4 from the same top-left cell. Where that does not fit (for example Large at column 4, row 6 on the Balanced grid, under a Large Forecast, where four rows run past the bottom; or another widget in the two rows under its left half), that release rejects `state.json` and `state.backup.json` alike with “Hourly temperature is outside the grid” (or “overlaps another widget”) and does not start. Before rolling back: set Hourly forecast to **Medium**, or remove it, in the current settings and in every saved style that has it Large (save that style again, or delete it); Save; then make and save one more settings change, so the backup rotates; or restore the complete pre-update data copy. Medium, the widget off, and a Large placement whose 4 × 4 reading also fits are read. Opening data with this build rewrites nothing, so a rollback straight after an update, before anything is saved, needs no step. `d66832b` itself does not know the widget: for it any saved Hourly forecast that is on is the [#565 exception](#fifteen-widget-collection-rollback-565). |
 
 <a id="rolling-back-the-installed-3446400"></a>
 
@@ -846,6 +851,23 @@ explicit rollback exception: the strict older reader rejects the unknown enabled
 ID. Disable it in settings and every saved style before a rollback requiring that
 reader. No new private widgetData section is added. Hourly weather details remain
 API-only, and timer contents stay in the existing sidecar outside exports.
+
+Hourly forecast (#714) keeps the id `hourlyTemperature`; its Large family changed from
+4 × 4 to 8 × 2. Updating needs no step: a Large placement saved earlier that no longer
+fits becomes Medium at the same origin when this build reads it, and reading rewrites
+nothing. For the frozen d66832b reader nothing changes: it does not know the id at all,
+so its data is readable by that reader exactly when the widget is off in settings and in
+every saved style, as before (`src/server/rollback.test.ts`).
+
+**Rolling back to the release installed now is different.** `712ce80`, like every build
+from #565 up to #714, draws Large as 4 × 4. Once this build has saved Hourly forecast in
+the Large size where 4 × 4 does not fit (for example at column 4, row 6 on the Balanced
+grid, under a Large Forecast), `712ce80` rejects `state.json` and `state.backup.json`
+alike and does not start. Before such a rollback, follow the #714 row of the
+[compatibility table](#additive-data-and-rollback-compatibility-84): set the widget to
+Medium or remove it, in the current settings and in every saved style; save; make and
+save one more change; or restore the complete pre-update data copy. Checked against
+`712ce80`'s own reader on 2026-11-22.
 
 ### Birthday content rollback (#584)
 

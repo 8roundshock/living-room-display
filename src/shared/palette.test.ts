@@ -125,14 +125,15 @@ test('catalog tones and weather glyphs all map to palette roles', () => {
 test('the merged catalog keeps its tone decisions, and every literal data-glyph has a sub-tone', () => {
   // Agreed across the #73/#74/#78 units: World clocks and Calendar are time, Countdown and Note
   // personal (like Reminders), Air quality sky (like Weather and Forecast), Sun & moon sun. Dynamic
-  // (#437) is sky; each card's own role reaches only its glyph and detail.
+  // (#437) is sky; each card's own role reaches only its glyph and detail. Hourly forecast (#714) is sky
+  // like Forecast, so the two strips read as a pair; its chances are water and its sun columns' symbol sun.
   const tones = Object.fromEntries(ACTIVE_WIDGET_IDS.map(id => [id, WIDGET_CATALOG[id].tone]));
   assert.deepEqual(tones, {
     clock: 'time', worldClocks: 'time', calendar: 'time',
     weather: 'sky', forecast: 'sky', airQuality: 'sky', sunMoon: 'sun', dynamic: 'sky',
     reminders: 'personal', countdown: 'personal', note: 'personal',
     preview: 'stone', photo: 'stone',
-    timers: 'time', agenda: 'personal', weekAhead: 'personal', dayProgress: 'time', yearProgress: 'time', timeOverlap: 'time', weatherAlerts: 'sky', hourlyTemperature: 'sun', wind: 'sky', humidity: 'water', pressure: 'sky', visibility: 'sky', cloudCover: 'sky', precipitation: 'water', quietScene: 'stone',
+    timers: 'time', agenda: 'personal', weekAhead: 'personal', dayProgress: 'time', yearProgress: 'time', timeOverlap: 'time', weatherAlerts: 'sky', hourlyTemperature: 'sky', wind: 'sky', humidity: 'water', pressure: 'sky', visibility: 'sky', cloudCover: 'sky', precipitation: 'water', quietScene: 'stone',
   });
   // Renderers that hard-code a glyph name (Sun & moon's dot and moon) must use one palette.css maps.
   for (const file of readdirSync(new URL('../client/widgets/', import.meta.url)).filter(name => name.endsWith('.tsx'))) {

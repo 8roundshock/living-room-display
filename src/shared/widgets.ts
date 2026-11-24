@@ -32,6 +32,13 @@ export interface WidgetDefinition {
    * `maxColumnsFraction` of its width, so a full-height widget always leaves room to relocate.
    */
   freeSize?: { min: WidgetSpan; maxColumnsFraction: number };
+  /**
+   * A family whose span changed after data was saved with it (#714), and the family a saved placement
+   * falls back to when it no longer fits. See fitReshapedFamilies.
+   */
+  reshaped?: Partial<Record<WidgetSize, WidgetSize>>;
+  /** Extra words the picker's search matches besides the name, description and category; never shown. */
+  keywords?: string;
 }
 const standard = { small: { columns: 2, rows: 2 }, medium: { columns: 4, rows: 2 }, large: { columns: 4, rows: 4 } };
 
@@ -60,7 +67,7 @@ export const WIDGET_CATALOG = {
   yearProgress: { name: 'Year progress', description: 'The year in days and months', icon: 'yearProgress', category: 'time', tone: 'time', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
   timeOverlap: { name: 'Time overlap', description: 'Find shared daytime across your saved cities', icon: 'overlap', category: 'time', tone: 'time', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
   weatherAlerts: { name: 'Weather alerts', description: 'Official Canadian and US weather notices', icon: 'alert', category: 'weather', tone: 'sky', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
-  hourlyTemperature: { name: 'Hourly temperature', description: 'See how the next hours warm or cool', icon: 'thermometer', category: 'weather', tone: 'sun', sizes: { medium: standard.medium, large: standard.large }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
+  hourlyTemperature: { name: 'Hourly forecast', description: 'The hours ahead', icon: 'thermometer', category: 'weather', tone: 'sky', sizes: { medium: standard.medium, large: { columns: 8, rows: 2 } }, defaultSize: 'medium', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 }, reshaped: { large: 'medium' }, keywords: 'hourly hours temperature rain snow sunrise sunset' },
   wind: { name: 'Wind', description: 'Direction, speed and hourly gusts', icon: 'wind', category: 'weather', tone: 'sky', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
   humidity: { name: 'Humidity', description: 'Outdoor moisture and dew point', icon: 'droplet', category: 'weather', tone: 'water', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
   pressure: { name: 'Pressure', description: 'Surface pressure and its forecast trend', icon: 'gauge', category: 'weather', tone: 'sky', sizes: { small: standard.small, medium: standard.medium }, defaultSize: 'small', defaultEnabled: false, defaultPlacement: { column: 0, row: 0 } },
@@ -177,6 +184,26 @@ export function absorbableGridProblem(grid: WidgetGrid, enabled: Partial<Record<
   const rest = { ...enabled }; for (const id of merging) rest[id] = false;
   if (gridProblem(grid, rest)) return problem;
   return merging.every(id => placementFits(grid, id, grid.placements[id], { ...rest, [retiredTarget(id)!]: false })) ? null : problem;
+}
+/**
+ * #714: Hourly forecast's large family changed from 4 × 4 to 8 × 2, like Forecast's. Data saved before
+ * that may hold a large placement that the new span puts outside the grid or over another shown widget,
+ * which validation rejects. Such a placement becomes the catalog's `reshaped` fallback family (medium,
+ * 4 × 2) at the same origin, which lies inside the cells it had, so a board that was valid stays valid.
+ * A hidden placement only has to stay inside the grid; a shown one must also clear every other shown
+ * widget. A placement that fits with the new span is kept. Revision-one grids predate every reshaped
+ * widget. Pure and idempotent; runs before grid validation for settings, saved styles and imports.
+ */
+export function fitReshapedFamilies<T extends Pick<VisualSettings, 'widgets' | 'widgetGrid'>>(value: T): T {
+  let grid = value.widgetGrid;
+  if (grid.revision !== 2) return value;
+  for (const id of WIDGET_IDS) {
+    const placement = grid.placements[id];
+    const fallback = (WIDGET_CATALOG[id] as WidgetDefinition).reshaped?.[placement.size];
+    if (!fallback || placement.span || placementFits(grid, id, placement, value.widgets[id] ? value.widgets : {})) continue;
+    grid = { ...grid, placements: { ...grid.placements, [id]: { column: placement.column, row: placement.row, size: fallback } } };
+  }
+  return grid === value.widgetGrid ? value : { ...value, widgetGrid: grid };
 }
 export function widgetSizes(id: WidgetId): WidgetSize[] { return WIDGET_SIZES.filter(size => Boolean((WIDGET_CATALOG[id].sizes as Partial<Record<WidgetSize, WidgetSpan>>)[size])); }
 export function widgetSpan(id: WidgetId, size: WidgetSize, revision: 1 | 2 = 2): WidgetSpan {

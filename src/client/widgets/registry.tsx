@@ -23,7 +23,7 @@ import { DayProgressWidget } from './DayProgress.tsx';
 import { YearProgressWidget } from './YearProgress.tsx';
 import { TimeOverlapWidget } from './TimeOverlap.tsx';
 import { WeatherAlertsWidget } from './WeatherAlerts.tsx';
-import { HourlyTemperatureWidget } from './HourlyTemperature.tsx';
+import { HourlyForecastWidget } from './HourlyForecast.tsx';
 import { WindWidget } from './Wind.tsx';
 import { HumidityWidget } from './Humidity.tsx';
 import { PressureWidget } from './Pressure.tsx';
@@ -58,7 +58,7 @@ const MODULES: Record<WidgetId, WidgetModule> = {
   yearProgress: YearProgressWidget,
   timeOverlap: TimeOverlapWidget,
   weatherAlerts: WeatherAlertsWidget,
-  hourlyTemperature: HourlyTemperatureWidget,
+  hourlyTemperature: HourlyForecastWidget,
   wind: WindWidget,
   humidity: HumidityWidget,
   pressure: PressureWidget,
