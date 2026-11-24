@@ -65,13 +65,17 @@ function inspect(widget) {
         // How far the value (a temperature or the sun word), the time label and the chance reach past the column on either side.
         spill: spillOf(ink, box), labelSpill: spillOf(labelInk, box), chanceSpill: spillOf(inkOf(rain), box),
         labelEdges: labelInk && [labelInk.left, labelInk.right], period: text(column.querySelector('.hourly-period')),
-        labelSize: parseFloat(getComputedStyle(labelNode).fontSize),
+        labelSize: parseFloat(getComputedStyle(labelNode).fontSize), periodSize: (node => node ? parseFloat(getComputedStyle(node).fontSize) : null)(column.querySelector('.hourly-period')),
+        valueSize: parseFloat(getComputedStyle(value).fontSize), chanceSize: parseFloat(getComputedStyle(rain).fontSize),
       };
     });
+    // The shared floors at this Text size, as widgets.css computes them for this widget (#221, #283).
+    const floor = expression => { const span = document.createElement('span'); span.style.cssText = `position:absolute;visibility:hidden;font-size:${expression}`; section.querySelector('.hourly-body')?.append(span); const size = span.isConnected ? parseFloat(getComputedStyle(span).fontSize) : null; span.remove(); return size; };
+    const floors = { text: floor('calc(var(--min-text) * var(--font-scale))'), data: floor('calc(var(--min-data) * var(--font-scale))') };
     const trendBox = trend?.getBoundingClientRect();
     return {
       fit: new DOMMatrix(getComputedStyle(section.querySelector('.widget-content')).transform).a,
-      contentHeight: section.querySelector('.widget-content').getBoundingClientRect().height,
+      contentHeight: section.querySelector('.widget-content').getBoundingClientRect().height, floors,
       heading: text(heading.querySelector('.ambient-label')), labelLines: lines(heading.querySelector('.ambient-label')), facts: [...section.querySelectorAll('.hourly-fact')].map(text),
       slot: slot && { text: text(slot), size: parseFloat(getComputedStyle(slot).fontSize), lines: lines(slot) }, headingChildren: heading.children.length,
       status: line && { ...cue(line), isSlot: line === slot, shared: line.classList.contains('status-caution'), label: cue(line.querySelector('.forecast-status')), age: cue(line.querySelector('.forecast-age')) },
@@ -104,7 +108,7 @@ function assertStrip(m, label) {
   });
   for (const column of m.columns) {
     if (column.kind === 'sunrise' || column.kind === 'sunset') {
-      assert.match(column.label, /^\d{1,2}:\d{2}([AP]M)?$/, `${label}: a sun column is labelled with its exact time`);
+      assert.match(column.label, /^\d{1,2}:\d{2}$/, `${label}: a sun column is labelled with its exact time, with no day period`);
       assert.equal(column.value, column.kind === 'sunset' ? 'Sunset' : 'Sunrise', `${label}: the word takes the temperature's place`);
       assert.equal(column.sunGlyph, 'sun', `${label}: the sun symbol paints the sun's sub-tone`); assert.equal(column.glyph, null);
       assert.equal(column.chance, '', `${label}: no precipitation value in a sun column`); assert.equal(column.droplets, 0);
@@ -132,6 +136,48 @@ function assertSameStrip(m, base, label) {
 }
 
 /** #720: Forecast's and Hourly forecast's strips of one family share every size, the heading and the rows' rhythm. */
+/**
+ * No size under its floor (final recheck 2 of PR #730): every time label and its day period, every sun word, at or
+ * above the text floor at this Text size; every temperature and chance at or above the data floor; and a day
+ * period never larger than the hour it follows. Sizes as laid out, before the fit's zoom.
+ */
+function assertFloors(m, label) {
+  assert.ok(m.floors.text > 0 && m.floors.data > 0, `${label}: the floors resolve ${JSON.stringify(m.floors)}`);
+  m.columns.forEach((column, index) => {
+    const where = `${label}: column ${index + 1} ("${column.label}")`, sun = column.kind === 'sunrise' || column.kind === 'sunset';
+    assert.ok(column.labelSize >= m.floors.text - 0.01, `${where}: the time label is ${column.labelSize} px, under the text floor ${m.floors.text} px`);
+    if (column.periodSize !== null) {
+      assert.ok(column.periodSize >= m.floors.text - 0.01, `${where}: the day period is ${column.periodSize} px, under the text floor ${m.floors.text} px`);
+      assert.ok(column.periodSize <= column.labelSize + 0.01, `${where}: the day period (${column.periodSize} px) is larger than its time (${column.labelSize} px)`);
+    }
+    assert.ok(column.valueSize >= (sun ? m.floors.text : m.floors.data) - 0.01, `${where}: "${column.value}" is ${column.valueSize} px, under its floor ${sun ? m.floors.text : m.floors.data} px`);
+    if (!sun) assert.ok(column.chanceSize >= m.floors.data - 0.01, `${where}: the chance is ${column.chanceSize} px, under the data floor ${m.floors.data} px`);
+  });
+}
+
+/** A larger Text size never shows a label, period, value or chance smaller on screen (after the fit) than Text 100% did on the same board. */
+function assertGrows(m, base, label) {
+  m.columns.forEach((column, index) => {
+    const before = base.columns[index];
+    for (const [part, size, was] of [['time label', column.labelSize, before.labelSize], ['day period', column.periodSize, before.periodSize], ['value', column.valueSize, before.valueSize], ['chance', column.chanceSize, before.chanceSize]]) {
+      if (size === null || was === null) continue;
+      assert.ok(size * m.fit >= was * base.fit - 0.01, `${label}: column ${index + 1}'s ${part} ("${column.label}") is ${(size * m.fit).toFixed(2)} px on screen, smaller than ${(was * base.fit).toFixed(2)} px at Text 100%`);
+    }
+  });
+}
+
+/**
+ * Where a column cannot hold its text at the shared size at Text 100%, the strip is laid out wider and the shared
+ * fit zooms the widget out a little. Measured: only Monospace's "Sunrise" on the Fine grid (large 0.973 to 0.976,
+ * medium 0.989 to 0.990, at 720p, 1080p and 4K). Everywhere else, the owner's 24-hour System Balanced board
+ * included, the strip is at fit 1.
+ */
+const SHRINKS = (fontFamily, density, family, columns) => fontFamily === 'mono' && density === 'fine' && columns.some(column => column.kind === 'sunrise');
+function assertFit(m, label, { fontFamily = 'sans', density, family }) {
+  if (SHRINKS(fontFamily, density, family, m.columns)) assert.ok(m.fit >= 0.95, `${label}: the strip zooms out only a little where a column cannot hold "Sunrise", got ${m.fit}`);
+  else assert.ok(m.fit >= 0.995, `${label}: fit 1 at Text 100%, got ${m.fit}`);
+}
+
 const ONE_FAMILY = ['headingLabel', 'headingSlot', 'headingGap', 'label', 'glyph', 'value', 'chance', 'chanceLine', 'droplet', 'dropletGap', 'rowGap'];
 function assertOneFamily(forecast, hourly, label, keys = ONE_FAMILY) {
   for (const key of keys) {
@@ -143,7 +189,7 @@ function assertOneFamily(forecast, hourly, label, keys = ONE_FAMILY) {
 
 export async function family({ widget, size, state }) {
   const m = await inspect(widget), label = `hourly ${size}`;
-  assertStrip(m, label);
+  assertStrip(m, label); assertFloors(m, label);
   assert.equal(m.columns.length, SLOTS[size], `${label}: the family's number of columns`);
   assert.equal(m.columns[0].kind, 'now'); assert.equal(m.columns[0].label, 'Now');
   // Fresh data shows no place, provider or update time (#715).
@@ -154,7 +200,7 @@ export async function family({ widget, size, state }) {
   if (size === 'large') {
     assert.deepEqual(suns.map(column => column.kind), ['sunset']);
     const index = m.columns.indexOf(suns[0]);
-    assert.equal(m.columns[index - 1].label, '6PM'); assert.equal(m.columns[index + 1].label, '7PM'); assert.match(suns[0].label, /^6:\d\dPM$/);
+    assert.equal(m.columns[index - 1].label, '6PM'); assert.equal(m.columns[index + 1].label, '7PM'); assert.match(suns[0].label, /^6:\d\d$/);
     // The fixture's 6 PM is clear and its 7 PM partly cloudy, so each glyph names the sky: the sun before the sunset, the moon after it.
     assert.equal(m.columns[index - 1].glyph, 'sun', 'the hour before sunset draws the day glyph');
     assert.equal(m.columns[index + 1].glyph, 'mooncloud', 'the hour after sunset draws the night glyph');
@@ -265,9 +311,10 @@ export async function sweep({ page, viewport, state, base, now }) {
           assert.deepEqual(m.facts, [], `${label}: no sun fact while the strip shows the next event`);
           assert.equal(m.slot.text, ' ', `${label}: an empty right slot holds its line`);
           assert.equal(m.paths.length, 1, `${label}: the line passes through the sunset column`);
-          // In the Monospace typeface "Sunrise" is widest; it still stays inside its column (assertStrip).
+          // In the Monospace typeface "Sunrise" is widest; it stays inside its column at its shared size (assertStrip,
+          // assertFloors), and where a column cannot hold it the whole strip zooms out a little instead (assertFit).
           const mono = await render({ size: family, density, at: summer, isDay: true, setup: () => { state.settings.appearance.fontFamily = 'mono'; } });
-          assertStrip(mono, `${label} Monospace`); assert.ok(mono.fit >= 0.995, `${label} Monospace: fit ${mono.fit}`);
+          assertStrip(mono, `${label} Monospace`); assertFloors(mono, `${label} Monospace`); assertFit(mono, `${label} Monospace`, { fontFamily: 'mono', density, family });
         }
       }
       await own.setViewportSize(viewport);
@@ -278,19 +325,21 @@ export async function sweep({ page, viewport, state, base, now }) {
       // On the 24-hour clock the hours are bare and only the sun columns show minutes.
       assert.deepEqual(both.columns.filter(column => column.kind === 'hour').map(column => column.label), ['21', '22', '23', '00', '01', '02', '03', '04', '05']);
 
-      // Twelve-hour labels: the hour columns are compact, the sun column keeps its minutes, and the day period is a
-      // smaller suffix with no space before it, as on a phone's hourly row.
+      // Twelve-hour labels: the hour columns are compact with the day period as a smaller suffix with no space before
+      // it, as on a phone's hourly row; the sun column keeps its minutes and has no period ("9:02" between "9PM" and
+      // "10PM", above "Sunset").
       const twelve = await render({ at: summer, isDay: true, setup: () => { state.settings.clockFormat = '12h'; } });
-      assertStrip(twelve, '12-hour');
+      assertStrip(twelve, '12-hour'); assertFloors(twelve, '12-hour');
       assert.deepEqual([twelve.columns[0].label, twelve.columns[1].label, twelve.columns[3].label], ['Now', '9PM', '10PM']);
-      assert.match(twelve.columns[2].label, /^9:0\dPM$/); assert.ok(twelve.fit >= 0.995);
-      assert.deepEqual([twelve.columns[0].period, twelve.columns[1].period, twelve.columns[2].period], [null, 'PM', 'PM']);
+      assert.match(twelve.columns[2].label, /^9:0\d$/); assert.ok(twelve.fit >= 0.995);
+      assert.deepEqual([twelve.columns[0].period, twelve.columns[1].period, twelve.columns[2].period], [null, 'PM', null]);
 
       // The 12-hour clock (the app's default) in every density at 720p, 1080p and 4K and in every typeface, with the
-      // widest labels: a sunrise as the last column (Toronto on a June night, "5:36AM") and two sun columns side by
-      // side (69.65° N on 17 May, at the edge of the polar day: "12:29AM" then "12:51AM"). No label leaves its column
-      // or touches another (assertStrip), every label but Now ends in the small day period, and the strip stays at
-      // fit 1 at Text 100%.
+      // widest labels: a sunrise as the last column (Toronto on a June night, "5:36") and two sun columns side by
+      // side (69.65° N on 17 May, at the edge of the polar day: "12:29" then "12:51"). No label leaves its column or
+      // touches another (assertStrip), nothing is under its floor and no period is larger than its hour
+      // (assertFloors), every hour label but Now ends in the small day period and no sun time has one, and the strip
+      // is at fit 1 at Text 100% but where a column cannot hold "Sunrise" (assertFit).
       const NORTH = { name: 'Synthetic north', latitude: 69.65, longitude: 18.96, timezone: 'Europe/Oslo' };
       const SCENES = [
         { name: 'a sunrise last', at: { large: Date.parse('2026-06-22T00:10:00Z'), medium: Date.parse('2026-06-22T05:10:00Z') }, expect: kinds => kinds.at(-1) === 'sunrise' },
@@ -304,25 +353,37 @@ export async function sweep({ page, viewport, state, base, now }) {
             state.settings.clockFormat = '12h'; state.settings.appearance.fontFamily = fontFamily;
             if (scene.place) state.weather.location = { ...state.weather.location, ...scene.place };
           } });
-          assertStrip(m, label);
+          assertStrip(m, label); assertFloors(m, label); assertFit(m, label, { fontFamily, density, family });
           assert.ok(scene.expect(m.columns.map(column => column.kind)), `${label}: ${m.columns.map(column => `${column.kind} ${column.label}`).join(' | ')}`);
-          assert.ok(m.fit >= 0.995, `${label}: fit 1 at Text 100%, got ${m.fit}`);
-          for (const column of m.columns) if (column.kind !== 'now') assert.match(column.period ?? '', /^[AP]M$/, `${label}: "${column.label}" ends in the small day period`);
+          for (const column of m.columns) if (column.kind !== 'now') assert.equal(column.period, column.kind === 'hour' ? column.label.slice(-2) : null, `${label}: "${column.label}": an hour ends in the small day period, a sun time has none`);
         }
       }
       await own.setViewportSize(viewport);
-      // Above Text 100% a label still keeps to its column: Edmonton's "10:07PM" sunset beside "11PM" at Text 125%, in
-      // every typeface, family and density (the widget may zoom out there like any other; its labels never collide).
-      const PRAIRIE = { name: 'Synthetic prairie', latitude: 53.55, longitude: -113.49, timezone: 'America/Edmonton' };
-      for (const density of Object.keys(GRID_DENSITIES)) for (const family of ['medium', 'large']) for (const fontFamily of ['sans', 'serif', 'mono']) {
-        const label = `${viewport.width} ${family}/${density} 12-hour, Text 125%, Edmonton, ${fontFamily}`;
-        const m = await render({ size: family, density, at: Date.parse('2026-06-22T03:30:00Z'), setup: () => {
-          state.settings.clockFormat = '12h'; state.settings.appearance.fontFamily = fontFamily; state.settings.appearance.fontScale = 1.25;
-          state.weather.location = { ...state.weather.location, ...PRAIRIE };
-        } });
-        assertStrip(m, label);
-        assert.ok(m.columns.some(column => column.kind === 'sunset' && /^10:0\dPM$/.test(column.label)), `${label}: ${m.columns.map(column => column.label).join(' | ')}`);
+
+      // Every Text size (100%, 110%, 125% and 150%) on the 12-hour clock in every typeface, Balanced and Fine, both
+      // families, at 720p and 1080p (and 4K in its pass), with the widest of everything: two sun columns side by side
+      // ("12:29", "12:51" above "Sunset" and "Sunrise"), "100%" in every hour and a "−12°". Nothing is under its floor,
+      // no period is larger than its hour, nothing leaves its column or touches its neighbour, and nothing is smaller
+      // on screen than at Text 100% on the same board (final recheck 2 of PR #730: column caps had made sun times and
+      // chances smaller the larger the Text size).
+      for (const view of views) {
+        await own.setViewportSize(view);
+        for (const density of ['balanced', 'fine']) for (const family of ['medium', 'large']) for (const fontFamily of ['sans', 'serif', 'mono']) {
+          let base = null;
+          for (const fontScale of [1, 1.1, 1.25, 1.5]) {
+            const label = `${view.width} ${family}/${density} 12-hour, Text ${Math.round(fontScale * 100)}%, ${fontFamily}`;
+            const m = await render({ size: family, density, at: SCENES[1].at[family], setup: () => {
+              state.settings.clockFormat = '12h'; state.settings.appearance.fontFamily = fontFamily; state.settings.appearance.fontScale = fontScale;
+              state.weather.location = { ...state.weather.location, ...NORTH };
+              state.weather.hourly.forEach(interval => { interval.precipitationProbability = 100; }); state.weather.details[3].temperature = -12.4;
+            } });
+            assert.ok(m.columns.some(column => column.kind === 'sunset') && m.columns.some(column => column.value === '−12°'), `${label}: ${m.columns.map(column => `${column.label} ${column.value}`).join(' | ')}`);
+            assertStrip(m, label); assertFloors(m, label);
+            if (base) assertGrows(m, base, label); else { base = m; assertFit(m, label, { fontFamily, density, family }); }
+          }
+        }
       }
+      await own.setViewportSize(viewport);
 
       // After sunset the next event is beyond the strip, so the heading names it; notable gusts join it.
       const evening = Date.parse('2026-11-22T23:20:00Z');
@@ -398,15 +459,16 @@ export async function sweep({ page, viewport, state, base, now }) {
             assert.ok(m.trend && m.trend.bottom - m.trend.top >= 0.068 * m.contentHeight, `${label}: the trend's travel ${(m.trend.bottom - m.trend.top).toFixed(1)} px of ${m.contentHeight.toFixed(1)} px`);
           }
         }
-        // A larger Text size flattens the trend before the strip zooms out, so the pair keeps one size as long as
-        // Forecast does: at Text 110% both stay at fit 1 with equal sizes (but for the chance, which on the Fine grid keeps to its narrow column); at 125% and 150% Hourly forecast zooms out
-        // no further than the Forecast above it (Forecast may zoom for its own reasons, such as two values per day).
-        for (const density of Object.keys(GRID_DENSITIES)) for (const family of ['medium', 'large']) for (const fontScale of [1.1, 1.25, 1.5]) {
-          const label = `${view.width} ${family}/${density} Text ${Math.round(fontScale * 100)}%`;
-          const m = await render({ size: family, density, at: evening, pair: true, setup: () => { state.settings.appearance.fontScale = fontScale; state.weather.hourly[3].precipitationProbability = 30; } });
-          assertStrip(m, label);
-          assert.ok(m.fit >= m.forecast.fit - 0.002, `${label}: Hourly forecast zooms out no further than Forecast ${JSON.stringify([m.fit, m.forecast.fit])}`);
-          if (fontScale === 1.1) { assert.ok(m.fit >= 0.995 && m.forecast.fit >= 0.995, `${label}: both at fit 1 ${JSON.stringify([m.fit, m.forecast.fit])}`); assertOneFamily(m.forecast, m.geometry, label, ONE_FAMILY.filter(key => !/^(chance|chanceLine|droplet|dropletGap)$/.test(key))); }
+        // A larger Text size flattens the trend before the strip zooms out, so at Text 110% the pair keeps one size:
+        // both at fit 1 with every shared size equal. Above that, twelve columns can be too narrow for the larger text
+        // and the whole strip zooms out further than the Forecast above it (#749); the Text-size matrix above holds
+        // that to the floors and to sizes that never shrink on screen.
+        for (const density of Object.keys(GRID_DENSITIES)) for (const family of ['medium', 'large']) {
+          const label = `${view.width} ${family}/${density} Text 110%`;
+          const m = await render({ size: family, density, at: evening, pair: true, setup: () => { state.settings.appearance.fontScale = 1.1; state.weather.hourly[3].precipitationProbability = 30; } });
+          assertStrip(m, label); assertFloors(m, label);
+          assert.ok(m.fit >= 0.995 && m.forecast.fit >= 0.995, `${label}: both at fit 1 ${JSON.stringify([m.fit, m.forecast.fit])}`);
+          assertOneFamily(m.forecast, m.geometry, label);
         }
       }
       await own.setViewportSize(viewport);
