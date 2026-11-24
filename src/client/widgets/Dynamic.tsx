@@ -6,9 +6,8 @@ import {
   DYNAMIC_ROWS_MAX, chooseDynamic, dynamicSignals, dynamicSummary, memoizeDynamicSignals, rotationSlot,
   type DynamicCard, type DynamicChoice, type DynamicGlyph, type DynamicInput, type DynamicPhrase, type DynamicPrevious, type DynamicSignals,
 } from '../dynamic.ts';
-import { ageLabel } from '../format.ts';
+import { ageLabel, weatherIsFresh } from '../format.ts';
 import { Icon } from '../icons.tsx';
-import { weatherAttributionWidget } from '../model.ts';
 import { atNaturalWidth, fittingCount, layoutExtent, useMeasured } from './measure.ts';
 import { MoonGlyph } from './SunMoon.tsx';
 import { WeatherGlyph } from './WeatherGlyph.tsx';
@@ -45,8 +44,11 @@ function Glyph({ glyph, still }: { glyph: DynamicGlyph; still: boolean }) {
   return <Icon name={glyph.name} size={null} className="dynamic-glyph" data-glyph={glyph.glyph} />;
 }
 
-/** Footer phrases that never break inside; the small family keeps one. */
-function footerPhrases(lead: DynamicCard | null, signals: DynamicSignals, size: WidgetContentProps['size'], credit: boolean): ({ kind: 'provenance' | 'age' | 'status' | 'credit' } & DynamicPhrase)[] {
+/**
+ * Footer phrases that never break inside; the small family keeps one. Owner decision, 2026-11-22 (#715): no
+ * provider name, and an age only with the status of data that is not fresh (`lead.age` is null while fresh).
+ */
+function footerPhrases(lead: DynamicCard | null, signals: DynamicSignals, size: WidgetContentProps['size']): ({ kind: 'provenance' | 'age' | 'status' } & DynamicPhrase)[] {
   const own = lead?.source;
   // A status about the lead's own source is already said by its age; "Offline" too, when the age says it.
   const statuses = signals.statuses.filter(status => status.source !== own && !(status.source === 'connection' && /offline/i.test(lead?.age?.text ?? ''))
@@ -62,11 +64,10 @@ function footerPhrases(lead: DynamicCard | null, signals: DynamicSignals, size: 
     ...(lead?.provenance ? [{ kind: 'provenance' as const, text: lead.provenance, caution: false }] : []),
     ...(lead?.age ? [{ kind: 'age' as const, ...lead.age }] : []),
     ...statuses.map(status => ({ kind: 'status' as const, text: status.text, caution: status.caution })),
-    ...(credit ? [{ kind: 'credit' as const, text: 'Forecast by Open-Meteo', caution: false }] : []),
   ];
 }
 
-/** One run of phrases joined by " · " that wraps only between phrases, so "2 hr ago" or "Open-Meteo" never breaks (#221). */
+/** One run of phrases joined by " · " that wraps only between phrases, so "2 hr ago" never breaks (#221). */
 function Footer({ phrases }: { phrases: ReturnType<typeof footerPhrases> }) {
   if (!phrases.length) return null;
   return <p className="dynamic-footer">{phrases.map((phrase, index) => <span key={`${phrase.kind}-${index}`}>{index > 0 && ' · '}<span
@@ -101,13 +102,13 @@ function Kicker({ card, choice, size }: { card: DynamicCard; choice: DynamicChoi
   </div>;
 }
 
-function CardView({ card, choice, signals, size, still, credit, swapped, settings }: { card: DynamicCard; choice: DynamicChoice; signals: DynamicSignals; size: WidgetContentProps['size']; still: boolean; credit: boolean; swapped: boolean; settings: Settings }) {
+function CardView({ card, choice, signals, size, still, swapped, settings }: { card: DynamicCard; choice: DynamicChoice; signals: DynamicSignals; size: WidgetContentProps['size']; still: boolean; swapped: boolean; settings: Settings }) {
   const body = useRef<HTMLDivElement>(null);
   const large = size === 'large', rows = large ? choice.also : [];
   // "+N more" counts warning, focus and notable cards only; calm filler is never "more".
   const counted = Math.min(rows.length, choice.more);
   const leftOver = (shown: number) => Math.max(0, choice.more - Math.min(shown, counted));
-  const phrases = footerPhrases(card, signals, size, credit);
+  const phrases = footerPhrases(card, signals, size);
   const key = JSON.stringify([card.id, card.headline, card.detail, rows.map(row => [row.id, row.compact, row.time]), phrases.map(phrase => phrase.text), settings.appearance.fontScale, settings.appearance.fontFamily]);
   const fit = useMeasured(body, key, element => large ? measureRows(element, rows.length, leftOver) : null, rows.length);
   const shown = Math.min(fit, rows.length), hidden = leftOver(shown);
@@ -168,10 +169,9 @@ function Dynamic({ state, settings, size, now, embedded, disconnected }: WidgetC
     </div>;
   }
   // Retained or unavailable forecasts never animate their glyph (#76).
-  const still = disconnected || state.weather.status !== 'fresh';
-  const credit = weatherAttributionWidget(settings) === 'dynamic' && (lead.source === 'weather' || (size === 'large' && choice.also.some(row => row.source === 'weather')));
+  const still = !weatherIsFresh(state.weather, disconnected, now.getTime());
   return <div className={`widget-body dynamic-body dynamic-mode-${choice.mode}`} {...attributes}>
-    <CardView key={lead.id} card={lead} choice={choice} signals={signals} size={size} still={still} credit={credit} swapped={swapped.current} settings={settings} />
+    <CardView key={lead.id} card={lead} choice={choice} signals={signals} size={size} still={still} swapped={swapped.current} settings={settings} />
   </div>;
 }
 

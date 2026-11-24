@@ -655,3 +655,25 @@ test('#714 Hourly forecast adds no rollback exception: off is readable, on is th
     await assertFilesAccepted(directory, 'Hourly forecast off again');
   } finally { await app.close(); await rm(directory, { recursive: true, force: true }); }
 });
+
+test('#716 the Calendar’s upcoming dates add no saved key; its Holiday calendars are the #575 selection, also with Theme Off', () => {
+  // The default board shows the Calendar, with Theme Off and all three calendars: nothing of #716 is written.
+  const settings = defaultSettings();
+  assert.deepEqual(Object.keys(settings.widgetData.calendar), ['weekStart'], 'the Calendar keeps its one setting');
+  assert.deepEqual([settings.widgets.calendar, settings.appearance.theme], [true, { mode: 'off', calendars: ['CA', 'KR', 'RU'] }]);
+  const stored = (value: Settings) => ({ version: 1 as const, settings: persistableData({ version: 1, settings: value, reminders: [], photoAsset: null }).settings as Loose, reminders: [], photoAsset: null });
+  const untouched = stored(settings);
+  assert.equal('theme' in untouched.settings.appearance, false, 'all three calendars with Theme Off: no theme key at rest');
+  assertPreviousReaderAccepts('data', untouched, 'the default board with the Calendar listing dates from all three calendars');
+  // Unticking a calendar in the Calendar's options changes the theme's selection, the documented #575 exception.
+  const one = structuredClone(settings); one.appearance.theme = { ...one.appearance.theme, calendars: ['CA'] };
+  const written = stored(one);
+  assert.deepEqual(written.settings.appearance.theme, { mode: 'off', calendars: ['CA'] }, 'one calendar with Theme Off is written');
+  assertPreviousReaderRejects('data', written, 'Theme Off with one calendar, chosen in the Calendar’s options');
+  const none = structuredClone(settings); none.appearance.theme = { ...none.appearance.theme, calendars: [] };
+  assertPreviousReaderRejects('data', stored(none), 'Theme Off with no calendar');
+  // Ticking all three again there restores readable data.
+  const restored = structuredClone(one); restored.appearance.theme = { ...restored.appearance.theme, calendars: ['CA', 'KR', 'RU'] };
+  assert.equal('theme' in stored(restored).settings.appearance, false);
+  assertPreviousReaderAccepts('data', stored(restored), 'all three calendars ticked again');
+});

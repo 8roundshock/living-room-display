@@ -486,6 +486,11 @@ While a refresh is in flight the state carries the API-only `refreshing: true`, 
 never stored or exported; during the first fetch for a location there is no data and no
 error text yet, rather than a failure. The browser asks again 2 seconds later while
 anything is refreshing, at most five times in a row, then keeps its 30-second poll.
+A forecast whose interval has just ended is answered as `stale` with `refreshing: true`
+and no `error`. The widgets do not present that as a saved forecast (#715,
+`presentedStatus` in `src/client/format.ts`): it stays fresh on the display until the
+refresh fails (which sets `error`, kept through the retries) or the data is over 45
+minutes old. Air quality follows the same rule.
 
 Successful forecasts are cached for 15 minutes in memory. Failed refreshes retain
 the last successful timestamp/data and mark them stale; without prior data the
@@ -540,8 +545,10 @@ intervals use the forecast's monotonic-and-wall timing, and a future `updatedAt`
 refreshed at once (#244). Both routes wait for a due refresh at most about one second
 and say `refreshing` meanwhile, as the forecast does (#351).
 
-The widget labels every value as a model estimate with its age, and credits
-"CAMS · Open-Meteo" (the inspector hint names Copernicus CAMS in full). It is not a
+The widget labels a fresh value "Model est." and nothing more: no update age and no
+provider name on the display (#715; the inspector hint names Copernicus CAMS via
+Open-Meteo in full). A value that is not fresh carries its status and age in the status
+tone ("Saved reading · 2 hr ago", "Offline · Model est. · 12 min ago"). It is not a
 local sensor reading or an official index such as Canada's AQHI. Saved current values
 stand for 3 hours after `updatedAt` (#188, the same rule as Weather's temperature in
 #243); older ones are replaced by the saved hourly estimate for the current hour
@@ -675,10 +682,11 @@ card at all Dynamic is `unavailable` when a source is degraded (shown, saying wh
 | Situation | What Dynamic shows |
 | --- | --- |
 | Forecast stale | Weather cards with "Saved forecast · Updated 2 hr ago" in the status tone; current-based cards only while the reading is up to 3 hours old (the shared last-known rule), with "As of 9 AM", never "Now"; no Dry card |
-| Display offline | "Offline · …"; reminder and countdown cards say "Saved reminders · offline" (or "Saved dates"); alerts are kept until their own end; glyphs are still |
+| Forecast or air refresh in flight | As fresh: no "Saved …" phrase, "Now" and the Dry card stay (#715, the shared `presentedStatus` rule) |
+| Display offline | "Offline · …"; reminder and countdown cards say "Saved reminders · offline" (or "Saved dates"); alerts are kept until their own end, their cards aged "Offline · checked 9 AM"; no "No alerts" claim, whatever the last status was (#715); glyphs are still |
 | Forecast unavailable | No weather cards; "Weather unavailable" in the status tone |
 | Alerts off / unsupported | Nothing from alerts; never "no alerts" (the editor explains coverage) |
-| Alerts fresh, none in effect | Small and medium say nothing; large: "No alerts · checked 9:41 PM" |
+| Alerts fresh, none in effect, display connected | Small and medium say nothing; large: "No alerts" (fresh, so no check time, #715). Never while the display is offline: the status it last received stays `fresh` for as long as the outage lasts |
 | Alerts stale | Retained alerts until their end, and "Saved alerts · checked 9:10 PM" in the status tone; no "No alerts" claim |
 | Alerts unavailable | "Weather alerts unavailable" in the status tone |
 | Air on, not loaded / unavailable / saved | No air cards and "Air quality not loaded yet" (medium and large) / "Air quality unavailable" / an air card aged "Saved reading · …", "Saved estimate" over 3 hours, or no air card and "Saved air reading" when only the last-known value is left |
@@ -693,10 +701,13 @@ alert list may still hide, and usable cards from other sources continue to rende
 Status phrases sit in the footer and leave out the lead card's own source; the small family
 shows one, in this order: Offline, Weather alerts unavailable, Weather unavailable, Saved
 forecast, Air quality unavailable, Reminders unavailable. Forecast cards say "Forecast
-estimate" (rain cards their confidence) with the forecast's age; air cards their age and
-"CAMS · Open-Meteo"; sun and moon cards the place; official cards the provider's name in
-full (the small family may say "Environment Canada") and when they were checked. Dynamic
-carries the "Forecast by Open-Meteo" credit only while Forecast and Weather are both off.
+estimate" (rain cards their confidence); air cards "Model est."; sun and moon cards the
+place; holiday cards the country. No card names a data provider, and a fresh card shows no
+update age or check time (owner decision, 2026-11-22, #715): an official card is marked by
+its alert icon and level word, and its issuer is named in the widget's settings. A card
+whose data is not fresh carries its status and age in the status tone instead ("Saved
+forecast · Updated 2 hr ago", "Saved reading · 2 hr ago", "Saved alerts · checked 9:10 PM",
+"Offline · …").
 
 ## Home (#438)
 

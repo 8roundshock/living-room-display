@@ -699,7 +699,26 @@ board under it shows the family's footprint (“4 × 2 cells of 12 × 8”).
   and rolls over at midnight. **Week starts on** offers Automatic (labelled with the
   resolved day, for example “Automatic · Sunday”, from the browser locale with a Monday
   fallback), Sunday or Monday. It has no data dependency, so it is always shown when
-  enabled.
+  enabled. Since #716 it also shows what is coming up
+  ([contract](widgets.md#calendar-upcoming-dates-716)): large lists up to three upcoming
+  dates under the month ("Dec 25  Christmas", "Today  Christmas" on the day), medium the
+  next one on one line under the date where the box has room (at Text 100% always on
+  Spacious and Balanced; on Fine only in a four-week month), and both put a small accent dot
+  under the days of the month that carry a date. The dates give way before the month does:
+  at a larger Text size fewer lines fit, then none, and the month is never zoomed out to
+  make room for them (on Balanced at 1080p a five-week large month shows one line at Text
+  110% and none from 125%; medium shows none from 110%); the dots stay. A name longer than
+  its line is cut after a whole word with an ellipsis, and a birthday that does not fit as
+  "Name's birthday" shows the name alone. The dates come from the holiday calendars ticked for
+  themes, the saved Birthdays ("Mina's birthday") and the Countdown dates, up to 90 days
+  ahead; reminders are not included. The panel has the same **Holiday calendars** boxes
+  (Canada, Korea, Russia) as Style › Theme and Dynamic, bound to the one selection
+  `appearance.theme.calendars`, and a hint naming the sources; the canvas follows the
+  draft, and unticking every calendar with no birthday or countdown date leaves the widget
+  as it was before #716. There is no new saved setting; a selection other than all three is
+  the existing #575 rollback exception, and with Theme Off and Dynamic's Holidays off this
+  panel is the only place that shows the boxes
+  ([install](install.md#additive-data-and-rollback-compatibility-84)).
 - **Countdown** (Personal, default small) holds up to 12 rows: a title (1–60
   characters), a date, an **Every year** toggle and Remove. **Add date** adds a row
   dated one week ahead and focuses its title. An empty title shows an inline error and
@@ -723,7 +742,8 @@ board under it shows the family's footprint (“4 × 2 cells of 12 × 8”).
 All three panels join the shared settings draft: Save/Cancel appear only for effective
 changes (trailing spaces trimmed on blur do not count), Cancel restores the saved values,
 and built-in or saved styles never change the week start, countdowns or note (styles
-do reset which widgets are shown). Countdowns and the note are private content stored
+do reset which widgets are shown). The Calendar panel's Holiday calendars are the theme's
+selection, which is part of a style like the theme itself. Countdowns and the note are private content stored
 on this device and included in exports. `tests/ui/catalog-time-browser.mjs` checks the
 picker groups and keyboard (Weather listed, no Rain; the free-size caption only for
 Reminders, qualified on the default board), the initial selection, item and Add names,
@@ -753,17 +773,29 @@ Save. A failed request retains them; a stale revision adopts unrelated remote
 changes and asks for review. Settings Cancel restores saved values. Time format
 applies across widgets and Home; the clock inspector links to Settings instead of
 duplicating the global control. The weather status line retains honest update age,
-amber stale/unavailable state and the server's readable failure reason.
+amber stale/unavailable state and the server's readable failure reason, and the
+"Forecast estimates by Open-Meteo" link beside it is the provider credit: since #715 it
+is the only place the app's pages name the forecast provider outside a widget's settings
+hint (the display shows no credit).
 
 Preview weather retains its actual city/units while a selection is unsaved or
 refreshing. Forecast dates/intervals use the weather city's timezone, or the computer's
 while a device location's zone is still `auto` before its first forecast (Weather and
-Forecast then read unavailable); the clock and reminder input use the computer timezone. Current conditions show age;
-retained stale data is marked throughout, with Forecast's “Saved forecast” or
-“Offline” prefix in the same amber status tone as Weather's age (#223). Missing values
+Forecast then read unavailable); the clock and reminder input use the computer timezone.
+Owner decision, 2026-11-22 (#715): fresh conditions show no update age and no widget names
+its data provider, on the display, the canvas and the picker samples. Retained stale data
+is marked throughout, with the age only there: Weather's “Saved forecast · Updated 5 hr
+ago” under its content, and Forecast's “Saved forecast · 5 hr ago” or “Offline · Updated
+5 hr ago” in its heading's right slot in place of the place and unit, each whole line
+in the amber status tone (#223). The place and unit return when the forecast is fresh
+again; in small, a status with no update time to tell is the label alone (“Saved forecast”). Forecast's strip keeps one size and position in every
+state. A forecast whose refresh is still running is not marked: only a failed refresh, an
+offline display or data over 45 minutes old is (see the
+[widget contract](widgets.md#data-and-image-boundaries)). Missing values
 stay unavailable. A retained forecast never shows past days, and a reading more than
 3 hours old reads “Last known · 9 AM” (#243, [rule](widgets.md#data-and-image-boundaries)).
-An update time in the future reads “Update time unknown” (#244). City search leaves
+While the forecast is saved or offline, an update time in the future reads “Update time
+unknown” (#244). City search leaves
 out a result it could not save (no valid timezone or coordinates) and keeps the rest
 (#246).
 Hourly chance covers precipitation including snow; rain estimates use rain plus
@@ -785,9 +817,12 @@ upgrade of a pre-#74 data folder, and a device location whose zone is still `aut
 while the provider is down (editor and display render, then recover).
 Each weather module keeps its actual place and relevant units visible when used
 alone; weather and forecast show the unit beside the place (“Toronto · °C”), and
-elevated Weather keeps the rain amount unit (“0.16 in rain”). Forecast labels read
+elevated Weather keeps the rain amount unit (“0.16 in rain”). One exception (#715):
+while its forecast is not fresh, Forecast shows the status in that slot instead (“Saved
+forecast · 5 hr ago”, “Offline · Updated 5 hr ago”), so a Forecast used without Weather
+then names neither its place nor its unit; both return when the forecast is fresh again. Forecast labels read
 Today and then weekdays, tomorrow included (#256), while assistive text and hover
-details keep the full relative label and civil date (“Tomorrow, 2026-10-19”). Ambient labels, age, attribution, units and secondary values
+details keep the full relative label and civil date (“Tomorrow, 2026-10-19”). Ambient labels, status lines, units and secondary values
 have a readability floor of 1.4% of the display height (1.65% for forecast
 chance/temperatures, the Weather rain detail and reminder dates), multiplied by
 **Text size**; very short compact widgets cap it by their own height. A larger
@@ -967,11 +1002,11 @@ later hours, so a saved reading never shows a past hour or a peak that has alrea
 happened; with fewer than two upcoming hours the line reads "Hourly estimate
 unavailable". The chart is named for screen readers ("US AQI estimate for the next
 24 hours: 40 to 45"); its axis reads "Now" and the last hour's end, like Weather's (#261).
-The footer (#221) always shows the age and the short credit "CAMS · Open-Meteo", on one
-row in medium and large and on two short rows where small is narrow (#309): "Model est.
-· 12 min ago" with a reading, "Saved reading · 2 hr ago" in the caution tone when stale,
-and "Offline · …" first while the display cannot reach the computer. Phrases never break
-inside, so "12 min ago", "12 µg/m³" and "Open-Meteo" stay whole, and small and medium keep
+The footer (#221) is one short row with no provider name (#715; the hint above names it):
+"Model est." for a fresh reading, with no age; "Saved reading · 2 hr ago" in the caution
+tone when stale; "Offline · Model est. · 12 min ago" while the display cannot reach the
+computer; and the age also for values over 3 hours old. Phrases never break
+inside, so "12 min ago" and "12 µg/m³" stay whole, and small and medium keep
 fit 1 at Text 100% in every density, fresh, stale or offline, and for a three-digit or
 long-category AQI (US 128, 156, 301, European 105) with either qualifier, which small sets
 on its own line under the reading, at 720p, 1080p and 4K (#309). Saved current values stand for 3 hours
@@ -979,8 +1014,9 @@ after the update, like Weather's temperature (#243). After that (#188) the readi
 shows the saved hourly estimate for the current hour, labelled "Saved estimate" in the
 caution tone, with its UV; without an estimate for this hour the old AQI reads "Last
 known · 9 AM" ("Sat 9 AM" when not today) and UV is hidden. The fetch-time main
-pollutant is hidden in both cases. Age and credit always stay. A failure reads "Air
-quality unavailable" (age only, caution tone), never clean air. Calculations are cached
+pollutant is hidden in both cases. A failure reads "Air
+quality unavailable" (age only, caution tone), never clean air; before the first request
+it reads "Air quality not loaded yet" with no footer. Calculations are cached
 per minute (no `Intl` formatter is built while the minute holds, #185); values change on
 the shared one-second tick without their own animation.
 Browser suite: `tests/ui/catalog-sky-browser.mjs`.
@@ -1077,7 +1113,8 @@ On the display Dynamic shows one card: a warning first (several take turns each 
 or calm card per wall-clock minute ([Dynamic signals](api.md#dynamic-signals)). Small shows
 the kicker, the glyph or a value beside a short headline, one detail line and one footer
 phrase; medium a glyph column beside the headline and detail and one footer run
-(provenance · age · status · credit); large a hero, the detail and up to three whole rows
+(what the card is or its place, then the status and age of data that is not fresh, then
+other sources' statuses; never a provider name or a fresh age, #715); large a hero, the detail and up to three whole rows
 measured from layout boxes, then an exact "+N more". "Warning" (and "Overdue") use the
 status tone; nothing else adds light, and a swap fades the new card in only at Subtle and
 Lively. It is hidden on the display when there is nothing to show and no source failed;
@@ -1248,7 +1285,16 @@ focus and layout changes and must still avoid every canvas action and the curren
 control. A visible canvas action alone does not suppress an off-screen error.
 
 The #565 collection's inspector panels describe the existing data source; content
-management stays on Home or the existing World clocks settings. The ambient
+management stays on Home or the existing World clocks settings. Since #715 the panels are
+where a provider is named, because the display names none: Weather alerts reads "Official
+notices from Environment Canada or the US National Weather Service, for the saved weather
+city. Data Source: Environment and Climate Change Canada. Other areas show unavailable
+coverage. Provider notices are information, not an emergency notification service." On
+the display the weather modules end with their place; a saved or offline forecast puts
+"Saved forecast · 5 hr ago" or "Offline · Updated 5 hr ago" above it in the status tone
+(and "Last known · Thu 2 AM" above that for a reading over three hours old), and Weather
+alerts shows "Saved alerts · 2 hr ago", "Offline · Updated 2 hr ago" or, under "Alerts
+unavailable", "Updated 2 hr ago" (the last successful check) only then. The ambient
 modules expose no controls. Every catalog entry declares only useful families;
 widgets without a useful small family begin at medium. Saved layouts, the default
 board and the Save/Cancel draft behavior remain unchanged.

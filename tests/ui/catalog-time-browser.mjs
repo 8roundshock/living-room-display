@@ -15,6 +15,7 @@ import { defaultSettings } from '../../src/shared/defaults.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, fitWidgetFamily, widgetSizes, widgetSpan } from '../../src/shared/widgets.ts';
 import { addToGrid } from '../../src/client/make-room.ts';
 import { launchEdge } from './lib/edge.mjs';
+import { assertNoSourceOrFreshAge } from './lib/source-age.mjs';
 
 /** The picker's grouped order (#154): WIDGET_CATEGORIES order, catalog order inside each group. */
 const GROUPED = Object.keys(WIDGET_CATEGORIES).flatMap(category => ACTIVE_WIDGET_IDS.filter(id => WIDGET_CATALOG[id].category === category));
@@ -353,7 +354,22 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await weekStart.selectOption('monday'); await save(); assert.equal(snapshot().widgetData.calendar.weekStart, 'monday');
     await page.reload(); await button('Edit layout').waitFor(); await page.clock.runFor(300);
     row = await inspector('Calendar'); assert.equal(await row.getByRole('combobox', { name: 'Week starts on' }).inputValue(), 'monday'); assert.equal(await firstHeader(), 'M');
-    checks.push('Calendar: add from the picker, Week starts on (Automatic · Sunday / Sunday / Monday) previews live, reverting hides the Save bar, Cancel restores, Save and reload persist');
+    // #716: the panel carries the holiday calendars it shares with themes and Dynamic; the canvas follows the draft.
+    const nextDate = () => canvas('calendar').locator('.calendar-next').innerText().then(text => text.replace(/\s+/g, ' ').trim());
+    const calendarBox = name => row.getByRole('checkbox', { name, exact: true });
+    const markedDays = () => canvas('calendar').locator('td:has(.calendar-mark)').allInnerTexts();
+    assert.equal(await nextDate(), 'Oct 31 Halloween', 'medium shows the next date, from the Canadian calendar');
+    assert.deepEqual(await markedDays(), ['3', '9', '12', '31'], 'October marks Foundation Day, Hangeul Day, Thanksgiving and Halloween');
+    assert.match(await row.locator('.hint').innerText(), /holiday calendars.*Birthdays.*Countdown/s, 'the panel says where the dates come from');
+    await calendarBox('Canada').uncheck(); await savebar().waitFor();
+    assert.equal(await nextDate(), 'Nov 4 Unity Day', 'without Canada the next date is Russia’s'); assert.deepEqual(await markedDays(), ['3', '9']);
+    await cancel(); assert.equal(await nextDate(), 'Oct 31 Halloween'); assert.equal(await calendarBox('Canada').isChecked(), true, 'Cancel restores the calendars');
+    for (const name of ['Canada', 'Korea', 'Russia']) await calendarBox(name).uncheck();
+    assert.equal(await canvas('calendar').locator('.calendar-next, .calendar-mark').count(), 0, 'no calendar, birthday or countdown date: the Calendar adds nothing');
+    await save(); assert.deepEqual(snapshot().appearance.theme.calendars, [], 'the choice is the theme’s calendar selection, no new setting');
+    for (const name of ['Canada', 'Korea', 'Russia']) await calendarBox(name).check();
+    await save(); assert.deepEqual(snapshot().appearance.theme.calendars, ['CA', 'KR', 'RU']); assert.equal(await nextDate(), 'Oct 31 Halloween');
+    checks.push('Calendar: add from the picker, Week starts on (Automatic · Sunday / Sunday / Monday) previews live, reverting hides the Save bar, Cancel restores, Save and reload persist; its Holiday calendars (the theme’s selection, #716) change the next date and the marked days live, Cancel restores them and Save stores them in appearance.theme.calendars');
 
     // 3. Countdown: placeholder, add/edit/delete, empty-title error blocks Save, Every year, Passed.
     await addFromPicker('Countdown');
@@ -683,6 +699,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
         });
         const span = widgetSpan(id, size), label = `${id} ${size}`;
         if (measured.min !== null) { assert.ok(measured.min >= 9, `${label}: smallest sample text ${measured.min} px ("${measured.text}")`); smallest.push(measured.min); }
+        // #715: a picker sample shows what the display shows: no provider name and, being fresh, no update age.
+        await assertNoSourceOrFreshAge(page.locator('.picker-sample'), `picker sample ${label}`, { id });
         assert.ok(Math.abs(measured.width - measured.fill) <= 1, `${label} fills its area (width, height or the 2× cap): ${JSON.stringify(measured)}`);
         assert.ok(measured.width <= span.columns * 100 + 1, `${label} is at most twice the canvas scale: ${JSON.stringify(measured)}`);
         assert.equal(measured.footprint, `${span.columns} × ${span.rows} cells of 12 × 8`, label);
@@ -697,6 +715,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await button('Preview Countdown').click(); await button('Countdown small').click();
     assert.match(await page.locator('.picker-sample').innerText(), /12\s*days\s*Weekend trip\s*Wed, Mar 17/, 'Countdown counts from today');
     if (capture) images.push({ name: 'picker-samples-1280x720', bytes: await page.screenshot() });
+    checks.push('#715 every picker sample, in every family, names no data provider and shows no update age');
     checks.push(`#361 at 1280×720 every picker family's smallest sample text line is at least 9 px (smallest ${Math.min(...smallest)} px), each sample fills the stage width at no more than twice the canvas scale and names its footprint; on 5 March 2027 the Clock shows 10:20, the Calendar marks the 5th and Countdown still reads 12 days`);
     assert.deepEqual(errors, []);
     return { checks, images };

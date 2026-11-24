@@ -1161,6 +1161,11 @@ export async function runStudioQa({ playwright, edge } = {}) {
     await statusRow.locator('.weather-status-error').waitFor();
     const staleLines = (await statusRow.innerText()).split('\n').map((line) => line.trim());
     assert.match(staleLines[0], /^Saved forecast · /);
+    // #715: the provider credit lives here, off the display: a link to the provider beside the status line.
+    const credit = page.locator('a.weather-credit');
+    assert.equal(await credit.innerText(), 'Forecast estimates by Open-Meteo', 'Settings keeps the provider credit');
+    assert.equal(await credit.getAttribute('href'), 'https://open-meteo.com/', 'the credit links to the provider');
+    assert.ok(await credit.isVisible(), 'the credit is visible in Settings');
     assert.equal(staleLines[1], 'Weather update failed. Showing the last successful forecast.');
     assert.equal(await statusRow.locator('.weather-status-error').evaluate((element) => getComputedStyle(element).color), caution);
     assert.equal(caution, 'rgb(201, 167, 130)', 'the caution tone');

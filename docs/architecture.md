@@ -39,8 +39,11 @@ dependency. Node 24 is an active LTS line; existing system runtimes are not repl
   [Windows installation](https://www.home-assistant.io/installation/windows/).
 - Open-Meteo supplies current, daily, and hourly forecast data. Version one uses
   hourly rain/precipitation intervals; it does not claim minute rain nowcasting.
-  The local noncommercial endpoint needs no account. Keep attribution visible,
-  refresh conservatively, and revisit provider terms before commercial use.
+  The local noncommercial endpoint needs no account. Keep the provider credit in the
+  app: owner decision, 2026-11-22 (#715), it is the "Forecast estimates by Open-Meteo"
+  link in Settings and the provider names in the widget settings hints and these docs,
+  not a line on the ambient display. Refresh conservatively, and revisit provider terms,
+  attribution placement included, before any public release or commercial use (#114).
   [Forecast API](https://open-meteo.com/en/docs).
 - Samsung TV control is optional. General integrations do not prove support for
   this particular S90F setup, wake behavior, or keys. Verify the device only when

@@ -151,8 +151,17 @@ The widgets are: Clock, World clocks (up to four cities), Calendar, Weather (wit
 rain timing when rain is near), Forecast (the next seven days), Air quality, Sun &
 moon, Dynamic (what matters now, or a calm rotation), Reminders, Countdown (to dates you choose), Note (a short note of your own),
 Photo (a dim picture from your PC) and Last screen (a dim picture of what was on
-your screen just before the display started, with its time; it is kept in memory
+your screen just before the display started, with no caption or time; it is kept in memory
 only and never saved).
+
+**Calendar** also shows what is coming up. The large size lists the next three holidays and
+important dates under the month ("Dec 25  Christmas"), the medium size shows the next one where
+it fits, and both put a small dot under those days in the month. The dates come from the holiday
+calendars you tick (Canada, Korea, Russia: the same boxes as under Theme, also in the Calendar's
+own options), your Birthdays in Settings and your Countdown dates, up to 90 days ahead. A
+February 29 birthday shows in leap years only. Untick every calendar to see only your own dates.
+A long name is shortened with "…". At a larger Text size the month keeps its size and fewer of
+these lines show, or none; the dots stay.
 
 **Dynamic** stays on what matters most: an official weather warning (from Environment
 and Climate Change Canada or the US National Weather Service, for Canada and the US
@@ -274,11 +283,13 @@ Windows** on Windows 10.
 
 ## About the weather
 
-The weather comes from Open-Meteo, a free forecast service. The display always says
-how old it is. If the PC can't reach the service, you see the last saved forecast,
-labelled as saved, or a plain "unavailable" message, never made-up weather. When
-rain is near, Weather adds its chance and rough timing: that is a forecast
-estimate, not a promise.
+The weather comes from Open-Meteo, a free forecast service; **Settings** has the
+link. The widgets themselves do not name the service or say when the weather was
+last updated while it is up to date. If the PC can't reach the service, you see the
+last saved forecast, labelled as saved with how old it is, or a plain "unavailable"
+message, never made-up weather. On the Forecast widget that label takes the place of
+the city and unit in its heading until the forecast is up to date again. When rain is near, Weather adds its chance and
+rough timing: that is a forecast estimate, not a promise.
 
 ## Backups
 

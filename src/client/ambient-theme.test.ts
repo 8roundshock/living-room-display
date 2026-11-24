@@ -86,6 +86,32 @@ test('stale, disconnected, aged and different-location weather falls back to sea
     assert.equal(resolveTheme(settings, weather, now, fault === 'offline', '2026-12-20')?.motif, 'christmas', fault);
   }
 });
+test('a refresh in flight keeps the weather scene; a failed, retried or long-overdue one does not (#740)', () => {
+  const minutes = (count: number) => new Date(now.getTime() - count * 60_000).toISOString();
+  const failed = 'Weather update failed. Showing the last successful forecast.';
+  // What the server answers while a due refresh takes over a second (#351): the saved forecast, stale, refreshing.
+  const cases: [string, Partial<WeatherState>, boolean][] = [
+    ['fresh', {}, true],
+    ['refresh in flight, 16 minutes old', { status: 'stale', refreshing: true, updatedAt: minutes(16) }, true],
+    ['refresh in flight at the end of the grace', { status: 'stale', refreshing: true, updatedAt: minutes(45) }, true],
+    ['saved, no refresh running', { status: 'stale', updatedAt: minutes(16) }, false],
+    ['the refresh failed', { status: 'stale', error: failed, updatedAt: minutes(16) }, false],
+    ['a retry after a failure', { status: 'stale', error: failed, refreshing: true, updatedAt: minutes(16) }, false],
+    ['refresh in flight after 50 minutes (a PC back from sleep)', { status: 'stale', refreshing: true, updatedAt: minutes(50) }, false],
+    ['never answered, retrying', { status: 'unavailable', refreshing: true, updatedAt: null }, false],
+  ];
+  for (const mode of ['combined', 'weather'] as const) for (const [name, change, drawn] of cases) {
+    const { settings, weather } = fixture(); settings.appearance.theme.mode = mode;
+    weather.current!.weatherCode = 61; Object.assign(weather, change);
+    const scene = resolveTheme(settings, weather, now, false, '2026-12-20');
+    // Combined keeps the Christmas scene either way and draws the rain over it; Weather mode has nothing else to show.
+    const expected = mode === 'combined' ? drawn ? ['rain', 'christmas'] : ['christmas', undefined] : drawn ? ['rain', undefined] : null;
+    assert.deepEqual(scene && [scene.motif, scene.habitat], expected, `${mode}: ${name}`);
+    // Offline draws no weather, refresh in flight or not.
+    const offline = resolveTheme(settings, weather, now, true, '2026-12-20');
+    assert.deepEqual(offline && [offline.motif, offline.habitat], mode === 'combined' ? ['christmas', undefined] : null, `${mode}: ${name}, offline`);
+  }
+});
 test('forecast scenery uses upcoming hourly instants, never a passed storm or daily worst code', () => {
   const { settings, weather } = fixture(); settings.appearance.theme.mode = 'weather';
   weather.details = [detail('2026-12-20T18:00:00Z',95), detail('2026-12-20T19:00:00Z',71)];

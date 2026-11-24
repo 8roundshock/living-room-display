@@ -171,6 +171,7 @@ test('rain tiers and a dry spell only for a fresh, complete forecast on a connec
   const soon = card(wet(3, 6))!;
   assert.deepEqual([soon.kind, soon.tier, soon.score, soon.compact.startsWith('Rain likely')], ['rain-soon', 'focus', DYNAMIC_SCORES.rainSoon, true]);
   assert.equal(soon.provenance, 'Forecast estimate'); assert.match(soon.detail ?? '', /^Peak 80% · 3 mm rain$/);
+  assert.equal(soon.age, null, 'a fresh forecast shows no update age (#715)');
   assert.deepEqual([card(wet(3, 6, 40))?.tier, card(wet(3, 6, 40))?.score], ['notable', DYNAMIC_SCORES.rainPossibleSoon], 'possible rain soon is notable');
   assert.deepEqual([card(wet(9, 11))?.kind, card(wet(9, 11))?.score], ['rain-later', DYNAMIC_SCORES.rainLater]);
   assert.deepEqual([card(index => index === 4 ? { chance: 40 } : {})?.kind, card(index => index === 4 ? { chance: 40 } : {})?.score], ['precipitation-possible', DYNAMIC_SCORES.precipitationPossible]);
@@ -199,7 +200,12 @@ test('stale and offline weather: saved-forecast age in the status tone, "As of",
 test('air: estimate and last-known readings, off and unavailable; UV from upcoming hours only', () => {
   const estimate = find(signal({ airQuality: air({ aqi: 160, status: 'stale', updatedAt: NOW - 5 * HOUR, start: NOW - 5 * HOUR - (NOW - 5 * HOUR) % HOUR }) }), 'air:aqi')!;
   assert.ok(estimate, 'over 3 hours old with this hour\'s saved estimate: still shown');
-  assert.match(estimate.age!.text, /^Saved estimate/); assert.equal(estimate.age!.caution, true);
+  assert.deepEqual([estimate.age, estimate.provenance], [{ text: 'Saved estimate · 5 hr ago', caution: true }, null]);
+  // #715: a fresh reading says it is a model estimate and nothing else; saved and offline ones keep their age.
+  const freshAir = find(signal({ airQuality: air({ aqi: 160 }) }), 'air:aqi')!;
+  assert.deepEqual([freshAir.provenance, freshAir.age], ['Model est.', null]);
+  assert.deepEqual(find(signal({ airQuality: air({ aqi: 160, status: 'stale', updatedAt: NOW - 2 * HOUR }) }), 'air:aqi')!.age, { text: 'Saved reading · 2 hr ago', caution: true });
+  assert.deepEqual(find(signal({ airQuality: air({ aqi: 160 }), disconnected: true }), 'air:aqi')!.age, { text: 'Offline · Model est. · 12 min ago', caution: true });
   const old = NOW - 30 * HOUR;
   const lastKnown = signal({ airQuality: air({ aqi: 160, status: 'stale', updatedAt: old, start: old - old % HOUR }) });
   assert.equal(all(lastKnown).filter(card => card.source === 'air').length, 0, 'last known: no air cards');
@@ -316,7 +322,8 @@ test('official alerts: a warning beats everything, two take turns, watch and adv
   assert.equal(choice.mode, 'alert'); assert.equal(choice.lead!.id, 'alert:w1');
   assert.deepEqual([choice.lead!.kicker, choice.lead!.kickerCaution, choice.lead!.headline, choice.lead!.official], ['Warning', true, 'Winter storm warning', true]);
   assert.equal(choice.lead!.detail, 'Until 5:30 PM · City of Toronto');
-  assert.equal(choice.lead!.provenance, 'Environment and Climate Change Canada'); assert.equal(choice.lead!.provenanceShort, 'Environment Canada');
+  // #715: an official card names no issuer and, while fresh, no check time; the alert icon and level word mark it official.
+  assert.deepEqual([choice.lead!.provenance, choice.lead!.provenanceShort, choice.lead!.age], [null, null, null]);
   assert.deepEqual(choice.also.map(card => card.id), ['alert:v1', 'weather:hazard', 'alert:a1'], 'then the watch (1010), hail now (1000), the advisory (945)');
   assert.equal(find(signals, 'alert:s1')!.tier, 'notable');
   const two = signal({ alerts: alerts([warning, alert('w2', 'warning', 'Wind warning', { startsAt: iso(NOW + HOUR) })]) });
@@ -330,10 +337,103 @@ test('official alerts: a warning beats everything, two take turns, watch and adv
   // Stale: retained alerts plus the saved-alerts phrase; fresh with none: "No alerts" for the large family only.
   const stale = signal({ alerts: alerts([warning], 'stale') });
   assert.deepEqual(find(stale, 'alert:w1')!.age, { text: 'Saved alerts · checked 9:26 AM', caution: true });
-  assert.deepEqual(signal().statuses.filter(status => status.source === 'alerts').map(status => [status.text, status.largeOnly]), [['No alerts · checked 9:26 AM', true]]);
+  assert.deepEqual(find(signal({ alerts: alerts([warning]), disconnected: true }), 'alert:w1')!.age, { text: 'Offline · checked 9:26 AM', caution: true });
+  assert.deepEqual(signal().statuses.filter(status => status.source === 'alerts').map(status => [status.text, status.largeOnly]), [['No alerts', true]], 'a fresh empty list carries no check time (#715)');
   assert.equal(signal({ alerts: alerts([warning], 'stale') }).statuses.some(status => /No alerts/.test(status.text)), false, 'no "No alerts" claim while saved');
   assert.deepEqual(signal({ alerts: { ...alerts([]), status: 'unsupported', provider: null, source: null } }).statuses.filter(status => status.source === 'alerts'), [], 'unsupported says nothing on the display');
   assert.ok(signal({ alerts: { ...alerts([]), status: 'unavailable' } }).statuses.some(status => status.text === 'Weather alerts unavailable' && status.smallRank === 1));
+});
+
+test('fresh cards show no provider name and no update age; only data that is not fresh carries an age, in the status tone (#715)', () => {
+  const PROVIDER = /Open-Meteo|CAMS|Copernicus|Environment (and Climate Change )?Canada|National Weather Service|Official weather alerts/;
+  const AGE = /\bago\b|Updated|just now|[Cc]hecked|Not updated yet|Update time unknown/;
+  const text = (card: DynamicCard) => [card.kicker, card.headline, card.compact, card.detail, card.detailCompact, card.detailFlag, card.provenance, card.provenanceShort, card.time, card.age?.text].filter(Boolean).join(' | ').replace(/\u00a0/g, ' ');
+  const everything: Partial<DynamicInput> = {
+    alerts: alerts([alert('w', 'warning', 'Winter storm warning'), alert('s', 'statement', 'Special weather statement')]), airQuality: air({ aqi: 160, uv: index => index === 4 ? 8 : 2 }),
+    weather: weather({ current: { weatherCode: 95, windSpeed: 55 }, hours: wet(3, 6) }), reminders: [reminder(NOW + 30 * MINUTE)], countdowns: [countdown('1', '2026-10-21')],
+  };
+  const fresh = signal(everything);
+  for (const source of ['weather', 'alerts', 'air', 'sky', 'personal'] as const) assert.ok(all(fresh).some(card => card.source === source), `${source} contributes a card`);
+  for (const card of all(fresh)) {
+    assert.doesNotMatch(text(card), PROVIDER, `${card.id}: no provider name`);
+    assert.doesNotMatch(text(card), AGE, `${card.id}: no update age while fresh`);
+    assert.equal(card.age, null, `${card.id}: no age phrase while fresh`);
+  }
+  for (const status of fresh.statuses) { assert.doesNotMatch(status.text, PROVIDER); assert.doesNotMatch(status.text, AGE); }
+  assert.deepEqual(signal().statuses.map(status => status.text), ['No alerts'], 'the quiet fresh board says only that there are no alerts');
+  // Saved data and an offline display: still no provider name; every age sits in a status-tone phrase.
+  const saved: Partial<DynamicInput> = { ...everything, alerts: alerts([alert('w', 'warning', 'Winter storm warning')], 'stale'),
+    weather: weather({ status: 'stale', updatedAt: NOW - 2 * HOUR, current: { weatherCode: 95, windSpeed: 55 }, hours: wet(3, 6) }), airQuality: air({ aqi: 160, status: 'stale', updatedAt: NOW - 2 * HOUR }) };
+  for (const [label, signals] of [['saved', signal(saved)], ['offline', signal({ ...everything, disconnected: true })]] as const) {
+    let aged = 0;
+    for (const card of all(signals)) {
+      assert.doesNotMatch(text(card), PROVIDER, `${label} ${card.id}: no provider name`);
+      assert.doesNotMatch(text({ ...card, age: null }), AGE, `${label} ${card.id}: no age outside its status phrase`);
+      if (!card.age) continue;
+      assert.equal(card.age.caution, true, `${label} ${card.id}: its status is in the status tone`);
+      if (AGE.test(card.age.text)) aged++;
+    }
+    assert.ok(aged >= 3, `${label}: weather, alert and air cards keep their age (${aged})`);
+    for (const status of signals.statuses) assert.doesNotMatch(status.text, PROVIDER, `${label}: ${status.text}`);
+  }
+});
+
+test('"No alerts" is said only while it is confirmed: never from an offline display or a saved list, where a claim about alerts carries its check time in the status tone (#715)', () => {
+  const plain = (text: string) => text.replace(/\u00a0/g, ' ');
+  const about = (signals: DynamicSignals) => signals.statuses.filter(status => status.source === 'alerts').map(status => ({ text: plain(status.text), caution: status.caution }));
+  const warning = alert('w1', 'warning', 'Winter storm warning');
+  // Connected and fresh: the plain claim, with no check time, for the large family only.
+  assert.deepEqual(about(signal()), [{ text: 'No alerts', caution: false }]);
+  // Offline: the list was fresh and empty at the last good poll, and `fresh` stays the status for as long as the
+  // outage lasts. No claim is made, whether the last check was four minutes or 26 hours ago.
+  for (const checkedAt of [iso(NOW - 4 * MINUTE), iso(NOW - 26 * HOUR)]) {
+    const offline = signal({ disconnected: true, alerts: { ...alerts([]), checkedAt } });
+    assert.deepEqual(about(offline), [], `offline, checked ${checkedAt}: nothing is claimed about alerts`);
+    assert.equal(offline.statuses.some(status => /No alerts/.test(status.text)), false);
+    assert.deepEqual(offline.statuses.filter(status => status.source === 'connection').map(status => [status.text, status.caution]), [['Offline', true]], 'the display still says it is offline');
+    // What the large family's footer would hold: no phrase about alerts at all.
+    assert.equal(offline.statuses.filter(status => !status.caution).some(status => /alert/i.test(status.text)), false);
+  }
+  // Offline with an alert still in effect: the card stays, with its check time in the status tone.
+  const offlineAlert = signal({ disconnected: true, alerts: alerts([warning]) });
+  assert.deepEqual([plain(find(offlineAlert, 'alert:w1')!.age!.text), find(offlineAlert, 'alert:w1')!.age!.caution], ['Offline · checked 9:26 AM', true]);
+  assert.deepEqual(about(offlineAlert), []);
+  // A saved list, empty or not: "Saved alerts · checked …" in the status tone, never "No alerts".
+  for (const list of [[], [warning]]) assert.deepEqual(about(signal({ alerts: alerts(list, 'stale') })), [{ text: 'Saved alerts · checked 9:26 AM', caution: true }]);
+  // Every phrase about alerts that is not the fresh, connected one carries a check time and the status tone.
+  for (const signals of [signal({ disconnected: true, alerts: alerts([]) }), signal({ disconnected: true, alerts: alerts([warning]) }), signal({ alerts: alerts([], 'stale') }), signal({ alerts: alerts([warning], 'stale') }), signal({ disconnected: true, alerts: alerts([warning], 'stale') })]) {
+    const phrases = [...about(signals), ...all(signals).filter(card => card.source === 'alerts').map(card => ({ text: plain(card.age?.text ?? ''), caution: card.age?.caution ?? false }))];
+    for (const phrase of phrases) { assert.match(phrase.text, /checked \d/, phrase.text); assert.equal(phrase.caution, true, phrase.text); }
+  }
+});
+
+test('a forecast or air reading whose refresh is still running is not presented as saved (#715)', () => {
+  const plain = (text: string) => text.replace(/\u00a0/g, ' ');
+  // What /api/state answers when the interval has just ended and the provider takes over a second (#351).
+  const refreshing = { ...weather({ status: 'stale', updatedAt: NOW - 16 * MINUTE }), refreshing: true };
+  const during = signal({ weather: refreshing });
+  assert.equal(during.statuses.some(status => status.source === 'weather'), false, 'no "Saved forecast" status');
+  for (const card of all(during).filter(item => item.source === 'weather')) assert.equal(card.age, null, `${card.id}: no age while the refresh runs`);
+  assert.ok(find(during, 'weather:dry'), 'the dry-spell card of a fresh forecast stays');
+  assert.match(plain(find(signal({ weather: { ...weather({ status: 'stale', updatedAt: NOW - 16 * MINUTE, current: { windSpeed: 55 } }), refreshing: true } }), 'weather:wind')!.detail ?? ''), /· Now$/, 'current conditions still read "Now"');
+  // The same forecast, not refreshing: saved, as before.
+  const saved = signal({ weather: weather({ status: 'stale', updatedAt: NOW - 16 * MINUTE, current: { windSpeed: 55 } }) });
+  assert.ok(saved.statuses.some(status => status.source === 'weather' && status.text === 'Saved forecast' && status.caution));
+  assert.equal(plain(find(saved, 'weather:wind')!.age!.text), 'Saved forecast · Updated 16 min ago');
+  assert.equal(find(saved, 'weather:dry'), undefined);
+  // A retry after a failed refresh keeps the saved presentation (no blink to fresh).
+  const retrying = signal({ weather: { ...weather({ status: 'stale', updatedAt: NOW - 2 * HOUR, current: { windSpeed: 55 } }), refreshing: true, error: 'Weather update failed. Showing the last successful forecast.' } });
+  assert.ok(retrying.statuses.some(status => status.text === 'Saved forecast'));
+  assert.equal(plain(find(retrying, 'weather:wind')!.age!.text), 'Saved forecast · Updated 2 hr ago');
+  // Offline stays as it is, refreshing or not.
+  const offline = signal({ weather: { ...weather({ status: 'stale', updatedAt: NOW - 16 * MINUTE, current: { windSpeed: 55 } }), refreshing: true }, disconnected: true });
+  assert.equal(plain(find(offline, 'weather:wind')!.age!.text), 'Offline · Updated 16 min ago');
+  // Air quality follows the same rule (its interval is 30 minutes).
+  const air31 = { ...air({ aqi: 160, status: 'stale', updatedAt: NOW - 31 * MINUTE }), refreshing: true };
+  const airDuring = find(signal({ airQuality: air31 }), 'air:aqi')!;
+  assert.deepEqual([airDuring.provenance, airDuring.age], ['Model est.', null]);
+  assert.equal(plain(find(signal({ airQuality: { ...air31, refreshing: false } }), 'air:aqi')!.age!.text), 'Saved reading · 31 min ago');
+  assert.equal(plain(find(signal({ airQuality: { ...air31, error: 'Air quality update failed. Showing the last successful reading.' } }), 'air:aqi')!.age!.text), 'Saved reading · 31 min ago');
 });
 
 test('chooseDynamic: tie-break, modulo, the latch, a new focus card breaking it, empty and unavailable, rows and the more count', () => {

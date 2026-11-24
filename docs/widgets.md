@@ -23,7 +23,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
 | [`src/client/hourly-forecast.ts`](../src/client/hourly-forecast.ts) | Hourly forecast (#714): the pure shaping of its columns (hours, and a sunrise or sunset in time order), the temperature trend and the heading facts, rebuilt once a minute ([Hourly forecast](#hourly-forecast-714)). |
 | [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
-| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), and `Dynamic` (#437), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157). |
+| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), and `Dynamic` (#437), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157), and [`src/client/calendar-dates.ts`](../src/client/calendar-dates.ts) the Calendar's upcoming dates and grid marks (#716). |
 | [`src/client/Display.tsx`](../src/client/Display.tsx) | Ambient state and the shared movement/composition boundary. |
 | [`src/client/Editor.tsx`](../src/client/Editor.tsx) | Picker, grid interactions and settings draft integration. |
 
@@ -80,7 +80,16 @@ change. Browser QA loads one check module per widget from
 An optional `sweep({ page, viewport, state, base, now })` runs once per viewport
 after the family sweep for checks beyond the families; a module whose `id` is not
 a widget id (such as `reminders-span`, the free-size span check) contributes only
-its sweep.
+its sweep. The suite's main page clock is shared by every module and moves only when a
+check runs it; the harness puts it back to its start before each viewport's family pass
+and before each sweep, so no check runs on time another one spent. Within a pass it
+still moves: work out an expectation that depends on the time (an hour, a day or night
+glyph, an age) from the page's own clock, never from the suite's first hour, and give a
+sweep that runs time for many cases (each offline case needs the 30 s poll) a page with
+a clock of its own through `withOwnClock` in
+[`tests/ui/lib/own-clock.mjs`](../tests/ui/lib/own-clock.mjs). The suite fails when one
+pass or sweep spends 150 minutes of that clock, where the synthetic fixtures start to
+age out (#741).
 
 Start with `WIDGET_CATALOG`, `GRID_DENSITIES` and `widgetSpan`; use
 `reflowWidget`/`fitGridDensity` rather than implementing a second collision or
@@ -108,7 +117,7 @@ On Balanced 12 × 8 it fills every cell:
 | Clock | 4, 0 | Large (8 × 4) |
 | Weather | 0, 4 | Large (4 × 4) |
 | Forecast | 4, 4 | Large (8 × 2) |
-| Last screen | Complete faint desktop, picture-only with responsive rounded and softly feathered edges; no visible timestamp (#563) | Wider complete desktop | Larger complete desktop; retains its aspect without zoom/cropping |
+| Last screen | 4, 6 | Medium (4 × 2) |
 | Reminders | 8, 6 | Medium (4 × 2) |
 
 Every other widget is off, and every widget stays optional. Hidden widgets wait at
@@ -134,7 +143,7 @@ smallest useful family and additional relevant detail in larger families. A
 larger family changes composition and information density; it is not merely a
 scaled small widget. A widget need not support every family. Keep text real,
 scalable and readable, with meaningful labels instead of relying on color.
-Small labels, age, attribution, units and secondary values use the shared floors in
+Small labels, status lines with their age, units and secondary values use the shared floors in
 [`widgets.css`](../src/client/widgets.css): `var(--min-text)`/`var(--min-data)`,
 inherited from `--ambient-min-text` (1.4% of the display or editor canvas height)
 and `--ambient-min-data` (1.65%), times Text size. Wrap related values onto shared
@@ -142,9 +151,24 @@ rows before letting the fit scale shrink a family. Only a family that truly cann
 fit caps the floors by its own content height: small forecast uses 7.25% (text)
 and 8.5% (data), which binds only when that height is under about 19.4% of the
 display (about 1.07%/1.26% in the fine grid; Balanced sits at the threshold). Its high
-and low share a row when they fit, and its “Saved forecast”/“Offline” prefix takes its
-own short line, so fresh, stale and offline small forecasts render at fit 1 at Text
-100% in every density at 720p, 1080p and 4K, with “5 hr ago” kept together (#221).
+and low share a row when they fit, so fresh, stale and offline small forecasts render at
+fit 1 at Text 100% in every density at 720p, 1080p and 4K, with “5 hr ago” kept
+together (#221). No Forecast family has a line under its strip (#715, see
+[data boundaries](#data-and-image-boundaries)): in medium and large the strip takes that
+room, in every state. A forecast that is not fresh says so in the heading's right slot,
+in place of the place and unit (small: the heading's second line), with the place's own
+typography, so the heading keeps its height and the strip its size and position:
+nothing resizes when a status comes or goes. The place and unit return when the forecast
+is fresh again; until then a Forecast used without Weather names neither. The slot stays
+one line in every family and density at Text 100%, up to the longest wording (“Offline ·
+Updated 364 days ago”). Small has no room for “Saved forecast · Update time unknown”,
+so there a status with no update time to tell is the label alone (“Saved forecast”,
+“Offline”). Above Text 100% a status can cost a little fit, because it is longer than the
+place: at Text 150% the small family on the Fine grid renders at fit 0.96 saved and 0.91
+offline (1 fresh), as it already does fresh on the two larger grids (0.96 to 0.97). An earlier version of #715 gave the saved
+strip a smaller size through a class; review found that every slow refresh then resized
+the strip for two seconds, so a status must never change a widget's sizes. Put it where
+the layout already has a line for it.
 Small Weather caps its floors the same way at 8.5% (text) and 10% (data) of its content
 height, which binds only below about 16.5% of the display (the Fine grid: about 9 px
 instead of 10.1 px at 720p), and keeps its footer to one row of short phrases (#283).
@@ -175,22 +199,111 @@ The renderer families have deliberate visual roles:
 | Widget | Small | Medium | Large |
 | --- | --- | --- | --- |
 | Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date. While a timer is visible, the date line shows it ("8 min", "Done") | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height; a timer shows as in small, Done adds "· 2 min ago" | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition; a timer reads "8 min left · ends 6:51 PM" ([timer slot](#clock-timer-slot)) |
-| Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”, “Rain possible now, likely later”); confidence only when partial. One footer row of short phrases, wrapping only between them: “Saved forecast · 5 hr ago · Open-Meteo” (#283) | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” beside the age | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and an hourly chance bar for each hour overlapping the next 12 (12 on the hour, 13 otherwise; spell hours brighter, unknown hours a dotted baseline) over “Now” and the window's end (#261). Unavailable in every family: a dim, still cloud, a dim “—°” and one status-tone line at the label size, “Weather unavailable · retrying” (“· offline” while the display cannot reach the computer), with the age only when known and no credit (#362) |
-| Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362) |
+| Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”, “Rain possible now, likely later”); confidence only when partial. No footer while fresh unless that confidence shows; a saved or offline forecast adds one row of short phrases, wrapping only between them: “Saved forecast · 5 hr ago” (#283, #715) | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” under it; calm fresh weather has no footer, and a saved or offline forecast adds “Saved forecast · Updated 5 hr ago” in the status tone (#715) | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and an hourly chance bar for each hour overlapping the next 12 (12 on the hour, 13 otherwise; spell hours brighter, unknown hours a dotted baseline) over “Now” and the window's end (#261). Unavailable in every family: a dim, still cloud, a dim “—°” and one status-tone line at the label size, “Weather unavailable · retrying” (“· offline” while the display cannot reach the computer), with the age only when known, in the status tone (#362, #715) |
+| Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362). A forecast is the heading and the strip, with nothing under it; medium and large use that room for a taller strip. A saved or offline one says “Saved forecast · 5 hr ago” or “Offline · Updated 5 hr ago” in the status tone in the heading's right slot, in place of the place and unit (small: the heading's second line), as Hourly forecast does; the strip keeps its size and position in every state (#715); the place and unit return when it is fresh again |
 | Hourly forecast (#714) | — | Six columns: “Now” from the current reading, then the hours ahead, each with its time, a day- or night-aware glyph, the temperature on a thin trend line and the precipitation chance from 10%. A sunrise or sunset inside the window is a column of its own (exact time, sun symbol, the word) | Twelve columns in Forecast's 8 × 2 strip, so the two sit one above the other. The heading reads “Hourly”, with at most two facts on the right: the next sunrise or sunset when the strip does not show it, and “Gusts 55 km/h” from 40 km/h or 25 mph. Not fresh: “Saved forecast · 5 hr ago” or “Offline · Updated 12 min ago” there instead, in the status tone; with no hour to show, “Hourly forecast unavailable · retrying” as Forecast shows it |
 | Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row. When not every reminder fits, more rows win over bigger titles: rows after the first may take one line with an ellipsis and titles step down to about small's width-based size, so medium shows at least as many as small and a wider box never fewer (#359) | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
-| Last screen | Complete, faint captured desktop with its "Last screen · 8:40 AM" caption on the image's left edge just below it (every family), on one line even under a narrow portrait image, which it may run past within the cell; the time never breaks from its AM/PM (#308) | Wider complete desktop | Larger complete desktop; no crop hides screen context |
+| Last screen | Complete faint desktop, picture-only with responsive rounded and softly feathered edges; no caption and no visible timestamp (#563) | Wider complete desktop | Larger complete desktop; retains its aspect without zoom/cropping |
 | World clocks | First city's label, time in regular-weight numerals, relation ("Tomorrow · +13 h"), day/night icon and a dim "+N" | Two cities side by side | Up to four rows, label and relation left, time right; hidden on the display with no cities |
-| Calendar | Month name over this week's strip (weekday initials and dates) | Weekday, large date and month beside a compact month grid | Month and year, a weekday header row and a generous month grid; every grid has only the 4–6 weeks the month needs |
+| Calendar | Month name over this week's strip (weekday initials and dates) | Weekday, large date and month beside a compact month grid, and the next upcoming date on one line under them where the box has room | Month and year, a weekday header row and a generous month grid, then up to three upcoming dates ("Dec 25  Christmas"); every grid has only the 4–6 weeks the month needs, and a day with a holiday or an important date carries a small dot ([upcoming dates](#calendar-upcoming-dates-716)) |
 | Countdown | The next date as a large count (“12” over “days”, or Today/Tomorrow), its title and a short date | The next date on the left; the following two as compact rows | As many rows as fit the box (title, date, days right-aligned), measured like Reminders, then an exact “+N more” (#221) |
 | Note | The text at the largest size that fits the box (measured from its lines and wrapping, #194), up to a family cap | The same, wider | The same, generous; only a note that cannot fit at the text floor zooms out through the shared fit |
-| Air quality | AQI and category word with place and scale; the age ("Model est. · 12 min ago" with a reading) and "CAMS · Open-Meteo" as two short footer rows where the box is narrow; values over 3 hours old read "Saved estimate" or "Last known · 9 AM" on their own line under the reading (#309) | Adds the main pollutant and UV with its WHO category (both hidden once the values are over 3 hours old, UV then from the saved estimate); one footer row | Adds AQI bars for the current and up to 23 following hours (unknown hours a dotted baseline) over "Now" and the last hour's end, as Weather's chart (#261), and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
+| Air quality | AQI and category word with place and scale; one short footer row: "Model est." for a fresh reading, with no age and no provider name, or the status and age of one that is not fresh in the status tone ("Saved reading · 2 hr ago", "Offline · Model est. · 12 min ago") (#715); values over 3 hours old read "Saved estimate" or "Last known · 9 AM" on their own line under the reading (#309) | Adds the main pollutant and UV with its WHO category (both hidden once the values are over 3 hours old, UV then from the saved estimate); one footer row | Adds AQI bars for the current and up to 23 following hours (unknown hours a dotted baseline) over "Now" and the last hour's end, as Weather's chart (#261), and today's UV peak, both from upcoming hours only; "Hourly estimate unavailable" when fewer than two remain |
 | Sun & moon | Next sunrise or sunset, its time and the place | Sunrise, sunset, daylight length and change from yesterday, moon glyph and phase | Dim dotted day arc with the sun's position, times, daylight, phase with illumination and the next full (or new) moon |
-| Dynamic (#437) | One card: the kicker (source word, or an official level word with the alert icon, "· +2 more" or "· 1 of 2"), the glyph or a value beside a short headline (up to three lines), a one-line detail and one footer phrase | A glyph or value column of about 30% beside the headline (two lines) and detail; one footer run of provenance · age · status · credit | A hero row and the detail, then up to three whole rows (source word, short headline, time right-aligned) measured from layout boxes like the large Countdown, an exact "+N more", and the footer; one card alone is centred with no list |
+| Dynamic (#437) | One card: the kicker (source word, or an official level word with the alert icon, "· +2 more" or "· 1 of 2"), the glyph or a value beside a short headline (up to three lines), a one-line detail and one footer phrase | A glyph or value column of about 30% beside the headline (two lines) and detail; one footer run: what kind of information the card is or the place it is for ("Forecast estimate", "Model est.", the city), then the status and age of its data only when that is not fresh, then other sources' statuses. No provider name and no credit (#715) | A hero row and the detail, then up to three whole rows (source word, short headline, time right-aligned) measured from layout boxes like the large Countdown, an exact "+N more", and the footer; one card alone is centred with no list |
 
 The large clock requires actual vertical room in the central catalog; do not
 recreate a giant option by scaling within the previous short large family.
+
+### Calendar upcoming dates (#716)
+
+Owner request, 2026-11-22: "calendar should say like upcoming holidays or important dates, or
+something, just make it a bit more useful". The Calendar lists what is coming up from data the app
+already has, so nothing new is entered or saved (no new persisted key):
+
+| Source | What it gives | Rule |
+| --- | --- | --- |
+| Holiday calendars | The observances of the calendars ticked for themes (`appearance.theme.calendars`, shared with Dynamic; absent means all three, an empty list none), from [`holidays.ts`](../src/shared/holidays.ts) | Each observance on its own date under its short name. One occasion in several calendars shows once under the first calendar's name (Christmas; New Year's Day rather than Russia's "New Year holidays"; Labour Day for Korea's and Russia's May 1; Easter when both Easters share a Sunday). Different occasions on one day each get a line. |
+| Birthdays | `settings.birthdays` | "Mina's birthday" on the exact day every year, like the birthday scene: a February 29 birthday appears in leap years only. A name that already says "birthday" is kept as written. |
+| Countdown dates | `widgetData.countdowns` | `nextOccurrence`, as Countdown counts: a yearly date rolls to its next anniversary (February 29 falls on February 28 in a common year), a passed one-time date is gone. They show whether or not the Countdown widget is on the board. |
+
+Reminders are not listed: Reminders, Agenda and Week ahead show those (#98 stays the ticket for
+reminder dots on the grid). `calendarDates` in [`calendar-dates.ts`](../src/client/calendar-dates.ts)
+is pure and unit-tested:
+
+- **Upcoming** means today through the next 90 days (`UPCOMING_HORIZON_DAYS`), on this computer's
+  civil date like the grid, soonest first; on one day your own dates come before holidays. Within 90
+  days a month and day name one date, so no year is shown, also across the turn of the year.
+- **Each occasion once.** Items of one day that share a name or an occasion, directly or through
+  another item, are one line, and the first in order stands for the others. So a countdown called
+  "Christmas" is the one Christmas line, and a countdown called "New Year's Day" also stands for
+  Russia's "New Year holidays", which is the same occasion as the Canadian day of that name. Names
+  match whatever their case, spacing or kind of apostrophe.
+- **Nothing in range:** the widget looks as it did before, with no list, no marks and no room made
+  for them. Captures of the small, large and medium families with nothing in range are identical to
+  captures from before #716, with one intended exception: a six-week medium month on the Fine grid,
+  which zoomed out before and now closes its rows up to fit (see Medium).
+- **Lines** read "Dec 25  Christmas": the date in the accent tone, the name in the text colour, and
+  "Today" for today's own dates. A line never wraps. A name has room for 32 letters
+  (`UPCOMING_NAME_LENGTH`), where a wide character (Hangul, kana, CJK ideographs, full-width forms,
+  emoji) counts as two because it is about twice as wide. A longer name is cut by `cleanCut` and ends
+  in an ellipsis:
+  - after the last whole word that fits, when that keeps at least half the line ("A deliberately long
+    synthetic…", "할머니 생신 잔치 준비하고 선물…");
+  - otherwise inside the word, so a line is never reduced to a stub: one long word, or "A
+    Supercalifragilisticexpialido…" rather than "A…";
+  - with no space, full stop, comma or dash left before the ellipsis, and never between a letter and
+    its combining mark or inside a joined emoji (grapheme segmentation).
+
+  A birthday reads "Mina's birthday" when that fits (names of up to 21 letters). When it does not,
+  the line is the name alone, cut like any other name ("Grandmother Alexandra…"), so a possessive is
+  never left without its word. Every bundled holiday short name fits and shows whole. The day's
+  accessible name always carries the whole names.
+- **Last resort in the browser:** the count cannot know the typeface, so a name that is still wider
+  than its line (capital W or M throughout, for example) stays on one line and ends in the browser's
+  own ellipsis where it runs out (`text-overflow: ellipsis`), which can fall inside a word. A Korean
+  and a Russian title show exactly as the model cut them on every grid at 720p, 1080p and 4K, and 31
+  capital W end in that ellipsis (the widget check).
+- **Large** shows up to three lines under the month (`.calendar-upcoming`). The month gives up spare
+  height, not type size: the heading and weekday rows sit closer and the week rows fill what is left.
+  Four- and five-week months keep their numbers; only a six-week month takes slightly smaller ones
+  (6.2cqh instead of 6.6cqh, 28 px instead of 30 px on the Balanced grid at 1080p).
+- **Medium** shows the next date on one line under the date and the month (`.calendar-next`). At Text
+  100% it is shown on the Spacious and Balanced grids in every month, and on Fine only in a four-week
+  month, where the box is too short beside five or six weeks. The big date gives the line its room
+  (48cqh instead of 54cqh). A six-week medium month shares the height that is left between its rows:
+  with room to spare they are exactly as before, with less the gap under the weekday labels and then
+  the rows' padding close up, down to the digits' own line. So it makes room for the next date on
+  Balanced and renders at fit 1 at the data floor on Fine instead of zooming out (before, to 0.88 at
+  720p).
+- **The dates give way before the month does.** The lines of both families are measured from layout
+  boxes like the Countdown list (`fittingLines` in `Calendar.tsx`): a line that does not fit takes no
+  layout, and with no line left the family has exactly the layout it has with nothing upcoming. So the
+  dates never make the shared fit zoom the month out, at any Text size, and the Calendar's fit is
+  never below what it was before #716. At Text 100% all three lines fit everywhere. Above it fewer
+  fit: on the Balanced grid at 1080p a five-week large month shows two lines at Text 105%, one at 110%
+  and 115% and none from 125%; a four-week month still shows one at 125%; medium shows its next date up
+  to Text 105% and none from 110%. The dots stay at every Text size.
+- **Small** is unchanged: the week strip has no list and no marks.
+- **Marks:** a day of the shown month that carries one of these dates, past days included, gets one
+  small dot in the accent tone (`.calendar-mark`, a real element so the palette harness audits it),
+  centred on the bottom of the day's pill, which is today's ring. It takes no room, adds no fill or
+  frame, and dims with its day (0.45 past, 0.7 ahead, 1 today). The cell's accessible name carries
+  the names ("25, Christmas").
+- **Once per day:** the rows, their strings and the marks are built once per civil day and set of
+  sources. A state refresh that hands over new arrays with the same content keeps them
+  (`sourcesSignature`), so a one-second tick formats nothing (#193) and the list changes only at
+  local midnight or when a source changes. No timer or animation of its own.
+- **Settings:** the Calendar panel carries the same **Holiday calendars** boxes as Style and Dynamic
+  (one shared selection, part of the style) and says where the dates come from. With Theme Off and
+  Dynamic's Holidays off it is the only place that shows them; a selection other than all three is the
+  #575 rollback exception ([install](install.md#additive-data-and-rollback-compatibility-84)).
+  Birthday names and countdown titles are private content: tests and fixtures use synthetic entries
+  only.
+
+Every family renders at fit 1 at Text 100% on every grid density at 720p, 1080p and 4K in four-, five-
+and six-week months (the widgets suite's Calendar sweep, which also checks Text 110%, 125% and 150%).
 
 ### Clock timer slot
 
@@ -438,14 +551,17 @@ families. Its tone is sky, like Forecast, so the two strips read as a pair.
 Unused pixels remain true black. Reuse ambient brightness and type tokens; keep
 fills small and dim. Avoid persistent card backgrounds, borders, dials, divider
 lines, corner marks, logos and repeated decorative labels. All visible content,
-including attribution and stale-state labels, belongs inside its movable group.
+including stale-state labels, belongs inside its movable group. A widget carries no
+provider credit (#715).
 The editor may be brighter and show controls; those styles must not leak into the
 ambient view or its error/loading states.
 
 Colour follows one rule in both accent modes (#75). Primary content always uses
 the text colour: time digits, temperatures, condition text, reminder titles and
 forecast highs. Accent content uses `--ambient-accent`: labels, place and units,
-secondary metrics, weather glyphs, chart bars, dots, captions, age and attribution.
+secondary metrics, weather glyphs, chart bars, dots and captions (“Forecast estimate”,
+“Model est.”). An update age is never accent content: it appears only inside a status
+line, in the status tone (#715).
 In `color` mode that is the single accent; in `native` mode `src/client/palette.css`
 redirects it to the section's catalog `tone`, so both modes colour exactly the same
 elements and Native never lights more of the panel. Inside a widget, an icon marked
@@ -464,7 +580,7 @@ cues never change: a stale or offline line uses the shared `.status-caution` cla
 (`widgets.css`), which paints the one amber status tone, `--ambient-caution`, at full
 opacity, so a dimmed parent never fades the cue (#322; Weather's “Last known”,
 Forecast's “Saved forecast”/“Offline”, Air quality's qualifier, “Saved reminders ·
-offline”). The Overdue word keeps its own rule in the same tone. There is no separate
+offline”), and so does every line that carries an update age (#715). The Overdue word keeps its own rule in the same tone. There is no separate
 offline colour (#223, #133).
 Never hard-code a hue in widget CSS (Air
 quality has no category colours), fill or frame anything new for colour, or tint
@@ -610,9 +726,37 @@ previews do not establish physical-TV brightness or long-term panel behavior.
 ## Data and image boundaries
 
 Render content according to available space without changing its meaning. Keep
-forecast estimates, age, stale/unknown states, place and units honest. For a
+forecast estimates, stale/unknown states, place and units honest. For a
 hide-when-empty option, distinguish confirmed empty from unavailable or failed.
 Keep management available in the editor when the ambient widget is hidden.
+
+**No source, no fresh age (#715).** Owner decision, 2026-11-22: on the display, the editor
+canvas and the picker samples, a widget shows neither the name of a data provider nor,
+while its data is fresh, when that data was updated or checked.
+
+| State | What the widget says |
+| --- | --- |
+| Fresh | Nothing about source or age. Wording that is neither stays: the rain “Forecast estimate” confidence, Air quality's “Model est.”, category words, units and the place. A footer that held only the credit and age is not rendered, and its room goes to the content. |
+| Saved (stale) | Its status label with the age, in the status tone: “Saved forecast · Updated 5 hr ago” (Weather medium and large; compact rows and Forecast's heading slot: “Saved forecast · 5 hr ago”), “Saved reading · 2 hr ago”, “Saved alerts · 2 hr ago”; Dynamic: “Saved alerts · checked 9 AM”. |
+| Refresh in flight | Nothing: still fresh. The server calls a forecast `stale` the moment its 15-minute interval ends (air quality: 30) and answers after about a second with `refreshing: true` while the provider is slow (#351). That is not a saved forecast, so no status shows while the first refresh since the last good one is running and the data is at most 45 minutes old. Once a refresh has failed (`error` is set, and stays through the retries) it is saved, and a retry in flight does not blink it fresh. |
+| Offline display | “Offline” first: “Offline · Updated 5 hr ago” (the age keeps its “Updated”, because a bare age could read as the outage's); Air quality “Offline · Model est. · 12 min ago”; Dynamic's alerts “Offline · checked 9 AM”. |
+| Hours old | “Last known · Thu 2 AM” (Weather, the collection weather widgets) or “Saved estimate” (Air quality), as before. |
+| Unavailable | The widget's own status line (“Weather unavailable · retrying”), with the age only when an update time is known; Weather alerts: “Updated 2 hr ago” under “Alerts unavailable”. |
+| A claim that needs fresh data | Made only while it is confirmed. Dynamic's “No alerts” is said by a connected display with a fresh list, without a check time; an offline display (whose last status stays `fresh` for as long as the outage lasts) and a saved list never say it. What they do say about alerts carries its check time in the status tone (“Saved alerts · checked 9 AM”, an alert card's “Offline · checked 9 AM”). Weather alerts reads “Current alerts unknown” then. |
+
+No state names a provider. `presentedStatus` in [`format.ts`](../src/client/format.ts) is
+the one place that decides whether forecast or air data is presented as fresh (the
+refresh-in-flight rule); Weather, Forecast, the collection footer, Air quality and
+Dynamic's weather and air cards all read the status through it, so they change together.
+`weatherStatus`, `weatherIsFresh` and `shortAge` build the weather wording on it,
+`airAgeSegments` in [`airHourly.ts`](../src/client/airHourly.ts) Air quality's and Dynamic's
+air cards', `alertsWidgetStatus` in [`collection.ts`](../src/client/collection.ts) Weather
+alerts'; `DynamicCard.age` is null while fresh. A new weather widget must use
+`presentedStatus` (or `weatherStatus`) rather than compare `weather.status` itself. The provider
+credit lives in Settings (“Forecast estimates by Open-Meteo”, a link) and in the widget
+settings hints (Air quality, Dynamic's Official weather alerts, Weather alerts), which may
+name providers; a renderer may not (`src/client/model.test.ts` checks the sources).
+Provider terms are part of the public-release decision (#114, which absorbed #168).
 
 One widget's failure stays inside that widget (#318). The registry wraps every renderer
 in its own error boundary ([`WidgetBoundary.tsx`](../src/client/widgets/WidgetBoundary.tsx)),
@@ -635,14 +779,14 @@ Weather shows “Last known · 9 AM” (with the weekday when not today, “Last
 Thu 9 AM”) in the status tone in place of the condition line (above the rain timing
 where the family shows timing instead), and keeps the glyph still and the age line.
 Three hours matches the hourly model: after that the saved temperature describes a
-different part of the day. Air quality applies the same threshold to its current values
+different part of the day. The age line exists only in these states (#715). Air quality applies the same threshold to its current values
 (#188), whatever its status, because its saved hourly estimate can stand in for them.
 Both widgets share one threshold, `LAST_KNOWN_AFTER_MS`, and one time label,
 `lastKnownLabel` (weekday when not today, compact time with no-break spaces), in
 [`format.ts`](../src/client/format.ts), and each keeps its own rule for when it applies
 (#329). An unavailable forecast is never louder than the weather it replaces: a dim,
 still cloud (the widget's icon, not a condition), a dim “—°” and one status-tone line at
-the label size, with no credit while nothing is shown (#362).
+the label size, with the age only when an update time is known (#362).
 
 Timers (#438) are private, short-lived content kept in their own `timers.json` beside the
 settings data, never in `state.json`, `state.backup.json` or exports, so the previous
@@ -679,6 +823,12 @@ to personal photo folders merely to implement a widget.
   content, a floating (translated) section and, with Swap places on, every swap.
   Inspect actual images for
   density, clipping, collisions and stale/error/empty states using synthetic data.
+- Check that the widget names no data provider and shows no update age while fresh, and
+  that a saved or offline state keeps its status label with the age in the status tone
+  (#715). `assertNoSourceOrFreshAge` in
+  [`tests/ui/lib/source-age.mjs`](../tests/ui/lib/source-age.mjs) does this for a rendered
+  widget; the widgets, collection and catalog suites apply it to every family, state and
+  picker sample.
 - Exercise add/remove, drag/drop, resize, keyboard alternatives, invalid placement,
   grid changes, Save/Cancel, clean/dirty save-bar visibility, persistence,
   presets and legacy import/migration. Retain edits made while Save is pending.
@@ -738,8 +888,10 @@ Weather details reuse the existing forecast request and cache. The server retain
 at most 25 hourly detail instants separately from the existing preceding-hour
 precipitation intervals. A missing field remains null. Forecast widgets filter
 expired rows; current detail widgets never choose a future instant, identify
-readings older than three hours as last known, and retain source/update age and
-stale/offline status. Official field/time/unit semantics were verified against
+readings older than three hours as last known, and keep their stale/offline status
+with the age only then. Fresh data shows the place as the widget's last line and
+nothing about its source or age; Weather alerts has no footer while fresh (#715).
+Official field/time/unit semantics were verified against
 [Open-Meteo's forecast documentation](https://open-meteo.com/en/docs) on 2026-11-03.
 
 Only the catalog's additive visibility/placement keys persist. Off defaults and

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { formatTime, sunDay } from '../../../src/client/astronomy.ts';
+import { formatTime, moonPhase, sunDay } from '../../../src/client/astronomy.ts';
 import { intlPerTicks } from './clock.mjs';
 
 export const id = 'sunMoon';
@@ -28,7 +28,13 @@ export async function family({ page, widget, size, density, viewport, state }) {
     assert.match(text, /Firstquarter/);
   }
   if (size === 'large') {
-    assert.match(text, /Firstquarter·49%/); assert.match(text, /FullmoonMon,Oct26/);
+    // The lit fraction grows by about half a percent an hour at first quarter (49% when the suite starts), and the
+    // suite's page clock is shared and moves on (#741): the widget shows the phase at the page's own minute, or at
+    // the minute before when its one-second tick is late. `moonPhase` is checked against almanac dates in its unit tests.
+    const pageNow = await page.evaluate(() => Date.now());
+    const phases = [pageNow, pageNow - 1000].map(at => moonPhase(new Date(Math.floor(at / 60_000) * 60_000))).map(moon => compact(`${moon.name} · ${Math.round(moon.illumination * 100)}%`));
+    assert.ok(phases.some(phase => text.includes(phase)), `the moon phase at the page clock, ${phases.join(' or ')}: ${text}`);
+    assert.match(text, /FullmoonMon,Oct26/);
     assert.equal(await widget.locator('.sun-arc .sun-dot[data-glyph="sun"]').count(), 1, 'sun dot while the sun is up');
     const arc = await widget.locator('.sun-arc-path').evaluate(group => ({ dots: group.querySelectorAll('circle').length, opacity: Number(getComputedStyle(group).opacity) }));
     assert.ok(arc.dots >= 20 && arc.opacity <= 0.5, `thin dim dotted arc ${JSON.stringify(arc)}`);

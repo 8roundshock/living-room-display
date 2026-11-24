@@ -673,23 +673,21 @@ export async function runGridQa({ playwright, edge } = {}) {
       'real JPEG/WebP browser decode and 1280px normalized PNG downsample stay cancellable',
     );
 
-    for (const id of ['weather']) {
+    // #715 (owner decision, 2026-11-22): no widget carries a provider credit, with Forecast on the board or not.
+    for (const id of ['weather', 'forecast']) {
       const settings = onlyClock();
       settings.widgets.clock = false;
       settings.widgets[id] = true;
       await open(settings);
       await page.goto(base + '/display');
-      await page.getByText('Forecast by Open-Meteo', { exact: true }).waitFor();
-      assert.equal(
-        await page
-          .locator(`.ambient-${id}`)
-          .getByText('Forecast by Open-Meteo', { exact: true })
-          .count(),
-        1,
-      );
+      await page.locator(`.ambient-${id}`).getByText('Toronto', { exact: false }).first().waitFor();
+      const shown = await page.locator('.ambient').innerText();
+      assert.doesNotMatch(shown, /Open-Meteo/, `${id} alone names no provider: ${shown}`);
+      assert.doesNotMatch(shown, /Updated|\bago\b|just now/, `${id} alone shows no update age while fresh: ${shown}`);
+      assert.equal(await page.locator('.ambient .weather-credit, .ambient .forecast-attribution').count(), 0);
     }
     checks.push(
-      'provider credit remains inside the relocating Weather widget without Forecast',
+      'no provider credit and no fresh update age on the display, for Weather or Forecast alone (#715)',
     );
 
     for (const id of ['weather', 'forecast'])

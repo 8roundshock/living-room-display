@@ -187,6 +187,11 @@ Browser widget checks live in `tests/ui/widget-checks/`, one module per widget
 (`id`, optional `prepare`, `selectors`, `family` and a once-per-viewport `sweep`).
 The widget harness loads every module in that folder and requires one for each
 active catalog id; extra modules such as `reminders-span.mjs` add only a sweep.
+The suite's main page clock is shared and moves only when a check runs it: the harness
+puts it back to its start before each viewport's family pass and each sweep, time-dependent
+expectations come from the page's own clock, and a sweep that runs time for many cases
+uses `withOwnClock` (`tests/ui/lib/own-clock.mjs`); see the
+[widget contract](widgets.md#catalog-contract) (#741).
 A newly active widget also joins `FULL_BOARD` in `tests/ui/palette-browser.mjs`,
 plus `ACCENT_SELECTOR` (a new kind of accent element) or `TEXT_ONLY` (no accent
 element), so the palette harness checks its colours (#214), and the shared
@@ -202,6 +207,16 @@ machine. Air-quality reloads and the status page's navigation/shell wait allow u
 to 90 s (#306); other widget loads still use their existing timeouts. Unifying
 those readiness waits remains part of #431.
 
+A computed keyword's spelling can change between Edge versions (#729). Edge 158 reports a
+computed `flex-start` as `flow-start` and `flex-end` as `flow-end` (`safe flex-end` as
+`safe flow-end`) on the six alignment properties: `align-content`, `align-items`, `align-self`,
+`justify-content`, `justify-items` and `justify-self`. Edge 157, which the CI runner had on
+2026-11-22, keeps the old spelling; the layout is the same in both. `reminders-span.mjs`, the
+only check that compares one of them with such a keyword, therefore reads both spellings as
+`flex-`, next to its measured-position assertion. A check that compares a computed keyword
+compares what it means (a measured position, or a normalised keyword), not one browser
+version's spelling.
+
 The stale/offline status page uses its own browser context, fake clock and routed
 state (#431/#415). It must neither advance the main family's clock nor compete
 with that page through the real single-display BroadcastChannel. The suite checks
@@ -215,7 +230,22 @@ replace full widget coverage or #431's repeated-load acceptance.
 Air-quality age assertions follow the public minutes/hours/days wording even when
 other family checks have advanced the main clock. Literal boundary renders cover
 59/60/69 minutes and one/two days; the saved-reading assertion uses its actual
-elapsed age rather than assuming the fixture is still within the first hour.
+elapsed age rather than assuming the fixture is still within the first hour. Since
+#715 a fresh reading shows no age, so each boundary is rendered as a saved reading
+for the wording, and as a fresh one (while under three hours) to assert "Model est."
+alone.
+
+**No source, no fresh age (#715).** `tests/ui/lib/source-age.mjs` holds the rule's
+checks: `PROVIDER_NAME` (names no widget may print), `UPDATE_AGE` (every form an update
+age or check time takes) and `assertNoSourceOrFreshAge(locator, label, { fresh, id })`,
+which reads a rendered widget or picker sample and fails when it names a provider, when
+an age sits outside a `.status-caution` element, or, for fresh data, when it shows an
+age at all. The widgets suite applies it to every family in every density and viewport,
+fresh, stale and offline; the collection suite to its families and scenarios; the
+catalog-time suite to every picker sample; the dynamic suite to every card. Timers and
+the Clock's timer slot are exempt from the age part only ("Done · 2 min ago" is the
+timer's own time). `src/client/model.test.ts` scans the renderer sources for a provider
+name outside a settings hint.
 
 ## Browser suites
 
