@@ -1,6 +1,6 @@
 # Project status
 
-## Hourly forecast: Forecast's long strip with conditions, a temperature trend, precipitation and sun events — 2026-11-22 (#714)
+## Hourly forecast: Forecast's long strip with conditions, a temperature trend, precipitation and sun events — 2026-11-23 (#714, #720)
 
 Source candidate, not installed. The owner: the hourly widget should "feel like the daily weather one, but
 with more good information about the hourly", be "long like the forecast one (so i will have them one over
@@ -22,8 +22,18 @@ What changed:
   passes through a sun column. The row's height never changes with the values.
 - The heading's right side holds at most two facts: the next sunrise or sunset when the strip does not show
   it, and "Gusts 55 km/h" from 40 km/h or 25 mph. No place, provider or update time. While the forecast is
-  not fresh it shows "Saved forecast · 5 hr ago" or "Offline · Updated 12 min ago" there instead, in the
-  status tone, and an hours-old reading is not called Now.
+  not fresh it shows Forecast's own status line there instead, word for word and in the status tone ("Saved
+  forecast · 5 hr ago", "Offline · Updated 12 min ago"), from the same helper as Forecast (#715), so the two
+  strips always agree and a refresh that is merely slow shows nothing on either. The heading keeps one
+  height in every state, and an hours-old reading is not called Now.
+- One definition of the strip sizes (#720): Forecast's and Hourly forecast's medium and large strips read
+  the same `--strip-*` sizes in `src/client/widgets.css` (heading, its gap, labels, glyphs, temperatures,
+  chances and their droplets, the gaps between rows), so stacked they read as one family and a change to one
+  is a change to both. Only the column widths differ. This takes Hourly forecast to the larger sizes #715
+  gave Forecast (at 1080p on the Balanced grid, large: hour labels 18.9 → 22.0 px, glyphs 33.5 → 41.9 px,
+  temperatures 27.2 → 28.5 px; chances 17.8 px and the heading 16.8 px as before); the trend line's travel
+  is smaller for it (about 12% of the box on Balanced, 7% on Fine). Forecast's droplet now sits 0.25 em from
+  its chance, as Hourly's did, instead of 1% of the widget's width (11 px in large at 1080p).
 - Saved data: a large placement from before this change that no longer fits as 8 × 2 becomes medium at the
   same origin, in settings, saved styles and imports. Opening old data rewrites nothing.
 - Rollback: the release installed now, `712ce80`, draws this widget's Large as 4 × 4. Once this build has
@@ -38,10 +48,10 @@ What changed:
 Details: [Hourly forecast](docs/widgets.md#hourly-forecast-714) and [its UI](docs/ui.md#hourly-forecast).
 
 Verified with source builds and synthetic data only: see the pull request. Both families render at fit 1 at
-Text 100% on every grid at 720p, 1080p and 4K, fresh, stale and offline, with sun columns. Not verified:
+Text 100% on every grid at 720p, 1080p and 4K, fresh, saved, offline and while a refresh runs, with sun
+columns, under a Forecast of the same family with the same sizes and status words. Not verified:
 installation, the TV, and the owner's own look at it on the display. Follow-ups: hourly feels-like (#718), a
-small family (#719), one definition of the strip sizes shared with Forecast (#720), and a 500 instead of a
-400 for an unsupported family found on the way (#721).
+small family (#719), and a 500 instead of a 400 for an unsupported family found on the way (#721).
 
 ## Widgets: no data source and no update time while fresh — 2026-11-22 (#715)
 

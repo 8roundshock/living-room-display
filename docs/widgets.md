@@ -23,7 +23,7 @@ every ambient widget, including clocks, photos and last-desktop previews.
 | [`src/client/widgets/registry.tsx`](../src/client/widgets/registry.tsx) | `WIDGET_MODULES` (one line per id, catalog order), renderers, `widgetVisible` and labels. |
 | [`src/client/hourly-forecast.ts`](../src/client/hourly-forecast.ts) | Hourly forecast (#714): the pure shaping of its columns (hours, and a sunrise or sunset in time order), the temperature trend and the heading facts, rebuilt once a minute ([Hourly forecast](#hourly-forecast-714)). |
 | [`src/client/weather-outlook.ts`](../src/client/weather-outlook.ts) | The adaptive Weather rain outlook (#74): `rainOutlook` kinds, spells and confidence, and `rainOutlookCopy` wording ([API semantics](api.md#adaptive-weather-outlook)). |
-| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), and `Dynamic` (#437), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx`, the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157), and [`src/client/calendar-dates.ts`](../src/client/calendar-dates.ts) the Calendar's upcoming dates and grid marks (#716). |
+| [`src/client/widgets/`](../src/client/widgets/) `<Name>.tsx` | One module per catalog id: `Clock`, `Weather`, `Rain` (retired, renders nothing), `Forecast`, `Reminders`, `Preview` (Last screen, drawn by `SnapshotImage`) and `Photo`, then the #78 widgets `WorldClocks`, `Calendar`, `Countdown`, `Note`, `AirQuality` and `SunMoon` (#157, #171), and `Dynamic` (#437), which each import their own CSS file. No id is planned, so there are no stubs. Also shared weather pieces in `common.tsx` (among them the status line and unavailable state that Forecast and Hourly forecast share), the `WeatherGlyph` and `TransitionText` primitives, and `measure.ts`, the layout-box measurement shared by the Reminders and large Countdown lists and the Note size (#216). [`src/client/calendar.ts`](../src/client/calendar.ts) holds the civil-date, week-start and countdown helpers that Calendar and Countdown share (#157), and [`src/client/calendar-dates.ts`](../src/client/calendar-dates.ts) the Calendar's upcoming dates and grid marks (#716). |
 | [`src/client/Display.tsx`](../src/client/Display.tsx) | Ambient state and the shared movement/composition boundary. |
 | [`src/client/Editor.tsx`](../src/client/Editor.tsx) | Picker, grid interactions and settings draft integration. |
 
@@ -155,7 +155,9 @@ and low share a row when they fit, so fresh, stale and offline small forecasts r
 fit 1 at Text 100% in every density at 720p, 1080p and 4K, with “5 hr ago” kept
 together (#221). No Forecast family has a line under its strip (#715, see
 [data boundaries](#data-and-image-boundaries)): in medium and large the strip takes that
-room, in every state. A forecast that is not fresh says so in the heading's right slot,
+room, in every state. Those medium and large strips are defined once for Forecast and
+Hourly forecast (the `--strip-*` properties in `widgets.css`, #720), so the two read as
+one family when stacked; see [Hourly forecast](#hourly-forecast-714). A forecast that is not fresh says so in the heading's right slot,
 in place of the place and unit (small: the heading's second line), with the place's own
 typography, so the heading keeps its height and the strip its size and position:
 nothing resizes when a status comes or goes. The place and unit return when the forecast
@@ -201,7 +203,7 @@ The renderer families have deliberate visual roles:
 | Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date. While a timer is visible, the date line shows it ("8 min", "Done") | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height; a timer shows as in small, Done adds "· 2 min ago" | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition; a timer reads "8 min left · ends 6:51 PM" ([timer slot](#clock-timer-slot)) |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”, “Rain possible now, likely later”); confidence only when partial. No footer while fresh unless that confidence shows; a saved or offline forecast adds one row of short phrases, wrapping only between them: “Saved forecast · 5 hr ago” (#283, #715) | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” under it; calm fresh weather has no footer, and a saved or offline forecast adds “Saved forecast · Updated 5 hr ago” in the status tone (#715) | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and an hourly chance bar for each hour overlapping the next 12 (12 on the hour, 13 otherwise; spell hours brighter, unknown hours a dotted baseline) over “Now” and the window's end (#261). Unavailable in every family: a dim, still cloud, a dim “—°” and one status-tone line at the label size, “Weather unavailable · retrying” (“· offline” while the display cannot reach the computer), with the age only when known, in the status tone (#362, #715) |
 | Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362). A forecast is the heading and the strip, with nothing under it; medium and large use that room for a taller strip. A saved or offline one says “Saved forecast · 5 hr ago” or “Offline · Updated 5 hr ago” in the status tone in the heading's right slot, in place of the place and unit (small: the heading's second line), as Hourly forecast does; the strip keeps its size and position in every state (#715); the place and unit return when it is fresh again |
-| Hourly forecast (#714) | — | Six columns: “Now” from the current reading, then the hours ahead, each with its time, a day- or night-aware glyph, the temperature on a thin trend line and the precipitation chance from 10%. A sunrise or sunset inside the window is a column of its own (exact time, sun symbol, the word) | Twelve columns in Forecast's 8 × 2 strip, so the two sit one above the other. The heading reads “Hourly”, with at most two facts on the right: the next sunrise or sunset when the strip does not show it, and “Gusts 55 km/h” from 40 km/h or 25 mph. Not fresh: “Saved forecast · 5 hr ago” or “Offline · Updated 12 min ago” there instead, in the status tone; with no hour to show, “Hourly forecast unavailable · retrying” as Forecast shows it |
+| Hourly forecast (#714) | — | Six columns: “Now” from the current reading, then the hours ahead, each with its time, a day- or night-aware glyph, the temperature on a thin trend line and the precipitation chance from 10%. A sunrise or sunset inside the window is a column of its own (exact time, sun symbol, the word) | Twelve columns in Forecast's 8 × 2 strip, so the two sit one above the other; both strips share one definition of their sizes (#720). The heading reads “Hourly”, with at most two facts on the right: the next sunrise or sunset when the strip does not show it, and “Gusts 55 km/h” from 40 km/h or 25 mph. Not fresh: Forecast's own status there instead, “Saved forecast · 5 hr ago” or “Offline · Updated 12 min ago”, in the status tone (#715); with no hour to show, “Hourly forecast unavailable · retrying” as Forecast shows it |
 | Reminders | As many pending reminders as fit the actual box (measured from layout boxes, #216), soonest first (overdue or due within a week, then undated newest first, then later dates), with an honest “+N more” | The same measured list; never a partially visible row. When not every reminder fits, more rows win over bigger titles: rows after the first may take one line with an ellipsis and titles step down to about small's width-based size, so medium shows at least as many as small and a wider box never fewer (#359) | The same measured list; titles scale with width but stay capped near 3.2% of the display height. In any free size, when every pending reminder fits, cut-off titles may use up to four lines and whole titles grow toward the cap (#254) |
 | Photo | Center crop in a compact area | Wider landscape crop | Complete image fitted in the larger area |
 | Last screen | Complete faint desktop, picture-only with responsive rounded and softly feathered edges; no caption and no visible timestamp (#563) | Wider complete desktop | Larger complete desktop; retains its aspect without zoom/cropping |
@@ -511,20 +513,30 @@ families. Its tone is sky, like Forecast, so the two strips read as a pair.
   known value starts a new one, so nothing is drawn across an unknown value. A sun column
   is not a missing value: the line runs straight through it between its neighbours. The
   row's height depends only on the box and Text size, never on the values: the line's
-  travel is whatever height the other rows leave, between 10% and 18% of the box.
+  travel is whatever height the other rows leave, between 7% and 18% of the box (since
+  the strips share Forecast's larger sizes, #720, about 12% on the Balanced grid and 7% on
+  the Fine grid, where the text floors leave the least room).
 - **Heading.** "Hourly" on the left. On the right at most two calm facts that the board
   does not already show: the next sunrise or sunset within a day, only when the strip does
   not show it ("Sunrise 07:21" on a winter evening), and peak gusts over the shown hours
   from 40 km/h or 25 mph ("Gusts 55 km/h"). No place, provider or update time for fresh
   data (#715).
-- **States.** While the forecast is stale or the display offline, the heading's right side
-  shows the status in the shared status tone instead of the facts: "Saved forecast · 5 hr
-  ago", "Offline · Updated 12 min ago" (as Weather words them). A saved current reading
+- **States.** While the forecast is not fresh, the heading's right side shows Forecast's
+  own status line instead of the facts (`ForecastStatusLine` in
+  [`common.tsx`](../src/client/widgets/common.tsx), from the shared `weatherStatus`), with
+  the same words, classes and status tone at full opacity: "Saved forecast · 5 hr ago",
+  "Offline · Updated 12 min ago", "Saved forecast · Update time unknown". So the two strips
+  stacked one above the other always say the same thing, and a refresh that is merely slow
+  is not a saved forecast on either (`presentedStatus`, #715). The slot is always there (a
+  no-break space when it has nothing to say) and stays one line up to the longest wording
+  ("Offline · Updated 364 days ago"), so the heading has Forecast's height in every state
+  and the strip never moves when a fact or a status comes or goes. A saved current reading
   older than three hours is never called Now (`lastKnownTime`, the rule Weather uses): the
   strip then starts at the next hour. An hour the saved forecast lacks keeps its column
   with dashes; the hours end where the forecast ends; with no upcoming hour the widget
-  shows Forecast's unavailable treatment with "Hourly forecast unavailable · retrying"
-  ("· offline").
+  shows Forecast's unavailable treatment (`ForecastUnavailable`) with "Hourly forecast
+  unavailable · retrying" ("· offline"), and the age of a saved forecast whose hours have
+  all passed ("Updated 2 days ago") under it in the status tone.
 - **Migration.** The 4 × 4 large family is gone. A `large` placement saved before #714
   that the 8 × 2 span puts outside the grid, or over another shown widget, becomes
   `medium` at the same origin, which lies inside the cells it had; one that fits stays
@@ -535,16 +547,26 @@ families. Its tone is sky, like Forecast, so the two strips read as a pair.
   release installed now (`712ce80`) draws Large as 4 × 4 and rejects a Large placement
   saved by this build where that does not fit, so a rollback needs the step in the #714
   row of the [compatibility table](install.md#additive-data-and-rollback-compatibility-84).
-- **Rendering.** The markup reuses Forecast's heading, strip, column, label, glyph and
-  droplet classes, with Forecast's sizes for the same family written out in
-  [`hourly-forecast.css`](../src/client/widgets/hourly-forecast.css). Both families render
-  at fit 1 at Text 100% in every density at 720p, 1080p and 4K: fresh, stale, offline and
-  with sun columns. The view is rebuilt once a minute (#99) and values change through
+- **Rendering.** The markup reuses Forecast's heading, strip, column, label, glyph,
+  temperature and droplet classes, and the sizes are Forecast's own: one definition of the
+  medium and large strips for both widgets, the `--strip-*` custom properties in
+  [`widgets.css`](../src/client/widgets.css) (#720), for the heading and its gap, the hour
+  or day label, the glyph, the temperature, the chance and its droplet, and the gaps between
+  the rows. Changing one changes both; only the column widths differ (6 or 12 hours against
+  5 or 7 days, with a narrower column gap here).
+  [`hourly-forecast.css`](../src/client/widgets/hourly-forecast.css) adds only what an hour
+  strip needs: the subgrid rows, the trend's travel worked out from those sizes, and the sun
+  word, which takes the hour label's size but never runs past its column (capped by the
+  column's width over the width of "Sunrise": it binds only for the Monospace typeface on
+  the Fine grid). The widgets suite puts a Forecast of the same family above it in every
+  state, family and density at 720p, 1080p and 4K and compares the two: the same sizes,
+  heading height and rhythm from label to glyph to value, and the same status words. Both
+  families render at fit 1 at Text 100% in every density at 720p, 1080p and 4K: fresh,
+  saved, offline, while a refresh runs and with sun columns, in every typeface. The view is rebuilt once a minute (#99) and values change through
   `TransitionText`; the widget has no timer or animation loop of its own. At Lively the
   columns slide in one after another like Forecast's, and the trend line fades in with the
   last of them, never ahead of its values (opacity only, to its resting 0.8).
-- **Follow-ups:** hourly feels-like (#718), a small 2 × 2 family (#719) and keeping the
-  two strips' type in step if Forecast's families are refitted (#720).
+- **Follow-ups:** hourly feels-like (#718) and a small 2 × 2 family (#719).
 
 ## Ambient appearance and recurring exposure
 
