@@ -94,7 +94,9 @@ function assertAnalog(geometry, { size, density, viewport }) {
 /**
  * #332: the medium Clock keeps its date beside its own time. Nothing frames widgets, so the date's gap to its
  * own time (visible text, screen-reader text excluded) must be smaller than its gap to the cell's right edge,
- * beyond which the next widget begins.
+ * beyond which the next widget begins. Since #717 the date stands after the room of the widest time, so it does
+ * not move with the minute: this holds at the suite's 9:00, and beside a narrow time (11:11) on the Fine grid the
+ * date is further from the digits than from the edge (docs/widgets.md, Clock digit spacing; #727).
  */
 async function assertDateGrouped(widget, label) {
   const result = await widget.evaluate(section => {
@@ -273,23 +275,34 @@ export async function sweep({ page, viewport, state }) {
   await page.setViewportSize(viewport);
   if (viewport.width !== 1920) return `Analog clock: every family and density at 720p/1080p/4K fits at 1, hands ≥ 3/2 px at 720p (scaled), 30%/45% reach, text-colour HTML hands with an accent pivot, small/medium sized to the cell height with the date beside; Outline stroke ≥ 1.2 px at 720p (scaled) in every family; medium Outline and Digital keep the date nearer their time than the cell edge (#332). ${timerSummary}`;
 
-  // #363: Classic (Georgia) numerals are lining and tabular: every digit shares one baseline and height. Georgia's
-  // default old-style 9 would descend about a fifth of the size below the 0s.
+  // #363: Classic (Georgia) numerals are lining figures: every digit shares one baseline and height. Georgia's
+  // default old-style 9 would descend about a fifth of the size below the 0s. Since #717 the digits are spaced by
+  // their ink, so they are lining figures at their own widths; the rest of the time (AM/PM, and the digits of a
+  // typeface that cannot be measured) stays lining and tabular. The time is pinned to 9:06 AM (#742): an old-style 9
+  // would descend below the 0 and a 6 would rise above it. The page clock is shared and has moved by whatever this
+  // sweep spent before here (the timer cases alone take about 20 minutes), so it is set for the block and put back.
   {
-    only(state, { size: 'large', density: 'balanced', style: 'digital' }); state.settings.appearance.fontFamily = 'serif'; await reload(page);
-    assert.equal(await page.locator('.clock-time').evaluate(element => getComputedStyle(element).fontVariantNumeric), 'lining-nums tabular-nums', 'Classic clock numerals');
-    const digits = [];
-    for (const character of await page.locator('.clock-char').all()) {
-      const text = await character.textContent(); if (!/\d/.test(text)) continue;
-      digits.push({ text, ...await inkRows(page, await character.screenshot()) });
+    const before = await page.evaluate(() => Date.now()), format = state.settings.clockFormat;
+    const pinned = await page.evaluate(() => { const day = new Date(); return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 9, 6, 20).getTime(); });
+    try {
+      await page.clock.setSystemTime(pinned);
+      only(state, { size: 'large', density: 'balanced', style: 'digital' }); state.settings.appearance.fontFamily = 'serif'; state.settings.clockFormat = '12h'; await reload(page);
+      assert.equal(await page.locator('.clock-digits').evaluate(element => getComputedStyle(element).fontVariantNumeric), 'lining-nums', 'Classic clock digits');
+      assert.equal(await page.locator('.clock-time').evaluate(element => getComputedStyle(element).fontVariantNumeric), 'lining-nums tabular-nums', 'Classic clock time');
+      const digits = [];
+      for (const character of await page.locator('.clock-char').all()) {
+        const text = await character.textContent(); if (!/\d/.test(text)) continue;
+        digits.push({ text, ...await inkRows(page, await character.screenshot()) });
+      }
+      assert.equal(digits.map(digit => digit.text).join(''), '906', 'the Classic clock shows the pinned 9:06 AM');
+      // Round digits overshoot a flat top or baseline by a few percent of their height; old-style figures differ by
+      // about a fifth of it.
+      const tolerance = Math.max(2, 0.05 * (digits[0].bottom - digits[0].top));
+      for (const digit of digits) for (const edge of ['top', 'bottom']) assert.ok(Math.abs(digit[edge] - digits[0][edge]) <= tolerance, `Classic digit ${digit.text} ${edge} ${digit[edge]} vs ${digits[0][edge]} (±${tolerance.toFixed(1)}): ${JSON.stringify(digits)}`);
+    } finally {
+      state.settings.appearance.fontFamily = 'sans'; state.settings.clockFormat = format;
+      await page.clock.setSystemTime(before + 1_000);
     }
-    // 9:xx: an old-style 9 would descend below the 0s and 1s and a 6 or 8 would rise above them.
-    assert.match(digits.map(digit => digit.text).join(''), /^9\d\d$/);
-    // Round digits overshoot a flat top or baseline by a few percent of their height; old-style figures differ by
-    // about a fifth of it.
-    const tolerance = Math.max(2, 0.05 * (digits[0].bottom - digits[0].top));
-    for (const digit of digits) for (const edge of ['top', 'bottom']) assert.ok(Math.abs(digit[edge] - digits[0][edge]) <= tolerance, `Classic digit ${digit.text} ${edge} ${digit[edge]} vs ${digits[0][edge]} (±${tolerance.toFixed(1)}): ${JSON.stringify(digits)}`);
-    state.settings.appearance.fontFamily = 'sans';
   }
 
   // At rest the geometry is the same at Off, Subtle and Lively (#161), and each hand points where the
@@ -322,5 +335,5 @@ export async function sweep({ page, viewport, state }) {
     only(state, { size: 'large', density: 'balanced', style: 'outline' }); await reload(page);
     assert.equal(await intlPerTicks(page), 0, 'outline: no Intl formatter per tick');
   } finally { await page.emulateMedia({ reducedMotion: 'reduce' }); }
-  return `Analog clock at rest: identical box and hand geometry at Off/Subtle/Lively with each hand at its labelled angle; a minute change at Subtle transitions only rotate on HTML hand wrappers; zero Intl formatters per tick within a minute; Classic digits are lining (one baseline and height, #363). ${timerSummary}`;
+  return `Analog clock at rest: identical box and hand geometry at Off/Subtle/Lively with each hand at its labelled angle; a minute change at Subtle transitions only rotate on HTML hand wrappers; zero Intl formatters per tick within a minute; Classic digits are lining (one baseline and height at a pinned 9:06 AM, #363, #742). ${timerSummary}`;
 }

@@ -194,13 +194,14 @@ can change the content's overflow must switch a class (or change text or structu
 The fit itself writes only the content's `style`, so a refit never triggers another.
 With the Classic typeface (Georgia) every number uses lining, tabular figures, so digits
 share one baseline and height; a rule that sets `font-variant-numeric` itself spells out
-`lining-nums tabular-nums` so it does not bring the old-style figures back (#363).
+`lining-nums tabular-nums` so it does not bring the old-style figures back (#363). The
+Clock's own digits are lining figures spaced by their ink ([digit spacing](#clock-digit-spacing)).
 
 The renderer families have deliberate visual roles:
 
 | Widget | Small | Medium | Large |
 | --- | --- | --- | --- |
-| Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date. While a timer is visible, the date line shows it ("8 min", "Done") | Time with its calendar column right beside it, never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height; a timer shows as in small, Done adds "· 2 min ago" | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition; a timer reads "8 min left · ends 6:51 PM" ([timer slot](#clock-timer-slot)) |
+| Clock | Compact time and calendar; analog puts the hands, sized to the cell height, beside the date. While a timer is visible, the date line shows it ("8 min", "Done") | Time with its calendar column beside it, after the room of the widest time so the date does not move with the minute (#717), never pushed to the far edge where it would read as the next widget's (#332); analog sizes its hands to the cell height; a timer shows as in small, Done adds "· 2 min ago" | Centered monumental time with a quiet calendar line; outline, digital and hand-only analog styles share this composition; a timer reads "8 min left · ends 6:51 PM" ([timer slot](#clock-timer-slot)) |
 | Weather (adaptive, #74) | Temperature and glyph, then one line: the condition when calm, otherwise the compact rain outlook (“Rain likely now”, “Rain possible now, likely later”); confidence only when partial. No footer while fresh unless that confidence shows; a saved or offline forecast adds one row of short phrases, wrapping only between them: “Saved forecast · 5 hr ago” (#283, #715) | Calm: conditions and feels-like; hint: the outlook line replaces feels-like; elevated (rain now or within six hours): rain timing and “Peak 60% · 4 mm rain”, with “Forecast estimate” under it; calm fresh weather has no footer, and a saved or offline forecast adds “Saved forecast · Updated 5 hr ago” in the status tone (#715) | Calm: adds wind and daily high/low; hint as medium; elevated: condition and high/low, then timing, detail and an hourly chance bar for each hour overlapping the next 12 (12 on the hour, 13 otherwise; spell hours brighter, unknown hours a dotted baseline) over “Now” and the window's end (#261). Unavailable in every family: a dim, still cloud, a dim “—°” and one status-tone line at the label size, “Weather unavailable · retrying” (“· offline” while the display cannot reach the computer), with the age only when known, in the status tone (#362, #715) |
 | Forecast | Three days from the city's today; high and low share a row when they fit | Five days | Seven days; compact weekday labels preserve room for temperatures and chance, marked by a small droplet (#251). Every family starts at Today and names later days by weekday (tomorrow too, #256), with “Tomorrow, <date>” in assistive text; past days never show (#243), and the heading counts the days shown (“Next 4 days”). With no day to show, “Forecast unavailable · retrying” as Weather shows it (#362). A forecast is the heading and the strip, with nothing under it; medium and large use that room for a taller strip. A saved or offline one says “Saved forecast · 5 hr ago” or “Offline · Updated 5 hr ago” in the status tone in the heading's right slot, in place of the place and unit (small: the heading's second line), as Hourly forecast does; the strip keeps its size and position in every state (#715); the place and unit return when it is fresh again |
 | Hourly forecast (#714) | — | Six columns: “Now” from the current reading, then the hours ahead, each with its time, a day- or night-aware glyph, the temperature on a thin trend line and the precipitation chance from 10%. A sunrise or sunset inside the window is a column of its own (exact time, sun symbol, the word) | Twelve columns in Forecast's 8 × 2 strip, so the two sit one above the other; both strips share one definition of their sizes (#720). The heading reads “Hourly”, with at most two facts on the right: the next sunrise or sunset when the strip does not show it, and “Gusts 55 km/h” from 40 km/h or 25 mph. Not fresh: Forecast's own status there instead, “Saved forecast · 5 hr ago” or “Offline · Updated 12 min ago”, in the status tone (#715); with no hour to show, “Hourly forecast unavailable · retrying” as Forecast shows it |
@@ -343,6 +344,11 @@ shows it. Start timers from Home." The widgets suite's Clock sweep checks every 
 offline included, in every family, style and density at 720p, 1080p and 4K with a
 40-character name and "+5": fit 1 at Text 100%, nothing clipped, the readability floor
 kept, Done in the status tone, and no `Intl` formatter per tick.
+On a medium clock the slot sits after the room of the widest time
+([digit spacing](#clock-digit-spacing)), so the name's room is the same at every minute
+and a little smaller than before #717, when the digits overlapped: 231 px at 1080p
+Balanced in 24-hour time (240 before), 215 px in 12-hour; 153 and 141 px on Fine (167);
+102 and 94 px on Fine at 720p (112). A long name ends in its ellipsis that much sooner.
 All families use the same renderer in ambient view, authored editor canvas and
 synthetic picker preview. Picker fixtures never become user data.
 The editor canvas renders inside `.studio`, so renderer class names must not reuse
@@ -649,6 +655,125 @@ HTML bar on a full-square wrapper that turns with `rotate` around the centre, so
 minute ease runs on the compositor (#161), and the square clips so a turned wrapper
 never adds overflow to the widget fit. At rest the geometry is the same at every
 Animation level. The owner's couch check remains the acceptance gate for #222.
+
+### Clock digit spacing
+
+The clock's digits are spaced by what they paint, not by their advance boxes (#717). A
+typeface spaces figures by their boxes, and tabular figures all share the widest box: a 1
+sits in a hole and a 4 fills its box edge to edge. The clock used to pull every box
+together with a fixed negative `letter-spacing` (-0.065em), and the Outline stroke
+extends past the glyph, so 44, 04 and 54 overlapped (48 too at 4K) and 00, 34, 40 and 48
+touched while 11 stood a fifth of the digit height apart: on the large 1080p clock the
+painted gaps ran from -12 px to 65 px. They now run from 19 to 21 px.
+
+**Even gaps.**
+
+- [`src/client/clock-spacing.ts`](../src/client/clock-spacing.ts) measures, once per
+  typeface, how far each glyph's ink starts and ends inside its advance box (canvas
+  `measureText`, averaged over six sizes under 256 px, where the canvas reports whole
+  pixels; above that it is far coarser). `Clock.tsx` gives each character those bearings
+  as `--ink-left` and `--ink-right`, and `widgets.css` turns them into margins that
+  leave one gap, `--clock-gap`, between the painted edges of every pair of neighbours:
+  digits and colon alike, outline stroke included.
+- The gap is 6% of the digit size and never under 42% of the shared text floor (4.2 px at
+  720p), so the smallest clock keeps whole pixels between digits (2 to 3 px painted there).
+- Never put a negative `letter-spacing` on the clock's digits or on any other tabular
+  numeral. World clocks, Countdown and Sun & moon keep their typeface's own spacing for
+  the same reason. `src/client/legacy-css.test.ts` fails for a rule that tracks a tabular
+  numeral tighter (the numerals that still are appear there by name and in
+  [#726](https://github.com/8roundshock/living-room-display/issues/726)), and the clock
+  check fails when the page computes a negative `letter-spacing` for any of those four
+  widgets' numerals, so a value that arrives through `var()` or `calc()` fails too.
+
+**What moves when a minute changes.** A time is as wide as its digits (11:11 is much
+narrower than 04:44), and re-placing everything by that width every minute is too
+restless for an ambient display (owner-side decision on #717, 2026-11-22: at 1,295 of
+1,440 minute changes the unchanged characters of a centred clock stepped sideways, 44 px
+at most at 1080p). The rule: **within an hour, only the digits that change move.**
+
+- The clock holds the room of the widest time of its format (04:44 in 24-hour and 10:44
+  in 12-hour with Segoe UI). `clockPlacement` says where a time sits in that room, and
+  two empty boxes (`.clock-room-start`, `.clock-room-end`) hold the rest of it. The
+  shared fit and the float both measure those boxes, so the fit is 1 at every minute at
+  Text 100%, a clock that zooms out at a larger Text size keeps its scale, and the
+  float's range does not follow the minute.
+- **Large (centred)** is placed once an hour. It is centred by the middle of that hour's
+  narrowest and widest minute, so the hour, the colon and the left edge of the minutes
+  stay where they are for the whole hour and the minutes grow and shrink to the right.
+  The painted time is then off centre by 17 px at the median minute and 38 px at most
+  at 1080p (a quarter of the minutes' range; the old tabular clock's ink sat -12 to
+  +21 px off). An unchanged character moves at 22 of the day's 1,440 changes, all at
+  the hour: 14 px at the median and 32 px at most in 24-hour; in 12-hour 16 px and 78 px,
+  the largest when the hour gains or loses a digit.
+- Held to a device pixel, not exactly: the hour is placed from a box summed from
+  per-character margins, each rounded to 1/64 px, so its position wanders by up to
+  0.03 px from minute to minute and the rasteriser sometimes snaps it to the next pixel.
+  The held hour and colon flip by one device pixel within the hour about 16 to 40 times
+  a day, and the minutes' left edge up to 52 times on a 720p-at-300% display (measured
+  in the independent recheck of #736); invisible at couch distance (#727).
+- **Small and medium (left-aligned)** keep every digit where it is until a digit to its
+  left changes, which is the hour (18 to 22 changes a day).
+- **AM/PM** stands after the widest minute's room, so it does not move within the hour
+  either; before a narrow minute it is that much further from the last digit. On the
+  large 1080p clock the painted gap runs from 27 px (12:44) to 186 px (1:11), 72 px at
+  the median, against 19 to 21 px between digits: up to 0.83 of the painted digit
+  height. The digits of a 12-hour large clock stand as they would with the period right
+  beside the middle minute.
+- **The date line beside a medium clock** (and the timer slot there) sits after the
+  widest time's room and never moves. The cost: beside a narrow time it is further from
+  the digits (painted, at 1080p: 32 to 148 px on Balanced, 24 to 113 px on Fine, 48 to
+  210 px on Spacious), and the #332 rule (the date nearer its time than the cell's right
+  edge, by text boxes) breaks for some minutes: on Fine at 16 minutes a day in 24-hour
+  time (11:10 to 11:19 and the like) and 120 in 12-hour (1:00 to 1:59), on Balanced at
+  1 (11:11) and 0, on Spacious never; at most 17 px over at 1080p (34 px at 4K), at most
+  6 px in 12-hour. The #332 check reads 9:00; the date still stands beside the room of
+  its own time (#727).
+- When a digit changes, the other characters are already in place and the new one fades
+  in. Nothing glides sideways: a character easing from its old place would cross the
+  incoming digit. What still steps, at the hour, is in
+  [#727](https://github.com/8roundshock/living-room-display/issues/727).
+- "One scale" is to within the fit's own one-pixel measurement: the held room is the
+  same to a hundredth of a pixel, and the fit rounds it to whole pixels, so a few
+  minutes a day can read up to 0.2% apart at a larger Text size (under one pixel on
+  screen). In 12-hour, AM and PM differ in width by a pixel or two (under 1%).
+
+**Typefaces.** Canvas text cannot set `font-variant-numeric`, so a glyph is trusted only
+when the page lays it out with the advance the canvas measured. The Classic clock
+therefore draws its digits from `LRD Classic Figures`, an alias of Georgia with lining
+figures turned on in the font face (`styles.css`); its digits are Georgia's lining
+figures at their own widths, no longer tabular. A typeface that cannot be measured has
+no `clock-ink` class (`clock-unmeasured` on the time) and takes the fallback: tabular
+figures, tracked apart by the stroke and at least 30% of the text floor on top of the
+glyphs' own bearings, drawn at 78% of the size so their wider boxes stay inside the
+measured clock's room, with a one-digit hour holding the room of two. Nothing touches
+(2 px and more on the smallest 720p clock) and the fit is 1 at every time in every
+family, density, viewport and format, but the gaps are the typeface's own and uneven. A
+failed measurement is tried again when the hour the clock shows changes, in local time
+(`shownHour`; a UTC hour changes at :30 or :45 local in zones such as Asia/Kolkata and
+Asia/Kathmandu, which would move the colon mid-hour), and on a later mount, at most once
+a minute.
+
+**Check.**
+[`tests/ui/widget-checks/clock-spacing.mjs`](../tests/ui/widget-checks/clock-spacing.mjs)
+(in the `widgets` suite) measures the painted pixels: each character paints one colour
+channel, so one RAM screenshot tells neighbours apart. It fails on any overlap, on a gap
+under the rule's (at least one unlit device pixel, and more on larger clocks: 70% of the
+stylesheet's gap less 2 px), on gaps that differ by more than a few pixels, on a
+negative computed `letter-spacing`, and on a character whose box moves while a digit
+changes. It reads every minute of a day from layout boxes, for the large, medium and
+small clock in 24- and 12-hour time, and fails when an unchanged character moves within
+an hour, when more than 24 changes a day move one, when the time is further off centre
+than the rule allows, and when AM/PM, the medium date line, the fit or the box the float
+measures moves with the minute. With the display floating it fails when the float's
+offset steps at a minute change. It also makes a typeface unmeasurable at 720p and 1080p,
+12-hour included, checks the fallback, and checks in Asia/Kolkata that a failed
+measurement waits for the shown hour. It sets the time of day and runs days of minutes,
+so it runs on a page with a clock of its own (`withOwnClock`).
+
+Not verified: Segoe UI Variable (Windows 11's `system-ui`) is not installed on the
+development PC. It is measured the same way; a clock under 48 px there uses a smaller
+optical size than the one measured, so its gaps may differ by a pixel
+([#728](https://github.com/8roundshock/living-room-display/issues/728)).
 
 The display never goes dark to move (#436, owner decision 2026-10-20; it replaces the
 black rest of #357 and #395). By default the arrangement stays as placed and floats:

@@ -390,7 +390,8 @@
   display: block;
   min-height: 42px;
   font-size: 25px;
-  letter-spacing: -1.4px;
+  /* #717: no negative tracking on numerals; it made the outlined example's digits touch. */
+  letter-spacing: 0.5px;
   line-height: 42px;
   color: #b8a3ce;
 }

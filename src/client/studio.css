@@ -12,7 +12,6 @@ html.studio-editor {
 }
 .clock-time {
   font-weight: 500;
-  letter-spacing: -0.065em;
   font-size: calc(11.3cqw * var(--font-scale));
 }
 .clock-digits {
