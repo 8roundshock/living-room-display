@@ -51,21 +51,27 @@ function inspect(widget) {
     const cue = node => node && { text: text(node), color: getComputedStyle(node).color, opacity: opacity(node), lines: lines(node) };
     const strip = section.querySelector('.hourly-strip'), trend = section.querySelector('.hourly-trend');
     const heading = section.querySelector('.hourly-heading'), slot = heading.querySelector('.weather-context'), line = heading.querySelector('.forecast-status-line');
+    // The box a node's contents take (its text and any droplet), and how far that reaches past the column on either side.
+    const inkOf = node => { const range = document.createRange(); range.selectNodeContents(node); const rect = range.getBoundingClientRect(); return rect.width ? rect : null; };
+    const spillOf = (ink, box) => ink ? Math.max(box.left - ink.left, ink.right - box.right) : -Infinity;
     const columns = [...section.querySelectorAll('.hourly-hour')].map(column => {
       const box = column.getBoundingClientRect(), value = column.querySelector('.hourly-temperature'), cell = value.getBoundingClientRect();
-      const range = document.createRange(); range.selectNodeContents(value); const ink = range.getBoundingClientRect();
+      const ink = inkOf(value), labelNode = column.querySelector('.forecast-day-label'), labelInk = inkOf(labelNode), rain = column.querySelector('.hourly-rain');
       return {
-        kind: column.dataset.hourlyColumn, label: text(column.querySelector('.forecast-day-label')), value: text(value), chance: text(column.querySelector('.hourly-rain')),
+        kind: column.dataset.hourlyColumn, label: text(labelNode), value: text(value), chance: text(rain),
         glyph: column.querySelector('.weather-glyph')?.dataset.glyph ?? null, sunGlyph: column.querySelector('svg.hourly-sun-glyph')?.dataset.glyph ?? null,
         unknown: column.querySelectorAll('.forecast-unknown').length, droplets: column.querySelectorAll('.hourly-rain svg').length,
-        centre: box.left + box.width / 2, width: box.width, cellTop: cell.top, cellHeight: cell.height, valueBottom: ink.bottom,
-        // How far the value's text reaches past its column on either side (a sun word must stay inside).
-        spill: Math.max(box.left - ink.left, ink.right - box.right),
+        centre: box.left + box.width / 2, width: box.width, cellTop: cell.top, cellHeight: cell.height, valueBottom: ink?.bottom ?? cell.bottom,
+        // How far the value (a temperature or the sun word), the time label and the chance reach past the column on either side.
+        spill: spillOf(ink, box), labelSpill: spillOf(labelInk, box), chanceSpill: spillOf(inkOf(rain), box),
+        labelEdges: labelInk && [labelInk.left, labelInk.right], period: text(column.querySelector('.hourly-period')),
+        labelSize: parseFloat(getComputedStyle(labelNode).fontSize),
       };
     });
     const trendBox = trend?.getBoundingClientRect();
     return {
       fit: new DOMMatrix(getComputedStyle(section.querySelector('.widget-content')).transform).a,
+      contentHeight: section.querySelector('.widget-content').getBoundingClientRect().height,
       heading: text(heading.querySelector('.ambient-label')), labelLines: lines(heading.querySelector('.ambient-label')), facts: [...section.querySelectorAll('.hourly-fact')].map(text),
       slot: slot && { text: text(slot), size: parseFloat(getComputedStyle(slot).fontSize), lines: lines(slot) }, headingChildren: heading.children.length,
       status: line && { ...cue(line), isSlot: line === slot, shared: line.classList.contains('status-caution'), label: cue(line.querySelector('.forecast-status')), age: cue(line.querySelector('.forecast-age')) },
@@ -87,11 +93,19 @@ function assertStrip(m, label) {
   const widths = m.columns.map(column => column.width);
   assert.ok(Math.max(...widths) - Math.min(...widths) < 0.6, `${label}: every column has the same width`);
   assert.ok(new Set(m.columns.map(column => Math.round(column.cellHeight * 4))).size === 1 && new Set(m.columns.map(column => Math.round(column.cellTop * 4))).size === 1, `${label}: the temperature row has one height and one top for every column`);
+  // Nothing a column draws leaves it, in any clock format, typeface or Text size: the time label, the value or the sun
+  // word, and the chance with its droplet. So no two labels touch either; they keep at least a pixel between them.
+  m.columns.forEach((column, index) => {
+    for (const [part, spill, shown] of [['label', column.labelSpill, column.label], ['value', column.spill, column.value], ['chance', column.chanceSpill, column.chance]]) {
+      assert.ok(spill <= 0.5, `${label}: column ${index + 1}'s ${part} "${shown}" stays inside its column (${spill.toFixed(1)} px past it)`);
+    }
+    const next = m.columns[index + 1];
+    if (next?.labelEdges && column.labelEdges) assert.ok(next.labelEdges[0] - column.labelEdges[1] >= 1, `${label}: "${column.label}" and "${next.label}" do not touch (${(next.labelEdges[0] - column.labelEdges[1]).toFixed(1)} px apart)`);
+  });
   for (const column of m.columns) {
     if (column.kind === 'sunrise' || column.kind === 'sunset') {
-      assert.match(column.label, /^\d{1,2}:\d{2}( [AP]M)?$/, `${label}: a sun column is labelled with its exact time`);
+      assert.match(column.label, /^\d{1,2}:\d{2}([AP]M)?$/, `${label}: a sun column is labelled with its exact time`);
       assert.equal(column.value, column.kind === 'sunset' ? 'Sunset' : 'Sunrise', `${label}: the word takes the temperature's place`);
-      assert.ok(column.spill <= 0.5, `${label}: "${column.value}" stays inside its column (${column.spill.toFixed(1)} px past it)`);
       assert.equal(column.sunGlyph, 'sun', `${label}: the sun symbol paints the sun's sub-tone`); assert.equal(column.glyph, null);
       assert.equal(column.chance, '', `${label}: no precipitation value in a sun column`); assert.equal(column.droplets, 0);
     } else {
@@ -118,8 +132,9 @@ function assertSameStrip(m, base, label) {
 }
 
 /** #720: Forecast's and Hourly forecast's strips of one family share every size, the heading and the rows' rhythm. */
-function assertOneFamily(forecast, hourly, label) {
-  for (const key of ['headingLabel', 'headingSlot', 'headingGap', 'label', 'glyph', 'value', 'chance', 'chanceLine', 'droplet', 'dropletGap', 'rowGap']) {
+const ONE_FAMILY = ['headingLabel', 'headingSlot', 'headingGap', 'label', 'glyph', 'value', 'chance', 'chanceLine', 'droplet', 'dropletGap', 'rowGap'];
+function assertOneFamily(forecast, hourly, label, keys = ONE_FAMILY) {
+  for (const key of keys) {
     assert.ok(typeof forecast[key] === 'number' && typeof hourly[key] === 'number' && Math.abs(forecast[key] - hourly[key]) <= 0.02, `${label}: Forecast's and Hourly forecast's ${key} differ ${JSON.stringify([forecast[key], hourly[key]])}`);
   }
   assert.ok(Math.abs(forecast.headingHeight - hourly.headingHeight) <= 0.5, `${label}: one heading height ${JSON.stringify([forecast.headingHeight, hourly.headingHeight])}`);
@@ -139,7 +154,7 @@ export async function family({ widget, size, state }) {
   if (size === 'large') {
     assert.deepEqual(suns.map(column => column.kind), ['sunset']);
     const index = m.columns.indexOf(suns[0]);
-    assert.equal(m.columns[index - 1].label, '6 PM'); assert.equal(m.columns[index + 1].label, '7 PM'); assert.match(suns[0].label, /^6:\d\d PM$/);
+    assert.equal(m.columns[index - 1].label, '6PM'); assert.equal(m.columns[index + 1].label, '7PM'); assert.match(suns[0].label, /^6:\d\dPM$/);
     // The fixture's 6 PM is clear and its 7 PM partly cloudy, so each glyph names the sky: the sun before the sunset, the moon after it.
     assert.equal(m.columns[index - 1].glyph, 'sun', 'the hour before sunset draws the day glyph');
     assert.equal(m.columns[index + 1].glyph, 'mooncloud', 'the hour after sunset draws the night glyph');
@@ -263,10 +278,51 @@ export async function sweep({ page, viewport, state, base, now }) {
       // On the 24-hour clock the hours are bare and only the sun columns show minutes.
       assert.deepEqual(both.columns.filter(column => column.kind === 'hour').map(column => column.label), ['21', '22', '23', '00', '01', '02', '03', '04', '05']);
 
-      // Twelve-hour labels: the hour columns are compact, the sun column keeps its minutes.
+      // Twelve-hour labels: the hour columns are compact, the sun column keeps its minutes, and the day period is a
+      // smaller suffix with no space before it, as on a phone's hourly row.
       const twelve = await render({ at: summer, isDay: true, setup: () => { state.settings.clockFormat = '12h'; } });
-      assert.deepEqual([twelve.columns[0].label, twelve.columns[1].label, twelve.columns[3].label], ['Now', '9 PM', '10 PM']);
-      assert.match(twelve.columns[2].label, /^9:0\d PM$/); assert.ok(twelve.fit >= 0.995);
+      assertStrip(twelve, '12-hour');
+      assert.deepEqual([twelve.columns[0].label, twelve.columns[1].label, twelve.columns[3].label], ['Now', '9PM', '10PM']);
+      assert.match(twelve.columns[2].label, /^9:0\dPM$/); assert.ok(twelve.fit >= 0.995);
+      assert.deepEqual([twelve.columns[0].period, twelve.columns[1].period, twelve.columns[2].period], [null, 'PM', 'PM']);
+
+      // The 12-hour clock (the app's default) in every density at 720p, 1080p and 4K and in every typeface, with the
+      // widest labels: a sunrise as the last column (Toronto on a June night, "5:36AM") and two sun columns side by
+      // side (69.65° N on 17 May, at the edge of the polar day: "12:29AM" then "12:51AM"). No label leaves its column
+      // or touches another (assertStrip), every label but Now ends in the small day period, and the strip stays at
+      // fit 1 at Text 100%.
+      const NORTH = { name: 'Synthetic north', latitude: 69.65, longitude: 18.96, timezone: 'Europe/Oslo' };
+      const SCENES = [
+        { name: 'a sunrise last', at: { large: Date.parse('2026-06-22T00:10:00Z'), medium: Date.parse('2026-06-22T05:10:00Z') }, expect: kinds => kinds.at(-1) === 'sunrise' },
+        { name: 'two sun columns', place: NORTH, at: { large: Date.parse('2026-05-17T18:10:00Z'), medium: Date.parse('2026-05-17T20:10:00Z') }, expect: kinds => kinds.join(' ').includes('sunset sunrise') },
+      ];
+      for (const view of views) {
+        await own.setViewportSize(view);
+        for (const density of Object.keys(GRID_DENSITIES)) for (const family of ['medium', 'large']) for (const scene of SCENES) for (const fontFamily of ['sans', 'serif', 'mono']) {
+          const label = `${view.width} ${family}/${density} 12-hour, ${scene.name}, ${fontFamily}`;
+          const m = await render({ size: family, density, at: scene.at[family], setup: () => {
+            state.settings.clockFormat = '12h'; state.settings.appearance.fontFamily = fontFamily;
+            if (scene.place) state.weather.location = { ...state.weather.location, ...scene.place };
+          } });
+          assertStrip(m, label);
+          assert.ok(scene.expect(m.columns.map(column => column.kind)), `${label}: ${m.columns.map(column => `${column.kind} ${column.label}`).join(' | ')}`);
+          assert.ok(m.fit >= 0.995, `${label}: fit 1 at Text 100%, got ${m.fit}`);
+          for (const column of m.columns) if (column.kind !== 'now') assert.match(column.period ?? '', /^[AP]M$/, `${label}: "${column.label}" ends in the small day period`);
+        }
+      }
+      await own.setViewportSize(viewport);
+      // Above Text 100% a label still keeps to its column: Edmonton's "10:07PM" sunset beside "11PM" at Text 125%, in
+      // every typeface, family and density (the widget may zoom out there like any other; its labels never collide).
+      const PRAIRIE = { name: 'Synthetic prairie', latitude: 53.55, longitude: -113.49, timezone: 'America/Edmonton' };
+      for (const density of Object.keys(GRID_DENSITIES)) for (const family of ['medium', 'large']) for (const fontFamily of ['sans', 'serif', 'mono']) {
+        const label = `${viewport.width} ${family}/${density} 12-hour, Text 125%, Edmonton, ${fontFamily}`;
+        const m = await render({ size: family, density, at: Date.parse('2026-06-22T03:30:00Z'), setup: () => {
+          state.settings.clockFormat = '12h'; state.settings.appearance.fontFamily = fontFamily; state.settings.appearance.fontScale = 1.25;
+          state.weather.location = { ...state.weather.location, ...PRAIRIE };
+        } });
+        assertStrip(m, label);
+        assert.ok(m.columns.some(column => column.kind === 'sunset' && /^10:0\dPM$/.test(column.label)), `${label}: ${m.columns.map(column => column.label).join(' | ')}`);
+      }
 
       // After sunset the next event is beyond the strip, so the heading names it; notable gusts join it.
       const evening = Date.parse('2026-11-22T23:20:00Z');
@@ -284,6 +340,15 @@ export async function sweep({ page, viewport, state, base, now }) {
       const chances = await render({ at: evening, setup: () => { [9, 10, 100].forEach((value, index) => { state.weather.hourly[index + 1].precipitationProbability = value; }); state.weather.hourly[4].precipitationProbability = null; } });
       assert.deepEqual(chances.columns.slice(1, 5).map(column => column.chance), ['', '10%', '100%', '—']);
       assert.ok(chances.fit >= 0.995);
+
+      // "100%" in every hour, the widest chance, on the Fine grid's narrow columns in every typeface: it stays inside its
+      // column and the strip at fit 1.
+      for (const family of ['medium', 'large']) for (const fontFamily of ['sans', 'serif', 'mono']) {
+        const label = `${viewport.width} ${family}/fine "100%" in every hour, ${fontFamily}`;
+        const full = await render({ size: family, density: 'fine', at: evening, setup: () => { state.settings.appearance.fontFamily = fontFamily; state.weather.hourly.forEach(interval => { interval.precipitationProbability = 100; }); } });
+        assertStrip(full, label);
+        assert.ok(full.columns.every(column => column.chance === '100%'), label); assert.ok(full.fit >= 0.995, `${label}: fit ${full.fit}`);
+      }
 
       // Unknown values: a dash where the temperature is unknown, the line broken around it, never joined across.
       const gaps = await render({ at: evening, setup: () => { state.weather.details[4].temperature = null; state.weather.details[7].weatherCode = null; state.weather.details.splice(9, 1); } });
@@ -329,7 +394,19 @@ export async function sweep({ page, viewport, state, base, now }) {
             // An hours-old reading (five hours, or a year) is never called Now; an unknown age is not hours old.
             assert.equal(m.columns[0].kind, ['stale', 'retrying', 'offlineLong'].includes(status) ? 'hour' : 'now', `${label}: Now only for a current reading`);
             assertSameStrip(m, fresh, label);
+            // At Text 100% the trend keeps a readable travel: at least 7% of the box (the Fine grid is the tightest).
+            assert.ok(m.trend && m.trend.bottom - m.trend.top >= 0.068 * m.contentHeight, `${label}: the trend's travel ${(m.trend.bottom - m.trend.top).toFixed(1)} px of ${m.contentHeight.toFixed(1)} px`);
           }
+        }
+        // A larger Text size flattens the trend before the strip zooms out, so the pair keeps one size as long as
+        // Forecast does: at Text 110% both stay at fit 1 with equal sizes (but for the chance, which on the Fine grid keeps to its narrow column); at 125% and 150% Hourly forecast zooms out
+        // no further than the Forecast above it (Forecast may zoom for its own reasons, such as two values per day).
+        for (const density of Object.keys(GRID_DENSITIES)) for (const family of ['medium', 'large']) for (const fontScale of [1.1, 1.25, 1.5]) {
+          const label = `${view.width} ${family}/${density} Text ${Math.round(fontScale * 100)}%`;
+          const m = await render({ size: family, density, at: evening, pair: true, setup: () => { state.settings.appearance.fontScale = fontScale; state.weather.hourly[3].precipitationProbability = 30; } });
+          assertStrip(m, label);
+          assert.ok(m.fit >= m.forecast.fit - 0.002, `${label}: Hourly forecast zooms out no further than Forecast ${JSON.stringify([m.fit, m.forecast.fit])}`);
+          if (fontScale === 1.1) { assert.ok(m.fit >= 0.995 && m.forecast.fit >= 0.995, `${label}: both at fit 1 ${JSON.stringify([m.fit, m.forecast.fit])}`); assertOneFamily(m.forecast, m.geometry, label, ONE_FAMILY.filter(key => !/^(chance|chanceLine|droplet|dropletGap)$/.test(key))); }
         }
       }
       await own.setViewportSize(viewport);
