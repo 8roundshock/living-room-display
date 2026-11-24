@@ -1,65 +1,59 @@
 /* Hourly forecast (#714): Forecast's strip with one column per hour, so the two can sit one above the other.
-   The markup reuses Forecast's heading, strip, column, label, glyph and droplet classes, and the sizes below
-   are Forecast's own for the same family (widgets.css: medium is its base, large its large family). They are
-   written out here as variables because the widget also has to know its rows' heights: the temperatures ride
-   a trend line, and the line's vertical travel is whatever height the rows leave, between 10% and 18% of the
-   box. So the temperature row's height depends only on the box and Text size, never on the values, and both
-   families render at fit 1 at Text 100% on every grid at 720p, 1080p and 4K (a larger Text size first flattens
-   the travel, then zooms out like any widget). What differs from Forecast:
+   The markup reuses Forecast's heading, strip, column, label, glyph, temperature and droplet classes, and its
+   sizes are Forecast's own: one definition of the heading, the type, the glyphs and the row gaps for both
+   widgets' medium and large families, the `--strip-*` properties in widgets.css (#720). This file only adds what
+   an hour strip needs on top of them. The temperatures ride a trend line, and the line's vertical travel is
+   whatever height the rows leave, between 7% and 18% of the box. So the temperature row's height depends only
+   on the box and Text size, never on the values, and both families render at fit 1 at Text 100% on every grid at
+   720p, 1080p and 4K (a larger Text size first flattens the travel, then zooms out like any widget). Beyond
+   Forecast's strip:
    - every column shares the strip's four rows (subgrid), so the trend can span the temperature row;
    - the precipitation row keeps its line when an hour shows no chance, so nothing moves when one appears;
    - a sunrise or sunset is a column of its own, and the strip always has the family's number of columns;
-   - a narrower column gap and a tighter droplet, so "100%" fits one of twelve columns on the Fine grid. */
+   - a narrower column gap, so "100%" and "Sunrise" fit one of twelve columns on the Fine grid. */
 .grid-ambient .ambient-hourlyTemperature .hourly-body {
-  --hourly-heading: calc(max(var(--min-text), min(6.4cqw, 8cqh)) * var(--font-scale));
-  --hourly-context: calc(max(var(--min-text), min(5cqw, 6cqh)) * var(--font-scale));
-  --hourly-label: calc(max(var(--min-text), min(7cqw, 9cqh)) * var(--font-scale));
-  --hourly-glyph: min(10cqw, 16cqh);
-  --hourly-value: calc(max(var(--min-data), min(8cqw, 12cqh)) * var(--font-scale));
-  --hourly-chance: calc(max(var(--min-data), min(5cqw, 7cqh)) * var(--font-scale));
   --hourly-gap: 1cqw;
-  --hourly-row-gap: 3cqh;
-  --hourly-heading-gap: 4cqh;
   /* Air between a value and its point on the line. */
-  --hourly-clear: calc(var(--hourly-value) * 0.2);
-  /* The height of everything except the travel: heading, hour, glyph, value, chance and their gaps. */
-  --hourly-rows: calc(max(var(--hourly-heading), var(--hourly-context)) * 1.3 + var(--hourly-heading-gap) + var(--hourly-label) * 1.2 + var(--hourly-glyph) + var(--hourly-value) * 1.15 + var(--hourly-clear) + var(--hourly-chance) * 1.2 + 3 * var(--hourly-row-gap));
-  --hourly-travel: clamp(10cqh, 100cqh - var(--hourly-rows) - 2px, 18cqh);
+  --hourly-clear: calc(var(--strip-value) * 0.2);
+  /* The height of everything except the travel: the heading, hour, glyph, value and chance rows and their gaps, at
+     the line heights widgets.css gives them (the heading's two parts share a baseline, so its height is a little
+     over the larger line's; 1.3 covers it). */
+  --hourly-rows: calc(max(var(--strip-heading), var(--strip-context)) * 1.3 + var(--strip-heading-gap) + var(--strip-label) * 1.2 + var(--strip-glyph) + var(--strip-value) * 1.15 + var(--hourly-clear) + var(--strip-chance) * 1.2 + 3 * var(--strip-row-gap));
+  --hourly-travel: clamp(7cqh, 100cqh - var(--hourly-rows) - 2px, 18cqh);
 }
-.grid-ambient .ambient-hourlyTemperature.widget-size-large .hourly-body {
-  --hourly-label: calc(max(var(--min-text), min(4cqw, 9cqh)) * var(--font-scale));
-  --hourly-value: calc(max(var(--min-data), min(5cqw, 13cqh)) * var(--font-scale));
-  --hourly-chance: calc(max(var(--min-data), min(3cqw, 7cqh)) * var(--font-scale));
-}
-.grid-ambient .ambient-hourlyTemperature .hourly-heading { margin-bottom: var(--hourly-heading-gap); }
-.grid-ambient .ambient-hourlyTemperature .hourly-heading .ambient-label { flex: none; font-size: var(--hourly-heading); line-height: 1.2; white-space: nowrap; }
-.grid-ambient .ambient-hourlyTemperature .hourly-heading .weather-context { min-width: 0; font-size: var(--hourly-context); line-height: 1.3; text-align: right; }
+/* The right slot is always there, holding a no-break space when it has nothing to say, so the heading has
+   Forecast's height in every state: the strip never moves when a fact or a status comes or goes. */
+.grid-ambient .ambient-hourlyTemperature .hourly-heading .ambient-label { flex: none; white-space: nowrap; }
+.grid-ambient .ambient-hourlyTemperature .hourly-heading .weather-context { min-width: 0; text-align: right; }
 .grid-ambient .ambient-hourlyTemperature .hourly-fact { white-space: nowrap; }
 /* The chance row is reserved by its track, not by its cells: an hour with no chance to show has an empty,
    zero-height cell, so the float measures only what is drawn (Display.tsx inkSlack). */
-.grid-ambient .ambient-hourlyTemperature .hourly-strip { position: relative; grid-template-rows: repeat(3, auto) minmax(calc(var(--hourly-chance) * 1.2), auto); gap: var(--hourly-row-gap) var(--hourly-gap); }
-.grid-ambient .ambient-hourlyTemperature .hourly-hour { grid-row: 1 / -1; display: grid; grid-template-rows: subgrid; row-gap: var(--hourly-row-gap); justify-items: center; }
-.grid-ambient .ambient-hourlyTemperature .hourly-hour > .forecast-day-label { font-size: var(--hourly-label); line-height: 1.2; }
-.grid-ambient .ambient-hourlyTemperature .hourly-hour > :is(.weather-glyph, .forecast-unknown, .hourly-sun-glyph) { width: var(--hourly-glyph); height: var(--hourly-glyph); font-size: var(--hourly-glyph); line-height: 1; }
+.grid-ambient .ambient-hourlyTemperature .hourly-strip { position: relative; grid-template-rows: repeat(3, auto) minmax(calc(var(--strip-chance) * 1.2), auto); gap: var(--strip-row-gap) var(--hourly-gap); }
+.grid-ambient .ambient-hourlyTemperature .hourly-hour { grid-row: 1 / -1; display: grid; grid-template-rows: subgrid; justify-items: center; }
+.grid-ambient .ambient-hourlyTemperature .hourly-sun-glyph { width: var(--strip-glyph); height: var(--strip-glyph); }
+.grid-ambient .ambient-hourlyTemperature .hourly-hour > .forecast-unknown { line-height: 1; }
 /* The value's top edge moves with its level (1 warmest, 0 coolest); the row's height stays the same. */
 .grid-ambient .ambient-hourlyTemperature .hourly-temperature {
   box-sizing: border-box;
-  height: calc(var(--hourly-value) * 1.15 + var(--hourly-clear) + var(--hourly-travel));
+  height: calc(var(--strip-value) * 1.15 + var(--hourly-clear) + var(--hourly-travel));
   padding-top: calc((1 - var(--hourly-level, 0.5)) * var(--hourly-travel));
-  font-size: var(--hourly-value);
   line-height: 1.15;
   white-space: nowrap;
 }
 /* A sunrise or sunset column (as a phone's weather app shows it): the word takes the value's place at the
-   hour label's size, so "Sunrise" fits a column of twelve, with its bottom where a value's would be. */
+   hour label's size, with its bottom where a value's would be. It never runs past its column: the size is
+   capped by the column's width over the width of "Sunrise" in ems (3.31 in the System typeface, 3.35 in
+   Classic, 3.85 in Monospace). The cap binds only for Monospace on the Fine grid, and only a little. */
 .grid-ambient .ambient-hourlyTemperature .hourly-sun-word {
-  padding-top: calc((1 - var(--hourly-level, 0.5)) * var(--hourly-travel) + (var(--hourly-value) - var(--hourly-label)) * 1.15);
-  font-size: var(--hourly-label);
+  --hourly-sun-em: 3.4;
+  --hourly-sun-size: min(var(--strip-label), (100cqw - (var(--forecast-days, 12) - 1) * var(--hourly-gap)) / var(--forecast-days, 12) / var(--hourly-sun-em));
+  padding-top: calc((1 - var(--hourly-level, 0.5)) * var(--hourly-travel) + (var(--strip-value) - var(--hourly-sun-size)) * 1.15);
+  font-size: var(--hourly-sun-size);
   font-weight: 500;
   color: var(--ambient-accent);
 }
-.grid-ambient .ambient-hourlyTemperature .hourly-rain { align-self: center; font-size: var(--hourly-chance); line-height: 1.2; gap: 0.2em; white-space: nowrap; }
-.grid-ambient .ambient-hourlyTemperature .hourly-rain svg { width: 0.75em; height: 0.75em; }
+.grid-ambient.font-mono .ambient-hourlyTemperature .hourly-sun-word { --hourly-sun-em: 3.9; }
+.grid-ambient .ambient-hourlyTemperature .hourly-rain { align-self: center; white-space: nowrap; }
 .grid-ambient .ambient-hourlyTemperature .hourly-unknown { opacity: 0.65; }
 /* The line spans the temperature row from the first column's centre to the last one's, so equal steps of
    its 0–100 box are column centres, and fills the travel at the row's bottom: a point lies --hourly-clear
