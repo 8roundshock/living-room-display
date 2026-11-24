@@ -3,7 +3,8 @@
 .grid-ambient .ambient-countdown .countdown-face { width: 100%; min-height: 100cqh; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .grid-ambient .ambient-countdown .countdown-hero { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
 .grid-ambient .ambient-countdown .countdown-count { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; font-variant-numeric: lining-nums tabular-nums; }
-.grid-ambient .ambient-countdown .countdown-number .countdown-value { font-size: calc(min(27cqw, 30cqh) * var(--font-scale)); font-weight: 300; letter-spacing: -0.04em; }
+/* #717: the count keeps the typeface's own spacing; negative letter-spacing made 44 overlap and 40, 46, 48 and 64 touch. */
+.grid-ambient .ambient-countdown .countdown-number .countdown-value { font-size: calc(min(27cqw, 30cqh) * var(--font-scale)); font-weight: 300; letter-spacing: 0; }
 .grid-ambient .ambient-countdown .countdown-word .countdown-value { font-size: calc(min(14cqw, 19cqh) * var(--font-scale)); font-weight: 400; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .grid-ambient .ambient-countdown .countdown-count .countdown-unit { margin-top: 1.5cqh; font-size: calc(max(var(--min-text), min(7cqw, 9cqh)) * var(--font-scale)); color: var(--ambient-accent); line-height: 1.15; }
 .grid-ambient .ambient-countdown .countdown-title { margin: 5cqh 0 0; font-size: calc(max(var(--min-text), min(8.6cqw, 11.5cqh)) * var(--font-scale)); line-height: 1.2; font-weight: 500; overflow-wrap: anywhere; }
