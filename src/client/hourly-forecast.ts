@@ -1,14 +1,15 @@
 import type { WeatherDetailReading, WeatherState } from '../shared/contracts.ts';
 import type { WidgetSize } from '../shared/widgets.ts';
 import { sunIsUp } from './astronomy.ts';
-import { ageLabel, compactWeatherTime, dateTimeFormat, lastKnownTime, NBSP, weatherTime } from './format.ts';
+import { compactWeatherTime, dateTimeFormat, lastKnownTime, NBSP, weatherTime } from './format.ts';
 
 /**
  * Hourly forecast (#714): the pure shaping behind the widget. A fixed number of columns: one per hour,
  * and a column of its own for a sunrise or sunset, in time order between the hours it falls between (as
  * the hourly row of a phone's weather app shows it). The temperatures ride a trend that never joins
  * across an unknown value, and the heading gets at most two calm facts. Everything here is a function of
- * the saved weather and one instant, so the widget memoizes it per minute (#99).
+ * the saved weather and one instant, so the widget memoizes it per minute (#99). The status of a forecast
+ * that is not fresh is not shaped here: the widget shows Forecast's (`weatherStatus`, ForecastStatusLine).
  */
 
 const HOUR = 3_600_000;
@@ -53,8 +54,6 @@ export interface HourlyForecastView {
   columns: HourlyColumn[];
   /** At most two: the next sunrise or sunset when the strip does not show it, and peak gusts when notable. */
   facts: string[];
-  /** “Saved forecast · 5 hr ago” or “Offline · Updated 12 min ago”; null while the forecast is fresh. */
-  status: string | null;
   /** SVG path data, one entry per unbroken run of known temperatures, in a 0–100 box (see trendPaths). */
   trend: string[];
 }
@@ -258,7 +257,7 @@ export function hourlyColumns(weather: WeatherState, { now, slots, clockFormat, 
 
 /** The whole view for one family at one minute. Without an upcoming hour there is nothing to show: `columns` is empty. */
 export function hourlyForecastView(weather: WeatherState, options: HourlyForecastOptions): HourlyForecastView {
-  const { now, clockFormat, timeZone, disconnected } = options;
+  const { clockFormat, timeZone } = options;
   const shaped = hourlyColumns(weather, options);
   // A lone Now column is not an hourly forecast.
   const shown = shaped.columns.some(column => column.kind === 'hour' && !column.now);
@@ -274,11 +273,5 @@ export function hourlyForecastView(weather: WeatherState, options: HourlyForecas
     const gust = peakGust((weather.details ?? []).filter(reading => times.has(Date.parse(reading.time))), weather.units.windSpeed);
     if (gust !== null) facts.push(`Gusts${NBSP}${gust}${NBSP}${weather.units.windSpeed}`);
   }
-  // The age shows only while the forecast is not fresh, and only when it is known. As Weather words it,
-  // “Updated” stays after “Offline”, where a bare age could read as the outage's.
-  const label = ageLabel(weather.updatedAt, now);
-  const age = label.startsWith('Updated ') ? label.replace(/(\d+) (\w+) ago$/, `$1${NBSP}$2${NBSP}ago`) : null;
-  const status = disconnected ? (age ? `Offline${NBSP}· ${age}` : 'Offline')
-    : weather.status !== 'fresh' ? (age ? `Saved forecast${NBSP}· ${age.slice('Updated '.length)}` : 'Saved forecast') : null;
-  return { columns, facts, status, trend: shown ? trendPaths(columns.map((column, index) => shaped.onTrend[index] ? column.level : null)) : [] };
+  return { columns, facts, trend: shown ? trendPaths(columns.map((column, index) => shaped.onTrend[index] ? column.level : null)) : [] };
 }

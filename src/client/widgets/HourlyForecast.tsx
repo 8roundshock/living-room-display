@@ -1,8 +1,9 @@
 import { useMemo, type CSSProperties } from 'react';
 import { sunIsUp } from '../astronomy.ts';
-import { NBSP, temperature, weatherTimeZone } from '../format.ts';
+import { NBSP, temperature, weatherStatus, weatherTimeZone } from '../format.ts';
 import { HOURLY_CHANCE_MIN, SUN_WORD, hourlyForecastSlots, hourlyForecastView } from '../hourly-forecast.ts';
 import { Icon } from '../icons.tsx';
+import { ForecastStatusLine, ForecastUnavailable } from './common.tsx';
 import { TransitionText } from './TransitionText.tsx';
 import { WeatherGlyph } from './WeatherGlyph.tsx';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
@@ -16,9 +17,12 @@ import './hourly-forecast.css';
  * between the hours it falls between: its exact time, a sun symbol and the word, with no temperature or
  * chance. The strip always has the family's number of columns, so nothing reflows when a sun column
  * enters or leaves. The heading's right side holds at most two calm facts (the next sunrise or sunset
- * when the strip does not show it, and notable gusts) or, while the forecast is not fresh, the status.
- * No place, provider or update time is shown for fresh data (#715). The view is recomputed once a
- * minute (#99), not on the one-second tick.
+ * when the strip does not show it, and notable gusts) or, while the forecast is not fresh, the status,
+ * which is Forecast's own (ForecastStatusLine, from the shared `weatherStatus`): the two strips stacked
+ * one above the other say the same thing, also while a refresh is merely slow. No place, provider or
+ * update time is shown for fresh data (#715). The slot is always there, a no-break space when empty, so
+ * the heading has Forecast's height in every state. The view is recomputed once a minute (#99), not on
+ * the one-second tick.
  */
 function HourlyForecast({ state: { weather }, settings: { clockFormat }, size, now, disconnected }: WidgetContentProps) {
   const slots = hourlyForecastSlots(size);
@@ -26,23 +30,20 @@ function HourlyForecast({ state: { weather }, settings: { clockFormat }, size, n
   const timeZone = useMemo(() => weatherTimeZone(weather.location.timezone), [weather.location.timezone]);
   const minute = Math.floor(now.getTime() / 60_000) * 60_000;
   const view = useMemo(() => hourlyForecastView(weather, { now: minute, slots, clockFormat, timeZone, disconnected }), [weather, minute, slots, clockFormat, timeZone, disconnected]);
+  const status = weatherStatus(weather, disconnected, now.getTime());
   if (!view.columns.length) {
-    // Unavailable, as Forecast shows it (#362): a dim, still cloud and placeholder, then one status-tone line.
-    const reason = disconnected ? 'offline' : weather.status === 'fresh' ? null : 'retrying';
+    // Unavailable, as Forecast shows it (#362).
     return <div className="widget-body forecast-body hourly-body" data-hourly-unavailable="">
-      <div className="forecast-heading hourly-heading"><div className="ambient-label">Hourly</div></div>
-      <div className="forecast-unavailable">
-        <div className="forecast-placeholder"><WeatherGlyph code={3} still size={null} className="forecast-unavailable-glyph" /><span className="forecast-placeholder-value" aria-hidden="true"><span className="weather-placeholder-dash">—</span>°</span></div>
-        <div className="forecast-unavailable-line status-caution">{reason ? `Hourly forecast unavailable${NBSP}·${NBSP}${reason}` : 'Hourly forecast unavailable'}</div>
-      </div>
+      <div className="forecast-heading hourly-heading"><div className="ambient-label">Hourly</div><div className="weather-context hourly-facts">{NBSP}</div></div>
+      <ForecastUnavailable what="Hourly forecast" weather={weather} disconnected={disconnected} now={now} />
     </div>;
   }
   return <div className="widget-body forecast-body hourly-body">
     <div className="forecast-heading hourly-heading">
       <div className="ambient-label">Hourly</div>
-      {view.status
-        ? <div className="weather-context hourly-status status-caution">{view.status}</div>
-        : view.facts.length > 0 && <div className="weather-context hourly-facts">{view.facts.map((fact, index) => <span className="hourly-fact" key={index}>{index > 0 && ' · '}<TransitionText value={fact} /></span>)}</div>}
+      {status
+        ? <ForecastStatusLine status={status} />
+        : <div className="weather-context hourly-facts">{view.facts.length ? view.facts.map((fact, index) => <span className="hourly-fact" key={index}>{index > 0 && ' · '}<TransitionText value={fact} /></span>) : NBSP}</div>}
     </div>
     <div className="forecast-strip hourly-strip" style={{ '--forecast-days': view.columns.length } as CSSProperties}>
       {/* Keyed by position: when the hour turns, each column's values change in place (TransitionText) instead of the columns moving. */}

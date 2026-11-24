@@ -1,7 +1,8 @@
 import { useMemo, type CSSProperties } from 'react';
 import { widgetContentLimits } from '../../shared/widgets.ts';
-import { ageIsKnown, ageLabel, civilDate, forecastDay, NBSP, shortAge, temperature, upcomingDays, weatherStatus, weatherTimeZone } from '../format.ts';
+import { civilDate, forecastDay, temperature, upcomingDays, weatherStatus, weatherTimeZone } from '../format.ts';
 import { Icon } from '../icons.tsx';
+import { ForecastStatusLine, ForecastUnavailable } from './common.tsx';
 import { TransitionText } from './TransitionText.tsx';
 import { WeatherGlyph } from './WeatherGlyph.tsx';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
@@ -37,32 +38,21 @@ function Forecast({ state: { weather }, size, now, disconnected }: WidgetContent
   const shown = days.length || count;
   const heading = shown === 7 ? 'The week' : shown === 1 ? 'Today' : `Next ${shown} days`;
   const status = weatherStatus(weather, disconnected, now.getTime());
-  // Small's slot is one short line: there the label stands alone when there is no elapsed time to tell.
-  const statusAge = status && !(size === 'small' && status.label && !ageIsKnown(status.age)) ? status.label === 'Saved forecast' ? shortAge(status.age) : status.age : null;
   const place = <div className="weather-context">{weather.location.name} · {weather.units.temperature}</div>;
   if (!days.length) {
-    // Unavailable (#362), as in Weather: a dim, still cloud and placeholder, one status-tone line at the
-    // label size, and the age only when an update time is known (a saved forecast whose days have all
-    // passed), in the status tone too (#715).
-    const reason = disconnected ? 'offline' : weather.status === 'fresh' ? null : 'retrying';
+    // Unavailable (#362), as in Weather; the same treatment as Hourly forecast's (ForecastUnavailable).
     return <div className="widget-body forecast-body" data-forecast-unavailable="">
       <div className="forecast-heading"><div className="ambient-label">{heading}</div>{place}</div>
-      <div className="forecast-unavailable">
-        <div className="forecast-placeholder"><WeatherGlyph code={3} still size={null} className="forecast-unavailable-glyph" /><span className="forecast-placeholder-value" aria-hidden="true"><span className="weather-placeholder-dash">—</span>°</span></div>
-        <div className="forecast-unavailable-line status-caution">{reason ? `Forecast unavailable${NBSP}·${NBSP}${reason}` : 'Forecast unavailable'}</div>
-      </div>
-      {weather.updatedAt && <div className="forecast-unavailable-age status-caution"><span className="forecast-age">{ageLabel(weather.updatedAt, now.getTime())}</span></div>}
+      <ForecastUnavailable what="Forecast" weather={weather} disconnected={disconnected} now={now} />
     </div>;
   }
   return <div className="widget-body forecast-body">
-    {/* The right slot: the place and unit, or the status of a forecast that is not fresh (#715), the whole of it in
-        the shared status tone at full opacity (#223). “Updated” stays after “Offline”, where a bare age could read as
-        the outage's. The phrases never break inside, so a narrow slot wraps between them (#221). */}
+    {/* The right slot: the place and unit, or the status of a forecast that is not fresh (#715), in the words and the
+        tone Hourly forecast uses (ForecastStatusLine). Small's slot is one short line: there the label stands alone
+        when there is no elapsed time to tell. */}
     <div className="forecast-heading">
       <div className="ambient-label">{heading}</div>
-      {status
-        ? <div className="weather-context forecast-status-line status-caution">{status.label && <span className="forecast-status">{status.label}</span>}{status.label && statusAge && <span className="forecast-separator">{NBSP}· </span>}{statusAge && <span className="forecast-age">{statusAge}</span>}</div>
-        : place}
+      {status ? <ForecastStatusLine status={status} compact={size === 'small'} /> : place}
     </div>
     <div className="forecast-strip" style={{ '--forecast-days': days.length } as CSSProperties}>{days.map(({ day, label, full }) => <div className="forecast-day" key={day.date}>
       <span className="forecast-day-label" aria-label={full} title={full}>{label}</span>

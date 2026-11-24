@@ -255,24 +255,22 @@ test('the hours end where the saved forecast ends, and a lone Now is not an hour
   assert.deepEqual(hourlyForecastView(far, options(EVENING)).columns, []);
 });
 
-test('an hours-old saved reading is never called Now, and the status shows only while not fresh', () => {
-  const fresh = hourlyForecastView(weather(EVENING), options(EVENING));
-  assert.equal(fresh.status, null);
+test('an hours-old saved reading is never called Now', () => {
+  // The status of a forecast that is not fresh is Forecast's (weatherStatus, format.test.ts); the view has none of its own.
+  assert.equal('status' in hourlyForecastView(weather(EVENING), options(EVENING)), false);
   // Saved for two hours: Weather still presents the reading as current, so Now stays.
   const recent = hourlyForecastView(weather(EVENING, { status: 'stale', updatedAt: EVENING - 2 * HOUR }), options(EVENING));
-  assert.equal(readable(recent.columns[0]!.label), 'Now'); assert.equal(readable(recent.status!), 'Saved forecast · 2 hr ago');
+  assert.equal(readable(recent.columns[0]!.label), 'Now');
+  // A refresh in flight is not a saved forecast (presentedStatus): Now stays.
+  const refreshing = { ...weather(EVENING, { status: 'stale', updatedAt: EVENING - 16 * MINUTE }), refreshing: true };
+  assert.equal(readable(hourlyForecastView(refreshing, options(EVENING)).columns[0]!.label), 'Now');
   // Saved for five hours: no Now; the strip starts at the next hour and still has twelve columns.
   const old = hourlyForecastView(weather(EVENING, { status: 'stale', updatedAt: EVENING - 5 * HOUR }), options(EVENING));
   assert.deepEqual(old.columns.map(column => readable(column.label)), ['19', '20', '21', '22', '23', '00', '01', '02', '03', '04', '05', '06']);
-  assert.equal(readable(old.status!), 'Saved forecast · 5 hr ago'); assert.equal(old.status, 'Saved forecast\u00a0· 5\u00a0hr\u00a0ago');
-  // Offline keeps “Updated”, where a bare age could read as the outage's; an hours-old reading drops Now here too.
-  assert.equal(readable(hourlyForecastView(weather(EVENING, { updatedAt: EVENING - 12 * MINUTE }), options(EVENING, { disconnected: true })).status!), 'Offline · Updated 12 min ago');
+  // Offline: a recent reading is still Now; an hours-old one is not, here too.
+  assert.equal(readable(hourlyForecastView(weather(EVENING, { updatedAt: EVENING - 12 * MINUTE }), options(EVENING, { disconnected: true })).columns[0]!.label), 'Now');
   const offline = hourlyForecastView(weather(EVENING, { updatedAt: EVENING - 4 * HOUR }), options(EVENING, { disconnected: true }));
-  assert.equal(readable(offline.columns[0]!.label), '19'); assert.equal(readable(offline.status!), 'Offline · Updated 4 hr ago');
-  // An unknown update time shows the status word alone.
-  const unknown = weather(EVENING, { status: 'stale' }); unknown.updatedAt = null;
-  assert.equal(hourlyForecastView(unknown, options(EVENING)).status, 'Saved forecast');
-  assert.equal(hourlyForecastView(unknown, options(EVENING, { disconnected: true })).status, 'Offline');
+  assert.equal(readable(offline.columns[0]!.label), '19');
   // Without a current reading there is no Now.
   const noCurrent = weather(EVENING); noCurrent.current = null;
   assert.equal(readable(hourlyForecastView(noCurrent, options(EVENING)).columns[0]!.label), '19');
