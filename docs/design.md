@@ -269,9 +269,24 @@ Unavailable weather is never louder than the weather it replaces (#362). Weather
 Forecast keep their footprint with a dim (35%), still cloud, the widget's own icon rather
 than a condition, beside a dim “—°”, and say so once in the status tone at the family's
 label size: “Weather unavailable · retrying”, or “· offline” while the display cannot
-reach the computer. The age shows only when an update time is known, and the credit goes
-while no forecast is shown. Nothing is invented; there is no option to hide the widget
-when unavailable.
+reach the computer. The age shows only when an update time is known, in the status tone
+too. Nothing is invented; there is no option to hide the widget when unavailable.
+
+Fresh weather data carries no footer of its own (#715, owner decision 2026-11-22): no
+provider credit and no update age, on any widget. Forecast is only its heading and
+strip, and in medium and large the strip grows into the room the old footer held (taller
+glyphs, day labels and chances; temperatures only in large, capped by a day column's
+width), in every state. A saved or offline forecast says “Saved forecast · 5 hr ago” or
+“Offline · Updated 5 hr ago” in the heading's right slot, in the status tone and in place
+of the place and unit (which return when the forecast is fresh again), as Hourly forecast
+does, so the two strips read alike when stacked. The slot keeps the place's typography: the heading keeps its height, and the
+strip its size and position. A status never resizes a widget. A refresh that is merely
+slow is not a status at all (the [refresh-in-flight rule](widgets.md#data-and-image-boundaries)). Weather
+keeps a footer only for the rain confidence wording (“Forecast estimate”, “Partial
+forecast”) and for that status line. Air quality keeps one short footer row: “Model est.”
+when fresh, the status and age when not. The collection weather widgets keep the place
+as their last line, with the status lines above it. Weather alerts has no footer when
+fresh. The provider credit lives in Settings and the widget settings hints.
 
 ## Primary guidance and adaptation
 
@@ -378,7 +393,7 @@ animate; opacity never rises above its resting value, so nothing flashes or
 brightens; offsets come from above or the left, or stay inside the glyph box, and
 never exceed the widget padding, so content stays inside its rectangle and the fit
 scale never changes; numbers are never tweened through invented values; stale,
-offline or unavailable weather keeps its glyph still; age and attribution have no
+offline or unavailable weather keeps its glyph still; a status line and its age have no
 independent animation. The whole widget still participates in the shared float.
 Content transitions last at most 2 s except the Lively glyph loops; board float and
 optional swap glides follow the separate movement contract (#436, #481). Editor

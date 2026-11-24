@@ -1,6 +1,6 @@
-import type { Reminder, WeatherAlert, WeatherDetailReading, WeatherState, WorldClockCity } from '../shared/contracts.ts';
+import type { AlertsState, Reminder, WeatherAlert, WeatherDetailReading, WeatherState, WorldClockCity } from '../shared/contracts.ts';
 import { addDays, civilFromDate, daysBetween, formatCivil, todayCivil } from './calendar.ts';
-import { dateTimeFormat } from './format.ts';
+import { ageLabel, dateTimeFormat, shortAge } from './format.ts';
 
 export const COLLECTION_WIDGET_IDS = [
   'timers',
@@ -19,6 +19,26 @@ export const COLLECTION_WIDGET_IDS = [
   'precipitation',
   'quietScene',
 ] as const;
+/**
+ * The Weather alerts widget's status line (#715), or null when it has none. Fresh alerts say nothing about
+ * their source or age. Alerts that are not fresh keep their label with the age only there, in the status
+ * tone: "Saved alerts · 2 hr ago" for a saved list, "Offline · Updated 2 hr ago" while the display cannot
+ * reach the computer (the age keeps its "Updated", because a bare age could read as the outage's), and
+ * for an unavailable list, which the widget already names ("Alerts unavailable"), the age of the last
+ * successful check alone, "Updated 2 hr ago". With no known check time only the label remains.
+ * `label` and `age` never break inside.
+ */
+export function alertsWidgetStatus(
+  alerts: Pick<AlertsState, 'status' | 'checkedAt'> | undefined,
+  disconnected: boolean,
+  now: number,
+): { label: 'Offline' | 'Saved alerts' | null; age: string | null } | null {
+  const age = alerts?.checkedAt ? ageLabel(alerts.checkedAt, now) : null;
+  if (disconnected) return { label: 'Offline', age };
+  if (alerts?.status === 'stale') return { label: 'Saved alerts', age: age && shortAge(age) };
+  if (alerts?.status === 'unavailable' && age) return { label: null, age };
+  return null;
+}
 export function datedReminders(reminders: readonly Reminder[]): Reminder[] {
   return reminders
     .filter((item) => !item.completed && item.dueAt && Number.isFinite(Date.parse(item.dueAt)))

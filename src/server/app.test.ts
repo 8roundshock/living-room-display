@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { request as httpRequest } from 'node:http';
 import { createApplication } from './app.ts';
 import { catalogBoardDefaults, forecastFixture, photoFixture } from './fixtures.ts';
+import { presentedStatus } from '../client/format.ts';
 
 async function fixture(now?: () => number) {
   const directory = await mkdtemp(join(tmpdir(), 'lrd-api-'));
@@ -339,12 +340,21 @@ test('a slow provider fills the next request after it completes; a failing one k
     mode = 'fail'; current += 16 * 60_000;
     const during = await app.state();
     assert.equal(during.weather.status, 'stale'); assert.equal(during.weather.refreshing, true); assert.equal(during.weather.updatedAt, fresh.weather.updatedAt);
+    // #715: the display reads this answer through `presentedStatus`. The first refresh since the forecast expired
+    // is in flight and nothing has failed yet, so it is still presented as fresh, not as a saved forecast.
+    assert.equal(during.weather.error, null, 'no refresh has failed yet');
+    assert.equal(presentedStatus(during.weather, current), 'fresh');
     await settle(700);
     const failed = await app.state();
     assert.equal(failed.weather.status, 'stale'); assert.match(failed.weather.error, /last successful forecast/); assert.equal('refreshing' in failed.weather, false);
+    assert.equal(presentedStatus(failed.weather, current), 'stale', 'a failed refresh is a saved forecast');
     assert.equal(calls, 2);
     current += 30_000; await app.state(); assert.equal(calls, 2, 'the one-minute back-off is unchanged');
-    current += 31_000; await app.state(); assert.equal(calls, 3, 'and retries after it');
+    current += 31_000;
+    const retry = await app.state(); assert.equal(calls, 3, 'and retries after it');
+    // The retry is in flight, but the error of the failed refresh is kept, so the forecast never blinks fresh (#715).
+    assert.equal(retry.weather.refreshing, true); assert.match(retry.weather.error, /last successful forecast/);
+    assert.equal(presentedStatus(retry.weather, current), 'stale');
   } finally { await app.close(); }
 });
 

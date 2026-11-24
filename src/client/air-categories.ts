@@ -7,8 +7,6 @@ import type { AirQualityState } from '../shared/contracts.ts';
  */
 type Scale = AirQualityState['scale'];
 export const SCALE_LABELS: Record<Scale, string> = { us: 'US AQI', european: 'European AQI' };
-/** The short credit the footer row keeps (#221); the inspector hint names Copernicus CAMS in full. */
-export const AIR_CREDIT = 'CAMS · Open-Meteo';
 /** Upper bound (inclusive) of each category, its name and an optional compact name. */
 export const AQI_CATEGORIES: Record<Scale, [number, string, string?][]> = {
   us: [[50, 'Good'], [100, 'Moderate'], [150, 'Unhealthy for sensitive groups', 'Sensitive groups'], [200, 'Unhealthy'], [300, 'Very unhealthy'], [Infinity, 'Hazardous']],

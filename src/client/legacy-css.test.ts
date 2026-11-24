@@ -29,6 +29,24 @@ test('no retired layout, preview or offline style remains in any client styleshe
   }
 });
 
+test('no ambient style remains for a provider credit or a forecast attribution line (#715)', () => {
+  // Owner decision, 2026-11-22: widgets show no provider name. Nothing renders these classes any more; the
+  // Settings credit link keeps its own unscoped `.weather-credit` rule (studio.css), never a `.grid-ambient` one.
+  let settingsCredit = 0;
+  for (const { name, text } of stylesheets()) {
+    const rules = text.replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.doesNotMatch(rules, /\.forecast-attribution|\.forecast-source|\.air-credit|\.dynamic-credit/, `${name}: a retired credit or attribution class`);
+    // The Forecast strip has one size in every state: no class resizes it when a status comes or goes.
+    assert.doesNotMatch(rules, /forecast-with-status/, `${name}: the retired Forecast size switch`);
+    for (const [, selector] of rules.matchAll(/([^{}]+)\{[^{}]*\}/g)) {
+      if (!/\.weather-credit/.test(selector!)) continue;
+      assert.doesNotMatch(selector!, /grid-ambient|\.ambient-/, `${name}: ${selector!.trim()} styles a credit on the display`);
+      settingsCredit++;
+    }
+  }
+  assert.ok(settingsCredit >= 1, 'the Settings credit link keeps its style');
+});
+
 test('Classic numerals stay lining wherever a rule sets its own figures (#363)', () => {
   // font-variant-numeric replaces the inherited value, so a rule that sets only tabular-nums would bring
   // Georgia's old-style figures back under .font-serif. Editor chrome never uses the Classic typeface.

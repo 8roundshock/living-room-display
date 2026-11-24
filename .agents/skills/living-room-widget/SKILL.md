@@ -30,7 +30,7 @@ code and tests for actual symbols and commands; the documentation is not a schem
   Avoid a bright card, fixed frame, separator or permanent header. For large time
   numerals favor a legible dim outline treatment; do not add a stationary clock
   face or hide meaningful data merely to make a size fit.
-- Keep the entire widget, including labels and attribution, inside its movable
+- Keep the entire widget, including labels and status lines, inside its movable
   group. There is no black rest (#436): the board floats and each widget's content
   floats inside its own box by translating the section (`--float-x`/`--float-y`),
   so a widget must tolerate a translated section: lay out inside the content box,
@@ -40,6 +40,19 @@ code and tests for actual symbols and commands; the documentation is not a schem
   burn-in.
 - Use honest loading, unavailable, stale and empty states. An empty widget can
   disappear according to its option; a failed request must not imply no content.
+- Owner decision, 2026-11-22 (#715): never print a data provider's name in a widget,
+  and show no update age while the data is fresh. Only a state that is not fresh
+  (saved, offline, last known, unavailable) carries its age, inside its
+  `.status-caution` line. Name the provider in the widget's `Settings` hint and the
+  docs; the forecast credit is a link in Settings. A footer that would hold only a
+  credit or a fresh age is not rendered; let the content use its room and keep every
+  state at fit 1. A status must never resize the widget: put it where the layout
+  already has a line (Forecast's heading slot replaces the place), not on a line that
+  takes room back from the content. Read weather or air freshness through
+  `presentedStatus`/`weatherStatus` in `src/client/format.ts`, never by comparing
+  `status` yourself: a refresh in flight is not saved data. A claim that needs fresh
+  data ("No alerts") is made only while connected and fresh.
+  Assert it with `assertNoSourceOrFreshAge` from `tests/ui/lib/source-age.mjs`.
   Ambient widgets are silent and passive; configuration/actions belong in the editor.
 - For image widgets, read the contract's photo boundary. User-selected photo
   storage and the last-desktop runtime cache are different features. Owner
@@ -92,6 +105,9 @@ code and tests for actual symbols and commands; the documentation is not a schem
   `mergedInto` so its keys stay readable for rollback.
 - Add a `tests/ui/widget-checks/<id>.mjs` module, and prove new persisted data
   with rollback scenarios using the helpers in `src/server/compat/previous-reader.ts`.
+  In that module, read any time-dependent expectation from the page's own clock (the
+  suite's clock is shared and moves), and give a sweep that runs time for many cases its
+  own clock with `withOwnClock` (`tests/ui/lib/own-clock.mjs`).
 
 Configuration edits join the existing settings draft: Save/Cancel, dirty-only
 save bar, async cancellation and concurrent-draft preservation. Do not add an

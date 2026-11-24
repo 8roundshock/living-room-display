@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   COLLECTION_WIDGET_IDS,
   alertStartLabel,
+  alertsWidgetStatus,
   compass,
   currentDetail,
   dayProgress,
@@ -174,6 +175,24 @@ test('detail readers never use future instants as current or expired instants as
   assert.equal(distance(1000, false), '1.0 km');
   assert.equal(distance(null, false), '—');
 });
+test('Weather alerts status line: nothing while fresh; saved, offline and unavailable keep the age of the last check (#715)', () => {
+  const now = Date.parse('2026-10-19T13:00:00Z'), checked = (hours: number) => new Date(now - hours * 3600_000).toISOString();
+  // Fresh, unsupported, off or absent: no line, so no issuer and no age on the display.
+  for (const status of ['fresh', 'unsupported', 'off'] as const) assert.equal(alertsWidgetStatus({ status, checkedAt: checked(0.1) }, false, now), null, status);
+  assert.equal(alertsWidgetStatus(undefined, false, now), null);
+  // Saved: the label, then the short age.
+  assert.deepEqual(alertsWidgetStatus({ status: 'stale', checkedAt: checked(2) }, false, now), { label: 'Saved alerts', age: '2 hr ago' });
+  assert.deepEqual(alertsWidgetStatus({ status: 'stale', checkedAt: null }, false, now), { label: 'Saved alerts', age: null });
+  // Unavailable: the widget names the state itself; the last successful check's age is kept when known.
+  assert.deepEqual(alertsWidgetStatus({ status: 'unavailable', checkedAt: checked(2) }, false, now), { label: null, age: 'Updated 2 hr ago' });
+  assert.deepEqual(alertsWidgetStatus({ status: 'unavailable', checkedAt: checked(26) }, false, now), { label: null, age: 'Updated 1 day ago' });
+  assert.equal(alertsWidgetStatus({ status: 'unavailable', checkedAt: null }, false, now), null, 'no empty age when nothing was ever checked');
+  // Offline: always said, whatever the last status; the age keeps its "Updated".
+  for (const status of ['fresh', 'stale', 'unavailable'] as const) assert.deepEqual(alertsWidgetStatus({ status, checkedAt: checked(2) }, true, now), { label: 'Offline', age: 'Updated 2 hr ago' }, status);
+  assert.deepEqual(alertsWidgetStatus({ status: 'fresh', checkedAt: null }, true, now), { label: 'Offline', age: null });
+  assert.deepEqual(alertsWidgetStatus(undefined, true, now), { label: 'Offline', age: null });
+});
+
 test('future alert starts use the saved weather zone and selected 12/24-hour format', () => {
   const at = '2026-11-03T21:30:00Z';
   assert.match(alertStartLabel(at, 'America/Toronto', '12h'), /4:30.*PM/);

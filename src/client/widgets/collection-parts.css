@@ -10,6 +10,8 @@
 .grid-ambient .collection-large .collection-value { font-size: calc(max(var(--min-data), min(18cqw, 20cqh)) * var(--font-scale)); }
 .grid-ambient .collection-empty { font-size: calc(max(var(--min-data), min(6cqw, 12cqh)) * var(--font-scale)); line-height: 1.3; overflow-wrap: anywhere; }
 .grid-ambient .collection-footer { overflow-wrap: anywhere; }
+/* "5 hr ago" stays whole: a status line wraps before its age, never inside it (#715). */
+.grid-ambient .collection-age { white-space: nowrap; }
 .grid-ambient .collection-hours { display: flex; gap: 3cqw; width: 100%; justify-content: flex-start; }
 .grid-ambient .collection-hour { display: flex; flex-direction: column; gap: 1cqh; min-width: 0; }
 .grid-ambient .collection-hour-value { font-size: calc(max(var(--min-data), min(5cqw, 12cqh)) * var(--font-scale)); white-space: nowrap; }
@@ -24,5 +26,5 @@
 .grid-ambient .collection-dots span { width: max(3px, 1cqw); height: max(3px, 1cqw); border: 1px solid currentColor; border-radius: 50%; }
 .grid-ambient .collection-dots .elapsed { opacity: 0.35; }
 
-/* Preserve the reading and all stale-source lines in a small card. */
+/* Preserve the reading and every status line of a saved, old reading in a small card. */
 .grid-ambient .collection-small:has(.collection-last-known) { gap: 0.5cqh; }
