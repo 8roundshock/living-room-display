@@ -1047,15 +1047,18 @@ On the display it is Forecast's strip with one column per hour:
   refresh that is merely slow shows nothing on either strip. Fresh data shows no place,
   provider or update time (#715). The right side keeps its line when it is empty, so the
   heading has one height in every state and the strip never moves.
-- **Hour columns:** the time ("Now", then "5 PM", or the bare hour "17" on the 24-hour
-  clock, in the weather city's zone), a
+- **Hour columns:** the time ("Now", then "5PM" with the day period as a smaller suffix,
+  as a phone's hourly row writes it and never below the text floor, or the bare hour "17"
+  on the 24-hour clock, in the weather city's zone), a
   weather glyph that is a sun or a moon according to the hour, the temperature, and the
   droplet with the chance only from 10%. An unknown condition or temperature is a dash, an
   unknown chance a dim dash; a chance under 10% leaves its cell empty.
 - **Sun columns:** a sunrise or sunset inside the strip stands between the hours it falls
-  between: its exact time, the sunrise or sunset symbol, and "Sunrise" or "Sunset" at the
-  hour label's size where a temperature would be (a little smaller only where the word
-  would not fit its column: the Monospace typeface on the Fine grid). It takes one of the 6 or 12 columns, so
+  between: its exact time ("5:36AM", "16:47"), the sunrise or sunset symbol, and
+  "Sunrise" or "Sunset" at the hour label's size where a temperature would be. The time
+  and the word never leave their column: each is a little smaller only where it would not
+  fit (a 12-hour time with a two-digit hour such as "12:29AM" on the Fine grid, the
+  Monospace word). Two sun columns side by side never touch. It takes one of the 6 or 12 columns, so
   the columns never change width. The hours before a sunset draw day glyphs and the hours
   after it night glyphs: both come from the same sun test.
 - **Trend line:** a thin line in the accent tone at 80% opacity behind the values, from
@@ -1078,8 +1081,11 @@ temperatures 19.0 px, chances 11.9 px, the heading 11.2 px and its facts 10.1 px
 equal to Forecast's day labels, glyphs, temperatures, chances and heading; the line's
 travel is 17 px (8 px on the Fine grid, where the floors leave less room). Both families
 render at fit 1 at Text 100% in every density at 720p, 1080p and 4K: fresh, saved,
-offline and while a refresh runs, with one or two sun columns, three-character
-temperatures, "100%" in every hour and a 12-hour "10:07 PM" sun label, in every typeface. The view is rebuilt once a minute and
+offline and while a refresh runs, with one or two sun columns (also side by side and as
+the last column), three-character temperatures and "100%" in every hour, on both clocks
+and in every typeface, with nothing outside its column. A larger Text size flattens the
+trend line before the strip zooms out, so it never zooms out further than the Forecast
+above it. The view is rebuilt once a minute and
 constructs no `Intl` formatter on the one-second tick (#99).
 Browser checks: `tests/ui/widget-checks/hourlyTemperature.mjs` in the widgets suite, the
 palette harness for its tones, and the collection and catalog-sky suites.
