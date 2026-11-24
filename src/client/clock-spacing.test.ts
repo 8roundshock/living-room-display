@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CLOCK_GLYPHS, MEASURE_SIZES, RETRY_AFTER_MS, clockPlacement, clockRun, dueForMeasuring, inkTable, widestClockRun, type ClockInk, type GlyphMeter } from './clock-spacing.ts';
+import { CLOCK_GLYPHS, MEASURE_SIZES, RETRY_AFTER_MS, clockPlacement, clockRun, dueForMeasuring, inkTable, shownHour, widestClockRun, type ClockInk, type GlyphMeter } from './clock-spacing.ts';
 
 /** A typeface in em: each glyph's advance and where its ink starts and ends inside it. */
 type Face = Record<string, { advance: number; left: number; right: number }>;
@@ -193,4 +193,35 @@ test('#717 a typeface that could not be measured is tried again, not sooner than
   assert.equal(dueForMeasuring({ ink: INK, at: 0 }, 10 * RETRY_AFTER_MS), false, 'a table is kept');
   assert.equal(dueForMeasuring({ ink: null, at: 1_000 }, 1_000 + RETRY_AFTER_MS - 1), false, 'a failure is left alone at first');
   assert.equal(dueForMeasuring({ ink: null, at: 1_000 }, 1_000 + RETRY_AFTER_MS), true, 'and tried again later');
+});
+
+test('#717 a failed measurement is retried when the shown hour changes, in a half-hour and a 45-minute zone too', () => {
+  // The clock retries when shownHour changes. In these zones a UTC hour changes mid-hour: retried at 20:30 in Kolkata,
+  // the fallback's 78% digits grew to the measured size and the colon jumped 80 px within the hour.
+  const previous = process.env.TZ;
+  const utcHour = (at: string) => Math.floor(Date.parse(at) / 3_600_000);
+  /** The minutes from `from` to `to` at which `key` changes. */
+  const changes = (from: string, to: string, key: (at: string) => number) => {
+    const keys: number[] = []; for (let at = Date.parse(from); at <= Date.parse(to); at += 60_000) keys.push(key(new Date(at).toISOString()));
+    return keys.flatMap((value, index) => index && value !== keys[index - 1] ? [new Date(Date.parse(from) + index * 60_000).toISOString()] : []);
+  };
+  try {
+    for (const [zone, offset, localEight] of [['Asia/Kolkata', 330, '2026-11-23T14:30:00Z'], ['Asia/Kathmandu', 345, '2026-11-23T14:15:00Z'], ['America/Toronto', -300, '2026-11-24T01:00:00Z']] as const) {
+      process.env.TZ = zone;
+      assert.equal(new Date(localEight).getTimezoneOffset(), -offset, `${zone}: the zone applies`);
+      const shown = (at: string) => shownHour(new Date(at));
+      assert.equal(shown(localEight), 20, `${zone}: ${localEight} is 20:00 there`);
+      // Every minute from 20:00 to 22:00 local: the key changes exactly at 21:00 and 22:00, as the shown hour does.
+      const from = localEight, to = new Date(Date.parse(localEight) + 2 * 3_600_000).toISOString();
+      assert.deepEqual(changes(from, to, shown), [new Date(Date.parse(from) + 3_600_000).toISOString(), to], `${zone}: retried only when the shown hour changes`);
+      // What the clock keyed on before: a UTC hour, which changes at :30 or :45 local there.
+      if (offset % 60) assert.deepEqual(changes(from, to, utcHour).map(at => new Date(at).getMinutes()), [offset % 60, offset % 60], `${zone}: a UTC hour changes at :${offset % 60} local`);
+    }
+    // When summer time ends the shown hour repeats (01:59 EDT → 01:00 EST): no retry until 02:00.
+    process.env.TZ = 'America/Toronto';
+    assert.deepEqual([shownHour(new Date('2026-11-01T05:59:00Z')), shownHour(new Date('2026-11-01T06:00:00Z')), shownHour(new Date('2026-11-01T07:00:00Z'))], [1, 1, 2]);
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
 });

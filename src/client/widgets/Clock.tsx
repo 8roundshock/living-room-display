@@ -4,7 +4,7 @@ import type { Settings } from '../../shared/contracts.ts';
 import type { WidgetSize } from '../../shared/widgets.ts';
 import { TransitionText } from './TransitionText.tsx';
 import { clockTimer, type ClockTimer } from '../timer.ts';
-import { clockInk, clockPlacement, type ClockInk } from '../clock-spacing.ts';
+import { clockInk, clockPlacement, shownHour, type ClockInk } from '../clock-spacing.ts';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
 
 /**
@@ -100,10 +100,10 @@ function Clock({ state, settings, now, size, disconnected }: WidgetContentProps)
   const timer = clockTimer(state.timers, now.getTime(), settings.clockFormat, size, disconnected);
   // #717: the digits' typeface is measured once per typeface (clock-spacing.ts), when the run is first on the page
   // and again when the typeface, the style or the family changes. Analog has no run and no table. A typeface that
-  // could not be measured is tried again when the hour changes.
+  // could not be measured is tried again when the hour the clock shows changes (local time, never a UTC hour).
   const run = useRef<HTMLSpanElement>(null);
   const [ink, setInk] = useState<ClockInk | null>(null);
-  const typeface = `${settings.appearance.fontFamily}:${style}:${size}`, retry = ink ? 0 : Math.floor(minute / 60);
+  const typeface = `${settings.appearance.fontFamily}:${style}:${size}`, retry = ink ? null : shownHour(now);
   useLayoutEffect(() => { setInk(run.current ? clockInk(run.current) : null); }, [typeface, retry]);
   // Where this minute's time sits in the room of the widest time; widgets.css holds that room and places the time.
   // A centred clock is held by the middle minute: the hold is what this minute's box is short of it. With AM/PM

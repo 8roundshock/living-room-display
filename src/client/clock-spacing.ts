@@ -146,6 +146,14 @@ export interface Measured { ink: ClockInk | null; at: number }
 export function dueForMeasuring(known: Measured | undefined, now: number): boolean {
   return !known || known.ink === null && now - known.at >= RETRY_AFTER_MS;
 }
+/**
+ * When a clock without a table asks again: the hour it shows, in the computer's local time, as its labels do. A
+ * retry that succeeds changes the spacing, the size and the room, so it must land when the shown hour changes,
+ * with the step the held characters take then, never within the hour. An epoch hour (`Math.floor(ms / 3_600_000)`)
+ * is a UTC hour, which changes at :30 local time in Asia/Kolkata and at :45 in Asia/Kathmandu. When summer time
+ * ends the shown hour repeats (01:59 → 01:00) and so does this: nothing is retried until the hour changes.
+ */
+export function shownHour(at: Date): number { return at.getHours(); }
 /** One entry per typeface for the life of the page. A table is kept for good; a failure only for a while. */
 const tables = new Map<string, Measured>();
 
