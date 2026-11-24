@@ -179,6 +179,16 @@ function hourLabel(iso: string, timeZone: string, clockFormat: '12h' | '24h'): s
   return part('minute') === '00' ? part('hour') : `${part('hour')}:${part('minute')}`;
 }
 
+/**
+ * A column label's time and 12-hour day period: “4:47 PM” is “4:47” and “PM”, “5 PM” is “5” and “PM”. The
+ * widget draws the period as a smaller suffix with no space before it, as a phone's hourly row does, so a
+ * 12-hour time stays inside its column. A 24-hour label, or “Now”, has no period.
+ */
+export function labelParts(label: string): { main: string; period: string | null } {
+  const match = /^(.+?)\s+([AP]M)$/.exec(label);
+  return match ? { main: match[1]!, period: match[2]! } : { main: label, period: null };
+}
+
 /** A sun event's exact time in the weather city's zone: “16:47”, “4:47 PM” (kept on one line). */
 const sunTime = (at: number, timeZone: string, clockFormat: '12h' | '24h') => weatherTime(new Date(at).toISOString(), timeZone, clockFormat).replace(/\s/g, NBSP);
 

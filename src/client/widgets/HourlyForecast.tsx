@@ -1,13 +1,24 @@
 import { useMemo, type CSSProperties } from 'react';
 import { sunIsUp } from '../astronomy.ts';
 import { NBSP, temperature, weatherStatus, weatherTimeZone } from '../format.ts';
-import { HOURLY_CHANCE_MIN, SUN_WORD, hourlyForecastSlots, hourlyForecastView } from '../hourly-forecast.ts';
+import { HOURLY_CHANCE_MIN, SUN_WORD, hourlyForecastSlots, hourlyForecastView, labelParts } from '../hourly-forecast.ts';
 import { Icon } from '../icons.tsx';
 import { ForecastStatusLine, ForecastUnavailable } from './common.tsx';
 import { TransitionText } from './TransitionText.tsx';
 import { WeatherGlyph } from './WeatherGlyph.tsx';
 import type { WidgetContentProps, WidgetModule } from './types.ts';
 import './hourly-forecast.css';
+
+/**
+ * A column's time label. On the 12-hour clock the day period is a smaller suffix with no space before it
+ * ("5:36AM", as a phone's hourly row and the Clock's period draw it), so the widest time still fits its
+ * column; hourly-forecast.css also caps the label's size to its column. A 12-hour time with a two-digit hour
+ * ("10:07", "12:29") is marked wide, so only those take the tighter cap.
+ */
+function ColumnLabel({ text }: { text: string }) {
+  const { main, period } = labelParts(text);
+  return <span className={period && main.length >= 5 ? 'forecast-day-label hourly-label-wide' : 'forecast-day-label'}><TransitionText value={main} />{period && <span className="hourly-period"><TransitionText value={period} /></span>}</span>;
+}
 
 /**
  * Hourly forecast (#714; the stored id stays `hourlyTemperature`): Forecast's strip with one column per
@@ -45,11 +56,11 @@ function HourlyForecast({ state: { weather }, settings: { clockFormat }, size, n
         ? <ForecastStatusLine status={status} />
         : <div className="weather-context hourly-facts">{view.facts.length ? view.facts.map((fact, index) => <span className="hourly-fact" key={index}>{index > 0 && ' · '}<TransitionText value={fact} /></span>) : NBSP}</div>}
     </div>
-    <div className="forecast-strip hourly-strip" style={{ '--forecast-days': view.columns.length } as CSSProperties}>
+    <div className={`forecast-strip hourly-strip hourly-${clockFormat}`} style={{ '--forecast-days': view.columns.length } as CSSProperties}>
       {/* Keyed by position: when the hour turns, each column's values change in place (TransitionText) instead of the columns moving. */}
       {view.columns.map((column, index) => column.kind === 'hour'
         ? <div className="forecast-day hourly-hour" key={index} data-hourly-column={column.now ? 'now' : 'hour'}>
-          <span className="forecast-day-label"><TransitionText value={column.label} /></span>
+          <ColumnLabel text={column.label} />
           {column.weatherCode === null ? <span className="forecast-unknown" aria-label="Conditions unavailable">—</span> : <WeatherGlyph code={column.weatherCode} isDay={column.isDay} size={null} />}
           {/* The value sits just above its point on the trend; an unknown value is a dash at mid height, where no line passes. */}
           <div className="forecast-temperatures hourly-temperature" style={{ '--hourly-level': column.level ?? 0.5 } as CSSProperties}><TransitionText value={temperature(column.temperature)} /></div>
@@ -60,7 +71,7 @@ function HourlyForecast({ state: { weather }, settings: { clockFormat }, size, n
         </div>
         // A sunrise or sunset: its exact time, the sun symbol (the sun's own sub-tone) and the word where the trend passes.
         : <div className="forecast-day hourly-hour hourly-sun" key={index} data-hourly-column={column.kind}>
-          <span className="forecast-day-label"><TransitionText value={column.label} /></span>
+          <ColumnLabel text={column.label} />
           <Icon name={column.kind} size={null} className="hourly-sun-glyph" data-glyph="sun" />
           <div className="hourly-temperature hourly-sun-word" style={{ '--hourly-level': column.level ?? 0.5 } as CSSProperties}><TransitionText value={SUN_WORD[column.kind]} /></div>
           <span className="forecast-rain hourly-rain" />

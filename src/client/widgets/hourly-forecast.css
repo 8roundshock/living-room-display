@@ -10,7 +10,8 @@
    - every column shares the strip's four rows (subgrid), so the trend can span the temperature row;
    - the precipitation row keeps its line when an hour shows no chance, so nothing moves when one appears;
    - a sunrise or sunset is a column of its own, and the strip always has the family's number of columns;
-   - a narrower column gap, so "100%" and "Sunrise" fit one of twelve columns on the Fine grid. */
+   - nothing a column draws may leave it: twelve hours are narrower than seven days, so the time label, the sun
+     word and the chance are each capped to the column (below), and the column gap is narrower. */
 .grid-ambient .ambient-hourlyTemperature .hourly-body {
   --hourly-gap: 1cqw;
   /* Air between a value and its point on the line. */
@@ -20,7 +21,32 @@
      over the larger line's; 1.3 covers it). */
   --hourly-rows: calc(max(var(--strip-heading), var(--strip-context)) * 1.3 + var(--strip-heading-gap) + var(--strip-label) * 1.2 + var(--strip-glyph) + var(--strip-value) * 1.15 + var(--hourly-clear) + var(--strip-chance) * 1.2 + 3 * var(--strip-row-gap));
   --hourly-travel: clamp(7cqh, 100cqh - var(--hourly-rows) - 2px, 18cqh);
+  /* The widest text a column holds, in ems of its own size, per typeface (System here; Classic and Monospace
+     below), measured in Edge with about 1% to spare: an hour label ("Now", "10AM" with the small period, "17"),
+     a sun column's time on the 12-hour clock with a one-digit hour ("4:44AM", --hourly-em-sun12n) or a two-digit
+     one ("10:44AM", --hourly-em-sun12; the label is marked wide) and on the 24-hour clock ("04:44"), the sun word
+     ("Sunrise") and a chance with its droplet ("100%"). Each is drawn at its shared size, or smaller only where
+     that would run past the column: the column's width over these ems. The small period has a floor (below), so a
+     12-hour label also keeps its time ("4:44", "10:44", "10") inside what the column leaves beside a period at that
+     floor (--hourly-em-time12n, --hourly-em-time12, --hourly-em-hour12, --hourly-em-period). At Text 100% the
+     caps bind only here: on the Fine grid a 12-hour sun time with a two-digit hour ("12:29AM": 3% to 6% smaller in
+     System, 11% to 14% in Classic, 1% to 3% in Monospace) and the chances in Classic (1%), and the sun word in
+     Monospace (1% on Balanced, up to 4% on Fine). Hour labels, one-digit sun times and everything else keep
+     Forecast's sizes. */
+  --hourly-em-hour: 2.15;
+  --hourly-em-hour12: 0.97;
+  --hourly-em-sun12n: 3.15;
+  --hourly-em-time12n: 1.99;
+  --hourly-em-sun12: 3.54;
+  --hourly-em-time12: 2.38;
+  --hourly-em-period: 1.65;
+  --hourly-em-sun24: 2.56;
+  --hourly-em-word: 3.34;
+  --hourly-em-chance: 3.47;
+  --hourly-period-floor: calc(var(--hourly-em-period) * var(--min-text, 0px) * var(--font-scale, 1));
 }
+.grid-ambient.font-serif .ambient-hourlyTemperature .hourly-body { --hourly-em-hour: 2.3; --hourly-em-hour12: 1.14; --hourly-em-sun12n: 3.22; --hourly-em-time12n: 2.07; --hourly-em-sun12: 3.77; --hourly-em-time12: 2.61; --hourly-em-period: 1.65; --hourly-em-sun24: 2.64; --hourly-em-word: 3.38; --hourly-em-chance: 3.54; }
+.grid-ambient.font-mono .ambient-hourlyTemperature .hourly-body { --hourly-em-hour: 1.92; --hourly-em-hour12: 1.12; --hourly-em-sun12n: 3.03; --hourly-em-time12n: 2.23; --hourly-em-sun12: 3.59; --hourly-em-time12: 2.78; --hourly-em-period: 1.15; --hourly-em-sun24: 2.78; --hourly-em-word: 3.89; --hourly-em-chance: 3.23; }
 /* The right slot is always there, holding a no-break space when it has nothing to say, so the heading has
    Forecast's height in every state: the strip never moves when a fact or a status comes or goes. */
 .grid-ambient .ambient-hourlyTemperature .hourly-heading .ambient-label { flex: none; white-space: nowrap; }
@@ -29,7 +55,23 @@
 /* The chance row is reserved by its track, not by its cells: an hour with no chance to show has an empty,
    zero-height cell, so the float measures only what is drawn (Display.tsx inkSlack). */
 .grid-ambient .ambient-hourlyTemperature .hourly-strip { position: relative; grid-template-rows: repeat(3, auto) minmax(calc(var(--strip-chance) * 1.2), auto); gap: var(--strip-row-gap) var(--hourly-gap); }
-.grid-ambient .ambient-hourlyTemperature .hourly-hour { grid-row: 1 / -1; display: grid; grid-template-rows: subgrid; justify-items: center; }
+/* --hourly-column is one column's width: the strip spans the widget, and --forecast-days is its column count. */
+.grid-ambient .ambient-hourlyTemperature .hourly-hour {
+  --hourly-column: calc((100cqw - (var(--forecast-days, 12) - 1) * var(--hourly-gap)) / var(--forecast-days, 12));
+  grid-row: 1 / -1;
+  display: grid;
+  grid-template-rows: subgrid;
+  justify-items: center;
+}
+.grid-ambient .ambient-hourlyTemperature .hourly-strip .hourly-hour > .forecast-day-label { font-size: min(var(--strip-label), var(--hourly-column) / var(--hourly-em-hour)); }
+.grid-ambient .ambient-hourlyTemperature .hourly-strip.hourly-12h .hourly-hour > .forecast-day-label { font-size: min(var(--strip-label), var(--hourly-column) / var(--hourly-em-hour), (var(--hourly-column) - var(--hourly-period-floor)) / var(--hourly-em-hour12)); }
+.grid-ambient .ambient-hourlyTemperature .hourly-strip .hourly-sun > .forecast-day-label { font-size: min(var(--strip-label), var(--hourly-column) / var(--hourly-em-sun24)); }
+.grid-ambient .ambient-hourlyTemperature .hourly-strip.hourly-12h .hourly-sun > .forecast-day-label { font-size: min(var(--strip-label), var(--hourly-column) / var(--hourly-em-sun12n), (var(--hourly-column) - var(--hourly-period-floor)) / var(--hourly-em-time12n)); }
+.grid-ambient .ambient-hourlyTemperature .hourly-strip.hourly-12h .hourly-sun > .forecast-day-label.hourly-label-wide { font-size: min(var(--strip-label), var(--hourly-column) / var(--hourly-em-sun12), (var(--hourly-column) - var(--hourly-period-floor)) / var(--hourly-em-time12)); }
+/* On the 12-hour clock the day period is a smaller suffix with no space before it ("5:36AM", "11PM"), as a phone's
+   hourly row draws it, so a sunrise time fits a column of twelve without shrinking. Like the Clock's period it
+   never goes below the display's text floor. */
+.grid-ambient .ambient-hourlyTemperature .hourly-period { font-size: max(var(--min-text, 0px) * var(--font-scale, 1), 0.7em); margin-left: 0.04em; }
 .grid-ambient .ambient-hourlyTemperature .hourly-sun-glyph { width: var(--strip-glyph); height: var(--strip-glyph); }
 .grid-ambient .ambient-hourlyTemperature .hourly-hour > .forecast-unknown { line-height: 1; }
 /* The value's top edge moves with its level (1 warmest, 0 coolest); the row's height stays the same. */
@@ -41,18 +83,15 @@
   white-space: nowrap;
 }
 /* A sunrise or sunset column (as a phone's weather app shows it): the word takes the value's place at the
-   hour label's size, with its bottom where a value's would be. It never runs past its column: the size is
-   capped by the column's width over the width of "Sunrise" in ems (3.31 in the System typeface, 3.35 in
-   Classic, 3.85 in Monospace). The cap binds only for Monospace on the Fine grid, and only a little. */
+   hour label's size (capped to the column like the label), with its bottom where a value's would be. */
 .grid-ambient .ambient-hourlyTemperature .hourly-sun-word {
-  --hourly-sun-em: 3.4;
-  --hourly-sun-size: min(var(--strip-label), (100cqw - (var(--forecast-days, 12) - 1) * var(--hourly-gap)) / var(--forecast-days, 12) / var(--hourly-sun-em));
+  --hourly-sun-size: min(var(--strip-label), var(--hourly-column) / var(--hourly-em-word));
   padding-top: calc((1 - var(--hourly-level, 0.5)) * var(--hourly-travel) + (var(--strip-value) - var(--hourly-sun-size)) * 1.15);
   font-size: var(--hourly-sun-size);
   font-weight: 500;
   color: var(--ambient-accent);
 }
-.grid-ambient.font-mono .ambient-hourlyTemperature .hourly-sun-word { --hourly-sun-em: 3.9; }
+.grid-ambient .ambient-hourlyTemperature .hourly-strip .hourly-hour > .hourly-rain { font-size: min(var(--strip-chance), var(--hourly-column) / var(--hourly-em-chance)); }
 .grid-ambient .ambient-hourlyTemperature .hourly-rain { align-self: center; white-space: nowrap; }
 .grid-ambient .ambient-hourlyTemperature .hourly-unknown { opacity: 0.65; }
 /* The line spans the temperature row from the first column's centre to the last one's, so equal steps of
