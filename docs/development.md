@@ -187,7 +187,8 @@ Browser widget checks live in `tests/ui/widget-checks/`, one module per widget
 (`id`, optional `prepare`, `selectors`, `family` and a once-per-viewport `sweep`).
 The widget harness loads every module in that folder and requires one for each
 active catalog id; extra modules such as `reminders-span.mjs` and `clock-spacing.mjs`
-(#717, the Clock's painted digit gaps and where it stands through every minute of a day; about two minutes) add only a sweep.
+(#717, the Clock's painted digit gaps and where it stands through every minute of a
+day, on a page with a clock of its own; about four minutes) add only a sweep.
 The suite's main page clock is shared and moves only when a check runs it: the harness
 puts it back to its start before each viewport's family pass and each sweep, time-dependent
 expectations come from the page's own clock, and a sweep that runs time for many cases

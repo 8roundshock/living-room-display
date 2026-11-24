@@ -546,12 +546,14 @@ painted gaps ran from -12 px to 65 px. They now run from 19 to 21 px.
   leave one gap, `--clock-gap`, between the painted edges of every pair of neighbours:
   digits and colon alike, outline stroke included.
 - The gap is 6% of the digit size and never under 42% of the shared text floor (4.2 px at
-  720p), so the smallest clock keeps whole pixels between digits (3 px measured there).
+  720p), so the smallest clock keeps whole pixels between digits (2 to 3 px painted there).
 - Never put a negative `letter-spacing` on the clock's digits or on any other tabular
   numeral. World clocks, Countdown and Sun & moon keep their typeface's own spacing for
-  the same reason, and `src/client/legacy-css.test.ts` fails for a tabular numeral that
-  is tracked tighter; the numerals that still are appear there by name and in
-  [#726](https://github.com/8roundshock/living-room-display/issues/726).
+  the same reason. `src/client/legacy-css.test.ts` fails for a rule that tracks a tabular
+  numeral tighter (the numerals that still are appear there by name and in
+  [#726](https://github.com/8roundshock/living-room-display/issues/726)), and the clock
+  check fails when the page computes a negative `letter-spacing` for any of those four
+  widgets' numerals, so a value that arrives through `var()` or `calc()` fails too.
 
 **What moves when a minute changes.** A time is as wide as its digits (11:11 is much
 narrower than 04:44), and re-placing everything by that width every minute is too
@@ -573,17 +575,29 @@ at most at 1080p). The rule: **within an hour, only the digits that change move.
   +21 px off). An unchanged character moves at 22 of the day's 1,440 changes, all at
   the hour: 14 px at the median and 32 px at most in 24-hour; in 12-hour 16 px and 78 px,
   the largest when the hour gains or loses a digit.
+- Held to a device pixel, not exactly: the hour is placed from a box summed from
+  per-character margins, each rounded to 1/64 px, so its position wanders by up to
+  0.03 px from minute to minute and the rasteriser sometimes snaps it to the next pixel.
+  The held hour and colon flip by one device pixel within the hour about 16 to 40 times
+  a day, and the minutes' left edge up to 52 times on a 720p-at-300% display (measured
+  in the independent recheck of #736); invisible at couch distance (#727).
 - **Small and medium (left-aligned)** keep every digit where it is until a digit to its
   left changes, which is the hour (18 to 22 changes a day).
 - **AM/PM** stands after the widest minute's room, so it does not move within the hour
-  either; before a narrow minute (9:11) it is that much further from the last digit
-  (up to half a digit height). The digits of a 12-hour large clock stand as they would
-  with the period right beside the middle minute.
+  either; before a narrow minute it is that much further from the last digit. On the
+  large 1080p clock the painted gap runs from 27 px (12:44) to 186 px (1:11), 72 px at
+  the median, against 19 to 21 px between digits: up to 0.83 of the painted digit
+  height. The digits of a 12-hour large clock stand as they would with the period right
+  beside the middle minute.
 - **The date line beside a medium clock** (and the timer slot there) sits after the
   widest time's room and never moves. The cost: beside a narrow time it is further from
-  the digits (31 to 148 px at 1080p Balanced), and on the Fine grid it is nearer the
-  cell's right edge (58 px) than the digits for part of the day. The date still stands
-  beside the room of its own time (#332).
+  the digits (painted, at 1080p: 32 to 148 px on Balanced, 24 to 113 px on Fine, 48 to
+  210 px on Spacious), and the #332 rule (the date nearer its time than the cell's right
+  edge, by text boxes) breaks for some minutes: on Fine at 16 minutes a day in 24-hour
+  time (11:10 to 11:19 and the like) and 120 in 12-hour (1:00 to 1:59), on Balanced at
+  1 (11:11) and 0, on Spacious never; at most 17 px over at 1080p (34 px at 4K), at most
+  6 px in 12-hour. The #332 check reads 9:00; the date still stands beside the room of
+  its own time (#727).
 - When a digit changes, the other characters are already in place and the new one fades
   in. Nothing glides sideways: a character easing from its old place would cross the
   incoming digit. What still steps, at the hour, is in
@@ -602,22 +616,29 @@ no `clock-ink` class (`clock-unmeasured` on the time) and takes the fallback: ta
 figures, tracked apart by the stroke and at least 30% of the text floor on top of the
 glyphs' own bearings, drawn at 78% of the size so their wider boxes stay inside the
 measured clock's room, with a one-digit hour holding the room of two. Nothing touches
-(3 px and more on the smallest 720p clock) and the fit is 1 at every time in every
+(2 px and more on the smallest 720p clock) and the fit is 1 at every time in every
 family, density, viewport and format, but the gaps are the typeface's own and uneven. A
-failed measurement is tried again when the hour changes and on a later mount, at most
-once a minute.
+failed measurement is tried again when the hour the clock shows changes, in local time
+(`shownHour`; a UTC hour changes at :30 or :45 local in zones such as Asia/Kolkata and
+Asia/Kathmandu, which would move the colon mid-hour), and on a later mount, at most once
+a minute.
 
 **Check.**
 [`tests/ui/widget-checks/clock-spacing.mjs`](../tests/ui/widget-checks/clock-spacing.mjs)
 (in the `widgets` suite) measures the painted pixels: each character paints one colour
 channel, so one RAM screenshot tells neighbours apart. It fails on any overlap, on a gap
-under the rule's, on gaps that differ by more than a few pixels, and on a character whose
-box moves while a digit changes. It reads every minute of a day from layout boxes and
-fails when an unchanged character moves within an hour, when more than 24 changes a day
-move one, when the time is further off centre than the rule allows, and when AM/PM, the
-medium date line, the fit or the box the float measures moves with the minute. With the
-display floating it fails when the float's offset steps at a minute change. It also makes
-a typeface unmeasurable at 720p and 1080p, 12-hour included, and checks the fallback.
+under the rule's (at least one unlit device pixel, and more on larger clocks: 70% of the
+stylesheet's gap less 2 px), on gaps that differ by more than a few pixels, on a
+negative computed `letter-spacing`, and on a character whose box moves while a digit
+changes. It reads every minute of a day from layout boxes, for the large, medium and
+small clock in 24- and 12-hour time, and fails when an unchanged character moves within
+an hour, when more than 24 changes a day move one, when the time is further off centre
+than the rule allows, and when AM/PM, the medium date line, the fit or the box the float
+measures moves with the minute. With the display floating it fails when the float's
+offset steps at a minute change. It also makes a typeface unmeasurable at 720p and 1080p,
+12-hour included, checks the fallback, and checks in Asia/Kolkata that a failed
+measurement waits for the shown hour. It sets the time of day and runs days of minutes,
+so it runs on a page with a clock of its own (`withOwnClock`).
 
 Not verified: Segoe UI Variable (Windows 11's `system-ui`) is not installed on the
 development PC. It is measured the same way; a clock under 48 px there uses a smaller

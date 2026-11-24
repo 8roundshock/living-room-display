@@ -22,16 +22,25 @@ What changed:
   the colon and the left edge of the minutes stay put and the minutes grow to the right. An
   unchanged character moves at 22 of the day's 1,440 changes, all at the hour (it was 1,295 while
   the clock re-centred every minute), and the time is 17 px off centre at the median minute, 38 px
-  at most, at 1080p. AM/PM and the date beside a medium clock do not move with the minute either.
+  at most, at 1080p. AM/PM and the date beside a medium clock do not move with the minute either;
+  held to a device pixel: the hour and colon can flip by one device pixel within the hour (#727).
 - The clock holds its widest time's room, which the shared fit and the float both measure: fit 1
   at Text 100% in every family, density, typeface and format at 720p, 1080p and 4K, the same zoom
   at every minute at larger Text sizes, and a float that does not step at a minute change.
-- A typeface that cannot be measured falls back to tabular figures that never touch and fit at 1.
+- A typeface that cannot be measured falls back to tabular figures that never touch (2 px and more on
+  the smallest 720p clock) and fit at 1. A failed measurement is tried again when the hour the clock
+  shows changes, in local time, so in a half-hour zone it no longer lands at :30.
 - World clocks, Countdown and Sun & moon lost the negative letter-spacing that made their 44
-  overlap, and a unit test keeps it out. The editor's Clock style examples no longer touch.
-- A new check (`tests/ui/widget-checks/clock-spacing.mjs`, in the `widgets` suite) measures painted
-  pixels and every minute of a day: it fails on overlap, uneven gaps, a character that moves within
-  the hour, a time too far off centre, and a float or fit that follows the minute.
+  overlap; a unit test keeps it out of the stylesheets and the clock check fails when the page
+  computes one. The editor's Clock style examples no longer touch.
+- A new check (`tests/ui/widget-checks/clock-spacing.mjs`, in the `widgets` suite, on a page with a
+  clock of its own) measures painted pixels and every minute of a day (large, medium and small, 24-
+  and 12-hour): it fails on overlap, uneven gaps, a character that moves within the hour, a time too
+  far off centre, and a float or fit that follows the minute. The Clock sweep's Classic-numerals check
+  now pins its time instead of assuming the suite's first hour (#742).
+- Trade-offs left for the owner (#727): in 12-hour AM/PM stands 27 to 186 px from the last digit on
+  the large 1080p clock; the medium date breaks the #332 rule for a few minutes a day on Fine (16 in
+  24-hour, 120 in 12-hour) and 1 on Balanced, at most 17 px over at 1080p.
 
 Details: [Clock digit spacing](docs/widgets.md#clock-digit-spacing). Follow-ups: the Weather
 temperature, Air quality, detail-widget, Dynamic and Timers numerals have the same defect (#726);
