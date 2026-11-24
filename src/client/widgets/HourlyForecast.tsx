@@ -10,14 +10,12 @@ import type { WidgetContentProps, WidgetModule } from './types.ts';
 import './hourly-forecast.css';
 
 /**
- * A column's time label. On the 12-hour clock the day period is a smaller suffix with no space before it
- * ("5:36AM", as a phone's hourly row and the Clock's period draw it), so the widest time still fits its
- * column; hourly-forecast.css also caps the label's size to its column. A 12-hour time with a two-digit hour
- * ("10:07", "12:29") is marked wide, so only those take the tighter cap.
+ * A column's time label. On the 12-hour clock an hour's day period is a smaller suffix with no space before it
+ * ("5PM"), as a phone's hourly row and the Clock's period draw it; a sun column's time has none ("5:36").
  */
 function ColumnLabel({ text }: { text: string }) {
   const { main, period } = labelParts(text);
-  return <span className={period && main.length >= 5 ? 'forecast-day-label hourly-label-wide' : 'forecast-day-label'}><TransitionText value={main} />{period && <span className="hourly-period"><TransitionText value={period} /></span>}</span>;
+  return <span className="forecast-day-label"><TransitionText value={main} />{period && <span className="hourly-period"><TransitionText value={period} /></span>}</span>;
 }
 
 /**
@@ -56,7 +54,7 @@ function HourlyForecast({ state: { weather }, settings: { clockFormat }, size, n
         ? <ForecastStatusLine status={status} />
         : <div className="weather-context hourly-facts">{view.facts.length ? view.facts.map((fact, index) => <span className="hourly-fact" key={index}>{index > 0 && ' · '}<TransitionText value={fact} /></span>) : NBSP}</div>}
     </div>
-    <div className={`forecast-strip hourly-strip hourly-${clockFormat}`} style={{ '--forecast-days': view.columns.length } as CSSProperties}>
+    <div className="forecast-strip hourly-strip" style={{ '--forecast-days': view.columns.length } as CSSProperties}>
       {/* Keyed by position: when the hour turns, each column's values change in place (TransitionText) instead of the columns moving. */}
       {view.columns.map((column, index) => column.kind === 'hour'
         ? <div className="forecast-day hourly-hour" key={index} data-hourly-column={column.now ? 'now' : 'hour'}>

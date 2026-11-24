@@ -28,7 +28,7 @@ export const TREND_MIN_SPAN = { '°C': 5, '°F': 9 } as const;
 interface ColumnBase {
   /** The instant this column describes. */
   time: string;
-  /** The top label: “Now”, the hour (“5 PM”, “17”) or a sun event's exact time (“4:47 PM”, “16:47”). */
+  /** The top label: “Now”, the hour (“5 PM”, “17”) or a sun event's exact time (“4:47”, “16:47”; no day period, see sunLabel). */
   label: string;
   /** Where the column's value sits on the trend, 0 (coolest shown) to 1 (warmest); null when unknown. */
   level: number | null;
@@ -180,17 +180,23 @@ function hourLabel(iso: string, timeZone: string, clockFormat: '12h' | '24h'): s
 }
 
 /**
- * A column label's time and 12-hour day period: “4:47 PM” is “4:47” and “PM”, “5 PM” is “5” and “PM”. The
- * widget draws the period as a smaller suffix with no space before it, as a phone's hourly row does, so a
- * 12-hour time stays inside its column. A 24-hour label, or “Now”, has no period.
+ * A label's time and 12-hour day period: “5 PM” is “5” and “PM”, “4:47 PM” is “4:47” and “PM”. The widget
+ * draws an hour's period as a smaller suffix with no space before it (“5PM”), as a phone's hourly row does. A
+ * 24-hour label, “Now” or a sun column's time (sunLabel) has no period.
  */
 export function labelParts(label: string): { main: string; period: string | null } {
   const match = /^(.+?)\s+([AP]M)$/.exec(label);
   return match ? { main: match[1]!, period: match[2]! } : { main: label, period: null };
 }
 
-/** A sun event's exact time in the weather city's zone: “16:47”, “4:47 PM” (kept on one line). */
+/** A sun event's exact time in the weather city's zone: “16:47”, “4:47 PM” (kept on one line). The heading's fact shows it whole. */
 const sunTime = (at: number, timeZone: string, clockFormat: '12h' | '24h') => weatherTime(new Date(at).toISOString(), timeZone, clockFormat).replace(/\s/g, NBSP);
+/**
+ * A sun column's label: its exact time without a day period (“4:47”, “12:29”, “16:47”). The word under it and the
+ * hour labels on either side (“4PM”, “5PM”) already say which half of the day it is, and at the shared label size
+ * a column of twelve on the Fine grid has no room for “12:29AM” (final recheck 2 of PR #730).
+ */
+const sunLabel = (at: number, timeZone: string, clockFormat: '12h' | '24h') => labelParts(sunTime(at, timeZone, clockFormat)).main;
 
 /**
  * The strip's columns, at most `slots` of them.
@@ -241,7 +247,7 @@ export function hourlyColumns(weather: WeatherState, { now, slots, clockFormat, 
     // One scan, on the hours' own grid, serves the strip and the heading.
     const events = sunEvents(now, now + 24 * HOUR, latitude, longitude, first), end = Date.parse(ahead.at(-1)!.time);
     nextSun = events[0] ?? null;
-    const suns: HourlyColumn[] = events.filter(event => event.at <= end).map(event => ({ kind: event.kind, time: new Date(event.at).toISOString(), label: sunTime(event.at, timeZone, clockFormat), level: null }));
+    const suns: HourlyColumn[] = events.filter(event => event.at <= end).map(event => ({ kind: event.kind, time: new Date(event.at).toISOString(), label: sunLabel(event.at, timeZone, clockFormat), level: null }));
     // Time order; a sun column exactly on an hour comes before that hour (Array#sort is stable, the sun columns are first).
     const ordered = [...suns, ...ahead].sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
     columns.push(...ordered.slice(0, Math.max(0, slots - columns.length)));

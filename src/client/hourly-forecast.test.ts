@@ -90,8 +90,9 @@ test('a sunset is its own column between the hours it falls between, and takes a
   const state = weather(AFTERNOON);
   assert.deepEqual(kinds(state, options(AFTERNOON)), ['now', 'hour', 'hour', 'hour', 'sunset', 'hour', 'hour', 'hour', 'hour', 'hour', 'hour', 'hour']);
   assert.deepEqual(labels(state, options(AFTERNOON)), ['Now', '14', '15', '16', clock(NOV_SUNSET), '17', '18', '19', '20', '21', '22', '23'], 'twelve columns: the sun column replaces the last hour (00:00)');
-  assert.equal(readable(hourlyColumns(state, options(AFTERNOON, { clockFormat: '12h' })).columns[4]!.label), clock(NOV_SUNSET, 'America/Toronto', '12h'));
+  // On the 12-hour clock a sun column's time has no day period ("4:46", between "4PM" and "5PM").
   assert.match(clock(NOV_SUNSET, 'America/Toronto', '12h'), /^4:4\d PM$/);
+  assert.equal(readable(hourlyColumns(state, options(AFTERNOON, { clockFormat: '12h' })).columns[4]!.label), clock(NOV_SUNSET, 'America/Toronto', '12h').replace(/ PM$/, ''));
   const sun = hourlyColumns(state, options(AFTERNOON)).columns[4]!;
   assert.ok(Math.abs(Date.parse(sun.time) - NOV_SUNSET) < 1000, 'the instant Sun & moon shows, to the second');
   assertOneSky(hourlyColumns(state, options(AFTERNOON)).columns, 'afternoon');
@@ -276,16 +277,19 @@ test('an hours-old saved reading is never called Now', () => {
   assert.equal(readable(hourlyForecastView(noCurrent, options(EVENING)).columns[0]!.label), '19');
 });
 
-test('a 12-hour label splits into its time and the day period the widget draws small; a 24-hour label has none', () => {
+test('a 12-hour hour label splits into its time and the day period the widget draws small; a sun time and a 24-hour label have none', () => {
   assert.deepEqual(labelParts('4:47 PM'), { main: '4:47', period: 'PM' });
   assert.deepEqual(labelParts('12 AM'), { main: '12', period: 'AM' });
   assert.deepEqual(labelParts('10:07 PM'), { main: '10:07', period: 'PM' });
-  for (const label of ['Now', '17', '05:36', '16:47']) assert.deepEqual(labelParts(label), { main: label, period: null });
-  // Every label the strip makes on the 12-hour clock has a period, hours and sun columns alike.
+  for (const label of ['Now', '17', '05:36', '16:47', '4:47']) assert.deepEqual(labelParts(label), { main: label, period: null });
+  // On the 12-hour clock every hour label has a period and a sun column's time has none.
   const { columns } = hourlyColumns(weather(AFTERNOON), options(AFTERNOON, { clockFormat: '12h' }));
   assert.ok(columns.some(column => column.kind === 'sunset'));
-  for (const column of columns.slice(1)) assert.match(labelParts(column.label).period ?? '', /^[AP]M$/, readable(column.label));
+  for (const column of columns.slice(1)) assert.match(labelParts(column.label).period ?? '', column.kind === 'hour' ? /^[AP]M$/ : /^$/, readable(column.label));
+  assert.match(readable(columns.find(column => column.kind === 'sunset')!.label), /^4:4\d$/);
   assert.equal(labelParts(columns[0]!.label).period, null, 'Now');
+  // The heading's fact keeps the whole time, period included.
+  assert.match(readable(hourlyForecastView(weather(EVENING), options(EVENING, { clockFormat: '12h' })).facts[0]!), /^Sunrise 7:2\d AM$/);
 });
 
 test('trend levels use the model’s values over at least a minimum range', () => {
