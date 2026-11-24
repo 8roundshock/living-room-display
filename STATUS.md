@@ -40,8 +40,9 @@ What changed:
   is smaller for it (about 12% of the box on Balanced, 7% on Fine). Forecast's droplet now sits 0.2 em from
   its chance, as Hourly's does, instead of 1% of the widget's width (11 px in large at 1080p). A larger Text
   size flattens the trend before Hourly forecast zooms out, so at Text 110% both strips stay at fit 1 with
-  equal sizes everywhere; at 125% and 150% Hourly forecast's twelve columns can make it zoom out further
-  than Forecast (#749).
+  equal sizes in System and Classic (Monospace with a sun column zooms Hourly forecast to 0.893 to 0.988);
+  at 125% and 150% Hourly forecast's twelve columns can make it zoom out further than Forecast, and a sun
+  column entering or leaving can change its zoom where a column is that tight (#749).
 - Saved data: a large placement from before this change that no longer fits as 8 × 2 becomes medium at the
   same origin, in settings, saved styles and imports. Opening old data rewrites nothing.
 - Rollback: the release installed now, `712ce80`, draws this widget's Large as 4 × 4. Once this build has

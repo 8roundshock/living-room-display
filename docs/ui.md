@@ -1088,8 +1088,10 @@ the last column), three-character temperatures and "100%" in every hour, on both
 and in every typeface, with nothing outside its column and nothing under its floor; the
 one exception is Monospace's "Sunrise" on the Fine grid, where the strip zooms out to
 0.973 to 0.976 (large) or 0.989 to 0.990 (medium). A larger Text size flattens the trend
-line before the strip zooms out, so at Text 110% it keeps Forecast's sizes; above that,
+line before the strip zooms out, so at Text 110% it keeps Forecast's sizes in System and
+Classic (in Monospace, with a sun column, it zooms out to 0.893 to 0.988); above that,
 twelve columns can be too narrow and the strip zooms out further than Forecast (#749),
+and a sun column entering or leaving can change its zoom where a column is that tight,
 but nothing in it is ever smaller on screen than at Text 100%. The view is rebuilt once a minute and
 constructs no `Intl` formatter on the one-second tick (#99).
 Browser checks: `tests/ui/widget-checks/hourlyTemperature.mjs` in the widgets suite, the

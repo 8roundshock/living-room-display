@@ -528,10 +528,17 @@ families. Its tone is sky, like Forecast, so the two strips read as a pair.
   Balanced grid and 7% on the Fine grid, where the text floors leave the least room). A
   larger Text size takes the travel first and then the air between the values and the
   line, down to a flat line, before the strip zooms out, so at Text 110% both strips stay
-  at fit 1 on every grid at 720p, 1080p and 4K with every shared size equal. Above that,
-  twelve columns can be too narrow for the larger text ("Sunset" at Text 150% is about
-  100 px in an 84 px column at 1080p on the Balanced grid), and the strip zooms out further
-  than the Forecast above it: up to about 8% on Balanced at 150% (#749).
+  at fit 1 on every grid at 720p, 1080p and 4K with every shared size equal in the System
+  and Classic typefaces. Monospace is the exception: with a sun column in the strip,
+  Hourly forecast zooms out to 0.893 to 0.988 at Text 110% while Forecast stays at 1. Above
+  Text 110%, twelve columns can be too narrow for the larger text in any typeface ("Sunset"
+  at Text 150% is about 100 px in an 84 px column at 1080p on the Balanced grid), and the
+  strip zooms out further than the Forecast above it: up to about 8% on Balanced at 150%
+  (#749). Because the widest column sets the strip's width, a sun column entering or
+  leaving the window (about ten hours before a sunrise, and at the sunrise) can change the
+  whole widget's zoom where a column is that tight: at Text 100% only Monospace on the Fine
+  grid (about 2.6%); above Text 100% up to 6% at 125% and 14% at 150% (720p, large,
+  Balanced, System).
 - **Heading.** "Hourly" on the left. On the right at most two calm facts that the board
   does not already show: the next sunrise or sunset within a day, only when the strip does
   not show it ("Sunrise 07:21" on a winter evening), and peak gusts over the shown hours
