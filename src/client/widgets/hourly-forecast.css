@@ -3,10 +3,11 @@
    sizes are Forecast's own: one definition of the heading, the type, the glyphs and the row gaps for both
    widgets' medium and large families, the `--strip-*` properties in widgets.css (#720). This file only adds what
    an hour strip needs on top of them. The temperatures ride a trend line, and the line's vertical travel is
-   whatever height the rows leave, between 7% and 18% of the box. So the temperature row's height depends only
-   on the box and Text size, never on the values, and both families render at fit 1 at Text 100% on every grid at
-   720p, 1080p and 4K (a larger Text size first flattens the travel, then zooms out like any widget). Beyond
-   Forecast's strip:
+   whatever height the rows leave, up to 18% of the box. So the temperature row's height depends only on the box
+   and Text size, never on the values, and both families render at fit 1 at Text 100% on every grid at 720p,
+   1080p and 4K, where the travel is at least 7% of the box. A larger Text size first flattens the travel, down to
+   a flat line, and only then zooms the strip out like any widget, so the strip keeps Forecast's sizes as long
+   as it can. Beyond Forecast's strip:
    - every column shares the strip's four rows (subgrid), so the trend can span the temperature row;
    - the precipitation row keeps its line when an hour shows no chance, so nothing moves when one appears;
    - a sunrise or sunset is a column of its own, and the strip always has the family's number of columns;
@@ -14,13 +15,15 @@
      word and the chance are each capped to the column (below), and the column gap is narrower. */
 .grid-ambient .ambient-hourlyTemperature .hourly-body {
   --hourly-gap: 1cqw;
-  /* Air between a value and its point on the line. */
-  --hourly-clear: calc(var(--strip-value) * 0.2);
-  /* The height of everything except the travel: the heading, hour, glyph, value and chance rows and their gaps, at
-     the line heights widgets.css gives them (the heading's two parts share a baseline, so its height is a little
-     over the larger line's; 1.3 covers it). */
-  --hourly-rows: calc(max(var(--strip-heading), var(--strip-context)) * 1.3 + var(--strip-heading-gap) + var(--strip-label) * 1.2 + var(--strip-glyph) + var(--strip-value) * 1.15 + var(--hourly-clear) + var(--strip-chance) * 1.2 + 3 * var(--strip-row-gap));
-  --hourly-travel: clamp(7cqh, 100cqh - var(--hourly-rows) - 2px, 18cqh);
+  /* The height of everything Forecast's strip also has: the heading, hour, glyph, value and chance rows and their
+     gaps, at the line heights widgets.css gives them (the heading's two parts share a baseline, so its height is a
+     little over the larger line's; 1.3 covers it). What the box has left over is the trend's room. */
+  --hourly-rows: calc(max(var(--strip-heading), var(--strip-context)) * 1.3 + var(--strip-heading-gap) + var(--strip-label) * 1.2 + var(--strip-glyph) + var(--strip-value) * 1.15 + var(--strip-chance) * 1.2 + 3 * var(--strip-row-gap));
+  --hourly-room: calc(100cqh - var(--hourly-rows) - 2px);
+  /* Air between a value and its point on the line, then the line's travel. When a larger Text size leaves less
+     room, the travel goes first and then the air, so the strip zooms out only where Forecast's would too. */
+  --hourly-clear: clamp(0px, var(--hourly-room), var(--strip-value) * 0.2);
+  --hourly-travel: clamp(0px, var(--hourly-room) - var(--hourly-clear), 18cqh);
   /* The widest text a column holds, in ems of its own size, per typeface (System here; Classic and Monospace
      below), measured in Edge with about 1% to spare: an hour label ("Now", "10AM" with the small period, "17"),
      a sun column's time on the 12-hour clock with a one-digit hour ("4:44AM", --hourly-em-sun12n) or a two-digit
