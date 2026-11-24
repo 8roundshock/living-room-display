@@ -4,6 +4,7 @@ import { shiftHolidayDate, type HolidayWindow } from '../shared/holidays.ts';
 import { QUIET_PALETTE, QUIET_THEME, THEME_MOTIONS, THEME_SCENES, THEME_CLEARANCE_SECONDS, type ThemeSceneId, type ThemeMotionFrame } from '../shared/theme-registry.ts';
 import { themeDay, themeHemisphere, type ThemeDayInput } from '../shared/theme-schedule.ts';
 import { DYNAMIC_THRESHOLDS } from './dynamic.ts';
+import { presentedStatus } from './format.ts';
 import { gustForecastSpells } from './weather-hazards.ts';
 
 export type WeatherMotif = 'rain' | 'snow' | 'storm' | 'fog' | 'wind';
@@ -34,9 +35,14 @@ export function themeLocalDate(at: Date): string {
   return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * The weather kind to draw, from a forecast that is current: fresh by the rule the widgets share (`presentedStatus`,
+ * #740), so the seconds a due refresh is in flight do not take the rain away and bring it back; a saved, failed,
+ * offline, aged or misplaced forecast draws none.
+ */
 function weatherScene(weather: WeatherState, settings: Settings, now: number, disconnected: boolean): { motif: WeatherMotif; forecast: boolean } | null {
   const updated = Date.parse(weather.updatedAt ?? '');
-  if (disconnected || weather.status !== 'fresh' || !Number.isFinite(updated) || now - updated > 2 * HOUR || updated > now + 300_000) return null;
+  if (disconnected || presentedStatus(weather, now) !== 'fresh' || !Number.isFinite(updated) || now - updated > 2 * HOUR || updated > now + 300_000) return null;
   if (Math.abs(weather.location.latitude - settings.location.latitude) > 0.11 || Math.abs(weather.location.longitude - settings.location.longitude) > 0.11) return null;
   const candidates: { motif: WeatherMotif; forecast: boolean; at: number }[] = [];
   const currentAt = Date.parse(weather.current?.time ?? '');

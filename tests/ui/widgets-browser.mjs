@@ -32,6 +32,7 @@ const INTL_TICK_ALLOWANCES = {};
 /** Two Balanced boards cover the active catalog without changing production geometry. */
 import { FULL_BOARD, WIDGET_BOARDS } from './lib/boards.mjs';
 import { launchEdge } from './lib/edge.mjs';
+import { assertNoSourceOrFreshAge } from './lib/source-age.mjs';
 
 /** Counts ResizeObserver and Intl constructions and style changes on .widget-content (an init script). */
 function instrumentFit() {
@@ -198,9 +199,11 @@ export async function runWidgetQa({ playwright, edge, capture = false, statusOnl
         for (let attempt = 0; !/offline/i.test(await widget.innerText()); attempt++) { assert.ok(attempt < 100, `${id}/${size} shows its offline state`); await statusPage.waitForTimeout(20); }
         statusOffline = false;
       } else assert.match(await widget.innerText(), /Saved/, `${id}/${size} shows its stale state`);
+      // #715: a saved or offline widget still names no provider, and its age sits only in the status tone.
+      await assertNoSourceOrFreshAge(widget, statusCase, { fresh: false, id }); sourceAgeCases++;
       return floorReport(widget);
     }
-    const floorFailures = [], allowancesUsed = new Set(), allowedCases = []; let floorCases = 0, flooredCases = 0;
+    const floorFailures = [], allowancesUsed = new Set(), allowedCases = []; let floorCases = 0, flooredCases = 0, sourceAgeCases = 0;
     /**
      * Fit within half a percent of 1 is the fit search resolving a sub-pixel overflow, not a zoom-out. Every
      * zoom-out at Text 100% counts, whether or not an element sits exactly on a floor (#283): a family whose
@@ -214,10 +217,26 @@ export async function runWidgetQa({ playwright, edge, capture = false, statusOnl
       if (FLOOR_FIT_ALLOWANCES[`${id}/${size}`]) { allowancesUsed.add(`${id}/${size}`); allowedCases.push(detail); return; }
       floorFailures.push(detail);
     };
+    // The main page clock is shared by every check below and moves only when one of them runs it (#431, #741).
+    // It is put back to `now` before each viewport's family pass and before each sweep, so no check runs on time
+    // that another one spent: before this, the sweeps' minutes added up, and a check that assumed the suite's
+    // first hour failed once a new sweep pushed the total past it. Within a pass or a sweep the clock still moves,
+    // so an expectation that depends on the time is worked out from the page's own clock, and a sweep that runs
+    // time for many cases takes a page with a clock of its own (tests/ui/lib/own-clock.mjs). The fixtures are
+    // dated at `now`; the first to age out is the fresh air reading (12 minutes old, current for 3 hours), so no
+    // pass or sweep may spend CLOCK_BUDGET.
+    const CLOCK_BUDGET = 150 * 60_000;
+    const restartClock = () => page.clock.setSystemTime(new Date(now));
+    let clockMost = 0;
+    const clockSpent = async by => {
+      const spent = await page.evaluate(() => Date.now()) - now;
+      assert.ok(spent < CLOCK_BUDGET, `${by} left the shared page clock ${Math.round(spent / 60_000)} min past its start, over the fixtures' ${CLOCK_BUDGET / 60_000}-minute budget: give its cases a clock of their own (tests/ui/lib/own-clock.mjs)`);
+      clockMost = Math.max(clockMost, spent);
+    };
     // The family sweep includes the owner's 1280×720 TV (#283); the per-viewport sweeps below cover 720p from
     // their 1080p pass, so they run at 1080p and 4K only.
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 3840, height: 2160 }]) {
-      await page.setViewportSize(viewport);
+      await page.setViewportSize(viewport); await restartClock();
       for (const density of Object.keys(GRID_DENSITIES)) for (const id of (statusOnly ? ['forecast', 'agenda'] : ACTIVE_WIDGET_IDS)) for (const size of widgetSizes(id)) {
         current = familyState(id, size, density);
         await open(); const widget = page.locator(`[data-widget-id="${id}"]`); await widget.waitFor();
@@ -237,14 +256,18 @@ export async function runWidgetQa({ playwright, edge, capture = false, statusOnl
           if (capture) images.push({ name: `${id}-${size}`, bytes: await widget.screenshot() });
         }
         floorCheck(id, size, density, viewport, 'fresh', await floorReport(widget));
+        // #715: fresh data shows neither a provider name nor an update age, in any family.
+        await assertNoSourceOrFreshAge(widget, `${id}/${size}/${density}/${viewport.width} fresh`, { id }); sourceAgeCases++;
         await WIDGET_CHECKS[id].family?.({ page, widget, size, density, viewport, state: current });
         for (const status of STATUS_WIDGETS[id] ?? []) floorCheck(id, size, density, viewport, status, await statusReport(id, size, density, viewport, status));
       }
+      await clockSpent(`the ${viewport.width}x${viewport.height} family pass`);
       // Checks beyond the families (tests/ui/widget-checks sweep hooks) run once per viewport.
       if (!statusOnly && viewport.width !== 1280) for (const check of Object.values(WIDGET_CHECKS)) if (check.sweep) {
-        current = structuredClone(source);
+        current = structuredClone(source); await restartClock();
         const summary = await check.sweep({ page, viewport, state: current, base, now });
         if (summary && !checks.includes(summary)) checks.push(summary);
+        await clockSpent(`the ${check.id} sweep at ${viewport.width}x${viewport.height}`);
       }
     }
     if (statusOnly) {
@@ -254,9 +277,11 @@ export async function runWidgetQa({ playwright, edge, capture = false, statusOnl
     }
     assert.ok(clockFonts.large > clockFonts.medium * 1.4, `Large clock should be visibly larger: ${JSON.stringify(clockFonts)}`);
     checks.push(`All ${familyCount} widget families × 3 densities × 720p/1080p/4K: bounds, useful content, no frames/fills, tone classes, photo crops, whole-screen snapshot`);
+    checks.push(`Shared page clock: back at its start before each viewport's family pass and each sweep, so no check runs on time another spent; the most one of them spent is ${Math.round(clockMost / 60_000)} min of the fixtures' ${CLOCK_BUDGET / 60_000}-minute budget, and time-dependent expectations follow the page clock (#741)`);
     await statusContext.close();
     assert.deepEqual(floorFailures, [], '#221, #283: every family renders at fit 1 at Text 100% (a tracked exception needs its own ticket and an allowance)');
     assert.deepEqual(Object.entries(FLOOR_FIT_ALLOWANCES).filter(([key]) => !allowancesUsed.has(key)).map(([key, ticket]) => `${key} (${ticket})`), [], 'these families now render at fit 1 at Text 100%: remove their allowances');
+    checks.push(`#715 no data provider named and no update age for fresh data; saved and offline widgets keep their status label with the age only in the status tone: ${sourceAgeCases} family × density × 720p/1080p/4K × fresh/stale/offline cases`);
     checks.push(`#221/#283 fit at Text 100%: ${floorCases} family × density × 720p/1080p/4K × fresh/stale/offline cases (${flooredCases} with an element on a floor) render at fit 1, except ${allowedCases.length} tracked cases: ${allowedCases.join('; ')}`);
     // Every #78 id has shipped (#157, #171), so the inactive ids are retired ones (Rain, #74) plus any
     // future planned entry; the catalog contract says neither is ever rendered.

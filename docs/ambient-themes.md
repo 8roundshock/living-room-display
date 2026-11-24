@@ -1114,7 +1114,10 @@ modified to make a new feature pass.
 
 ## Resolution and motion
 
-Weather uses fresh, connected readings for the selected location. Current codes
+Weather uses fresh, connected readings for the selected location. Fresh is the
+widgets' rule (`presentedStatus`, #740): a forecast whose refresh is still running counts
+as fresh, so a slow refresh does not take the weather off the scene for a few seconds; a
+failed refresh, a retry after one, or a refresh of data over 45 minutes old does not. Current codes
 must be at most 90 minutes old; forecast conditions look ahead three hours.
 Hourly codes are instants, while gusts describe the preceding hour. Only a wholly
 upcoming gust interval produces “expected soon.” Wind and gust thresholds are

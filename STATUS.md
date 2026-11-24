@@ -40,6 +40,92 @@ the step that remains at the hour (#727); Windows 11's typeface is unverified (#
 Verified with source builds and synthetic data only: see the pull request. Not verified:
 installation, the TV, Windows 11 (Segoe UI Variable).
 
+## Widgets: no data source and no update time while fresh — 2026-11-22 (#715)
+
+Source candidate, not installed. Owner request: "all of them say the source for the data, but i
+dont want to see that" and, of when it was updated, "also dont care".
+
+What changed, on the display, the editor canvas and the picker samples:
+- **Fresh data shows neither a provider name nor an update age.** "Open-Meteo", "Forecast by
+  Open-Meteo", "CAMS · Open-Meteo", the alert issuer line and "Updated 5 min ago" are gone from
+  Weather, Forecast, Dynamic, Air quality, Weather alerts and the collection weather widgets
+  (Wind, Humidity, Pressure, Visibility, Cloud cover, Precipitation and today's Hourly).
+- **Data that is not fresh keeps its honest state**, with the age only there and in the status
+  tone: "Saved forecast · Updated 5 hr ago" (Forecast: "Saved forecast · 5 hr ago"), "Saved
+  reading · 2 hr ago", "Saved alerts · 2 hr ago", "Offline · Updated 5 hr ago", "Last known ·
+  Thu 2 AM", "Weather unavailable · retrying".
+  No provider name there either.
+- **The credit stays in the app, off the display:** the "Forecast estimates by Open-Meteo" link in
+  Settings, and the provider names in the widget settings hints (Air quality, Dynamic's official
+  alerts and now Weather alerts) and the docs. The one-credit-per-board rule is removed.
+- **What is neither a source nor an age stays:** the rain "Forecast estimate" confidence, Air
+  quality's "Model est.", category words, units and place names. The collection weather widgets
+  keep their place as the last line. One exception: while a forecast is not fresh,
+  Forecast's heading shows the status in place of its place and unit; they return when it is
+  fresh again.
+- **Freed room goes to the content.** Forecast is its heading and strip; in medium and large the
+  strip is taller (glyphs, day labels, chances; temperatures in large), in every state. A saved
+  or offline forecast says so in the heading's right slot, in place of the place and unit
+  ("Saved forecast · 5 hr ago"), as Hourly forecast does, so the strip never changes size or
+  position; in small, a status with no update time to tell is the label alone. Weather keeps a footer only for the rain confidence and the status line; Air
+  quality's footer is one short row; Weather alerts has none while fresh.
+- **A refresh in flight is not a saved forecast.** When a refresh takes over a second the server
+  answers `stale` and `refreshing`; the widgets keep showing the data as fresh until the refresh
+  fails or the data is over 45 minutes old. One helper (`presentedStatus`) decides this for
+  Weather, Forecast, Dynamic, Air quality and the collection weather widgets, and for the
+  whole-screen weather scene, which used to drop out for those seconds (#740).
+- **No claim from data that is not fresh.** Dynamic says "No alerts" only from a connected
+  display with a fresh list; offline or from a saved list it does not. Weather alerts keeps
+  the age of its last successful check when unavailable ("Updated 2 hr ago").
+- `AGENTS.md` and [product requirements](docs/product.md) now state this decision in place of
+  "show weather age".
+
+Other widgets were checked and needed no change: Sun & moon, World clocks, Calendar, Countdown,
+Note, Photo, Reminders, Agenda, Week ahead, Timers and the progress widgets show no provider and
+no data age (their "Saved … · offline" labels stay), and Last screen has had no caption since
+#563 (the widget contract's table rows for it are corrected).
+
+Details: [widget contract](docs/widgets.md#data-and-image-boundaries), [design](docs/design.md),
+[UI contracts](docs/ui.md), [API](docs/api.md#dynamic-signals).
+
+Verified with source builds and synthetic data only: both typechecks and the build; the unit
+tests (no provider name and no fresh age from the Dynamic engine, the air footer phrases and the
+weather status helper; no renderer source names a provider outside a settings hint; no ambient
+style left for a credit); and the browser suites `widgets` (every family in every density at
+720p, 1080p and 4K, fresh, saved and offline: no provider named, no fresh age, an age only in
+the status tone, fit 1), `weather`, `dynamic`, `collection`, `catalog-sky`, `catalog-time` (every
+picker sample), `grid`, `studio` (Settings keeps the credit link), `palette`, `canvas-scope` and
+`home`. `widgets` passed on Edge 157; on Edge 158 it stops at an unrelated Reminders check
+(#729). `motion` did not complete in five runs, one of them on `main`'s build: its mid-reveal
+step fails while other suites load the PC (#165); the step that concerns this change (a stale
+label appears in the status tone without a transition) was checked with a one-off probe. Not
+verified: installation and the TV.
+
+After the independent review (the Forecast status slot, the refresh-in-flight rule, Dynamic's
+"No alerts" and Weather alerts' unavailable age): the build, the unit tests, the Forecast,
+Weather, Weather alerts and Dynamic widget checks run through a driver (every family in every
+density at 720p, 1080p and 4K, fresh, saved and offline, and their sweeps), and the `weather`,
+`dynamic`, `collection`, `catalog-sky` and `palette` suites again. The full `widgets` and
+`motion` suites were not rerun for those fixes.
+
+After the recheck: the full `widgets` suite had failed, because the sweeps this change added
+spent the suite's shared page clock and the World clocks check assumed its first hour (#741).
+The harness now puts that clock back to its start before each viewport's family pass and each
+sweep, sweeps that run time use a page with a clock of its own, and the World clocks, Air
+quality and Sun & moon checks work their time-dependent expectations out from the page clock;
+the Clock sweep's "9:xx" assumption is left for #742. Every family check and sweep was run with
+the clock started 100 to 300 minutes late to find them. Run again on Edge 158: the build, the
+unit tests (842), the full `widgets` suite (pass in 1881 s; no pass or sweep
+spends more than 22 minutes of the shared clock), and the `weather`, `dynamic`,
+`collection`, `catalog-sky`, `catalog-time`, `palette` and `themes` suites
+(`themes` passed when run alone; beside `widgets` it missed its 150 ms bound once, #651). `motion` was not rerun (#165).
+
+Open for the owner: "Model est." under a fresh Air quality reading and the place line under the
+collection weather widgets are kept as wording that is neither a source nor an age; say so if
+they should go too. Provider terms and where the credit must appear are part of the
+public-release decision (#114). Found on the way: two double-digit sub-zero temperatures crowd
+the medium Forecast (#731, also on `main`).
+
 ## Calendar: upcoming holidays and important dates — 2026-11-22 (#716)
 
 Source candidate, not installed. The owner: "calendar should say like upcoming holidays or important

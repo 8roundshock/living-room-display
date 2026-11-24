@@ -58,8 +58,11 @@ idle/screensaver helper. Implementation is authorized and in progress;
   edits cancellable and show Save/Cancel only for effective unsaved changes.
 - The TV stays powered on by choice. TV power, wake, input, and remote integration
   are optional future work, never prerequisites or recurring power-off advice.
-- Present rain timing as a forecast estimate. Show weather age and stale/error
-  states; never invent current weather or present a model estimate as certainty.
+- Present rain timing as a forecast estimate. Owner decision, 2026-11-22 (#715):
+  a widget shows no data-provider credit and, while its data is fresh, no update
+  age. Stale and error states stay honest and visible, with the age only there, in
+  the status tone. The provider credit lives in Settings, the widget settings hints
+  and the docs. Never invent current weather or present a model estimate as certainty.
 - Owner decision, 2026-10-27 (#544): use one private runtime snapshot at
   `InstallRoot/run/cache/last-screen.png`, atomically replaced every five minutes
   when safely eligible. Browser and native displays read that same file; automatic

@@ -77,9 +77,6 @@ html.studio-editor {
 .forecast-low {
   opacity: 0.65;
 }
-.forecast-attribution {
-  opacity: 0.65;
-}
 .ambient-reminder-title {
   font-weight: 500;
   letter-spacing: -0.02em;

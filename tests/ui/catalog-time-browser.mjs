@@ -15,6 +15,7 @@ import { defaultSettings } from '../../src/shared/defaults.ts';
 import { ACTIVE_WIDGET_IDS, WIDGET_CATALOG, WIDGET_CATEGORIES, fitWidgetFamily, widgetSizes, widgetSpan } from '../../src/shared/widgets.ts';
 import { addToGrid } from '../../src/client/make-room.ts';
 import { launchEdge } from './lib/edge.mjs';
+import { assertNoSourceOrFreshAge } from './lib/source-age.mjs';
 
 /** The picker's grouped order (#154): WIDGET_CATEGORIES order, catalog order inside each group. */
 const GROUPED = Object.keys(WIDGET_CATEGORIES).flatMap(category => ACTIVE_WIDGET_IDS.filter(id => WIDGET_CATALOG[id].category === category));
@@ -698,6 +699,8 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
         });
         const span = widgetSpan(id, size), label = `${id} ${size}`;
         if (measured.min !== null) { assert.ok(measured.min >= 9, `${label}: smallest sample text ${measured.min} px ("${measured.text}")`); smallest.push(measured.min); }
+        // #715: a picker sample shows what the display shows: no provider name and, being fresh, no update age.
+        await assertNoSourceOrFreshAge(page.locator('.picker-sample'), `picker sample ${label}`, { id });
         assert.ok(Math.abs(measured.width - measured.fill) <= 1, `${label} fills its area (width, height or the 2× cap): ${JSON.stringify(measured)}`);
         assert.ok(measured.width <= span.columns * 100 + 1, `${label} is at most twice the canvas scale: ${JSON.stringify(measured)}`);
         assert.equal(measured.footprint, `${span.columns} × ${span.rows} cells of 12 × 8`, label);
@@ -712,6 +715,7 @@ export async function runCatalogTimeQa({ playwright, edge, capture = false } = {
     await button('Preview Countdown').click(); await button('Countdown small').click();
     assert.match(await page.locator('.picker-sample').innerText(), /12\s*days\s*Weekend trip\s*Wed, Mar 17/, 'Countdown counts from today');
     if (capture) images.push({ name: 'picker-samples-1280x720', bytes: await page.screenshot() });
+    checks.push('#715 every picker sample, in every family, names no data provider and shows no update age');
     checks.push(`#361 at 1280×720 every picker family's smallest sample text line is at least 9 px (smallest ${Math.min(...smallest)} px), each sample fills the stage width at no more than twice the canvas scale and names its footprint; on 5 March 2027 the Clock shows 10:20, the Calendar marks the 5th and Countdown still reads 12 days`);
     assert.deepEqual(errors, []);
     return { checks, images };

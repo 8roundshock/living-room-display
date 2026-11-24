@@ -1,25 +1,46 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defaultSettings } from '../shared/defaults.ts';
 import {
   applyBuiltinPreset,
   getVisual,
   reminderPresentation,
-  weatherAttributionWidget,
 } from './model.ts';
 import { precipitationOutlook, rainOutlook, upcomingRain } from './weather-outlook.ts';
 import { pendingReminders } from '../shared/reminders.ts';
 
-test('weather attribution follows the first enabled weather module and can all be removed', () => {
-  const settings = defaultSettings(); assert.equal(weatherAttributionWidget(settings), 'forecast');
-  settings.widgets.forecast = false; assert.equal(weatherAttributionWidget(settings), 'weather');
-  // Rain is retired into Weather (#74): even an injected enabled Rain never carries the credit.
-  settings.widgets.weather = false; settings.widgets.rain = true; assert.equal(weatherAttributionWidget(settings), null);
-  settings.widgets.rain = false; assert.equal(weatherAttributionWidget(settings), null);
-  // Dynamic (#437) carries it only while Forecast and Weather are both off.
-  settings.widgets.dynamic = true; assert.equal(weatherAttributionWidget(settings), 'dynamic');
-  settings.widgets.weather = true; assert.equal(weatherAttributionWidget(settings), 'weather');
-  settings.widgets.weather = false; settings.widgets.forecast = true; assert.equal(weatherAttributionWidget(settings), 'forecast');
+test('no widget carries a provider credit: the credit lives in Settings, never in a renderer (#715)', () => {
+  // Owner decision, 2026-11-22: the display names no data provider, so the one-credit-per-board rule
+  // (`weatherAttributionWidget`) is gone and no renderer may bring a provider name back. The credit is the
+  // "Forecast estimates by Open-Meteo" link in Settings; widget settings hints name the providers too.
+  const client = fileURLToPath(new URL('.', import.meta.url)), widgets = join(client, 'widgets');
+  assert.doesNotMatch(readFileSync(join(client, 'model.ts'), 'utf8'), /weatherAttributionWidget/);
+  assert.match(readFileSync(join(client, 'SettingsPage.tsx'), 'utf8'), /className="weather-credit" href=\{state\.weather\.sourceUrl\}[^>]*>Forecast estimates by Open-Meteo<\/a>/, 'Settings keeps the credit link');
+  const PROVIDER = /Open-Meteo|CAMS|Copernicus|Environment (and Climate Change )?Canada|National Weather Service|Canada and US coverage/;
+  const files = [...readdirSync(widgets).filter(name => /\.tsx?$/.test(name)).map(name => join(widgets, name)), ...['dynamic.ts', 'air-categories.ts', 'airHourly.ts', 'collection.ts', 'format.ts', 'weather-outlook.ts'].map(name => join(client, name))];
+  assert.ok(files.length > 30, `${files.length} renderer sources`);
+  const found: string[] = [];
+  for (const file of files) {
+    // What could reach the display: no comments, no state fixtures (`source:`/`sourceUrl:` fields) and no settings hints.
+    const lines = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, '')).split('\n')
+      .map(line => line.replace(/^\s*\/\/.*$/, '').replace(/\s\/\/ .*$/, '').replace(/\bsource(Url)?: '[^']*'/g, ''));
+    let hint = false;
+    for (const [index, line] of lines.entries()) {
+      // A settings hint is editor text: `<p className="hint">…</p>` (which may span lines) or a Dynamic source's `hint: '…'`.
+      if (/className="hint/.test(line)) hint = true;
+      if (!hint && PROVIDER.test(line.replace(/\bhint: '[^']*'/g, ''))) found.push(`${file.slice(client.length)}:${index + 1}: ${line.trim().slice(0, 120)}`);
+      if (/<\/p>/.test(line)) hint = false;
+    }
+  }
+  assert.deepEqual(found, [], 'a renderer names a data provider outside its settings hint');
+  // The settings hints do keep naming them.
+  for (const [file, pattern] of [['AirQuality.tsx', /Copernicus CAMS via Open-Meteo/], ['Dynamic.tsx', /Data Source: Environment and Climate Change Canada/], ['WeatherAlerts.tsx', /Data Source: Environment and Climate Change Canada/]] as const) {
+    assert.match(readFileSync(join(widgets, file), 'utf8'), pattern, `${file}: the settings hint names the provider`);
+  }
+  assert.ok(defaultSettings().widgets.forecast, 'the default board still shows Forecast, now without a credit line');
 });
 import {
   ageLabel,

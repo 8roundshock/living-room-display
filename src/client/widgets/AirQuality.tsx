@@ -1,15 +1,15 @@
 import { useMemo, type CSSProperties } from 'react';
 import type { AirPollutant, AirQualityReading, AirQualityState, AppState } from '../../shared/contracts.ts';
-import { airAgeSegments, airHourly, airReadingView } from '../airHourly.ts';
-import { ageLabel, weatherTimeZone } from '../format.ts';
+import { airAgeIsStatus, airAgeSegments, airHourly, airReadingView } from '../airHourly.ts';
+import { ageLabel, presentedStatus, weatherTimeZone } from '../format.ts';
 import { Icon } from '../icons.tsx';
-import { AIR_CREDIT, SCALE_LABELS, aqiCategory, uvCategory } from '../air-categories.ts';
+import { SCALE_LABELS, aqiCategory, uvCategory } from '../air-categories.ts';
 import { TransitionText } from './TransitionText.tsx';
 import type { WidgetContentProps, WidgetModule, WidgetSettingsProps } from './types.ts';
 import './air-quality.css';
 
 type Scale = AirQualityState['scale'];
-export { AIR_CREDIT, SCALE_LABELS, aqiCategory, uvCategory } from '../air-categories.ts';
+export { SCALE_LABELS, aqiCategory, uvCategory } from '../air-categories.ts';
 const POLLUTANTS: Record<AirPollutant, string> = { pm2_5: 'PM2.5', pm10: 'PM10', ozone: 'ozone', nitrogen_dioxide: 'nitrogen dioxide', sulphur_dioxide: 'sulphur dioxide', carbon_monoxide: 'carbon monoxide' };
 
 function airState(state: AppState): AirQualityState {
@@ -23,7 +23,7 @@ function pollutantLine(current: NonNullable<AirQualityState['current']>): string
 }
 const NO_HOURS: AirQualityReading[] = [];
 
-/** Phrases joined by " · " that wrap only between phrases, so "12 min ago", "12 µg/m³" and "Open-Meteo" stay whole (#221). */
+/** Phrases joined by " · " that wrap only between phrases, so "12 min ago" and "12 µg/m³" stay whole (#221). */
 function Phrases({ parts }: { parts: string[] }) {
   return <>{parts.map((part, index) => <span key={index}>{index > 0 && ' · '}<span className="air-phrase">{part}</span></span>)}</>;
 }
@@ -34,7 +34,6 @@ function AirQuality({ state, settings, size, now, disconnected }: WidgetContentP
   // The place's zone, or this computer's while it is still `auto`; memoized, since the fallback builds a formatter.
   const timeZone = useMemo(() => weatherTimeZone(zone), [zone]);
   const current = air.status === 'fresh' || air.status === 'stale' ? air.current : null;
-  const caution = disconnected || air.status === 'stale' || air.status === 'unavailable';
   // Everything that needs a clock or a formatter is rebuilt once per minute (#185): whether the saved
   // values are still current (#188), and the large family's bars, hour labels and UV peak, which use
   // upcoming hours only (a saved reading keeps its old series).
@@ -45,8 +44,13 @@ function AirQuality({ state, settings, size, now, disconnected }: WidgetContentP
   const hourly = useMemo(() => series.length ? airHourly(series, minute * 60_000, air.scale, SCALE_LABELS[air.scale], timeZone, settings.clockFormat) : null,
     [series, minute, air.scale, timeZone, settings.clockFormat]);
   const category = view ? aqiCategory(view.aqi, air.scale, size === 'small') : null;
-  // One footer row (#221): "Model est." only with a reading; with none (off or unavailable) only the age.
-  const age = airAgeSegments({ age: ageLabel(air.updatedAt, now.getTime()), stale: air.status === 'stale', reading: Boolean(current), disconnected });
+  // One footer row (#221, #715): a fresh reading says only "Model est."; the age follows a status label only
+  // (saved, offline, or values over 3 hours old), in the status tone. No provider name: that is in the settings hint.
+  const old = Boolean(view && view.kind !== 'current');
+  // A reading whose refresh is still running is not a saved one (presentedStatus, the rule every weather widget shares).
+  const status = presentedStatus(air, now.getTime());
+  const age = airAgeSegments({ age: ageLabel(air.updatedAt, now.getTime()), status, reading: Boolean(current), disconnected, old });
+  const caution = airAgeIsStatus({ status, disconnected, old });
   const pollutant = current && view?.showPollutant ? pollutantLine(current) : null;
   const uv = view?.showUv ? view.uvIndex === null ? ['UV unavailable'] : [`UV ${Math.round(view.uvIndex)}`, uvCategory(view.uvIndex)] : null;
   return <div className="widget-body air-body">
@@ -71,7 +75,7 @@ function AirQuality({ state, settings, size, now, disconnected }: WidgetContentP
           <div className="air-uv-peak">{hourly.uvPeak}</div>
         </> : <div className="air-hourly-missing">Hourly estimate unavailable</div>)}
       </>}
-    <div className="air-footer"><div className={`weather-age air-age ${caution ? 'stale' : ''}`}><Phrases parts={age} /></div><div className="weather-credit air-credit"><Phrases parts={AIR_CREDIT.split(' · ')} /></div></div>
+    {age.length > 0 && <div className="air-footer"><div className={caution ? 'weather-age air-age stale status-caution' : 'weather-age air-age'}><Phrases parts={age} /></div></div>}
   </div>;
 }
 

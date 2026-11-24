@@ -188,6 +188,11 @@ Browser widget checks live in `tests/ui/widget-checks/`, one module per widget
 The widget harness loads every module in that folder and requires one for each
 active catalog id; extra modules such as `reminders-span.mjs` and `clock-spacing.mjs`
 (#717, the Clock's painted digit gaps and where it stands through every minute of a day; about two minutes) add only a sweep.
+The suite's main page clock is shared and moves only when a check runs it: the harness
+puts it back to its start before each viewport's family pass and each sweep, time-dependent
+expectations come from the page's own clock, and a sweep that runs time for many cases
+uses `withOwnClock` (`tests/ui/lib/own-clock.mjs`); see the
+[widget contract](widgets.md#catalog-contract) (#741).
 A newly active widget also joins `FULL_BOARD` in `tests/ui/palette-browser.mjs`,
 plus `ACCENT_SELECTOR` (a new kind of accent element) or `TEXT_ONLY` (no accent
 element), so the palette harness checks its colours (#214), and the shared
@@ -226,7 +231,22 @@ replace full widget coverage or #431's repeated-load acceptance.
 Air-quality age assertions follow the public minutes/hours/days wording even when
 other family checks have advanced the main clock. Literal boundary renders cover
 59/60/69 minutes and one/two days; the saved-reading assertion uses its actual
-elapsed age rather than assuming the fixture is still within the first hour.
+elapsed age rather than assuming the fixture is still within the first hour. Since
+#715 a fresh reading shows no age, so each boundary is rendered as a saved reading
+for the wording, and as a fresh one (while under three hours) to assert "Model est."
+alone.
+
+**No source, no fresh age (#715).** `tests/ui/lib/source-age.mjs` holds the rule's
+checks: `PROVIDER_NAME` (names no widget may print), `UPDATE_AGE` (every form an update
+age or check time takes) and `assertNoSourceOrFreshAge(locator, label, { fresh, id })`,
+which reads a rendered widget or picker sample and fails when it names a provider, when
+an age sits outside a `.status-caution` element, or, for fresh data, when it shows an
+age at all. The widgets suite applies it to every family in every density and viewport,
+fresh, stale and offline; the collection suite to its families and scenarios; the
+catalog-time suite to every picker sample; the dynamic suite to every card. Timers and
+the Clock's timer slot are exempt from the age part only ("Done · 2 min ago" is the
+timer's own time). `src/client/model.test.ts` scans the renderer sources for a provider
+name outside a settings hint.
 
 ## Browser suites
 

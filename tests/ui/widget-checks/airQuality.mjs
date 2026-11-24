@@ -4,7 +4,7 @@ import { GRID_DENSITIES, WIDGET_IDS } from '../../../src/shared/widgets.ts';
 import { intlPerTicks } from './clock.mjs';
 
 export const id = 'airQuality';
-export const selectors = ['.air-context', '.air-age', '.air-credit', '.air-details', '.air-hours', '.air-uv-peak', '.air-hourly-missing', '.air-bars', '.air-qualifier'];
+export const selectors = ['.air-context', '.air-age', '.air-details', '.air-hours', '.air-uv-peak', '.air-hourly-missing', '.air-bars', '.air-qualifier'];
 const HOUR = 3600_000;
 
 /** What the widget's clock helpers print for an instant: "9:00 AM" (bar labels) or "1 PM" (UV peak). */
@@ -27,12 +27,39 @@ export function airQualityFixture(now, location) {
 export function prepare(state, { now }) { state.airQuality = airQualityFixture(now, state.weather.location); }
 
 /**
+ * The fixture's hours that are still ahead at the page's own clock, and what the large family says of them.
+ * The suite's page clock is shared by every check and moves on as they run, so nothing may assume it is still in
+ * the hour the suite started in (#741): a past hour is not drawn, and the UV peak is the highest hour left. The
+ * widget's one-second tick may lag the clock by a second, so the facts are given for both instants.
+ */
+async function upcomingHours(page, air) {
+  const pageNow = await page.evaluate(() => Date.now()), timeZone = air.location.timezone;
+  return [pageNow, pageNow - 1000].map(at => {
+    const upcoming = air.hourly.filter(reading => Date.parse(reading.time) > at - HOUR);
+    const known = upcoming.filter(reading => reading.aqi !== null).map(reading => Math.round(reading.aqi)), unknown = upcoming.length - known.length;
+    const low = Math.min(...known), high = Math.max(...known);
+    // The fixture's daylight hours all fall on the day the suite starts on; the first of the highest hours left is the peak.
+    const peak = upcoming.reduce((best, reading) => !best || reading.uvIndex > best.uvIndex ? reading : best, null);
+    const peakAt = clockFormat => clockFormat === '24h'
+      ? new Intl.DateTimeFormat('en', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(peak.time))
+      : label(peak.time, timeZone, { hour: 'numeric' });
+    return {
+      count: upcoming.length, unknown,
+      summary: `US AQI estimate for the next ${upcoming.length} hours: ${low === high ? low : `${low} to ${high}`}${unknown ? `, ${unknown} unknown` : ''}`,
+      /** "UV peaks 5 at 11 AM" ("11:00" with the 24-hour setting); null once the fixture has no daylight hour left. */
+      uvPeak: clockFormat => peak && Math.round(peak.uvIndex) >= 1 ? `UV peaks ${Math.round(peak.uvIndex)} at ${peakAt(clockFormat)}` : null,
+    };
+  });
+}
+
+/**
  * #306: a display load normally takes well under a second, but under a machine shared with other suites one
- * reload once waited more than the default 30 s for `.display-page`. Wait instead for this widget's own footer,
- * which renders with every reading, the unavailable and the off states, with a timeout matched to that cost.
+ * reload once waited more than the default 30 s for `.display-page`. Wait instead for this widget's own place
+ * line, which renders with every reading, the unavailable and the off states, with a timeout matched to that
+ * cost. (The footer no longer does: an `off` state has none, #715.)
  */
 const LOAD_TIMEOUT = 90_000;
-const ready = page => page.locator('[data-widget-id="airQuality"] .air-footer').waitFor({ timeout: LOAD_TIMEOUT });
+const ready = page => page.locator('[data-widget-id="airQuality"] .air-context').waitFor({ timeout: LOAD_TIMEOUT });
 async function reload(page) { await page.reload({ timeout: LOAD_TIMEOUT }); await ready(page); await page.clock.runFor(100); }
 
 /** Lines each never-breaking phrase (#221) occupies, its footer layout and the widget fit. */
@@ -40,16 +67,19 @@ function layout(widget) {
   return widget.evaluate(section => {
     const lines = element => new Set([...element.getClientRects()].map(rect => Math.round(rect.top))).size;
     const phrases = [...section.querySelectorAll('.air-phrase')].map(element => ({ text: element.textContent, lines: lines(element) }));
-    const age = section.querySelector('.air-age').getBoundingClientRect(), credit = section.querySelector('.air-credit').getBoundingClientRect();
-    return { fit: new DOMMatrix(getComputedStyle(section.querySelector('.widget-content')).transform).a, phrases, footerRow: Math.abs(age.top - credit.top) <= 1, text: section.innerText };
+    // The footer is one element of phrases (#715: no separate credit); its rows are the distinct lines they sit on.
+    const footerRows = new Set([...section.querySelectorAll('.air-age .air-phrase')].flatMap(element => [...element.getClientRects()].map(rect => Math.round(rect.top)))).size;
+    return { fit: new DOMMatrix(getComputedStyle(section.querySelector('.widget-content')).transform).a, phrases, footerRows, credit: section.querySelectorAll('.air-credit, .weather-credit').length, text: section.innerText };
   });
 }
 
 function assertLayout(result, { size, label: name, oneRow = size !== 'small' }) {
   if (size !== 'large') assert.equal(result.fit, 1, `${name}: fits at Text 100% without zooming out (${result.fit})`);
-  assert.deepEqual(result.phrases.filter(phrase => phrase.lines !== 1), [], `${name}: number–unit pairs, ages and "Open-Meteo" never break`);
-  assert.ok(result.phrases.some(phrase => phrase.text === 'Open-Meteo'), `${name}: credits Open-Meteo`);
-  if (oneRow) assert.ok(result.footerRow, `${name}: age and credit share one footer row`);
+  assert.deepEqual(result.phrases.filter(phrase => phrase.lines !== 1), [], `${name}: number–unit pairs and ages never break`);
+  // #715: no provider name anywhere in the widget, and no credit element.
+  assert.equal(result.credit, 0, `${name}: no credit element`);
+  assert.doesNotMatch(result.text, /Open-Meteo|CAMS/, `${name}: names no data provider`);
+  if (oneRow) assert.equal(result.footerRows, 1, `${name}: the footer is one row`);
 }
 
 /** Text in the caution (status) tone, as the stale age and the qualifier use. */
@@ -82,21 +112,26 @@ function expectedAge(minutes) {
 export async function family({ page, widget, size, density, viewport, state }) {
   const text = await widget.innerText();
   assert.match(text, /Air quality/); assert.match(text, /US AQI/); assert.match(text, /\b42\b/); assert.match(text, /Good/);
-  // The page clock advances across the suite, and further as the merged catalog grows (#73, #157), so
-  // the age is read against the page clock; the one-second tick may lag it by up to a second.
-  const clockNow = await page.evaluate(() => Date.now());
-  const ages = [clockNow, clockNow - 1000].map(at => Math.floor((at - Date.parse(state.airQuality.updatedAt)) / 60_000));
-  assert.ok(ages.some(age => text.includes(`Model est. · ${expectedAge(age)}`)), `age matches the page clock (${ages.map(expectedAge).join(' or ')}): ${text}`);
-  assert.match(text, /CAMS · Open-Meteo/); assert.doesNotMatch(text, /Saved estimate|Last known/, 'a fresh reading is not qualified');
+  // #715: a fresh reading says only that it is a model estimate: no update age and no provider name. The footer
+  // is that one quiet phrase, not a status cue.
+  assert.equal(await widget.locator('.air-age').innerText(), 'Model est.', `a fresh reading shows no age: ${text}`);
+  assert.equal(await widget.locator('.air-age.status-caution, .air-age.stale').count(), 0, 'the fresh footer is not in the status tone');
+  assert.doesNotMatch(text, /\bago\b|Updated|just now|Open-Meteo|CAMS/, `no age and no provider: ${text}`);
+  assert.doesNotMatch(text, /Saved estimate|Last known/, 'a fresh reading is not qualified');
   assert.equal(await widget.locator('.air-reading').getAttribute('data-air-reading'), 'current');
   if (size === 'small') assert.doesNotMatch(text, /Mostly/);
   else { assert.match(text, /Mostly PM2\.5 · 12 µg\/m³/); assert.match(text, /UV 3 · Moderate/); }
   assertLayout(await layout(widget), { size, label: `air ${size}/${density} ${viewport.width} fresh` });
+  // In the suite's first hour: 24 bars, one unknown, "UV peaks 5 at 11 AM" and "US AQI estimate for the next 24
+  // hours: 40 to 45, 1 unknown". Later the past hours are gone, so the expectation follows the page's own clock.
+  const bars = await widget.locator('.air-bar').count(), candidates = await upcomingHours(page, state.airQuality);
+  const hours = candidates.find(candidate => candidate.count === bars) ?? candidates[0];
   if (size === 'large') {
-    assert.equal(await widget.locator('.air-bar').count(), 24); assert.equal(await widget.locator('.air-bar-unknown').count(), 1, 'unknown hour is dotted');
-    assert.match(text, /UV peaks 5 at 11 AM/);
-    assert.equal(await page.getByRole('img', { name: 'US AQI estimate for the next 24 hours: 40 to 45, 1 unknown', exact: true }).count(), 1, 'the bar chart exposes its name');
-  } else assert.equal(await widget.locator('.air-bar').count(), 0);
+    assert.equal(bars, hours.count, 'one bar for each hour still ahead'); assert.equal(await widget.locator('.air-bar-unknown').count(), hours.unknown, 'unknown hour is dotted');
+    assert.ok(hours.count >= 2, 'the fixture still has hours ahead (the suite\'s page clock has not run past it)');
+    if (hours.uvPeak('12h')) assert.ok(text.includes(hours.uvPeak('12h')), `${hours.uvPeak('12h')}: ${text}`);
+    assert.equal(await page.getByRole('img', { name: hours.summary, exact: true }).count(), 1, `the bar chart exposes its name: ${hours.summary}`);
+  } else assert.equal(bars, 0);
   // No category colours: the reading uses the ordinary text colour.
   assert.equal(await widget.locator('.air-category').evaluate(element => getComputedStyle(element).color), await widget.locator('.air-aqi').evaluate(element => getComputedStyle(element.closest('.ambient')).color));
   if (density !== 'balanced' || viewport.width !== 1920) return;
@@ -104,9 +139,10 @@ export async function family({ page, widget, size, density, viewport, state }) {
   state.settings.clockFormat = '24h'; state.airQuality.current.aqi = 120; await reload(page);
   const unhealthy = await page.locator('.ambient-airQuality').innerText();
   assert.match(unhealthy, size === 'small' ? /Sensitive groups/ : /Unhealthy for sensitive groups/);
-  if (size === 'large') assert.match(unhealthy, /UV peaks 5 at 11:00/);
+  if (size === 'large' && hours.uvPeak('24h')) assert.ok(unhealthy.includes(hours.uvPeak('24h')), `${hours.uvPeak('24h')}: ${unhealthy}`);
   state.settings.clockFormat = '12h';
-  state.airQuality = { ...structuredClone(fresh), status: 'stale', updatedAt: new Date(Date.parse(fresh.updatedAt) - 2 * HOUR + 12 * 60_000).toISOString() }; await reload(page);
+  // Saved two hours before the page's own clock (which moves on across the suite): its values are under 3 hours old.
+  state.airQuality = { ...structuredClone(fresh), status: 'stale', updatedAt: new Date(await page.evaluate(() => Date.now()) - 2 * HOUR).toISOString() }; await reload(page);
   const stale = page.locator('.ambient-airQuality .air-age');
   assert.match(await stale.innerText(), /^Saved reading · 2 hr ago$/);
   const [color, caution] = await cautionColor(stale);
@@ -173,10 +209,12 @@ export async function family({ page, widget, size, density, viewport, state }) {
   state.airQuality = { ...structuredClone(fresh), status: 'unavailable', updatedAt: null, current: null, hourly: [] }; await reload(page);
   const unavailable = await page.locator('.ambient-airQuality').innerText();
   assert.match(unavailable, /Air quality unavailable/); assert.doesNotMatch(unavailable, /Good|\b42\b/, 'a failure never reads as clean air');
-  assert.doesNotMatch(unavailable, /Model est/, 'no estimate label without a reading'); assert.match(unavailable, /Not updated yet/); assert.match(unavailable, /CAMS · Open-Meteo/);
+  assert.doesNotMatch(unavailable, /Model est/, 'no estimate label without a reading'); assert.match(unavailable, /Not updated yet/); assert.doesNotMatch(unavailable, /Open-Meteo|CAMS/, 'no provider name (#715)');
+  assert.deepEqual(await statusCue(page.locator('.ambient-airQuality .air-age')), { shared: true, caution: true, opacity: 1 }, 'the unavailable age line is the shared status cue');
   state.airQuality = { ...structuredClone(fresh), status: 'off', updatedAt: null, current: null, hourly: [] }; await reload(page);
   const off = await page.locator('.ambient-airQuality').innerText();
-  assert.match(off, /not loaded yet/); assert.doesNotMatch(off, /Good|Model est/);
+  assert.match(off, /not loaded yet/); assert.doesNotMatch(off, /Good|Model est|Not updated yet|Open-Meteo|CAMS/);
+  assert.equal(await page.locator('.ambient-airQuality .air-footer').count(), 0, 'off has nothing to qualify, so no footer (#715)');
   state.airQuality = fresh; await reload(page);
 }
 
@@ -235,9 +273,16 @@ export async function sweep({ page, viewport, state, base, now }) {
         const air = airQualityFixture(now, state.weather.location);
         air.updatedAt = new Date(now - minutes * 60_000).toISOString();
         if (minutes >= 180) air.status = 'stale';
-        const widget = await render(viewport, 'balanced', size, air);
         assert.equal(expectedAge(minutes), age, `${size}/${minutes}: independent age expectation`);
-        assert.equal(await widget.locator('.air-age').innerText(), `${air.status === 'stale' ? 'Saved reading' : 'Model est.'} · ${age}`, `${size}/${minutes}: exact elapsed-age wording`);
+        // #715: a fresh reading never shows its age, whatever it is; the same reading saved shows the exact wording.
+        if (air.status === 'fresh') {
+          const widget = await render(viewport, 'balanced', size, air);
+          assert.equal(await widget.locator('.air-age').innerText(), 'Model est.', `${size}/${minutes}: a fresh reading shows no age`);
+          cases++;
+        }
+        const widget = await render(viewport, 'balanced', size, { ...air, status: 'stale' });
+        assert.equal(await widget.locator('.air-age').innerText(), `Saved reading · ${age}`, `${size}/${minutes}: exact elapsed-age wording`);
+        assert.deepEqual(await statusCue(widget.locator('.air-age')), { shared: true, caution: true, opacity: 1 }, `${size}/${minutes}: the saved age is the shared status cue`);
         cases++;
       }
     }
@@ -246,6 +291,7 @@ export async function sweep({ page, viewport, state, base, now }) {
       for (const [name, reading, offline] of [['fresh', fresh(), false], ['stale', { ...fresh(), status: 'stale', updatedAt: new Date(now - 2 * HOUR).toISOString() }, false], ['offline', fresh(), true]]) {
         const widget = await render(view, density, size, reading, { offline });
         if (offline) assert.match(await widget.locator('.air-age').innerText(), /^Offline · Model est\. · \d+ min ago$/);
+        if (name !== 'fresh') assert.deepEqual(await statusCue(widget.locator('.air-age')), { shared: true, caution: true, opacity: 1 }, `air ${size}/${density} ${view.width} ${name}: the age is the shared status cue`);
         assertLayout(await layout(widget), { size, label: `air ${size}/${density} ${view.width} ${name}` });
         cases++;
       }
@@ -278,5 +324,5 @@ export async function sweep({ page, viewport, state, base, now }) {
     state.settings.widgetGrid.placements.airQuality = { column: 0, row: 0, size: 'large' }; state.airQuality = airQualityFixture(now, state.weather.location); await reload(page);
     assert.equal(await intlPerTicks(page), 0, 'large Air quality builds no Intl formatter per tick');
   }
-  return `Air quality small/medium fit 1 at Text 100% with unbroken phrases in every density at 720p/1080p/4K: fresh/stale/offline (one-row footer from medium up) and US 128/156/301 and European 105 fresh, stale, "Saved estimate" and "Last known" with the qualifier as the full-opacity shared status cue, on its own line under the reading in small (#309; ${cases} cases at ${viewport.width}, one navigation each in a paused-clock context of their own, waiting for the widget's footer, #306); large builds no Intl formatter per tick`;
+  return `Air quality small/medium fit 1 at Text 100% with unbroken phrases in every density at 720p/1080p/4K: fresh ("Model est." alone: no age, no provider, #715), stale and offline (the age only in the status tone; one-row footer from medium up) and US 128/156/301 and European 105 fresh, stale, "Saved estimate" and "Last known" with the qualifier as the full-opacity shared status cue, on its own line under the reading in small (#309; ${cases} cases at ${viewport.width}, one navigation each in a paused-clock context of their own, waiting for the widget's place line, #306); large builds no Intl formatter per tick`;
 }

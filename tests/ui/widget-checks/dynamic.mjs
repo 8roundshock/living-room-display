@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { GRID_DENSITIES, WIDGET_IDS } from '../../../src/shared/widgets.ts';
+import { withOwnClock } from '../lib/own-clock.mjs';
 
 // Dynamic (#437). The shared fixture rains every hour (60%, 0.8 mm), so Dynamic leads with the
 // forecast's "Rain likely" card in focus mode, with the Weather kicker and a weather glyph.
@@ -12,8 +13,6 @@ export function prepare(state) {
   // tests/ui/dynamic-browser.mjs suite covers them with its own synthetic providers.
   state.alerts = { status: 'off', provider: null, source: null, sourceUrl: null, area: null, checkedAt: null, error: null, alerts: [] };
 }
-
-async function reload(page) { await page.reload(); await page.locator('.display-page').waitFor(); await page.clock.runFor(100); }
 
 export async function family({ widget, size }) {
   const body = widget.locator('.dynamic-body');
@@ -42,38 +41,75 @@ const fitOf = widget => widget.evaluate(section => new DOMMatrix(getComputedStyl
  * #221 for Dynamic: every family renders at fit 1 at Text 100% in every density, fresh, stale and offline,
  * at 1280×720, the owner's TV in CSS pixels (once, on the 1080p pass). The harness's floor check covers
  * 1080p and 4K, and tests/ui/dynamic-browser.mjs checks fit at 4K in its scenarios.
+ * The renders are on a page with a paused clock of its own (tests/ui/lib/own-clock.mjs): each offline case runs
+ * the 30 s state poll, which must not move the suite's shared page clock.
  */
-export async function sweep({ page, viewport, state, now }) {
+export async function sweep({ page, viewport, state, base, now }) {
   if (viewport.width !== 1920) return null;
-  const views = [{ width: 1280, height: 720 }];
-  const fresh = structuredClone(state.weather);
-  let cases = 0;
+  const fresh = structuredClone(state.weather), savedAlerts = state.alerts;
   const failures = [];
-  for (const view of views) {
-    await page.setViewportSize(view);
-    for (const density of Object.keys(GRID_DENSITIES)) for (const size of ['small', 'medium', 'large']) for (const status of ['fresh', 'stale', 'offline']) {
-      state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'dynamic']));
-      state.settings.widgetGrid.density = density; state.settings.widgetGrid.placements.dynamic = { column: 0, row: 0, size };
-      state.settings.appearance.fontScale = 1; state.settings.appearance.motionEnabled = false;
-      state.weather = status === 'stale' ? { ...structuredClone(fresh), status: 'stale', updatedAt: new Date(now - 2 * HOUR).toISOString() } : structuredClone(fresh);
-      await reload(page);
-      const widget = page.locator('[data-widget-id="dynamic"]');
-      if (status === 'offline') {
-        await page.route('**/api/state', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Synthetic offline"}' }));
+  let cases = 0, claims = 0;
+  try {
+    await withOwnClock(page, { viewport: { width: 1280, height: 720 }, state, now }, async (own, clock) => {
+      const widget = own.locator('[data-widget-id="dynamic"]');
+      const show = async () => { await clock.restart(); await own.goto(base + '/display'); await own.locator('.display-page').waitFor(); await own.clock.runFor(100); await widget.waitFor(); };
+      /** The next state poll fails; `said` is read until it says Offline. */
+      const goOffline = async said => {
+        clock.setOffline(true);
         try {
-          await page.clock.runFor(30_000);
-          for (let attempt = 0; attempt < 100 && !/Offline/i.test(await widget.innerText()); attempt++) await page.waitForTimeout(40);
-        } finally { await page.unroute('**/api/state'); }
-        assert.match(await widget.innerText(), /Offline/i, `${size}/${density} offline says so`);
+          await own.clock.runFor(30_000);
+          for (let attempt = 0; attempt < 100 && !/Offline/i.test(await said()); attempt++) await own.waitForTimeout(40);
+        } finally { clock.setOffline(false); }
+      };
+      const only = (size, density) => {
+        state.settings.widgets = Object.fromEntries(WIDGET_IDS.map(key => [key, key === 'dynamic']));
+        state.settings.widgetGrid.density = density; state.settings.widgetGrid.placements.dynamic = { column: 0, row: 0, size };
+        state.settings.appearance.fontScale = 1; state.settings.appearance.motionEnabled = false;
+      };
+      for (const density of Object.keys(GRID_DENSITIES)) for (const size of ['small', 'medium', 'large']) for (const status of ['fresh', 'stale', 'offline']) {
+        only(size, density);
+        state.weather = status === 'stale' ? { ...structuredClone(fresh), status: 'stale', updatedAt: new Date(now - 2 * HOUR).toISOString() } : structuredClone(fresh);
+        await show();
+        if (status === 'offline') {
+          await goOffline(() => widget.innerText());
+          assert.match(await widget.innerText(), /Offline/i, `${size}/${density} offline says so`);
+        }
+        if (status === 'stale') assert.match(await widget.innerText(), /Saved forecast/, `${size}/${density} stale says so`);
+        const fit = await fitOf(widget);
+        if (fit < 0.995) failures.push(`${size}/${density} 1280×720 ${status}: fit ${fit.toFixed(3)}`);
+        cases++;
       }
-      if (status === 'stale') assert.match(await widget.innerText(), /Saved forecast/, `${size}/${density} stale says so`);
-      const fit = await fitOf(widget);
-      if (fit < 0.995) failures.push(`${size}/${density} ${view.width}×${view.height} ${status}: fit ${fit.toFixed(3)}`);
-      cases++;
-    }
-  }
-  state.weather = fresh;
-  await page.setViewportSize(viewport);
-  assert.deepEqual(failures, [], 'Dynamic renders at fit 1 at Text 100%');
-  return `Dynamic small/medium/large fit 1 at Text 100% in every density, fresh/stale/offline, at 1280×720 (${cases} cases)`;
+      state.weather = structuredClone(fresh);
+      assert.deepEqual(failures, [], 'Dynamic renders at fit 1 at Text 100%');
+      // #715: "No alerts" is a claim about now. The large family makes it only while the display is connected and the
+      // list is fresh, and then without a check time. Offline, `fresh` is merely the last status the display received
+      // (for 4 minutes or 26 hours), so nothing is claimed; a saved list says "Saved alerts · checked …" in the status tone.
+      await own.setViewportSize(viewport);
+      const footer = async () => (await widget.locator('.dynamic-footer').innerText()).replace(/[\u00a0\u202f]/g, ' ');
+      const emptyList = (status, checked) => ({ status, provider: 'eccc', source: 'Environment and Climate Change Canada', sourceUrl: 'https://weather.gc.ca/', area: 'Sample area', checkedAt: new Date(now - checked).toISOString(), error: null, alerts: [] });
+      for (const checked of [4 * 60_000, 26 * HOUR]) {
+        only('large', 'balanced');
+        state.alerts = emptyList('fresh', checked);
+        await show();
+        const connected = await footer();
+        assert.match(connected, /(^| · )No alerts( · |$)/, `connected, fresh and empty: the large family says so: ${connected}`);
+        assert.doesNotMatch(connected, /checked|Environment|Canada/, `fresh: no check time and no issuer: ${connected}`);
+        await goOffline(footer);
+        const offline = await footer();
+        assert.match(offline, /Offline/, `offline says so: ${offline}`);
+        assert.doesNotMatch(offline, /No alerts/, `offline (last check ${Math.round(checked / 60_000)} min before): no "No alerts" claim: ${offline}`);
+        assert.equal(await widget.locator('.dynamic-footer .status-caution', { hasText: 'Offline' }).count(), 1, 'Offline is in the status tone');
+        assert.ok(await fitOf(widget) >= 0.995, 'offline large Dynamic stays at fit 1');
+        claims++;
+      }
+      // A saved, empty list: its check time in the status tone, and no "No alerts".
+      state.alerts = emptyList('stale', 2 * HOUR);
+      await show();
+      const saved = await footer();
+      assert.match(saved, /Saved alerts · checked \d/, `a saved list carries its check time: ${saved}`);
+      assert.doesNotMatch(saved, /No alerts/, `a saved list is never "No alerts": ${saved}`);
+      assert.equal(await widget.locator('.dynamic-footer .status-caution', { hasText: 'Saved alerts' }).count(), 1, 'the saved-alerts phrase is in the status tone');
+    });
+  } finally { state.weather = fresh; state.alerts = savedAlerts; }
+  return `Dynamic small/medium/large fit 1 at Text 100% in every density, fresh/stale/offline, at 1280×720 (${cases} cases); "No alerts" only from a connected display with a fresh list, never offline (last check 4 min or 26 h before) or from a saved list (#715, ${claims} offline cases)`;
 }

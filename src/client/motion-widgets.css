@@ -79,9 +79,9 @@
   transition: rotate var(--motion-hand) var(--motion-ease);
 }
 
-/* Weather: age and attribution never move. The stale or offline label takes the status tone at once,
-   with the "Saved forecast" or "Offline" words it gains at the same moment (#161): a colour fade
-   ran on the main thread and only made the cue lag its own words. */
+/* Weather: the stale or offline label never moves. It appears in the status tone at once, with its
+   "Saved forecast" or "Offline" words and the age (#161, #715): a colour fade ran on the main thread
+   and only made the cue lag its own words. Fresh weather has no such line. */
 
 /* The hero glyph settles once on a reveal or condition change (parts remount for both).
    Stale, offline or unavailable weather (data-glyph-still) keeps it still. */

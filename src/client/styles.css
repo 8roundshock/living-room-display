@@ -491,12 +491,6 @@ a.button {
   height: 1cqw;
   width: 1cqw;
 }
-.forecast-attribution {
-  font-size: 0.8cqw;
-  margin-top: 2cqh;
-  text-align: right;
-  color: var(--ambient-accent);
-}
 .display-help {
   position: absolute;
   right: 20px;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { AirQualityReading } from '../shared/contracts.ts';
-import { airAgeSegments, airHourly, airReadingView, currentHourReading, upcomingAirHours, uvPeakLabel } from './airHourly.ts';
+import { airAgeIsStatus, airAgeSegments, airHourly, airReadingView, currentHourReading, upcomingAirHours, uvPeakLabel } from './airHourly.ts';
 import { LAST_KNOWN_AFTER_MS, lastKnownLabel } from './format.ts';
 
 const HOUR = 3600_000;
@@ -111,13 +111,25 @@ test('without an estimate for this hour the old AQI is qualified with its time a
   assert.equal(airReadingView({ ...SAVED, updatedAt: 'invalid' }, { ...CURRENT, time: 'invalid' }, later, ZONE, '12h').kind, 'current');
 });
 
-test('the footer age is short phrases: model estimate, saved, offline, or the age alone', () => {
-  const base = { age: 'Updated 12 min ago', stale: false, reading: true, disconnected: false };
-  assert.deepEqual(airAgeSegments(base), ['Model est.', '12 min ago']);
-  assert.deepEqual(airAgeSegments({ ...base, stale: true, age: 'Updated 2 hr ago' }), ['Saved reading', '2 hr ago']);
+test('the footer is short phrases: a fresh reading says only "Model est."; the age follows a status label only (#715)', () => {
+  const base = { age: 'Updated 12 min ago', status: 'fresh' as const, reading: true, disconnected: false };
+  // Fresh: no update age, whatever it is, and never a provider name.
+  assert.deepEqual(airAgeSegments(base), ['Model est.']);
+  assert.deepEqual(airAgeSegments({ ...base, age: 'Updated just now' }), ['Model est.']);
+  assert.deepEqual(airAgeSegments({ ...base, age: 'Updated 2 hr ago' }), ['Model est.'], 'fresh values under 3 hours old still stand');
+  assert.equal(airAgeIsStatus(base), false, 'the fresh label is not a status cue');
+  // Not fresh: saved, offline, or values over 3 hours old keep their age, without "Updated".
+  assert.deepEqual(airAgeSegments({ ...base, status: 'stale', age: 'Updated 2 hr ago' }), ['Saved reading', '2 hr ago']);
   assert.deepEqual(airAgeSegments({ ...base, disconnected: true }), ['Offline', 'Model est.', '12 min ago']);
-  assert.deepEqual(airAgeSegments({ ...base, age: 'Updated just now' }), ['Model est.', 'just now']);
-  assert.deepEqual(airAgeSegments({ ...base, reading: false, age: 'Not updated yet' }), ['Not updated yet'], 'no estimate label without a reading');
-  assert.deepEqual(airAgeSegments({ ...base, reading: false, age: 'Updated 5 min ago' }), ['Updated 5 min ago']);
-  assert.deepEqual(airAgeSegments({ ...base, reading: false, stale: true, disconnected: true, age: 'Not updated yet' }), ['Offline', 'Not updated yet']);
+  assert.deepEqual(airAgeSegments({ ...base, status: 'stale', disconnected: true, age: 'Updated 1 day ago' }), ['Offline', 'Saved reading', '1 day ago']);
+  assert.deepEqual(airAgeSegments({ ...base, old: true, age: 'Updated 5 hr ago' }), ['Model est.', '5 hr ago'], 'old values, which a qualifier replaces, keep their age');
+  assert.deepEqual(airAgeSegments({ ...base, status: 'stale', age: 'Update time unknown' }), ['Saved reading', 'Update time unknown']);
+  for (const state of [{ ...base, status: 'stale' as const }, { ...base, disconnected: true }, { ...base, old: true }, { ...base, status: 'unavailable' as const, reading: false }]) assert.equal(airAgeIsStatus(state), true);
+  // Without a reading there is no estimate label: an unavailable state keeps the age line, off says nothing.
+  assert.deepEqual(airAgeSegments({ ...base, status: 'unavailable', reading: false, age: 'Not updated yet' }), ['Not updated yet'], 'no estimate label without a reading');
+  assert.deepEqual(airAgeSegments({ ...base, status: 'unavailable', reading: false, age: 'Updated 5 min ago' }), ['Updated 5 min ago']);
+  assert.deepEqual(airAgeSegments({ ...base, status: 'off', reading: false, age: 'Not updated yet' }), [], 'nothing was asked for yet');
+  assert.deepEqual(airAgeSegments({ ...base, status: 'off', reading: false, disconnected: true, age: 'Not updated yet' }), ['Offline']);
+  assert.deepEqual(airAgeSegments({ ...base, status: 'stale', reading: false, disconnected: true, age: 'Not updated yet' }), ['Offline', 'Not updated yet']);
+  for (const segments of [airAgeSegments(base), airAgeSegments({ ...base, status: 'stale' }), airAgeSegments({ ...base, disconnected: true })]) assert.doesNotMatch(segments.join(' '), /Open-Meteo|CAMS/);
 });
